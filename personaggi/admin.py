@@ -86,7 +86,7 @@ class PunteggioAdmin(A_Admin):
 class AbilitaPrerequisitoAdmin(A_Admin):
 	list_display = ('abilita', 'prerequisito', )
 	search_fields = ['abilita__nome', 'prerequisito__nome', ]
-	autocomplete_fields = ['abilita', 'prereeeeeequisito',]
+	autocomplete_fields = ['abilita', 'prerequisito',]
 
 class TierAdmin(A_Admin):
 	list_display = ['nome', 'descrizione', ]
