@@ -27,11 +27,12 @@ SECRET_KEY = 'django-insecure-2v412!5-=9cils@7_78wzzssrnkf*5)(%z2a6d*z2!3khn1w9c
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['www.k-o-r-35.it',]
+ALLOWED_HOSTS = ['www.k-o-r-35.it','127.0.0.1', ]
 
 # prova 
 
 # Application definition
+
 
 INSTALLED_APPS = [
 	'djangocms_admin_style', #cms
@@ -42,7 +43,7 @@ INSTALLED_APPS = [
    'django.contrib.sessions',
    'django.contrib.messages',
    'django.contrib.staticfiles',
-	'personaggi',
+	'personaggi.apps.PersonaggiConfig', #personaggi
 	'django.contrib.sites',
 	'cms', #cms
 	'menus', #cms
@@ -65,6 +66,9 @@ INSTALLED_APPS = [
 	'allauth.socialaccount.providers.google',  #allauth
 	'cms_kor',
 	'django_summernote', # Djano-sumernote 28/01/2025
+    'rest_framework', # Django REST Framework
+    'rest_framework.authtoken', # Django REST Framework Token Authentication
+	'corsheaders', # Django CORS Headers
 ]
 
 # sezione per django_cms
@@ -104,6 +108,7 @@ THUMBNAIL_PROCESSORS = (
 MIDDLEWARE = [
    'django.middleware.security.SecurityMiddleware',
    'django.contrib.sessions.middleware.SessionMiddleware',
+   'corsheaders.middleware.CorsMiddleware',  # Django CORS Headers
    'django.middleware.common.CommonMiddleware',
    'django.middleware.csrf.CsrfViewMiddleware',
    'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -119,6 +124,13 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'kor35.urls'
+
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for CORS
+# CORS_ALLOWED_ORIGINS = [
+#     'http://localhost:8000',
+#     'https://www.k-o-r-35.it',
+# ]
+
 
 TEMPLATES = [
     {
@@ -156,6 +168,11 @@ DATABASES = {
 	}
 }
 
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    )
+}
 
 AUTHENTICATION_BACKENDS = [
 	'django.contrib.auth.backends.ModelBackend',

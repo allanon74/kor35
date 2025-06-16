@@ -87,7 +87,7 @@ class Abilita(A_modello):
 	nome = models.CharField("Nome dell'abilità", max_length = 90, )
 	descrizione = models.TextField('Descrizione', null=True, blank=True,)
 	caratteristica = models.ForeignKey(
-		Punteggio, 
+		Punteggio,  
 		on_delete=models.CASCADE,
 		verbose_name="Caratteristica", 
 		limit_choices_to={'tipo' : CARATTERISTICA}

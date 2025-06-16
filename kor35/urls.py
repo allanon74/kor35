@@ -16,10 +16,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, re_path, include
+from rest_framework.authtoken.views import obtain_auth_token
 
 urlpatterns = [
     path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
+    path('personaggi/', include('personaggi.urls')),
+    path('auth/', obtain_auth_token),
     re_path(r'^', include('cms.urls')),
+    
 ]
+
