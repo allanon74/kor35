@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models import Sum
 
 
-
+# prova modifica
 
 # Create your models here.
 
