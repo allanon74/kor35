@@ -1,7 +1,7 @@
 name: Test SSH Connection
 
 on:
-  workflow_dispatch:  # Permette di avviare manualmente il test da GitHub
+  workflow_dispatch:
 
 jobs:
   ssh-test:
@@ -15,6 +15,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p 2222 -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Test SSH connection
+      - name: Test SSH connection with verbose output
         run: |
-          ssh -p 2222 -o StrictHostKeyChecking=yes ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ Connessione SSH riuscita!'"
+          ssh -vvv -p 2222 -o StrictHostKeyChecking=yes ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ Connessione SSH riuscita!'"
+
