@@ -19,10 +19,10 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /percorso/del/progetto
+            cd /progetti/kor35
             git fetch origin main
             git reset --hard origin/main
-            source venv/bin/activate
+            source ambienti/kor35/bin/activate
             pip install -r requirements.txt
             python manage.py migrate
             systemctl restart gunicorn
