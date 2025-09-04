@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('cms', '0037_alter_cmsplugin_id_alter_globalpagepermission_id_and_more'),
+        ('cms', '0041_alter_pageurl_unique_together_pageurl_site_and_more'),
         ('personaggi', '0010_delete_tabellapluginmodel'),
     ]
 

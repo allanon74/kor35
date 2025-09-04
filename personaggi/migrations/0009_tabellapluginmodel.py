@@ -7,8 +7,11 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('cms', '0037_alter_cmsplugin_id_alter_globalpagepermission_id_and_more'),
+        # ('cms', '0037_alter_cmsplugin_id_alter_globalpagepermission_id_and_more'),
+        # ('personaggi', '0008_abilita_prerequisito'),
+        ('cms', '0041_alter_pageurl_unique_together_pageurl_site_and_more'),
         ('personaggi', '0008_abilita_prerequisito'),
+        
     ]
 
     operations = [
