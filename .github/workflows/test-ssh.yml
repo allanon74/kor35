@@ -1,0 +1,21 @@
+name: Test SSH Connection
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ssh-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p 2222 -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Test SSH connection with verbose output
+        run: |
+          ssh -vvv -p 2222 -o StrictHostKeyChecking=yes ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo '✅ Connessione SSH riuscita!'"
+

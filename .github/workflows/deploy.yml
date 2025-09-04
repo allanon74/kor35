@@ -19,10 +19,31 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /percorso/del/progetto
+            # 1. Vai nella cartella del progetto
+            cd ~/progetti/kor35
+
+            # 2. Aggiorna il codice dal repository
             git fetch origin main
             git reset --hard origin/main
-            source venv/bin/activate
+
+            # 3. Attiva l'ambiente virtuale usando il percorso assoluto (più sicuro)
+            #    Usa il percorso completo per pip e python per evitare problemi.
+            #    ATTENZIONE: Assicurati che '~/ambienti/kor35' sia il percorso corretto!
+            source ~/ambienti/kor35/bin/activate
+            
+            # 4. Installa le dipendenze
             pip install -r requirements.txt
+            
+            # 5. Esegui le migrazioni del database
             python manage.py migrate
-            systemctl restart gunicorn
+            
+            # 6. Riavvia il servizio corretto (Apache) con sudo
+            #    Scegli UNA delle due opzioni qui sotto
+            
+            # OPZIONE A: Riavvia completamente Apache.
+            # sudo systemctl restart apache2
+            
+            # OPZIONE B (consigliata): Ricarica l'applicazione senza riavviare Apache.
+            # Questo funziona solo se Apache è configurato per ricaricare quando il file wsgi.py viene "toccato".
+            # Sostituisci il percorso con quello corretto del tuo file wsgi.py
+            touch ~/progetti/kor35/kor35/wsgi.py

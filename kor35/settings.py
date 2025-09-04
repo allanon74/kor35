@@ -68,7 +68,7 @@ INSTALLED_APPS = [
 	'allauth.socialaccount',  #allauth
 	'allauth.socialaccount.providers.google',  #allauth
 	'cms_kor',
-	'django_summernote', # Djano-sumernote 28/01/2025
+	'django_summernote', # Django-sumernote 28/01/2025
     'rest_framework', # Django REST Framework
     'rest_framework.authtoken', # Django REST Framework Token Authentication
 	'corsheaders', # Django CORS Headers
@@ -243,3 +243,16 @@ SOCIALACCOUNT_PROVIDERS = {
 	'OAUTH_PKCE_ENABLED': True,
 	}
 }
+
+# Email settings
+# Ensure you have the SMTP_EMAIL environment variable set in your .env file
+SMTP_EMAIL = env("SMTP_EMAIL")
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = env("EMAIL_HOST")
+EMAIL_PORT = env("EMAIL_PORT")
+EMAIL_HOST_USER = env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD")
+EMAIL_USE_TLS = False	
+EMAIL_USE_SSL = False
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = SMTP_EMAIL
