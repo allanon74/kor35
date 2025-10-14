@@ -19,10 +19,10 @@
 		{% cms_toolbar %}
 		<!-- Header -->
 			<header id="header">
-				<a href="/" class="title"><img src="{% static 'tema/logo.png' %}" alt="Logo KOR-35" style="height: 100px; width: auto; vertical-align: middle;"></a>
+				
 				<nav>
 					<ul>
-						<li>prova</li>
+						<li><a href="/" class="title"><img src="{% static 'tema/logo.png' %}" alt="Logo KOR-35" style="height: 100px; width: auto; vertical-align: middle;"></a></li>
 					</ul>
 				</nav>
 			</header>
@@ -31,7 +31,7 @@
 				<div class="inner">
 					<nav>
 						<ul>
-							<{% show_menu 0 100 100 100 %}
+							{% show_menu 0 100 100 100 %}
 						</ul>
 					</nav>
 				</div>
