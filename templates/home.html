@@ -1,12 +1,21 @@
 {% load cms_tags sekizai_tags %}
-<html>
-    <head>
-        <title>{% page_attribute "page_title" %}</title>
-        {% render_block "css" %}
-    </head>
-    <body>
-        {% cms_toolbar %}
-        {% placeholder "content" %}
-        {% render_block "js" %}
-    </body>
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>La mia Pagina</title>
+    {% render_block "css" %}
+</head>
+<body>
+
+    {% cms_toolbar %}
+
+    <h1>Questa è la mia Homepage</h1>
+    <p>Qui sotto puoi aggiungere i tuoi contenuti.</p>
+
+    {% placeholder 'content' %}
+
+    {% render_block "js" %}
+</body>
 </html>

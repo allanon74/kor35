@@ -1,0 +1,64 @@
+
+{% load static cms_tags menu_tags sekizai_tags %}
+<!DOCTYPE HTML>
+<!--
+	Hyperspace by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+	<head>
+		<title>{% block title %}KOR-35 - LARP{% endblock %}</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="{% static 'tema/assets/css/main.css' %}" />
+		<noscript><link rel="stylesheet" href="{% static 'tema/assets/css//noscript.css' %}" /></noscript>
+		{% render_block "css" %}
+	</head>
+	<body class="is-preload">
+		{% cms_toolbar %}
+		<!-- Header -->
+			<header id="header">
+				<a href="/" class="title"><img src="{% static 'tema/logo_trasparente.png' %}" alt="Logo KOR-35" style="height: 100px; width: auto; vertical-align: middle;"></a>
+				<nav>
+					<ul>
+						{% show_menu 0 100 100 100 %}
+					</ul>
+				</nav>
+			</header>
+
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Main -->
+					<section id="main" class="wrapper">
+						<div class="inner">
+							{% block content %}
+								{% placeholder "Inserisci qui il contenuto" %}
+							{% endblock %}
+						</div>
+					</section>
+
+			</div>
+
+		<!-- Footer -->
+			<footer id="footer" class="wrapper alt">
+				<div class="inner">
+					<ul class="menu">
+						<li>&copy; #KOR-35 & Arcana Domine. All rights reserved.</li><li>Design: <a href="http://html5up.net">HTML5 UP</a></li>
+					</ul>
+				</div>
+			</footer>
+
+		<!-- Scripts -->
+			<script src="{% static 'tema/assets/js/jquery.min.js' %}"></script>
+			<script src="{% static 'tema/assets/js/jquery.scrollex.min.js' %}"></script>
+			<script src="{% static 'tema/assets/js/jquery.scrolly.min.js' %}"></script>
+			<script src="{% static 'tema/assets/js/browser.min.js' %}"></script>
+			<script src="{% static 'tema/assets/js/breakpoints.min.js' %}"></script>
+			<script src="{% static 'tema/assets/js/util.js' %}"></script>
+			<script src="{% static 'tema/assets/js/main.js' %}"></script>
+
+		{% render_block "js" %}
+	</body>
+</html>

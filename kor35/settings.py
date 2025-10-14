@@ -63,6 +63,7 @@ INSTALLED_APPS = [
 	'djangocms_googlemap', #cms
 	'djangocms_snippet', #cms
 	'djangocms_style', #cms
+	'djangocms_versioning', # correzione errore
 	'allauth',  #allauth
 	'allauth.account',  #allauth
 	'allauth.socialaccount',  #allauth
@@ -89,7 +90,8 @@ LANGUAGES = [
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 CMS_TEMPLATES = [
-	('home.html', 'Home page template'),
+	('base.html', 'Home page template'),
+	('home.html', 'Vecchio home template'),
 	]
 
 
@@ -138,7 +140,7 @@ CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for CORS
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['/var/www/html/nextcloud/data/giorgio/files/progetti/kor35/templates'],
+        'DIRS': ['/home/django/progetti/kor35/templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
