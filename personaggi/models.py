@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models import Sum
 
 
-# prova modifica seconda volta
+# prova modifica terza volta
 
 # Create your models here.
 
