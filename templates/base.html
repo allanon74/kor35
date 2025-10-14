@@ -12,20 +12,30 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 		<link rel="stylesheet" href="{% static 'tema/assets/css/main.css' %}" />
-		<noscript><link rel="stylesheet" href="{% static 'tema/assets/css//noscript.css' %}" /></noscript>
+		<noscript><link rel="stylesheet" href="{% static 'tema/assets/css/noscript.css' %}" /></noscript>
 		{% render_block "css" %}
 	</head>
 	<body class="is-preload">
 		{% cms_toolbar %}
 		<!-- Header -->
 			<header id="header">
-				<a href="/" class="title"><img src="{% static 'tema/logo_trasparente.png' %}" alt="Logo KOR-35" style="height: 100px; width: auto; vertical-align: middle;"></a>
+				<a href="/" class="title"><img src="{% static 'tema/logo.png' %}" alt="Logo KOR-35" style="height: 100px; width: auto; vertical-align: middle;"></a>
 				<nav>
 					<ul>
-						{% show_menu 0 100 100 100 %}
+						<li>prova</li>
 					</ul>
 				</nav>
 			</header>
+		<!-- Sidebar -->
+			<section id="sidebar">
+				<div class="inner">
+					<nav>
+						<ul>
+							<{% show_menu 0 100 100 100 %}
+						</ul>
+					</nav>
+				</div>
+			</section>
 
 		<!-- Wrapper -->
 			<div id="wrapper">
