@@ -47,6 +47,7 @@ INSTALLED_APPS = [
    'django.contrib.messages',
    'django.contrib.staticfiles',
 	'personaggi.apps.PersonaggiConfig', #personaggi
+	'oggetti.apps.OggettiConfig', #oggetti
 	'django.contrib.sites',
 	'cms', #cms
 	'menus', #cms
@@ -92,6 +93,7 @@ X_FRAME_OPTIONS = 'SAMEORIGIN'
 CMS_TEMPLATES = [
 	('base.html', 'Home page template'),
 	('home.html', 'Vecchio home template'),
+	('default.html', 'Default template'),
 	]
 
 
