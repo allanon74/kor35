@@ -5,6 +5,7 @@ from django.db import models
 class QrCode(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     data_creazione = models.DateTimeField(auto_now_add=True)
+    testo = models.TextField(blank=True, null=True)
 
     def __str__(self):
         return "({codice})".format(codice=self.id)
