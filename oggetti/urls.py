@@ -10,5 +10,9 @@ urlpatterns = [
     # come argomento chiamato 'pk'.
     path('qrcode/', views.qr_code_html_view, name='qr_code_html_view'),
     
-    # ... altre url della tua app
+    # NUOVA VISTA 1: Elenco dei QR (../oggetti/qr/)
+    path('qr/', views.qr_code_list_view, name='qr_code_list'),
+    
+    # NUOVA VISTA 2: Dettaglio del singolo QR (../oggetti/qr/<uuid>/)
+    path('qr/<uuid:pk>/', views.qr_code_detail_view, name='qr_code_detail'),
 ]
