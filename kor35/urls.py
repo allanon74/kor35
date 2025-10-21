@@ -23,6 +23,7 @@ urlpatterns = [
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
     path('personaggi/', include('personaggi.urls')),
+    path('oggetti/', include('oggetti.urls', namespace='oggetti')),
     path('auth/', obtain_auth_token),
     re_path(r'^', include('cms.urls')),
     
