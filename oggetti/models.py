@@ -37,6 +37,7 @@ class QrCode(models.Model):
     )
     data_creazione = models.DateTimeField(auto_now_add=True)
     testo = models.TextField(blank=True, null=True)
+    vista = models.OneToOneField(A_vista, blank=True, null=True, on_delete=models.SET_NULL)
 
     def __str__(self):
         return "({codice})".format(codice=self.id)
