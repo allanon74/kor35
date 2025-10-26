@@ -141,9 +141,16 @@ class Spell(A_modello):
 		through = "spell_mattone",
 		help_text = "Mattoni requisito dell'abilità attivata",
 		)
+	aura = models.ForeignKey(
+		Punteggio, 
+		on_delete=models.CASCADE, 
+		limit_choices_to={'tipo' : AURA}, 
+		related_name = "aura_spell",
+		)
 	#livello = elementi.all().count()
-#	def livello(self):
-#		return self.mattoni.all().aggregate(Sum())
+	
+	def livello(self):
+		return self.mattoni.all().aggregate(Sum())
 
 	class Meta:
 		verbose_name = "Abilità attivata"

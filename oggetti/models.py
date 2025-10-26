@@ -23,7 +23,7 @@ class A_vista(models.Model):
     
     class Meta:
         ordering = ['-data_creazione'] 
-        abstract = True
+        # abstract = True
 
 
 # Create your models here.
@@ -66,6 +66,13 @@ class QrCode(models.Model):
             super().save(*args, **kwargs)
 
 class Oggetto(A_vista):
+    # a_vista_ptr = models.OneToOneField(
+    #     A_vista,
+    #     on_delete=models.CASCADE,
+    #     parent_link=True,
+    #     # related_name='istanza_oggetto', # Nome univoco per evitare conflitti
+    #     null=True # <-- Questo è il punto chiave temporaneo
+    # )
     elementi = models.ManyToManyField(Punteggio, blank=True, limit_choices_to={'tipo' : ELEMENTO}, verbose_name="Elementi associati")
     aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, verbose_name="Aura associata", related_name="oggetti_aura")
 
@@ -74,3 +81,8 @@ class Oggetto(A_vista):
 
     def __str__(self):
         return f"{self.nome} - {self.aura}"
+    
+class Manifesto(A_vista):
+
+    def __str__(self):
+        return f"Manifesto: {self.nome}"
