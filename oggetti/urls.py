@@ -14,5 +14,5 @@ urlpatterns = [
     path('qr/', views.qr_code_list_view, name='qr_code_list'),
     
     # NUOVA VISTA 2: Dettaglio del singolo QR (../oggetti/qr/<uuid>/)
-    path('qr/<string:pk>/', views.qr_code_detail_view, name='qr_code_detail'),
+    path('qr/<str:pk>/', views.qr_code_detail_view, name='qr_code_detail'),
 ]
