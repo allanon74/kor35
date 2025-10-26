@@ -2,6 +2,7 @@ import uuid
 import secrets
 import string
 from django.db import models, IntegrityError
+from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO
 
 def generate_short_id(length=14):
     """
@@ -10,6 +11,20 @@ def generate_short_id(length=14):
     """
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+class A_vista(models.Model):
+    id = models.AutoField(primary_key=True)
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=100)
+    testo = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.nome} ({self.id})"
+    
+    class Meta:
+        ordering = ['-data_creazione'] 
+        abstract = True
+
 
 # Create your models here.
 class QrCode(models.Model):
@@ -48,3 +63,13 @@ class QrCode(models.Model):
             # Se non è un nuovo oggetto (_state.adding è False),
             # è un aggiornamento. Salviamo normalmente.
             super().save(*args, **kwargs)
+
+class Oggetto(A_vista):
+    elementi = models.ManyToManyField(Punteggio, blank=True, limit_choices_to={'tipo' : ELEMENTO}, verbose_name="Elementi associati")
+    aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, verbose_name="Aura associata", related_name="oggetti_aura")
+
+    def elementi_list(self):
+        return ", ".join(str(elemento) for elemento in self.elementi.all())
+
+    def __str__(self):
+        return f"{self.nome} - {self.aura}"
