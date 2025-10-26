@@ -1,3 +1,4 @@
+import string
 from django.shortcuts import render
 
 from django.shortcuts import get_object_or_404
@@ -148,7 +149,7 @@ def qr_code_list_view(request: HttpRequest) -> HttpResponse:
 
 
 # VISTA 2: Dettaglio del singolo QrCode
-def qr_code_detail_view(request: HttpRequest, pk: uuid.UUID) -> HttpResponse:
+def qr_code_detail_view(request: HttpRequest, pk: string) -> HttpResponse:
     """
     Restituisce l'HTML per un singolo QrCode, identificato dalla sua PK (UUID).
     """
