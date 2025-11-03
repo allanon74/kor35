@@ -2,7 +2,7 @@ import uuid
 import secrets
 import string
 from django.db import models, IntegrityError
-from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO
+from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica
 
 def generate_short_id(length=14):
     """
@@ -31,6 +31,20 @@ class OggettoElemento(models.Model):
         limit_choices_to={'tipo': ELEMENTO}, 
         verbose_name="Elemento"
     )
+
+class OggettoStatistica(models.Model):
+    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(
+        Statistica, 
+        on_delete=models.CASCADE
+    )
+    valore = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('oggetto', 'statistica') # Impedisce duplicati
+
+    def __str__(self):
+        return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore}"
 
 # abstract
 
@@ -109,7 +123,13 @@ class Oggetto(A_vista):
         # Rimuovi limit_choices_to da qui, è stato spostato
         # nel modello OggettoElemento.
     )
-    
+    statistiche = models.ManyToManyField(
+        Statistica,
+        through='OggettoStatistica',
+        blank=True,
+        verbose_name="Statistiche modificate", 
+        related_name = "oggetti_statistiche",
+    )
     
     aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, verbose_name="Aura associata", related_name="oggetti_aura")
 

@@ -32,6 +32,13 @@ tabelle_tipo = [
 	(TIER_4, 'Tier 4'),
 	]
 
+# --- 1. Definisci le scelte per i modificatori ---
+MODIFICATORE_ADDITIVO = 'ADD'
+MODIFICATORE_MOLTIPLICATIVO = 'MOL'
+MODIFICATORE_CHOICES = [
+    (MODIFICATORE_ADDITIVO, 'Additivo (+N)'),
+    (MODIFICATORE_MOLTIPLICATIVO, 'Moltiplicativo (xN)'),
+]
 
 # Classi astratte
 
@@ -83,6 +90,51 @@ class Punteggio(Tabella):
 		result = "{tipo} - {nome}"
 		return result.format(nome=self.nome, tipo = self.tipo)
 
+
+class Statistica(Punteggio):
+    """
+    Una Statistica è un tipo specializzato di Punteggio
+    che ha valori predefiniti.
+    """
+    valore_predefinito = models.IntegerField(
+        default=0,
+        help_text="Valore di default per questa statistica."
+    )
+    
+    tipo_modificatore = models.CharField(
+        max_length=3,
+        choices=MODIFICATORE_CHOICES,
+        default=MODIFICATORE_ADDITIVO,
+        help_text="Come questo punteggio si combina con altri."
+    )
+
+    def save(self, *args, **kwargs):
+        # Forza il tipo di Punteggio a essere STATISTICA
+        self.tipo = STATISTICA
+        super().save(*args, **kwargs)
+
+    class Meta:
+        verbose_name = "Statistica"
+        verbose_name_plural = "Statistiche"
+        
+        
+# --- 3. Crea il modello "Through" per Abilita <-> Statistica ---
+class AbilitaStatistica(models.Model):
+    abilita = models.ForeignKey('Abilita', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(
+        Statistica, 
+        on_delete=models.CASCADE
+        # Non serve limit_choices_to, perché il FK è già su Statistica
+    )
+    valore = models.IntegerField(default=0)
+    
+    class Meta:
+        unique_together = ('abilita', 'statistica') # Impedisce duplicati
+
+    def __str__(self):
+        return f"{self.abilita.nome} - {self.statistica.nome}: {self.valore}"
+
+
 class Abilita(A_modello):
 	nome = models.CharField("Nome dell'abilità", max_length = 90, )
 	descrizione = models.TextField('Descrizione', null=True, blank=True,)
@@ -123,7 +175,13 @@ class Abilita(A_modello):
 	# 	through = "abilita_prerequisito",
 	# 	help_text = "Abilità che fungono da prerequisito",
 	# )
- 
+	statistiche = models.ManyToManyField(
+        Statistica,
+        through='AbilitaStatistica',
+        blank=True,
+        verbose_name="Statistiche modificate", 
+        related_name="abilita_statistiche",
+    )
  
 	class Meta:
 		verbose_name = "Abilità"
