@@ -4,16 +4,19 @@ from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO
 
 
 class PunteggioOggettoInline(admin.TabularInline):
-    model = Oggetto.elementi.through
+    # Questo ora punta correttamente al modello 'OggettoElemento'
+    model = Oggetto.elementi.through 
     extra = 1
-
+    # Aggiungiamo verbose_name per chiarezza nell'admin
+    verbose_name = "Elemento"
+    verbose_name_plural = "Elementi dell'Oggetto"
 
 
 
 
 @admin.register(Manifesto)
 class ManifestoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'data_creazione', 'titolo', 'autore')
+    list_display = ('id', 'data_creazione', 'nome', 'autore')
     readonly_fields = ('id', 'data_creazione',)
 
 @admin.register(QrCode)
@@ -28,6 +31,7 @@ class OggettoAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'data_creazione','livello',) 
 
     inlines = [PunteggioOggettoInline]
-    filter_vertical = [Oggetto.elementi.through]
+    # filter_vertical = [Oggetto.elementi.through]
+    exclude = ('elementi',)
     
     

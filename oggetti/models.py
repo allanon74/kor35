@@ -12,6 +12,28 @@ def generate_short_id(length=14):
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
+# through
+
+class OggettoElemento(models.Model):
+    """
+    Modello intermedio per permettere a un Oggetto di avere
+    più volte lo stesso Elemento (Punteggio).
+    """
+    oggetto = models.ForeignKey(
+        'Oggetto', 
+        on_delete=models.CASCADE
+    )
+    elemento = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE,
+        # Applicando qui il filtro, l'inline nell'admin
+        # mostrerà solo Punteggi di tipo ELEMENTO.
+        limit_choices_to={'tipo': ELEMENTO}, 
+        verbose_name="Elemento"
+    )
+
+# abstract
+
 class A_vista(models.Model):
     id = models.AutoField(primary_key=True)
     data_creazione = models.DateTimeField(auto_now_add=True)
@@ -24,6 +46,15 @@ class A_vista(models.Model):
     class Meta:
         ordering = ['-data_creazione'] 
         # abstract = True
+
+
+
+    def __str__(self):
+        return str(self.elemento)
+    
+    class Meta:
+        verbose_name = "Elemento dell'Oggetto"
+        verbose_name_plural = "Elementi dell'Oggetto"
 
 
 # Create your models here.
@@ -73,7 +104,18 @@ class Oggetto(A_vista):
     #     # related_name='istanza_oggetto', # Nome univoco per evitare conflitti
     #     null=True # <-- Questo è il punto chiave temporaneo
     # )
-    elementi = models.ManyToManyField(Punteggio, blank=True, limit_choices_to={'tipo' : ELEMENTO}, verbose_name="Elementi associati")
+    # elementi = models.ManyToManyField(Punteggio, blank=True, limit_choices_to={'tipo' : ELEMENTO}, verbose_name="Elementi associati")
+    
+    elementi = models.ManyToManyField(
+        Punteggio, 
+        blank=True, 
+        verbose_name="Elementi associati",
+        through='OggettoElemento', # Specifica il modello intermedio
+        # Rimuovi limit_choices_to da qui, è stato spostato
+        # nel modello OggettoElemento.
+    )
+    
+    
     aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, verbose_name="Aura associata", related_name="oggetti_aura")
 
     def elementi_list(self):
