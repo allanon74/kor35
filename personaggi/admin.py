@@ -82,39 +82,49 @@ class StatisticaInlineAdminBase(admin.TabularInline):
         
     def get_formset(self, request, obj=None, **kwargs):
         """
-        Pre-popola l'inline con le statistiche mancanti.
+        Questo è il cuore della logica.
+        Quando si modifica un oggetto (obj is not None),
+        crea al volo le istanze "through" mancanti.
         """
-        formset = super().get_formset(request, obj, **kwargs)
         
-        fk_name = self.fk_name 
-        all_stats = Statistica.objects.all()
-        initial_data = []
-        
-        # Lista delle statistiche già collegate a questo oggetto
-        existing_stat_pks = []
-        if obj is not None:
-            # Siamo in modalità "Modifica", troviamo quelle esistenti
+        # --- IMPLEMENTAZIONE DELLA TUA IDEA (PRE-SAVE) ---
+        if obj is not None: # Esegui solo in modalità "Modifica"
+            
+            # 1. Trova il nome del campo FK (es. 'abilita' o 'oggetto')
+            fk_name = self.fk_name
+            
+            # 2. Prendi tutte le statistiche
+            all_stats = Statistica.objects.all()
+            
+            # 3. Trova le statistiche GIÀ collegate a questo oggetto
             existing_stat_pks = self.model.objects.filter(
                 **{fk_name: obj}
             ).values_list('statistica_id', flat=True)
 
-        # Troviamo le statistiche che NON sono ancora collegate
-        missing_stats = all_stats.exclude(pk__in=existing_stat_pks)
+            # 4. Trova le statistiche NON ancora collegate
+            missing_stats = all_stats.exclude(pk__in=existing_stat_pks)
+            
+            # 5. Prepara le nuove istanze da creare
+            new_instances_to_create = []
+            for stat in missing_stats:
+                # Crea le nuove istanze "through" con il valore predefinito
+                new_instances_to_create.append(
+                    self.model(
+                        **{fk_name: obj},
+                        statistica=stat,
+                        valore=stat.valore_predefinito
+                    )
+                )
+            
+            # 6. Salva tutte le nuove istanze in un'unica query
+            if new_instances_to_create:
+                self.model.objects.bulk_create(new_instances_to_create)
         
-        # Creiamo i dati iniziali per le statistiche mancanti
-        for stat in missing_stats:
-            initial_data.append({
-                'statistica': stat.pk,
-                'valore': stat.valore_predefinito
-            })
-        
-        # Assegna i dati iniziali
-        formset.initial = initial_data
-        
-        # Imposta 'extra' pari al numero di form che stiamo pre-popolando
-        formset.extra = len(initial_data)
-        
-        return formset
+        # --- FINE BLOCCO PRE-SAVE ---
+
+        # Ora chiama il get_formset() standard.
+        # Troverà automaticamente i record che abbiamo appena creato.
+        return super().get_formset(request, obj, **kwargs)
 
     # def has_add_permission(self, request, obj=None):
     #     # Vogliamo solo modificare i valori, non aggiungere/rimuovere righe
