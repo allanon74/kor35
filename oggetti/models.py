@@ -46,11 +46,6 @@ class A_vista(models.Model):
     class Meta:
         ordering = ['-data_creazione'] 
         # abstract = True
-
-
-
-    def __str__(self):
-        return str(self.elemento)
     
     class Meta:
         verbose_name = "Elemento dell'Oggetto"
