@@ -63,7 +63,7 @@ class StatisticaInlineAdminBase(admin.TabularInline):
     fields = ('statistica', 'valore')
     readonly_fields = ('statistica',)
     # Quanti form "extra" mostrare (sarà sovrascritto)
-    extra = 0 
+    # extra = 0 
     
     # def statistica_nome(self, instance):
     #     # Mostra il nome della statistica come testo
@@ -72,50 +72,57 @@ class StatisticaInlineAdminBase(admin.TabularInline):
     #     return "---" # In caso di errore
     # statistica_nome.short_description = "Statistica"
     
+    def get_max_num(self, request, obj=None, **kwargs):
+        """
+        Imposta il numero totale di form consentiti pari al numero
+        di statistiche totali. Questo nasconde il link "Aggiungi un altro..."
+        una volta che tutte le statistiche sono visualizzate.
+        """
+        return Statistica.objects.count()
+        
     def get_formset(self, request, obj=None, **kwargs):
+        """
+        Pre-popola l'inline con le statistiche mancanti.
+        """
         formset = super().get_formset(request, obj, **kwargs)
         
-        # Recupera il nome del campo ForeignKey (es. 'abilita' o 'oggetto')
         fk_name = self.fk_name 
-        
-        # Lista di tutte le statistiche disponibili
         all_stats = Statistica.objects.all()
-        
         initial_data = []
         
-        if obj is None:
-            # --- Siamo nella pagina "Aggiungi" (obj non esiste) ---
-            # Pre-popoliamo con i valori di default
-            for stat in all_stats:
-                initial_data.append({
-                    'statistica': stat.pk,
-                    'valore': stat.valore_predefinito
-                })
-            formset.extra = len(initial_data)
-        else:
-            # --- Siamo nella pagina "Modifica" (obj esiste) ---
-            # Troviamo le statistiche che a questo oggetto mancano
-            existing_stat_pks = self.model.objects.filter(**{fk_name: obj}).values_list('statistica_id', flat=True)
-            missing_stats = all_stats.exclude(pk__in=existing_stat_pks)
-            
-            for stat in missing_stats:
-                initial_data.append({
-                    'statistica': stat.pk,
-                    'valore': stat.valore_predefinito
-                })
-            # Mostriamo solo le righe per le statistiche mancanti
-            formset.extra = len(initial_data)
+        # Lista delle statistiche già collegate a questo oggetto
+        existing_stat_pks = []
+        if obj is not None:
+            # Siamo in modalità "Modifica", troviamo quelle esistenti
+            existing_stat_pks = self.model.objects.filter(
+                **{fk_name: obj}
+            ).values_list('statistica_id', flat=True)
 
+        # Troviamo le statistiche che NON sono ancora collegate
+        missing_stats = all_stats.exclude(pk__in=existing_stat_pks)
+        
+        # Creiamo i dati iniziali per le statistiche mancanti
+        for stat in missing_stats:
+            initial_data.append({
+                'statistica': stat.pk,
+                'valore': stat.valore_predefinito
+            })
+        
+        # Assegna i dati iniziali
         formset.initial = initial_data
+        
+        # Imposta 'extra' pari al numero di form che stiamo pre-popolando
+        formset.extra = len(initial_data)
+        
         return formset
 
-    def has_add_permission(self, request, obj=None):
-        # Vogliamo solo modificare i valori, non aggiungere/rimuovere righe
-        return False # Permetti di aggiungere le righe mancanti
+    # def has_add_permission(self, request, obj=None):
+    #     # Vogliamo solo modificare i valori, non aggiungere/rimuovere righe
+    #     return False # Permetti di aggiungere le righe mancanti
 
-    def has_delete_permission(self, request, obj=None):
-        # Impedisce all'utente di cancellare una riga di statistica
-        return False
+    # def has_delete_permission(self, request, obj=None):
+    #     # Impedisce all'utente di cancellare una riga di statistica
+    #     return False
         
     # def get_readonly_fields(self, request, obj=None):
     #     # Se l'oggetto esiste, rendi 'statistica' readonly
