@@ -16,7 +16,7 @@ class PunteggioOggettoInline(admin.TabularInline):
 
 @admin.register(Manifesto)
 class ManifestoAdmin(admin.ModelAdmin):
-    list_display = ('id', 'data_creazione', 'nome', 'autore')
+    list_display = ('id', 'data_creazione', 'nome', )
     readonly_fields = ('id', 'data_creazione',)
 
 @admin.register(QrCode)
