@@ -28,5 +28,6 @@ class OggettoAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'data_creazione','livello',) 
 
     inlines = [PunteggioOggettoInline]
+    filter_vertical = [Oggetto.elementi.through]
     
     
