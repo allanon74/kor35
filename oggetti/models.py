@@ -82,6 +82,11 @@ class Oggetto(A_vista):
     def __str__(self):
         return f"{self.nome} - {self.aura}"
     
+    @property
+    def livello(self):
+        return self.elementi.count()
+    
+    
 class Manifesto(A_vista):
 
     def __str__(self):
