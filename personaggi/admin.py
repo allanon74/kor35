@@ -59,18 +59,18 @@ class StatisticaInlineAdminBase(admin.TabularInline):
     pre-popolando i valori di default per quelle non ancora impostate.
     """
     # Il campo 'statistica' non deve essere modificabile
-    readonly_fields = ('statistica_nome',)
-    fields = ('statistica_nome', 'valore')
-    
+    # readonly_fields = ('statistica_nome',)
+    fields = ('statistica', 'valore')
+    readonly_fields = ('statistica',)
     # Quanti form "extra" mostrare (sarà sovrascritto)
     extra = 0 
     
-    def statistica_nome(self, instance):
-        # Mostra il nome della statistica come testo
-        if instance.pk:
-            return instance.statistica.nome
-        return "---" # In caso di errore
-    statistica_nome.short_description = "Statistica"
+    # def statistica_nome(self, instance):
+    #     # Mostra il nome della statistica come testo
+    #     if instance.pk:
+    #         return instance.statistica.nome
+    #     return "---" # In caso di errore
+    # statistica_nome.short_description = "Statistica"
     
     def get_formset(self, request, obj=None, **kwargs):
         formset = super().get_formset(request, obj, **kwargs)
@@ -111,17 +111,17 @@ class StatisticaInlineAdminBase(admin.TabularInline):
 
     def has_add_permission(self, request, obj=None):
         # Vogliamo solo modificare i valori, non aggiungere/rimuovere righe
-        return True # Permetti di aggiungere le righe mancanti
+        return False # Permetti di aggiungere le righe mancanti
 
     def has_delete_permission(self, request, obj=None):
         # Impedisce all'utente di cancellare una riga di statistica
         return False
         
-    def get_readonly_fields(self, request, obj=None):
-        # Se l'oggetto esiste, rendi 'statistica' readonly
-        if obj:
-            return ('statistica',) + self.readonly_fields
-        return self.readonly_fields
+    # def get_readonly_fields(self, request, obj=None):
+    #     # Se l'oggetto esiste, rendi 'statistica' readonly
+    #     if obj:
+    #         return ('statistica',) + self.readonly_fields
+    #     return self.readonly_fields
 
 class AbilitaStatisticaInline(StatisticaInlineAdminBase):
     model = AbilitaStatistica
