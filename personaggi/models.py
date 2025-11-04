@@ -248,7 +248,8 @@ class Mattone(A_modello):
 class abilita_tier(A_modello):
 	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
 	tabella = models.ForeignKey(Tier, on_delete=models.CASCADE, )
-	costo = models.IntegerField("Costo dell'abilità", default=10, )
+	costo = models.IntegerField("Costo dell'abilità in Punti Caratteristica", default=0, )
+	costo_crediti = models.IntegerField("Costo dell'abilità in Crediti", default=0, )	 
 	ordine = models.IntegerField("Ordine in tabella", default=10, )
 	
 	class Meta:
