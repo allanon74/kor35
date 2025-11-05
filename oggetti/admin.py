@@ -87,6 +87,18 @@ class OggettoAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome', 'livello')
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione',) 
 
+    fieldsets = (
+        ('Informazioni Principali', {
+            'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))
+        }),
+        # Questo crea il box separato per l'anteprima
+        ('Anteprima', {
+            'classes': ('wide',), # 'wide' lo rende più largo
+            'fields': ('mostra_testo_formattato',)
+        }),
+    )
+    
+    
     inlines = [
         PunteggioOggettoInline, 
         OggettoStatisticaInline,
@@ -126,6 +138,17 @@ class AttivataAdmin(SModelAdmin):
     inlines = [AttivataStatisticaBaseInline]
     exclude = ('statistiche_base',) 
     summernote_fields = ['testo', ]   
+
+    fieldsets = (
+        ('Informazioni Principali', {
+            'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))
+        }),
+        # Questo crea il box separato per l'anteprima
+        ('Anteprima', {
+            'classes': ('wide',),
+            'fields': ('mostra_testo_formattato',)
+        }),
+    )
 
 
     def get_form(self, request, obj=None, **kwargs):
