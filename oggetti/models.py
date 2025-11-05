@@ -216,7 +216,7 @@ class Oggetto(A_vista):
             valore = link.valore_base
         
             if param:
-                testo_formattato = testo_formattato.replace(f"{{{{{param}}}}}", str(valore))
+                testo_formattato = testo_formattato.replace(f"{{{param}}}", str(valore))
         return testo_formattato
     
         
@@ -262,7 +262,7 @@ class Attivata(A_vista):
         stats_links = self.attivatastatisticabase_set.select_related('statistica').all()
         
         for link in stats_links:
-            param = link.statistica.param
+            param = link.statistica.parametro
             valore = link.valore_base
             
             if param:
