@@ -1,9 +1,33 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import OggettoStatisticaBase, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase
-from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO
+from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica
 from personaggi.admin import StatisticaPivotInlineBase
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
+
+
+def get_statistica_base_help_text():
+    """
+    Crea dinamicamente l'help text con le variabili disponibili
+    basate sulle 'sigle' del modello Statistica.
+    """
+    try:
+        # Filtra solo le statistiche che hanno una sigla definita
+        stats = Statistica.objects.filter(sigla__isnull=False).exclude(sigla__exact='')
+        if not stats.exists():
+            return "Nessuna variabile statistica definita."
+        
+        # Costruisci l'elenco HTML
+        base_text = "<b>Variabili Valori Base disponibili:</b><br>"
+        variabili = [f"&bull; <b>{{{s.sigla}}}</b>: {s.nome}" for s in stats]
+        
+        # format_html è importante per la sicurezza e per renderizzare l'HTML
+        return format_html(base_text + "<br>".join(variabili))
+    except Exception as e:
+        # Se la tabella Statistica non esiste ancora (es. prima migrazione)
+        return f"Errore nel caricare le variabili: {e}"
+
 
 
 class PunteggioOggettoInline(admin.TabularInline):
@@ -54,7 +78,7 @@ class QrCodeAdmin(admin.ModelAdmin):
 class OggettoAdmin(SModelAdmin):
     
     list_display = ('id', 'data_creazione', 'nome', 'livello')
-    readonly_fields = ('id', 'data_creazione','livello',) 
+    readonly_fields = ('id', 'data_creazione','livello', 'TestoFormattato', ) 
 
     inlines = [
         PunteggioOggettoInline, 
@@ -64,6 +88,13 @@ class OggettoAdmin(SModelAdmin):
     # filter_vertical = [Oggetto.elementi.through]
     exclude = ('elementi', 'statistiche', 'statistiche_base')  # Escludi i campi ManyToMany originali  
     summernote_fields = ['testo', ]
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Imposta l'help_text per il campo 'testo' (che viene da A_vista)
+        if 'testo' in form.base_fields:
+            form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        return form
     
 class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
     model = AttivataStatisticaBase
@@ -77,7 +108,15 @@ class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
 @admin.register(Attivata)
 class AttivataAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome')
-    readonly_fields = ('id', 'data_creazione',)
+    readonly_fields = ('id', 'data_creazione', 'livello', 'TestoFormattato', )
     inlines = [AttivataStatisticaBaseInline]
     exclude = ('statistiche_base',) 
     summernote_fields = ['testo', ]   
+
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Imposta l'help_text per il campo 'testo' (che viene da A_vista)
+        if 'testo' in form.base_fields:
+            form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        return form

@@ -203,6 +203,24 @@ class Oggetto(A_vista):
     def livello(self):
         return self.elementi.count()
     
+    @property
+    def TestoFormattato(self):
+        if not self.testo:
+            return ""
+        testo_formattato = self.testo
+        
+        stats_links = self.oggettostatisticabase_set.select_related('statistica').all()
+        
+        for link in stats_links:
+            sigla = link.statistica.sigla
+            valore = link.valore_base
+        
+            if sigla:
+                testo_formattato = testo_formattato.replace(f"{{{{{sigla}}}}}", str(valore))
+        return testo_formattato
+    
+        
+    
 class Attivata(A_vista):
     
     elementi = models.ManyToManyField(
@@ -224,6 +242,33 @@ class Attivata(A_vista):
 
     def __str__(self):
         return f"Attivata: {self.nome}"
+
+    @property
+    def livello(self):
+        return self.elementi.count()
+
+    @property
+    def TestoFormattato(self):
+        """
+        Sostituisce i placeholder {sigla} nel testo
+        con i valori da AttivataStatisticaBase.
+        """
+        if not self.testo:
+            return ""
+        
+        testo_formattato = self.testo
+        
+        # Usiamo il related_name 'attivatastatisticabase_set'
+        stats_links = self.attivatastatisticabase_set.select_related('statistica').all()
+        
+        for link in stats_links:
+            sigla = link.statistica.sigla
+            valore = link.valore_base
+            
+            if sigla:
+                testo_formattato = testo_formattato.replace(f"{{{sigla}}}", str(valore))
+                
+        return testo_formattato
 
     
 class Manifesto(A_vista):
