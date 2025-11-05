@@ -200,7 +200,10 @@ class StatisticaPivotInlineBase(admin.TabularInline):
                 self.model.objects.bulk_create(new_instances_to_create)
         
         return super().get_formset(request, obj, **kwargs)
-
+    class Media:
+        css = {
+            'all': ('admin/css/nascondi-inline-header.css',)
+        }
 
 
 class AbilitaStatisticaInline(StatisticaPivotInlineBase):

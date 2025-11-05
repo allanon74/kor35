@@ -85,7 +85,7 @@ class QrCodeAdmin(admin.ModelAdmin):
 class OggettoAdmin(SModelAdmin):
     
     list_display = ('id', 'data_creazione', 'nome', 'livello')
-    readonly_fields = ('id', 'data_creazione','livello', 'TestoFormattato', ) 
+    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione',) 
 
     inlines = [
         PunteggioOggettoInline, 
@@ -103,6 +103,13 @@ class OggettoAdmin(SModelAdmin):
             form.base_fields['testo'].help_text = get_statistica_base_help_text()
         return form
     
+    def mostra_testo_formattato(self, obj):
+        # Chiama la proprietà dal modello e formatta l'HTML
+        return format_html(obj.TestoFormattato)
+    # Imposta la caption personalizzata
+    mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
+    
+    
 class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
     model = AttivataStatisticaBase
     fk_name = 'attivata'
@@ -115,7 +122,7 @@ class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
 @admin.register(Attivata)
 class AttivataAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome')
-    readonly_fields = ('id', 'data_creazione', 'livello', 'TestoFormattato', )
+    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione',) 
     inlines = [AttivataStatisticaBaseInline]
     exclude = ('statistiche_base',) 
     summernote_fields = ['testo', ]   
@@ -127,3 +134,9 @@ class AttivataAdmin(SModelAdmin):
         if 'testo' in form.base_fields:
             form.base_fields['testo'].help_text = get_statistica_base_help_text()
         return form
+    
+    def mostra_testo_formattato(self, obj):
+        # Chiama la proprietà dal modello e formatta l'HTML
+        return format_html(obj.TestoFormattato)
+    # Imposta la caption personalizzata
+    mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
