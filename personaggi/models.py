@@ -101,6 +101,11 @@ class Statistica(Punteggio):
         help_text="Valore di default per questa statistica."
     )
     
+    valore_base_predefinito = models.IntegerField(
+        default=0,
+        help_text="Valore BASE di default per questa statistica (per i VALORI INIZIALI)."
+    )
+    
     tipo_modificatore = models.CharField(
         max_length=3,
         choices=MODIFICATORE_CHOICES,

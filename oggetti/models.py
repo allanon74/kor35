@@ -31,6 +31,25 @@ class OggettoElemento(models.Model):
         limit_choices_to={'tipo': ELEMENTO}, 
         verbose_name="Elemento"
     )
+    
+class AttivataElemento(models.Model):
+    """
+    Modello intermedio per permettere a un Oggetto di avere
+    più volte lo stesso Elemento (Punteggio).
+    """
+    attivata = models.ForeignKey(
+        'Attivata', 
+        on_delete=models.CASCADE
+    )
+    elemento = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE,
+        # Applicando qui il filtro, l'inline nell'admin
+        # mostrerà solo Punteggi di tipo ELEMENTO.
+        limit_choices_to={'tipo': ELEMENTO}, 
+        verbose_name="Elemento"
+    )
+
 
 class OggettoStatistica(models.Model):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
@@ -45,6 +64,38 @@ class OggettoStatistica(models.Model):
 
     def __str__(self):
         return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore}"
+
+# --- 1. NUOVO MODELLO "THROUGH" per Oggetto <-> Valore Base ---
+class OggettoStatisticaBase(models.Model):
+    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('oggetto', 'statistica')
+        verbose_name = "Statistica (Valore Base)"
+        verbose_name_plural = "Statistiche (Valori Base)"
+
+    def __str__(self):
+        return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore_base}"
+
+
+# --- 2. NUOVO MODELLO "THROUGH" per Attivate <-> Valore Base ---
+class AttivataStatisticaBase(models.Model):
+    attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+
+
+
+    class Meta:
+        unique_together = ('attivata', 'statistica')
+        verbose_name = "Statistica (Valore Base)"
+        verbose_name_plural = "Statistiche (Valori Base)"
+
+    def __str__(self):
+        return f"{self.attivata.nome} - {self.statistica.nome}: {self.valore_base}"
+
 
 # abstract
 
@@ -131,6 +182,15 @@ class Oggetto(A_vista):
         related_name = "oggetti_statistiche",
     )
     
+    # --- 3. NUOVO CAMPO ManyToMany per i VALORI BASE ---
+    statistiche_base = models.ManyToManyField(
+        Statistica,
+        through='OggettoStatisticaBase',
+        blank=True,
+        verbose_name="Statistiche (Valori Base)",
+        related_name='oggetti_statistiche_base' # Nuovo related_name univoco
+    )
+    
     aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, verbose_name="Aura associata", related_name="oggetti_aura")
 
     def elementi_list(self):
@@ -143,6 +203,28 @@ class Oggetto(A_vista):
     def livello(self):
         return self.elementi.count()
     
+class Attivata(A_vista):
+    
+    elementi = models.ManyToManyField(
+        Punteggio, 
+        blank=True, 
+        verbose_name="Elementi associati",
+        through='AttivataElemento', # Specifica il modello intermedio
+        # Rimuovi limit_choices_to da qui, è stato spostato
+        # nel modello Through AttivataElemento.
+    )
+    
+    statistiche_base = models.ManyToManyField(
+        Statistica,
+        through='AttivataStatisticaBase',
+        blank=True,
+        verbose_name="Statistiche (Valori Base)",
+        related_name='attivata_statistiche_base' # related_name univoco
+    )
+
+    def __str__(self):
+        return f"Attivata: {self.nome}"
+
     
 class Manifesto(A_vista):
 
