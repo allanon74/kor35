@@ -1,7 +1,7 @@
 from django.contrib import admin
-from .models import QrCode, Oggetto, Manifesto, OggettoStatistica
+from .models import OggettoStatisticaBase, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase
 from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO
-from personaggi.admin import StatisticaInlineAdminBase
+from personaggi.admin import StatisticaPivotInlineBase
 
 
 class PunteggioOggettoInline(admin.TabularInline):
@@ -11,11 +11,30 @@ class PunteggioOggettoInline(admin.TabularInline):
     # Aggiungiamo verbose_name per chiarezza nell'admin
     verbose_name = "Elemento"
     verbose_name_plural = "Elementi dell'Oggetto"
+    
+    
+class PunteggioAttivataInline(admin.TabularInline):
+    # Questo ora punta correttamente al modello 'AttivataElemento'
+    model = Attivata.elementi.through
+    extra = 1
+    # Aggiungiamo verbose_name per chiarezza nell'admin
+    verbose_name = "Elemento"
+    verbose_name_plural = "Elementi dell'Attivata"
 
-class OggettoStatisticaInline(StatisticaInlineAdminBase):
+class OggettoStatisticaInline(StatisticaPivotInlineBase):
     model = OggettoStatistica
     fk_name = 'oggetto' # Nome del FK nel modello "through"
-
+    verbose_name = "Statistica (Modificatore)"
+    verbose_name_plural = "Statistiche (Modificatori)"
+    
+class OggettoStatisticaBaseInline(StatisticaPivotInlineBase):
+    model = OggettoStatisticaBase
+    fk_name = 'oggetto'
+    # Sovrascrivi i campi per usare i Valori Base
+    value_field = 'valore_base'
+    default_field = 'valore_base_predefinito'
+    verbose_name = "Statistica (Valore Base)"
+    verbose_name_plural = "Statistiche (Valori Base)"
 
 @admin.register(Manifesto)
 class ManifestoAdmin(admin.ModelAdmin):
@@ -36,8 +55,23 @@ class OggettoAdmin(admin.ModelAdmin):
     inlines = [
         PunteggioOggettoInline, 
         OggettoStatisticaInline,
+        Oggetto, 
         ]
     # filter_vertical = [Oggetto.elementi.through]
-    exclude = ('elementi', 'statistiche',)  # Escludi i campi ManyToMany originali  
+    exclude = ('elementi', 'statistiche', 'statistiche_base')  # Escludi i campi ManyToMany originali  
     
-    
+class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
+    model = AttivataStatisticaBase
+    fk_name = 'attivata'
+    # Sovrascrivi i campi per usare i Valori Base
+    value_field = 'valore_base'
+    default_field = 'valore_base_predefinito'
+    verbose_name = "Statistica (Valore Base)"
+    verbose_name_plural = "Statistiche (Valori Base)"
+
+@admin.register(Attivata)
+class AttivataAdmin(admin.ModelAdmin):
+    list_display = ('id', 'data_creazione', 'nome')
+    readonly_fields = ('id', 'data_creazione',)
+    inlines = [AttivataStatisticaBaseInline]
+    exclude = ('statistiche_base',)    
