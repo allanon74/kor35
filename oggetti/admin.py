@@ -27,7 +27,7 @@ def get_statistica_base_help_text():
         
         # Costruisci l'elenco HTML
         base_text = "<b>Variabili Valori Base disponibili:</b><br>"
-        variabili = [f"&bull; <b>{{{{s.parametro}}}}</b>: {s.nome}" for s in stats]
+        variabili = [f"&bull; <b>{{{{{s.parametro}}}}}</b>: {s.nome}" for s in stats]
         
         # format_html è importante per la sicurezza e per renderizzare l'HTML
         return format_html(base_text + "<br>".join(variabili))
