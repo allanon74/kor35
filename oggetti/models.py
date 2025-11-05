@@ -212,11 +212,11 @@ class Oggetto(A_vista):
         stats_links = self.oggettostatisticabase_set.select_related('statistica').all()
         
         for link in stats_links:
-            parametro = link.statistica.parametro
+            param = link.statistica.parametro
             valore = link.valore_base
         
-            if parametro:
-                testo_formattato = testo_formattato.replace(f"{{{{{parametro}}}}}", str(valore))
+            if param:
+                testo_formattato = testo_formattato.replace(f"{{{{{param}}}}}", str(valore))
         return testo_formattato
     
         
@@ -262,11 +262,11 @@ class Attivata(A_vista):
         stats_links = self.attivatastatisticabase_set.select_related('statistica').all()
         
         for link in stats_links:
-            parametro = link.statistica.parametro
+            param = link.statistica.param
             valore = link.valore_base
             
-            if parametro:
-                testo_formattato = testo_formattato.replace(f"{{{parametro}}}", str(valore))
+            if param:
+                testo_formattato = testo_formattato.replace(f"{{{param}}}", str(valore))
                 
         return testo_formattato
 

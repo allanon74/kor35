@@ -16,7 +16,7 @@ def get_statistica_base_help_text():
         # Filtra solo le statistiche che hanno una sigla definita
         stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
         if not stats.exists():
-            return "Nessuna variabile statistica definita."
+            return "Nessuna variabile statistica (parametro) definita."
         
         # Costruisci l'elenco HTML
         base_text = "<b>Variabili Valori Base disponibili:</b><br>"
@@ -26,7 +26,7 @@ def get_statistica_base_help_text():
         return format_html(base_text + "<br>".join(variabili))
     except Exception as e:
         # Se la tabella Statistica non esiste ancora (es. prima migrazione)
-        return f"Errore nel caricare le variabili: {e}"
+        return format_html(f"<b style='color:red;'>Errore nel caricare le variabili: {e}</b>")
 
 
 
