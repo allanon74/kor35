@@ -14,13 +14,13 @@ def get_statistica_base_help_text():
     """
     try:
         # Filtra solo le statistiche che hanno una sigla definita
-        stats = Statistica.objects.filter(sigla__isnull=False).exclude(sigla__exact='')
+        stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
         if not stats.exists():
             return "Nessuna variabile statistica definita."
         
         # Costruisci l'elenco HTML
         base_text = "<b>Variabili Valori Base disponibili:</b><br>"
-        variabili = [f"&bull; <b>{{{s.sigla}}}</b>: {s.nome}" for s in stats]
+        variabili = [f"&bull; <b>{{{s.parametro}}}</b>: {s.nome}" for s in stats]
         
         # format_html è importante per la sicurezza e per renderizzare l'HTML
         return format_html(base_text + "<br>".join(variabili))
