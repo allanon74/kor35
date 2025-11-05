@@ -7,33 +7,33 @@ from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 
 
-def get_statistica_base_help_text():
-    """
-    Funzione di test per forzare l'aggiornamento.
-    """
-    # Restituisce una stringa semplice senza database o try/except
-    return format_html("<b>Test di ricarica: Funziona!</b>") 
-
 # def get_statistica_base_help_text():
 #     """
-#     Crea dinamicamente l'help text con le variabili disponibili
-#     basate sulle 'sigle' del modello Statistica.
+#     Funzione di test per forzare l'aggiornamento.
 #     """
-#     try:
-#         # Filtra solo le statistiche che hanno una sigla definita
-#         stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
-#         if not stats.exists():
-#             return "Nessuna variabile statistica (parametro) definita."
+#     # Restituisce una stringa semplice senza database o try/except
+#     return format_html("<b>Test di ricarica: Funziona!</b>") 
+
+def get_statistica_base_help_text():
+    """
+    Crea dinamicamente l'help text con le variabili disponibili
+    basate sulle 'sigle' del modello Statistica.
+    """
+    try:
+        # Filtra solo le statistiche che hanno una sigla definita
+        stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
+        if not stats.exists():
+            return "Nessuna variabile statistica (parametro) definita."
         
-#         # Costruisci l'elenco HTML
-#         base_text = "<b>Variabili Valori Base disponibili:</b><br>"
-#         variabili = [f"&bull; <b>{{{s.parametro}}}</b>: {s.nome}" for s in stats]
+        # Costruisci l'elenco HTML
+        base_text = "<b>Variabili Valori Base disponibili:</b><br>"
+        variabili = [f"&bull; <b>{{{s.parametro}}}</b>: {s.nome}" for s in stats]
         
-#         # format_html è importante per la sicurezza e per renderizzare l'HTML
-#         return format_html(base_text + "<br>".join(variabili))
-#     except Exception as e:
-#         # Se la tabella Statistica non esiste ancora (es. prima migrazione)
-#         return format_html(f"<b style='color:red;'>Errore nel caricare le variabili: {e}</b>")
+        # format_html è importante per la sicurezza e per renderizzare l'HTML
+        return format_html(base_text + "<br>".join(variabili))
+    except Exception as e:
+        # Se la tabella Statistica non esiste ancora (es. prima migrazione)
+        return format_html(f"<b style='color:red;'>Errore nel caricare le variabili: {e}</b>")
 
 
 
