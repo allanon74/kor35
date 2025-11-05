@@ -96,6 +96,14 @@ class Statistica(Punteggio):
     Una Statistica è un tipo specializzato di Punteggio
     che ha valori predefiniti.
     """
+    parametro = models.CharField(
+        max_length=10,
+        unique=True,
+        blank=True, 
+        null=True,
+        help_text="La variabile da usare nel testo, es. 'pv' (senza parentesi graffe)."
+    )
+    
     valore_predefinito = models.IntegerField(
         default=0,
         help_text="Valore di default per questa statistica."

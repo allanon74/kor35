@@ -2,6 +2,8 @@ from django.contrib import admin
 from .models import OggettoStatisticaBase, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase
 from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO
 from personaggi.admin import StatisticaPivotInlineBase
+from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
+from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 
 
 class PunteggioOggettoInline(admin.TabularInline):
@@ -37,17 +39,19 @@ class OggettoStatisticaBaseInline(StatisticaPivotInlineBase):
     verbose_name_plural = "Statistiche (Valori Base)"
 
 @admin.register(Manifesto)
-class ManifestoAdmin(admin.ModelAdmin):
+class ManifestoAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome', )
     readonly_fields = ('id', 'data_creazione',)
+    summernote_fields = ['testo', ]
 
 @admin.register(QrCode)
 class QrCodeAdmin(admin.ModelAdmin):
     list_display = ('id', 'data_creazione',)
     readonly_fields = ('id', 'data_creazione',) 
+    summernote_fields = ['testo', ]
     
 @admin.register(Oggetto)
-class OggettoAdmin(admin.ModelAdmin):
+class OggettoAdmin(SModelAdmin):
     
     list_display = ('id', 'data_creazione', 'nome', 'livello')
     readonly_fields = ('id', 'data_creazione','livello',) 
@@ -55,10 +59,11 @@ class OggettoAdmin(admin.ModelAdmin):
     inlines = [
         PunteggioOggettoInline, 
         OggettoStatisticaInline,
-        Oggetto, 
+        OggettoStatisticaBaseInline,
         ]
     # filter_vertical = [Oggetto.elementi.through]
     exclude = ('elementi', 'statistiche', 'statistiche_base')  # Escludi i campi ManyToMany originali  
+    summernote_fields = ['testo', ]
     
 class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
     model = AttivataStatisticaBase
@@ -70,8 +75,9 @@ class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
     verbose_name_plural = "Statistiche (Valori Base)"
 
 @admin.register(Attivata)
-class AttivataAdmin(admin.ModelAdmin):
+class AttivataAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome')
     readonly_fields = ('id', 'data_creazione',)
     inlines = [AttivataStatisticaBaseInline]
-    exclude = ('statistiche_base',)    
+    exclude = ('statistiche_base',) 
+    summernote_fields = ['testo', ]   
