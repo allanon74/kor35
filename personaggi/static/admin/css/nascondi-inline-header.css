@@ -1,0 +1,16 @@
+/*
+ * Nasconde l'intestazione "originale" per gli inline tabulari
+ * che usano la classe StatisticaPivotInlineBase.
+ */
+.inline-group .tabular tr.has_original td:first-child {
+    /* Nasconde il link/testo, ma mantiene lo spazio per il pulsante "elimina" se attivo */
+    text-indent: -9999px;
+    overflow: hidden;
+}
+
+/* Se vuoi nascondere anche il nome della tabella (es. "STATISTICA (VALORE BASE):") */
+/*
+.inline-group h2 {
+    display: none;
+}
+*/
