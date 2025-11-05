@@ -160,7 +160,11 @@ class StatisticaPivotInlineBase(admin.TabularInline):
     # 'statistica' è sempre readonly
     readonly_fields = ('statistica',)
     extra = 0
-    has_delete_permission = False 
+    # has_delete_permission = False 
+
+    def has_delete_permission(self, request, obj=None):
+        # Impedisce all'utente di cancellare una riga di statistica
+        return False
 
     def get_fields(self, request, obj=None):
         # Imposta i campi da mostrare dinamicamente
