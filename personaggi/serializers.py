@@ -223,7 +223,8 @@ class OggettoSerializer(serializers.ModelSerializer):
     elementi = OggettoElementoSerializer(source='oggettoelemento_set', many=True, read_only=True)
     
     # Serializza la @property
-    TestoFormattato = serializers.CharField(read_only=True) 
+    TestoFormattato = serializers.CharField(read_only=True)
+    testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True) # Serializza la @property
     aura = PunteggioSerializer(read_only=True) # Serializza il FK
     inventario_corrente = serializers.StringRelatedField(read_only=True)
@@ -232,6 +233,7 @@ class OggettoSerializer(serializers.ModelSerializer):
         model = Oggetto
         fields = (
             'id', 'nome', 'testo', 'TestoFormattato', 
+            'testo_formattato_personaggio', 
             'livello', 'aura', 
             'elementi', 'statistiche', 'statistiche_base',
             'inventario_corrente',
@@ -241,12 +243,14 @@ class AttivataSerializer(serializers.ModelSerializer):
     statistiche_base = AttivataStatisticaBaseSerializer(source='attivatastatisticabase_set', many=True, read_only=True)
     elementi = AttivataElementoSerializer(source='attivataelemento_set', many=True, read_only=True) 
     TestoFormattato = serializers.CharField(read_only=True)
+    testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Attivata
         fields = (
             'id', 'nome', 'testo', 'TestoFormattato',
+            'testo_formattato_personaggio', 
             'livello', 'elementi', 'statistiche_base'
         )
 
@@ -306,16 +310,18 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     
     # Proprietà Read-only
     crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    caratteristiche_calcolate = serializers.JSONField(read_only=True)
-    modificatori_statistiche = serializers.JSONField(read_only=True)
+    caratteristiche_base = serializers.JSONField(read_only=True) # Era 'caratteristiche_calcolate'
+    modificatori_calcolati = serializers.JSONField(read_only=True) # Era 'modificatori_statistiche'
     TestoFormattatoPersonale = serializers.JSONField(read_only=True)
+
     
     # M2M Posseduti
     abilita_possedute = AbilitaSerializer(many=True, read_only=True)
     attivate_possedute = AttivataSerializer(many=True, read_only=True) # Potrebbe essere pesante
     
     # Oggetti (da Inventario)
-    oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
+    oggetti = serializers.SerializerMethodField()
+    attivate_possedute = serializers.SerializerMethodField()
     
     # Log e Crediti
     log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
@@ -329,11 +335,61 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         model = Personaggio
         fields = (
             'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte',
-            'crediti', 'caratteristiche_calcolate', 'modificatori_statistiche',
-            'TestoFormattatoPersonale', 'abilita_possedute', 'attivate_possedute',
-            'oggetti', 'log_eventi', 'movimenti_credito',
+            'crediti', 
+            'caratteristiche_base', # Nome aggiornato
+            'modificatori_calcolati', # Nome aggiornato
+            'abilita_possedute', 
+            'oggetti', # Aggiornato a SerializerMethodField
+            'attivate_possedute', # Aggiornato a SerializerMethodField
+            'log_eventi', 'movimenti_credito',
             'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese'
         )
+    
+    def get_oggetti(self, personaggio):
+        """
+        Metodo per serializzare gli oggetti posseduti,
+        iniettando il testo formattato calcolato.
+        """
+        # Pre-carica tutto il necessario per i calcoli in una volta
+        # (La logica di get_oggetti() e get_testo_formattato_per_item 
+        #  beneficerà delle cache e prefetch)
+        oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
+            'statistiche_base__statistica', 'oggettostatistica_set__statistica',
+            'oggettoelemento_set__elemento', 'aura'
+        )
+        
+        # Ottieni i modificatori una sola volta (verranno messi in cache)
+        personaggio.modificatori_calcolati
+        
+        risultati = []
+        for obj in oggetti_posseduti:
+            # Serializza l'oggetto
+            dati_oggetto = OggettoSerializer(obj, context=self.context).data
+            # Calcola e aggiungi il testo formattato specifico
+            dati_oggetto['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(obj)
+            risultati.append(dati_oggetto)
+            
+        return risultati
+
+    def get_attivate_possedute(self, personaggio):
+        """
+        Metodo per serializzare le attivate possedute,
+        iniettando il testo formattato calcolato.
+        """
+        attivate_possedute = personaggio.attivate_possedute.prefetch_related(
+            'statistiche_base__statistica', 'attivataelemento_set__elemento'
+        )
+        
+        # I modificatori dovrebbero essere già in cache da get_oggetti()
+        personaggio.modificatori_calcolati
+        
+        risultati = []
+        for att in attivate_possedute:
+            dati_attivata = AttivataSerializer(att, context=self.context).data
+            dati_attivata['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(att)
+            risultati.append(dati_attivata)
+            
+        return risultati
 
 class PersonaggioPublicSerializer(serializers.ModelSerializer):
     """Serializer pubblico per un Personaggio (Inventario)."""

@@ -598,24 +598,23 @@ class Personaggio(Inventario):
     
     # --- PROPRIETÀ READONLY (Statistiche/Caratteristiche) ---
     # (Implementazione iniziale, da espandere con i modificatori da Caratteristiche)
-    
-    
     @property
     def caratteristiche_base(self):
         """
         [CALCOLO 1]
-        Calcola i valori base delle Caratteristiche (es. Forza, Destrezza)
-        sommando i bonus 'punteggio_acquisito' dalle abilità possedute.
-        Restituisce un dict: {'Forza': 10, 'Destrezza': 8}
+        Calcola i valori base delle Caratteristiche.
+        Usa una cache sull'istanza ('_caratteristiche_base_cache') 
+        per evitare ricalcoli multipli nella stessa richiesta.
         """
-        # 1. Trova i collegamenti 'abilita_punteggio' per le abilità possedute
-        #    che puntano a Punteggi di tipo CARATTERISTICA
+        # Controlla se la cache esiste già
+        if hasattr(self, '_caratteristiche_base_cache'):
+            return self._caratteristiche_base_cache
+
         links = abilita_punteggio.objects.filter(
             abilita__personaggioabilita__personaggio=self,
             punteggio__tipo=CARATTERISTICA
         ).select_related('punteggio')
         
-        # 2. Aggrega i valori in un dizionario
         caratteristiche = {}
         for link in links:
             nome_caratteristica = link.punteggio.nome
@@ -623,28 +622,23 @@ class Personaggio(Inventario):
                 caratteristiche[nome_caratteristica] = 0
             caratteristiche[nome_caratteristica] += link.valore
             
-        return caratteristiche
+        # Salva nella cache dell'istanza
+        self._caratteristiche_base_cache = caratteristiche
+        return self._caratteristiche_base_cache
     
     @property
     def modificatori_calcolati(self):
         """
         [CALCOLO 2]
-        Calcola i modificatori Additivi e Moltiplicativi totali per 
-        ogni Statistica, combinando:
-        1. Bonus da Abilità (via AbilitaStatistica)
-        2. Bonus da Oggetti equipaggiati (via OggettoStatistica)
-        3. Bonus da Caratteristiche base (via CaratteristicaModificatore)
-        
-        Restituisce un dict: 
-        {
-          'Danni Mischia': {'add': 15, 'mol': 1.0},
-          'Punti Vita':    {'add': 10, 'mol': 1.2}
-        }
+        Calcola i modificatori Additivi e Moltiplicativi totali.
+        Usa una cache sull'istanza ('_modificatori_calcolati_cache').
         """
+        # Controlla se la cache esiste già
+        if hasattr(self, '_modificatori_calcolati_cache'):
+            return self._modificatori_calcolati_cache
+
+        mods = {} 
         
-        mods = {} # Il dizionario finale
-        
-        # Helper per aggiungere un modificatore
         def _add_mod(stat_nome, tipo, valore):
             if stat_nome not in mods:
                 mods[stat_nome] = {'add': 0, 'mol': 1.0}
@@ -652,7 +646,8 @@ class Personaggio(Inventario):
             if tipo == MODIFICATORE_ADDITIVO:
                 mods[stat_nome]['add'] += valore
             elif tipo == MODIFICATORE_MOLTIPLICATIVO:
-                mods[stat_nome]['mol'] *= valore # Moltiplica i moltiplicatori
+                # Assicuriamo che il valore sia un float per la moltiplicazione
+                mods[stat_nome]['mol'] *= float(valore) 
 
         # 1. Bonus da Abilità possedute
         bonus_abilita = AbilitaStatistica.objects.filter(
@@ -671,28 +666,25 @@ class Personaggio(Inventario):
         for link in bonus_oggetti:
             _add_mod(link.statistica.nome, link.tipo_modificatore, link.valore)
 
-        # 3. Bonus da Caratteristiche base
-        caratteristiche_base = self.caratteristiche_base
-        if not caratteristiche_base:
-            return mods # Inutile continuare se non ci sono caratteristiche
-        
-        # Trova tutti i possibili modificatori per le caratteristiche che possediamo
-        links_caratteristiche = CaratteristicaModificatore.objects.filter(
-            caratteristica__nome__in=caratteristiche_base.keys()
-        ).select_related('caratteristica', 'statistica_modificata')
-        
-        for link in links_caratteristiche:
-            nome_caratteristica = link.caratteristica.nome
-            punti_caratteristica = caratteristiche_base.get(nome_caratteristica, 0)
+        # 3. Bonus da Caratteristiche base (usa la proprietà che ha già la cache)
+        caratteristiche_base = self.caratteristiche_base 
+        if caratteristiche_base:
+            links_caratteristiche = CaratteristicaModificatore.objects.filter(
+                caratteristica__nome__in=caratteristiche_base.keys()
+            ).select_related('caratteristica', 'statistica_modificata')
             
-            if punti_caratteristica > 0 and link.ogni_x_punti > 0:
-                # Calcola il bonus (es. 10 Forza / 2 = +5)
-                bonus = (punti_caratteristica // link.ogni_x_punti) * link.modificatore
-                if bonus > 0:
-                    # I bonus da caratteristica sono SEMPRE additivi
-                    _add_mod(link.statistica_modificata.nome, MODIFICATORE_ADDITIVO, bonus)
-                    
-        return mods
+            for link in links_caratteristiche:
+                nome_caratteristica = link.caratteristica.nome
+                punti_caratteristica = caratteristiche_base.get(nome_caratteristica, 0)
+                
+                if punti_caratteristica > 0 and link.ogni_x_punti > 0:
+                    bonus = (punti_caratteristica // link.ogni_x_punti) * link.modificatore
+                    if bonus > 0:
+                        _add_mod(link.statistica_modificata.nome, MODIFICATORE_ADDITIVO, bonus)
+        
+        # Salva nella cache dell'istanza
+        self._modificatori_calcolati_cache = mods
+        return self._modificatori_calcolati_cache
     
     @property
     def TestoFormattatoPersonale(self):
@@ -751,6 +743,52 @@ class Personaggio(Inventario):
             testi_formattati.append({"sorgente": f"Attivata: {attivata.nome}", "testo": testo_attivata})
         
         return testi_formattati
+    
+    def get_testo_formattato_per_item(self, item):
+        """
+        [CALCOLO 3 - NUOVA VERSIONE]
+        Prende un singolo Oggetto o Attivata e ne calcola il
+        TestoFormattato applicando i modificatori del personaggio.
+        """
+        if not item or not item.testo:
+            return ""
+
+        testo_formattato = item.testo
+        
+        # 1. Prendi i modificatori totali (usa la cache)
+        mods = self.modificatori_calcolati
+        
+        # 2. Determina quali statistiche base usare (Oggetto o Attivata)
+        # Usiamo il nome della relazione inversa per accedere ai link
+        links_base = None
+        if isinstance(item, Oggetto):
+            links_base = item.oggettostatisticabase_set.select_related('statistica').all()
+        elif isinstance(item, Attivata):
+            links_base = item.attivatastatisticabase_set.select_related('statistica').all()
+        else:
+            return testo_formattato # Non so come formattare questo oggetto
+
+        # 3. Applica i modificatori
+        for link in links_base:
+            stat = link.statistica
+            if not stat.parametro:
+                continue
+
+            valore_base = link.valore_base
+            
+            # Prendi i modificatori calcolati per questa statistica
+            stat_mods = mods.get(stat.nome, {'add': 0, 'mol': 1.0})
+            
+            # Applica la formula
+            valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
+            
+            # Sostituisci il placeholder
+            testo_formattato = testo_formattato.replace(
+                f"{{{stat.parametro}}}", 
+                str(round(valore_finale, 2))
+            )
+            
+        return testo_formattato
     
     
     @property
