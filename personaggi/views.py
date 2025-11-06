@@ -5,8 +5,10 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
-from .models import Personaggio
+from .models import Personaggio, TransazioneSospesa, CreditoMovimento
 import uuid # Importa uuid per il type hinting (opzionale ma pulito)
+
+from .models import STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES
 
 import qrcode
 import io
@@ -15,22 +17,26 @@ from django.utils.html import escape
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import viewsets, status, permissions
+from rest_framework.authtoken.admin import User
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.authtoken.views import ObtainAuthToken
 
 from .serializers import (
     OggettoSerializer, AttivataSerializer, 
     ManifestoSerializer, A_vistaSerializer, 
     InventarioSerializer,
+    PersonaggioDetailSerializer, # <-- Nuovo
+    CreditoMovimentoCreateSerializer, # <-- Nuovo
+    TransazioneCreateSerializer, # <-- Nuovo
+    TransazioneSospesaSerializer, # <-- Nuovo
+    TransazioneConfermaSerializer, #
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
 
-from rest_framework import viewsets, status, permissions
-from rest_framework.authtoken.admin import User
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.authtoken.views import ObtainAuthToken
+
 
 
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -406,3 +412,159 @@ class QrCodeDetailView(APIView):
         }
         
         return Response(response_payload, status=status.HTTP_200_OK) 
+    
+class PersonaggioMeView(APIView):
+    """
+    GET /api/personaggio/me/
+    Restituisce i dettagli completi del personaggio
+    collegato all'utente attualmente loggato.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        try:
+            # Trova il personaggio collegato all'utente che fa la richiesta
+            # Assumiamo che ci sia un solo personaggio per utente
+            personaggio = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = PersonaggioDetailSerializer(personaggio)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CreditoMovimentoCreateView(APIView):
+    """
+    POST /api/personaggio/me/crediti/
+    Aggiunge un movimento di crediti al personaggio dell'utente loggato.
+    Richiede: {"importo": "100.00", "descrizione": "Ricompensa missione"}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        try:
+            personaggio = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = CreditoMovimentoCreateSerializer(
+            data=request.data,
+            context={'personaggio': personaggio} # Passa il personaggio al serializer
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class TransazioneSospesaListView(APIView):
+    """
+    GET /api/transazioni/sospese/
+    Restituisce l'elenco delle transazioni in uscita
+    che l'utente loggato deve confermare.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        try:
+            personaggio = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Trova le transazioni in attesa in cui il mittente
+        # è l'inventario del personaggio loggato
+        transazioni = TransazioneSospesa.objects.filter(
+            mittente=personaggio.inventario_ptr, # Usa l'inventario_ptr
+            stato=STATO_TRANSAZIONE_IN_ATTESA
+        )
+        
+        serializer = TransazioneSospesaSerializer(transazioni, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class TransazioneRichiediView(APIView):
+    """
+    POST /api/transazioni/richiedi/
+    Un utente loggato (richiedente) crea una richiesta di transazione.
+    Richiede: {"oggetto_id": 123, "mittente_id": 456}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        try:
+            personaggio_richiedente = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente (richiedente)."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = TransazioneCreateSerializer(
+            data=request.data,
+            context={'richiedente': personaggio_richiedente}
+        )
+        
+        if serializer.is_valid():
+            transazione = serializer.save()
+            # Serializza la transazione creata per la risposta
+            response_serializer = TransazioneSospesaSerializer(transazione)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class TransazioneConfermaView(APIView):
+    """
+    POST /api/transazioni/<int:pk>/conferma/
+    Permette al mittente di accettare o rifiutare una transazione.
+    Richiede: {"azione": "accetta"} o {"azione": "rifiuta"}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk, format=None):
+        try:
+            personaggio_mittente = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            transazione = TransazioneSospesa.objects.get(
+                pk=pk,
+                mittente=personaggio_mittente.inventario_ptr, # Verifica che l'utente sia il mittente
+                stato=STATO_TRANSAZIONE_IN_ATTESA
+            )
+        except TransazioneSospesa.DoesNotExist:
+            return Response(
+                {"error": "Transazione non trovata, già processata o non autorizzata."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = TransazioneConfermaSerializer(
+            data=request.data,
+            context={'transazione': transazione}
+        )
+        
+        if serializer.is_valid():
+            try:
+                serializer.save()
+                return Response(
+                    {"success": f"Transazione {serializer.validated_data['azione']}ta."},
+                    status=status.HTTP_200_OK
+                )
+            except Exception as e:
+                return Response(
+                    {"error": f"Errore durante l'azione: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

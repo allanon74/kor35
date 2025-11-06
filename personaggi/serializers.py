@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
-
+from django.utils import timezone
 
 from .models import (
     Abilita, Tier, Spell, Mattone, Punteggio, Tabella,
@@ -344,3 +344,64 @@ class PersonaggioPublicSerializer(serializers.ModelSerializer):
         # Mostra solo i campi pubblici (come un Inventario)
         fields = ('id', 'nome', 'testo', 'oggetti')
         
+
+
+class CreditoMovimentoCreateSerializer(serializers.Serializer):
+    """Serializer per validare la creazione di un movimento crediti."""
+    importo = serializers.DecimalField(max_digits=10, decimal_places=2)
+    descrizione = serializers.CharField(max_length=200)
+
+    def create(self, validated_data):
+        # Il personaggio viene passato dal contesto della vista
+        personaggio = self.context['personaggio']
+        movimento = CreditoMovimento.objects.create(
+            personaggio=personaggio,
+            **validated_data
+        )
+        return movimento
+
+class TransazioneCreateSerializer(serializers.Serializer):
+    """Serializer per validare la richiesta di una transazione."""
+    oggetto_id = serializers.PrimaryKeyRelatedField(queryset=Oggetto.objects.all())
+    mittente_id = serializers.PrimaryKeyRelatedField(queryset=Inventario.objects.all())
+
+    def validate(self, data):
+        """
+        Validazione incrociata: l'oggetto è davvero nell'inventario del mittente?
+        """
+        oggetto = data.get('oggetto_id')
+        mittente = data.get('mittente_id')
+        
+        # Controlla se l'oggetto è attualmente in quell'inventario
+        if oggetto.inventario_corrente != mittente:
+            raise serializers.ValidationError(
+                f"L'oggetto '{oggetto.nome}' non si trova nell'inventario di '{mittente.nome}'."
+            )
+        return data
+    
+    def create(self, validated_data):
+        # Il richiedente (personaggio) viene passato dal contesto della vista
+        richiedente_pg = self.context['richiedente']
+        
+        transazione = TransazioneSospesa.objects.create(
+            oggetto=validated_data.get('oggetto_id'),
+            mittente=validated_data.get('mittente_id'),
+            richiedente=richiedente_pg
+        )
+        return transazione
+
+class TransazioneConfermaSerializer(serializers.Serializer):
+    """Serializer per validare l'azione di conferma/rifiuto."""
+    azione = serializers.ChoiceField(choices=['accetta', 'rifiuta'])
+
+    def save(self, **kwargs):
+        # La transazione viene passata dal contesto della vista
+        transazione = self.context['transazione']
+        azione = self.validated_data['azione']
+        
+        if azione == 'accetta':
+            transazione.accetta()
+        elif azione == 'rifiuta':
+            transazione.rifiuta()
+            
+        return transazione

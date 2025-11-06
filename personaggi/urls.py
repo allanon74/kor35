@@ -17,6 +17,8 @@ from .views import (AbilViewSet,
     SpellMattoneViewSet, SpellElementoViewSet, MyAuthToken, get_csrf_token	
 )
 
+app_name = 'personaggi'
+
 router = DefaultRouter()
 router.register(r'abilita', AbilitaViewSet)
 router.register(r'abil', AbilViewSet, basename='abil')
@@ -53,5 +55,13 @@ urlpatterns = [
     # Definisci il nuovo endpoint
     # L'app React chiamerà: /oggetti/api/qrcode/IL-TUO-ID/   
     path('api/qrcode/<str:qrcode_id>/', views.QrCodeDetailView.as_view(), name='api_qrcode_detail'),
+    
+    path('api/personaggio/me/', views.PersonaggioMeView.as_view(), name='api_personaggio_me'),
+    path('api/personaggio/me/crediti/', views.CreditoMovimentoCreateView.as_view(), name='api_crediti_create'),
+
+    # --- Viste API Transazioni (Nuove) ---
+    path('api/transazioni/sospese/', views.TransazioneSospesaListView.as_view(), name='api_transazioni_sospese'),
+    path('api/transazioni/richiedi/', views.TransazioneRichiediView.as_view(), name='api_transazioni_richiedi'),
+    path('api/transazioni/<int:pk>/conferma/', views.TransazioneConfermaView.as_view(), name='api_transazioni_conferma'),
 
 ]
