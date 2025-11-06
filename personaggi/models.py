@@ -10,6 +10,10 @@ from django.utils import timezone
 from django.contrib.auth.models import User # Importa il modello User
 from django.utils import timezone # Importa timezone
 
+
+
+from cms.models.pluginmodel import CMSPlugin
+
 # from oggetti.models import Inventario, Attivata
 
 # prova modifica terza volta
@@ -106,7 +110,13 @@ class Punteggio(Tabella):
 		verbose_name = "Carattesitica relativa",
 		related_name = "punteggi_caratteristica",
 		)
-	
+	modifica_statistiche = models.ManyToManyField(
+		'Statistica',
+		through='CaratteristicaModificatore',
+		related_name='modificata_da_caratteristiche',
+		blank=True
+	)
+ 
 	class Meta:
 		verbose_name = "Punteggio"
 		verbose_name_plural = "Punteggi"
@@ -156,6 +166,38 @@ class Statistica(Punteggio):
         verbose_name = "Statistica"
         verbose_name_plural = "Statistiche"
         
+ # --- NUOVO MODELLO "THROUGH" PER CARATTERISTICA -> STATISTICA ---
+class CaratteristicaModificatore(models.Model):
+    """
+    Definisce come una Caratteristica (es. Forza) modifica una Statistica (es. Danni Mischia).
+    """
+    caratteristica = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo': CARATTERISTICA},
+        related_name = "modificatori_dati",
+    )
+    statistica_modificata = models.ForeignKey(
+        Statistica, 
+        on_delete=models.CASCADE,
+        related_name = "modificatori_ricevuti",
+    )
+    modificatore = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=1.0,
+        help_text="Es: +1, +0.5, ecc. (valore additivo)"
+    )
+    ogni_x_punti = models.IntegerField(
+        default=1,
+        help_text="Applica il modificatore ogni X punti di caratteristica."
+    )
+    
+    class Meta:
+        verbose_name = "Modificatore da Caratteristica"
+        verbose_name_plural = "Modificatori da Caratteristiche"
+        unique_together = ('caratteristica', 'statistica_modificata')
+ 
         
 # --- 3. Crea il modello "Through" per Abilita <-> Statistica ---
 class AbilitaStatistica(models.Model):
@@ -164,6 +206,11 @@ class AbilitaStatistica(models.Model):
         Statistica, 
         on_delete=models.CASCADE
         # Non serve limit_choices_to, perché il FK è già su Statistica
+    )
+    tipo_modificatore = models.CharField(
+        max_length=3,
+        choices=MODIFICATORE_CHOICES,
+        default=MODIFICATORE_ADDITIVO
     )
     valore = models.IntegerField(default=0)
     
@@ -552,6 +599,160 @@ class Personaggio(Inventario):
     # --- PROPRIETÀ READONLY (Statistiche/Caratteristiche) ---
     # (Implementazione iniziale, da espandere con i modificatori da Caratteristiche)
     
+    
+    @property
+    def caratteristiche_base(self):
+        """
+        [CALCOLO 1]
+        Calcola i valori base delle Caratteristiche (es. Forza, Destrezza)
+        sommando i bonus 'punteggio_acquisito' dalle abilità possedute.
+        Restituisce un dict: {'Forza': 10, 'Destrezza': 8}
+        """
+        # 1. Trova i collegamenti 'abilita_punteggio' per le abilità possedute
+        #    che puntano a Punteggi di tipo CARATTERISTICA
+        links = abilita_punteggio.objects.filter(
+            abilita__personaggioabilita__personaggio=self,
+            punteggio__tipo=CARATTERISTICA
+        ).select_related('punteggio')
+        
+        # 2. Aggrega i valori in un dizionario
+        caratteristiche = {}
+        for link in links:
+            nome_caratteristica = link.punteggio.nome
+            if nome_caratteristica not in caratteristiche:
+                caratteristiche[nome_caratteristica] = 0
+            caratteristiche[nome_caratteristica] += link.valore
+            
+        return caratteristiche
+    
+    @property
+    def modificatori_calcolati(self):
+        """
+        [CALCOLO 2]
+        Calcola i modificatori Additivi e Moltiplicativi totali per 
+        ogni Statistica, combinando:
+        1. Bonus da Abilità (via AbilitaStatistica)
+        2. Bonus da Oggetti equipaggiati (via OggettoStatistica)
+        3. Bonus da Caratteristiche base (via CaratteristicaModificatore)
+        
+        Restituisce un dict: 
+        {
+          'Danni Mischia': {'add': 15, 'mol': 1.0},
+          'Punti Vita':    {'add': 10, 'mol': 1.2}
+        }
+        """
+        
+        mods = {} # Il dizionario finale
+        
+        # Helper per aggiungere un modificatore
+        def _add_mod(stat_nome, tipo, valore):
+            if stat_nome not in mods:
+                mods[stat_nome] = {'add': 0, 'mol': 1.0}
+            
+            if tipo == MODIFICATORE_ADDITIVO:
+                mods[stat_nome]['add'] += valore
+            elif tipo == MODIFICATORE_MOLTIPLICATIVO:
+                mods[stat_nome]['mol'] *= valore # Moltiplica i moltiplicatori
+
+        # 1. Bonus da Abilità possedute
+        bonus_abilita = AbilitaStatistica.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).select_related('statistica')
+        
+        for link in bonus_abilita:
+            _add_mod(link.statistica.nome, link.tipo_modificatore, link.valore)
+
+        # 2. Bonus da Oggetti posseduti (nell'inventario)
+        bonus_oggetti = OggettoStatistica.objects.filter(
+            oggetto__tracciamento_inventario__inventario=self.inventario_ptr,
+            oggetto__tracciamento_inventario__data_fine__isnull=True
+        ).select_related('statistica')
+        
+        for link in bonus_oggetti:
+            _add_mod(link.statistica.nome, link.tipo_modificatore, link.valore)
+
+        # 3. Bonus da Caratteristiche base
+        caratteristiche_base = self.caratteristiche_base
+        if not caratteristiche_base:
+            return mods # Inutile continuare se non ci sono caratteristiche
+        
+        # Trova tutti i possibili modificatori per le caratteristiche che possediamo
+        links_caratteristiche = CaratteristicaModificatore.objects.filter(
+            caratteristica__nome__in=caratteristiche_base.keys()
+        ).select_related('caratteristica', 'statistica_modificata')
+        
+        for link in links_caratteristiche:
+            nome_caratteristica = link.caratteristica.nome
+            punti_caratteristica = caratteristiche_base.get(nome_caratteristica, 0)
+            
+            if punti_caratteristica > 0 and link.ogni_x_punti > 0:
+                # Calcola il bonus (es. 10 Forza / 2 = +5)
+                bonus = (punti_caratteristica // link.ogni_x_punti) * link.modificatore
+                if bonus > 0:
+                    # I bonus da caratteristica sono SEMPRE additivi
+                    _add_mod(link.statistica_modificata.nome, MODIFICATORE_ADDITIVO, bonus)
+                    
+        return mods
+    
+    @property
+    def TestoFormattatoPersonale(self):
+        """
+        [CALCOLO 3]
+        Restituisce un elenco di tutti i testi formattati
+        degli Oggetti e Attivate posseduti, applicando
+        i modificatori calcolati del personaggio.
+        """
+        
+        # 1. Prendi i modificatori totali del personaggio
+        mods = self.modificatori_calcolati
+        testi_formattati = []
+
+        # 2. Itera sugli oggetti posseduti
+        oggetti_posseduti = self.get_oggetti().prefetch_related('statistiche_base__statistica')
+        for oggetto in oggetti_posseduti:
+            if not oggetto.testo:
+                continue
+            testo_oggetto = oggetto.testo
+            
+            for link_base in oggetto.oggettostatisticabase_set.all():
+                stat = link_base.statistica
+                if not stat.parametro:
+                    continue
+
+                valore_base = link_base.valore_base
+                
+                # Applica i modificatori del personaggio
+                stat_mods = mods.get(stat.nome, {'add': 0, 'mol': 1.0})
+                valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
+                
+                testo_oggetto = testo_oggetto.replace(f"{{{stat.parametro}}}", str(round(valore_finale, 2)))
+            
+            testi_formattati.append({"sorgente": f"Oggetto: {oggetto.nome}", "testo": testo_oggetto})
+
+        # 3. Itera sulle attivate possedute
+        attivate_possedute = self.attivate_possedute.prefetch_related('statistiche_base__statistica')
+        for attivata in attivate_possedute:
+            if not attivata.testo:
+                continue
+            testo_attivata = attivata.testo
+            
+            for link_base in attivata.attivatastatisticabase_set.all():
+                stat = link_base.statistica
+                if not stat.parametro:
+                    continue
+                    
+                valore_base = link_base.valore_base
+                
+                stat_mods = mods.get(stat.nome, {'add': 0, 'mol': 1.0})
+                valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
+                
+                testo_attivata = testo_attivata.replace(f"{{{stat.parametro}}}", str(round(valore_finale, 2)))
+
+            testi_formattati.append({"sorgente": f"Attivata: {attivata.nome}", "testo": testo_attivata})
+        
+        return testi_formattati
+    
+    
     @property
     def caratteristiche_calcolate(self):
         """
@@ -804,6 +1005,12 @@ class OggettoStatistica(models.Model):
         on_delete=models.CASCADE
     )
     valore = models.IntegerField(default=0)
+    
+    tipo_modificatore = models.CharField(
+        max_length=3,
+        choices=MODIFICATORE_CHOICES,
+        default=MODIFICATORE_ADDITIVO
+    )
 
     class Meta:
         unique_together = ('oggetto', 'statistica') # Impedisce duplicati
@@ -995,4 +1202,30 @@ class Oggetto(A_vista):
             )
     # -----------------------------------------
     
-        
+
+
+# --- MODELLI PER I PLUGIN CMS ---
+
+class TierPluginModel(CMSPlugin):
+    tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='personaggi_tier_plugin')
+
+    def __str__(self):
+        return self.tier.nome
+
+class AbilitaPluginModel(CMSPlugin):
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.abilita.nome
+
+class OggettoPluginModel(CMSPlugin):
+    oggetto = models.ForeignKey(Oggetto, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.oggetto.nome
+
+class AttivataPluginModel(CMSPlugin):
+    attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.attivata.nome        

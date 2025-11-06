@@ -14,7 +14,7 @@ class TabellaPluginModel(CMSPlugin):
         return "{tabella}".format(tabella = self.tabella.nome)
 
 class TierPluginModel(CMSPlugin):
-    tier = models.ForeignKey(Tier, on_delete = models.CASCADE)
+    tier = models.ForeignKey(Tier, on_delete = models.CASCADE, related_name='cms_kor_tier_plugin')
     
     def __str__(self):
         return "{tier}".format(tier = self.tier.nome)

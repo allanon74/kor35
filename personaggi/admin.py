@@ -171,7 +171,10 @@ class StatisticaPivotInlineBase(admin.TabularInline):
         return False
 
     def get_fields(self, request, obj=None):
-        # Imposta i campi da mostrare dinamicamente
+        # Aggiungi 'tipo_modificatore' se il campo valore è 'valore'
+        if self.value_field == 'valore':
+            return ('statistica', self.value_field, 'tipo_modificatore')
+        # Altrimenti (per i Valori Base) mostra solo i due campi
         return ('statistica', self.value_field)
 
     def get_max_num(self, request, obj=None, **kwargs):
@@ -324,6 +327,7 @@ class OggettoStatisticaInline(StatisticaPivotInlineBase):
     fk_name = 'oggetto' # Nome del FK nel modello "through"
     verbose_name = "Statistica (Modificatore)"
     verbose_name_plural = "Statistiche (Modificatori)"
+    fields = ('statistica', 'valore', 'tipo_modificatore')
     
 class OggettoStatisticaBaseInline(StatisticaPivotInlineBase):
     model = OggettoStatisticaBase

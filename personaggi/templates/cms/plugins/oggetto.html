@@ -1,0 +1,7 @@
+<div>
+    <h4>{{ oggetto.nome }}</h4>
+    {% if oggetto.aura %}
+        <p><strong>Aura:</strong> {{ oggetto.aura.nome }}</p>
+    {% endif %}
+    <div>{{ oggetto.TestoFormattato|safe }}</div>
+</div>
