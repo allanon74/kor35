@@ -4,6 +4,7 @@ from django.shortcuts import render
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from .models import QrCode
+from .models import Oggetto, Attivata, Manifesto, A_vista
 import uuid # Importa uuid per il type hinting (opzionale ma pulito)
 
 import qrcode
@@ -11,6 +12,14 @@ import io
 import base64
 from django.utils.html import escape
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+from .serializers import (
+    OggettoSerializer, AttivataSerializer, 
+    ManifestoSerializer, A_vistaSerializer
+)
 
 def qr_code_html_view(request: HttpRequest) -> HttpResponse:
     uuid_str = request.GET.get('id')
@@ -199,3 +208,70 @@ def qr_code_detail_view(request: HttpRequest, pk: string) -> HttpResponse:
     """
     
     return HttpResponse(html_response)
+
+class QrCodeDetailView(APIView):
+    """
+    Vista API per recuperare i dettagli di un QrCode.
+    Accetta un ID QrCode e restituisce il JSON dell'oggetto
+    A_vista collegato (Oggetto, Attivata, Manifesto, ecc.).
+    """
+    
+    def get(self, request, qrcode_id, format=None):
+        try:
+            # 1. Trova il QrCode, ottimizzando la query per includere 'vista'
+            qr_code = QrCode.objects.select_related('vista').get(id=qrcode_id)
+        except QrCode.DoesNotExist:
+            return Response(
+                {"error": "QrCode non trovato."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        vista_obj = qr_code.vista
+        
+        if vista_obj is None:
+            # QrCode valido ma non collegato a nulla
+            return Response(
+                {
+                    "tipo_modello": "qrcode_scollegato",
+                    "messaggio": "Questo QrCode è valido ma non è collegato a nessun oggetto.",
+                    "qrcode_id": qr_code.id,
+                    "testo_qrcode": qr_code.testo
+                },
+                status=status.HTTP_200_OK
+            )
+        
+        data = None
+        model_type = None
+        
+        # 2. Determina il modello figlio (Polimorfismo)
+        # Controlliamo quale relazione inversa esiste sull'istanza di A_vista
+        
+        if hasattr(vista_obj, 'oggetto'):
+            model_type = 'oggetto'
+            # Usiamo vista_obj.oggetto per ottenere l'istanza "figlia"
+            serializer = OggettoSerializer(vista_obj.oggetto)
+            data = serializer.data
+            
+        elif hasattr(vista_obj, 'attivata'):
+            model_type = 'attivata'
+            serializer = AttivataSerializer(vista_obj.attivata)
+            data = serializer.data
+            
+        elif hasattr(vista_obj, 'manifesto'):
+            model_type = 'manifesto'
+            serializer = ManifestoSerializer(vista_obj.manifesto)
+            data = serializer.data
+            
+        else:
+            # È solo un A_vista, o un tipo non ancora gestito
+            model_type = 'a_vista'
+            serializer = A_vistaSerializer(vista_obj)
+            data = serializer.data
+
+        # 3. Costruisci e restituisci la risposta
+        response_payload = {
+            "tipo_modello": model_type,
+            "dati": data
+        }
+        
+        return Response(response_payload, status=status.HTTP_200_OK)
