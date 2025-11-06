@@ -49,7 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 	'personaggi.apps.PersonaggiConfig', #personaggi
-	'oggetti.apps.OggettiConfig', #oggetti
+	# 'oggetti.apps.OggettiConfig', #oggetti
 	'django.contrib.sites',
 	'cms', #cms
 	'menus', #cms

@@ -1,6 +1,16 @@
-from django.db import models
-from django.db.models import Sum
+from django.db.models import Sum, F
 
+import uuid
+import secrets
+import string
+from django.db import models, IntegrityError
+from django.db.models import Q
+from django.utils import timezone
+
+from django.contrib.auth.models import User # Importa il modello User
+from django.utils import timezone # Importa timezone
+
+# from oggetti.models import Inventario, Attivata
 
 # prova modifica terza volta
 
@@ -47,6 +57,22 @@ class A_modello(models.Model):
 	class Meta:
 		abstract = True
 		
+class A_vista(models.Model):
+    id = models.AutoField(primary_key=True)
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=100)
+    testo = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.nome} ({self.id})"
+    
+    class Meta:
+        ordering = ['-data_creazione'] 
+        # abstract = True
+    
+    class Meta:
+        verbose_name = "Elemento dell'Oggetto"
+        verbose_name_plural = "Elementi dell'Oggetto"
 
 
 #definizioni classi
@@ -351,4 +377,622 @@ class spell_mattone(A_modello):
 		testo = "{spell} necessita {mattone} {liv}"
 		return testo.format(spell=self.spell.nome, mattone=self.mattone.nome, liv=self.valore)
 
+    
+class Attivata(A_vista):
+    
+    elementi = models.ManyToManyField(
+        Punteggio, 
+        blank=True, 
+        verbose_name="Elementi associati",
+        through='AttivataElemento', # Specifica il modello intermedio
+        # Rimuovi limit_choices_to da qui, è stato spostato
+        # nel modello Through AttivataElemento.
+    )
+    
+    statistiche_base = models.ManyToManyField(
+        Statistica,
+        through='AttivataStatisticaBase',
+        blank=True,
+        verbose_name="Statistiche (Valori Base)",
+        related_name='attivata_statistiche_base' # related_name univoco
+    )
 
+    def __str__(self):
+        return f"Attivata: {self.nome}"
+
+    @property
+    def livello(self):
+        return self.elementi.count()
+
+    @property
+    def TestoFormattato(self):
+        """
+        Sostituisce i placeholder {sigla} nel testo
+        con i valori da AttivataStatisticaBase.
+        """
+        if not self.testo:
+            return ""
+        
+        testo_formattato = self.testo
+        
+        # Usiamo il related_name 'attivatastatisticabase_set'
+        stats_links = self.attivatastatisticabase_set.select_related('statistica').all()
+        
+        for link in stats_links:
+            param = link.statistica.parametro
+            valore = link.valore_base
+            
+            if param:
+                testo_formattato = testo_formattato.replace(f"{{{param}}}", str(valore))
+                
+        return testo_formattato
+
+    
+class Manifesto(A_vista):
+
+    def __str__(self):
+        return f"Manifesto: {self.nome}"
+
+
+class Inventario(A_vista):
+    """
+    Rappresenta un contenitore di Oggetti.
+    (es. forziere, negozio, deposito, o un Personaggio).
+    """
+    class Meta:
+        verbose_name = "Inventario"
+        verbose_name_plural = "Inventari"
+
+    def __str__(self):
+        return f"Inventario: {self.nome}"
+
+    def get_oggetti(self, data=None):
+        """
+        Restituisce un queryset di oggetti in questo inventario
+        in un momento specifico.
+        Se data è None, restituisce gli oggetti attuali.
+        """
+        if data is None:
+            data = timezone.now()
+        
+        return Oggetto.objects.filter(
+            tracciamento_inventario__inventario=self,
+            tracciamento_inventario__data_inizio__lte=data,
+            tracciamento_inventario__data_fine__isnull=True
+        )
+
+# --- 2. NUOVO MODELLO "THROUGH" PER IL TRACCIAMENTO STORICO ---
+class OggettoInInventario(models.Model):
+    """
+    Traccia la cronologia di un Oggetto in un Inventario.
+    Un record "attivo" (data_fine=None) indica la posizione attuale.
+    """
+    oggetto = models.ForeignKey(
+        'Oggetto', 
+        on_delete=models.CASCADE,
+        related_name="tracciamento_inventario"
+    )
+    inventario = models.ForeignKey(
+        Inventario, 
+        on_delete=models.CASCADE,
+        related_name="tracciamento_oggetti"
+    )
+    data_inizio = models.DateTimeField(default=timezone.now)
+    data_fine = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        help_text="Se Nullo, l'oggetto è attualmente in questo inventario."
+    )
+
+    class Meta:
+        verbose_name = "Tracciamento Oggetto in Inventario"
+        verbose_name_plural = "Tracciamenti Oggetto in Inventario"
+        ordering = ['-data_inizio'] # Ordina per il più recente
+
+    def __str__(self):
+        stato = "Attuale" if self.data_fine is None else f"Fino a {self.data_fine.strftime('%Y-%m-%d')}"
+        return f"{self.oggetto.nome} in {self.inventario.nome} (Da {self.data_inizio.strftime('%Y-%m-%d')} - {stato})"
+
+
+
+
+class Personaggio(Inventario):
+    """
+    Rappresenta un personaggio giocante o non giocante.
+    Eredita da Inventario, quindi PUÒ possedere oggetti.
+    """
+    proprietario = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL, # Non cancellare il PG se l'utente viene eliminato
+        related_name="personaggi",
+        null=True, 
+        blank=True,
+        help_text="L'account utente che controlla questo personaggio."
+    )
+    data_nascita = models.DateTimeField(default=timezone.now)
+    data_morte = models.DateTimeField(null=True, blank=True)
+    
+    # M2M verso le abilità e attivate che il personaggio possiede
+    abilita_possedute = models.ManyToManyField(
+        'Abilita',
+        through='PersonaggioAbilita',
+        blank=True
+    )
+    attivate_possedute = models.ManyToManyField(
+        Attivata,
+        through='PersonaggioAttivata',
+        blank=True
+    )
+
+    class Meta:
+        verbose_name = "Personaggio"
+        verbose_name_plural = "Personaggi"
+
+    def __str__(self):
+        return self.nome
+        
+    def aggiungi_log(self, testo_log):
+        """Metodo helper per creare velocemente un log."""
+        PersonaggioLog.objects.create(personaggio=self, testo_log=testo_log)
+    
+    def modifica_crediti(self, importo, descrizione):
+        """Metodo helper per aggiungere un movimento di crediti."""
+        CreditoMovimento.objects.create(
+            personaggio=self,
+            importo=importo,
+            descrizione=descrizione
+        )
+
+    # --- PROPRIETÀ READONLY (Crediti) ---
+    @property
+    def crediti(self):
+        """Calcola il totale dei crediti sommando tutti i movimenti."""
+        return self.movimenti_credito.aggregate(totale=Sum('importo'))['totale'] or 0
+    
+    # --- PROPRIETÀ READONLY (Statistiche/Caratteristiche) ---
+    # (Implementazione iniziale, da espandere con i modificatori da Caratteristiche)
+    
+    @property
+    def caratteristiche_calcolate(self):
+        """
+        Calcola i valori totali delle Caratteristiche (CA)
+        base (da abilita_punteggio).
+        """
+        # Filtra per 'punteggio__tipo' == CARATTERISTICA
+        caratteristiche = self.abilita_possedute.through.objects.filter(
+            personaggio=self,
+            abilita__punteggio_acquisito__tipo=CARATTERISTICA
+        ).values(
+            'abilita__punteggio_acquisito__nome' # Raggruppa per nome
+        ).annotate(
+            valore_totale=Sum('abilita__punteggio_acquisito__abilita_punteggio__valore') # TODO: da verificare
+        ).order_by('abilita__punteggio_acquisito__nome')
+        
+        # Questo è un queryset di dizionari, es:
+        # [{'abilita__punteggio_acquisito__nome': 'Forza', 'valore_totale': 10}, ...]
+        return caratteristiche
+
+    @property
+    def modificatori_statistiche(self):
+        """
+        Calcola i modificatori totali delle Statistiche (ST)
+        dalle abilità possedute.
+        """
+        modificatori = self.abilita_possedute.through.objects.filter(
+            personaggio=self
+        ).values(
+            'abilita__statistiche__nome' # Raggruppa per nome statistica
+        ).annotate(
+            modificatore_totale=Sum('abilita__abilitastatistica__valore')
+        ).order_by('abilita__statistiche__nome')
+        
+        # Restituisce un queryset di dizionari, es:
+        # [{'abilita__statistiche__nome': 'Danni Mischia', 'modificatore_totale': 5}, ...]
+        return modificatori
+
+    # --- PROPRIETÀ READONLY (Testo Formattato) ---
+    @property
+    def TestoFormattatoPersonale(self):
+        """
+        Restituisce un elenco di tutti i testi formattati
+        degli Oggetti e Attivate posseduti, applicando
+        i modificatori del personaggio.
+        """
+        
+        # 1. Prendi i modificatori totali del personaggio
+        # (Questo è un dict per accesso rapido, es: {'Danni Mischia': 5, 'Punti Vita': 10})
+        mods = {
+            item['abilita__statistiche__nome']: item['modificatore_totale'] 
+            for item in self.modificatori_statistiche if item['modificatore_totale']
+        }
+        
+        # TODO: Aggiungere qui i modificatori derivanti dalle Caratteristiche
+        
+        testi_formattati = []
+
+        # 2. Itera sugli oggetti posseduti
+        oggetti_posseduti = self.get_oggetti() # Metodo ereditato da Inventario
+        for oggetto in oggetti_posseduti.select_related('aura').prefetch_related('statistiche_base__statistica'):
+            if not oggetto.testo:
+                continue
+
+            testo_oggetto = oggetto.testo
+            # Itera sui valori base dell'oggetto
+            for link_base in oggetto.oggettostatisticabase_set.all():
+                stat = link_base.statistica
+                valore = link_base.valore_base
+                
+                # Applica il modificatore del personaggio
+                modificatore = mods.get(stat.nome, 0)
+                valore_finale = valore + modificatore # (Semplificazione, non gestisce MOLTIPLICATIVO)
+                
+                if stat.parametro:
+                    testo_oggetto = testo_oggetto.replace(f"{{{stat.parametro}}}", str(valore_finale))
+            
+            testi_formattati.append({"sorgente": oggetto.nome, "testo": testo_oggetto})
+
+        # 3. Itera sulle attivate possedute
+        # ... (logica simile per self.attivate_possedute) ...
+        
+        return testi_formattati
+
+
+# --- 2. MODELLI "THROUGH" PER PERSONAGGIO ---
+class PersonaggioAbilita(models.Model):
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
+class PersonaggioAttivata(models.Model):
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
+
+# --- 3. MODELLI DI LOG E CREDITI ---
+class PersonaggioLog(models.Model):
+    personaggio = models.ForeignKey(
+        Personaggio, 
+        on_delete=models.CASCADE,
+        related_name="log_eventi"
+    )
+    data = models.DateTimeField(default=timezone.now)
+    testo_log = models.TextField()
+
+    class Meta:
+        verbose_name = "Log Evento Personaggio"
+        verbose_name_plural = "Log Eventi Personaggio"
+        ordering = ['-data']
+
+class CreditoMovimento(models.Model):
+    personaggio = models.ForeignKey(
+        Personaggio,
+        on_delete=models.CASCADE,
+        related_name="movimenti_credito"
+    )
+    importo = models.DecimalField(max_digits=10, decimal_places=2)
+    descrizione = models.CharField(max_length=200)
+    data = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Movimento Crediti"
+        verbose_name_plural = "Movimenti Crediti"
+        ordering = ['-data']
+
+# --- 4. MODELLO PER TRANSAZIONI SOSPESE ---
+STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
+STATO_TRANSAZIONE_ACCETTATA = 'ACCETTATA'
+STATO_TRANSAZIONE_RIFIUTATA = 'RIFIUTATA'
+STATO_TRANSAZIONE_CHOICES = [
+    (STATO_TRANSAZIONE_IN_ATTESA, 'In Attesa'),
+    (STATO_TRANSAZIONE_ACCETTATA, 'Accettata'),
+    (STATO_TRANSAZIONE_RIFIUTATA, 'Rifiutata'),
+]
+
+class TransazioneSospesa(models.Model):
+    """
+    Rappresenta una richiesta di trasferimento di un oggetto
+    che richiede conferma.
+    """
+    oggetto = models.ForeignKey(
+        'Oggetto', 
+        on_delete=models.CASCADE
+    )
+    # L'inventario che DEVE CONFERMARE (probabilmente un Personaggio)
+    mittente = models.ForeignKey(
+        Inventario, 
+        on_delete=models.CASCADE,
+        related_name="transazioni_in_uscita_sospese"
+    )
+    # Il Personaggio che ha INIZIATO la richiesta e riceverà l'oggetto
+    richiedente = models.ForeignKey(
+        Personaggio, 
+        on_delete=models.CASCADE,
+        related_name="transazioni_in_entrata_sospese"
+    )
+    data_richiesta = models.DateTimeField(default=timezone.now)
+    stato = models.CharField(
+        max_length=10,
+        choices=STATO_TRANSAZIONE_CHOICES,
+        default=STATO_TRANSAZIONE_IN_ATTESA
+    )
+    
+    class Meta:
+        verbose_name = "Transazione Sospesa"
+        verbose_name_plural = "Transazioni Sospese"
+        ordering = ['-data_richiesta']
+
+    def accetta(self):
+        """
+        Accetta la transazione e sposta l'oggetto.
+        """
+        if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
+            raise Exception("Transazione già processata.")
+        
+        # Sposta l'oggetto all'inventario del richiedente
+        self.oggetto.sposta_in_inventario(self.richiedente)
+        self.stato = STATO_TRANSAZIONE_ACCETTATA
+        self.save()
+        
+        # Aggiungi log
+        self.richiedente.aggiungi_log(f"Ricevuto {self.oggetto.nome} da {self.mittente.nome}.")
+        if hasattr(self.mittente, 'personaggio'):
+            self.mittente.personaggio.aggiungi_log(f"Consegnato {self.oggetto.nome} a {self.richiedente.nome}.")
+        
+    def rifiuta(self):
+        """Rifiuta la transazione."""
+        if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
+            raise Exception("Transazione già processata.")
+        
+        self.stato = STATO_TRANSAZIONE_RIFIUTATA
+        self.save()
+        # Aggiungi log
+        self.richiedente.aggiungi_log(f"Richiesta per {self.oggetto.nome} da {self.mittente.nome} rifiutata.")
+        
+
+def generate_short_id(length=14):
+    """
+    Genera un ID casuale sicuro di 14 caratteri.
+    Usa A-Z, a-z, 0-9.
+    """
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+# through
+
+class OggettoElemento(models.Model):
+    """
+    Modello intermedio per permettere a un Oggetto di avere
+    più volte lo stesso Elemento (Punteggio).
+    """
+    oggetto = models.ForeignKey(
+        'Oggetto', 
+        on_delete=models.CASCADE
+    )
+    elemento = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE,
+        # Applicando qui il filtro, l'inline nell'admin
+        # mostrerà solo Punteggi di tipo ELEMENTO.
+        limit_choices_to={'tipo': ELEMENTO}, 
+        verbose_name="Elemento"
+    )
+    
+class AttivataElemento(models.Model):
+    """
+    Modello intermedio per permettere a un Oggetto di avere
+    più volte lo stesso Elemento (Punteggio).
+    """
+    attivata = models.ForeignKey(
+        'Attivata', 
+        on_delete=models.CASCADE
+    )
+    elemento = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE,
+        # Applicando qui il filtro, l'inline nell'admin
+        # mostrerà solo Punteggi di tipo ELEMENTO.
+        limit_choices_to={'tipo': ELEMENTO}, 
+        verbose_name="Elemento"
+    )
+
+
+class OggettoStatistica(models.Model):
+    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(
+        Statistica, 
+        on_delete=models.CASCADE
+    )
+    valore = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('oggetto', 'statistica') # Impedisce duplicati
+
+    def __str__(self):
+        return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore}"
+
+# --- 1. NUOVO MODELLO "THROUGH" per Oggetto <-> Valore Base ---
+class OggettoStatisticaBase(models.Model):
+    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('oggetto', 'statistica')
+        verbose_name = "Statistica (Valore Base)"
+        verbose_name_plural = "Statistiche (Valori Base)"
+
+    def __str__(self):
+        return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore_base}"
+
+
+# --- 2. NUOVO MODELLO "THROUGH" per Attivate <-> Valore Base ---
+class AttivataStatisticaBase(models.Model):
+    attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+
+
+
+    class Meta:
+        unique_together = ('attivata', 'statistica')
+        verbose_name = "Statistica (Valore Base)"
+        verbose_name_plural = "Statistiche (Valori Base)"
+
+    def __str__(self):
+        return f"{self.attivata.nome} - {self.statistica.nome}: {self.valore_base}"
+
+
+# abstract
+
+
+
+# Create your models here.
+class QrCode(models.Model):
+    # id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.CharField(
+        primary_key=True,  # <-- QUESTO È IL PUNTO CHIAVE
+        max_length=14,
+        default=generate_short_id,
+        editable=False
+    )
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    testo = models.TextField(blank=True, null=True)
+    vista = models.OneToOneField(A_vista, blank=True, null=True, on_delete=models.SET_NULL)
+
+    def __str__(self):
+        return "({codice})".format(codice=self.id)
+    
+    def save(self, *args, **kwargs):
+        """
+        Sovrascrive il metodo save per gestire le (improbabili)
+        collisioni della chiave primaria.
+        """
+        # _state.adding è True solo quando l'oggetto viene creato
+        if self._state.adding:
+            while True:  # Inizia un ciclo di tentativi
+                try:
+                    # Prova a salvare l'oggetto. 
+                    # L'ID è già stato generato dal 'default'.
+                    super().save(*args, **kwargs)
+                    # Se il salvataggio va a buon fine, usciamo dal ciclo
+                    break
+                except IntegrityError:
+                    # Se fallisce per IntegrityError, significa che l'ID esiste.
+                    # Generiamo un nuovo ID e il ciclo 'while' riproverà.
+                    self.id = generate_short_id()
+        else:
+            # Se non è un nuovo oggetto (_state.adding è False),
+            # è un aggiornamento. Salviamo normalmente.
+            super().save(*args, **kwargs)
+
+
+
+
+class Oggetto(A_vista):
+    # a_vista_ptr = models.OneToOneField(
+    #     A_vista,
+    #     on_delete=models.CASCADE,
+    #     parent_link=True,
+    #     # related_name='istanza_oggetto', # Nome univoco per evitare conflitti
+    #     null=True # <-- Questo è il punto chiave temporaneo
+    # )
+    # elementi = models.ManyToManyField(Punteggio, blank=True, limit_choices_to={'tipo' : ELEMENTO}, verbose_name="Elementi associati")
+    
+    elementi = models.ManyToManyField(
+        Punteggio, 
+        blank=True, 
+        verbose_name="Elementi associati",
+        through='OggettoElemento', # Specifica il modello intermedio
+        # Rimuovi limit_choices_to da qui, è stato spostato
+        # nel modello OggettoElemento.
+    )
+    statistiche = models.ManyToManyField(
+        Statistica,
+        through='OggettoStatistica',
+        blank=True,
+        verbose_name="Statistiche modificate", 
+        related_name = "oggetti_statistiche",
+    )
+    
+    # --- 3. NUOVO CAMPO ManyToMany per i VALORI BASE ---
+    statistiche_base = models.ManyToManyField(
+        Statistica,
+        through='OggettoStatisticaBase',
+        blank=True,
+        verbose_name="Statistiche (Valori Base)",
+        related_name='oggetti_statistiche_base' # Nuovo related_name univoco
+    )
+    
+    aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, verbose_name="Aura associata", related_name="oggetti_aura")
+
+    def elementi_list(self):
+        return ", ".join(str(elemento) for elemento in self.elementi.all())
+
+    def __str__(self):
+        return f"{self.nome} - {self.aura}"
+    
+    @property
+    def livello(self):
+        return self.elementi.count()
+    
+    @property
+    def TestoFormattato(self):
+        if not self.testo:
+            return ""
+        testo_formattato = self.testo
+        
+        stats_links = self.oggettostatisticabase_set.select_related('statistica').all()
+        
+        for link in stats_links:
+            param = link.statistica.parametro
+            valore = link.valore_base
+        
+            if param:
+                testo_formattato = testo_formattato.replace(f"{{{param}}}", str(valore))
+        return testo_formattato
+    
+    @property
+    def inventario_corrente(self):
+        """
+        Restituisce l'istanza di Inventario in cui questo oggetto
+        si trova attualmente.
+        """
+        tracciamento_attuale = self.tracciamento_inventario.filter(
+            data_fine__isnull=True
+        ).first() # .first() perché ce ne dovrebbe essere solo uno
+        
+        return tracciamento_attuale.inventario if tracciamento_attuale else None
+
+    def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
+        """
+        Metodo principale per spostare un oggetto in un nuovo inventario.
+        Gestisce la cronologia.
+        """
+        if data_spostamento is None:
+            data_spostamento = timezone.now()
+
+        # 1. Trova e chiudi il record di tracciamento attuale (se esiste)
+        tracciamento_attuale = self.tracciamento_inventario.filter(
+            data_fine__isnull=True
+        ).first()
+        
+        if tracciamento_attuale:
+            if tracciamento_attuale.inventario == nuovo_inventario:
+                # L'oggetto è già in questo inventario, non fare nulla
+                return
+            
+            tracciamento_attuale.data_fine = data_spostamento
+            tracciamento_attuale.save()
+
+        # 2. Crea il nuovo record di tracciamento (se nuovo_inventario non è None)
+        # Se nuovo_inventario è None, l'oggetto viene "lasciato a terra"
+        if nuovo_inventario is not None:
+            OggettoInInventario.objects.create(
+                oggetto=self,
+                inventario=nuovo_inventario,
+                data_inizio=data_spostamento
+            )
+    # -----------------------------------------
+    
+        

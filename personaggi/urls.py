@@ -42,5 +42,16 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('auth/', MyAuthToken.as_view()),
     path('csrf/', get_csrf_token),
+        path('qrcode/', views.qr_code_html_view, name='qr_code_html_view'),
+    
+    # NUOVA VISTA 1: Elenco dei QR (../oggetti/qr/)
+    path('qr/', views.qr_code_list_view, name='qr_code_list'),
+    
+    # NUOVA VISTA 2: Dettaglio del singolo QR (../oggetti/qr/<uuid>/)
+    path('qr/<str:pk>/', views.qr_code_detail_view, name='qr_code_detail'),
+ 
+    # Definisci il nuovo endpoint
+    # L'app React chiamerà: /oggetti/api/qrcode/IL-TUO-ID/   
+    path('api/qrcode/<str:qrcode_id>/', views.QrCodeDetailView.as_view(), name='api_qrcode_detail'),
 
 ]

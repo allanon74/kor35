@@ -4,7 +4,8 @@ from django.shortcuts import render
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from .models import QrCode
-from .models import Oggetto, Attivata, Manifesto, A_vista
+from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
+from personaggi.models import Personaggio
 import uuid # Importa uuid per il type hinting (opzionale ma pulito)
 
 import qrcode
@@ -18,8 +19,11 @@ from rest_framework import status
 
 from .serializers import (
     OggettoSerializer, AttivataSerializer, 
-    ManifestoSerializer, A_vistaSerializer
+    ManifestoSerializer, A_vistaSerializer, 
+    InventarioSerializer,
 )
+
+from personaggi.serializers import PersonaggioPublicSerializer
 
 def qr_code_html_view(request: HttpRequest) -> HttpResponse:
     uuid_str = request.GET.get('id')
@@ -245,6 +249,17 @@ class QrCodeDetailView(APIView):
         
         # 2. Determina il modello figlio (Polimorfismo)
         # Controlliamo quale relazione inversa esiste sull'istanza di A_vista
+        
+        if hasattr(vista_obj, 'personaggio'):
+            model_type = 'personaggio'
+            # Usiamo il serializer pubblico!
+            serializer = PersonaggioPublicSerializer(vista_obj.personaggio)
+            data = serializer.data
+            
+        elif hasattr(vista_obj, 'inventario'):
+            model_type = 'inventario'
+            serializer = InventarioSerializer(vista_obj.inventario)
+            data = serializer.data
         
         if hasattr(vista_obj, 'oggetto'):
             model_type = 'oggetto'

@@ -1,10 +1,14 @@
 from rest_framework import serializers
 from .models import (
-    Oggetto, Attivata, Manifesto, A_vista,
+    Oggetto, Attivata, Manifesto, A_vista, Inventario, 
     OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
-    OggettoElemento, AttivataElemento # Vedi NOTA IMPORTANTE
+    OggettoElemento, AttivataElemento,
+    OggettoInventario, 
 )
-from personaggi.models import Statistica, Punteggio
+from personaggi.models import (
+    Statistica, Punteggio, Personaggio, CreditoMovimento, 
+    PersonaggioLog, TransazioneSospesa, Abilita
+)
 
 # --- Serializers per i dati annidati (le pivot) ---
 
@@ -52,7 +56,6 @@ class OggettoElementoSerializer(serializers.ModelSerializer):
 class AttivataElementoSerializer(serializers.ModelSerializer):
     """
     Serializza la pivot Elementi di Attivata.
-    (Vedi NOTA IMPORTANTE sul modello AttivataElemento)
     """
     elemento = PunteggioSerializer(read_only=True)
     class Meta:
@@ -72,18 +75,19 @@ class OggettoSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True) 
     livello = serializers.IntegerField(read_only=True) # Serializza la @property
     aura = PunteggioSerializer(read_only=True) # Serializza il FK
+    inventario_corrente = serializers.StringRelatedField(read_only=True)
 
     class Meta:
         model = Oggetto
         fields = (
             'id', 'nome', 'testo', 'TestoFormattato', 
             'livello', 'aura', 
-            'elementi', 'statistiche', 'statistiche_base'
+            'elementi', 'statistiche', 'statistiche_base',
+            'inventario_corrente',
         )
 
 class AttivataSerializer(serializers.ModelSerializer):
     statistiche_base = AttivataStatisticaBaseSerializer(source='attivatastatisticabase_set', many=True, read_only=True)
-    # Vedi NOTA IMPORTANTE
     elementi = AttivataElementoSerializer(source='attivataelemento_set', many=True, read_only=True) 
     TestoFormattato = serializers.CharField(read_only=True)
     livello = serializers.IntegerField(read_only=True)
@@ -105,3 +109,86 @@ class A_vistaSerializer(serializers.ModelSerializer):
     class Meta:
         model = A_vista
         fields = ('id', 'nome', 'testo')
+        
+        
+class InventarioSerializer(serializers.ModelSerializer):
+    """Serializza un Inventario base."""
+    # Mostra gli oggetti attualmente nell'inventario
+    oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
+
+    class Meta:
+        model = Inventario
+        fields = ('id', 'nome', 'testo', 'oggetti')
+
+
+class AbilitaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Abilita
+        fields = ('id', 'nome', 'descrizione')
+
+class PersonaggioLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonaggioLog
+        fields = ('data', 'testo_log')
+
+class CreditoMovimentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CreditoMovimento
+        fields = ('importo', 'descrizione', 'data')
+
+class TransazioneSospesaSerializer(serializers.ModelSerializer):
+    # Mostra i nomi invece degli ID per leggibilità
+    oggetto = serializers.StringRelatedField(read_only=True)
+    mittente = serializers.StringRelatedField(read_only=True)
+    richiedente = serializers.StringRelatedField(read_only=True)
+    
+    class Meta:
+        model = TransazioneSospesa
+        fields = ('id', 'oggetto', 'mittente', 'richiedente', 'data_richiesta', 'stato')
+
+class PersonaggioDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo per il Personaggio, da usare
+    per l'utente che possiede quel personaggio.
+    """
+    proprietario = serializers.StringRelatedField(read_only=True)
+    
+    # Proprietà Read-only
+    crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    caratteristiche_calcolate = serializers.JSONField(read_only=True)
+    modificatori_statistiche = serializers.JSONField(read_only=True)
+    TestoFormattatoPersonale = serializers.JSONField(read_only=True)
+    
+    # M2M Posseduti
+    abilita_possedute = AbilitaSerializer(many=True, read_only=True)
+    attivate_possedute = AttivataSerializer(many=True, read_only=True) # Potrebbe essere pesante
+    
+    # Oggetti (da Inventario)
+    oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
+    
+    # Log e Crediti
+    log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
+    movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
+    
+    # Transazioni
+    transazioni_in_uscita_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
+    transazioni_in_entrata_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Personaggio
+        fields = (
+            'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte',
+            'crediti', 'caratteristiche_calcolate', 'modificatori_statistiche',
+            'TestoFormattatoPersonale', 'abilita_possedute', 'attivate_possedute',
+            'oggetti', 'log_eventi', 'movimenti_credito',
+            'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese'
+        )
+
+class PersonaggioPublicSerializer(serializers.ModelSerializer):
+    """Serializer pubblico per un Personaggio (Inventario)."""
+    oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
+    
+    class Meta:
+        model = Personaggio
+        # Mostra solo i campi pubblici (come un Inventario)
+        fields = ('id', 'nome', 'testo', 'oggetti')

@@ -2,6 +2,8 @@ import uuid
 import secrets
 import string
 from django.db import models, IntegrityError
+from django.db.models import Q
+from django.utils import timezone
 from personaggi.models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica
 
 def generate_short_id(length=14):
@@ -156,6 +158,68 @@ class QrCode(models.Model):
             # è un aggiornamento. Salviamo normalmente.
             super().save(*args, **kwargs)
 
+
+class Inventario(A_vista):
+    """
+    Rappresenta un contenitore di Oggetti.
+    (es. forziere, negozio, deposito, o un Personaggio).
+    """
+    class Meta:
+        verbose_name = "Inventario"
+        verbose_name_plural = "Inventari"
+
+    def __str__(self):
+        return f"Inventario: {self.nome}"
+
+    def get_oggetti(self, data=None):
+        """
+        Restituisce un queryset di oggetti in questo inventario
+        in un momento specifico.
+        Se data è None, restituisce gli oggetti attuali.
+        """
+        if data is None:
+            data = timezone.now()
+        
+        return Oggetto.objects.filter(
+            tracciamento_inventario__inventario=self,
+            tracciamento_inventario__data_inizio__lte=data,
+            tracciamento_inventario__data_fine__isnull=True
+        )
+
+# --- 2. NUOVO MODELLO "THROUGH" PER IL TRACCIAMENTO STORICO ---
+class OggettoInInventario(models.Model):
+    """
+    Traccia la cronologia di un Oggetto in un Inventario.
+    Un record "attivo" (data_fine=None) indica la posizione attuale.
+    """
+    oggetto = models.ForeignKey(
+        'Oggetto', 
+        on_delete=models.CASCADE,
+        related_name="tracciamento_inventario"
+    )
+    inventario = models.ForeignKey(
+        Inventario, 
+        on_delete=models.CASCADE,
+        related_name="tracciamento_oggetti"
+    )
+    data_inizio = models.DateTimeField(default=timezone.now)
+    data_fine = models.DateTimeField(
+        null=True, 
+        blank=True, 
+        help_text="Se Nullo, l'oggetto è attualmente in questo inventario."
+    )
+
+    class Meta:
+        verbose_name = "Tracciamento Oggetto in Inventario"
+        verbose_name_plural = "Tracciamenti Oggetto in Inventario"
+        ordering = ['-data_inizio'] # Ordina per il più recente
+
+    def __str__(self):
+        stato = "Attuale" if self.data_fine is None else f"Fino a {self.data_fine.strftime('%Y-%m-%d')}"
+        return f"{self.oggetto.nome} in {self.inventario.nome} (Da {self.data_inizio.strftime('%Y-%m-%d')} - {stato})"
+
+
+
 class Oggetto(A_vista):
     # a_vista_ptr = models.OneToOneField(
     #     A_vista,
@@ -218,6 +282,49 @@ class Oggetto(A_vista):
             if param:
                 testo_formattato = testo_formattato.replace(f"{{{param}}}", str(valore))
         return testo_formattato
+    
+    @property
+    def inventario_corrente(self):
+        """
+        Restituisce l'istanza di Inventario in cui questo oggetto
+        si trova attualmente.
+        """
+        tracciamento_attuale = self.tracciamento_inventario.filter(
+            data_fine__isnull=True
+        ).first() # .first() perché ce ne dovrebbe essere solo uno
+        
+        return tracciamento_attuale.inventario if tracciamento_attuale else None
+
+    def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
+        """
+        Metodo principale per spostare un oggetto in un nuovo inventario.
+        Gestisce la cronologia.
+        """
+        if data_spostamento is None:
+            data_spostamento = timezone.now()
+
+        # 1. Trova e chiudi il record di tracciamento attuale (se esiste)
+        tracciamento_attuale = self.tracciamento_inventario.filter(
+            data_fine__isnull=True
+        ).first()
+        
+        if tracciamento_attuale:
+            if tracciamento_attuale.inventario == nuovo_inventario:
+                # L'oggetto è già in questo inventario, non fare nulla
+                return
+            
+            tracciamento_attuale.data_fine = data_spostamento
+            tracciamento_attuale.save()
+
+        # 2. Crea il nuovo record di tracciamento (se nuovo_inventario non è None)
+        # Se nuovo_inventario è None, l'oggetto viene "lasciato a terra"
+        if nuovo_inventario is not None:
+            OggettoInInventario.objects.create(
+                oggetto=self,
+                inventario=nuovo_inventario,
+                data_inizio=data_spostamento
+            )
+    # -----------------------------------------
     
         
     
