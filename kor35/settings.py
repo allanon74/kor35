@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-2v412!5-=9cils@7_78wzzssrnkf*5)(%z2a6d*z2!3khn1w9c
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['www.k-o-r-35.it','127.0.0.1', ]
+ALLOWED_HOSTS = ['www.k-o-r-35.it','127.0.0.1', 'www.kor35.it', ]
 
 # prova 
 
@@ -38,14 +38,16 @@ ALLOWED_HOSTS = ['www.k-o-r-35.it','127.0.0.1', ]
 
 
 INSTALLED_APPS = [
-	'djangocms_admin_style', #cms
-   'django.contrib.admin',
-   'django.contrib.admindocs',
-   'django.contrib.auth',
-   'django.contrib.contenttypes',
-   'django.contrib.sessions',
-   'django.contrib.messages',
-   'django.contrib.staticfiles',
+	# 'djangocms_admin_style', #cms
+	'admin_interface', #admin interface
+	'colorfield', 
+    'django.contrib.admin',
+    'django.contrib.admindocs',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
 	'personaggi.apps.PersonaggiConfig', #personaggi
 	'oggetti.apps.OggettiConfig', #oggetti
 	'django.contrib.sites',
@@ -74,6 +76,7 @@ INSTALLED_APPS = [
     'rest_framework', # Django REST Framework
     'rest_framework.authtoken', # Django REST Framework Token Authentication
 	'corsheaders', # Django CORS Headers
+	
 ]
 
 # sezione per django_cms
@@ -265,3 +268,8 @@ EMAIL_USE_TLS = False
 EMAIL_USE_SSL = False
 EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = SMTP_EMAIL
+
+
+# admin_interface settings
+X_FRAME_OPTIONS = "SAMEORIGIN"
+SILENCED_SYSTEM_CHECKS = ["security.W019"]
