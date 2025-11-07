@@ -56,7 +56,7 @@ urlpatterns = [
     # L'app React chiamerà: /oggetti/api/qrcode/IL-TUO-ID/   
     path('api/qrcode/<str:qrcode_id>/', views.QrCodeDetailView.as_view(), name='api_qrcode_detail'),
     
-    path('api/personaggi/', views.PersonaggioListView.as_view(), name='api_personaggio_list'),
+    # path('api/personaggi/', views.PersonaggioListView.as_view(), name='api_personaggio_list'),
     
     path('api/personaggio/me/', views.PersonaggioMeView.as_view(), name='api_personaggio_me'),
     path('api/personaggio/me/crediti/', views.CreditoMovimentoCreateView.as_view(), name='api_crediti_create'),
