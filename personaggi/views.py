@@ -657,3 +657,32 @@ class PersonaggioListView(APIView):
         # Usa il serializer "leggero" per la lista
         serializer = PersonaggioListSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class PersonaggioDetailView(APIView):
+    """
+    GET /api/personaggi/<pk>/
+    
+    Restituisce i dettagli completi di un personaggio specifico.
+    Applica la stessa logica di permessi della ListView:
+    - Staff/Admin: può vedere qualsiasi personaggio.
+    - Utente normale: può vedere SOLO un personaggio di sua proprietà.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, format=None):
+        # Recupera il personaggio o restituisci 404
+        personaggio = get_object_or_404(Personaggio, pk=pk)
+        
+        user = request.user
+
+        # Controllo di sicurezza:
+        # Se l'utente NON è staff E il personaggio NON è suo
+        if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
+            return Response(
+                {"error": "Non hai il permesso di visualizzare questo personaggio."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Se l'utente è staff O è il proprietario, restituisci i dati
+        serializer = PersonaggioDetailSerializer(personaggio)
+        return Response(serializer.data, status=status.HTTP_200_OK)
