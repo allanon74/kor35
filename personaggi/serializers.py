@@ -353,7 +353,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'oggetti', # Aggiornato a SerializerMethodField
             'attivate_possedute', # Aggiornato a SerializerMethodField
             'log_eventi', 'movimenti_credito',
-            'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese'
+            'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese', 'TestoFormattatoPersonale',
         )
     
     def get_oggetti(self, personaggio):
