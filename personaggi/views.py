@@ -28,7 +28,7 @@ from .serializers import (
     ManifestoSerializer, A_vistaSerializer, 
     InventarioSerializer,
     PersonaggioDetailSerializer, # <-- Nuovo
-    CreditoMovimentoCreateSerializer, # <-- Nuovo
+    CreditoMovimentoCreateSerializer, PersonaggioListSerializer, # <-- Nuovo
     TransazioneCreateSerializer, # <-- Nuovo
     TransazioneSospesaSerializer, # <-- Nuovo
     TransazioneConfermaSerializer, #
@@ -568,3 +568,27 @@ class TransazioneConfermaView(APIView):
                 )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+class PersonaggioListView(APIView):
+    """
+    GET /api/personaggi/
+    
+    Restituisce un elenco di personaggi.
+    - Se l'utente è staff (admin), restituisce TUTTI i personaggi.
+    - Se l'utente non è staff, restituisce SOLO i personaggi
+      collegati a quell'utente.
+    """
+    permission_classes = [IsAuthenticated] # L'utente deve essere loggato
+
+    def get(self, request, format=None):
+        # Controlla se l'utente è un admin
+        if request.user.is_staff or request.user.is_superuser:
+            queryset = Personaggio.objects.all()
+        else:
+            # L'utente normale vede solo i suoi personaggi
+            queryset = Personaggio.objects.filter(proprietario=request.user)
+        
+        # Usa il serializer "leggero" per la lista
+        serializer = PersonaggioListSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

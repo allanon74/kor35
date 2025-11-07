@@ -461,3 +461,21 @@ class TransazioneConfermaSerializer(serializers.Serializer):
             transazione.rifiuta()
             
         return transazione
+    
+class PersonaggioListSerializer(serializers.ModelSerializer):
+    """
+    Serializer leggero usato per elencare i personaggi.
+    Mostra solo le informazioni chiave, non l'intero inventario o i log.
+    """
+    # Mostra il nome dell'utente invece del suo ID
+    proprietario = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Personaggio
+        fields = (
+            'id', 
+            'nome', 
+            'proprietario', 
+            'data_nascita', 
+            'data_morte'
+        )
