@@ -1,0 +1,9 @@
+<div class="tier">
+<h2>{{ instance.tier.nome }}</h2>
+<p>{{ instance.tier.descrizione|safe }}</p>
+{% for ab in instance.tier.abilita_tier_set.all %}
+    {% if forloop.first %}<table style="width:100%;"><tr><th>Nome</th><th>Costo in PC</th><th>Costo in Crediti</th><th>Descrizione</th></tr>{% endif %}
+    <tr><td><div style="font-weight:bold;">{{ ab.abilita.nome|linebreaksbr }}</div></td><td style="text-align:center;">{{ ab.costo|linebreaksbr }}</td><td style="text-align:center;">{{ ab.costo_crediti|linebreaksbr }}</td><td>{{ ab.abilita.descrizione|safe }}</td></tr>
+    {% if forloop.last %}</table>{% endif %}
+{% endfor %}
+</div>

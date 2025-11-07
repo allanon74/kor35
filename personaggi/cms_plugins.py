@@ -4,7 +4,7 @@ from cms.plugin_base import CMSPluginBase
 from cms.plugin_pool import plugin_pool
 from django.utils.translation import gettext_lazy as _
 
-from .models import Tier, Abilita, Oggetto, Attivata, AbilitaPluginModel, TierPluginModel, OggettoPluginModel, AttivataPluginModel  
+from .models import TabellaPluginModel, Tier, Abilita, Oggetto, Attivata, AbilitaPluginModel, TierPluginModel, OggettoPluginModel, AttivataPluginModel  
 
 # --- 1. Plugin per i TIER (preso da cms_kor e adattato) ---
 
@@ -61,4 +61,28 @@ class AttivataPlugin(CMSPluginBase):
     def render(self, context, instance, placeholder):
         context = super().render(context, instance, placeholder)
         context['attivata'] = instance.attivata
+        return context
+    
+#@plugin_pool.register_plugin
+class TabellaPluginPublisher(CMSPluginBase):
+    model = TabellaPluginModel
+    module = "Kor"
+    name = "Plugin Tabella"
+    render_template = "cms/plugins/PI_tabella.html"
+    
+    def render(self, context, instance, placeholder):
+        context.update({"instance": instance})
+        return context
+
+plugin_pool.register_plugin(TabellaPluginPublisher)
+
+@plugin_pool.register_plugin
+class TierPluginPublisher(CMSPluginBase):
+    model = TierPluginModel
+    module = "Kor"
+    name = "Plugin Tier"
+    render_template = "cms/plugins/PI_tier.html"
+
+    def render(self, context, instance, placeholder):
+        context.update({"instance": instance})
         return context

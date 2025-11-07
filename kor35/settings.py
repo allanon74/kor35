@@ -71,7 +71,7 @@ INSTALLED_APPS = [
 	'allauth.account',  #allauth
 	'allauth.socialaccount',  #allauth
 	'allauth.socialaccount.providers.google',  #allauth
-	'cms_kor',
+	# 'cms_kor',
 	'django_summernote', # Django-sumernote 28/01/2025
     'rest_framework', # Django REST Framework
     'rest_framework.authtoken', # Django REST Framework Token Authentication
