@@ -541,6 +541,55 @@ class OggettoInInventario(models.Model):
         return f"{self.oggetto.nome} in {self.inventario.nome} (Da {self.data_inizio.strftime('%Y-%m-%d')} - {stato})"
 
 
+# --- 1. NUOVO MODELLO: TIPOLOGIA PERSONAGGIO ---
+class TipologiaPersonaggio(models.Model):
+    nome = models.CharField(max_length=100, unique=True, default="Standard")
+    crediti_iniziali = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0
+    )
+    caratteristiche_iniziali = models.IntegerField(
+        default=8
+    )
+    giocante = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Tipologia Personaggio"
+        verbose_name_plural = "Tipologie Personaggio"
+
+    def __str__(self):
+        return self.nome
+
+def get_default_tipologia():
+    """
+    Funzione per il campo 'default' di Personaggio.
+    Crea la tipologia "Standard" se non esiste e la restituisce.
+    """
+    # Usiamo get_or_create per la massima sicurezza.
+    # I valori di default (0, 8, True) sono già nel modello.
+    tipologia, created = TipologiaPersonaggio.objects.get_or_create(
+        nome="Standard" 
+    )
+    return tipologia.pk
+
+
+# --- 2. NUOVO MODELLO: MOVIMENTI PC ---
+class PuntiCaratteristicaMovimento(models.Model):
+    personaggio = models.ForeignKey(
+        'Personaggio',
+        on_delete=models.CASCADE,
+        related_name="movimenti_pc"
+    )
+    importo = models.IntegerField() # I PC sono interi
+    descrizione = models.CharField(max_length=200)
+    data = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Movimento Punti Caratteristica"
+        verbose_name_plural = "Movimenti Punti Caratteristica"
+        ordering = ['-data']
+
+    def __str__(self):
+        return f"{self.personaggio.nome}: {self.importo} PC ({self.descrizione})"
 
 
 class Personaggio(Inventario):
@@ -556,6 +605,14 @@ class Personaggio(Inventario):
         blank=True,
         help_text="L'account utente che controlla questo personaggio."
     )
+    
+    tipologia = models.ForeignKey(
+        TipologiaPersonaggio,
+        on_delete=models.PROTECT, # Non cancellare una tipologia se è usata
+        related_name="personaggi",
+        default=get_default_tipologia
+    )
+    
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     
@@ -590,11 +647,37 @@ class Personaggio(Inventario):
             descrizione=descrizione
         )
 
+    # --- NUOVO METODO HELPER PER PC ---
+    def modifica_pc(self, importo, descrizione):
+        """Metodo helper per aggiungere un movimento di Punti Caratteristica."""
+        PuntiCaratteristicaMovimento.objects.create(
+            personaggio=self,
+            importo=importo,
+            descrizione=descrizione
+        )
+
     # --- PROPRIETÀ READONLY (Crediti) ---
+    # --- PROPRIETÀ CREDITI (AGGIORNATA) ---
     @property
     def crediti(self):
-        """Calcola il totale dei crediti sommando tutti i movimenti."""
-        return self.movimenti_credito.aggregate(totale=Sum('importo'))['totale'] or 0
+        """
+        Calcola il totale dei crediti sommando il valore iniziale
+        della tipologia a tutti i movimenti.
+        """
+        base = self.tipologia.crediti_iniziali
+        movimenti = self.movimenti_credito.aggregate(totale=Sum('importo'))['totale'] or 0
+        return base + movimenti
+    
+    # --- NUOVA PROPRIETÀ PUNTI CARATTERISTICA ---
+    @property
+    def punti_caratteristica(self):
+        """
+        Calcola il totale dei Punti Caratteristica sommando il valore
+        iniziale della tipologia a tutti i movimenti.
+        """
+        base = self.tipologia.caratteristiche_iniziali
+        movimenti = self.movimenti_pc.aggregate(totale=Sum('importo'))['totale'] or 0
+        return base + movimenti
     
     # --- PROPRIETÀ READONLY (Statistiche/Caratteristiche) ---
     # (Implementazione iniziale, da espandere con i modificatori da Caratteristiche)

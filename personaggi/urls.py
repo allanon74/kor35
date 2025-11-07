@@ -60,6 +60,8 @@ urlpatterns = [
     
     path('api/personaggio/me/', views.PersonaggioMeView.as_view(), name='api_personaggio_me'),
     path('api/personaggio/me/crediti/', views.CreditoMovimentoCreateView.as_view(), name='api_crediti_create'),
+    path('api/personaggio/me/pc/', views.PuntiCaratteristicaMovimentoCreateView.as_view(), name='api_pc_create'),
+    path('api/personaggi/', views.PersonaggioListView.as_view(), name='api_personaggio_list'),
 
     # --- Viste API Transazioni (Nuove) ---
     path('api/transazioni/sospese/', views.TransazioneSospesaListView.as_view(), name='api_transazioni_sospese'),

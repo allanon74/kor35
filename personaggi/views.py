@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
-from .models import Personaggio, TransazioneSospesa, CreditoMovimento
+from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
 import uuid # Importa uuid per il type hinting (opzionale ma pulito)
 
 from .models import STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES
@@ -29,6 +29,7 @@ from .serializers import (
     InventarioSerializer,
     PersonaggioDetailSerializer, # <-- Nuovo
     CreditoMovimentoCreateSerializer, PersonaggioListSerializer, # <-- Nuovo
+    PuntiCaratteristicaMovimentoCreateSerializer, # <-- Nuovo
     TransazioneCreateSerializer, # <-- Nuovo
     TransazioneSospesaSerializer, # <-- Nuovo
     TransazioneConfermaSerializer, #
@@ -455,6 +456,34 @@ class CreditoMovimentoCreateView(APIView):
         serializer = CreditoMovimentoCreateSerializer(
             data=request.data,
             context={'personaggio': personaggio} # Passa il personaggio al serializer
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class PuntiCaratteristicaMovimentoCreateView(APIView):
+    """
+    POST /api/personaggio/me/pc/
+    Aggiunge un movimento di Punti Caratteristica al personaggio dell'utente loggato.
+    Richiede: {"importo": 5, "descrizione": "Avanzamento di livello"}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        try:
+            personaggio = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = PuntiCaratteristicaMovimentoCreateSerializer(
+            data=request.data,
+            context={'personaggio': personaggio}
         )
         
         if serializer.is_valid():

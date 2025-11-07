@@ -3,7 +3,7 @@ from rest_framework.authtoken.models import Token
 from django.utils import timezone
 
 from .models import (
-    Abilita, Tier, Spell, Mattone, Punteggio, Tabella,
+    Abilita, PuntiCaratteristicaMovimento, Tier, Spell, Mattone, Punteggio, Tabella, TipologiaPersonaggio,
     abilita_tier, abilita_requisito, abilita_sbloccata,
     abilita_punteggio, abilita_prerequisito,
     spell_mattone, spell_elemento
@@ -301,6 +301,13 @@ class TransazioneSospesaSerializer(serializers.ModelSerializer):
         model = TransazioneSospesa
         fields = ('id', 'oggetto', 'mittente', 'richiedente', 'data_richiesta', 'stato')
 
+# --- NUOVO SERIALIZER (da aggiungere prima di PersonaggioDetailSerializer) ---
+class TipologiaPersonaggioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipologiaPersonaggio
+        fields = ('nome', 'crediti_iniziali', 'caratteristiche_iniziali', 'giocante')
+
+
 class PersonaggioDetailSerializer(serializers.ModelSerializer):
     """
     Serializer completo per il Personaggio, da usare
@@ -310,9 +317,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     
     # Proprietà Read-only
     crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    punti_caratteristica = serializers.IntegerField(read_only=True)
     caratteristiche_base = serializers.JSONField(read_only=True) # Era 'caratteristiche_calcolate'
     modificatori_calcolati = serializers.JSONField(read_only=True) # Era 'modificatori_statistiche'
     TestoFormattatoPersonale = serializers.JSONField(read_only=True)
+    tipologia = TipologiaPersonaggioSerializer(read_only=True)
 
     
     # M2M Posseduti
@@ -335,7 +344,9 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         model = Personaggio
         fields = (
             'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte',
+            'tipologia', 
             'crediti', 
+            'punti_caratteristica',
             'caratteristiche_base', # Nome aggiornato
             'modificatori_calcolati', # Nome aggiornato
             'abilita_possedute', 
@@ -469,6 +480,7 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
     """
     # Mostra il nome dell'utente invece del suo ID
     proprietario = serializers.StringRelatedField(read_only=True)
+    tipologia = serializers.StringRelatedField(read_only=True)
 
     class Meta:
         model = Personaggio
@@ -476,6 +488,20 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'id', 
             'nome', 
             'proprietario', 
+            'tipologia',
             'data_nascita', 
             'data_morte'
         )
+        
+class PuntiCaratteristicaMovimentoCreateSerializer(serializers.Serializer):
+    """Serializer per validare la creazione di un movimento PC."""
+    importo = serializers.IntegerField()
+    descrizione = serializers.CharField(max_length=200)
+
+    def create(self, validated_data):
+        personaggio = self.context['personaggio']
+        movimento = PuntiCaratteristicaMovimento.objects.create(
+            personaggio=personaggio,
+            **validated_data
+        )
+        return movimento

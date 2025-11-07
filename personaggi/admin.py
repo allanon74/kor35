@@ -4,8 +4,8 @@ from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 
 from django.utils.html import format_html
-from .models import OggettoStatisticaBase, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase
-from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica
+from .models import CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase, TipologiaPersonaggio
+from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiCaratteristicaMovimento 
 
 from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica
 from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica
@@ -220,16 +220,42 @@ class AbilitaStatisticaInline(StatisticaPivotInlineBase):
     verbose_name = "Statistica (Modificatore)"
     verbose_name_plural = "Statistiche (Modificatori)"
     
+    
+
+# --- NUOVI INLINE PER PERSONAGGIO ---
+class CreditoMovimentoInline(admin.TabularInline):
+    model = CreditoMovimento
+    extra = 1
+    fields = ('importo', 'descrizione', 'data')
+    readonly_fields = ('data',)
+
+class PuntiCaratteristicaMovimentoInline(admin.TabularInline):
+    model = PuntiCaratteristicaMovimento
+    extra = 1
+    fields = ('importo', 'descrizione', 'data')
+    readonly_fields = ('data',)
+
+class PersonaggioLogInline(admin.TabularInline):
+    model = PersonaggioLog
+    extra = 0 # Generalmente non si aggiungono log a mano
+    fields = ('testo_log', 'data')
+    readonly_fields = ('data',)
+    
 # ----------- CLASSI ADMIN -------------
 
-class SpellAdmin(A_Admin):
-	list_display = (
-		'id', 
-		'nome', 
-		#'livello',
-		)
-	inlines = (spell_mattone_inline, )
-	
+@admin.register(TipologiaPersonaggio)
+class TipologiaPersonaggioAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'crediti_iniziali', 'caratteristiche_iniziali', 'giocante')
+
+# class SpellAdmin(A_Admin):
+# 	list_display = (
+# 		'id', 
+# 		'nome', 
+# 		#'livello',
+# 		)
+# 	inlines = (spell_mattone_inline, )
+
+@admin.register(Abilita)
 class AbilitaAdmin(A_Admin):
 	list_display = ('id', 'nome', )
 	summernote_fields = ['descrizione', ]
@@ -246,16 +272,19 @@ class AbilitaAdmin(A_Admin):
 	save_as = True
 	exclude = ('statistiche',)
 
+@admin.register(Punteggio)
 class PunteggioAdmin(A_Admin):
 	list_display = ('nome', 'tipo', 'caratteristica',)
 	list_filter = ('tipo', 'caratteristica',)
 	search_fields = ('nome', )
 
+@admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
 	list_display = ('abilita', 'prerequisito', )
 	search_fields = ['abilita__nome', 'prerequisito__nome', ]
 	autocomplete_fields = ['abilita', 'prerequisito',]
 
+@admin.register(Tier)
 class TierAdmin(A_Admin):
 	list_display = ['nome', 'descrizione', ]
 	summernote_fields = ["descrizione",]
@@ -271,16 +300,16 @@ class StatisticaAdmin(admin.ModelAdmin):
 # Register your models here.
 
 admin.site.register(Tabella)
-admin.site.register(Abilita, AbilitaAdmin)
-admin.site.register(Tier, TierAdmin)
-admin.site.register(Spell, SpellAdmin)
-admin.site.register(Punteggio, PunteggioAdmin)
+#admin.site.register(Abilita, AbilitaAdmin)
+#admin.site.register(Tier, TierAdmin)
+#admin.site.register(Spell, SpellAdmin)
+#admin.site.register(Punteggio, PunteggioAdmin)
 admin.site.register(abilita_tier)
 admin.site.register(abilita_punteggio)
 admin.site.register(abilita_requisito)
 admin.site.register(abilita_sbloccata)
 admin.site.register(Mattone)
-admin.site.register(abilita_prerequisito, AbilitaPrerequisitoAdmin)
+#admin.site.register(abilita_prerequisito, AbilitaPrerequisitoAdmin)
 
 def get_statistica_base_help_text():
     """
@@ -433,3 +462,34 @@ class AttivataAdmin(SModelAdmin):
         return format_html(obj.TestoFormattato)
     # Imposta la caption personalizzata
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
+    
+@admin.register(Personaggio)
+class PersonaggioAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'proprietario', 'tipologia', 'crediti', 'punti_caratteristica')
+    readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
+    list_filter = ('tipologia',)
+    search_fields = ('nome', 'proprietario__username')
+    
+    # Aggiungiamo i nuovi inline
+    inlines = [
+        CreditoMovimentoInline,
+        PuntiCaratteristicaMovimentoInline,
+        PersonaggioLogInline
+        # Potresti voler aggiungere qui anche PersonaggioAbilitaInline, ecc.
+    ]
+    
+    fieldsets = (
+        ('Informazioni Principali', {
+            'fields': (
+                'nome', 'proprietario', 'tipologia', 'testo', 
+                ('data_nascita', 'data_morte')
+            )
+        }),
+        ('Valori Calcolati (Sola Lettura)', {
+            'classes': ('collapse',),
+            'fields': (
+                ('id', 'data_creazione'),
+                ('crediti', 'punti_caratteristica')
+            )
+        }),
+    )
