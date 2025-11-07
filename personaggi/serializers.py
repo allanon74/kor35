@@ -406,7 +406,12 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
 class PersonaggioPublicSerializer(serializers.ModelSerializer):
     """Serializer pubblico per un Personaggio (Inventario)."""
-    oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
+    oggetti = OggettoSerializer(
+        source='get_oggetti', 
+        many=True, 
+        read_only=True, 
+        # source='inventario_ptr.oggetti',
+        )
     
     class Meta:
         model = Personaggio
