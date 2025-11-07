@@ -1,8 +1,10 @@
 import string
 from django.shortcuts import render
-
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
+
+from .models import OggettoInInventario
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
@@ -424,13 +426,47 @@ class PersonaggioMeView(APIView):
 
     def get(self, request, format=None):
         try:
-            # Trova il personaggio collegato all'utente che fa la richiesta
-            # Assumiamo che ci sia un solo personaggio per utente
-            personaggio = Personaggio.objects.get(proprietario=request.user)
+            # --- OTTIMIZZAZIONE QUERY ---
+            # Precarichiamo TUTTI i dati che il PersonaggioDetailSerializer userà.
+            # Questo riduce decine di query a un numero fisso e basso.
+            personaggio = Personaggio.objects.select_related(
+                'tipologia',
+                'inventario_ptr' # Necessario per l'ereditarietà
+            ).prefetch_related(
+                'log_eventi',
+                'movimenti_credito',
+                'movimenti_pc',
+                'transazioni_in_uscita_sospese',
+                'transazioni_in_entrata_sospese',
+                'abilita_possedute',
+                'attivate_possedute__statistiche_base__statistica',
+                'attivate_possedute__elementi__elemento',
+                
+                # Prefetch per gli oggetti posseduti
+                Prefetch(
+                    'inventario_ptr__tracciamento_oggetti',
+                    queryset=OggettoInInventario.objects.filter(data_fine__isnull=True).select_related(
+                        'oggetto__aura',
+                    ).prefetch_related(
+                        'oggetto__oggettostatisticabase_set__statistica',
+                        'oggetto__oggettostatistica_set__statistica',
+                        'oggetto__oggettoelemento_set__elemento'
+                    ),
+                    to_attr='tracciamento_oggetti_correnti' # Nome cache personalizzato
+                ),
+                
+                # Prefetch per i calcoli dei modificatori
+                'abilita_possedute__statistiche__statistica',
+                'abilita_possedute__punteggio_acquisito__modifica_statistiche__statistica_modificata',
+                'inventario_ptr__tracciamento_oggetti__oggetto__statistiche__statistica',
+                
+            ).get(proprietario=request.user)
+            # --------------------------
+            
         except Personaggio.DoesNotExist:
             return Response(
                 {"error": "Nessun personaggio trovato per questo utente."},
-                status=status.HTTP_404_NOT_FOUND
+                status=status.HTTP_4_04_NOT_FOUND
             )
         
         serializer = PersonaggioDetailSerializer(personaggio)

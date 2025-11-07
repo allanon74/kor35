@@ -14,11 +14,6 @@ from django.utils import timezone # Importa timezone
 
 from cms.models.pluginmodel import CMSPlugin
 
-# from oggetti.models import Inventario, Attivata
-
-# prova modifica terza volta
-
-# Create your models here.
 
 # tipi generici per DDL
 
@@ -610,7 +605,7 @@ class Personaggio(Inventario):
         TipologiaPersonaggio,
         on_delete=models.PROTECT, # Non cancellare una tipologia se è usata
         related_name="personaggi",
-        default=get_default_tipologia
+        null=True, blank=True,
     )
     
     data_nascita = models.DateTimeField(default=timezone.now)
@@ -634,6 +629,17 @@ class Personaggio(Inventario):
 
     def __str__(self):
         return self.nome
+
+    def save(self, *args, **kwargs):
+        # Se il personaggio sta venendo creato e non ha una tipologia
+        if not self.pk and self.tipologia is None:
+            # Trova o crea la tipologia "Standard"
+            tipologia_standard, created = TipologiaPersonaggio.objects.get_or_create(
+                nome="Standard"
+            )
+            self.tipologia = tipologia_standard
+        
+        super().save(*args, **kwargs) # Salva l'istanza
         
     def aggiungi_log(self, testo_log):
         """Metodo helper per creare velocemente un log."""
@@ -684,31 +690,35 @@ class Personaggio(Inventario):
     @property
     def caratteristiche_base(self):
         """
-        [CALCOLO 1]
-        Calcola i valori base delle Caratteristiche.
-        Usa una cache sull'istanza ('_caratteristiche_base_cache') 
-        per evitare ricalcoli multipli nella stessa richiesta.
+        [CALCOLO 1 - OTTIMIZZATO]
+        Calcola i valori base delle Caratteristiche (es. Forza, Destrezza)
+        sommando i bonus 'punteggio_acquisito' dalle abilità possedute.
+        Usa l'aggregazione del database invece di un ciclo Python.
         """
-        # Controlla se la cache esiste già
         if hasattr(self, '_caratteristiche_base_cache'):
             return self._caratteristiche_base_cache
 
+        # 1. Filtra per le abilità del personaggio
         links = abilita_punteggio.objects.filter(
             abilita__personaggioabilita__personaggio=self,
             punteggio__tipo=CARATTERISTICA
-        ).select_related('punteggio')
+        )
         
-        caratteristiche = {}
-        for link in links:
-            nome_caratteristica = link.punteggio.nome
-            if nome_caratteristica not in caratteristiche:
-                caratteristiche[nome_caratteristica] = 0
-            caratteristiche[nome_caratteristica] += link.valore
+        # 2. Raggruppa per nome del punteggio e somma i valori
+        query_aggregata = links.values(
+            'punteggio__nome' # Raggruppa per questo campo
+        ).annotate(
+            valore_totale=Sum('valore') # Somma i valori
+        ).order_by('punteggio__nome')
+        
+        # 3. Trasforma il risultato in un dizionario
+        caratteristiche = {
+            item['punteggio__nome']: item['valore_totale'] 
+            for item in query_aggregata
+        }
             
-        # Salva nella cache dell'istanza
         self._caratteristiche_base_cache = caratteristiche
         return self._caratteristiche_base_cache
-    
     @property
     def modificatori_calcolati(self):
         """
@@ -1292,29 +1302,30 @@ class Oggetto(A_vista):
         
         return tracciamento_attuale.inventario if tracciamento_attuale else None
 
-    def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
+def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
         """
         Metodo principale per spostare un oggetto in un nuovo inventario.
-        Gestisce la cronologia.
+        Gestisce la cronologia in modo atomico per prevenire race conditions.
         """
         if data_spostamento is None:
             data_spostamento = timezone.now()
 
-        # 1. Trova e chiudi il record di tracciamento attuale (se esiste)
+        # 2. Blocca l'oggetto nel database per questa transazione
+        # Questo previene che altre richieste lo modifichino contemporaneamente
+        Oggetto.objects.select_for_update().get(pk=self.pk)
+
+        # 3. Trova e chiudi il record di tracciamento attuale (se esiste)
         tracciamento_attuale = self.tracciamento_inventario.filter(
             data_fine__isnull=True
         ).first()
         
         if tracciamento_attuale:
             if tracciamento_attuale.inventario == nuovo_inventario:
-                # L'oggetto è già in questo inventario, non fare nulla
                 return
             
             tracciamento_attuale.data_fine = data_spostamento
             tracciamento_attuale.save()
 
-        # 2. Crea il nuovo record di tracciamento (se nuovo_inventario non è None)
-        # Se nuovo_inventario è None, l'oggetto viene "lasciato a terra"
         if nuovo_inventario is not None:
             OggettoInInventario.objects.create(
                 oggetto=self,
