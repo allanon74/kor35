@@ -68,5 +68,7 @@ urlpatterns = [
     path('api/transazioni/sospese/', views.TransazioneSospesaListView.as_view(), name='api_transazioni_sospese'),
     path('api/transazioni/richiedi/', views.TransazioneRichiediView.as_view(), name='api_transazioni_richiedi'),
     path('api/transazioni/<int:pk>/conferma/', views.TransazioneConfermaView.as_view(), name='api_transazioni_conferma'),
-
+    path('api/transazioni/ruba/', views.RubaView.as_view(), name='api_ruba'),
+    path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
+    
 ]

@@ -2,6 +2,8 @@ from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from django.utils import timezone
 
+from .models import QrCode
+
 from .models import (
     Abilita, PuntiCaratteristicaMovimento, Tier, Spell, Mattone, Punteggio, Tabella, TipologiaPersonaggio,
     abilita_tier, abilita_requisito, abilita_sbloccata,
@@ -505,3 +507,126 @@ class PuntiCaratteristicaMovimentoCreateSerializer(serializers.Serializer):
             **validated_data
         )
         return movimento
+    
+
+class RubaSerializer(serializers.Serializer):
+    """
+    Serializer per l'azione "Ruba".
+    Valida che il personaggio che ruba (richiedente) abbia i
+    punteggi di caratteristica necessari per rubare l'oggetto.
+    """
+    # L'ID dell'oggetto che si sta tentando di rubare
+    oggetto_id = serializers.PrimaryKeyRelatedField(queryset=Oggetto.objects.all())
+    
+    # L'ID del personaggio che si sta derubando (mittente)
+    target_personaggio_id = serializers.PrimaryKeyRelatedField(queryset=Personaggio.objects.all())
+
+    def validate(self, data):
+        richiedente = self.context.get('richiedente')
+        if not richiedente:
+            raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
+        
+        oggetto = data.get('oggetto_id')
+        target_personaggio = data.get('target_personaggio_id')
+
+        # 1. Controlla che l'oggetto sia nell'inventario del target
+        if not target_personaggio.inventario_ptr.oggetti.filter(id=oggetto.id).exists():
+             raise serializers.ValidationError("L'oggetto non appartiene al personaggio target.")
+
+        # 2. Logica di "Visibilità" (già gestita dal frontend, ma ricontrolliamo)
+        # (Presumo tu abbia una funzione)
+        # if not richiedente.puo_vedere_oggetto(oggetto):
+        #    raise serializers.ValidationError("Non puoi vedere questo oggetto.")
+
+        # 3. Logica Caratteristiche vs Elementi
+        # (Questa è una logica di ESEMPIO, adattala ai tuoi modelli)
+        
+        # Presumo che Oggetto abbia una relazione ManyToMany 'elementi'
+        # e che Punteggio (per le caratteristiche) abbia un campo 'elemento'
+        
+        elementi_oggetto = oggetto.elementi.all()
+        caratteristiche_richiedente = richiedente.get_caratteristiche_finali() # Funzione da creare
+
+        for elemento in elementi_oggetto:
+            # Trova la caratteristica corrispondente
+            try:
+                caratteristica_associata = Punteggio.objects.get(
+                    tipo='CARATTERISTICA', 
+                    elemento=elemento
+                )
+            except Punteggio.DoesNotExist:
+                raise serializers.ValidationError(f"Nessuna caratteristica associata all'elemento {elemento.nome}.")
+            
+            # Controlla se il PG ha punteggio in quella caratteristica
+            punteggio_pg = caratteristiche_richiedente.get(caratteristica_associata.nome, 0)
+            
+            if punteggio_pg <= 0:
+                raise serializers.ValidationError(
+                    f"Punteggio insufficiente in '{caratteristica_associata.nome}' per rubare questo oggetto."
+                )
+
+        # Se tutti i controlli passano, i dati sono validi
+        return data
+
+    def save(self):
+        richiedente = self.context['richiedente']
+        oggetto = self.validated_data['oggetto_id']
+        target_personaggio = self.validated_data['target_personaggio_id']
+        
+        # Esegui il furto (sposta l'oggetto)
+        # Questa è la logica di trasferimento
+        target_personaggio.inventario_ptr.rimuovi_oggetto(oggetto)
+        richiedente.inventario_ptr.aggiungi_oggetto(oggetto)
+        
+        # TODO: Aggiungi log, ecc.
+        
+        return oggetto
+
+
+class AcquisisciSerializer(serializers.Serializer):
+    """
+    Serializer per l'azione "Acquisisci".
+    Collega un oggetto/attivata a un personaggio e scollega il QR code.
+    """
+    qrcode_id = serializers.UUIDField()
+    
+    def validate(self, data):
+        richiedente = self.context.get('richiedente')
+        if not richiedente:
+            raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
+            
+        try:
+            qr_code = QrCode.objects.select_related('vista').get(id=data.get('qrcode_id'))
+        except QrCode.DoesNotExist:
+            raise serializers.ValidationError("QrCode non valido.")
+            
+        if not qr_code.vista:
+            raise serializers.ValidationError("Questo QrCode non è collegato a nulla.")
+            
+        vista_obj = qr_code.vista
+        
+        if not (hasattr(vista_obj, 'oggetto') or hasattr(vista_obj, 'attivata')):
+            raise serializers.ValidationError("Questo QrCode non punta a un oggetto o attivata acquisibile.")
+        
+        # Salva l'oggetto trovato nel contesto per il .save()
+        self.context['qr_code'] = qr_code
+        self.context['item'] = vista_obj.oggetto if hasattr(vista_obj, 'oggetto') else vista_obj.attivata
+        
+        return data
+
+    def save(self):
+        richiedente = self.context['richiedente']
+        qr_code = self.context['qr_code']
+        item = self.context['item']
+        
+        # 1. Aggiungi l'item al personaggio
+        if isinstance(item, Oggetto):
+            richiedente.inventario_ptr.aggiungi_oggetto(item)
+        elif isinstance(item, Attivata):
+            richiedente.attivate_possedute.add(item)
+            
+        # 2. Scollega il QrCode (come da richiesta)
+        qr_code.vista = None
+        qr_code.save()
+        
+        return item

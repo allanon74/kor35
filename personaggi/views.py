@@ -35,6 +35,8 @@ from .serializers import (
     TransazioneCreateSerializer, # <-- Nuovo
     TransazioneSospesaSerializer, # <-- Nuovo
     TransazioneConfermaSerializer, #
+    RubaSerializer, 
+    AcquisisciSerializer,
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
@@ -686,3 +688,75 @@ class PersonaggioDetailView(APIView):
         # Se l'utente è staff O è il proprietario, restituisci i dati
         serializer = PersonaggioDetailSerializer(personaggio)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+
+class RubaView(APIView):
+    """
+    POST /personaggi/api/transazioni/ruba/
+    Richiede: {"oggetto_id": 123, "target_personaggio_id": 456}
+    
+    Esegue la logica di furto basata sulle caratteristiche
+    del personaggio richiedente (loggato).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        try:
+            personaggio_richiedente = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = RubaSerializer(
+            data=request.data,
+            context={'richiedente': personaggio_richiedente}
+        )
+        
+        if serializer.is_valid():
+            try:
+                oggetto_rubato = serializer.save()
+                return Response(
+                    {"success": f"Oggetto '{oggetto_rubato.nome}' rubato con successo!"}, 
+                    status=status.HTTP_200_OK
+                )
+            except Exception as e:
+                # Gestisce errori durante il salvataggio (es. logica complessa nei modelli)
+                return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AcquisisciView(APIView):
+    """
+    POST /personaggi/api/transazioni/acquisisci/
+    Richiede: {"qrcode_id": "uuid-del-qr"}
+    
+    Collega l'oggetto/attivata al personaggio loggato
+    e scollega il QrCode.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        try:
+            personaggio_richiedente = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = AcquisisciSerializer(
+            data=request.data,
+            context={'richiedente': personaggio_richiedente}
+        )
+        
+        if serializer.is_valid():
+            item_acquisito = serializer.save()
+            return Response(
+                {"success": f"'{item_acquisito.nome}' acquisito con successo!"}, 
+                status=status.HTTP_200_OK
+            )
+            
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
