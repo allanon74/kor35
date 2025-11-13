@@ -14,11 +14,7 @@ from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_
 from django_icon_picker.widgets import IconPicker
 # ----------- CLASSI ASTRATTE -------------
 
-class MuteIconPickerWidget(IconPicker):
-    @property
-    def media(self):
-        # Rimuovi i media per evitare il doppio caricamento
-        return Media()
+
 
 class A_Admin(SModelAdmin):
     actions_on_top = True
@@ -41,12 +37,14 @@ class A_Admin(SModelAdmin):
         abstract = True
 
 class PunteggioAdminForm(forms.ModelForm):
+    icona = forms.CharField(
+        widget=IconPicker,  # Applichiamo il widget manualmente
+        required=False      # Imposta come nel modello originale
+    )
+    
     class Meta:
         model = Punteggio
         fields = '__all__'
-        widgets = {
-            'icona': MuteIconPickerWidget,
-        }
 
 		
 class A_Multi_Inline (admin.TabularInline):
