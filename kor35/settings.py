@@ -78,7 +78,7 @@ INSTALLED_APPS = [
     'rest_framework', # Django REST Framework
     'rest_framework.authtoken', # Django REST Framework Token Authentication
 	'corsheaders', # Django CORS Headers
-	'django_yarnpkg', # django-yarnpkg
+	# 'django_yarnpkg', # django-yarnpkg
 	
 ]
 
@@ -225,12 +225,17 @@ USE_I18N = True
 USE_TZ = True
 
 # yarnpkg settings
-NODE_MODULES_ROOT = os.path.join(BASE_DIR, 'node_modules')
+# NODE_MODULES_ROOT = os.path.join(BASE_DIR, 'node_modules')
 # YARN_PATH = '/usr/bin/yarn'
 # YARN_PACKAGE_JSON_PATH = BASE_DIR / 'package.json'  
-YARN_INSTALLED_APPS = [
-  "@iconify/json",
-]
+# YARN_INSTALLED_APPS = [
+#   "@iconify/json",
+# ]
+
+
+# iconify settings
+
+ICONIFY_JSON_ROOT = "/var/www/django/static/iconify/json/"
 
 
 # Static files (CSS, JavaScript, Images)
