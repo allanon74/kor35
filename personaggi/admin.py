@@ -31,8 +31,8 @@ class A_Admin(SModelAdmin):
         
         # 3b. Definisci i media per l'icon picker
         media_picker = Media(
-            js=('django_icon_picker/static/js/icon_picker.js',),
-            css={'all': ('django_icon_picker/static/css/icon_picker.css',)}
+            js=('django_icon_picker/js/icon_picker.js',),
+            css={'all': ('django_icon_picker/css/icon_picker.css',)}
         )
         
         # 3c. Unisci i due: prima Summernote, POI icon-picker
