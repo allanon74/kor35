@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from django.forms import Media
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 
@@ -17,17 +18,25 @@ class MuteIconPickerWidget(IconPicker):
     @property
     def media(self):
         # Rimuovi i media per evitare il doppio caricamento
-        return admin.widgets.forms.Media()
+        return Media()
 
 class A_Admin(SModelAdmin):
     actions_on_top = True
     save_on_top = True
 
-class Media:
-    js = ('django_icon_picker/static/js/icon_picker.js',)
-    css = {
-        'all': ('django_icon_picker/static/css/icon_picker.css',)
-    }
+    @property
+    def media(self):
+        # 3a. Prendi tutti i media originali di Summernote
+        media_super = super().media 
+        
+        # 3b. Definisci i media per l'icon picker
+        media_picker = Media(
+            js=('django_icon_picker/static/js/icon_picker.js',),
+            css={'all': ('django_icon_picker/static/css/icon_picker.css',)}
+        )
+        
+        # 3c. Unisci i due: prima Summernote, POI icon-picker
+        return media_super + media_picker
 
     class Meta:
         abstract = True
