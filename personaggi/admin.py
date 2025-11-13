@@ -45,7 +45,7 @@ class PunteggioAdminForm(forms.ModelForm):
         model = Punteggio
         fields = '__all__'
         widgets = {
-            'icona': MuteIconPickerWidget(),
+            'icona': MuteIconPickerWidget,
         }
 
 		
