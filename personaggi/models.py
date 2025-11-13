@@ -1271,7 +1271,7 @@ class Oggetto(A_vista):
         return ", ".join(str(elemento) for elemento in self.elementi.all())
 
     def __str__(self):
-        return f"{self.nome} - {self.aura}"
+        return f"{self.nome} ({self.aura.sigla if self.aura else 'Nessuna Aura'})"
     
     @property
     def livello(self):
