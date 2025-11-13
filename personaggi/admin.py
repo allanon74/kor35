@@ -299,13 +299,23 @@ class PunteggioAdmin(A_Admin):
     list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
+    summernote_fields = ('descrizione',)
 
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        # Assumendo che il campo si chiami 'icona'
-        if 'icona' in form.base_fields:
-            form.base_fields['icona'].widget = MuteIconPickerWidget()
-        return form
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        
+        # Controlla se il campo del database è il nostro campo 'icona'
+        if db_field.name == 'icona':
+            
+            # Forza l'uso del nostro widget "muto"
+            kwargs['widget'] = MuteIconPickerWidget
+            
+            # Chiama il metodo originale (di SModelAdmin) 
+            # ma con il nostro widget personalizzato.
+            return super().formfield_for_dbfield(db_field, request, **kwargs)
+        
+        # Per tutti gli altri campi (es. 'descrizione', 'nome'), 
+        # lascia che SModelAdmin faccia il suo lavoro normale.
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 @admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
