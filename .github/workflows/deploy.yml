@@ -37,13 +37,16 @@ jobs:
             # 5. Esegui le migrazioni del database
             python manage.py migrate
             
-            # 6. Riavvia il servizio corretto (Apache) con sudo
+            # 6. Raccogli i file statici
+            python manage.py collectstatic --noinput
+
+            # 7. Riavvia il servizio corretto (Apache) con sudo
             #    Scegli UNA delle due opzioni qui sotto
             
             # OPZIONE A: Riavvia completamente Apache.
-            # sudo systemctl restart apache2
+            sudo systemctl restart apache2.service
             
             # OPZIONE B (consigliata): Ricarica l'applicazione senza riavviare Apache.
             # Questo funziona solo se Apache è configurato per ricaricare quando il file wsgi.py viene "toccato".
             # Sostituisci il percorso con quello corretto del tuo file wsgi.py
-            touch ~/progetti/kor35/kor35/wsgi.py
+            # touch ~/progetti/kor35/kor35/wsgi.py
