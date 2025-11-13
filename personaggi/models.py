@@ -217,46 +217,49 @@ class AbilitaStatistica(models.Model):
 
 
 class Abilita(A_modello):
-	nome = models.CharField("Nome dell'abilità", max_length = 90, )
-	descrizione = models.TextField('Descrizione', null=True, blank=True,)
-	caratteristica = models.ForeignKey(
-		Punteggio,  
-		on_delete=models.CASCADE,
-		verbose_name="Caratteristica", 
-		limit_choices_to={'tipo' : CARATTERISTICA}
-		)
-	tiers = models.ManyToManyField(
-		Tier,
-		related_name = "abilita",
-		through = "abilita_tier",
-		help_text = "Tiers in cui è presente l'abilità",
-		)
-	requisiti = models.ManyToManyField(
-		Punteggio,
-		related_name = "abilita_req",
-		through = "abilita_requisito",
-		help_text = "Caratteristiche requisito di sblocco",
-		limit_choices_to={'tipo' : CARATTERISTICA}
-		)
-	tabelle_sbloccate = models.ManyToManyField(
-		Tabella,
-		related_name = "abilita_sbloccante",
-		through = "abilita_sbloccata",
-		help_text = "Tabelle sbloccate dall'abilità",
-		)
-	punteggio_acquisito = models.ManyToManyField(
-		Punteggio,
-		related_name = "abilita_acquisizione",
-		through = "abilita_punteggio",
-		help_text = "Caratteristiche requisito di sblocco",
-		)
-	# prerequisiti = models.ManyToManyField(
-	# 	"Abilita",
-	# 	related_name = "abilitati",
-	# 	through = "abilita_prerequisito",
-	# 	help_text = "Abilità che fungono da prerequisito",
-	# )
-	statistiche = models.ManyToManyField(
+    nome = models.CharField("Nome dell'abilità", max_length = 90, )
+    descrizione = models.TextField('Descrizione', null=True, blank=True,)
+    costo_pc = models.IntegerField("Costo base dell'abilità in Punti Caratteristica", default=0, )
+    costo_crediti = models.IntegerField("Costo base dell'abilità in Crediti", default=0, )
+    
+    caratteristica = models.ForeignKey(
+        Punteggio,  
+        on_delete=models.CASCADE,
+        verbose_name="Caratteristica", 
+        limit_choices_to={'tipo' : CARATTERISTICA}
+    )
+    tiers = models.ManyToManyField(
+        Tier,
+        related_name = "abilita",
+        through = "abilita_tier",
+        help_text = "Tiers in cui è presente l'abilità",
+    )
+    requisiti = models.ManyToManyField(
+        Punteggio,
+        related_name = "abilita_req",
+        through = "abilita_requisito",
+        help_text = "Caratteristiche requisito di sblocco",
+        limit_choices_to={'tipo' : CARATTERISTICA}
+    )
+    tabelle_sbloccate = models.ManyToManyField(
+        Tabella,
+        related_name = "abilita_sbloccante",
+        through = "abilita_sbloccata",
+        help_text = "Tabelle sbloccate dall'abilità",
+    )
+    punteggio_acquisito = models.ManyToManyField(
+        Punteggio,
+        related_name = "abilita_acquisizione",
+        through = "abilita_punteggio",
+        help_text = "Caratteristiche requisito di sblocco",
+    )
+    # prerequisiti = models.ManyToManyField(
+    #     "Abilita",
+    #     related_name = "abilitati",
+    #     through = "abilita_prerequisito",
+    #     help_text = "Abilità che fungono da prerequisito",
+    # )
+    statistiche = models.ManyToManyField(
         Statistica,
         through='AbilitaStatistica',
         blank=True,
@@ -264,12 +267,12 @@ class Abilita(A_modello):
         related_name="abilita_statistiche",
     )
  
-	class Meta:
-		verbose_name = "Abilità"
-		verbose_name_plural = "Abilità"
+    class Meta:
+        verbose_name = "Abilità"
+        verbose_name_plural = "Abilità"
 
-	def __str__(self):
-		return self.nome
+    def __str__(self):
+        return self.nome
 
 class Spell(A_modello):
 	nome = models.CharField("Nome dell'abilità attivata", max_length=90, )
@@ -329,8 +332,8 @@ class Mattone(A_modello):
 class abilita_tier(A_modello):
 	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
 	tabella = models.ForeignKey(Tier, on_delete=models.CASCADE, )
-	costo = models.IntegerField("Costo dell'abilità in Punti Caratteristica", default=0, )
-	costo_crediti = models.IntegerField("Costo dell'abilità in Crediti", default=0, )	 
+	# costo = models.IntegerField("Costo dell'abilità in Punti Caratteristica", default=0, )
+	# costo_crediti = models.IntegerField("Costo dell'abilità in Crediti", default=0, )	 
 	ordine = models.IntegerField("Ordine in tabella", default=10, )
 	
 	class Meta:
