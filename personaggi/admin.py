@@ -10,14 +10,27 @@ from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiC
 from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica
 from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica
 
+from django_icon_picker.widgets import IconPickerWidget
 # ----------- CLASSI ASTRATTE -------------
 
+class MuteIconPickerWidget(IconPickerWidget):
+    @property
+    def media(self):
+        # Rimuovi i media per evitare il doppio caricamento
+        return admin.widgets.forms.Media()
+
 class A_Admin(SModelAdmin):
-	actions_on_top = True
-	save_on_top = True
-	
-	class Meta:
-		abstract = True
+    actions_on_top = True
+    save_on_top = True
+
+class Media:
+    js = ('django_icon_picker/static/js/icon_picker.js',)
+    css = {
+        'all': ('django_icon_picker/static/css/icon_picker.css',)
+    }
+
+    class Meta:
+        abstract = True
 		
 class A_Multi_Inline (admin.TabularInline):
 	extra = 1
@@ -274,9 +287,16 @@ class AbilitaAdmin(A_Admin):
 
 @admin.register(Punteggio)
 class PunteggioAdmin(A_Admin):
-	list_display = ('nome', 'tipo', 'caratteristica_relativa',)
-	list_filter = ('tipo', 'caratteristica_relativa',)
-	search_fields = ('nome', )
+    list_display = ('nome', 'tipo', 'caratteristica_relativa',)
+    list_filter = ('tipo', 'caratteristica_relativa',)
+    search_fields = ('nome', )
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        # Assumendo che il campo si chiami 'icona'
+        if 'icona' in form.base_fields:
+            form.base_fields['icona'].widget = MuteIconPickerWidget()
+        return form
 
 @admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
