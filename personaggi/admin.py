@@ -24,20 +24,6 @@ class A_Admin(SModelAdmin):
     actions_on_top = True
     save_on_top = True
 
-    @property
-    def media(self):
-        # 3a. Prendi tutti i media originali di Summernote
-        media_super = super().media 
-        
-        # 3b. Definisci i media per l'icon picker
-        media_picker = Media(
-            js=('django_icon_picker/js/icon_picker.js',),
-            css={'all': ('django_icon_picker/css/icon_picker.css',)}
-        )
-        
-        # 3c. Unisci i due: prima Summernote, POI icon-picker
-        return media_super + media_picker
-
     class Meta:
         abstract = True
 		
@@ -300,22 +286,6 @@ class PunteggioAdmin(A_Admin):
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
     summernote_fields = ('descrizione',)
-
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
-        
-        # Controlla se il campo del database è il nostro campo 'icona'
-        if db_field.name == 'icona':
-            
-            # Forza l'uso del nostro widget "muto"
-            kwargs['widget'] = MuteIconPickerWidget
-            
-            # Chiama il metodo originale (di SModelAdmin) 
-            # ma con il nostro widget personalizzato.
-            return super().formfield_for_dbfield(db_field, request, **kwargs)
-        
-        # Per tutti gli altri campi (es. 'descrizione', 'nome'), 
-        # lascia che SModelAdmin faccia il suo lavoro normale.
-        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 @admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
