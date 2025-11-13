@@ -10,10 +10,10 @@ from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiC
 from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica
 from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica
 
-from django_icon_picker.widgets import IconPickerWidget
+from django_icon_picker.widgets import IconPicker
 # ----------- CLASSI ASTRATTE -------------
 
-class MuteIconPickerWidget(IconPickerWidget):
+class MuteIconPickerWidget(IconPicker):
     @property
     def media(self):
         # Rimuovi i media per evitare il doppio caricamento
