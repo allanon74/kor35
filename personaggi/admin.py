@@ -387,7 +387,7 @@ class OggettoAdmin(SModelAdmin):
 
     fieldsets = (
         ('Informazioni Principali', {
-            'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))
+            'fields': ('nome', 'aura', 'testo', ('id', 'data_creazione', 'livello'))
         }),
         # Questo crea il box separato per l'anteprima
         ('Anteprima', {
