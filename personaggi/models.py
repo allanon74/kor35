@@ -21,12 +21,14 @@ CARATTERISTICA = "CA"
 STATISTICA = "ST"
 ELEMENTO = "EL"
 AURA = "AU"
+CONDIZIONE = "CO"
 
 punteggi_tipo = [
 	(CARATTERISTICA, 'Caratteristica'),
 	(STATISTICA, 'Statistica'),
 	(ELEMENTO, 'Elemento'),
-	(AURA, 'Aura',)
+	(AURA, 'Aura',),
+    (CONDIZIONE, 'Condizione',),
 	]
 
 TIER_1 = "T1"
@@ -226,7 +228,7 @@ class Abilita(A_modello):
         Punteggio,  
         on_delete=models.CASCADE,
         verbose_name="Caratteristica", 
-        limit_choices_to={'tipo' : CARATTERISTICA}
+        limit_choices_to={'tipo__in' : [CARATTERISTICA, CONDIZIONE, ]},
     )
     tiers = models.ManyToManyField(
         Tier,
@@ -239,7 +241,7 @@ class Abilita(A_modello):
         related_name = "abilita_req",
         through = "abilita_requisito",
         help_text = "Caratteristiche requisito di sblocco",
-        limit_choices_to={'tipo' : CARATTERISTICA}
+        # limit_choices_to={'tipo' : CARATTERISTICA}
     )
     tabelle_sbloccate = models.ManyToManyField(
         Tabella,
