@@ -343,7 +343,7 @@ class abilita_tier(A_modello):
 
 	def __str__(self):
 		testo = "{abilita} - {tabella} ({costo})"
-		return testo.format(abilita=self.abilita.nome, tabella=self.tabella.nome, costo=self.costo)
+		return testo.format(abilita=self.abilita.nome, tabella=self.tabella.nome, costo=self.abilita.costo_crediti)
 
 class abilita_prerequisito(A_modello):
 	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_prerequisiti", )
