@@ -10,7 +10,9 @@ from django.utils import timezone
 from django.contrib.auth.models import User # Importa il modello User
 from django.utils import timezone # Importa timezone
 
+from colorfield.fields import ColorField
 
+from django_icon_picker.field import IconField
 
 from cms.models.pluginmodel import CMSPlugin
 
@@ -97,31 +99,34 @@ class Tier(Tabella):
 		verbose_name_plural = "Tiers"
 
 class Punteggio(Tabella):
-	sigla = models.CharField('Sigla', max_length=3, unique=True, )
-	tipo = models.CharField('Tipo di punteggio', choices=punteggi_tipo, max_length=2)
-	caratteristica = models.ForeignKey(
-		"Punteggio",
-		on_delete=models.CASCADE, 
-		limit_choices_to={'tipo' : CARATTERISTICA},
-		null=True, blank=True,
-		verbose_name = "Carattesitica relativa",
-		related_name = "punteggi_caratteristica",
-		)
-	modifica_statistiche = models.ManyToManyField(
-		'Statistica',
-		through='CaratteristicaModificatore',
-		related_name='modificata_da_caratteristiche',
-		blank=True
-	)
+    sigla = models.CharField('Sigla', max_length=3, unique=True, )
+    tipo = models.CharField('Tipo di punteggio', choices=punteggi_tipo, max_length=2)
+    colore = ColorField('Colore', default='#1976D2', help_text="Colore associato al punteggio (es. per icone).")
+    icona = IconField(max_length=255, blank=True)
+    
+    caratteristica_relativa = models.ForeignKey(
+        "Punteggio",
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo' : CARATTERISTICA},
+        null=True, blank=True,
+        verbose_name = "Caratteristica relativa",
+        related_name = "punteggi_caratteristica",
+        )
+    modifica_statistiche = models.ManyToManyField(
+        'Statistica',
+        through='CaratteristicaModificatore',
+        related_name='modificata_da_caratteristiche',
+        blank=True
+    )
  
-	class Meta:
-		verbose_name = "Punteggio"
-		verbose_name_plural = "Punteggi"
-		ordering =['tipo', 'nome']
+    class Meta:
+        verbose_name = "Punteggio"
+        verbose_name_plural = "Punteggi"
+        ordering =['tipo', 'nome']
 
-	def __str__(self):
-		result = "{tipo} - {nome}"
-		return result.format(nome=self.nome, tipo = self.tipo)
+    def __str__(self):
+        result = "{tipo} - {nome}"
+        return result.format(nome=self.nome, tipo = self.tipo)
 
 
 class Statistica(Punteggio):

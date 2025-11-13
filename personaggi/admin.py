@@ -274,8 +274,8 @@ class AbilitaAdmin(A_Admin):
 
 @admin.register(Punteggio)
 class PunteggioAdmin(A_Admin):
-	list_display = ('nome', 'tipo', 'caratteristica',)
-	list_filter = ('tipo', 'caratteristica',)
+	list_display = ('nome', 'tipo', 'caratteristica_relativa',)
+	list_filter = ('tipo', 'caratteristica_relativa',)
 	search_fields = ('nome', )
 
 @admin.register(abilita_prerequisito)

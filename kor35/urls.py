@@ -22,6 +22,7 @@ urlpatterns = [
     path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
+    path('icon_picker/', include('django_icon_picker.urls')),
     path('personaggi/', include('personaggi.urls')),
     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),
     path('auth/', obtain_auth_token),

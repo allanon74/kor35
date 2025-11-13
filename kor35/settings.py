@@ -41,7 +41,9 @@ INSTALLED_APPS = [
 	# 'djangocms_admin_style', #cms
 	'admin_interface', #admin interface
 	'colorfield', 
-    'django.contrib.admin',
+	"dj_iconify.apps.DjIconifyConfig",
+	"django_icon_picker",    
+ 	'django.contrib.admin',
     'django.contrib.admindocs',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -76,6 +78,7 @@ INSTALLED_APPS = [
     'rest_framework', # Django REST Framework
     'rest_framework.authtoken', # Django REST Framework Token Authentication
 	'corsheaders', # Django CORS Headers
+	'django_yarnpkg', # django-yarnpkg
 	
 ]
 
@@ -221,6 +224,14 @@ USE_I18N = True
 
 USE_TZ = True
 
+# yarnpkg settings
+NODE_MODULES_ROOT = os.path.join(BASE_DIR, 'node_modules')
+# YARN_PATH = '/usr/bin/yarn'
+# YARN_PACKAGE_JSON_PATH = BASE_DIR / 'package.json'  
+YARN_INSTALLED_APPS = [
+  "@iconify/json",
+]
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
@@ -231,6 +242,7 @@ STATIC_ROOT = '/var/www/django/static'
 STATICFILES_FINDERS = [
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+    'django_yarnpkg.finders.NodeModulesFinder',
 ]
 
 STATICFILES_DIRS = [
