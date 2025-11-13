@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django import forms
+
 from django.forms import Media
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
@@ -11,7 +11,6 @@ from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiC
 from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica
 from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica
 
-from django_icon_picker.widgets import IconPicker
 # ----------- CLASSI ASTRATTE -------------
 
 
@@ -20,31 +19,8 @@ class A_Admin(SModelAdmin):
     actions_on_top = True
     save_on_top = True
 
-    @property
-    def media(self):
-        media_super = super().media 
-        
-        # Definisci i media per l'icon picker (con i percorsi corretti)
-        media_picker = Media(
-            js=('django_icon_picker/js/icon_picker.js',),
-            css={'all': ('django_icon_picker/css/icon_picker.css',)}
-        )
-        
-        # Unisci i due: prima Summernote, POI icon-picker
-        return media_super + media_picker
-
     class Meta:
         abstract = True
-
-class PunteggioAdminForm(forms.ModelForm):
-    icona = forms.CharField(
-        widget=IconPicker,  # Applichiamo il widget manualmente
-        required=False      # Imposta come nel modello originale
-    )
-    
-    class Meta:
-        model = Punteggio
-        fields = '__all__'
 
 		
 class A_Multi_Inline (admin.TabularInline):
@@ -52,6 +28,7 @@ class A_Multi_Inline (admin.TabularInline):
 	
 	class Meta:
 		abstract = True
+
 
 # ----------- CLASSI INLINE -------------
 class abilita_tier_inline(A_Multi_Inline):
@@ -301,12 +278,11 @@ class AbilitaAdmin(A_Admin):
 	exclude = ('statistiche',)
 
 @admin.register(Punteggio)
-class PunteggioAdmin(A_Admin):
-    form = PunteggioAdminForm
+class PunteggioAdmin(admin.ModelAdmin):
     list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
-    summernote_fields = ('descrizione',)
+    # summernote_fields = ('descrizione',)
 
 @admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
