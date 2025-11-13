@@ -235,7 +235,7 @@ USE_TZ = True
 
 # iconify settings
 
-ICONIFY_JSON_ROOT = "/var/www/django/static/iconify/json/"
+ICONIFY_JSON_ROOT = os.path.join(BASE_DIR.parent, 'iconify', 'json')
 
 
 # Static files (CSS, JavaScript, Images)
