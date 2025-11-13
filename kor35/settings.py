@@ -41,7 +41,7 @@ INSTALLED_APPS = [
 	# 'djangocms_admin_style', #cms
 	# 'admin_interface', #admin interface
 	'colorfield', 
-	"dj_iconify.apps.DjIconifyConfig",
+	# "dj_iconify.apps.DjIconifyConfig",
 	"django_icon_picker",    
  	'django.contrib.admin',
     'django.contrib.admindocs',
