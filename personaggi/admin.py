@@ -243,14 +243,14 @@ class AbilitaAdmin(A_Admin):
 	exclude = ('statistiche',)
 
 @admin.register(Punteggio)
-class PunteggioAdmin(A_Admin):
+class PunteggioAdmin(admin.ModelAdmin):
     # form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
     
     # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_display = ('nome', 'tipo',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
-    summernote_fields = ('descrizione',)
+    # summernote_fields = ('descrizione',)
     # def formfield_for_dbfield(self, db_field, request, **kwargs):
     #     # Se stiamo processando il campo 'icona'
     #     if db_field.name == 'icona':
