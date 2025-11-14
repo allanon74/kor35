@@ -20,8 +20,8 @@ def download_icon_api(request):
     if not (request.user.is_superuser or request.user.has_perm(f"{model.split('.')[0]}.change_{model.split('.')[1]}")):
         return JsonResponse({"error": "Not permitted"}, status=403)
 
-    if color.startswith('#'):
-        color = color.replace("#", "%23")
+    # if color.startswith('#'):
+    #     color = color.replace("#", "%23")
 
     svg_url = f"https://api.iconify.design/{icon_name}.svg"
     params = {'color': color}

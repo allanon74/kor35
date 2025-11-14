@@ -153,17 +153,28 @@ class Punteggio(Tabella):
     @property
     def icona_html(self):
         url = self.icona_url
-        if url:
-            # Usiamo il 'colore' del modello per applicare un filtro!
-            # Nota: questo richiede che l'SVG non abbia colori hardcodati.
-            # Se l'SVG scaricato ha già un colore, questa riga va rimossa.
-            style = f"width: 24px; height: 24px; vertical-align: middle; color: {self.colore};"
-            return format_html(
-                '<img src="{}" style="{}" alt="Icona">',
-                url,
-                style
+        colore = self.colore
+        
+        if url and colore:
+            # Usiamo un <div>. Il colore di sfondo è il colore del modello.
+            # L'SVG (che ora è nero) viene usato come "maschera".
+            style = (
+                f"width: 24px; "
+                f"height: 24px; "
+                f"background-color: {colore}; "
+                f"mask-image: url({url}); "
+                f"-webkit-mask-image: url({url}); "
+                f"mask-repeat: no-repeat; "
+                f"-webkit-mask-repeat: no-repeat; "
+                f"mask-size: contain; "
+                f"-webkit-mask-size: contain; "
+                f"display: inline-block; "
+                f"vertical-align: middle;"
             )
-        return ""
+            # Restituiamo un <div> vuoto stilizzato, non un <img>
+            return format_html('<div style="{}"></div>', style)
+        
+        return "" # Non mostrare nulla se manca l'icona o il colore
     
     
     def __str__(self):

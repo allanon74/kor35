@@ -256,8 +256,7 @@ class AbilitaAdmin(A_Admin):
 class PunteggioAdmin(A_Admin):
     form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
     
-    # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
-    list_display = ('nome', 'tipo',)
+    list_display = ('nome', 'icona_html', 'tipo', 'caratteristica_relativa',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
     summernote_fields = ('descrizione',)
