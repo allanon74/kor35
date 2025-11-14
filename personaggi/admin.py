@@ -38,15 +38,22 @@ class A_Multi_Inline (admin.TabularInline):
 class MuteIconPickerWidget(IconPicker):
     @property
     def media(self):
-        return Media()
+        # PATCH: Silenzia solo il JS, ma carica il CSS.
+        # Il JS verrà caricato (una sola volta) dal template del widget nel <body>.
+        return Media(
+            css={'all': ('django_icon_picker/css/icon_picker.css',)}
+            # Niente 'js' qui!
+        )
 
-class PunteggioAdminForm(forms.ModelForm):
-    class Meta:
-        model = Punteggio
-        fields = '__all__'
-        widgets = {
-            'icona': MuteIconPickerWidget, # Corretto: applica la patch
-        }
+# class PunteggioAdminForm(forms.ModelForm):
+#     class Meta:
+#         model = Punteggio
+#         fields = '__all__'
+#         widgets = {
+#             'icona': MuteIconPickerWidget, # Corretto: applica la patch
+#         }
+        
+
 
 # ----------- CLASSI INLINE -------------
 class abilita_tier_inline(A_Multi_Inline):
@@ -297,14 +304,21 @@ class AbilitaAdmin(A_Admin):
 
 @admin.register(Punteggio)
 class PunteggioAdmin(admin.ModelAdmin):
-    form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
+    # form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
     
     # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_display = ('nome', 'tipo',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
     # summernote_fields = ('descrizione',)
-    
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        # Se stiamo processando il campo 'icona'
+        if db_field.name == 'icona':
+            # Forza l'uso del nostro widget "muto" (che carica solo CSS)
+            kwargs['widget'] = MuteIconPickerWidget
+            
+        # Chiama il metodo originale con le nostre modifiche
+        return super().formfield_for_dbfield(db_field, request, **kwargs)    
 
 
 
