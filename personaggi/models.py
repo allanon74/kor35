@@ -199,46 +199,57 @@ class Punteggio(Tabella):
         """
         Genera l'HTML per un cerchio colorato con l'icona
         in bianco o nero per il contrasto.
+        
+        Questa versione usa il file SVG locale come maschera CSS.
         """
-        # 1. Controlla se abbiamo i dati necessari
-        if not self.icona or not self.colore:
+        # 1. Ottieni l'URL del file SVG locale (es. /media/icone/punteggio/icon-....svg)
+        url_icona_locale = self.icona_url 
+        
+        # 2. Ottieni il colore di sfondo (es. #FF0000)
+        colore_sfondo = self.colore
+        
+        if not url_icona_locale or not colore_sfondo:
             return ""
 
-        # 2. Determina il colore dell'icona (bianco o nero)
-        colore_icona = _get_icon_color_from_bg(self.colore)
+        # 3. Determina il colore dell'icona (bianco o nero)
+        colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo)
+
+        # 4. Definisce gli stili CSS
         
-        # 3. Codifica il colore dell'icona per l'URL
-        colore_icona_url = colore_icona.replace("#", "%23") # 'white' e 'black' non hanno '#', ma è una buona prassi
-
-        # 4. Genera l'URL per l'icona (con il nuovo colore)
-        icona_url = f"https://api.iconify.design/{self.icona}.svg?color={colore_icona_url}"
-
-        # 5. Definisce gli stili CSS inline
+        # Stile per il cerchio esterno
         stile_cerchio = (
             f"display: inline-block; "
             f"width: 24px; "
             f"height: 24px; "
-            f"background-color: {self.colore}; " # Colore di sfondo dal modello
+            f"background-color: {colore_sfondo}; " # Colore di sfondo dal modello
             f"border-radius: 50%; "            # Rende il div circolare
             f"vertical-align: middle; "
-            f"text-align: center; "            # Centra l'immagine
-            f"line-height: 24px;"               # Aiuta a centrare verticalmente
+            f"text-align: center; "            # Centra l'icona
+            f"line-height: 24px;"               # Aiuta a centrare
         )
         
-        stile_img = (
-            f"width: 16px; "  # Leggermente più piccola del cerchio (24px)
+        # Stile per l'icona interna (il <div> che fa da maschera)
+        stile_icona_maschera = (
+            f"display: inline-block; "
+            f"width: 16px; "  # Leggermente più piccola del cerchio
             f"height: 16px; "
-            f"vertical-align: middle;" # Allinea l'img dentro il div
+            f"vertical-align: middle; "
+            f"background-color: {colore_icona_contrasto}; " # Colore dell'icona (bianco o nero)
+            f"mask-image: url({url_icona_locale}); "
+            f"-webkit-mask-image: url({url_icona_locale}); "
+            f"mask-repeat: no-repeat; "
+            f"-webkit-mask-repeat: no-repeat; "
+            f"mask-size: contain; "
+            f"-webkit-mask-size: contain; "
         )
 
-        # 6. Combina tutto in HTML
+        # 5. Combina tutto in HTML
         return format_html(
-            '<div style="{}">'
-            '  <img src="{}" style="{}">'
+            '<div style="{}">'  # Il cerchio colorato
+            '  <div style="{}"></div>' # L'icona mascherata
             '</div>',
             stile_cerchio,
-            icona_url,
-            stile_img
+            stile_icona_maschera
         )
     
     
