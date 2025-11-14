@@ -40,7 +40,7 @@ ALLOWED_HOSTS = ['www.k-o-r-35.it','127.0.0.1', 'www.kor35.it', ]
 
 INSTALLED_APPS = [
 	# 'djangocms_admin_style', #cms
-	# 'admin_interface', #admin interface
+	'admin_interface', #admin interface
 	'colorfield', 
 	"dj_iconify.apps.DjIconifyConfig",
 	"django_icon_picker",    

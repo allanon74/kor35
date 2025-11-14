@@ -253,35 +253,15 @@ class AbilitaAdmin(A_Admin):
 	exclude = ('statistiche',)
 
 @admin.register(Punteggio)
-class PunteggioAdmin(admin.ModelAdmin):
-    # form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
+class PunteggioAdmin(A_Admin):
+    form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
     
     # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_display = ('nome', 'tipo',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
-    # summernote_fields = ('descrizione',)
-    # def formfield_for_dbfield(self, db_field, request, **kwargs):
-    #     # Se stiamo processando il campo 'icona'
-    #     if db_field.name == 'icona':
-    #         # Forza l'uso del nostro widget "muto" (che carica solo CSS)
-    #         kwargs['widget'] = MuteIconPickerWidget
-            
-    #     # Chiama il metodo originale con le nostre modifiche
-    #     return super().formfield_for_dbfield(db_field, request, **kwargs)  
-    
-    form = PunteggioAdminForm  
-
-    # def formfield_for_dbfield(self, db_field, request, **kwargs):
-    #     if db_field.name == 'icona':
-    #         # Prende il widget (CustomIconWidget) dal campo (CustomIconField)
-    #         field = super().formfield_for_dbfield(db_field, request, **kwargs)
-            
-    #         # Passa il nome del modello al widget per usarlo nel template/JS
-    #         field.widget.attrs['model_name'] = f'{db_field.model._meta.app_label}.{db_field.model._meta.model_name}'
-    #         return field
-            
-    #     return super().formfield_for_dbfield(db_field, request, **kwargs)
+    summernote_fields = ('descrizione',)
+    save_as = True
 
 
 
@@ -300,10 +280,12 @@ class TierAdmin(A_Admin):
 	save_as = True
 
 @admin.register(Statistica)
-class StatisticaAdmin(admin.ModelAdmin):
+class StatisticaAdmin(A_Admin):
+    form = PunteggioAdminForm
     list_display = ('nome', 'valore_predefinito', 'valore_base_predefinito', 'tipo_modificatore')
     # Questo eredita i campi di Punteggio, potresti doverli nascondere
     exclude = ('tipo',) # Nasconde il campo 'tipo' che forziamo a 'ST'
+    summernote_fields = ('descrizione',)
 
 # Register your models here.
 
