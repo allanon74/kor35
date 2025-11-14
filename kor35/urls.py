@@ -19,6 +19,7 @@ from django.urls import path, re_path, include
 from rest_framework.authtoken.views import obtain_auth_token
 from django.conf import settings
 from django.conf.urls.static import static
+from personaggi import views as personaggi_views
 
 from django.views.decorators.csrf import csrf_exempt
 from django_icon_picker import views as icon_picker_views
@@ -28,7 +29,8 @@ urlpatterns = [
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
     # path('icon_picker/', include('django_icon_picker.urls')),
-    path('icon_picker/download-svg/', csrf_exempt(icon_picker_views.download_and_save_svg), name='download_svg_patch'),
+    # path('icon_picker/download-svg/', csrf_exempt(icon_picker_views.download_and_save_svg), name='download_svg_patch'),
+    path('icon_picker/download-svg/', personaggi_views.download_icon_patch, name='download_svg_patch'),
     # --- FINE DELLA PATCH URL ---
     path('personaggi/', include('personaggi.urls')),
     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),

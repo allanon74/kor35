@@ -44,8 +44,11 @@ from personaggi.serializers import PersonaggioPublicSerializer
 
 
 
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.http import JsonResponse
+import requests
+import os
+from django.conf import settings
 
 
 @ensure_csrf_cookie
@@ -760,3 +763,57 @@ class AcquisisciView(APIView):
             )
             
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    
+@csrf_exempt # (Aggiriamo il Bug #2 qui invece che in urls.py)
+def download_icon_patch(request):
+    model = request.GET.get("model")
+    
+    # Controllo permessi (come l'originale)
+    if not (request.user.is_superuser or request.user.has_perm(f"edit_{model}")):
+        return HttpResponse("Not permitted")
+
+    svg_icon = request.GET.get("icon")
+    color = request.GET.get("color") # es. '%23ff0000'
+    id = request.GET.get("id")
+
+    # --- INIZIO FIX PER IL BUG #5 ---
+    # Decodifica il colore (es. da '%23ff0000' a '#ff0000')
+    if color and color.startswith('%23'):
+        color = '#' + color[3:]
+    
+    # Prepara l'URL e i parametri per la libreria 'requests'.
+    # In questo modo 'requests' gestirà la codifica correttamente.
+    svg_url = f"https://api.iconify.design/{svg_icon}.svg"
+    params = {'color': color}
+    # --- FINE FIX ---
+
+    try:
+        response = requests.get(svg_url, params=params, timeout=5) # Aggiunto timeout
+        
+        if response.status_code == 200:
+            save_path_base = getattr(settings, "ICON_PICKER_PATH", "media")
+            save_path = os.path.join(settings.MEDIA_ROOT, save_path_base, model)
+            
+            os.makedirs(save_path, exist_ok=True)
+            
+            filename = f"icon-{id}.svg"
+            file_path_absolute = os.path.join(save_path, filename)
+
+            # Salva il file SVG (sappiamo che i permessi sono corretti)
+            with open(file_path_absolute, "wb") as f:
+                f.write(response.content)
+            
+            # Restituisce il *percorso relativo* che il JS salverà nel form
+            file_path_relative = os.path.join(save_path_base, model, filename)
+            return HttpResponse(file_path_relative)
+        else:
+            return HttpResponse(
+                f"Failed to download SVG file. Status code: {response.reason}",
+                status=response.status_code
+            )
+    except requests.RequestException as e:
+        return HttpResponse(f"Failed to contact Iconify API: {e}", status=500)
+    except Exception as e:
+        # Cattura qualsiasi altro errore (es. il crash 'NoneType' originale)
+        return HttpResponse(f"Internal server error: {e}", status=500)
