@@ -19,7 +19,10 @@ from django_icon_picker.widgets import IconPicker
 
 # ----------- CLASSI ASTRATTE -------------
 
-
+IconPicker.media = property(lambda self: Media(
+    css={'all': ('django_icon_picker/css/icon_picker.css',)}
+    # Niente 'js' qui!
+))
 
 class A_Admin(SModelAdmin):
     actions_on_top = True
@@ -35,15 +38,15 @@ class A_Multi_Inline (admin.TabularInline):
 	class Meta:
 		abstract = True
 
-class MuteIconPickerWidget(IconPicker):
-    @property
-    def media(self):
-        # PATCH: Silenzia solo il JS, ma carica il CSS.
-        # Il JS verrà caricato (una sola volta) dal template del widget nel <body>.
-        return Media(
-            css={'all': ('django_icon_picker/css/icon_picker.css',)}
-            # Niente 'js' qui!
-        )
+# class MuteIconPickerWidget(IconPicker):
+#     @property
+#     def media(self):
+#         # PATCH: Silenzia solo il JS, ma carica il CSS.
+#         # Il JS verrà caricato (una sola volta) dal template del widget nel <body>.
+#         return Media(
+#             css={'all': ('django_icon_picker/css/icon_picker.css',)}
+#             # Niente 'js' qui!
+#         )
 
 # class PunteggioAdminForm(forms.ModelForm):
 #     class Meta:
@@ -86,95 +89,6 @@ class abilita_abilitati_inline(A_Multi_Inline):
     fk_name= "prerequisito"
     verbose_name = "Abilita sbloccata dall'abilità"
     verbose_name_plural = "Abilita sbloccate dall'abilità"
-
-
-
-# class StatisticaInlineAdminBase(admin.TabularInline):
-#     """
-#     Inline personalizzato che mostra TUTTE le statistiche disponibili,
-#     pre-popolando i valori di default per quelle non ancora impostate.
-#     """
-#     # Il campo 'statistica' non deve essere modificabile
-#     # readonly_fields = ('statistica_nome',)
-#     fields = ('statistica', 'valore')
-#     readonly_fields = ('statistica',)
-#     # Quanti form "extra" mostrare (sarà sovrascritto)
-#     # extra = 0 
-    
-#     # def statistica_nome(self, instance):
-#     #     # Mostra il nome della statistica come testo
-#     #     if instance.pk:
-#     #         return instance.statistica.nome
-#     #     return "---" # In caso di errore
-#     # statistica_nome.short_description = "Statistica"
-    
-#     def get_max_num(self, request, obj=None, **kwargs):
-#         """
-#         Imposta il numero totale di form consentiti pari al numero
-#         di statistiche totali. Questo nasconde il link "Aggiungi un altro..."
-#         una volta che tutte le statistiche sono visualizzate.
-#         """
-#         return Statistica.objects.count()
-        
-#     def get_formset(self, request, obj=None, **kwargs):
-#         """
-#         Questo è il cuore della logica.
-#         Quando si modifica un oggetto (obj is not None),
-#         crea al volo le istanze "through" mancanti.
-#         """
-        
-#         # --- IMPLEMENTAZIONE DELLA TUA IDEA (PRE-SAVE) ---
-#         if obj is not None: # Esegui solo in modalità "Modifica"
-            
-#             # 1. Trova il nome del campo FK (es. 'abilita' o 'oggetto')
-#             fk_name = self.fk_name
-            
-#             # 2. Prendi tutte le statistiche
-#             all_stats = Statistica.objects.all()
-            
-#             # 3. Trova le statistiche GIÀ collegate a questo oggetto
-#             existing_stat_pks = self.model.objects.filter(
-#                 **{fk_name: obj}
-#             ).values_list('statistica_id', flat=True)
-
-#             # 4. Trova le statistiche NON ancora collegate
-#             missing_stats = all_stats.exclude(pk__in=existing_stat_pks)
-            
-#             # 5. Prepara le nuove istanze da creare
-#             new_instances_to_create = []
-#             for stat in missing_stats:
-#                 # Crea le nuove istanze "through" con il valore predefinito
-#                 new_instances_to_create.append(
-#                     self.model(
-#                         **{fk_name: obj},
-#                         statistica=stat,
-#                         valore=stat.valore_predefinito
-#                     )
-#                 )
-            
-#             # 6. Salva tutte le nuove istanze in un'unica query
-#             if new_instances_to_create:
-#                 self.model.objects.bulk_create(new_instances_to_create)
-        
-#         # --- FINE BLOCCO PRE-SAVE ---
-
-#         # Ora chiama il get_formset() standard.
-#         # Troverà automaticamente i record che abbiamo appena creato.
-#         return super().get_formset(request, obj, **kwargs)
-
-#     # def has_add_permission(self, request, obj=None):
-#     #     # Vogliamo solo modificare i valori, non aggiungere/rimuovere righe
-#     #     return False # Permetti di aggiungere le righe mancanti
-
-#     # def has_delete_permission(self, request, obj=None):
-#     #     # Impedisce all'utente di cancellare una riga di statistica
-#     #     return False
-        
-#     # def get_readonly_fields(self, request, obj=None):
-#     #     # Se l'oggetto esiste, rendi 'statistica' readonly
-#     #     if obj:
-#     #         return ('statistica',) + self.readonly_fields
-#     #     return self.readonly_fields
 
 
 class StatisticaPivotInlineBase(admin.TabularInline):
@@ -311,14 +225,14 @@ class PunteggioAdmin(admin.ModelAdmin):
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
     # summernote_fields = ('descrizione',)
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
-        # Se stiamo processando il campo 'icona'
-        if db_field.name == 'icona':
-            # Forza l'uso del nostro widget "muto" (che carica solo CSS)
-            kwargs['widget'] = MuteIconPickerWidget
+    # def formfield_for_dbfield(self, db_field, request, **kwargs):
+    #     # Se stiamo processando il campo 'icona'
+    #     if db_field.name == 'icona':
+    #         # Forza l'uso del nostro widget "muto" (che carica solo CSS)
+    #         kwargs['widget'] = MuteIconPickerWidget
             
-        # Chiama il metodo originale con le nostre modifiche
-        return super().formfield_for_dbfield(db_field, request, **kwargs)    
+    #     # Chiama il metodo originale con le nostre modifiche
+    #     return super().formfield_for_dbfield(db_field, request, **kwargs)    
 
 
 
