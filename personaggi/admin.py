@@ -40,7 +40,13 @@ class MuteIconPickerWidget(IconPicker):
     def media(self):
         return Media()
 
-
+class PunteggioAdminForm(forms.ModelForm):
+    class Meta:
+        model = Punteggio
+        fields = '__all__'
+        widgets = {
+            'icona': MuteIconPickerWidget, # Corretto: applica la patch
+        }
 
 # ----------- CLASSI INLINE -------------
 class abilita_tier_inline(A_Multi_Inline):
@@ -291,7 +297,7 @@ class AbilitaAdmin(A_Admin):
 
 @admin.register(Punteggio)
 class PunteggioAdmin(admin.ModelAdmin):
-
+    form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
     
     # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_display = ('nome', 'tipo',)
@@ -299,28 +305,7 @@ class PunteggioAdmin(admin.ModelAdmin):
     search_fields = ('nome', )
     # summernote_fields = ('descrizione',)
     
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
-        # Se stiamo processando il campo 'icona'
-        if db_field.name == 'icona':
-            # Forza l'uso del nostro widget "muto"
-            kwargs['widget'] = MuteIconPickerWidget
-            
-            # ATTENZIONE: Questo è necessario perché il
-            # plugin hardcoda anche il CSS nel suo template.
-            # Dobbiamo aggiungere il CSS manualmente nel <head>
-            # perché il MuteIconPickerWidget ha silenziato *anche* quello.
-            # Questo è l'unico modo per non avere duplicati.
-            
-            # Questo è un trucco per aggiungere CSS extra
-            # solo quando questo campo è presente.
-            class MediaCSS:
-                css = {
-                    'all': ('django_icon_picker/css/icon_picker.css',)
-                }
-            kwargs['widget'].media = MediaCSS
-            
-        # Chiama il metodo originale con le nostre modifiche
-        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
 
 
 
