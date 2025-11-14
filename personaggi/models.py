@@ -219,20 +219,20 @@ class Punteggio(Tabella):
         # Stile per il cerchio esterno
         stile_cerchio = (
             f"display: inline-block; "
-            f"width: 24px; "
-            f"height: 24px; "
+            f"width: 30px; "
+            f"height: 30px; "
             f"background-color: {colore_sfondo}; " # Colore di sfondo dal modello
             f"border-radius: 50%; "            # Rende il div circolare
             f"vertical-align: middle; "
             f"text-align: center; "            # Centra l'icona
-            f"line-height: 24px;"               # Aiuta a centrare
+            f"line-height: 30px;"               # Aiuta a centrare
         )
         
         # Stile per l'icona interna (il <div> che fa da maschera)
         stile_icona_maschera = (
             f"display: inline-block; "
-            f"width: 16px; "  # Leggermente più piccola del cerchio
-            f"height: 16px; "
+            f"width: 24px; "  # Leggermente più piccola del cerchio
+            f"height: 24px; "
             f"vertical-align: middle; "
             f"background-color: {colore_icona_contrasto}; " # Colore dell'icona (bianco o nero)
             f"mask-image: url({url_icona_locale}); "
