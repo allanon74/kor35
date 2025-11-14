@@ -278,11 +278,11 @@ class AbilitaAdmin(A_Admin):
 	exclude = ('statistiche',)
 
 @admin.register(Punteggio)
-class PunteggioAdmin(admin.ModelAdmin):
+class PunteggioAdmin(A_Admin):
     list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
-    # summernote_fields = ('descrizione',)
+    summernote_fields = ('descrizione',)
 
 @admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
