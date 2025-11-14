@@ -1,0 +1,45 @@
+{% include "django_icon_picker/icon_picker.html" %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    // Sovrascrive l'inizializzazione del widget originale
+    // per correggere le funzioni difettose.
+    var originalPicker = new IconPicker({
+        searchInputId: "id_{{ widget.name }}",
+        savePath: "{{ widget.attrs.save_path }}",
+        model: "{{ widget.attrs.model_name }}",
+        objectId: "{{ widget.attrs.object_id }}",
+    });
+
+    // --- INIZIO PATCH JS ---
+
+    // 1. Corregge la funzione di download
+    originalPicker.downloadAndSaveSvg = function(iconName, iconColor) {
+        // BUGFIX: Passa 'icon' e 'color' come parametri separati
+        const downloadUrl = `/icon_picker/download-svg/?icon=${iconName}&color=${iconColor}&id=${this.objectId}&model=${this.model}`;
+
+        fetch(downloadUrl)
+            .then((response) => response.text())
+            .then((data) => {
+                // 'data' è il percorso del file salvato (es. 'media/punteggio/icon-....svg')
+                this.searchInput.value = data; 
+            })
+            .catch((error) => {
+                console.error("IconPicker Patch: Errore nel download/salvataggio:", error);
+            });
+    };
+
+    // 2. Corregge l'handler del submit
+    originalPicker.form.addEventListener("submit", function(event) {
+        if (originalPicker.savePath && originalPicker.icon) {
+            // BUGFIX: Chiama la funzione corretta con parametri separati
+            var color = originalPicker.colorPicker.value.replace("#", "%23");
+            originalPicker.downloadAndSaveSvg(originalPicker.icon, color);
+        }
+        // Non chiamiamo this.form.submit() qui, lasciamo che l'evento
+        // di submit del form prosegua normalmente.
+    });
+
+    // --- FINE PATCH JS ---
+});
+</script>

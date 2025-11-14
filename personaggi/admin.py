@@ -46,6 +46,10 @@ IconPicker.media = property(lambda self: colorfield_media + iconpicker_media)
 #     # Niente 'js' qui!
 # ))
 
+# patch 3: admin base class
+IconPicker.template_name = 'admin/widgets/patched_icon_picker.html'
+
+
 class A_Admin(SModelAdmin):
     actions_on_top = True
     save_on_top = True

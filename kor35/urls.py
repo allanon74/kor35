@@ -28,8 +28,7 @@ urlpatterns = [
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
     # path('icon_picker/', include('django_icon_picker.urls')),
-    path('icon-picker/save-icon/', csrf_exempt(icon_picker_views.save_icon), name='save_icon'),
-    path('icon-picker/search-icon/', icon_picker_views.search_icon, name='search_icon'),
+    path('icon_picker/download-svg/', csrf_exempt(icon_picker_views.download_and_save_svg), name='download_svg_patch'),
     # --- FINE DELLA PATCH URL ---
     path('personaggi/', include('personaggi.urls')),
     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),
