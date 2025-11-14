@@ -94,11 +94,12 @@ class Tabella(A_modello):
 		return self.nome
 
 class Tier(Tabella):
-	tipo = models.CharField('Tier', choices=tabelle_tipo, max_length=2)	
+    tipo = models.CharField('Tier', choices=tabelle_tipo, max_length=2)	
+    foto = models.ImageField(upload_to='tiers/', null=True, blank=True)
 
-	class Meta:
-		verbose_name = "Tier"
-		verbose_name_plural = "Tiers"
+    class Meta:
+        verbose_name = "Tier"
+        verbose_name_plural = "Tiers"
 
 class Punteggio(Tabella):
     sigla = models.CharField('Sigla', max_length=3, unique=True, )
