@@ -242,7 +242,7 @@ ICONIFY_JSON_ROOT = os.path.join(BASE_DIR.parent, 'iconify', 'json')
 
 # Icon Picker settings
 
-ICON_PICKER_PATH = ''
+ICON_PICKER_PATH = 'media'
 ICON_PICKER_COLOR = "#00bcc9"
 
 # Static files (CSS, JavaScript, Images)
