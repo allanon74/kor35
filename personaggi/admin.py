@@ -285,6 +285,21 @@ class PunteggioAdmin(admin.ModelAdmin):
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
     # summernote_fields = ('descrizione',)
+    class Media:
+        # Aggiungiamo i CSS di ColorField (presi dal tuo sorgente HTML)
+        css = {
+            'all': (
+                'colorfield/coloris/coloris.css',
+                'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
+            )
+        }
+        # Aggiungiamo i JS di ColorField (presi dal tuo sorgente HTML)
+        js = (
+            'colorfield/coloris/coloris.js',
+            'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
+            'colorfield/colorfield.js',
+        )
+
 
 @admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
