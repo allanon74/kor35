@@ -60,7 +60,7 @@ INSTALLED_APPS = [
 	'filer', #cms
 	'easy_thumbnails', #cms
 	#'mptt', #cms
-	'djangocms_text_ckeditor', #cms
+	# 'djangocms_text_ckeditor', #cms
 	'djangocms_link', #cms
 	'djangocms_file', #cms
 	'djangocms_picture', #cms
