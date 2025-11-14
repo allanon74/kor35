@@ -1,3 +1,9 @@
+{% comment %}
+Questo file sovrascrive il widget di icon_picker per:
+1. Caricare il JS originale (che viene bloccato nell'head dalla patch di admin.py)
+2. Sovrascrivere la funzione 'setupEventListeners' per correggere i bug della libreria.
+{% endcomment %}
+
 {% include "django_icon_picker/icon_picker.html" %}
 
 <script>
@@ -10,9 +16,11 @@ document.addEventListener("DOMContentLoaded", function () {
         objectId: "{{ widget.attrs.object_id }}",
     });
 
-    // --- INIZIO PATCH JS v2 (Corregge Race Condition) ---
+    // --- INIZIO PATCH JS v3 (Corregge Race Condition) ---
 
-    // 1. Sovrascrivi 'downloadAndSaveSvg' per restituire una Promise
+    // 1. Sovrascriviamo la funzione 'downloadAndSaveSvg' per:
+    //    a) Passare i parametri 'icon' e 'color' separati (per il Bug Python)
+    //    b) Restituire una Promise (per l'await)
     originalPicker.downloadAndSaveSvg = function(iconName, iconColor) {
         const downloadUrl = `/icon_picker/download-svg/?icon=${iconName}&color=${iconColor}&id=${this.objectId}&model=${this.model}`;
         
@@ -20,50 +28,67 @@ document.addEventListener("DOMContentLoaded", function () {
         return fetch(downloadUrl)
             .then((response) => {
                 if (!response.ok) {
-                    // Se il server fallisce (es. 404, 500), lancia un errore
-                    throw new Error(`Errore server: ${response.status} ${response.statusText}`);
+                    throw new Error(`Errore server: ${response.status}`);
                 }
                 return response.text();
             })
             .then((data) => {
-                // 'data' è il percorso relativo del file (es. 'punteggio/icon-....svg')
-                // Aggiorna il campo del form
+                // 'data' è il percorso relativo del file (es. 'media/punteggio/icon-....svg')
+                // Aggiorna il campo di testo del form
                 this.searchInput.value = data; 
                 return data; // Restituisce il percorso per l'await
             });
     };
 
-    // 2. Sovrascrivi l'evento 'submit' per essere 'async'
-    originalPicker.form.addEventListener("submit", async function(event) {
-        
-        // Controlla se è stata selezionata una *nuova* icona
-        // (originalPicker.icon è impostato solo quando clicchi una nuova icona)
-        if (originalPicker.savePath && originalPicker.icon) {
-            
-            // 1. Impedisce al form di inviare i dati immediatamente
-            event.preventDefault(); 
-            
-            try {
-                var color = originalPicker.colorPicker.value.replace("#", "%23");
-                
-                // 2. Esegui il salvataggio e ASPETTA che sia finito
-                await originalPicker.downloadAndSaveSvg(originalPicker.icon, color);
-                
-                // 3. Ora che this.searchInput.value è stato aggiornato,
-                // invia manualmente il form con il nuovo valore.
-                originalPicker.form.submit(); 
-
-            } catch (error) {
-                console.error("IconPicker Patch: Fallimento salvataggio icona, submit annullato.", error);
-                // Se il salvataggio fallisce, per sicurezza inviamo comunque il form
-                // (invierà il valore vecchio, ma almeno la pagina non si blocca)
-                originalPicker.form.submit();
+    // 2. Sovrascriviamo l'intera funzione 'setupEventListeners'
+    //    per sostituire il listener 'submit' difettoso.
+    originalPicker.setupEventListeners = function() {
+        // (Copiamo l'listener 'input' originale, che funziona)
+        this.searchInput.addEventListener("input", () => {
+            const query = this.searchInput.value;
+            if (query.length > 2) {
+                this.searchIcons(query);
+            } else {
+                this.resultsDiv.innerHTML = "";
             }
-        }
-        // Se non è stata selezionata una nuova icona, lascia che l'invio
-        // del form proceda normalmente (nessun event.preventDefault()).
-    });
+        });
 
-    // --- FINE PATCH JS v2 ---
+        // (Sostituiamo l'listener 'submit' originale)
+        this.form.addEventListener("submit", async function(event) {
+            
+            // Controlla se è stata selezionata una *nuova* icona
+            // (this.icon è impostato solo quando clicchi una nuova icona)
+            if (originalPicker.savePath && originalPicker.icon) {
+                
+                // 1. Impedisce al form di inviare i dati immediatamente
+                event.preventDefault(); 
+                
+                try {
+                    var color = originalPicker.colorPicker.value.replace("#", "%23");
+                    
+                    // 2. Esegui il salvataggio e ASPETTA che sia finito
+                    await originalPicker.downloadAndSaveSvg(originalPicker.icon, color);
+                    
+                    // 3. Ora che this.searchInput.value è stato aggiornato,
+                    // invia manualmente il form con il nuovo valore.
+                    originalPicker.form.submit(); 
+
+                } catch (error) {
+                    console.error("IconPicker Patch: Fallimento salvataggio icona, submit annullato.", error);
+                    // Se il salvataggio fallisce, per sicurezza inviamo comunque il form
+                    // (invierà il valore vecchio, ma almeno la pagina non si blocca)
+                    originalPicker.form.submit();
+                }
+            }
+            // Se non è stata selezionata una nuova icona, lascia che l'invio
+            // del form proceda normalmente (nessun event.preventDefault()).
+        });
+    };
+    
+    // 3. Richiamiamo init() per applicare la nostra versione patchata
+    //    di setupEventListeners()
+    originalPicker.init();
+
+    // --- FINE PATCH JS v3 ---
 });
 </script>
