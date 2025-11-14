@@ -281,7 +281,8 @@ class AbilitaAdmin(A_Admin):
 
 @admin.register(Punteggio)
 class PunteggioAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'tipo', 'caratteristica_relativa',)
+    # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
+    list_display = ('nome', 'tipo',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
     # summernote_fields = ('descrizione',)
