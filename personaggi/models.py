@@ -16,6 +16,8 @@ from django_icon_picker.field import IconField
 
 from cms.models.pluginmodel import CMSPlugin
 
+from django.utils.html import format_html
+
 
 # tipi generici per DDL
 
@@ -123,6 +125,16 @@ class Punteggio(Tabella):
         verbose_name = "Punteggio"
         verbose_name_plural = "Punteggi"
         ordering =['tipo', 'nome']
+        
+    def svg_icon(self):
+        return format_html(
+            '<img src="{}" height="30" width="30" alt="{}"/>'.format(
+                f"/{self.icon}"
+                if self.icon.endswith(".svg")
+                else f"https://api.iconify.design/{self.icon}.svg",
+                f"Icon for {self.name}"
+            )
+        )
 
     def __str__(self):
         result = "{tipo} - {nome}"
