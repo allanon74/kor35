@@ -304,11 +304,7 @@ class PunteggioAdmin(admin.ModelAdmin):
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
     # summernote_fields = ('descrizione',)
-    class Media:
-        # Aggiungiamo i CSS di ColorField (presi dal tuo sorgente HTML)
-        css = {
-            'all': ('django_icon_picker/css/icon_picker.css',)
-        }
+
 
 
 
