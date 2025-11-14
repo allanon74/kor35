@@ -22,6 +22,24 @@ from django.utils.html import format_html
 from icon_widget.fields import CustomIconField
 
 
+def _get_icon_color_from_bg(hex_color):
+    """
+    Determina se un colore di sfondo hex è chiaro o scuro
+    e restituisce 'white' o 'black' per il testo/icona.
+    """
+    try:
+        hex_color = hex_color.lstrip('#')
+        # Converte hex in RGB
+        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        # Formula di luminanza (YIQ)
+        luminanza = ((r * 299) + (g * 587) + (b * 114)) / 1000
+        
+        # Se lo sfondo è chiaro (luminanza > 128), usa un'icona nera
+        return 'black' if luminanza > 128 else 'white'
+    except Exception:
+        # Fallback in caso di colore non valido
+        return 'black'
+
 # tipi generici per DDL
 
 CARATTERISTICA = "CA"
@@ -175,6 +193,53 @@ class Punteggio(Tabella):
             return format_html('<div style="{}"></div>', style)
         
         return "" # Non mostrare nulla se manca l'icona o il colore
+    
+    @property
+    def icona_cerchio_html(self):
+        """
+        Genera l'HTML per un cerchio colorato con l'icona
+        in bianco o nero per il contrasto.
+        """
+        # 1. Controlla se abbiamo i dati necessari
+        if not self.icona or not self.colore:
+            return ""
+
+        # 2. Determina il colore dell'icona (bianco o nero)
+        colore_icona = _get_icon_color_from_bg(self.colore)
+        
+        # 3. Codifica il colore dell'icona per l'URL
+        colore_icona_url = colore_icona.replace("#", "%23") # 'white' e 'black' non hanno '#', ma è una buona prassi
+
+        # 4. Genera l'URL per l'icona (con il nuovo colore)
+        icona_url = f"https://api.iconify.design/{self.icona}.svg?color={colore_icona_url}"
+
+        # 5. Definisce gli stili CSS inline
+        stile_cerchio = (
+            f"display: inline-block; "
+            f"width: 24px; "
+            f"height: 24px; "
+            f"background-color: {self.colore}; " # Colore di sfondo dal modello
+            f"border-radius: 50%; "            # Rende il div circolare
+            f"vertical-align: middle; "
+            f"text-align: center; "            # Centra l'immagine
+            f"line-height: 24px;"               # Aiuta a centrare verticalmente
+        )
+        
+        stile_img = (
+            f"width: 16px; "  # Leggermente più piccola del cerchio (24px)
+            f"height: 16px; "
+            f"vertical-align: middle;" # Allinea l'img dentro il div
+        )
+
+        # 6. Combina tutto in HTML
+        return format_html(
+            '<div style="{}">'
+            '  <img src="{}" style="{}">'
+            '</div>',
+            stile_cerchio,
+            icona_url,
+            stile_img
+        )
     
     
     def __str__(self):
