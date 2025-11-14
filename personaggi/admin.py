@@ -16,9 +16,19 @@ from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistic
 from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica
 
 from django_icon_picker.widgets import IconPicker
+from icon_widget.widgets import CustomIconWidget
 
 # ----------- CLASSI ASTRATTE -------------
 
+class PunteggioAdminForm(forms.ModelForm):
+    class Meta:
+        model = Punteggio
+        fields = '__all__'
+        widgets = {
+            'icona': CustomIconWidget, # Applica il widget al campo 'icona
+        }
+        
+        
 # colorfield_media = Media(
 #     css={'all': (
 #         'colorfield/coloris/coloris.css',
@@ -258,18 +268,20 @@ class PunteggioAdmin(admin.ModelAdmin):
     #         kwargs['widget'] = MuteIconPickerWidget
             
     #     # Chiama il metodo originale con le nostre modifiche
-    #     return super().formfield_for_dbfield(db_field, request, **kwargs)    
+    #     return super().formfield_for_dbfield(db_field, request, **kwargs)  
+    
+    form = PunteggioAdminForm  
 
-    def formfield_for_dbfield(self, db_field, request, **kwargs):
-        if db_field.name == 'icona':
-            # Prende il widget (CustomIconWidget) dal campo (CustomIconField)
-            field = super().formfield_for_dbfield(db_field, request, **kwargs)
+    # def formfield_for_dbfield(self, db_field, request, **kwargs):
+    #     if db_field.name == 'icona':
+    #         # Prende il widget (CustomIconWidget) dal campo (CustomIconField)
+    #         field = super().formfield_for_dbfield(db_field, request, **kwargs)
             
-            # Passa il nome del modello al widget per usarlo nel template/JS
-            field.widget.attrs['model_name'] = f'{db_field.model._meta.app_label}.{db_field.model._meta.model_name}'
-            return field
+    #         # Passa il nome del modello al widget per usarlo nel template/JS
+    #         field.widget.attrs['model_name'] = f'{db_field.model._meta.app_label}.{db_field.model._meta.model_name}'
+    #         return field
             
-        return super().formfield_for_dbfield(db_field, request, **kwargs)
+    #     return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
 
