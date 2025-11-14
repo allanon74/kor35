@@ -13,6 +13,9 @@ class CustomIconWidget(forms.TextInput):
 
     class Media:
         js = ('admin/js/custom_icon_picker.js',)
+        css = {
+            'all': ('admin/css/custom_icon_picker.css',)
+        }
 
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)

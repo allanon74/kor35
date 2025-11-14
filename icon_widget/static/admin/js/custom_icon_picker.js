@@ -59,7 +59,17 @@ window.initCustomIconPicker = function(options) {
                     data.icons.forEach(iconName => {
                         const item = document.createElement('div');
                         item.className = 'icon-dropdown-item';
-                        item.innerHTML = `<img src="https://api.iconify.design/${iconName}.svg" style="width: 16px; height: 16px; margin-right: 5px;"> <span>${iconName}</span>`;
+                        // item.innerHTML = `<img src="https://api.iconify.design/${iconName}.svg" style="width: 16px; height: 16px; margin-right: 5px;"> <span>${iconName}</span>`;
+                        iconImg.src = `https://api.iconify.design/${iconName}.svg`;
+                        iconImg.className = "icon-preview"; // Usa la classe CSS
+                        
+                        const iconText = document.createElement("span");
+                        iconText.textContent = iconName;
+                        iconText.className = "icon-name"; // Usa la classe CSS
+
+                        item.appendChild(iconImg);
+                        item.appendChild(iconText);
+
                         item.style.padding = '5px';
                         item.style.cursor = 'pointer';
                         
