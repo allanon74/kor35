@@ -19,7 +19,7 @@ from django.urls import path, re_path, include
 from rest_framework.authtoken.views import obtain_auth_token
 
 urlpatterns = [
-    path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
+    # path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
     path('icon_picker/', include('django_icon_picker.urls')),

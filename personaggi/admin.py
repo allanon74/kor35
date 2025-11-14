@@ -1,8 +1,10 @@
 from django.contrib import admin
 
 from django.forms import Media
-from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
-from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
+# from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
+from django.contrib.admin import ModelAdmin as SModelAdmin # temporaneo senza summernote
+# from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
+from django.contrib.admin import TabularInline as SInlineModelAdmin # temporaneo senza summernote
 
 from django.utils.html import format_html
 from .models import CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase, TipologiaPersonaggio
