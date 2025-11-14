@@ -1,49 +1,81 @@
 {% comment %}
-Questo file sovrascrive il widget di icon_picker per:
-1. Caricare il JS originale (che viene bloccato nell'head dalla patch di admin.py)
-2. Sovrascrivere la funzione 'setupEventListeners' per correggere i bug della libreria.
+Questo file sovrascrive il template del widget per:
+1. Caricare l'HTML e il CSS originali.
+2. Caricare il file JS originale (che definisce la classe 'IconPicker').
+3. Eseguire uno script che SOVRASCRIVE i metodi difettosi della classe
+   prima di inizializzarla.
 {% endcomment %}
 
-{% include "django_icon_picker/icon_picker.html" %}
+{% load static %}
+
+<link rel="stylesheet" href="{% static 'django_icon_picker/css/icon_picker.css' %}">
+<div class="icon-picker-container">
+  <div class="icon-picker-wrapper">
+    <div class="icon-picker-input" style="display: flex; align-items: center;">
+      <img class="icon-preview" id="selectedIcon" class="" style="margin-right: 10px;">
+      <input type="{{ widget.type }}" name="{{ widget.name }}" class="vTextField" model_name="{{ widget.attrs.model_name }}"
+             {% if widget.value != None %} value="{{ widget.value|stringformat:'s' }}"{% endif %}
+             {% include "django/forms/widgets/attrs.html" %}>
+
+      <input class="vTextField" id="color" value="{{ widget.attrs.color|default:'#00bcc9' }}" type="text" data-coloris style="margin-left: 10px;">
+    </div>
+    <div id="results"></div>
+  </div>
+</div>
+
+<script src="{% static 'django_icon_picker/js/icon_picker.js' %}"></script>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    // Inizializza il picker originale
-    var originalPicker = new IconPicker({
-        searchInputId: "id_{{ widget.name }}",
-        savePath: "{{ widget.attrs.save_path }}",
-        model: "{{ widget.attrs.model_name }}",
-        objectId: "{{ widget.attrs.object_id }}",
-    });
+  document.addEventListener("DOMContentLoaded", function () {
+    
+    // --- INIZIO PATCH JS v4 ---
 
-    // --- INIZIO PATCH JS v3 (Corregge Race Condition) ---
-
-    // 1. Sovrascriviamo la funzione 'downloadAndSaveSvg' per:
-    //    a) Passare i parametri 'icon' e 'color' separati (per il Bug Python)
-    //    b) Restituire una Promise (per l'await)
-    originalPicker.downloadAndSaveSvg = function(iconName, iconColor) {
+    // 1. Correggi la funzione di download (parametri separati)
+    IconPicker.prototype.downloadAndSaveSvg = function(iconName, iconColor) {
+        // BUGFIX: Passa 'icon' e 'color' come parametri separati
         const downloadUrl = `/icon_picker/download-svg/?icon=${iconName}&color=${iconColor}&id=${this.objectId}&model=${this.model}`;
         
-        // Restituisce la promise del 'fetch'
-        return fetch(downloadUrl)
+        return fetch(downloadUrl) // Restituisce la promise
             .then((response) => {
                 if (!response.ok) {
-                    throw new Error(`Errore server: ${response.status}`);
+                    throw new Error(`Errore server: ${response.status} ${response.statusText}`);
                 }
                 return response.text();
             })
             .then((data) => {
-                // 'data' è il percorso relativo del file (es. 'media/punteggio/icon-....svg')
-                // Aggiorna il campo di testo del form
+                // 'data' è il percorso del file salvato (es. 'media/punteggio/icon-....svg')
                 this.searchInput.value = data; 
-                return data; // Restituisce il percorso per l'await
+                return data; 
             });
     };
 
-    // 2. Sovrascriviamo l'intera funzione 'setupEventListeners'
-    //    per sostituire il listener 'submit' difettoso.
-    originalPicker.setupEventListeners = function() {
-        // (Copiamo l'listener 'input' originale, che funziona)
+    // 2. Correggi la funzione 'click' (non scrive il percorso prematuramente)
+    IconPicker.prototype.createDropdownItem = function(icon, iconUrl) {
+        const item = document.createElement("div");
+        item.className = "icon-dropdown-item";
+        const iconImg = document.createElement("img");
+        iconImg.src = iconUrl;
+        iconImg.className = "icon-preview";
+        const iconText = document.createElement("span");
+        iconText.textContent = icon;
+        iconText.className = "icon-name";
+        item.appendChild(iconImg);
+        item.appendChild(iconText);
+        
+        const pickerInstance = this; 
+        item.addEventListener("click", () => {
+            // BUGFIX: Imposta solo il nome dell'icona (es. "mdi:star")
+            pickerInstance.searchInput.value = icon; 
+            pickerInstance.selectedIcon.src = iconUrl;
+            pickerInstance.resultsDiv.innerHTML = "";
+            pickerInstance.icon = icon; // Imposta l'icona che verrà salvata
+        });
+        return item;
+    };
+
+    // 3. Corregge la funzione 'setupEventListeners' per il 'submit' (async/await)
+    IconPicker.prototype.setupEventListeners = function() {
+        // (Listener 'input' originale - OK)
         this.searchInput.addEventListener("input", () => {
             const query = this.searchInput.value;
             if (query.length > 2) {
@@ -53,42 +85,38 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
 
-        // (Sostituiamo l'listener 'submit' originale)
-        this.form.addEventListener("submit", async function(event) {
-            
-            // Controlla se è stata selezionata una *nuova* icona
-            // (this.icon è impostato solo quando clicchi una nuova icona)
-            if (originalPicker.savePath && originalPicker.icon) {
+        // (Listener 'submit' PATCHATO)
+        this.form.addEventListener("submit", async (event) => {
+            // Se 'media' è impostato E una *nuova* icona è stata scelta
+            if (this.savePath && this.icon) { 
                 
-                // 1. Impedisce al form di inviare i dati immediatamente
-                event.preventDefault(); 
+                event.preventDefault(); // Blocca l'invio del form
                 
                 try {
-                    var color = originalPicker.colorPicker.value.replace("#", "%23");
+                    var color = this.colorPicker.value.replace("#", "%23");
                     
-                    // 2. Esegui il salvataggio e ASPETTA che sia finito
-                    await originalPicker.downloadAndSaveSvg(originalPicker.icon, color);
+                    // Chiama la nostra funzione di download patchata e ASPETTA
+                    await this.downloadAndSaveSvg(this.icon, color);
                     
-                    // 3. Ora che this.searchInput.value è stato aggiornato,
-                    // invia manualmente il form con il nuovo valore.
-                    originalPicker.form.submit(); 
-
+                    // Ora che this.searchInput.value è stato aggiornato
+                    // dalla funzione di download, invia il form.
+                    this.form.submit();
                 } catch (error) {
                     console.error("IconPicker Patch: Fallimento salvataggio icona, submit annullato.", error);
-                    // Se il salvataggio fallisce, per sicurezza inviamo comunque il form
-                    // (invierà il valore vecchio, ma almeno la pagina non si blocca)
-                    originalPicker.form.submit();
+                    this.form.submit(); // Fallback per non bloccare l'utente
                 }
             }
-            // Se non è stata selezionata una nuova icona, lascia che l'invio
-            // del form proceda normalmente (nessun event.preventDefault()).
         });
     };
     
-    // 3. Richiamiamo init() per applicare la nostra versione patchata
-    //    di setupEventListeners()
-    originalPicker.init();
-
-    // --- FINE PATCH JS v3 ---
-});
+    // 4. Ora inizializza l'istanza, che userà le nostre funzioni patchate
+    new IconPicker({
+      searchInputId: "id_{{ widget.name }}",
+      savePath: "{{ widget.attrs.save_path }}",
+      model: "{{ widget.attrs.model_name }}",
+      objectId: "{{ widget.attrs.object_id }}",
+    });
+    
+    // --- FINE PATCH JS v4 ---
+  });
 </script>
