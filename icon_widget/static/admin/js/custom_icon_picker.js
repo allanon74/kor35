@@ -60,20 +60,30 @@ window.initCustomIconPicker = function(options) {
                         const item = document.createElement('div');
                         item.className = 'icon-dropdown-item';
                         // item.innerHTML = `<img src="https://api.iconify.design/${iconName}.svg" style="width: 16px; height: 16px; margin-right: 5px;"> <span>${iconName}</span>`;
-                        iconImg.src = `https://api.iconify.design/${iconName}.svg`;
-                        iconImg.className = "icon-preview"; // Usa la classe CSS
+                        // iconImg.src = `https://api.iconify.design/${iconName}.svg`;
+                        // iconImg.className = "icon-preview"; // Usa la classe CSS
                         
-                        const iconText = document.createElement("span");
-                        iconText.textContent = iconName;
-                        iconText.className = "icon-name"; // Usa la classe CSS
+                        // const iconText = document.createElement("span");
+                        // iconText.textContent = iconName;
+                        // iconText.className = "icon-name"; // Usa la classe CSS
 
-                        item.appendChild(iconImg);
-                        item.appendChild(iconText);
+                        // item.appendChild(iconImg);
+                        // item.appendChild(iconText);
 
-                        item.style.padding = '5px';
-                        item.style.cursor = 'pointer';
+                        // item.style.padding = '5px';
+                        // item.style.cursor = 'pointer';
                         
-                        item.addEventListener('click', () => selectIcon(iconName));
+                        // item.addEventListener('click', () => selectIcon(iconName));
+                        // resultsDiv.appendChild(item);
+
+                        item.className = 'icon-dropdown-item';
+                        item.innerHTML = `<img src="https://api.iconify.design/${iconName}.svg" class="icon-preview"> <span class="icon-name">${iconName}</span>`;
+                        // --- FINE MODIFICA ---
+                        
+                        item.style.cursor = 'pointer'; // Lasciamo questo per sicurezza
+                        
+                        // Questo ora funzionerà di nuovo
+                        item.addEventListener('click', () => selectIcon(iconName)); 
                         resultsDiv.appendChild(item);
                     });
                 }
