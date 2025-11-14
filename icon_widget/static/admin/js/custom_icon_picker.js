@@ -95,7 +95,7 @@ window.initCustomIconPicker = function(options) {
     });
 
     async function selectIcon(iconName) {
-        // const color = colorField ? colorField.value : '#000000';
+        const color = colorField ? colorField.value : '#000000';
         
         resultsDiv.innerHTML = ''; 
         statusSpan.textContent = `Salvataggio di ${iconName}...`;
