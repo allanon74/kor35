@@ -2,8 +2,7 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-    // Sovrascrive l'inizializzazione del widget originale
-    // per correggere le funzioni difettose.
+    // Inizializza il picker originale
     var originalPicker = new IconPicker({
         searchInputId: "id_{{ widget.name }}",
         savePath: "{{ widget.attrs.save_path }}",
@@ -11,35 +10,60 @@ document.addEventListener("DOMContentLoaded", function () {
         objectId: "{{ widget.attrs.object_id }}",
     });
 
-    // --- INIZIO PATCH JS ---
+    // --- INIZIO PATCH JS v2 (Corregge Race Condition) ---
 
-    // 1. Corregge la funzione di download
+    // 1. Sovrascrivi 'downloadAndSaveSvg' per restituire una Promise
     originalPicker.downloadAndSaveSvg = function(iconName, iconColor) {
-        // BUGFIX: Passa 'icon' e 'color' come parametri separati
         const downloadUrl = `/icon_picker/download-svg/?icon=${iconName}&color=${iconColor}&id=${this.objectId}&model=${this.model}`;
-
-        fetch(downloadUrl)
-            .then((response) => response.text())
-            .then((data) => {
-                // 'data' è il percorso del file salvato (es. 'media/punteggio/icon-....svg')
-                this.searchInput.value = data; 
+        
+        // Restituisce la promise del 'fetch'
+        return fetch(downloadUrl)
+            .then((response) => {
+                if (!response.ok) {
+                    // Se il server fallisce (es. 404, 500), lancia un errore
+                    throw new Error(`Errore server: ${response.status} ${response.statusText}`);
+                }
+                return response.text();
             })
-            .catch((error) => {
-                console.error("IconPicker Patch: Errore nel download/salvataggio:", error);
+            .then((data) => {
+                // 'data' è il percorso relativo del file (es. 'punteggio/icon-....svg')
+                // Aggiorna il campo del form
+                this.searchInput.value = data; 
+                return data; // Restituisce il percorso per l'await
             });
     };
 
-    // 2. Corregge l'handler del submit
-    originalPicker.form.addEventListener("submit", function(event) {
+    // 2. Sovrascrivi l'evento 'submit' per essere 'async'
+    originalPicker.form.addEventListener("submit", async function(event) {
+        
+        // Controlla se è stata selezionata una *nuova* icona
+        // (originalPicker.icon è impostato solo quando clicchi una nuova icona)
         if (originalPicker.savePath && originalPicker.icon) {
-            // BUGFIX: Chiama la funzione corretta con parametri separati
-            var color = originalPicker.colorPicker.value.replace("#", "%23");
-            originalPicker.downloadAndSaveSvg(originalPicker.icon, color);
+            
+            // 1. Impedisce al form di inviare i dati immediatamente
+            event.preventDefault(); 
+            
+            try {
+                var color = originalPicker.colorPicker.value.replace("#", "%23");
+                
+                // 2. Esegui il salvataggio e ASPETTA che sia finito
+                await originalPicker.downloadAndSaveSvg(originalPicker.icon, color);
+                
+                // 3. Ora che this.searchInput.value è stato aggiornato,
+                // invia manualmente il form con il nuovo valore.
+                originalPicker.form.submit(); 
+
+            } catch (error) {
+                console.error("IconPicker Patch: Fallimento salvataggio icona, submit annullato.", error);
+                // Se il salvataggio fallisce, per sicurezza inviamo comunque il form
+                // (invierà il valore vecchio, ma almeno la pagina non si blocca)
+                originalPicker.form.submit();
+            }
         }
-        // Non chiamiamo this.form.submit() qui, lasciamo che l'evento
-        // di submit del form prosegua normalmente.
+        // Se non è stata selezionata una nuova icona, lascia che l'invio
+        // del form proceda normalmente (nessun event.preventDefault()).
     });
 
-    // --- FINE PATCH JS ---
+    // --- FINE PATCH JS v2 ---
 });
 </script>
