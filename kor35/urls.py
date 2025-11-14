@@ -21,7 +21,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
-    # path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
+    path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
     path('icon_picker/', include('django_icon_picker.urls')),

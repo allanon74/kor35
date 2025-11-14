@@ -3,10 +3,10 @@ from django.contrib import admin
 from django import forms
 
 from django.forms import Media
-# from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
-from django.contrib.admin import ModelAdmin as SModelAdmin # temporaneo senza summernote
-# from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
-from django.contrib.admin import TabularInline as SInlineModelAdmin # temporaneo senza summernote
+from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
+# from django.contrib.admin import ModelAdmin as SModelAdmin # temporaneo senza summernote
+from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
+# from django.contrib.admin import TabularInline as SInlineModelAdmin # temporaneo senza summernote
 
 from django.utils.html import format_html
 from .models import CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase, TipologiaPersonaggio
@@ -19,26 +19,26 @@ from django_icon_picker.widgets import IconPicker
 
 # ----------- CLASSI ASTRATTE -------------
 
-colorfield_media = Media(
-    css={'all': (
-        'colorfield/coloris/coloris.css',
-        'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
-    )},
-    js=(
-        'colorfield/coloris/coloris.js',
-        'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
-        'colorfield/colorfield.js',
-    )
-)
+# colorfield_media = Media(
+#     css={'all': (
+#         'colorfield/coloris/coloris.css',
+#         'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
+#     )},
+#     js=(
+#         'colorfield/coloris/coloris.js',
+#         'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
+#         'colorfield/colorfield.js',
+#     )
+# )
 
-iconpicker_media = Media(
-    css={'all': ('django_icon_picker/css/icon_picker.css',)}
-)
+# iconpicker_media = Media(
+#     css={'all': ('django_icon_picker/css/icon_picker.css',)}
+# )
 
-# Combiniamo i due e applichiamo la patch
-# Questo caricherà i CSS di entrambi E i JS di ColorField nell' <head>
-# escludendo solo 'icon_picker.js'
-IconPicker.media = property(lambda self: colorfield_media + iconpicker_media)
+# # Combiniamo i due e applichiamo la patch
+# # Questo caricherà i CSS di entrambi E i JS di ColorField nell' <head>
+# # escludendo solo 'icon_picker.js'
+# IconPicker.media = property(lambda self: colorfield_media + iconpicker_media)
 
 
 # IconPicker.media = property(lambda self: Media(
@@ -239,14 +239,14 @@ class AbilitaAdmin(A_Admin):
 	exclude = ('statistiche',)
 
 @admin.register(Punteggio)
-class PunteggioAdmin(admin.ModelAdmin):
+class PunteggioAdmin(A_Admin):
     # form = PunteggioAdminForm # <-- USA IL FORM PER SILENZIARE IL WIDGET
     
     # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_display = ('nome', 'tipo',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     search_fields = ('nome', )
-    # summernote_fields = ('descrizione',)
+    summernote_fields = ('descrizione',)
     # def formfield_for_dbfield(self, db_field, request, **kwargs):
     #     # Se stiamo processando il campo 'icona'
     #     if db_field.name == 'icona':

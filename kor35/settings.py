@@ -40,7 +40,7 @@ ALLOWED_HOSTS = ['www.k-o-r-35.it','127.0.0.1', 'www.kor35.it', ]
 
 INSTALLED_APPS = [
 	# 'djangocms_admin_style', #cms
-	# 'admin_interface', #admin interface
+	'admin_interface', #admin interface
 	'colorfield', 
 	# "dj_iconify.apps.DjIconifyConfig",
 	"django_icon_picker",    
@@ -61,7 +61,7 @@ INSTALLED_APPS = [
 	'filer', #cms
 	'easy_thumbnails', #cms
 	#'mptt', #cms
-	# 'djangocms_text_ckeditor', #cms
+	'djangocms_text_ckeditor', #cms
 	'djangocms_link', #cms
 	'djangocms_file', #cms
 	'djangocms_picture', #cms
@@ -75,7 +75,7 @@ INSTALLED_APPS = [
 	'allauth.socialaccount',  #allauth
 	'allauth.socialaccount.providers.google',  #allauth
 	# 'cms_kor',
-	# 'django_summernote', # Django-sumernote 28/01/2025
+	'django_summernote', # Django-sumernote 28/01/2025
     'rest_framework', # Django REST Framework
     'rest_framework.authtoken', # Django REST Framework Token Authentication
 	'corsheaders', # Django CORS Headers
