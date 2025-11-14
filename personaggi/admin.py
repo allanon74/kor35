@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from django import forms
+
 from django.forms import Media
 # from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django.contrib.admin import ModelAdmin as SModelAdmin # temporaneo senza summernote
@@ -12,6 +14,8 @@ from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiC
 
 from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica
 from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica
+
+from django_icon_picker.widgets import IconPicker
 
 # ----------- CLASSI ASTRATTE -------------
 
@@ -31,6 +35,18 @@ class A_Multi_Inline (admin.TabularInline):
 	class Meta:
 		abstract = True
 
+class MuteIconPickerWidget(IconPicker):
+    @property
+    def media(self):
+        return Media()
+
+class PunteggioAdminForm(forms.ModelForm):
+    class Meta:
+        model = Punteggio
+        fields = '__all__'
+        widgets = {
+            'icona': MuteIconPickerWidget, # SENZA parentesi
+        }
 
 # ----------- CLASSI INLINE -------------
 class abilita_tier_inline(A_Multi_Inline):
@@ -281,6 +297,8 @@ class AbilitaAdmin(A_Admin):
 
 @admin.register(Punteggio)
 class PunteggioAdmin(admin.ModelAdmin):
+    form = PunteggioAdminForm
+    
     # list_display = ('nome', 'tipo', 'caratteristica_relativa',)
     list_display = ('nome', 'tipo',)
     list_filter = ('tipo', 'caratteristica_relativa',)
@@ -289,17 +307,10 @@ class PunteggioAdmin(admin.ModelAdmin):
     class Media:
         # Aggiungiamo i CSS di ColorField (presi dal tuo sorgente HTML)
         css = {
-            'all': (
-                'colorfield/coloris/coloris.css',
-                'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
-            )
+            'all': ('django_icon_picker/css/icon_picker.css',)
         }
-        # Aggiungiamo i JS di ColorField (presi dal tuo sorgente HTML)
-        js = (
-            'colorfield/coloris/coloris.js',
-            'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
-            'colorfield/colorfield.js',
-        )
+
+
 
 
 @admin.register(abilita_prerequisito)
