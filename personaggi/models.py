@@ -1348,11 +1348,11 @@ def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
 
 # --- MODELLI PER I PLUGIN CMS ---
 
-class TierPluginModel(CMSPlugin):
-    tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='personaggi_tier_plugin')
+# class TierPluginModel(CMSPlugin):
+#     tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='personaggi_tier_plugin')
 
-    def __str__(self):
-        return self.tier.nome
+#     def __str__(self):
+#         return self.tier.nome
 
 class AbilitaPluginModel(CMSPlugin):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
