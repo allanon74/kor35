@@ -106,6 +106,7 @@ class Punteggio(Tabella):
     tipo = models.CharField('Tipo di punteggio', choices=punteggi_tipo, max_length=2)
     colore = ColorField('Colore', default='#1976D2', help_text="Colore associato al punteggio (es. per icone).")
     icona = IconField(max_length=255, blank=True)
+    # icon = models.CharField(max_length=100, blank=True, null=True) # Un CharField standard
     
     caratteristica_relativa = models.ForeignKey(
         "Punteggio",

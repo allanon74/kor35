@@ -20,17 +20,23 @@ from rest_framework.authtoken.views import obtain_auth_token
 from django.conf import settings
 from django.conf.urls.static import static
 
+from django.views.decorators.csrf import csrf_exempt
+from django_icon_picker import views as icon_picker_views
+
 urlpatterns = [
     path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
-    path('icon_picker/', include('django_icon_picker.urls')),
+    # path('icon_picker/', include('django_icon_picker.urls')),
+    path('icon-picker/save-icon/', csrf_exempt(icon_picker_views.save_icon), name='save_icon'),
+    path('icon-picker/search-icon/', icon_picker_views.search_icon, name='search_icon'),
+    # --- FINE DELLA PATCH URL ---
     path('personaggi/', include('personaggi.urls')),
     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),
     path('auth/', obtain_auth_token),
     path('api/api-token-auth/', obtain_auth_token, name='api_token_auth'),
     re_path(r'^', include('cms.urls')),
-    # path("icons/", include("dj_iconify.urls")),
+    path("icons/", include("dj_iconify.urls")),
     
 ]
 if settings.DEBUG:

@@ -19,26 +19,26 @@ from django_icon_picker.widgets import IconPicker
 
 # ----------- CLASSI ASTRATTE -------------
 
-# colorfield_media = Media(
-#     css={'all': (
-#         'colorfield/coloris/coloris.css',
-#         'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
-#     )},
-#     js=(
-#         'colorfield/coloris/coloris.js',
-#         'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
-#         'colorfield/colorfield.js',
-#     )
-# )
+colorfield_media = Media(
+    css={'all': (
+        'colorfield/coloris/coloris.css',
+        'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
+    )},
+    js=(
+        'colorfield/coloris/coloris.js',
+        'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
+        'colorfield/colorfield.js',
+    )
+)
 
-# iconpicker_media = Media(
-#     css={'all': ('django_icon_picker/css/icon_picker.css',)}
-# )
+iconpicker_media = Media(
+    css={'all': ('django_icon_picker/css/icon_picker.css',)}
+)
 
-# # Combiniamo i due e applichiamo la patch
-# # Questo caricherà i CSS di entrambi E i JS di ColorField nell' <head>
-# # escludendo solo 'icon_picker.js'
-# IconPicker.media = property(lambda self: colorfield_media + iconpicker_media)
+# Combiniamo i due e applichiamo la patch
+# Questo caricherà i CSS di entrambi E i JS di ColorField nell' <head>
+# escludendo solo 'icon_picker.js'
+IconPicker.media = property(lambda self: colorfield_media + iconpicker_media)
 
 
 # IconPicker.media = property(lambda self: Media(

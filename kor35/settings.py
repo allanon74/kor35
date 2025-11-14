@@ -42,7 +42,7 @@ INSTALLED_APPS = [
 	# 'djangocms_admin_style', #cms
 	'admin_interface', #admin interface
 	'colorfield', 
-	# "dj_iconify.apps.DjIconifyConfig",
+	"dj_iconify.apps.DjIconifyConfig",
 	"django_icon_picker",    
  	'django.contrib.admin',
     'django.contrib.admindocs',
@@ -242,7 +242,7 @@ ICONIFY_JSON_ROOT = os.path.join(BASE_DIR.parent, 'iconify', 'json')
 
 # Icon Picker settings
 
-# ICON_PICKER_PATH = 'media'
+ICON_PICKER_PATH = 'media'
 ICON_PICKER_COLOR = "#00bcc9"
 
 # Static files (CSS, JavaScript, Images)
