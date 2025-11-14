@@ -1,0 +1,23 @@
+{% include "django/forms/widgets/text.html" %}
+    
+<div style="margin-top: 5px; display: flex; align-items: center; gap: 10px;">
+    <strong>Preview:</strong>
+    <img id="icon_preview_{{ widget.name }}" 
+         src="" 
+         style="width: 24px; height: 24px; vertical-align: middle; display: none;">
+    <span id="icon_status_{{ widget.name }}" style="font-style: italic;"></span>
+</div>
+<div id="icon_results_{{ widget.name }}" style="border: 1px solid #ccc; max-height: 150px; overflow-y: auto; margin-top: 5px;"></div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Passiamo i dati al nostro script JS
+        if (window.initCustomIconPicker) {
+            window.initCustomIconPicker({
+                inputId: '{{ widget.attrs.id }}', // es. 'id_icona'
+                name: '{{ widget.name }}',       // es. 'icona'
+                modelName: '{{ widget.model_name }}' // es. 'personaggi.punteggio'
+            });
+        }
+    });
+</script>

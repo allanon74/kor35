@@ -19,35 +19,35 @@ from django_icon_picker.widgets import IconPicker
 
 # ----------- CLASSI ASTRATTE -------------
 
-colorfield_media = Media(
-    css={'all': (
-        'colorfield/coloris/coloris.css',
-        'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
-    )},
-    js=(
-        'colorfield/coloris/coloris.js',
-        'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
-        'colorfield/colorfield.js',
-    )
-)
+# colorfield_media = Media(
+#     css={'all': (
+#         'colorfield/coloris/coloris.css',
+#         'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.css',
+#     )},
+#     js=(
+#         'colorfield/coloris/coloris.js',
+#         'https://cdn.jsdelivr.net/gh/mdbassit/Coloris@latest/dist/coloris.min.js',
+#         'colorfield/colorfield.js',
+#     )
+# )
 
-iconpicker_media = Media(
-    css={'all': ('django_icon_picker/css/icon_picker.css',)}
-)
-
-# Combiniamo i due e applichiamo la patch
-# Questo caricherà i CSS di entrambi E i JS di ColorField nell' <head>
-# escludendo solo 'icon_picker.js'
-IconPicker.media = property(lambda self: colorfield_media + iconpicker_media)
-
-
-# IconPicker.media = property(lambda self: Media(
+# iconpicker_media = Media(
 #     css={'all': ('django_icon_picker/css/icon_picker.css',)}
-#     # Niente 'js' qui!
-# ))
+# )
 
-# patch 3: admin base class
-IconPicker.template_name = 'admin/widgets/patched_icon_picker.html'
+# # Combiniamo i due e applichiamo la patch
+# # Questo caricherà i CSS di entrambi E i JS di ColorField nell' <head>
+# # escludendo solo 'icon_picker.js'
+# IconPicker.media = property(lambda self: colorfield_media + iconpicker_media)
+
+
+# # IconPicker.media = property(lambda self: Media(
+# #     css={'all': ('django_icon_picker/css/icon_picker.css',)}
+# #     # Niente 'js' qui!
+# # ))
+
+# # patch 3: admin base class
+# IconPicker.template_name = 'admin/widgets/patched_icon_picker.html'
 
 
 class A_Admin(SModelAdmin):
@@ -260,7 +260,16 @@ class PunteggioAdmin(A_Admin):
     #     # Chiama il metodo originale con le nostre modifiche
     #     return super().formfield_for_dbfield(db_field, request, **kwargs)    
 
-
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == 'icona':
+            # Prende il widget (CustomIconWidget) dal campo (CustomIconField)
+            field = super().formfield_for_dbfield(db_field, request, **kwargs)
+            
+            # Passa il nome del modello al widget per usarlo nel template/JS
+            field.widget.attrs['model_name'] = f'{db_field.model._meta.app_label}.{db_field.model._meta.model_name}'
+            return field
+            
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
 

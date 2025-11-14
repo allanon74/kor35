@@ -31,6 +31,7 @@ urlpatterns = [
     # path('icon_picker/', include('django_icon_picker.urls')),
     # path('icon_picker/download-svg/', csrf_exempt(icon_picker_views.download_and_save_svg), name='download_svg_patch'),
     path('icon_picker/download-svg/', personaggi_views.download_icon_patch, name='download_svg_patch'),
+    path('icon-widget-api/', include('icon_widget.urls')), # <-- LA NOSTRA APP
     # --- FINE DELLA PATCH URL ---
     path('personaggi/', include('personaggi.urls')),
     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),

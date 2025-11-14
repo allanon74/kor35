@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken', # Django REST Framework Token Authentication
 	'corsheaders', # Django CORS Headers
 	# 'django_yarnpkg', # django-yarnpkg
+	'icon_widget', # icon widget
 	
 ]
 

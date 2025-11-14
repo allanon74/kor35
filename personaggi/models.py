@@ -6,6 +6,7 @@ import string
 from django.db import models, IntegrityError
 from django.db.models import Q
 from django.utils import timezone
+from django.conf import settings
 
 from django.contrib.auth.models import User # Importa il modello User
 from django.utils import timezone # Importa timezone
@@ -17,6 +18,8 @@ from django_icon_picker.field import IconField
 from cms.models.pluginmodel import CMSPlugin
 
 from django.utils.html import format_html
+
+from icon_widget.fields import CustomIconField
 
 
 # tipi generici per DDL
@@ -105,7 +108,8 @@ class Punteggio(Tabella):
     sigla = models.CharField('Sigla', max_length=3, unique=True, )
     tipo = models.CharField('Tipo di punteggio', choices=punteggi_tipo, max_length=2)
     colore = ColorField('Colore', default='#1976D2', help_text="Colore associato al punteggio (es. per icone).")
-    icona = IconField(max_length=255, blank=True)
+    icona_old = IconField(max_length=255, blank=True)
+    icona = CustomIconField(blank=True)
     # icon = models.CharField(max_length=100, blank=True, null=True) # Un CharField standard
     
     caratteristica_relativa = models.ForeignKey(
@@ -138,6 +142,30 @@ class Punteggio(Tabella):
             )
         )
 
+    @property
+    def icona_url(self):
+        if self.icona:
+            # Assumiamo che il nome del file sia il percorso relativo da MEDIA_URL
+            return f"{settings.MEDIA_URL}{self.icona}"
+        return None
+
+    # --- Property per Template Django ---
+    @property
+    def icona_html(self):
+        url = self.icona_url
+        if url:
+            # Usiamo il 'colore' del modello per applicare un filtro!
+            # Nota: questo richiede che l'SVG non abbia colori hardcodati.
+            # Se l'SVG scaricato ha già un colore, questa riga va rimossa.
+            style = f"width: 24px; height: 24px; vertical-align: middle; color: {self.colore};"
+            return format_html(
+                '<img src="{}" style="{}" alt="Icona">',
+                url,
+                style
+            )
+        return ""
+    
+    
     def __str__(self):
         result = "{tipo} - {nome}"
         return result.format(nome=self.nome, tipo = self.tipo)
