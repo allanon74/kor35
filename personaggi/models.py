@@ -47,6 +47,10 @@ STATISTICA = "ST"
 ELEMENTO = "EL"
 AURA = "AU"
 CONDIZIONE = "CO"
+CULTO = "CU"
+VIA = "VI"
+ARTE = "AR"
+ARCHETIPO = "AR"
 
 punteggi_tipo = [
 	(CARATTERISTICA, 'Caratteristica'),
@@ -54,6 +58,10 @@ punteggi_tipo = [
 	(ELEMENTO, 'Elemento'),
 	(AURA, 'Aura',),
     (CONDIZIONE, 'Condizione',),
+    (CULTO, 'Culto',),
+    (VIA, 'Via',),
+    (ARTE, 'Arte',),
+    (ARCHETIPO, 'Archetipo',),
 	]
 
 TIER_1 = "T1"
