@@ -41,7 +41,7 @@ router.register(r'spell-elemento', SpellElementoViewSet)
 router.register('users', UserViewSet)
 
 urlpatterns = [
-    path('api/', include(router.urls)),
+    
     path('auth/', MyAuthToken.as_view()),
     path('csrf/', get_csrf_token),
         path('qrcode/', views.qr_code_html_view, name='qr_code_html_view'),
@@ -72,5 +72,7 @@ urlpatterns = [
     path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
     path('api/abilita/master_list/', views.AbilitaMasterListView.as_view(), name='abilita_master_list'),
     path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
+    
+    path('api/', include(router.urls)),
     
 ]
