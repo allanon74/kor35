@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from django.utils import timezone
+from django.conf import settings
 from django.utils.html import format_html
+from .models import _get_icon_color_from_bg
 
 from .models import QrCode
 
