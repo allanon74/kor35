@@ -141,11 +141,27 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'kor35.urls'
 
-CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for CORS
-# CORS_ALLOWED_ORIGINS = [
-#     'http://localhost:8000',
-#     'https://www.k-o-r-35.it',
-# ]
+# CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for CORS
+CORS_ALLOWED_ORIGINS = [
+    "https://www.k-o-r-35.it",     # La tua app React in produzione
+    "https://localhost:5173",      # Il tuo server di sviluppo React (Vite)
+    # Aggiungi anche http se lo usi in sviluppo
+    "http://localhost:5173",       
+]
+
+CORS_URLS_REGEX = r'^/personaggi/api/.*$'
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',  # <-- FONDAMENTALE per il Token Auth
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 
 TEMPLATES = [
