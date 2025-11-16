@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from django.utils import timezone
+from django.utils.html import format_html
 
 from .models import QrCode
 
@@ -700,11 +701,11 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
 class PunteggioDetailSerializer(serializers.ModelSerializer):
     """
     Serializza un Punteggio includendo le property calcolate
-    per le icone HTML.
+    per le icone HTML con URL assoluti.
     """
-    icona_html = serializers.CharField(read_only=True)
-    icona_cerchio_html = serializers.CharField(read_only=True)
-    icona_cerchio_inverted_html = serializers.CharField(read_only=True)
+    icona_html = serializers.SerializerMethodField()
+    icona_cerchio_html = serializers.SerializerMethodField()
+    icona_cerchio_inverted_html = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
@@ -717,6 +718,96 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'icona_html',
             'icona_cerchio_html',
             'icona_cerchio_inverted_html'
+        )
+
+    def get_base_url(self):
+        """Ottiene il base URL dal contesto della request."""
+        request = self.context.get('request')
+        if request:
+            # Costruisce l'URL assoluto (es. https://www.k-o-r-35.it)
+            return f"{request.scheme}://{request.get_host()}"
+        # Fallback se il request non è nel context (improbabile per una view)
+        return "" # O un default da settings
+
+    def get_icona_html(self, obj):
+        """Ricostruisce la logica di 'icona_html' ma con un URL assoluto."""
+        if not obj.icona or not obj.colore:
+            return ""
+        
+        base_url = self.get_base_url()
+        # Crea un URL assoluto per l'icona
+        url = f"{base_url}{settings.MEDIA_URL}{obj.icona}" 
+        
+        style = (
+            f"width: 24px; "
+            f"height: 24px; "
+            f"background-color: {obj.colore}; "
+            f"mask-image: url({url}); "
+            f"-webkit-mask-image: url({url}); "
+            f"mask-repeat: no-repeat; "
+            f"-webkit-mask-repeat: no-repeat; "
+            f"mask-size: contain; "
+            f"-webkit-mask-size: contain; "
+            f"display: inline-block; "
+            f"vertical-align: middle;"
+        )
+        return format_html('<div style="{}"></div>', style)
+
+    def get_icona_cerchio_html(self, obj):
+        """Ricostruisce la logica di 'icona_cerchio(inverted=False)'."""
+        return self._get_icona_cerchio(obj, inverted=False)
+
+    def get_icona_cerchio_inverted_html(self, obj):
+        """Ricostruisce la logica di 'icona_cerchio(inverted=True)'."""
+        return self._get_icona_cerchio(obj, inverted=True)
+
+    def _get_icona_cerchio(self, obj, inverted=False):
+        """Metodo helper per generare l'HTML del cerchio con URL assoluti."""
+        base_url = self.get_base_url()
+        if not obj.icona or not obj.colore:
+            return ""
+            
+        url_icona_locale = f"{base_url}{settings.MEDIA_URL}{obj.icona}"
+        colore_sfondo = obj.colore
+        
+        # Usa la funzione helper importata dal modello
+        colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
+
+        if inverted:
+            colore_icona_contrasto = obj.colore
+            colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
+        
+        stile_cerchio = (
+            f"display: inline-block; "
+            f"width: 30px; "
+            f"height: 30px; "
+            f"background-color: {colore_sfondo}; "
+            f"border-radius: 50%; "
+            f"vertical-align: middle; "
+            f"text-align: center; "
+            f"line-height: 30px;"
+        )
+        
+        stile_icona_maschera = (
+            f"display: inline-block; "
+            f"width: 24px; "
+            f"height: 24px; "
+            f"vertical-align: middle; "
+            f"background-color: {colore_icona_contrasto}; "
+            f"mask-image: url({url_icona_locale}); "
+            f"-webkit-mask-image: url({url_icona_locale}); "
+            f"mask-repeat: no-repeat; "
+            f"-webkit-mask-repeat: no-repeat; "
+            f"mask-size: contain; "
+            f"-webkit-mask-size: contain; "
+        )
+
+        return format_html(
+            '<div style="{}">'
+            '  <div style="{}"></div>'
+            '</div>',
+            stile_cerchio,
+            stile_icona_maschera
         )
 
 class PunteggioSmallSerializer(serializers.ModelSerializer):
