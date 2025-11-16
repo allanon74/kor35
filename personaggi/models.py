@@ -47,7 +47,7 @@ STATISTICA = "ST"
 ELEMENTO = "EL"
 AURA = "AU"
 CONDIZIONE = "CO"
-CULTO = "CU"
+CULTO = "CU"   
 VIA = "VI"
 ARTE = "AR"
 ARCHETIPO = "AR"
@@ -202,8 +202,7 @@ class Punteggio(Tabella):
         
         return "" # Non mostrare nulla se manca l'icona o il colore
     
-    @property
-    def icona_cerchio_html(self):
+    def icona_cerchio(self, inverted=True):
         """
         Genera l'HTML per un cerchio colorato con l'icona
         in bianco o nero per il contrasto.
@@ -222,6 +221,11 @@ class Punteggio(Tabella):
         # 3. Determina il colore dell'icona (bianco o nero)
         colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo)
 
+        if inverted:
+            colore_icona_contrasto = self.colore
+            colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
+            
+        
         # 4. Definisce gli stili CSS
         
         # Stile per il cerchio esterno
@@ -259,6 +263,17 @@ class Punteggio(Tabella):
             stile_cerchio,
             stile_icona_maschera
         )
+    
+    
+    
+    @property
+    def icona_cerchio_html(self):
+        return self.icona_cerchio(inverted=False)
+    
+    @property
+    def icona_cerchio_inverted_html(self):
+        return self.icona_cerchio(inverted=True)
+    
     
     
     def __str__(self):

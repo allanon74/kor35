@@ -176,7 +176,7 @@ class PunteggioSerializer(serializers.ModelSerializer):
     """Serializza i campi chiave di un Punteggio (per gli Elementi)."""
     class Meta:
         model = Punteggio
-        fields = ('nome', 'sigla')
+        fields = ('nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'colore')
 
 class OggettoStatisticaSerializer(serializers.ModelSerializer):
     """Serializza la pivot Modificatori di Oggetto."""
