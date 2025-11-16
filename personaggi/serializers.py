@@ -82,10 +82,13 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         if not obj.icona:
             return None
         base_url = self.get_base_url()
-        # Assicura che MEDIA_URL sia gestito correttamente
+        
         media_url = settings.MEDIA_URL
+        if not media_url:
+            media_url = "/media/"
         if media_url.startswith('/'):
             media_url = media_url[1:]
+            
         icona_path = str(obj.icona)
         if icona_path.startswith('/'):
             icona_path = icona_path[1:]
@@ -140,6 +143,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
 
 #
 # --- Serializer Vecchi (Aggiornati per usare PunteggioSmallSerializer) ---
+# (Questi sono usati dall'Admin o da vecchie view, li teniamo per compatibilità)
 #
 
 class AbilSerializer(serializers.ModelSerializer):
@@ -172,7 +176,6 @@ class SpellSerializer(serializers.ModelSerializer):
 
 #
 # --- Serializer "Through" (per admin/debug) ---
-# (Questi non usano PunteggioSerializer, quindi sono OK)
 #
 
 class AbilitaTierSerializer(serializers.ModelSerializer):
@@ -217,6 +220,21 @@ class AbilitaUpdateSerializer(serializers.ModelSerializer):
         model = Abilita
         fields = ['id', 'nome', 'descrizione', 'caratteristica', 'requisiti', 'punteggio_acquisito']
     # ... (il tuo metodo update() è corretto) ...
+    def update(self, instance, validated_data):
+        requisiti_data = validated_data.pop('requisiti', [])
+        punteggi_data = validated_data.pop('punteggio_acquisito', [])
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if requisiti_data:
+            instance.requisiti.clear()
+            for item in requisiti_data:
+                abilita_requisito.objects.create(abilita=instance, **item)
+        if punteggi_data:
+            instance.punteggio_acquisito.clear()
+            for item in punteggi_data:
+                abilita_punteggio.objects.create(abilita=instance, **item)
+        return instance
 
 #
 # --- Serializer Specifici per App React (continuazione) ---
@@ -264,15 +282,19 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
             'caratteristica', 'requisiti', 'prerequisiti'
         )
 
+# --- QUESTA È LA CLASSE CORRETTA PER LE ABILITÀ POSSEDUTE ---
 class AbilitaSerializer(serializers.ModelSerializer):
     """
     Serializer per le 'abilita_possedute' del personaggio (usato in PersonaggioDetailSerializer).
     """
-    caratteristica = PunteggioSmallSerializer(read_only=True) # <-- CAMPO CORRETTO
+    caratteristica = PunteggioSmallSerializer(read_only=True) 
     class Meta:
         model = Abilita
-        fields = ('id', 'nome', 'descrizione', 'caratteristica') # <-- CAMPO CORRETTO
+        # Aggiungi 'caratteristica' alla lista dei campi
+        fields = ('id', 'nome', 'descrizione', 'caratteristica')
 
+
+# --- Serializer Oggetti/Attivate (Pannello QR) ---
 
 class OggettoStatisticaSerializer(serializers.ModelSerializer):
     """Serializza la pivot Modificatori di Oggetto."""
@@ -390,11 +412,13 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     TestoFormattatoPersonale = serializers.JSONField(read_only=True)
     tipologia = TipologiaPersonaggioSerializer(read_only=True)
     
-    # Usa l'AbilitaSerializer corretto (definito sopra)
+    # --- CAMPI CHIAVE ---
+    # Ora usa l'UNICA E CORRETTA AbilitaSerializer (definita sopra)
     abilita_possedute = AbilitaSerializer(many=True, read_only=True) 
     
     oggetti = serializers.SerializerMethodField()
     attivate_possedute = serializers.SerializerMethodField()
+    # ---
     
     log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
@@ -418,7 +442,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'statistiche_base__statistica', 'oggettostatistica_set__statistica',
             'oggettoelemento_set__elemento', 'aura'
         )
-        personaggio.modificatori_calcolati
+        personaggio.modificatori_calcolati # Assicura che la cache sia piena
         risultati = []
         for obj in oggetti_posseduti:
             dati_oggetto = OggettoSerializer(obj, context=self.context).data 
@@ -430,7 +454,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         attivate_possedute = personaggio.attivate_possedute.prefetch_related(
             'statistiche_base__statistica', 'attivataelemento_set__elemento'
         )
-        personaggio.modificatori_calcolati
+        personaggio.modificatori_calcolati # La cache dovrebbe essere già piena
         risultati = []
         for att in attivate_possedute:
             dati_attivata = AttivataSerializer(att, context=self.context).data 
@@ -517,9 +541,74 @@ class RubaSerializer(serializers.Serializer):
     oggetto_id = serializers.PrimaryKeyRelatedField(queryset=Oggetto.objects.all())
     target_personaggio_id = serializers.PrimaryKeyRelatedField(queryset=Personaggio.objects.all())
     
-    # ... (il tuo metodo validate() e save() è corretto) ...
+    def validate(self, data):
+        richiedente = self.context.get('richiedente')
+        if not richiedente:
+            raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
+        
+        oggetto = data.get('oggetto_id')
+        target_personaggio = data.get('target_personaggio_id')
+
+        if not target_personaggio.inventario_ptr.oggetti.filter(id=oggetto.id).exists():
+             raise serializers.ValidationError("L'oggetto non appartiene al personaggio target.")
+
+        # Esempio di logica di validazione (da adattare)
+        # ... (commentata per ora) ...
+        return data
+
+    def save(self):
+        richiedente = self.context['richiedente']
+        oggetto = self.validated_data['oggetto_id']
+        target_personaggio = self.validated_data['target_personaggio_id']
+        
+        # Sposta l'oggetto (logica di esempio)
+        # target_personaggio.inventario_ptr.rimuovi_oggetto(oggetto)
+        # richiedente.inventario_ptr.aggiungi_oggetto(oggetto)
+        
+        # TODO: Aggiungi log, ecc.
+        
+        return oggetto
+
 
 class AcquisisciSerializer(serializers.Serializer):
     qrcode_id = serializers.UUIDField()
     
-    # ... (il tuo metodo validate() e save() è corretto) ...
+    def validate(self, data):
+        richiedente = self.context.get('richiedente')
+        if not richiedente:
+            raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
+            
+        try:
+            qr_code = QrCode.objects.select_related('vista').get(id=data.get('qrcode_id'))
+        except QrCode.DoesNotExist:
+            raise serializers.ValidationError("QrCode non valido.")
+            
+        if not qr_code.vista:
+            raise serializers.ValidationError("Questo QrCode non è collegato a nulla.")
+            
+        vista_obj = qr_code.vista
+        
+        if not (hasattr(vista_obj, 'oggetto') or hasattr(vista_obj, 'attivata')):
+            raise serializers.ValidationError("Questo QrCode non punta a un oggetto o attivata acquisibile.")
+        
+        self.context['qr_code'] = qr_code
+        self.context['item'] = vista_obj.oggetto if hasattr(vista_obj, 'oggetto') else vista_obj.attivata
+        
+        return data
+
+    def save(self):
+        richiedente = self.context['richiedente']
+        qr_code = self.context['qr_code']
+        item = self.context['item']
+        
+        if isinstance(item, Oggetto):
+            # Assicurati di avere un metodo 'aggiungi_oggetto'
+            # richiedente.inventario_ptr.aggiungi_oggetto(item) 
+            pass # Sostituisci con la logica corretta
+        elif isinstance(item, Attivata):
+            richiedente.attivate_possedute.add(item)
+            
+        qr_code.vista = None
+        qr_code.save()
+        
+        return item
