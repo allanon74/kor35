@@ -286,11 +286,12 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
         )
 
 # --- QUESTA È LA CLASSE CORRETTA PER LE ABILITÀ POSSEDUTE ---
+# (La vecchia 'AbilitaSerializer' generica è stata rimossa)
 class AbilitaSerializer(serializers.ModelSerializer):
     """
     Serializer per le 'abilita_possedute' del personaggio (usato in PersonaggioDetailSerializer).
     """
-    caratteristica = PunteggioSmallSerializer(read_only=True) # <-- CAMPO CORRETTO
+    caratteristica = PunteggioSmallSerializer(read_only=True) 
     class Meta:
         model = Abilita
         # Aggiungi 'caratteristica' alla lista dei campi
@@ -552,11 +553,12 @@ class RubaSerializer(serializers.Serializer):
         oggetto = data.get('oggetto_id')
         target_personaggio = data.get('target_personaggio_id')
 
-        if not target_personaggio.get_oggetti().filter(id=oggetto.id).exists(): # Logica corretta
+        # Correzione: get_oggetti() è un metodo, non un related manager
+        if not target_personaggio.get_oggetti().filter(id=oggetto.id).exists():
              raise serializers.ValidationError("L'oggetto non appartiene al personaggio target.")
-
-        # Logica di validazione esempio (da adattare)
-        # ... 
+        
+        # Esempio di logica di validazione (da adattare)
+        # ...
         
         return data
 
@@ -565,8 +567,8 @@ class RubaSerializer(serializers.Serializer):
         oggetto = self.validated_data['oggetto_id']
         target_personaggio = self.validated_data['target_personaggio_id']
         
-        # Logica di spostamento oggetto
-        oggetto.sposta_in_inventario(richiedente) # Usa il metodo del modello
+        # Usa il metodo corretto del modello per spostare l'oggetto
+        oggetto.sposta_in_inventario(richiedente) 
         
         # Aggiungi log
         richiedente.aggiungi_log(f"Oggetto '{oggetto.nome}' rubato da {target_personaggio.nome}.")
@@ -576,7 +578,8 @@ class RubaSerializer(serializers.Serializer):
 
 
 class AcquisisciSerializer(serializers.Serializer):
-    qrcode_id = serializers.UUIDField()
+    # NOTA: QrCode.id è un CharField, non UUIDField
+    qrcode_id = serializers.CharField(max_length=20) 
     
     def validate(self, data):
         richiedente = self.context.get('richiedente')
@@ -584,8 +587,9 @@ class AcquisisciSerializer(serializers.Serializer):
             raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
             
         try:
-            # Converte UUID da stringa
-            qr_code = QrCode.objects.select_related('vista').get(id=str(data.get('qrcode_id')))
+            # Convalida come stringa
+            qr_code_id_str = str(data.get('qrcode_id'))
+            qr_code = QrCode.objects.select_related('vista').get(id=qr_code_id_str)
         except (QrCode.DoesNotExist, ValueError, TypeError):
             raise serializers.ValidationError("QrCode non valido.")
             
@@ -594,7 +598,6 @@ class AcquisisciSerializer(serializers.Serializer):
             
         vista_obj = qr_code.vista
         
-        # Controlla se 'vista_obj' è un Oggetto o Attivata
         item = None
         if hasattr(vista_obj, 'oggetto'):
              item = vista_obj.oggetto
