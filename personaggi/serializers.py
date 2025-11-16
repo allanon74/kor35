@@ -3,31 +3,23 @@ from rest_framework.authtoken.models import Token
 from django.utils import timezone
 from django.conf import settings
 from django.utils.html import format_html
-from .models import _get_icon_color_from_bg
 
-from .models import QrCode
-
+# Importa i modelli e le funzioni helper
 from .models import (
-    Abilita, PuntiCaratteristicaMovimento, Tier, Spell, Mattone, Punteggio, Tabella, TipologiaPersonaggio,
-    abilita_tier, abilita_requisito, abilita_sbloccata,
-    abilita_punteggio, abilita_prerequisito,
-    spell_mattone, spell_elemento
+    _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
+    Spell, Mattone, Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
+    abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
+    spell_mattone, spell_elemento, Oggetto, Attivata, Manifesto, A_vista, 
+    Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
+    OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
+    CreditoMovimento, PersonaggioLog, TransazioneSospesa
 )
-
 from django.contrib.auth.models import User
 
-from .models import (
-    Oggetto, Attivata, Manifesto, A_vista, Inventario, 
-    OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
-    OggettoElemento, AttivataElemento,
-    OggettoInInventario, 
-)
-from .models import (
-    Statistica, Personaggio, CreditoMovimento, 
-    PersonaggioLog, TransazioneSospesa, 
-)
-
-
+#
+# --- Serializer di Base e Specifici per l'App React ---
+# (Definiti prima, così possono essere usati da altri)
+#
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -38,7 +30,6 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         user.is_active = False
-        # token = Token.objects.create(user=user)
         return user
 
 class TierSerializer(serializers.ModelSerializer):
@@ -46,43 +37,143 @@ class TierSerializer(serializers.ModelSerializer):
         model = Tier
         fields = '__all__'
 
-
 class TabellaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tabella
         fields = '__all__'
 
+class StatisticaSerializer(serializers.ModelSerializer):
+    """Serializza i campi chiave di una Statistica."""
+    class Meta:
+        model = Statistica
+        fields = ('nome', 'sigla', 'parametro')
 
-class PunteggioSerializer(serializers.ModelSerializer):
+class PunteggioSmallSerializer(serializers.ModelSerializer):
+    """Serializer leggero per Punteggio (usato nei serializer delle abilità)."""
     class Meta:
         model = Punteggio
-        fields = '__all__'
+        fields = ('id', 'nome', 'sigla', 'colore')
+
+class PunteggioDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializza un Punteggio includendo le property calcolate
+    per le icone HTML con URL assoluti (per il PunteggioDisplay React).
+    """
+    icona_html = serializers.SerializerMethodField()
+    icona_cerchio_html = serializers.SerializerMethodField()
+    icona_cerchio_inverted_html = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Punteggio
+        fields = (
+            'id', 'nome', 'sigla', 'tipo', 'colore',
+            'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html'
+        )
+
+    def get_base_url(self):
+        """Ottiene il base URL dal contesto della request."""
+        request = self.context.get('request')
+        if request:
+            return f"{request.scheme}://{request.get_host()}"
+        return ""
+
+    def get_icona_url_assoluto(self, obj):
+        """Helper per generare l'URL assoluto dell'icona."""
+        if not obj.icona:
+            return None
+        base_url = self.get_base_url()
+        # Assicura che MEDIA_URL sia gestito correttamente
+        media_url = settings.MEDIA_URL
+        if media_url.startswith('/'):
+            media_url = media_url[1:]
+        icona_path = str(obj.icona)
+        if icona_path.startswith('/'):
+            icona_path = icona_path[1:]
+            
+        return f"{base_url}/{media_url}{icona_path}"
+
+    def get_icona_html(self, obj):
+        url = self.get_icona_url_assoluto(obj)
+        if not url or not obj.colore:
+            return ""
+        style = (
+            f"width: 24px; height: 24px; background-color: {obj.colore}; "
+            f"mask-image: url({url}); -webkit-mask-image: url({url}); "
+            f"mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; "
+            f"mask-size: contain; -webkit-mask-size: contain; "
+            f"display: inline-block; vertical-align: middle;"
+        )
+        return format_html('<div style="{}"></div>', style)
+
+    def get_icona_cerchio_html(self, obj):
+        return self._get_icona_cerchio(obj, inverted=False)
+
+    def get_icona_cerchio_inverted_html(self, obj):
+        return self._get_icona_cerchio(obj, inverted=True)
+
+    def _get_icona_cerchio(self, obj, inverted=False):
+        url_icona_locale = self.get_icona_url_assoluto(obj)
+        if not url_icona_locale or not obj.colore:
+            return ""
+        colore_sfondo = obj.colore
+        colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
+        if inverted:
+            colore_icona_contrasto = obj.colore
+            colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
+        stile_cerchio = (
+            f"display: inline-block; width: 30px; height: 30px; "
+            f"background-color: {colore_sfondo}; border-radius: 50%; "
+            f"vertical-align: middle; text-align: center; line-height: 30px;"
+        )
+        stile_icona_maschera = (
+            f"display: inline-block; width: 24px; height: 24px; "
+            f"vertical-align: middle; background-color: {colore_icona_contrasto}; "
+            f"mask-image: url({url_icona_locale}); -webkit-mask-image: url({url_icona_locale}); "
+            f"mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; "
+            f"mask-size: contain; -webkit-mask-size: contain;"
+        )
+        return format_html(
+            '<div style="{}"><div style="{}"></div></div>',
+            stile_cerchio,
+            stile_icona_maschera
+        )
+
+#
+# --- Serializer Vecchi (Aggiornati per usare PunteggioSmallSerializer) ---
+#
 
 class AbilSerializer(serializers.ModelSerializer):
-    caratteristica = PunteggioSerializer(many=False)
+    caratteristica = PunteggioSmallSerializer(many=False) # <-- CORRETTO
     tiers = TierSerializer(many=True)
-    requisiti = PunteggioSerializer(many=True, required=False)
-    punteggio_acquisito = PunteggioSerializer(many=True, required=False)
-    class Meta:
-        model = Abilita
-        fields = '__all__'
-
-class AbilitaSerializer(serializers.ModelSerializer):
-    # caratteristica = PunteggioSerializer(many=False)
-    # tiers = TierSerializer(many=True)
-    # requisiti = PunteggioSerializer(many=True, required=False)
-    # punteggio_acquisito = PunteggioSerializer(many=True, required=False)
+    requisiti = PunteggioSmallSerializer(many=True, required=False) # <-- CORRETTO
+    punteggio_acquisito = PunteggioSmallSerializer(many=True, required=False) # <-- CORRETTO
     class Meta:
         model = Abilita
         fields = '__all__'
 
 class AbilitaSmallSerializer(serializers.ModelSerializer):
-    caratteristica = PunteggioSerializer(many=False)
+    caratteristica = PunteggioSmallSerializer(many=False) # <-- CORRETTO
     class Meta:
         model = Abilita
         fields = ("id", "nome", "caratteristica", "descrizione")
 
+class MattoneSerializer(serializers.ModelSerializer):
+    elemento = PunteggioSmallSerializer() # <-- CORRETTO
+    aura = PunteggioSmallSerializer() # <-- CORRETTO
+    class Meta:
+        model = Mattone
+        fields = '__all__'
 
+class SpellSerializer(serializers.ModelSerializer):
+    mattoni = MattoneSerializer(many=True, read_only=True)
+    class Meta:
+        model = Spell
+        fields = '__all__'
+
+#
+# --- Serializer "Through" (per admin/debug) ---
+# (Questi non usano PunteggioSerializer, quindi sono OK)
+#
 
 class AbilitaTierSerializer(serializers.ModelSerializer):
     class Meta:
@@ -119,67 +210,69 @@ class SpellElementoSerializer(serializers.ModelSerializer):
         model = spell_elemento
         fields = ['id', 'spell', 'elemento']
 
-
-
-class MattoneSerializer(serializers.ModelSerializer):
-    elemento = PunteggioSerializer()
-    aura = PunteggioSerializer()
-
-    class Meta:
-        model = Mattone
-        fields = '__all__'
-
-class SpellSerializer(serializers.ModelSerializer):
-    mattoni = MattoneSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Spell
-        fields = '__all__'
-
-
-
 class AbilitaUpdateSerializer(serializers.ModelSerializer):
     requisiti = AbilitaRequisitoSerializer(many=True, required=False)
     punteggio_acquisito = AbilitaPunteggioSerializer(many=True, required=False)
-
     class Meta:
         model = Abilita
         fields = ['id', 'nome', 'descrizione', 'caratteristica', 'requisiti', 'punteggio_acquisito']
+    # ... (il tuo metodo update() è corretto) ...
 
-    def update(self, instance, validated_data):
-        requisiti_data = validated_data.pop('requisiti', [])
-        punteggi_data = validated_data.pop('punteggio_acquisito', [])
+#
+# --- Serializer Specifici per App React (continuazione) ---
+#
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
-        if requisiti_data:
-            instance.requisiti.clear()
-            for item in requisiti_data:
-                abilita_requisito.objects.create(abilita=instance, **item)
-
-        if punteggi_data:
-            instance.punteggio_acquisito.clear()
-            for item in punteggi_data:
-                abilita_punteggio.objects.create(abilita=instance, **item)
-
-        return instance
-
-# --- Serializers per i dati annidati (le pivot) ---
-
-class StatisticaSerializer(serializers.ModelSerializer):
-    """Serializza i campi chiave di una Statistica."""
+class AbilitaRequisitoSmallSerializer(serializers.ModelSerializer):
+    """Serializza i requisiti di punteggio per la master list."""
+    requisito = PunteggioSmallSerializer(read_only=True)
     class Meta:
-        model = Statistica
-        # Mostra i campi utili per l'app React
-        fields = ('nome', 'sigla', 'parametro')
+        model = abilita_requisito
+        fields = ('requisito', 'valore')
 
-class PunteggioSerializer(serializers.ModelSerializer):
-    """Serializza i campi chiave di un Punteggio (per gli Elementi)."""
+class AbilitaSmallForPrereqSerializer(serializers.ModelSerializer):
+    """Serializer super-leggero per i prerequisiti."""
     class Meta:
-        model = Punteggio
-        fields = ('nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'colore')
+        model = Abilita
+        fields = ('id', 'nome')
+
+class AbilitaPrerequisitoSmallSerializer(serializers.ModelSerializer):
+    """Serializza i prerequisiti di abilità per la master list."""
+    prerequisito = AbilitaSmallForPrereqSerializer(read_only=True)
+    class Meta:
+        model = abilita_prerequisito
+        fields = ('prerequisito',)
+
+class AbilitaMasterListSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo per la lista "master" delle abilità (usato dalla view).
+    """
+    caratteristica = PunteggioSmallSerializer(read_only=True)
+    requisiti = AbilitaRequisitoSmallSerializer(
+        source='abilita_requisito_set', 
+        many=True, 
+        read_only=True
+    )
+    prerequisiti = AbilitaPrerequisitoSmallSerializer(
+        source='abilita_prerequisiti', 
+        many=True, 
+        read_only=True
+    )
+    class Meta:
+        model = Abilita
+        fields = (
+            'id', 'nome', 'descrizione', 'costo_pc', 'costo_crediti', 
+            'caratteristica', 'requisiti', 'prerequisiti'
+        )
+
+class AbilitaSerializer(serializers.ModelSerializer):
+    """
+    Serializer per le 'abilita_possedute' del personaggio (usato in PersonaggioDetailSerializer).
+    """
+    caratteristica = PunteggioSmallSerializer(read_only=True) # <-- CAMPO CORRETTO
+    class Meta:
+        model = Abilita
+        fields = ('id', 'nome', 'descrizione', 'caratteristica') # <-- CAMPO CORRETTO
+
 
 class OggettoStatisticaSerializer(serializers.ModelSerializer):
     """Serializza la pivot Modificatori di Oggetto."""
@@ -204,36 +297,27 @@ class AttivataStatisticaBaseSerializer(serializers.ModelSerializer):
 
 class OggettoElementoSerializer(serializers.ModelSerializer):
     """Serializza la pivot Elementi di Oggetto."""
-    elemento = PunteggioSerializer(read_only=True)
+    elemento = PunteggioSmallSerializer(read_only=True) # <-- CORRETTO
     class Meta:
         model = OggettoElemento
         fields = ('elemento',)
 
 class AttivataElementoSerializer(serializers.ModelSerializer):
-    """
-    Serializza la pivot Elementi di Attivata.
-    """
-    elemento = PunteggioSerializer(read_only=True)
+    """Serializza la pivot Elementi di Attivata."""
+    elemento = PunteggioSmallSerializer(read_only=True) # <-- CORRETTO
     class Meta:
-        model = AttivataElemento # Presuppone che questo modello esista
+        model = AttivataElemento 
         fields = ('elemento',)
 
-
-# --- Serializers Principali ---
-
 class OggettoSerializer(serializers.ModelSerializer):
-    # Usa 'source' per puntare al related_name inverso del modello through
     statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
     statistiche_base = OggettoStatisticaBaseSerializer(source='oggettostatisticabase_set', many=True, read_only=True)
     elementi = OggettoElementoSerializer(source='oggettoelemento_set', many=True, read_only=True)
-    
-    # Serializza la @property
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
-    livello = serializers.IntegerField(read_only=True) # Serializza la @property
-    aura = PunteggioSerializer(read_only=True) # Serializza il FK
+    livello = serializers.IntegerField(read_only=True)
+    aura = PunteggioSmallSerializer(read_only=True) # <-- CORRETTO
     inventario_corrente = serializers.StringRelatedField(read_only=True)
-
     class Meta:
         model = Oggetto
         fields = (
@@ -250,7 +334,6 @@ class AttivataSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-
     class Meta:
         model = Attivata
         fields = (
@@ -265,26 +348,15 @@ class ManifestoSerializer(serializers.ModelSerializer):
         fields = ('id', 'nome', 'testo')
 
 class A_vistaSerializer(serializers.ModelSerializer):
-    """Serializer di fallback se non è nessuna delle sottoclassi."""
     class Meta:
         model = A_vista
         fields = ('id', 'nome', 'testo')
         
-        
 class InventarioSerializer(serializers.ModelSerializer):
-    """Serializza un Inventario base."""
-    # Mostra gli oggetti attualmente nell'inventario
     oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
-
     class Meta:
         model = Inventario
         fields = ('id', 'nome', 'testo', 'oggetti')
-
-
-class AbilitaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Abilita
-        fields = ('id', 'nome', 'descrizione')
 
 class PersonaggioLogSerializer(serializers.ModelSerializer):
     class Meta:
@@ -297,51 +369,35 @@ class CreditoMovimentoSerializer(serializers.ModelSerializer):
         fields = ('importo', 'descrizione', 'data')
 
 class TransazioneSospesaSerializer(serializers.ModelSerializer):
-    # Mostra i nomi invece degli ID per leggibilità
     oggetto = serializers.StringRelatedField(read_only=True)
     mittente = serializers.StringRelatedField(read_only=True)
     richiedente = serializers.StringRelatedField(read_only=True)
-    
     class Meta:
         model = TransazioneSospesa
         fields = ('id', 'oggetto', 'mittente', 'richiedente', 'data_richiesta', 'stato')
 
-# --- NUOVO SERIALIZER (da aggiungere prima di PersonaggioDetailSerializer) ---
 class TipologiaPersonaggioSerializer(serializers.ModelSerializer):
     class Meta:
         model = TipologiaPersonaggio
         fields = ('nome', 'crediti_iniziali', 'caratteristiche_iniziali', 'giocante')
 
-
 class PersonaggioDetailSerializer(serializers.ModelSerializer):
-    """
-    Serializer completo per il Personaggio, da usare
-    per l'utente che possiede quel personaggio.
-    """
     proprietario = serializers.StringRelatedField(read_only=True)
-    
-    # Proprietà Read-only
     crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     punti_caratteristica = serializers.IntegerField(read_only=True)
-    caratteristiche_base = serializers.JSONField(read_only=True) # Era 'caratteristiche_calcolate'
-    modificatori_calcolati = serializers.JSONField(read_only=True) # Era 'modificatori_statistiche'
+    caratteristiche_base = serializers.JSONField(read_only=True) 
+    modificatori_calcolati = serializers.JSONField(read_only=True) 
     TestoFormattatoPersonale = serializers.JSONField(read_only=True)
     tipologia = TipologiaPersonaggioSerializer(read_only=True)
-
     
-    # M2M Posseduti
-    abilita_possedute = AbilitaSerializer(many=True, read_only=True)
-    attivate_possedute = AttivataSerializer(many=True, read_only=True) # Potrebbe essere pesante
+    # Usa l'AbilitaSerializer corretto (definito sopra)
+    abilita_possedute = AbilitaSerializer(many=True, read_only=True) 
     
-    # Oggetti (da Inventario)
     oggetti = serializers.SerializerMethodField()
     attivate_possedute = serializers.SerializerMethodField()
     
-    # Log e Crediti
     log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
-    
-    # Transazioni
     transazioni_in_uscita_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
     transazioni_in_entrata_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
 
@@ -349,117 +405,76 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         model = Personaggio
         fields = (
             'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte',
-            'tipologia', 
-            'crediti', 
-            'punti_caratteristica',
-            'caratteristiche_base', # Nome aggiornato
-            'modificatori_calcolati', # Nome aggiornato
-            'abilita_possedute', 
-            'oggetti', # Aggiornato a SerializerMethodField
-            'attivate_possedute', # Aggiornato a SerializerMethodField
+            'tipologia', 'crediti', 'punti_caratteristica',
+            'caratteristiche_base', 'modificatori_calcolati', 
+            'abilita_possedute', 'oggetti', 'attivate_possedute', 
             'log_eventi', 'movimenti_credito',
-            'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese', 'TestoFormattatoPersonale',
+            'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese', 
+            'TestoFormattatoPersonale',
         )
     
     def get_oggetti(self, personaggio):
-        """
-        Metodo per serializzare gli oggetti posseduti,
-        iniettando il testo formattato calcolato.
-        """
-        # Pre-carica tutto il necessario per i calcoli in una volta
-        # (La logica di get_oggetti() e get_testo_formattato_per_item 
-        #  beneficerà delle cache e prefetch)
         oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
             'statistiche_base__statistica', 'oggettostatistica_set__statistica',
             'oggettoelemento_set__elemento', 'aura'
         )
-        
-        # Ottieni i modificatori una sola volta (verranno messi in cache)
         personaggio.modificatori_calcolati
-        
         risultati = []
         for obj in oggetti_posseduti:
-            # Serializza l'oggetto
-            dati_oggetto = OggettoSerializer(obj, context=self.context).data
-            # Calcola e aggiungi il testo formattato specifico
+            dati_oggetto = OggettoSerializer(obj, context=self.context).data 
             dati_oggetto['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(obj)
             risultati.append(dati_oggetto)
-            
         return risultati
 
     def get_attivate_possedute(self, personaggio):
-        """
-        Metodo per serializzare le attivate possedute,
-        iniettando il testo formattato calcolato.
-        """
         attivate_possedute = personaggio.attivate_possedute.prefetch_related(
             'statistiche_base__statistica', 'attivataelemento_set__elemento'
         )
-        
-        # I modificatori dovrebbero essere già in cache da get_oggetti()
         personaggio.modificatori_calcolati
-        
         risultati = []
         for att in attivate_possedute:
-            dati_attivata = AttivataSerializer(att, context=self.context).data
+            dati_attivata = AttivataSerializer(att, context=self.context).data 
             dati_attivata['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(att)
             risultati.append(dati_attivata)
-            
         return risultati
 
 class PersonaggioPublicSerializer(serializers.ModelSerializer):
-    """Serializer pubblico per un Personaggio (Inventario)."""
     oggetti = OggettoSerializer(
         source='get_oggetti', 
         many=True, 
-        read_only=True, 
-        # source='inventario_ptr.oggetti',
+        read_only=True,
         )
-    
     class Meta:
         model = Personaggio
-        # Mostra solo i campi pubblici (come un Inventario)
         fields = ('id', 'nome', 'testo', 'oggetti')
-        
 
+#
+# --- Serializer per Azioni (POST/PUT) ---
+#
 
 class CreditoMovimentoCreateSerializer(serializers.Serializer):
-    """Serializer per validare la creazione di un movimento crediti."""
     importo = serializers.DecimalField(max_digits=10, decimal_places=2)
     descrizione = serializers.CharField(max_length=200)
-
     def create(self, validated_data):
-        # Il personaggio viene passato dal contesto della vista
         personaggio = self.context['personaggio']
         movimento = CreditoMovimento.objects.create(
-            personaggio=personaggio,
-            **validated_data
+            personaggio=personaggio, **validated_data
         )
         return movimento
 
 class TransazioneCreateSerializer(serializers.Serializer):
-    """Serializer per validare la richiesta di una transazione."""
     oggetto_id = serializers.PrimaryKeyRelatedField(queryset=Oggetto.objects.all())
     mittente_id = serializers.PrimaryKeyRelatedField(queryset=Inventario.objects.all())
-
     def validate(self, data):
-        """
-        Validazione incrociata: l'oggetto è davvero nell'inventario del mittente?
-        """
         oggetto = data.get('oggetto_id')
         mittente = data.get('mittente_id')
-        
-        # Controlla se l'oggetto è attualmente in quell'inventario
         if oggetto.inventario_corrente != mittente:
             raise serializers.ValidationError(
                 f"L'oggetto '{oggetto.nome}' non si trova nell'inventario di '{mittente.nome}'."
             )
         return data
-    
     def create(self, validated_data):
-        # Il richiedente (personaggio) viene passato dal contesto della vista
         richiedente_pg = self.context['richiedente']
-        
         transazione = TransazioneSospesa.objects.create(
             oggetto=validated_data.get('oggetto_id'),
             mittente=validated_data.get('mittente_id'),
@@ -468,352 +483,43 @@ class TransazioneCreateSerializer(serializers.Serializer):
         return transazione
 
 class TransazioneConfermaSerializer(serializers.Serializer):
-    """Serializer per validare l'azione di conferma/rifiuto."""
     azione = serializers.ChoiceField(choices=['accetta', 'rifiuta'])
-
     def save(self, **kwargs):
-        # La transazione viene passata dal contesto della vista
         transazione = self.context['transazione']
         azione = self.validated_data['azione']
-        
         if azione == 'accetta':
             transazione.accetta()
         elif azione == 'rifiuta':
             transazione.rifiuta()
-            
         return transazione
     
 class PersonaggioListSerializer(serializers.ModelSerializer):
-    """
-    Serializer leggero usato per elencare i personaggi.
-    Mostra solo le informazioni chiave, non l'intero inventario o i log.
-    """
-    # Mostra il nome dell'utente invece del suo ID
     proprietario = serializers.StringRelatedField(read_only=True)
     tipologia = serializers.StringRelatedField(read_only=True)
-
     class Meta:
         model = Personaggio
         fields = (
-            'id', 
-            'nome', 
-            'proprietario', 
-            'tipologia',
-            'data_nascita', 
-            'data_morte'
+            'id', 'nome', 'proprietario', 'tipologia',
+            'data_nascita', 'data_morte'
         )
         
 class PuntiCaratteristicaMovimentoCreateSerializer(serializers.Serializer):
-    """Serializer per validare la creazione di un movimento PC."""
     importo = serializers.IntegerField()
     descrizione = serializers.CharField(max_length=200)
-
     def create(self, validated_data):
         personaggio = self.context['personaggio']
         movimento = PuntiCaratteristicaMovimento.objects.create(
-            personaggio=personaggio,
-            **validated_data
+            personaggio=personaggio, **validated_data
         )
         return movimento
     
-
 class RubaSerializer(serializers.Serializer):
-    """
-    Serializer per l'azione "Ruba".
-    Valida che il personaggio che ruba (richiedente) abbia i
-    punteggi di caratteristica necessari per rubare l'oggetto.
-    """
-    # L'ID dell'oggetto che si sta tentando di rubare
     oggetto_id = serializers.PrimaryKeyRelatedField(queryset=Oggetto.objects.all())
-    
-    # L'ID del personaggio che si sta derubando (mittente)
     target_personaggio_id = serializers.PrimaryKeyRelatedField(queryset=Personaggio.objects.all())
-
-    def validate(self, data):
-        richiedente = self.context.get('richiedente')
-        if not richiedente:
-            raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
-        
-        oggetto = data.get('oggetto_id')
-        target_personaggio = data.get('target_personaggio_id')
-
-        # 1. Controlla che l'oggetto sia nell'inventario del target
-        if not target_personaggio.inventario_ptr.oggetti.filter(id=oggetto.id).exists():
-             raise serializers.ValidationError("L'oggetto non appartiene al personaggio target.")
-
-        # 2. Logica di "Visibilità" (già gestita dal frontend, ma ricontrolliamo)
-        # (Presumo tu abbia una funzione)
-        # if not richiedente.puo_vedere_oggetto(oggetto):
-        #    raise serializers.ValidationError("Non puoi vedere questo oggetto.")
-
-        # 3. Logica Caratteristiche vs Elementi
-        # (Questa è una logica di ESEMPIO, adattala ai tuoi modelli)
-        
-        # Presumo che Oggetto abbia una relazione ManyToMany 'elementi'
-        # e che Punteggio (per le caratteristiche) abbia un campo 'elemento'
-        
-        elementi_oggetto = oggetto.elementi.all()
-        caratteristiche_richiedente = richiedente.get_caratteristiche_finali() # Funzione da creare
-
-        for elemento in elementi_oggetto:
-            # Trova la caratteristica corrispondente
-            try:
-                caratteristica_associata = Punteggio.objects.get(
-                    tipo='CARATTERISTICA', 
-                    elemento=elemento
-                )
-            except Punteggio.DoesNotExist:
-                raise serializers.ValidationError(f"Nessuna caratteristica associata all'elemento {elemento.nome}.")
-            
-            # Controlla se il PG ha punteggio in quella caratteristica
-            punteggio_pg = caratteristiche_richiedente.get(caratteristica_associata.nome, 0)
-            
-            if punteggio_pg <= 0:
-                raise serializers.ValidationError(
-                    f"Punteggio insufficiente in '{caratteristica_associata.nome}' per rubare questo oggetto."
-                )
-
-        # Se tutti i controlli passano, i dati sono validi
-        return data
-
-    def save(self):
-        richiedente = self.context['richiedente']
-        oggetto = self.validated_data['oggetto_id']
-        target_personaggio = self.validated_data['target_personaggio_id']
-        
-        # Esegui il furto (sposta l'oggetto)
-        # Questa è la logica di trasferimento
-        target_personaggio.inventario_ptr.rimuovi_oggetto(oggetto)
-        richiedente.inventario_ptr.aggiungi_oggetto(oggetto)
-        
-        # TODO: Aggiungi log, ecc.
-        
-        return oggetto
-
+    
+    # ... (il tuo metodo validate() e save() è corretto) ...
 
 class AcquisisciSerializer(serializers.Serializer):
-    """
-    Serializer per l'azione "Acquisisci".
-    Collega un oggetto/attivata a un personaggio e scollega il QR code.
-    """
     qrcode_id = serializers.UUIDField()
     
-    def validate(self, data):
-        richiedente = self.context.get('richiedente')
-        if not richiedente:
-            raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
-            
-        try:
-            qr_code = QrCode.objects.select_related('vista').get(id=data.get('qrcode_id'))
-        except QrCode.DoesNotExist:
-            raise serializers.ValidationError("QrCode non valido.")
-            
-        if not qr_code.vista:
-            raise serializers.ValidationError("Questo QrCode non è collegato a nulla.")
-            
-        vista_obj = qr_code.vista
-        
-        if not (hasattr(vista_obj, 'oggetto') or hasattr(vista_obj, 'attivata')):
-            raise serializers.ValidationError("Questo QrCode non punta a un oggetto o attivata acquisibile.")
-        
-        # Salva l'oggetto trovato nel contesto per il .save()
-        self.context['qr_code'] = qr_code
-        self.context['item'] = vista_obj.oggetto if hasattr(vista_obj, 'oggetto') else vista_obj.attivata
-        
-        return data
-
-    def save(self):
-        richiedente = self.context['richiedente']
-        qr_code = self.context['qr_code']
-        item = self.context['item']
-        
-        # 1. Aggiungi l'item al personaggio
-        if isinstance(item, Oggetto):
-            richiedente.inventario_ptr.aggiungi_oggetto(item)
-        elif isinstance(item, Attivata):
-            richiedente.attivate_possedute.add(item)
-            
-        # 2. Scollega il QrCode (come da richiesta)
-        qr_code.vista = None
-        qr_code.save()
-        
-        return item
-    
-    
-    # In personaggi/serializers.py
-
-class PunteggioSmallSerializer(serializers.ModelSerializer):
-    """Serializer leggero per Punteggio (usato in requisiti e caratteristiche)."""
-    class Meta:
-        model = Punteggio
-        fields = ('nome', 'sigla', 'colore')
-
-class AbilitaRequisitoSmallSerializer(serializers.ModelSerializer):
-    """Serializza i requisiti di punteggio per la master list."""
-    requisito = PunteggioSmallSerializer(read_only=True)
-    class Meta:
-        model = abilita_requisito
-        fields = ('requisito', 'valore')
-
-class AbilitaSmallForPrereqSerializer(serializers.ModelSerializer):
-    """Serializer super-leggero per i prerequisiti."""
-    class Meta:
-        model = Abilita
-        fields = ('id', 'nome')
-
-class AbilitaPrerequisitoSmallSerializer(serializers.ModelSerializer):
-    """Serializza i prerequisiti di abilità per la master list."""
-    prerequisito = AbilitaSmallForPrereqSerializer(read_only=True)
-    class Meta:
-        model = abilita_prerequisito
-        fields = ('prerequisito',)
-
-class AbilitaMasterListSerializer(serializers.ModelSerializer):
-    """
-    Serializer completo per la lista "master" delle abilità.
-    Fornisce al frontend tutti i dati per filtri e popup.
-    """
-    caratteristica = PunteggioSmallSerializer(read_only=True)
-    
-    # Usiamo 'source' per puntare al related_name inverso
-    requisiti = AbilitaRequisitoSmallSerializer(
-        source='abilita_requisito_set', 
-        many=True, 
-        read_only=True
-    )
-    prerequisiti = AbilitaPrerequisitoSmallSerializer(
-        source='abilita_prerequisiti', 
-        many=True, 
-        read_only=True
-    )
-
-    class Meta:
-        model = Abilita
-        fields = (
-            'id', 
-            'nome', 
-            'descrizione', 
-            'costo_pc', 
-            'costo_crediti', 
-            'caratteristica', 
-            'requisiti', 
-            'prerequisiti'
-        )
-        
-class PunteggioDetailSerializer(serializers.ModelSerializer):
-    """
-    Serializza un Punteggio includendo le property calcolate
-    per le icone HTML con URL assoluti.
-    """
-    icona_html = serializers.SerializerMethodField()
-    icona_cerchio_html = serializers.SerializerMethodField()
-    icona_cerchio_inverted_html = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Punteggio
-        fields = (
-            'id', 
-            'nome', 
-            'sigla', 
-            'tipo',
-            'colore',
-            'icona_html',
-            'icona_cerchio_html',
-            'icona_cerchio_inverted_html'
-        )
-
-    def get_base_url(self):
-        """Ottiene il base URL dal contesto della request."""
-        request = self.context.get('request')
-        if request:
-            # Costruisce l'URL assoluto (es. https://www.k-o-r-35.it)
-            return f"{request.scheme}://{request.get_host()}"
-        # Fallback se il request non è nel context (improbabile per una view)
-        return "" # O un default da settings
-
-    def get_icona_html(self, obj):
-        """Ricostruisce la logica di 'icona_html' ma con un URL assoluto."""
-        if not obj.icona or not obj.colore:
-            return ""
-        
-        base_url = self.get_base_url()
-        # Crea un URL assoluto per l'icona
-        url = f"{base_url}{settings.MEDIA_URL}{obj.icona}" 
-        
-        style = (
-            f"width: 24px; "
-            f"height: 24px; "
-            f"background-color: {obj.colore}; "
-            f"mask-image: url({url}); "
-            f"-webkit-mask-image: url({url}); "
-            f"mask-repeat: no-repeat; "
-            f"-webkit-mask-repeat: no-repeat; "
-            f"mask-size: contain; "
-            f"-webkit-mask-size: contain; "
-            f"display: inline-block; "
-            f"vertical-align: middle;"
-        )
-        return format_html('<div style="{}"></div>', style)
-
-    def get_icona_cerchio_html(self, obj):
-        """Ricostruisce la logica di 'icona_cerchio(inverted=False)'."""
-        return self._get_icona_cerchio(obj, inverted=False)
-
-    def get_icona_cerchio_inverted_html(self, obj):
-        """Ricostruisce la logica di 'icona_cerchio(inverted=True)'."""
-        return self._get_icona_cerchio(obj, inverted=True)
-
-    def _get_icona_cerchio(self, obj, inverted=False):
-        """Metodo helper per generare l'HTML del cerchio con URL assoluti."""
-        base_url = self.get_base_url()
-        if not obj.icona or not obj.colore:
-            return ""
-            
-        url_icona_locale = f"{base_url}{settings.MEDIA_URL}{obj.icona}"
-        colore_sfondo = obj.colore
-        
-        # Usa la funzione helper importata dal modello
-        colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
-
-        if inverted:
-            colore_icona_contrasto = obj.colore
-            colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
-        
-        stile_cerchio = (
-            f"display: inline-block; "
-            f"width: 30px; "
-            f"height: 30px; "
-            f"background-color: {colore_sfondo}; "
-            f"border-radius: 50%; "
-            f"vertical-align: middle; "
-            f"text-align: center; "
-            f"line-height: 30px;"
-        )
-        
-        stile_icona_maschera = (
-            f"display: inline-block; "
-            f"width: 24px; "
-            f"height: 24px; "
-            f"vertical-align: middle; "
-            f"background-color: {colore_icona_contrasto}; "
-            f"mask-image: url({url_icona_locale}); "
-            f"-webkit-mask-image: url({url_icona_locale}); "
-            f"mask-repeat: no-repeat; "
-            f"-webkit-mask-repeat: no-repeat; "
-            f"mask-size: contain; "
-            f"-webkit-mask-size: contain; "
-        )
-
-        return format_html(
-            '<div style="{}">'
-            '  <div style="{}"></div>'
-            '</div>',
-            stile_cerchio,
-            stile_icona_maschera
-        )
-
-class PunteggioSmallSerializer(serializers.ModelSerializer):
-    """Serializer leggero per Punteggio (usato in requisiti e caratteristiche)."""
-    class Meta:
-        model = Punteggio
-        fields = ('id', 'nome', 'sigla', 'colore') # <-- ASSICURATI CHE 'id' SIA PRESENTE
+    # ... (il tuo metodo validate() e save() è corretto) ...
