@@ -86,8 +86,11 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         media_url = settings.MEDIA_URL
         if not media_url:
             media_url = "/media/"
+        # Gestisce correttamente gli slash
         if media_url.startswith('/'):
             media_url = media_url[1:]
+        if media_url and not media_url.endswith('/'):
+             media_url = f"{media_url}/"
             
         icona_path = str(obj.icona)
         if icona_path.startswith('/'):
@@ -219,7 +222,7 @@ class AbilitaUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Abilita
         fields = ['id', 'nome', 'descrizione', 'caratteristica', 'requisiti', 'punteggio_acquisito']
-    # ... (il tuo metodo update() è corretto) ...
+    
     def update(self, instance, validated_data):
         requisiti_data = validated_data.pop('requisiti', [])
         punteggi_data = validated_data.pop('punteggio_acquisito', [])
@@ -287,7 +290,7 @@ class AbilitaSerializer(serializers.ModelSerializer):
     """
     Serializer per le 'abilita_possedute' del personaggio (usato in PersonaggioDetailSerializer).
     """
-    caratteristica = PunteggioSmallSerializer(read_only=True) 
+    caratteristica = PunteggioSmallSerializer(read_only=True) # <-- CAMPO CORRETTO
     class Meta:
         model = Abilita
         # Aggiungi 'caratteristica' alla lista dei campi
@@ -549,11 +552,12 @@ class RubaSerializer(serializers.Serializer):
         oggetto = data.get('oggetto_id')
         target_personaggio = data.get('target_personaggio_id')
 
-        if not target_personaggio.inventario_ptr.oggetti.filter(id=oggetto.id).exists():
+        if not target_personaggio.get_oggetti().filter(id=oggetto.id).exists(): # Logica corretta
              raise serializers.ValidationError("L'oggetto non appartiene al personaggio target.")
 
-        # Esempio di logica di validazione (da adattare)
-        # ... (commentata per ora) ...
+        # Logica di validazione esempio (da adattare)
+        # ... 
+        
         return data
 
     def save(self):
@@ -561,11 +565,12 @@ class RubaSerializer(serializers.Serializer):
         oggetto = self.validated_data['oggetto_id']
         target_personaggio = self.validated_data['target_personaggio_id']
         
-        # Sposta l'oggetto (logica di esempio)
-        # target_personaggio.inventario_ptr.rimuovi_oggetto(oggetto)
-        # richiedente.inventario_ptr.aggiungi_oggetto(oggetto)
+        # Logica di spostamento oggetto
+        oggetto.sposta_in_inventario(richiedente) # Usa il metodo del modello
         
-        # TODO: Aggiungi log, ecc.
+        # Aggiungi log
+        richiedente.aggiungi_log(f"Oggetto '{oggetto.nome}' rubato da {target_personaggio.nome}.")
+        target_personaggio.aggiungi_log(f"Oggetto '{oggetto.nome}' rubato da {richiedente.nome}.")
         
         return oggetto
 
@@ -579,8 +584,9 @@ class AcquisisciSerializer(serializers.Serializer):
             raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
             
         try:
-            qr_code = QrCode.objects.select_related('vista').get(id=data.get('qrcode_id'))
-        except QrCode.DoesNotExist:
+            # Converte UUID da stringa
+            qr_code = QrCode.objects.select_related('vista').get(id=str(data.get('qrcode_id')))
+        except (QrCode.DoesNotExist, ValueError, TypeError):
             raise serializers.ValidationError("QrCode non valido.")
             
         if not qr_code.vista:
@@ -588,11 +594,17 @@ class AcquisisciSerializer(serializers.Serializer):
             
         vista_obj = qr_code.vista
         
-        if not (hasattr(vista_obj, 'oggetto') or hasattr(vista_obj, 'attivata')):
-            raise serializers.ValidationError("Questo QrCode non punta a un oggetto o attivata acquisibile.")
-        
+        # Controlla se 'vista_obj' è un Oggetto o Attivata
+        item = None
+        if hasattr(vista_obj, 'oggetto'):
+             item = vista_obj.oggetto
+        elif hasattr(vista_obj, 'attivata'):
+             item = vista_obj.attivata
+        else:
+             raise serializers.ValidationError("Questo QrCode non punta a un oggetto o attivata acquisibile.")
+
         self.context['qr_code'] = qr_code
-        self.context['item'] = vista_obj.oggetto if hasattr(vista_obj, 'oggetto') else vista_obj.attivata
+        self.context['item'] = item
         
         return data
 
@@ -602,11 +614,11 @@ class AcquisisciSerializer(serializers.Serializer):
         item = self.context['item']
         
         if isinstance(item, Oggetto):
-            # Assicurati di avere un metodo 'aggiungi_oggetto'
-            # richiedente.inventario_ptr.aggiungi_oggetto(item) 
-            pass # Sostituisci con la logica corretta
+            item.sposta_in_inventario(richiedente) # Usa il metodo corretto
+            richiedente.aggiungi_log(f"Acquisito oggetto: {item.nome}.")
         elif isinstance(item, Attivata):
             richiedente.attivate_possedute.add(item)
+            richiedente.aggiungi_log(f"Acquisita attivata: {item.nome}.")
             
         qr_code.vista = None
         qr_code.save()
