@@ -8,6 +8,7 @@ from .models import OggettoInInventario
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
+from .models import Punteggio, CARATTERISTICA
 import uuid # Importa uuid per il type hinting (opzionale ma pulito)
 
 from .models import STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES
@@ -42,6 +43,7 @@ from .serializers import (
     TransazioneConfermaSerializer, #
     RubaSerializer, 
     AcquisisciSerializer,
+    PunteggioDetailSerializer,
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
@@ -921,3 +923,15 @@ def download_icon_patch(request):
         return HttpResponse(f"Failed to contact Iconify API: {e}", status=500)
     except Exception as e:
         return HttpResponse(f"Internal server error: {e}", status=500)
+    
+class CaratteristicheListView(generics.ListAPIView):
+    """
+    GET /api/punteggi/caratteristiche/
+    Restituisce l'elenco completo di tutti i Punteggi
+    che sono di tipo CARATTERISTICA (CA).
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = PunteggioDetailSerializer
+    
+    # Filtra il queryset per includere solo le Caratteristiche
+    queryset = Punteggio.objects.filter(tipo=CARATTERISTICA).order_by('nome')

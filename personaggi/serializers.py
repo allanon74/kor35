@@ -696,3 +696,25 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
             'requisiti', 
             'prerequisiti'
         )
+        
+class PunteggioDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializza un Punteggio includendo le property calcolate
+    per le icone HTML.
+    """
+    icona_html = serializers.CharField(read_only=True)
+    icona_cerchio_html = serializers.CharField(read_only=True)
+    icona_cerchio_inverted_html = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Punteggio
+        fields = (
+            'id', 
+            'nome', 
+            'sigla', 
+            'tipo',
+            'colore',
+            'icona_html',
+            'icona_cerchio_html',
+            'icona_cerchio_inverted_html'
+        )
