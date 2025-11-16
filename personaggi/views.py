@@ -25,6 +25,11 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.views import ObtainAuthToken
 
+from rest_framework import generics
+from django.db import transaction
+from .serializers import AbilitaMasterListSerializer
+
+
 from .serializers import (
     OggettoSerializer, AttivataSerializer, 
     ManifestoSerializer, A_vistaSerializer, 
@@ -154,6 +159,100 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     authentication_classes = (TokenAuthentication,)
     permission_classes = (permissions.IsAuthenticated, )
+
+class AbilitaMasterListView(generics.ListAPIView):
+    """
+    GET /api/abilita/master_list/
+    Restituisce l'elenco completo di tutte le abilità con i dati
+    necessari per il calcolo dei requisiti e per i popup di dettaglio.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = AbilitaMasterListSerializer
+    
+    # Ottimizziamo la query per includere tutti i dati relazionati
+    queryset = Abilita.objects.select_related(
+        'caratteristica'
+    ).prefetch_related(
+        'abilita_requisito_set__requisito', 
+        'abilita_prerequisiti__prerequisito'
+    ).order_by('nome')
+
+
+class AcquisisciAbilitaView(APIView):
+    """
+    POST /api/personaggio/me/acquisisci_abilita/
+    Esegue l'acquisto di un'abilità per il personaggio loggato.
+    Richiede: {"abilita_id": <id>}
+    """
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic # Assicura che l'intera operazione fallisca o riesca
+    def post(self, request, format=None):
+        try:
+            personaggio = Personaggio.objects.select_related('tipologia').get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        abilita_id = request.data.get('abilita_id')
+        if not abilita_id:
+            return Response({"error": "abilita_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            abilita = Abilita.objects.prefetch_related(
+                'abilita_requisito_set__requisito', 
+                'abilita_prerequisiti'
+            ).get(id=abilita_id)
+        except Abilita.DoesNotExist:
+            return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Controllo: Già posseduta?
+        if personaggio.abilita_possedute.filter(id=abilita_id).exists():
+            return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Controllo: Requisiti di Punteggio
+        character_scores = personaggio.caratteristiche_base
+        for req in abilita.abilita_requisito_set.all():
+            punteggio_nome = req.requisito.nome
+            valore_richiesto = req.valore
+            punteggio_pg = character_scores.get(punteggio_nome, 0)
+            
+            if punteggio_pg < valore_richiesto:
+                return Response(
+                    {"error": f"Requisito non soddisfatto: {punteggio_nome} {valore_richiesto} (possiedi {punteggio_pg})"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # 3. Controllo: Prerequisiti di Abilità
+        required_prereqs = [p.prerequisito for p in abilita.abilita_prerequisiti.all()]
+        if required_prereqs:
+            possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
+            for prereq in required_prereqs:
+                if prereq.id not in possessed_skill_ids:
+                    return Response(
+                        {"error": f"Prerequisito non soddisfatto: {prereq.nome}"},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+        # 4. Controllo: Costi
+        if personaggio.punti_caratteristica < abilita.costo_pc:
+            return Response({"error": "Punti Caratteristica insufficenti."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if personaggio.crediti < abilita.costo_crediti:
+            return Response({"error": "Crediti insufficenti."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 5. Esecuzione Acquisto (Tutto valido)
+        personaggio.modifica_pc(-abilita.costo_pc, f"Acquisito abilità: {abilita.nome}")
+        personaggio.modifica_crediti(-abilita.costo_crediti, f"Acquisito abilità: {abilita.nome}")
+        personaggio.abilita_possedute.add(abilita)
+        
+        # Restituisce i dati aggiornati del personaggio
+        serializer = PersonaggioDetailSerializer(personaggio)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
     
 def qr_code_html_view(request: HttpRequest) -> HttpResponse:
     uuid_str = request.GET.get('id')

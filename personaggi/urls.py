@@ -70,5 +70,7 @@ urlpatterns = [
     path('api/transazioni/<int:pk>/conferma/', views.TransazioneConfermaView.as_view(), name='api_transazioni_conferma'),
     path('api/transazioni/ruba/', views.RubaView.as_view(), name='api_ruba'),
     path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
+    path('api/abilita/master_list/', views.AbilitaMasterListView.as_view(), name='abilita_master_list'),
+    path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
     
 ]

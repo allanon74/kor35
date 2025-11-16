@@ -635,3 +635,64 @@ class AcquisisciSerializer(serializers.Serializer):
         qr_code.save()
         
         return item
+    
+    
+    # In personaggi/serializers.py
+
+class PunteggioSmallSerializer(serializers.ModelSerializer):
+    """Serializer leggero per Punteggio (usato in requisiti e caratteristiche)."""
+    class Meta:
+        model = Punteggio
+        fields = ('nome', 'sigla', 'colore')
+
+class AbilitaRequisitoSmallSerializer(serializers.ModelSerializer):
+    """Serializza i requisiti di punteggio per la master list."""
+    requisito = PunteggioSmallSerializer(read_only=True)
+    class Meta:
+        model = abilita_requisito
+        fields = ('requisito', 'valore')
+
+class AbilitaSmallForPrereqSerializer(serializers.ModelSerializer):
+    """Serializer super-leggero per i prerequisiti."""
+    class Meta:
+        model = Abilita
+        fields = ('id', 'nome')
+
+class AbilitaPrerequisitoSmallSerializer(serializers.ModelSerializer):
+    """Serializza i prerequisiti di abilità per la master list."""
+    prerequisito = AbilitaSmallForPrereqSerializer(read_only=True)
+    class Meta:
+        model = abilita_prerequisito
+        fields = ('prerequisito',)
+
+class AbilitaMasterListSerializer(serializers.ModelSerializer):
+    """
+    Serializer completo per la lista "master" delle abilità.
+    Fornisce al frontend tutti i dati per filtri e popup.
+    """
+    caratteristica = PunteggioSmallSerializer(read_only=True)
+    
+    # Usiamo 'source' per puntare al related_name inverso
+    requisiti = AbilitaRequisitoSmallSerializer(
+        source='abilita_requisito_set', 
+        many=True, 
+        read_only=True
+    )
+    prerequisiti = AbilitaPrerequisitoSmallSerializer(
+        source='abilita_prerequisiti', 
+        many=True, 
+        read_only=True
+    )
+
+    class Meta:
+        model = Abilita
+        fields = (
+            'id', 
+            'nome', 
+            'descrizione', 
+            'costo_pc', 
+            'costo_crediti', 
+            'caratteristica', 
+            'requisiti', 
+            'prerequisiti'
+        )
