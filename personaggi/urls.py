@@ -72,7 +72,7 @@ urlpatterns = [
     path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
     path('api/abilita/master_list/', views.AbilitaMasterListView.as_view(), name='abilita_master_list'),
     path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
-    path('api/punteggi/caratteristiche/', views.CaratteristicheListView.as_view(), name='api_punteggi_caratteristiche'),
+    path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
     
     path('api/', include(router.urls)),
     

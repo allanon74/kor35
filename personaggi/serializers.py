@@ -718,3 +718,9 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'icona_cerchio_html',
             'icona_cerchio_inverted_html'
         )
+
+class PunteggioSmallSerializer(serializers.ModelSerializer):
+    """Serializer leggero per Punteggio (usato in requisiti e caratteristiche)."""
+    class Meta:
+        model = Punteggio
+        fields = ('id', 'nome', 'sigla', 'colore') # <-- ASSICURATI CHE 'id' SIA PRESENTE

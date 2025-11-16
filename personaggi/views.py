@@ -924,9 +924,9 @@ def download_icon_patch(request):
     except Exception as e:
         return HttpResponse(f"Internal server error: {e}", status=500)
     
-class CaratteristicheListView(generics.ListAPIView):
+class PunteggiListView(generics.ListAPIView):
     """
-    GET /api/punteggi/caratteristiche/
+    GET /api/punteggi/all/
     Restituisce l'elenco completo di tutti i Punteggi
     che sono di tipo CARATTERISTICA (CA).
     """
@@ -934,4 +934,4 @@ class CaratteristicheListView(generics.ListAPIView):
     serializer_class = PunteggioDetailSerializer
     
     # Filtra il queryset per includere solo le Caratteristiche
-    queryset = Punteggio.objects.filter(tipo=CARATTERISTICA).order_by('nome')
+    queryset = Punteggio.objects.all().order_by('tipo', 'nome')
