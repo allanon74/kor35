@@ -163,7 +163,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     def get_valore_predefinito(self, obj):
         # Restituisce il valore base solo se è una Statistica
         if hasattr(obj, 'statistica'):
-            return obj.statistica.valore_predefinito
+            return obj.statistica.valore_base_predefinito
         return 0 # Le Caratteristiche hanno base 0
 
     def get_parametro(self, obj):
