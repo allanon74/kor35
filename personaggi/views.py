@@ -5,7 +5,7 @@ from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 
-from .models import OggettoInInventario
+from .models import OggettoInInventario, Abilita, Tier, Mattone
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
@@ -282,6 +282,94 @@ class AcquisisciAbilitaView(APIView):
         # Restituisce i dati aggiornati del personaggio
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AbilitaAcquistabiliView(generics.GenericAPIView):
+    """
+    GET /api/personaggio/me/abilita_acquistabili/
+    Restituisce un elenco *filtrato* di abilità che il personaggio
+    può attualmente acquistare, con i costi già calcolati.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = AbilitaMasterListSerializer
+
+    def get(self, request, format=None):
+        try:
+            personaggio = Personaggio.objects.select_related('tipologia').get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # --- Logica di filtraggio (adattata dal frontend) ---
+
+        # 1. Ottieni i dati del personaggio
+        possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
+        char_scores = personaggio.caratteristiche_base
+        mods = personaggio.modificatori_calcolati
+
+        # 2. Calcola lo sconto (come in AcquisisciAbilitaView)
+        sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0}) 
+        sconto_valore = max(0, sconto_stat.get('add', 0)) 
+        sconto_percent = Decimal(sconto_valore) / Decimal(100)
+        moltiplicatore_costo = Decimal(1) - sconto_percent
+
+        # 3. Prendi *tutte* le abilità non possedute, pre-caricando i dati
+        # (Usiamo la stessa ottimizzazione della Soluzione 1)
+        master_skills_list = Abilita.objects.exclude(
+            id__in=possessed_skill_ids
+        ).select_related(
+            'caratteristica'
+        ).prefetch_related(
+            'abilita_requisito_set__requisito', 
+            'abilita_prerequisiti__prerequisito',
+            'abilita_punteggio_set__punteggio',
+            'abilitastatistica_set__statistica'
+        ).order_by('nome')
+
+        # 4. Filtra in Python (come faceva il frontend)
+        acquirable_skills = []
+        for skill in master_skills_list:
+            
+            # Controlla Requisiti
+            meets_reqs = True
+            for req in skill.abilita_requisito_set.all():
+                if char_scores.get(req.requisito.nome, 0) < req.valore:
+                    meets_reqs = False
+                    break
+            if not meets_reqs:
+                continue
+
+            # Controlla Prerequisiti
+            meets_prereqs = True
+            for pre in skill.abilita_prerequisiti.all():
+                if pre.prerequisito.id not in possessed_skill_ids:
+                    meets_prereqs = False
+                    break
+            if not meets_prereqs:
+                continue
+            
+            # Se passa, è acquistabile
+            acquirable_skills.append(skill)
+
+        # 5. Serializza i dati e aggiungi i costi calcolati
+        serializer = AbilitaMasterListSerializer(acquirable_skills, many=True, context={'request': request})
+        serialized_data = serializer.data
+        
+        final_data = []
+        for skill_data in serialized_data:
+            costo_crediti_base = Decimal(skill_data.get('costo_crediti', 0))
+            costo_pc_base = skill_data.get('costo_pc', 0)
+            
+            # Calcola i costi finali
+            costo_crediti_calc = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal('0.01'))
+            
+            # Aggiungi i costi calcolati al dizionario
+            skill_data['costo_pc_calc'] = costo_pc_base # PC non è scontato
+            skill_data['costo_crediti_calc'] = float(costo_crediti_calc) # float è JSON-friendly
+            final_data.append(skill_data)
+
+        return Response(final_data, status=status.HTTP_200_OK)
 
 
     

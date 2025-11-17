@@ -14,7 +14,7 @@ from .views import (AbilViewSet,
     AbilitaViewSet, TierViewSet, SpellViewSet, MattoneViewSet, PunteggioViewSet, TabellaViewSet,
     AbilitaTierViewSet, AbilitaRequisitoViewSet, AbilitaSbloccataViewSet,
     AbilitaPunteggioViewSet, AbilitaPrerequisitoViewSet,
-    SpellMattoneViewSet, SpellElementoViewSet, MyAuthToken, get_csrf_token	
+    SpellMattoneViewSet, SpellElementoViewSet, MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
 )
 
 app_name = 'personaggi'
@@ -72,6 +72,7 @@ urlpatterns = [
     path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
     path('api/abilita/master_list/', views.AbilitaMasterListView.as_view(), name='abilita_master_list'),
     path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
+    path('personaggio/me/abilita_acquistabili/', views.AbilitaAcquistabiliView.as_view(), name='abilita-acquistabili'),
     path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
     
     path('api/', include(router.urls)),

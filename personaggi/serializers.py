@@ -473,7 +473,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     
     # --- CAMPI CHIAVE ---
     # Ora usa l'UNICA E CORRETTA AbilitaSerializer (definita sopra)
-    abilita_possedute = AbilitaSerializer(many=True, read_only=True) 
+    # abilita_possedute = AbilitaSerializer(many=True, read_only=True) 
+    abilita_possedute = AbilitaMasterListSerializer(many=True, read_only=True)
     
     oggetti = serializers.SerializerMethodField()
     attivate_possedute = serializers.SerializerMethodField()
