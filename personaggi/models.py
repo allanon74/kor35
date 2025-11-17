@@ -311,6 +311,11 @@ class Statistica(Punteggio):
         help_text="Come questo punteggio si combina con altri."
     )
 
+    is_primaria = models.BooleanField(
+        default=False,
+        help_text="Seleziona se questa è una statistica primaria da mostrare in homepage."
+    )
+
     def save(self, *args, **kwargs):
         # Forza il tipo di Punteggio a essere STATISTICA
         self.tipo = STATISTICA
