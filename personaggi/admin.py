@@ -28,7 +28,7 @@ from icon_widget.widgets import CustomIconWidget
 
 # ----------- STILE E FORMS PERSONALIZZATI -------------
 
-HIGHLIGHT_STYLE = 'background-color: #fffbe6; border: 1px solid #ffe58f;'
+HIGHLIGHT_STYLE = 'background-color: #fff3e0; border: 2px solid #ff9800; font-weight: bold;'
 
 class PunteggioAdminForm(forms.ModelForm):
     class Meta:
@@ -51,8 +51,9 @@ class AbilitaStatisticaForm(forms.ModelForm):
             default_value = self.instance.statistica.valore_predefinito
             current_value = self.instance.valore
             
-            if current_value != default_value:
-                self.fields['valore'].widget.attrs['style'] = HIGHLIGHT_STYLE
+            for field_name in self.fields:
+                    # if field_name != 'statistica': # Non evidenziare il campo readonly
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
 
 class OggettoStatisticaBaseForm(forms.ModelForm):
     class Meta:
@@ -65,8 +66,9 @@ class OggettoStatisticaBaseForm(forms.ModelForm):
             default_value = self.instance.statistica.valore_base_predefinito
             current_value = self.instance.valore_base
             
-            if current_value != default_value:
-                self.fields['valore_base'].widget.attrs['style'] = HIGHLIGHT_STYLE
+            for field_name in self.fields:
+                    # if field_name != 'statistica':
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
 
 class OggettoStatisticaForm(forms.ModelForm):
     class Meta:
@@ -79,9 +81,11 @@ class OggettoStatisticaForm(forms.ModelForm):
             default_value = self.instance.statistica.valore_predefinito
             current_value = self.instance.valore
             
-            if current_value != default_value:
-                self.fields['valore'].widget.attrs['style'] = HIGHLIGHT_STYLE
-
+            # Applica lo stile a tutti i campi della riga
+            for field_name in self.fields:
+                # if field_name != 'statistica':
+                    self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
+                        
 class AttivataStatisticaBaseForm(forms.ModelForm):
     class Meta:
         model = AttivataStatisticaBase
@@ -94,7 +98,10 @@ class AttivataStatisticaBaseForm(forms.ModelForm):
             current_value = self.instance.valore_base
             
             if current_value != default_value:
-                self.fields['valore_base'].widget.attrs['style'] = HIGHLIGHT_STYLE
+                # Applica lo stile a tutti i campi della riga
+                for field_name in self.fields:
+                    # if field_name != 'statistica':
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
 
 
 # ----------- CLASSI ASTRATTE ADMIN -------------
