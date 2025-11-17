@@ -1,4 +1,5 @@
 import string
+from decimal import Decimal
 from django.shortcuts import render
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
@@ -56,6 +57,8 @@ from django.http import JsonResponse
 import requests
 import os
 from django.conf import settings
+
+PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
 
 
 @ensure_csrf_cookie
@@ -184,6 +187,7 @@ class AcquisisciAbilitaView(APIView):
     """
     POST /api/personaggio/me/acquisisci_abilita/
     Esegue l'acquisto di un'abilità per il personaggio loggato.
+    applicando gli sconti PARAMETRO_SCONTO_ABILITA SOLO ai crediti.
     Richiede: {"abilita_id": <id>}
     """
     permission_classes = [IsAuthenticated]
@@ -239,19 +243,42 @@ class AcquisisciAbilitaView(APIView):
                     )
 
         # 4. Controllo: Costi
-        if personaggio.punti_caratteristica < abilita.costo_pc:
-            return Response({"error": "Punti Caratteristica insufficenti."}, status=status.HTTP_400_BAD_REQUEST)
+# 4a. Calcola il valore dello sconto
+        mods = personaggio.modificatori_calcolati
+        # Usa la nuova costante 'rid_cos_ab'
+        sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0}) 
         
-        if personaggio.crediti < abilita.costo_crediti:
-            return Response({"error": "Crediti insufficenti."}, status=status.HTTP_400_BAD_REQUEST)
+        sconto_valore = max(0, sconto_stat.get('add', 0)) 
+        sconto_percent = Decimal(sconto_valore) / Decimal(100)
+        moltiplicatore_costo = Decimal(1) - sconto_percent
 
-        # 5. Esecuzione Acquisto (Tutto valido)
-        personaggio.modifica_pc(-abilita.costo_pc, f"Acquisito abilità: {abilita.nome}")
-        personaggio.modifica_crediti(-abilita.costo_crediti, f"Acquisito abilità: {abilita.nome}")
+        # 4b. Calcola i costi finali
+        
+        # --- MODIFICA CHIAVE ---
+        # Il costo in PC NON è scontato
+        costo_pc_finale = abilita.costo_pc 
+        # --- FINE MODIFICA ---
+
+        # Il costo in Crediti È scontato
+        costo_crediti_base = Decimal(abilita.costo_crediti)
+        costo_crediti_finale = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal('0.01')) # Arrotonda a 2 decimali
+
+        # 4c. Controlla se il personaggio ha abbastanza fondi
+        if personaggio.punti_caratteristica < costo_pc_finale:
+            return Response({"error": f"Punti Caratteristica insufficenti. Richiesti: {costo_pc_finale}"}, status=status.HTTP_400_BAD_REQUEST) 
+        
+        if personaggio.crediti < costo_crediti_finale:
+            return Response({"error": f"Crediti insufficenti. Richiesti: {costo_crediti_finale} (Costo base: {abilita.costo_crediti}, Sconto: {sconto_valore}%)"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- 5. Esecuzione Acquisto (BLOCCO MODIFICATO) ---
+        
+        # Addebita i costi finali (solo crediti scontati)
+        personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
+        personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
         personaggio.abilita_possedute.add(abilita)
         
         # Restituisce i dati aggiornati del personaggio
-        serializer = PersonaggioDetailSerializer(personaggio)
+        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
