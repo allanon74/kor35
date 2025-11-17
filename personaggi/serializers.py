@@ -6,7 +6,7 @@ from django.utils.html import format_html
 
 # Importa i modelli e le funzioni helper
 from .models import (
-    _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
+    AbilitaStatistica, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
     Spell, Mattone, Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
     abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
     spell_mattone, spell_elemento, Oggetto, Attivata, Manifesto, A_vista, 
@@ -59,6 +59,20 @@ class PunteggioSmallSerializer(serializers.ModelSerializer):
     class Meta:
         model = Punteggio
         fields = ('id', 'nome', 'sigla', 'colore')
+        
+class AbilitaPunteggioSmallSerializer(serializers.ModelSerializer):
+    """Serializza i punteggi dati da un'abilità (es. +1 Forza)."""
+    punteggio = PunteggioSmallSerializer(read_only=True)
+    class Meta:
+        model = abilita_punteggio
+        fields = ('punteggio', 'valore')
+
+class AbilitaStatisticaSmallSerializer(serializers.ModelSerializer):
+    """Serializza le statistiche modificate da un'abilità (es. +5 PV)."""
+    statistica = PunteggioSmallSerializer(read_only=True) # La statistica È un punteggio
+    class Meta:
+        model = AbilitaStatistica
+        fields = ('statistica', 'valore', 'tipo_modificatore')
 
 class PunteggioDetailSerializer(serializers.ModelSerializer):
     """
@@ -305,11 +319,24 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
         many=True, 
         read_only=True
     )
+    
+    punteggi_assegnati = AbilitaPunteggioSmallSerializer(
+        source='abilita_punteggio_set', 
+        many=True, 
+        read_only=True
+    )
+    statistiche_modificate = AbilitaStatisticaSmallSerializer(
+        source='abilitastatistica_set', 
+        many=True, 
+        read_only=True
+    )
+    
     class Meta:
         model = Abilita
         fields = (
             'id', 'nome', 'descrizione', 'costo_pc', 'costo_crediti', 
-            'caratteristica', 'requisiti', 'prerequisiti'
+            'caratteristica', 'requisiti', 'prerequisiti',
+            'punteggi_assegnati', 'statistiche_modificate',
         )
 
 # --- QUESTA È LA CLASSE CORRETTA PER LE ABILITÀ POSSEDUTE ---
