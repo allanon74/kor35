@@ -260,10 +260,11 @@ class TipologiaPersonaggioAdmin(admin.ModelAdmin):
 
 @admin.register(Abilita)
 class AbilitaAdmin(A_Admin):
-	list_display = ('id', 'nome', )
-	summernote_fields = ['descrizione', ]
-	search_fields = ['nome', 'descrizione',]
-	inlines = (
+    list_display = ('id', 'nome','costo_pc', 'costo_crediti' )
+    list_editable = ('costo_pc', 'costo_crediti', )
+    summernote_fields = ['descrizione', ]
+    search_fields = ['nome', 'descrizione',]
+    inlines = (
     	abilita_tier_inline,
 		AbilitaStatisticaInline, 
     	abilita_punteggio_inline, 
@@ -273,8 +274,8 @@ class AbilitaAdmin(A_Admin):
 		# abilita_abilitati_inline,
 
     	)
-	save_as = True
-	exclude = ('statistiche',)
+    save_as = True
+    exclude = ('statistiche',)
 
 @admin.register(Punteggio)
 class PunteggioAdmin(A_Admin):
