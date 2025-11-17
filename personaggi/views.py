@@ -179,7 +179,9 @@ class AbilitaMasterListView(generics.ListAPIView):
         'caratteristica'
     ).prefetch_related(
         'abilita_requisito_set__requisito', 
-        'abilita_prerequisiti__prerequisito'
+        'abilita_prerequisiti__prerequisito',
+        'abilita_punteggio_set__punteggio',
+        'abilitastatistica_set__statistica',
     ).order_by('nome')
 
 
