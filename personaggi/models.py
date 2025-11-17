@@ -251,6 +251,16 @@ class Punteggio(Tabella):
         result = "{tipo} - {nome}"
         return result.format(nome=self.nome, tipo = self.tipo)
 
+class Caratteristica(Punteggio):
+    """
+    Modello Proxy per filtrare i Punteggi
+    che sono solo di tipo CARATTERISTICA nell'admin.
+    """
+    class Meta:
+        proxy = True
+        verbose_name = "Caratteristica (Gestione)"
+        verbose_name_plural = "Caratteristiche (Gestione)"
+
 
 class Statistica(Punteggio):
     parametro = models.CharField(

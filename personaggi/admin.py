@@ -9,11 +9,11 @@ from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAd
 # from django.contrib.admin import TabularInline as SInlineModelAdmin # temporaneo senza summernote
 
 from django.utils.html import format_html
-from .models import CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase, TipologiaPersonaggio
+from .models import CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase, TipologiaPersonaggio
 from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiCaratteristicaMovimento 
 
-from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica
-from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica
+from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica, Caratteristica
+from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore
 
 from django_icon_picker.widgets import IconPicker
 from icon_widget.widgets import CustomIconWidget
@@ -92,7 +92,19 @@ class A_Multi_Inline (admin.TabularInline):
 #             'icona': MuteIconPickerWidget, # Corretto: applica la patch
 #         }
         
-
+class CaratteristicaModificatoreInline(admin.TabularInline):
+    model = CaratteristicaModificatore
+    # 'caratteristica' è il ForeignKey al modello Punteggio/Caratteristica
+    fk_name = "caratteristica" 
+    verbose_name = "Modificatore Statistica"
+    verbose_name_plural = "Statistiche Modificate da questa Caratteristica"
+    extra = 1
+    
+    # Limita la scelta delle statistiche solo a Punteggi di tipo STATISTICA
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "statistica_modificata":
+            kwargs["queryset"] = Statistica.objects.all()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 # ----------- CLASSI INLINE -------------
 class abilita_tier_inline(A_Multi_Inline):
@@ -261,8 +273,30 @@ class PunteggioAdmin(A_Admin):
     search_fields = ('nome', )
     summernote_fields = ('descrizione',)
     save_as = True
+    
+    def get_queryset(self, request):
+        # Filtra per mostrare TUTTO TRANNE le Caratteristiche,
+        # che ora hanno il loro pannello dedicato.
+        qs = super().get_queryset(request)
+        return qs.exclude(tipo=CARATTERISTICA)
 
+@admin.register(Caratteristica)
+class CaratteristicaAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html',)
+    search_fields = ('nome', 'sigla')
+    
+    # Aggiungi l'inline
+    inlines = [CaratteristicaModificatoreInline]
 
+    def get_queryset(self, request):
+        # Filtra per mostrare SOLO le Caratteristiche
+        qs = super().get_queryset(request)
+        return qs.filter(tipo=CARATTERISTICA)
+        
+    # (Opzionale) Nasconde il campo "tipo" nel form di dettaglio
+    # dato che è sempre "CA" e non deve essere modificato.
+    def get_exclude(self, request, obj=None):
+        return ('tipo',)
 
 
 @admin.register(abilita_prerequisito)
