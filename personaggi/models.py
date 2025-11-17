@@ -1,11 +1,10 @@
 from django.db.models import Sum, F
 
-import re
+import re # <-- Importa per le espressioni
 import secrets
 import string
-# --- MODIFICA QUI ---
-from django.db import models, IntegrityError, transaction # <-- AGGIUNTO 'transaction'
-# --- FINE MODIFICA ---
+# V--- Assicurati che 'transaction' sia qui
+from django.db import models, IntegrityError, transaction 
 from django.db.models import Q
 from django.utils import timezone
 from django.conf import settings
@@ -275,10 +274,12 @@ class Statistica(Punteggio):
         default=MODIFICATORE_ADDITIVO,
         help_text="Come questo punteggio si combina con altri."
     )
+    # --- CAMPO CHE HAI AGGIUNTO ---
     is_primaria = models.BooleanField(
         default=False,
         help_text="Seleziona se questa è una statistica primaria da mostrare in homepage."
     )
+    # --- FINE ---
 
     def save(self, *args, **kwargs):
         self.tipo = STATISTICA
@@ -733,13 +734,19 @@ class Personaggio(Inventario):
 
     @property
     def crediti(self):
-        base = self.tipologia.crediti_iniziali
+        if not self.tipologia: # Fallback se la tipologia è None
+             base = 0
+        else:
+             base = self.tipologia.crediti_iniziali
         movimenti = self.movimenti_credito.aggregate(totale=Sum('importo'))['totale'] or 0
         return base + movimenti
     
     @property
     def punti_caratteristica(self):
-        base = self.tipologia.caratteristiche_iniziali
+        if not self.tipologia: # Fallback se la tipologia è None
+            base = 0
+        else:
+            base = self.tipologia.caratteristiche_iniziali
         movimenti = self.movimenti_pc.aggregate(totale=Sum('importo'))['totale'] or 0
         return base + movimenti
     
@@ -838,37 +845,41 @@ class Personaggio(Inventario):
         """
         Metodo helper per calcolare un'espressione come {pv+pf-des}.
         """
-        espressione = match.group(1).strip()
-        
-        # Divide l'espressione in token (statistiche) e operatori
-        # es. "pv+pf-des" -> ['pv', '+', 'pf', '-', 'des']
-        tokens = re.split(r'([+\-])', espressione) 
-        
-        total = 0
-        current_op = '+' # L'operatore di default è +
+        try:
+            espressione = match.group(1).strip()
+            
+            # Divide l'espressione in token (statistiche) e operatori
+            # es. "pv+pf-des" -> ['pv', '+', 'pf', '-', 'des']
+            tokens = re.split(r'([+\-])', espressione) 
+            
+            total = 0
+            current_op = '+' # L'operatore di default è +
 
-        for token in tokens:
-            token = token.strip()
-            if not token:
-                continue
+            for token in tokens:
+                token = token.strip()
+                if not token:
+                    continue
 
-            if token in ['+', '-']:
-                current_op = token
-            else:
-                # Questo è un parametro di statistica (es. "pv")
-                valore_base = base_stats.get(token, 0)
-                stat_mods = mods.get(token, {'add': 0, 'mol': 1.0})
-                
-                # Calcola il valore finale per *questo* token
-                valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
-                
-                # Applica l'operazione
-                if current_op == '+':
-                    total += valore_finale
-                elif current_op == '-':
-                    total -= valore_finale
+                if token in ['+', '-']:
+                    current_op = token
+                else:
+                    # Questo è un parametro di statistica (es. "pv")
+                    valore_base = base_stats.get(token, 0)
+                    stat_mods = mods.get(token, {'add': 0, 'mol': 1.0})
                     
-        return str(round(total, 2))
+                    # Calcola il valore finale per *questo* token
+                    valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
+                    
+                    # Applica l'operazione
+                    if current_op == '+':
+                        total += valore_finale
+                    elif current_op == '-':
+                        total -= valore_finale
+                        
+            return str(round(total, 2))
+        except Exception:
+            # In caso di errore nel parsing (es. {pv+}), restituisce il placeholder originale
+            return match.group(0)
 
     
     def get_testo_formattato_per_item(self, item):
@@ -1009,8 +1020,12 @@ class TransazioneSospesa(models.Model):
         
         self.richiedente.aggiungi_log(f"Ricevuto {self.oggetto.nome} da {self.mittente.nome}.")
         if hasattr(self.mittente, 'personaggio'):
-            self.mittente.personaggio.aggiungi_log(f"Consegnato {self.oggetto.nome} a {self.richiedente.nome}.")
-        
+            # Assicurati che mittente sia un Personaggio o abbia un link a Personaggio
+            if isinstance(self.mittente, Personaggio):
+                self.mittente.aggiungi_log(f"Consegnato {self.oggetto.nome} a {self.richiedente.nome}.")
+            elif hasattr(self.mittente, 'personaggio'): # Se Inventario ha un FK 'personaggio'
+                self.mittente.personaggio.aggiungi_log(f"Consegnato {self.oggetto.nome} a {self.richiedente.nome}.")
+
     def rifiuta(self):
         if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
             raise Exception("Transazione già processata.")
@@ -1173,7 +1188,8 @@ class Oggetto(A_vista):
             valore = link.valore_base
         
             if param:
-                testo_formattato = testo_formattato.replace(f"{{{param}}}", str(valore))
+                # Sostituisce solo se il placeholder è esatto (es. {pv})
+                testo_formattato = re.sub(r'\{' + re.escape(param) + r'\}', str(valore), testo_formattato)
         return testo_formattato
     
     @property
