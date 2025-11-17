@@ -150,7 +150,7 @@ CORS_ALLOWED_ORIGINS = [
     "https://app.k-o-r-35.it",       
 ]
 
-CORS_URLS_REGEX = r'^/personaggi/api/.*$'
+CORS_URLS_REGEX = r'^/(personaggi/api|auth)/.*$'
 
 CORS_ALLOW_HEADERS = [
     'accept',
