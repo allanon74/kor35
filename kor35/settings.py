@@ -146,7 +146,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.k-o-r-35.it",     # La tua app React in produzione
     "https://localhost:5173",      # Il tuo server di sviluppo React (Vite)
     # Aggiungi anche http se lo usi in sviluppo
-    "http://localhost:5173",       
+    "http://localhost:5173",
+    "https://app.k-o-r-35.it",       
 ]
 
 CORS_URLS_REGEX = r'^/personaggi/api/.*$'
