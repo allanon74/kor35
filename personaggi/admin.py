@@ -51,10 +51,12 @@ class AbilitaStatisticaForm(forms.ModelForm):
             default_value = self.instance.statistica.valore_predefinito
             current_value = self.instance.valore
             
-            for field_name in self.fields:
+            if current_value != default_value:
+                # Applica lo stile a tutti i campi della riga
+                for field_name in self.fields:
                     # if field_name != 'statistica': # Non evidenziare il campo readonly
                         self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
-
+                        
 class OggettoStatisticaBaseForm(forms.ModelForm):
     class Meta:
         model = OggettoStatisticaBase
@@ -66,7 +68,9 @@ class OggettoStatisticaBaseForm(forms.ModelForm):
             default_value = self.instance.statistica.valore_base_predefinito
             current_value = self.instance.valore_base
             
-            for field_name in self.fields:
+            if current_value != default_value:
+                # Applica lo stile a tutti i campi della riga
+                for field_name in self.fields:
                     # if field_name != 'statistica':
                         self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
 
@@ -81,10 +85,11 @@ class OggettoStatisticaForm(forms.ModelForm):
             default_value = self.instance.statistica.valore_predefinito
             current_value = self.instance.valore
             
-            # Applica lo stile a tutti i campi della riga
-            for field_name in self.fields:
-                # if field_name != 'statistica':
-                    self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
+            if current_value != default_value:
+                # Applica lo stile a tutti i campi della riga
+                for field_name in self.fields:
+                    # if field_name != 'statistica':
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
                         
 class AttivataStatisticaBaseForm(forms.ModelForm):
     class Meta:
