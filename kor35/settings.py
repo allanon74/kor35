@@ -31,7 +31,13 @@ SECRET_KEY = 'django-insecure-2v412!5-=9cils@7_78wzzssrnkf*5)(%z2a6d*z2!3khn1w9c
 # DEBUG = True
 DEBUG = env.bool("DEBUG", default=False)
 
-ALLOWED_HOSTS = ['www.k-o-r-35.it','127.0.0.1', 'www.kor35.it', ]
+ALLOWED_HOSTS = [
+    'www.k-o-r-35.it',
+    '127.0.0.1', 
+    'www.kor35.it', 
+    'app.kor35.it', 
+    'app.k-o-r-35.it',
+                 ]
 
 # prova 
 
@@ -147,7 +153,13 @@ CORS_ALLOWED_ORIGINS = [
     "https://localhost:5173",      # Il tuo server di sviluppo React (Vite)
     # Aggiungi anche http se lo usi in sviluppo
     "http://localhost:5173",
-    "https://app.k-o-r-35.it",       
+    "https://app.k-o-r-35.it",
+    "https://kor35.it",
+    "https://www.kor35.it",
+    # "https://app.kor35.it",
+    "http://kor35.it",
+    "http://www.kor35.it",
+    # "http://app.kor35.it",       
 ]
 
 CORS_URLS_REGEX = r'^/(personaggi/api|auth)/.*$'
