@@ -761,28 +761,52 @@ class Personaggio(Inventario):
         return base + movimenti
     
     @property
-    def caratteristiche_base(self):
-        if hasattr(self, '_caratteristiche_base_cache'):
-            return self._caratteristiche_base_cache
+    def punteggi_base(self):
+        """
+        [CALCOLO 1 - AGGIORNATO]
+        Calcola i valori base di TUTTI i punteggi (CA, AU, CU, ecc.)
+        sommando i bonus 'punteggio_acquisito' dalle abilità possedute.
+        Usa una cache.
+        """
+        if hasattr(self, '_punteggi_base_cache'):
+            return self._punteggi_base_cache
 
+        # 1. Filtra per le abilità del personaggio
+        # *** MODIFICA: Rimosso il filtro 'punteggio__tipo=CARATTERISTICA' ***
         links = abilita_punteggio.objects.filter(
-            abilita__personaggioabilita__personaggio=self,
-            punteggio__tipo=CARATTERISTICA
-        )
+            abilita__personaggioabilita__personaggio=self
+        ).select_related('punteggio')
         
+        # 2. Raggruppa per nome del punteggio e somma i valori
         query_aggregata = links.values(
-            'punteggio__nome'
+            'punteggio__nome' # Raggruppa per questo campo
         ).annotate(
-            valore_totale=Sum('valore')
+            valore_totale=Sum('valore') # Somma i valori
         ).order_by('punteggio__nome')
         
-        caratteristiche = {
+        # 3. Trasforma il risultato in un dizionario
+        punteggi = {
             item['punteggio__nome']: item['valore_totale'] 
             for item in query_aggregata
         }
             
-        self._caratteristiche_base_cache = caratteristiche
-        return self._caratteristiche_base_cache
+        self._punteggi_base_cache = punteggi
+        return self._punteggi_base_cache
+
+    # Rinominiamo la vecchia property per compatibilità interna (se serve)
+    # ma la facciamo puntare alla nuova
+    @property
+    def caratteristiche_base(self):
+        # Filtra 'punteggi_base' per includere solo le Caratteristiche
+        return {
+            nome: val for nome, val in self.punteggi_base.items()
+            if Punteggio.objects.get(nome=nome).tipo == CARATTERISTICA
+        }
+        # NOTA: Questo è lento. Se hai problemi di performance,
+        # dovremmo ottimizzare la cache in 'punteggi_base'
+        # per salvare anche il 'tipo'. Per ora, funzionerà.
+
+    # --- FINE BLOCCO MODIFICATO ---
     
     # --- INIZIO BLOCCO MODIFICATO ---
 
