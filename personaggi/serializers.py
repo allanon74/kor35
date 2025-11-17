@@ -68,12 +68,16 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     icona_html = serializers.SerializerMethodField()
     icona_cerchio_html = serializers.SerializerMethodField()
     icona_cerchio_inverted_html = serializers.SerializerMethodField()
+    is_primaria = serializers.SerializerMethodField()
+    valore_predefinito = serializers.SerializerMethodField()
+    parametro = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
         fields = (
             'id', 'nome', 'sigla', 'tipo', 'colore',
-            'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html'
+            'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html',
+            'is_primaria', 'valore_predefinito', 'parametro',
         )
 
     def get_base_url(self):
@@ -150,6 +154,23 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             stile_icona_maschera
         )
 
+    def get_is_primaria(self, obj):
+        # Controlla se l'oggetto Punteggio è una Statistica e ha il flag
+        if hasattr(obj, 'statistica') and obj.statistica.is_primaria:
+            return True
+        return False
+
+    def get_valore_predefinito(self, obj):
+        # Restituisce il valore base solo se è una Statistica
+        if hasattr(obj, 'statistica'):
+            return obj.statistica.valore_predefinito
+        return 0 # Le Caratteristiche hanno base 0
+
+    def get_parametro(self, obj):
+        # Restituisce il parametro (es. "pv") solo se è una Statistica
+        if hasattr(obj, 'statistica'):
+            return obj.statistica.parametro
+        return None
 #
 # --- Serializer Vecchi (Aggiornati per usare PunteggioSmallSerializer) ---
 # (Questi sono usati dall'Admin o da vecchie view, li teniamo per compatibilità)

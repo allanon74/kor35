@@ -1,6 +1,6 @@
 from django.db.models import Sum, F
 
-import uuid
+import re
 import secrets
 import string
 from django.db import models, IntegrityError
@@ -886,28 +886,32 @@ class Personaggio(Inventario):
             
         self._caratteristiche_base_cache = caratteristiche
         return self._caratteristiche_base_cache
+    
     @property
     def modificatori_calcolati(self):
         """
-        [CALCOLO 2]
+        [CALCOLO 2 - AGGIORNATO]
         Calcola i modificatori Additivi e Moltiplicativi totali.
         Usa una cache sull'istanza ('_modificatori_calcolati_cache').
+        
+        *** MODIFICATO: Ora è indicizzato per 'statistica.parametro' (es. 'pv') ***
         """
-        # Controlla se la cache esiste già
         if hasattr(self, '_modificatori_calcolati_cache'):
             return self._modificatori_calcolati_cache
 
         mods = {} 
         
-        def _add_mod(stat_nome, tipo, valore):
-            if stat_nome not in mods:
-                mods[stat_nome] = {'add': 0, 'mol': 1.0}
+        def _add_mod(stat_parametro, tipo, valore): # <-- Modificato: riceve il parametro
+            if not stat_parametro: # Ignora statistiche senza parametro
+                return
+                
+            if stat_parametro not in mods:
+                mods[stat_parametro] = {'add': 0, 'mol': 1.0}
             
             if tipo == MODIFICATORE_ADDITIVO:
-                mods[stat_nome]['add'] += valore
+                mods[stat_parametro]['add'] += valore
             elif tipo == MODIFICATORE_MOLTIPLICATIVO:
-                # Assicuriamo che il valore sia un float per la moltiplicazione
-                mods[stat_nome]['mol'] *= float(valore) 
+                mods[stat_parametro]['mol'] *= float(valore) 
 
         # 1. Bonus da Abilità possedute
         bonus_abilita = AbilitaStatistica.objects.filter(
@@ -915,7 +919,8 @@ class Personaggio(Inventario):
         ).select_related('statistica')
         
         for link in bonus_abilita:
-            _add_mod(link.statistica.nome, link.tipo_modificatore, link.valore)
+            # Usa parametro invece di nome
+            _add_mod(link.statistica.parametro, link.tipo_modificatore, link.valore)
 
         # 2. Bonus da Oggetti posseduti (nell'inventario)
         bonus_oggetti = OggettoStatistica.objects.filter(
@@ -924,7 +929,8 @@ class Personaggio(Inventario):
         ).select_related('statistica')
         
         for link in bonus_oggetti:
-            _add_mod(link.statistica.nome, link.tipo_modificatore, link.valore)
+            # Usa parametro invece di nome
+            _add_mod(link.statistica.parametro, link.tipo_modificatore, link.valore)
 
         # 3. Bonus da Caratteristiche base (usa la proprietà che ha già la cache)
         caratteristiche_base = self.caratteristiche_base 
@@ -940,11 +946,48 @@ class Personaggio(Inventario):
                 if punti_caratteristica > 0 and link.ogni_x_punti > 0:
                     bonus = (punti_caratteristica // link.ogni_x_punti) * link.modificatore
                     if bonus > 0:
-                        _add_mod(link.statistica_modificata.nome, MODIFICATORE_ADDITIVO, bonus)
+                        # Usa parametro invece di nome
+                        _add_mod(link.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, bonus)
         
-        # Salva nella cache dell'istanza
         self._modificatori_calcolati_cache = mods
         return self._modificatori_calcolati_cache
+    
+    def _processa_placeholder(self, match, mods, base_stats):
+        """
+        Metodo helper per calcolare un'espressione come {pv+pf-des}.
+        """
+        espressione = match.group(1).strip()
+        
+        # Divide l'espressione in token (statistiche) e operatori
+        # es. "pv+pf-des" -> ['pv', '+', 'pf', '-', 'des']
+        tokens = re.split(r'([+\-])', espressione) 
+        
+        total = 0
+        current_op = '+' # L'operatore di default è +
+
+        for token in tokens:
+            token = token.strip()
+            if not token:
+                continue
+
+            if token in ['+', '-']:
+                current_op = token
+            else:
+                # Questo è un parametro di statistica (es. "pv")
+                valore_base = base_stats.get(token, 0)
+                stat_mods = mods.get(token, {'add': 0, 'mol': 1.0})
+                
+                # Calcola il valore finale per *questo* token
+                valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
+                
+                # Applica l'operazione
+                if current_op == '+':
+                    total += valore_finale
+                elif current_op == '-':
+                    total -= valore_finale
+                    
+        return str(round(total, 2))
+    
     
     @property
     def TestoFormattatoPersonale(self):
@@ -1006,47 +1049,43 @@ class Personaggio(Inventario):
     
     def get_testo_formattato_per_item(self, item):
         """
-        [CALCOLO 3 - NUOVA VERSIONE]
+        [CALCOLO 3 - RISCRITTO]
         Prende un singolo Oggetto o Attivata e ne calcola il
-        TestoFormattato applicando i modificatori del personaggio.
+        TestoFormattato applicando i modificatori del personaggio
+        e gestendo espressioni matematiche {stat1+stat2}.
         """
         if not item or not item.testo:
             return ""
 
         testo_formattato = item.testo
         
-        # 1. Prendi i modificatori totali (usa la cache)
+        # 1. Prendi i modificatori totali (indicizzati per 'parametro' es. 'pv')
         mods = self.modificatori_calcolati
         
         # 2. Determina quali statistiche base usare (Oggetto o Attivata)
-        # Usiamo il nome della relazione inversa per accedere ai link
         links_base = None
         if isinstance(item, Oggetto):
             links_base = item.oggettostatisticabase_set.select_related('statistica').all()
         elif isinstance(item, Attivata):
             links_base = item.attivatastatisticabase_set.select_related('statistica').all()
         else:
-            return testo_formattato # Non so come formattare questo oggetto
+            return testo_formattato # Non so come formattare
 
-        # 3. Applica i modificatori
-        for link in links_base:
-            stat = link.statistica
-            if not stat.parametro:
-                continue
+        # 3. Crea un dizionario di valori base per un lookup veloce
+        #    es. {'pv': 10, 'pf': 5}
+        base_stats = {
+            link.statistica.parametro: link.valore_base 
+            for link in links_base 
+            if link.statistica.parametro
+        }
 
-            valore_base = link.valore_base
-            
-            # Prendi i modificatori calcolati per questa statistica
-            stat_mods = mods.get(stat.nome, {'add': 0, 'mol': 1.0})
-            
-            # Applica la formula
-            valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
-            
-            # Sostituisci il placeholder
-            testo_formattato = testo_formattato.replace(
-                f"{{{stat.parametro}}}", 
-                str(round(valore_finale, 2))
-            )
+        # 4. Trova tutti i placeholder {..} e sostituiscili
+        #    usando il nostro metodo helper _processa_placeholder
+        testo_formattato = re.sub(
+            r'\{([^{}]+)\}', # Regex per trovare {qualsiasi_cosa}
+            lambda match: self._processa_placeholder(match, mods, base_stats), 
+            testo_formattato
+        )
             
         return testo_formattato
     
