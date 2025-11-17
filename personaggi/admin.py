@@ -10,7 +10,7 @@ from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAd
 
 from django.utils.html import format_html
 from .models import CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, AttivataStatisticaBase, TipologiaPersonaggio
-from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiCaratteristicaMovimento 
+from .models import Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, PuntiCaratteristicaMovimento, STATISTICA
 
 from .models import Tabella, Punteggio, Tier, Abilita, Spell, Mattone, Statistica, Caratteristica
 from .models import abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, spell_mattone, abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore
@@ -111,7 +111,18 @@ class abilita_tier_inline(A_Multi_Inline):
 	model = abilita_tier
 	
 class abilita_punteggio_inline(A_Multi_Inline):
-	model = abilita_punteggio
+    model = abilita_punteggio
+    extra = 1
+    verbose_name = "Punteggio Assegnato"
+    verbose_name_plural = "Punteggi Assegnati (es. +1 Forza, +1 Culto)"
+
+    # --- QUESTA È LA SOLUZIONE ---
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "punteggio":
+            # Escludi tutti i punteggi che sono di tipo "Statistica"
+            kwargs["queryset"] = Punteggio.objects.exclude(tipo=STATISTICA)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+    # --- FINE SOLUZIONE ---
 	
 class abilita_requisito_inline(A_Multi_Inline):
 	model = abilita_requisito
@@ -253,13 +264,14 @@ class AbilitaAdmin(A_Admin):
 	summernote_fields = ['descrizione', ]
 	search_fields = ['nome', 'descrizione',]
 	inlines = (
-    	abilita_tier_inline, 
+    	abilita_tier_inline,
+		AbilitaStatisticaInline, 
     	abilita_punteggio_inline, 
     	abilita_requisito_inline, 
-    	abilita_sbloccata_inline, 
+        # abilita_sbloccata_inline, 
 		abilita_prerequisiti_inline,
-		abilita_abilitati_inline,
-		AbilitaStatisticaInline,
+		# abilita_abilitati_inline,
+
     	)
 	save_as = True
 	exclude = ('statistiche',)
