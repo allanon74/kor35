@@ -3,7 +3,9 @@ from django.db.models import Sum, F
 import re
 import secrets
 import string
-from django.db import models, IntegrityError
+# --- MODIFICA QUI ---
+from django.db import models, IntegrityError, transaction # <-- AGGIUNTO 'transaction'
+# --- FINE MODIFICA ---
 from django.db.models import Q
 from django.utils import timezone
 from django.conf import settings
@@ -53,16 +55,16 @@ ARTE = "AR"
 ARCHETIPO = "AR"
 
 punteggi_tipo = [
-	(CARATTERISTICA, 'Caratteristica'),
-	(STATISTICA, 'Statistica'),
-	(ELEMENTO, 'Elemento'),
-	(AURA, 'Aura',),
+    (CARATTERISTICA, 'Caratteristica'),
+    (STATISTICA, 'Statistica'),
+    (ELEMENTO, 'Elemento'),
+    (AURA, 'Aura',),
     (CONDIZIONE, 'Condizione',),
     (CULTO, 'Culto',),
     (VIA, 'Via',),
     (ARTE, 'Arte',),
     (ARCHETIPO, 'Archetipo',),
-	]
+    ]
 
 TIER_1 = "T1"
 TIER_2 = "T2"
@@ -70,11 +72,11 @@ TIER_3 = "T3"
 TIER_4 = "T4"
 
 tabelle_tipo = [
-	(TIER_1, 'Tier 1'),
-	(TIER_2, 'Tier 2'),
-	(TIER_3, 'Tier 3'),
-	(TIER_4, 'Tier 4'),
-	]
+    (TIER_1, 'Tier 1'),
+    (TIER_2, 'Tier 2'),
+    (TIER_3, 'Tier 3'),
+    (TIER_4, 'Tier 4'),
+    ]
 
 # --- 1. Definisci le scelte per i modificatori ---
 MODIFICATORE_ADDITIVO = 'ADD'
@@ -87,10 +89,10 @@ MODIFICATORE_CHOICES = [
 # Classi astratte
 
 class A_modello(models.Model):
-	id = models.AutoField("Codice Identificativo", primary_key = True, )
-	class Meta:
-		abstract = True
-		
+    id = models.AutoField("Codice Identificativo", primary_key = True, )
+    class Meta:
+        abstract = True
+        
 class A_vista(models.Model):
     id = models.AutoField(primary_key=True)
     data_creazione = models.DateTimeField(auto_now_add=True)
@@ -102,9 +104,6 @@ class A_vista(models.Model):
     
     class Meta:
         ordering = ['-data_creazione'] 
-        # abstract = True
-    
-    class Meta:
         verbose_name = "Elemento dell'Oggetto"
         verbose_name_plural = "Elementi dell'Oggetto"
 
@@ -112,18 +111,18 @@ class A_vista(models.Model):
 #definizioni classi
 
 class Tabella(A_modello):
-	nome = models.CharField("Nome", max_length = 90, )
-	descrizione = models.TextField("descrizione", null=True, blank=True, )
+    nome = models.CharField("Nome", max_length = 90, )
+    descrizione = models.TextField("descrizione", null=True, blank=True, )
 
-	class Meta:
-		verbose_name = "Tabella"
-		verbose_name_plural = "Tabelle"
+    class Meta:
+        verbose_name = "Tabella"
+        verbose_name_plural = "Tabelle"
 
-	def __str__(self):
-		return self.nome
+    def __str__(self):
+        return self.nome
 
 class Tier(Tabella):
-    tipo = models.CharField('Tier', choices=tabelle_tipo, max_length=2)	
+    tipo = models.CharField('Tier', choices=tabelle_tipo, max_length=2)    
     foto = models.ImageField(upload_to='tiers/', null=True, blank=True)
 
     class Meta:
@@ -134,9 +133,7 @@ class Punteggio(Tabella):
     sigla = models.CharField('Sigla', max_length=3, unique=True, )
     tipo = models.CharField('Tipo di punteggio', choices=punteggi_tipo, max_length=2)
     colore = ColorField('Colore', default='#1976D2', help_text="Colore associato al punteggio (es. per icone).")
-    # icona_old = IconField(max_length=255, blank=True)
     icona = CustomIconField(blank=True)
-    # icon = models.CharField(max_length=100, blank=True, null=True) # Un CharField standard
     
     caratteristica_relativa = models.ForeignKey(
         "Punteggio",
@@ -171,19 +168,15 @@ class Punteggio(Tabella):
     @property
     def icona_url(self):
         if self.icona:
-            # Assumiamo che il nome del file sia il percorso relativo da MEDIA_URL
             return f"{settings.MEDIA_URL}{self.icona}"
         return None
 
-    # --- Property per Template Django ---
     @property
     def icona_html(self):
         url = self.icona_url
         colore = self.colore
         
         if url and colore:
-            # Usiamo un <div>. Il colore di sfondo è il colore del modello.
-            # L'SVG (che ora è nero) viene usato come "maschera".
             style = (
                 f"width: 24px; "
                 f"height: 24px; "
@@ -197,56 +190,40 @@ class Punteggio(Tabella):
                 f"display: inline-block; "
                 f"vertical-align: middle;"
             )
-            # Restituiamo un <div> vuoto stilizzato, non un <img>
             return format_html('<div style="{}"></div>', style)
         
-        return "" # Non mostrare nulla se manca l'icona o il colore
+        return ""
     
     def icona_cerchio(self, inverted=True):
-        """
-        Genera l'HTML per un cerchio colorato con l'icona
-        in bianco o nero per il contrasto.
-        
-        Questa versione usa il file SVG locale come maschera CSS.
-        """
-        # 1. Ottieni l'URL del file SVG locale (es. /media/icone/punteggio/icon-....svg)
         url_icona_locale = self.icona_url 
-        
-        # 2. Ottieni il colore di sfondo (es. #FF0000)
         colore_sfondo = self.colore
         
         if not url_icona_locale or not colore_sfondo:
             return ""
 
-        # 3. Determina il colore dell'icona (bianco o nero)
         colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo)
 
         if inverted:
             colore_icona_contrasto = self.colore
             colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
             
-        
-        # 4. Definisce gli stili CSS
-        
-        # Stile per il cerchio esterno
         stile_cerchio = (
             f"display: inline-block; "
             f"width: 30px; "
             f"height: 30px; "
-            f"background-color: {colore_sfondo}; " # Colore di sfondo dal modello
-            f"border-radius: 50%; "            # Rende il div circolare
+            f"background-color: {colore_sfondo}; "
+            f"border-radius: 50%; "
             f"vertical-align: middle; "
-            f"text-align: center; "            # Centra l'icona
-            f"line-height: 30px;"               # Aiuta a centrare
+            f"text-align: center; "
+            f"line-height: 30px;"
         )
         
-        # Stile per l'icona interna (il <div> che fa da maschera)
         stile_icona_maschera = (
             f"display: inline-block; "
-            f"width: 24px; "  # Leggermente più piccola del cerchio
+            f"width: 24px; "
             f"height: 24px; "
             f"vertical-align: middle; "
-            f"background-color: {colore_icona_contrasto}; " # Colore dell'icona (bianco o nero)
+            f"background-color: {colore_icona_contrasto}; "
             f"mask-image: url({url_icona_locale}); "
             f"-webkit-mask-image: url({url_icona_locale}); "
             f"mask-repeat: no-repeat; "
@@ -255,16 +232,13 @@ class Punteggio(Tabella):
             f"-webkit-mask-size: contain; "
         )
 
-        # 5. Combina tutto in HTML
         return format_html(
-            '<div style="{}">'  # Il cerchio colorato
-            '  <div style="{}"></div>' # L'icona mascherata
+            '<div style="{}">'
+            '  <div style="{}"></div>'
             '</div>',
             stile_cerchio,
             stile_icona_maschera
         )
-    
-    
     
     @property
     def icona_cerchio_html(self):
@@ -274,18 +248,12 @@ class Punteggio(Tabella):
     def icona_cerchio_inverted_html(self):
         return self.icona_cerchio(inverted=True)
     
-    
-    
     def __str__(self):
         result = "{tipo} - {nome}"
         return result.format(nome=self.nome, tipo = self.tipo)
 
 
 class Statistica(Punteggio):
-    """
-    Una Statistica è un tipo specializzato di Punteggio
-    che ha valori predefiniti.
-    """
     parametro = models.CharField(
         max_length=10,
         unique=True,
@@ -293,31 +261,26 @@ class Statistica(Punteggio):
         null=True,
         help_text="La variabile da usare nel testo, es. 'pv' (senza parentesi graffe)."
     )
-    
     valore_predefinito = models.IntegerField(
         default=0,
         help_text="Valore di default per questa statistica."
     )
-    
     valore_base_predefinito = models.IntegerField(
         default=0,
         help_text="Valore BASE di default per questa statistica (per i VALORI INIZIALI)."
     )
-    
     tipo_modificatore = models.CharField(
         max_length=3,
         choices=MODIFICATORE_CHOICES,
         default=MODIFICATORE_ADDITIVO,
         help_text="Come questo punteggio si combina con altri."
     )
-
     is_primaria = models.BooleanField(
         default=False,
         help_text="Seleziona se questa è una statistica primaria da mostrare in homepage."
     )
 
     def save(self, *args, **kwargs):
-        # Forza il tipo di Punteggio a essere STATISTICA
         self.tipo = STATISTICA
         super().save(*args, **kwargs)
 
@@ -325,11 +288,7 @@ class Statistica(Punteggio):
         verbose_name = "Statistica"
         verbose_name_plural = "Statistiche"
         
- # --- NUOVO MODELLO "THROUGH" PER CARATTERISTICA -> STATISTICA ---
 class CaratteristicaModificatore(models.Model):
-    """
-    Definisce come una Caratteristica (es. Forza) modifica una Statistica (es. Danni Mischia).
-    """
     caratteristica = models.ForeignKey(
         Punteggio, 
         on_delete=models.CASCADE, 
@@ -357,14 +316,11 @@ class CaratteristicaModificatore(models.Model):
         verbose_name_plural = "Modificatori da Caratteristiche"
         unique_together = ('caratteristica', 'statistica_modificata')
  
-        
-# --- 3. Crea il modello "Through" per Abilita <-> Statistica ---
 class AbilitaStatistica(models.Model):
     abilita = models.ForeignKey('Abilita', on_delete=models.CASCADE)
     statistica = models.ForeignKey(
         Statistica, 
         on_delete=models.CASCADE
-        # Non serve limit_choices_to, perché il FK è già su Statistica
     )
     tipo_modificatore = models.CharField(
         max_length=3,
@@ -374,11 +330,10 @@ class AbilitaStatistica(models.Model):
     valore = models.IntegerField(default=0)
     
     class Meta:
-        unique_together = ('abilita', 'statistica') # Impedisce duplicati
+        unique_together = ('abilita', 'statistica')
 
     def __str__(self):
         return f"{self.abilita.nome} - {self.statistica.nome}: {self.valore}"
-
 
 class Abilita(A_modello):
     nome = models.CharField("Nome dell'abilità", max_length = 90, )
@@ -403,7 +358,6 @@ class Abilita(A_modello):
         related_name = "abilita_req",
         through = "abilita_requisito",
         help_text = "Caratteristiche requisito di sblocco",
-        # limit_choices_to={'tipo' : CARATTERISTICA}
     )
     tabelle_sbloccate = models.ManyToManyField(
         Tabella,
@@ -417,12 +371,6 @@ class Abilita(A_modello):
         through = "abilita_punteggio",
         help_text = "Caratteristiche requisito di sblocco",
     )
-    # prerequisiti = models.ManyToManyField(
-    #     "Abilita",
-    #     related_name = "abilitati",
-    #     through = "abilita_prerequisito",
-    #     help_text = "Abilità che fungono da prerequisito",
-    # )
     statistiche = models.ManyToManyField(
         Statistica,
         through='AbilitaStatistica',
@@ -439,152 +387,147 @@ class Abilita(A_modello):
         return self.nome
 
 class Spell(A_modello):
-	nome = models.CharField("Nome dell'abilità attivata", max_length=90, )
-	descrizione = models.TextField("Descrizione", null=True, blank=True, )
-	mattoni = models.ManyToManyField(
-		"Mattone",
-		related_name = "spells",
-		through = "spell_mattone",
-		help_text = "Mattoni requisito dell'abilità attivata",
-		)
-	aura = models.ForeignKey(
-		Punteggio, 
-		on_delete=models.CASCADE, 
-		limit_choices_to={'tipo' : AURA}, 
-		related_name = "aura_spell",
-		)
-	#livello = elementi.all().count()
-	
-	def livello(self):
-		return self.mattoni.all().aggregate(Sum())
+    nome = models.CharField("Nome dell'abilità attivata", max_length=90, )
+    descrizione = models.TextField("Descrizione", null=True, blank=True, )
+    mattoni = models.ManyToManyField(
+        "Mattone",
+        related_name = "spells",
+        through = "spell_mattone",
+        help_text = "Mattoni requisito dell'abilità attivata",
+        )
+    aura = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo' : AURA}, 
+        related_name = "aura_spell",
+        )
+    
+    def livello(self):
+        return self.mattoni.all().aggregate(Sum())
 
-	class Meta:
-		verbose_name = "Abilità attivata"
-		verbose_name_plural = "Abilità attivate"
+    class Meta:
+        verbose_name = "Abilità attivata"
+        verbose_name_plural = "Abilità attivate"
 
-	def __str__(self):
-		return self.nome
-	
+    def __str__(self):
+        return self.nome
+    
 class Mattone(A_modello):
-	nome = models.CharField("Nome del mattone", max_length = 40)
-	descrizione = models.TextField("Descrizione del mattone", null=True, blank=True,)
-	elemento = models.ForeignKey(
-		Punteggio, 
-		on_delete=models.CASCADE, 
-		limit_choices_to={'tipo' : ELEMENTO}, 
-		related_name = "elemento_mattone",
-		)
-	aura = models.ForeignKey(
-		Punteggio, 
-		on_delete=models.CASCADE, 
-		limit_choices_to={'tipo' : AURA}, 
-		related_name = "aura_mattone",
-		)
-	class Meta:
-		verbose_name = "Mattone"
-		verbose_name_plural = "Mattoni"
+    nome = models.CharField("Nome del mattone", max_length = 40)
+    descrizione = models.TextField("Descrizione del mattone", null=True, blank=True,)
+    elemento = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo' : ELEMENTO}, 
+        related_name = "elemento_mattone",
+        )
+    aura = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo' : AURA}, 
+        related_name = "aura_mattone",
+        )
+    class Meta:
+        verbose_name = "Mattone"
+        verbose_name_plural = "Mattoni"
 
-	def __str__(self):
-		result = "{nome} ({aura} - {elemento})"
-		
-		return result.format(nome=self.nome, aura=self.aura.sigla, elemento=self.elemento.sigla)
-
-		
+    def __str__(self):
+        result = "{nome} ({aura} - {elemento})"
+        
+        return result.format(nome=self.nome, aura=self.aura.sigla, elemento=self.elemento.sigla)
 
 # Classi Through
 
 class abilita_tier(A_modello):
-	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
-	tabella = models.ForeignKey(Tier, on_delete=models.CASCADE, )
-	# costo = models.IntegerField("Costo dell'abilità in Punti Caratteristica", default=0, )
-	# costo_crediti = models.IntegerField("Costo dell'abilità in Crediti", default=0, )	 
-	ordine = models.IntegerField("Ordine in tabella", default=10, )
-	
-	class Meta:
-		verbose_name = "Abilità - Tier"
-		verbose_name_plural = "Abilità - Tiers"
-		ordering = ["ordine", "abilita__nome", ]
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
+    tabella = models.ForeignKey(Tier, on_delete=models.CASCADE, )
+    ordine = models.IntegerField("Ordine in tabella", default=10, )
+    
+    class Meta:
+        verbose_name = "Abilità - Tier"
+        verbose_name_plural = "Abilità - Tiers"
+        ordering = ["ordine", "abilita__nome", ]
 
-	def __str__(self):
-		testo = "{abilita} - {tabella} ({costo})"
-		return testo.format(abilita=self.abilita.nome, tabella=self.tabella.nome, costo=self.abilita.costo_crediti)
+    def __str__(self):
+        testo = "{abilita} - {tabella} ({costo})"
+        return testo.format(abilita=self.abilita.nome, tabella=self.tabella.nome, costo=self.abilita.costo_crediti)
 
 class abilita_prerequisito(A_modello):
-	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_prerequisiti", )
-	prerequisito = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_abilitati", )
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_prerequisiti", )
+    prerequisito = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_abilitati", )
 
-	class Meta:
-		verbose_name = "Abilità - Prerequisito"
-		verbose_name_plural = "Abilità - Prerequisiti"
+    class Meta:
+        verbose_name = "Abilità - Prerequisito"
+        verbose_name_plural = "Abilità - Prerequisiti"
 
-	def __str__(self):
-		testo = "{abilita} necessita {prerequisito}"
-		return testo.format(abilita=self.abilita.nome, prerequisito=self.prerequisito.nome)
+    def __str__(self):
+        testo = "{abilita} necessita {prerequisito}"
+        return testo.format(abilita=self.abilita.nome, prerequisito=self.prerequisito.nome)
 
  
 class abilita_requisito(A_modello):
-	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
-	requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo' : CARATTERISTICA})
-	valore = models.IntegerField("Punteggio della caratteristica", default=1, )
-	
-	class Meta:
-		verbose_name = "Abilità - Requisito"
-		verbose_name_plural = "Abilità - Requisiti"
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
+    requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo' : CARATTERISTICA})
+    valore = models.IntegerField("Punteggio della caratteristica", default=1, )
+    
+    class Meta:
+        verbose_name = "Abilità - Requisito"
+        verbose_name_plural = "Abilità - Requisiti"
 
-	def __str__(self):
-		testo = "{abilita} necessita {requisito}: {valore}"
-		return testo.format(abilita=self.abilita.nome, requisito=self.requisito.nome, valore=self.valore)
+    def __str__(self):
+        testo = "{abilita} necessita {requisito}: {valore}"
+        return testo.format(abilita=self.abilita.nome, requisito=self.requisito.nome, valore=self.valore)
 
 class abilita_sbloccata(A_modello):
-	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
-	sbloccata = models.ForeignKey(Tabella, on_delete=models.CASCADE, )
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
+    sbloccata = models.ForeignKey(Tabella, on_delete=models.CASCADE, )
 
-	class Meta:
-		verbose_name = "Abilità - Tabella sbloccata"
-		verbose_name_plural = "Abilità - Tabelle sbloccate"
+    class Meta:
+        verbose_name = "Abilità - Tabella sbloccata"
+        verbose_name_plural = "Abilità - Tabelle sbloccate"
 
-	def __str__(self):
-		testo = "{abilita} sblocca {sbloccata}"
-		return testo.format(abilita=self.abilita.nome, sbloccata=self.sbloccata.nome)
+    def __str__(self):
+        testo = "{abilita} sblocca {sbloccata}"
+        return testo.format(abilita=self.abilita.nome, sbloccata=self.sbloccata.nome)
 
-	
+    
 class abilita_punteggio(A_modello):
-	abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
-	punteggio = models.ForeignKey(Punteggio, on_delete=models.CASCADE, )
-	valore = models.IntegerField("Punteggio della caratteristica", default=1, )
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, )
+    punteggio = models.ForeignKey(Punteggio, on_delete=models.CASCADE, )
+    valore = models.IntegerField("Punteggio della caratteristica", default=1, )
 
-	class Meta:
-		verbose_name = "Abilità - Punteggio assegnato"
-		verbose_name_plural = "Abilità - Punteggi assegnati"
+    class Meta:
+        verbose_name = "Abilità - Punteggio assegnato"
+        verbose_name_plural = "Abilità - Punteggi assegnati"
 
-	def __str__(self):
-		testo = "{abilita} -> {punteggio} ({valore})"
-		return testo.format(abilita=self.abilita.nome, punteggio=self.punteggio.nome, valore=self.valore)
-	
+    def __str__(self):
+        testo = "{abilita} -> {punteggio} ({valore})"
+        return testo.format(abilita=self.abilita.nome, punteggio=self.punteggio.nome, valore=self.valore)
+    
 class spell_elemento(A_modello):
-	spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )	
-	elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo' : ELEMENTO}, )
+    spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
+    elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo' : ELEMENTO}, )
 
-	class Meta:
-		verbose_name = "Spell - Elemento necessario"
-		verbose_name_plural = "Spell - Elementi necessari"
+    class Meta:
+        verbose_name = "Spell - Elemento necessario"
+        verbose_name_plural = "Spell - Elementi necessari"
 
-	def __str__(self):
-		testo = "{spell} necessita {elemento}"
-		return testo.format(spell=self.spell.nome, elemento=self.elemento.nome)
-	
+    def __str__(self):
+        testo = "{spell} necessita {elemento}"
+        return testo.format(spell=self.spell.nome, elemento=self.elemento.nome)
+    
 class spell_mattone(A_modello):
-	spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )	
-	mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE, )
-	valore = models.IntegerField("Ripetizioni del mattone", default=1, )
+    spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
+    mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE, )
+    valore = models.IntegerField("Ripetizioni del mattone", default=1, )
 
-	class Meta:
-		verbose_name = "Abilità attivata - Mattone necessario"
-		verbose_name_plural = "Abilità attivate - Mattoni necessari"
+    class Meta:
+        verbose_name = "Abilità attivata - Mattone necessario"
+        verbose_name_plural = "Abilità attivate - Mattoni necessari"
 
-	def __str__(self):
-		testo = "{spell} necessita {mattone} {liv}"
-		return testo.format(spell=self.spell.nome, mattone=self.mattone.nome, liv=self.valore)
+    def __str__(self):
+        testo = "{spell} necessita {mattone} {liv}"
+        return testo.format(spell=self.spell.nome, mattone=self.mattone.nome, liv=self.valore)
 
     
 class Attivata(A_vista):
@@ -593,9 +536,7 @@ class Attivata(A_vista):
         Punteggio, 
         blank=True, 
         verbose_name="Elementi associati",
-        through='AttivataElemento', # Specifica il modello intermedio
-        # Rimuovi limit_choices_to da qui, è stato spostato
-        # nel modello Through AttivataElemento.
+        through='AttivataElemento',
     )
     
     statistiche_base = models.ManyToManyField(
@@ -603,7 +544,7 @@ class Attivata(A_vista):
         through='AttivataStatisticaBase',
         blank=True,
         verbose_name="Statistiche (Valori Base)",
-        related_name='attivata_statistiche_base' # related_name univoco
+        related_name='attivata_statistiche_base'
     )
 
     def __str__(self):
@@ -615,16 +556,10 @@ class Attivata(A_vista):
 
     @property
     def TestoFormattato(self):
-        """
-        Sostituisce i placeholder {sigla} nel testo
-        con i valori da AttivataStatisticaBase.
-        """
         if not self.testo:
             return ""
         
         testo_formattato = self.testo
-        
-        # Usiamo il related_name 'attivatastatisticabase_set'
         stats_links = self.attivatastatisticabase_set.select_related('statistica').all()
         
         for link in stats_links:
@@ -644,10 +579,6 @@ class Manifesto(A_vista):
 
 
 class Inventario(A_vista):
-    """
-    Rappresenta un contenitore di Oggetti.
-    (es. forziere, negozio, deposito, o un Personaggio).
-    """
     class Meta:
         verbose_name = "Inventario"
         verbose_name_plural = "Inventari"
@@ -656,11 +587,6 @@ class Inventario(A_vista):
         return f"Inventario: {self.nome}"
 
     def get_oggetti(self, data=None):
-        """
-        Restituisce un queryset di oggetti in questo inventario
-        in un momento specifico.
-        Se data è None, restituisce gli oggetti attuali.
-        """
         if data is None:
             data = timezone.now()
         
@@ -670,12 +596,7 @@ class Inventario(A_vista):
             tracciamento_inventario__data_fine__isnull=True
         )
 
-# --- 2. NUOVO MODELLO "THROUGH" PER IL TRACCIAMENTO STORICO ---
 class OggettoInInventario(models.Model):
-    """
-    Traccia la cronologia di un Oggetto in un Inventario.
-    Un record "attivo" (data_fine=None) indica la posizione attuale.
-    """
     oggetto = models.ForeignKey(
         'Oggetto', 
         on_delete=models.CASCADE,
@@ -696,14 +617,13 @@ class OggettoInInventario(models.Model):
     class Meta:
         verbose_name = "Tracciamento Oggetto in Inventario"
         verbose_name_plural = "Tracciamenti Oggetto in Inventario"
-        ordering = ['-data_inizio'] # Ordina per il più recente
+        ordering = ['-data_inizio']
 
     def __str__(self):
         stato = "Attuale" if self.data_fine is None else f"Fino a {self.data_fine.strftime('%Y-%m-%d')}"
         return f"{self.oggetto.nome} in {self.inventario.nome} (Da {self.data_inizio.strftime('%Y-%m-%d')} - {stato})"
 
 
-# --- 1. NUOVO MODELLO: TIPOLOGIA PERSONAGGIO ---
 class TipologiaPersonaggio(models.Model):
     nome = models.CharField(max_length=100, unique=True, default="Standard")
     crediti_iniziali = models.DecimalField(
@@ -722,26 +642,19 @@ class TipologiaPersonaggio(models.Model):
         return self.nome
 
 def get_default_tipologia():
-    """
-    Funzione per il campo 'default' di Personaggio.
-    Crea la tipologia "Standard" se non esiste e la restituisce.
-    """
-    # Usiamo get_or_create per la massima sicurezza.
-    # I valori di default (0, 8, True) sono già nel modello.
     tipologia, created = TipologiaPersonaggio.objects.get_or_create(
         nome="Standard" 
     )
     return tipologia.pk
 
 
-# --- 2. NUOVO MODELLO: MOVIMENTI PC ---
 class PuntiCaratteristicaMovimento(models.Model):
     personaggio = models.ForeignKey(
         'Personaggio',
         on_delete=models.CASCADE,
         related_name="movimenti_pc"
     )
-    importo = models.IntegerField() # I PC sono interi
+    importo = models.IntegerField()
     descrizione = models.CharField(max_length=200)
     data = models.DateTimeField(default=timezone.now)
 
@@ -755,13 +668,9 @@ class PuntiCaratteristicaMovimento(models.Model):
 
 
 class Personaggio(Inventario):
-    """
-    Rappresenta un personaggio giocante o non giocante.
-    Eredita da Inventario, quindi PUÒ possedere oggetti.
-    """
     proprietario = models.ForeignKey(
         User,
-        on_delete=models.SET_NULL, # Non cancellare il PG se l'utente viene eliminato
+        on_delete=models.SET_NULL,
         related_name="personaggi",
         null=True, 
         blank=True,
@@ -770,7 +679,7 @@ class Personaggio(Inventario):
     
     tipologia = models.ForeignKey(
         TipologiaPersonaggio,
-        on_delete=models.PROTECT, # Non cancellare una tipologia se è usata
+        on_delete=models.PROTECT,
         related_name="personaggi",
         null=True, blank=True,
     )
@@ -778,7 +687,6 @@ class Personaggio(Inventario):
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     
-    # M2M verso le abilità e attivate che il personaggio possiede
     abilita_possedute = models.ManyToManyField(
         'Abilita',
         through='PersonaggioAbilita',
@@ -798,87 +706,59 @@ class Personaggio(Inventario):
         return self.nome
 
     def save(self, *args, **kwargs):
-        # Se il personaggio sta venendo creato e non ha una tipologia
         if not self.pk and self.tipologia is None:
-            # Trova o crea la tipologia "Standard"
             tipologia_standard, created = TipologiaPersonaggio.objects.get_or_create(
                 nome="Standard"
             )
             self.tipologia = tipologia_standard
         
-        super().save(*args, **kwargs) # Salva l'istanza
+        super().save(*args, **kwargs)
         
     def aggiungi_log(self, testo_log):
-        """Metodo helper per creare velocemente un log."""
         PersonaggioLog.objects.create(personaggio=self, testo_log=testo_log)
     
     def modifica_crediti(self, importo, descrizione):
-        """Metodo helper per aggiungere un movimento di crediti."""
         CreditoMovimento.objects.create(
             personaggio=self,
             importo=importo,
             descrizione=descrizione
         )
 
-    # --- NUOVO METODO HELPER PER PC ---
     def modifica_pc(self, importo, descrizione):
-        """Metodo helper per aggiungere un movimento di Punti Caratteristica."""
         PuntiCaratteristicaMovimento.objects.create(
             personaggio=self,
             importo=importo,
             descrizione=descrizione
         )
 
-    # --- PROPRIETÀ READONLY (Crediti) ---
-    # --- PROPRIETÀ CREDITI (AGGIORNATA) ---
     @property
     def crediti(self):
-        """
-        Calcola il totale dei crediti sommando il valore iniziale
-        della tipologia a tutti i movimenti.
-        """
         base = self.tipologia.crediti_iniziali
         movimenti = self.movimenti_credito.aggregate(totale=Sum('importo'))['totale'] or 0
         return base + movimenti
     
-    # --- NUOVA PROPRIETÀ PUNTI CARATTERISTICA ---
     @property
     def punti_caratteristica(self):
-        """
-        Calcola il totale dei Punti Caratteristica sommando il valore
-        iniziale della tipologia a tutti i movimenti.
-        """
         base = self.tipologia.caratteristiche_iniziali
         movimenti = self.movimenti_pc.aggregate(totale=Sum('importo'))['totale'] or 0
         return base + movimenti
     
-    # --- PROPRIETÀ READONLY (Statistiche/Caratteristiche) ---
-    # (Implementazione iniziale, da espandere con i modificatori da Caratteristiche)
     @property
     def caratteristiche_base(self):
-        """
-        [CALCOLO 1 - OTTIMIZZATO]
-        Calcola i valori base delle Caratteristiche (es. Forza, Destrezza)
-        sommando i bonus 'punteggio_acquisito' dalle abilità possedute.
-        Usa l'aggregazione del database invece di un ciclo Python.
-        """
         if hasattr(self, '_caratteristiche_base_cache'):
             return self._caratteristiche_base_cache
 
-        # 1. Filtra per le abilità del personaggio
         links = abilita_punteggio.objects.filter(
             abilita__personaggioabilita__personaggio=self,
             punteggio__tipo=CARATTERISTICA
         )
         
-        # 2. Raggruppa per nome del punteggio e somma i valori
         query_aggregata = links.values(
-            'punteggio__nome' # Raggruppa per questo campo
+            'punteggio__nome'
         ).annotate(
-            valore_totale=Sum('valore') # Somma i valori
+            valore_totale=Sum('valore')
         ).order_by('punteggio__nome')
         
-        # 3. Trasforma il risultato in un dizionario
         caratteristiche = {
             item['punteggio__nome']: item['valore_totale'] 
             for item in query_aggregata
@@ -887,6 +767,8 @@ class Personaggio(Inventario):
         self._caratteristiche_base_cache = caratteristiche
         return self._caratteristiche_base_cache
     
+    # --- INIZIO BLOCCO MODIFICATO ---
+
     @property
     def modificatori_calcolati(self):
         """
@@ -987,65 +869,7 @@ class Personaggio(Inventario):
                     total -= valore_finale
                     
         return str(round(total, 2))
-    
-    
-    @property
-    def TestoFormattatoPersonale(self):
-        """
-        [CALCOLO 3]
-        Restituisce un elenco di tutti i testi formattati
-        degli Oggetti e Attivate posseduti, applicando
-        i modificatori calcolati del personaggio.
-        """
-        
-        # 1. Prendi i modificatori totali del personaggio
-        mods = self.modificatori_calcolati
-        testi_formattati = []
 
-        # 2. Itera sugli oggetti posseduti
-        oggetti_posseduti = self.get_oggetti().prefetch_related('statistiche_base__statistica')
-        for oggetto in oggetti_posseduti:
-            if not oggetto.testo:
-                continue
-            testo_oggetto = oggetto.testo
-            
-            for link_base in oggetto.oggettostatisticabase_set.all():
-                stat = link_base.statistica
-                if not stat.parametro:
-                    continue
-
-                valore_base = link_base.valore_base
-                
-                # Applica i modificatori del personaggio
-                stat_mods = mods.get(stat.nome, {'add': 0, 'mol': 1.0})
-                valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
-                
-                testo_oggetto = testo_oggetto.replace(f"{{{stat.parametro}}}", str(round(valore_finale, 2)))
-            
-            testi_formattati.append({"sorgente": f"Oggetto: {oggetto.nome}", "testo": testo_oggetto})
-
-        # 3. Itera sulle attivate possedute
-        attivate_possedute = self.attivate_possedute.prefetch_related('statistiche_base__statistica')
-        for attivata in attivate_possedute:
-            if not attivata.testo:
-                continue
-            testo_attivata = attivata.testo
-            
-            for link_base in attivata.attivatastatisticabase_set.all():
-                stat = link_base.statistica
-                if not stat.parametro:
-                    continue
-                    
-                valore_base = link_base.valore_base
-                
-                stat_mods = mods.get(stat.nome, {'add': 0, 'mol': 1.0})
-                valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
-                
-                testo_attivata = testo_attivata.replace(f"{{{stat.parametro}}}", str(round(valore_finale, 2)))
-
-            testi_formattati.append({"sorgente": f"Attivata: {attivata.nome}", "testo": testo_attivata})
-        
-        return testi_formattati
     
     def get_testo_formattato_per_item(self, item):
         """
@@ -1089,91 +913,11 @@ class Personaggio(Inventario):
             
         return testo_formattato
     
-    
-    @property
-    def caratteristiche_calcolate(self):
-        """
-        Calcola i valori totali delle Caratteristiche (CA)
-        base (da abilita_punteggio).
-        """
-        # Filtra per 'punteggio__tipo' == CARATTERISTICA
-        caratteristiche = self.abilita_possedute.through.objects.filter(
-            personaggio=self,
-            abilita__punteggio_acquisito__tipo=CARATTERISTICA
-        ).values(
-            'abilita__punteggio_acquisito__nome' # Raggruppa per nome
-        ).annotate(
-            valore_totale=Sum('abilita__punteggio_acquisito__abilita_punteggio__valore') # TODO: da verificare
-        ).order_by('abilita__punteggio_acquisito__nome')
-        
-        # Questo è un queryset di dizionari, es:
-        # [{'abilita__punteggio_acquisito__nome': 'Forza', 'valore_totale': 10}, ...]
-        return caratteristiche
-
-    @property
-    def modificatori_statistiche(self):
-        """
-        Calcola i modificatori totali delle Statistiche (ST)
-        dalle abilità possedute.
-        """
-        modificatori = self.abilita_possedute.through.objects.filter(
-            personaggio=self
-        ).values(
-            'abilita__statistiche__nome' # Raggruppa per nome statistica
-        ).annotate(
-            modificatore_totale=Sum('abilita__abilitastatistica__valore')
-        ).order_by('abilita__statistiche__nome')
-        
-        # Restituisce un queryset di dizionari, es:
-        # [{'abilita__statistiche__nome': 'Danni Mischia', 'modificatore_totale': 5}, ...]
-        return modificatori
-
-    # --- PROPRIETÀ READONLY (Testo Formattato) ---
-    @property
-    def TestoFormattatoPersonale(self):
-        """
-        Restituisce un elenco di tutti i testi formattati
-        degli Oggetti e Attivate posseduti, applicando
-        i modificatori del personaggio.
-        """
-        
-        # 1. Prendi i modificatori totali del personaggio
-        # (Questo è un dict per accesso rapido, es: {'Danni Mischia': 5, 'Punti Vita': 10})
-        mods = {
-            item['abilita__statistiche__nome']: item['modificatore_totale'] 
-            for item in self.modificatori_statistiche if item['modificatore_totale']
-        }
-        
-        # TODO: Aggiungere qui i modificatori derivanti dalle Caratteristiche
-        
-        testi_formattati = []
-
-        # 2. Itera sugli oggetti posseduti
-        oggetti_posseduti = self.get_oggetti() # Metodo ereditato da Inventario
-        for oggetto in oggetti_posseduti.select_related('aura').prefetch_related('statistiche_base__statistica'):
-            if not oggetto.testo:
-                continue
-
-            testo_oggetto = oggetto.testo
-            # Itera sui valori base dell'oggetto
-            for link_base in oggetto.oggettostatisticabase_set.all():
-                stat = link_base.statistica
-                valore = link_base.valore_base
-                
-                # Applica il modificatore del personaggio
-                modificatore = mods.get(stat.nome, 0)
-                valore_finale = valore + modificatore # (Semplificazione, non gestisce MOLTIPLICATIVO)
-                
-                if stat.parametro:
-                    testo_oggetto = testo_oggetto.replace(f"{{{stat.parametro}}}", str(valore_finale))
-            
-            testi_formattati.append({"sorgente": oggetto.nome, "testo": testo_oggetto})
-
-        # 3. Itera sulle attivate possedute
-        # ... (logica simile per self.attivate_possedute) ...
-        
-        return testi_formattati
-
+    # --- RIMOSSO BLOCCO DUPLICATO ---
+    # Le vecchie property 'TestoFormattatoPersonale', 'caratteristiche_calcolate', 
+    # e 'modificatori_statistiche' sono state rimosse da qui per
+    # evitare conflitti con le nuove versioni.
+    # --- FINE BLOCCO RIMOSSO ---
 
 # --- 2. MODELLI "THROUGH" PER PERSONAGGIO ---
 class PersonaggioAbilita(models.Model):
@@ -1228,21 +972,15 @@ STATO_TRANSAZIONE_CHOICES = [
 ]
 
 class TransazioneSospesa(models.Model):
-    """
-    Rappresenta una richiesta di trasferimento di un oggetto
-    che richiede conferma.
-    """
     oggetto = models.ForeignKey(
         'Oggetto', 
         on_delete=models.CASCADE
     )
-    # L'inventario che DEVE CONFERMARE (probabilmente un Personaggio)
     mittente = models.ForeignKey(
         Inventario, 
         on_delete=models.CASCADE,
         related_name="transazioni_in_uscita_sospese"
     )
-    # Il Personaggio che ha INIZIATO la richiesta e riceverà l'oggetto
     richiedente = models.ForeignKey(
         Personaggio, 
         on_delete=models.CASCADE,
@@ -1261,48 +999,34 @@ class TransazioneSospesa(models.Model):
         ordering = ['-data_richiesta']
 
     def accetta(self):
-        """
-        Accetta la transazione e sposta l'oggetto.
-        """
         if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
             raise Exception("Transazione già processata.")
         
-        # Sposta l'oggetto all'inventario del richiedente
-        self.oggetto.sposta_in_inventario(self.richiedente)
+        # sposta_in_inventario è un metodo di Oggetto, non self (TransazioneSospesa)
+        self.oggetto.sposta_in_inventario(self.richiedente) 
         self.stato = STATO_TRANSAZIONE_ACCETTATA
         self.save()
         
-        # Aggiungi log
         self.richiedente.aggiungi_log(f"Ricevuto {self.oggetto.nome} da {self.mittente.nome}.")
         if hasattr(self.mittente, 'personaggio'):
             self.mittente.personaggio.aggiungi_log(f"Consegnato {self.oggetto.nome} a {self.richiedente.nome}.")
         
     def rifiuta(self):
-        """Rifiuta la transazione."""
         if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
             raise Exception("Transazione già processata.")
         
         self.stato = STATO_TRANSAZIONE_RIFIUTATA
         self.save()
-        # Aggiungi log
         self.richiedente.aggiungi_log(f"Richiesta per {self.oggetto.nome} da {self.mittente.nome} rifiutata.")
         
 
 def generate_short_id(length=14):
-    """
-    Genera un ID casuale sicuro di 14 caratteri.
-    Usa A-Z, a-z, 0-9.
-    """
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 # through
 
 class OggettoElemento(models.Model):
-    """
-    Modello intermedio per permettere a un Oggetto di avere
-    più volte lo stesso Elemento (Punteggio).
-    """
     oggetto = models.ForeignKey(
         'Oggetto', 
         on_delete=models.CASCADE
@@ -1310,17 +1034,11 @@ class OggettoElemento(models.Model):
     elemento = models.ForeignKey(
         Punteggio, 
         on_delete=models.CASCADE,
-        # Applicando qui il filtro, l'inline nell'admin
-        # mostrerà solo Punteggi di tipo ELEMENTO.
         limit_choices_to={'tipo': ELEMENTO}, 
         verbose_name="Elemento"
     )
     
 class AttivataElemento(models.Model):
-    """
-    Modello intermedio per permettere a un Oggetto di avere
-    più volte lo stesso Elemento (Punteggio).
-    """
     attivata = models.ForeignKey(
         'Attivata', 
         on_delete=models.CASCADE
@@ -1328,8 +1046,6 @@ class AttivataElemento(models.Model):
     elemento = models.ForeignKey(
         Punteggio, 
         on_delete=models.CASCADE,
-        # Applicando qui il filtro, l'inline nell'admin
-        # mostrerà solo Punteggi di tipo ELEMENTO.
         limit_choices_to={'tipo': ELEMENTO}, 
         verbose_name="Elemento"
     )
@@ -1350,12 +1066,11 @@ class OggettoStatistica(models.Model):
     )
 
     class Meta:
-        unique_together = ('oggetto', 'statistica') # Impedisce duplicati
+        unique_together = ('oggetto', 'statistica')
 
     def __str__(self):
         return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore}"
 
-# --- 1. NUOVO MODELLO "THROUGH" per Oggetto <-> Valore Base ---
 class OggettoStatisticaBase(models.Model):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
@@ -1369,14 +1084,10 @@ class OggettoStatisticaBase(models.Model):
     def __str__(self):
         return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore_base}"
 
-
-# --- 2. NUOVO MODELLO "THROUGH" per Attivate <-> Valore Base ---
 class AttivataStatisticaBase(models.Model):
     attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
-
-
 
     class Meta:
         unique_together = ('attivata', 'statistica')
@@ -1389,13 +1100,9 @@ class AttivataStatisticaBase(models.Model):
 
 # abstract
 
-
-
-# Create your models here.
 class QrCode(models.Model):
-    # id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     id = models.CharField(
-        primary_key=True,  # <-- QUESTO È IL PUNTO CHIAVE
+        primary_key=True,
         max_length=14,
         default=generate_short_id,
         editable=False
@@ -1408,48 +1115,22 @@ class QrCode(models.Model):
         return "({codice})".format(codice=self.id)
     
     def save(self, *args, **kwargs):
-        """
-        Sovrascrive il metodo save per gestire le (improbabili)
-        collisioni della chiave primaria.
-        """
-        # _state.adding è True solo quando l'oggetto viene creato
         if self._state.adding:
-            while True:  # Inizia un ciclo di tentativi
+            while True:
                 try:
-                    # Prova a salvare l'oggetto. 
-                    # L'ID è già stato generato dal 'default'.
                     super().save(*args, **kwargs)
-                    # Se il salvataggio va a buon fine, usciamo dal ciclo
                     break
                 except IntegrityError:
-                    # Se fallisce per IntegrityError, significa che l'ID esiste.
-                    # Generiamo un nuovo ID e il ciclo 'while' riproverà.
                     self.id = generate_short_id()
         else:
-            # Se non è un nuovo oggetto (_state.adding è False),
-            # è un aggiornamento. Salviamo normalmente.
             super().save(*args, **kwargs)
 
-
-
-
 class Oggetto(A_vista):
-    # a_vista_ptr = models.OneToOneField(
-    #     A_vista,
-    #     on_delete=models.CASCADE,
-    #     parent_link=True,
-    #     # related_name='istanza_oggetto', # Nome univoco per evitare conflitti
-    #     null=True # <-- Questo è il punto chiave temporaneo
-    # )
-    # elementi = models.ManyToManyField(Punteggio, blank=True, limit_choices_to={'tipo' : ELEMENTO}, verbose_name="Elementi associati")
-    
     elementi = models.ManyToManyField(
         Punteggio, 
         blank=True, 
         verbose_name="Elementi associati",
-        through='OggettoElemento', # Specifica il modello intermedio
-        # Rimuovi limit_choices_to da qui, è stato spostato
-        # nel modello OggettoElemento.
+        through='OggettoElemento',
     )
     statistiche = models.ManyToManyField(
         Statistica,
@@ -1459,13 +1140,12 @@ class Oggetto(A_vista):
         related_name = "oggetti_statistiche",
     )
     
-    # --- 3. NUOVO CAMPO ManyToMany per i VALORI BASE ---
     statistiche_base = models.ManyToManyField(
         Statistica,
         through='OggettoStatisticaBase',
         blank=True,
         verbose_name="Statistiche (Valori Base)",
-        related_name='oggetti_statistiche_base' # Nuovo related_name univoco
+        related_name='oggetti_statistiche_base'
     )
     
     aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, verbose_name="Aura associata", related_name="oggetti_aura")
@@ -1498,17 +1178,14 @@ class Oggetto(A_vista):
     
     @property
     def inventario_corrente(self):
-        """
-        Restituisce l'istanza di Inventario in cui questo oggetto
-        si trova attualmente.
-        """
         tracciamento_attuale = self.tracciamento_inventario.filter(
             data_fine__isnull=True
-        ).first() # .first() perché ce ne dovrebbe essere solo uno
+        ).first()
         
         return tracciamento_attuale.inventario if tracciamento_attuale else None
 
-def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
+    # --- METODO SPOSTATO ---
+    def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
         """
         Metodo principale per spostare un oggetto in un nuovo inventario.
         Gestisce la cronologia in modo atomico per prevenire race conditions.
@@ -1516,39 +1193,34 @@ def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
         if data_spostamento is None:
             data_spostamento = timezone.now()
 
-        # 2. Blocca l'oggetto nel database per questa transazione
-        # Questo previene che altre richieste lo modifichino contemporaneamente
-        Oggetto.objects.select_for_update().get(pk=self.pk)
-
-        # 3. Trova e chiudi il record di tracciamento attuale (se esiste)
-        tracciamento_attuale = self.tracciamento_inventario.filter(
-            data_fine__isnull=True
-        ).first()
-        
-        if tracciamento_attuale:
-            if tracciamento_attuale.inventario == nuovo_inventario:
-                return
+        # Usa una transazione atomica per sicurezza
+        with transaction.atomic():
+            # Blocca l'oggetto nel database per questa transazione
+            # Oggetto.objects.select_for_update().get(pk=self.pk) # Questo può dare errori se self è nuovo
             
-            tracciamento_attuale.data_fine = data_spostamento
-            tracciamento_attuale.save()
+            # Trova e chiudi il record di tracciamento attuale (se esiste)
+            tracciamento_attuale = self.tracciamento_inventario.filter(
+                data_fine__isnull=True
+            ).first()
+            
+            if tracciamento_attuale:
+                if tracciamento_attuale.inventario == nuovo_inventario:
+                    return # È già nell'inventario giusto
+                
+                tracciamento_attuale.data_fine = data_spostamento
+                tracciamento_attuale.save()
 
-        if nuovo_inventario is not None:
-            OggettoInInventario.objects.create(
-                oggetto=self,
-                inventario=nuovo_inventario,
-                data_inizio=data_spostamento
-            )
-    # -----------------------------------------
-    
+            # Crea il nuovo record di tracciamento solo se l'inventario non è None
+            if nuovo_inventario is not None:
+                OggettoInInventario.objects.create(
+                    oggetto=self,
+                    inventario=nuovo_inventario,
+                    data_inizio=data_spostamento
+                )
+    # --- FINE METODO SPOSTATO ---
 
 
 # --- MODELLI PER I PLUGIN CMS ---
-
-# class TierPluginModel(CMSPlugin):
-#     tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='personaggi_tier_plugin')
-
-#     def __str__(self):
-#         return self.tier.nome
 
 class AbilitaPluginModel(CMSPlugin):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
@@ -1567,7 +1239,6 @@ class AttivataPluginModel(CMSPlugin):
 
     def __str__(self):
         return self.attivata.nome        
-
 
 class TabellaPluginModel(CMSPlugin):
     tabella = models.ForeignKey(Tabella, on_delete = models.CASCADE)
