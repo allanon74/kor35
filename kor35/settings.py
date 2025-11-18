@@ -156,10 +156,10 @@ CORS_ALLOWED_ORIGINS = [
     "https://app.k-o-r-35.it",
     "https://kor35.it",
     "https://www.kor35.it",
-    # "https://app.kor35.it",
+    "https://app.kor35.it",
     "http://kor35.it",
     "http://www.kor35.it",
-    # "http://app.kor35.it",       
+    "http://app.kor35.it",       
 ]
 
 CORS_URLS_REGEX = r'^/(personaggi/api|auth)/.*$'
@@ -176,6 +176,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
+CORS_ALLOW_CREDENTIALS = True
 
 TEMPLATES = [
     {
@@ -332,3 +333,11 @@ DEFAULT_FROM_EMAIL = SMTP_EMAIL
 # admin_interface settings
 X_FRAME_OPTIONS = "SAMEORIGIN"
 SILENCED_SYSTEM_CHECKS = ["security.W019"]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://www.k-o-r-35.it",
+    "https://localhost:5173", # Fondamentale per le chiamate POST da locale
+    "https://app.k-o-r-35.it",
+    "https://app.kor35.it",
+    "https://www.kor35.it",
+]
