@@ -3,6 +3,7 @@ from rest_framework.authtoken.models import Token
 from django.utils import timezone
 from django.conf import settings
 from django.utils.html import format_html
+from django.contrib.auth.models import User
 
 # Importa i modelli e le funzioni helper
 from .models import (
@@ -14,11 +15,10 @@ from .models import (
     OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
     CreditoMovimento, PersonaggioLog, TransazioneSospesa
 )
-from django.contrib.auth.models import User
+
 
 #
 # --- Serializer di Base e Specifici per l'App React ---
-# (Definiti prima, così possono essere usati da altri)
 #
 
 class UserSerializer(serializers.ModelSerializer):
@@ -95,14 +95,12 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         )
 
     def get_base_url(self):
-        """Ottiene il base URL dal contesto della request."""
         request = self.context.get('request')
         if request:
             return f"{request.scheme}://{request.get_host()}"
         return ""
 
     def get_icona_url_assoluto(self, obj):
-        """Helper per generare l'URL assoluto dell'icona."""
         if not obj.icona:
             return None
         base_url = self.get_base_url()
@@ -110,7 +108,6 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         media_url = settings.MEDIA_URL
         if not media_url:
             media_url = "/media/"
-        # Gestisce correttamente gli slash
         if media_url.startswith('/'):
             media_url = media_url[1:]
         if media_url and not media_url.endswith('/'):
@@ -169,45 +166,42 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         )
 
     def get_is_primaria(self, obj):
-        # Controlla se l'oggetto Punteggio è una Statistica e ha il flag
         if hasattr(obj, 'statistica') and obj.statistica.is_primaria:
             return True
         return False
 
     def get_valore_predefinito(self, obj):
-        # Restituisce il valore base solo se è una Statistica
         if hasattr(obj, 'statistica'):
             return obj.statistica.valore_base_predefinito
-        return 0 # Le Caratteristiche hanno base 0
+        return 0
 
     def get_parametro(self, obj):
-        # Restituisce il parametro (es. "pv") solo se è una Statistica
         if hasattr(obj, 'statistica'):
             return obj.statistica.parametro
         return None
+
 #
-# --- Serializer Vecchi (Aggiornati per usare PunteggioSmallSerializer) ---
-# (Questi sono usati dall'Admin o da vecchie view, li teniamo per compatibilità)
+# --- Serializer Vecchi ---
 #
 
 class AbilSerializer(serializers.ModelSerializer):
-    caratteristica = PunteggioSmallSerializer(many=False) # <-- CORRETTO
+    caratteristica = PunteggioSmallSerializer(many=False)
     tiers = TierSerializer(many=True)
-    requisiti = PunteggioSmallSerializer(many=True, required=False) # <-- CORRETTO
-    punteggio_acquisito = PunteggioSmallSerializer(many=True, required=False) # <-- CORRETTO
+    requisiti = PunteggioSmallSerializer(many=True, required=False)
+    punteggio_acquisito = PunteggioSmallSerializer(many=True, required=False)
     class Meta:
         model = Abilita
         fields = '__all__'
 
 class AbilitaSmallSerializer(serializers.ModelSerializer):
-    caratteristica = PunteggioSmallSerializer(many=False) # <-- CORRETTO
+    caratteristica = PunteggioSmallSerializer(many=False)
     class Meta:
         model = Abilita
         fields = ("id", "nome", "caratteristica", "descrizione")
 
 class MattoneSerializer(serializers.ModelSerializer):
-    elemento = PunteggioSmallSerializer() # <-- CORRETTO
-    aura = PunteggioSmallSerializer() # <-- CORRETTO
+    elemento = PunteggioSmallSerializer()
+    aura = PunteggioSmallSerializer()
     class Meta:
         model = Mattone
         fields = '__all__'
@@ -219,7 +213,7 @@ class SpellSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 #
-# --- Serializer "Through" (per admin/debug) ---
+# --- Serializer "Through" ---
 #
 
 class AbilitaTierSerializer(serializers.ModelSerializer):
@@ -281,7 +275,7 @@ class AbilitaUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 #
-# --- Serializer Specifici per App React (continuazione) ---
+# --- Serializer Specifici per App React ---
 #
 
 class AbilitaRequisitoSmallSerializer(serializers.ModelSerializer):
@@ -306,7 +300,7 @@ class AbilitaPrerequisitoSmallSerializer(serializers.ModelSerializer):
 
 class AbilitaMasterListSerializer(serializers.ModelSerializer):
     """
-    Serializer completo per la lista "master" delle abilità (usato dalla view).
+    Serializer completo per la lista "master" delle abilità.
     """
     caratteristica = PunteggioSmallSerializer(read_only=True)
     requisiti = AbilitaRequisitoSmallSerializer(
@@ -319,7 +313,6 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
         many=True, 
         read_only=True
     )
-    
     punteggi_assegnati = AbilitaPunteggioSmallSerializer(
         source='abilita_punteggio_set', 
         many=True, 
@@ -339,52 +332,44 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
             'punteggi_assegnati', 'statistiche_modificate',
         )
 
-# --- QUESTA È LA CLASSE CORRETTA PER LE ABILITÀ POSSEDUTE ---
-# (La vecchia 'AbilitaSerializer' generica è stata rimossa)
 class AbilitaSerializer(serializers.ModelSerializer):
     """
-    Serializer per le 'abilita_possedute' del personaggio (usato in PersonaggioDetailSerializer).
+    Serializer per le 'abilita_possedute' del personaggio.
     """
     caratteristica = PunteggioSmallSerializer(read_only=True) 
     class Meta:
         model = Abilita
-        # Aggiungi 'caratteristica' alla lista dei campi
         fields = ('id', 'nome', 'descrizione', 'caratteristica')
 
 
-# --- Serializer Oggetti/Attivate (Pannello QR) ---
+# --- Serializer Oggetti/Attivate ---
 
 class OggettoStatisticaSerializer(serializers.ModelSerializer):
-    """Serializza la pivot Modificatori di Oggetto."""
     statistica = StatisticaSerializer(read_only=True)
     class Meta:
         model = OggettoStatistica
         fields = ('statistica', 'valore')
 
 class OggettoStatisticaBaseSerializer(serializers.ModelSerializer):
-    """Serializza la pivot Valori Base di Oggetto."""
     statistica = StatisticaSerializer(read_only=True)
     class Meta:
         model = OggettoStatisticaBase
         fields = ('statistica', 'valore_base')
 
 class AttivataStatisticaBaseSerializer(serializers.ModelSerializer):
-    """Serializza la pivot Valori Base di Attivata."""
     statistica = StatisticaSerializer(read_only=True)
     class Meta:
         model = AttivataStatisticaBase
         fields = ('statistica', 'valore_base')
 
 class OggettoElementoSerializer(serializers.ModelSerializer):
-    """Serializza la pivot Elementi di Oggetto."""
-    elemento = PunteggioSmallSerializer(read_only=True) # <-- CORRETTO
+    elemento = PunteggioSmallSerializer(read_only=True)
     class Meta:
         model = OggettoElemento
         fields = ('elemento',)
 
 class AttivataElementoSerializer(serializers.ModelSerializer):
-    """Serializza la pivot Elementi di Attivata."""
-    elemento = PunteggioSmallSerializer(read_only=True) # <-- CORRETTO
+    elemento = PunteggioSmallSerializer(read_only=True)
     class Meta:
         model = AttivataElemento 
         fields = ('elemento',)
@@ -396,7 +381,7 @@ class OggettoSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-    aura = PunteggioSmallSerializer(read_only=True) # <-- CORRETTO
+    aura = PunteggioSmallSerializer(read_only=True)
     inventario_corrente = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = Oggetto
@@ -465,20 +450,15 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     proprietario = serializers.StringRelatedField(read_only=True)
     crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     punti_caratteristica = serializers.IntegerField(read_only=True)
-    # caratteristiche_base = serializers.JSONField(read_only=True)
     punteggi_base = serializers.JSONField(read_only=True) 
     modificatori_calcolati = serializers.JSONField(read_only=True) 
     TestoFormattatoPersonale = serializers.JSONField(read_only=True)
     tipologia = TipologiaPersonaggioSerializer(read_only=True)
     
-    # --- CAMPI CHIAVE ---
-    # Ora usa l'UNICA E CORRETTA AbilitaSerializer (definita sopra)
-    # abilita_possedute = AbilitaSerializer(many=True, read_only=True) 
     abilita_possedute = AbilitaMasterListSerializer(many=True, read_only=True)
     
     oggetti = serializers.SerializerMethodField()
     attivate_possedute = serializers.SerializerMethodField()
-    # ---
     
     log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
@@ -502,7 +482,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'statistiche_base__statistica', 'oggettostatistica_set__statistica',
             'oggettoelemento_set__elemento', 'aura'
         )
-        personaggio.modificatori_calcolati # Assicura che la cache sia piena
+        personaggio.modificatori_calcolati 
         risultati = []
         for obj in oggetti_posseduti:
             dati_oggetto = OggettoSerializer(obj, context=self.context).data 
@@ -514,7 +494,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         attivate_possedute = personaggio.attivate_possedute.prefetch_related(
             'statistiche_base__statistica', 'attivataelemento_set__elemento'
         )
-        personaggio.modificatori_calcolati # La cache dovrebbe essere già piena
+        personaggio.modificatori_calcolati 
         risultati = []
         for att in attivate_possedute:
             dati_attivata = AttivataSerializer(att, context=self.context).data 
@@ -580,24 +560,28 @@ class TransazioneConfermaSerializer(serializers.Serializer):
 class PersonaggioListSerializer(serializers.ModelSerializer):
     proprietario = serializers.StringRelatedField(read_only=True)
     tipologia = serializers.StringRelatedField(read_only=True)
+    
+    # Campo calcolato per il nome completo del proprietario
     proprietario_nome = serializers.SerializerMethodField()
+
     class Meta:
         model = Personaggio
         fields = (
             'id', 'nome', 'proprietario', 'tipologia', 'proprietario_nome',
             'data_nascita', 'data_morte'
         )
-        def get_proprietario_nome(self, obj):
-            """
-            Restituisce "Nome Cognome" del proprietario.
-            Se mancano, restituisce lo username.
-            """
-            user = obj.proprietario
-            if not user:
-                return "Nessun Proprietario"
-            
-            full_name = f"{user.last_name} {user.first_name}".strip()
-            return full_name if full_name else user.username
+    
+    def get_proprietario_nome(self, obj):
+        """
+        Restituisce "Nome Cognome" del proprietario.
+        Se mancano, restituisce lo username.
+        """
+        user = obj.proprietario
+        if not user:
+            return "Nessun Proprietario"
+        
+        full_name = f"{user.first_name} {user.last_name}".strip()
+        return full_name if full_name else user.username
         
 class PuntiCaratteristicaMovimentoCreateSerializer(serializers.Serializer):
     importo = serializers.IntegerField()
@@ -621,12 +605,8 @@ class RubaSerializer(serializers.Serializer):
         oggetto = data.get('oggetto_id')
         target_personaggio = data.get('target_personaggio_id')
 
-        # Correzione: get_oggetti() è un metodo, non un related manager
         if not target_personaggio.get_oggetti().filter(id=oggetto.id).exists():
              raise serializers.ValidationError("L'oggetto non appartiene al personaggio target.")
-        
-        # Esempio di logica di validazione (da adattare)
-        # ...
         
         return data
 
@@ -635,10 +615,8 @@ class RubaSerializer(serializers.Serializer):
         oggetto = self.validated_data['oggetto_id']
         target_personaggio = self.validated_data['target_personaggio_id']
         
-        # Usa il metodo corretto del modello per spostare l'oggetto
         oggetto.sposta_in_inventario(richiedente) 
         
-        # Aggiungi log
         richiedente.aggiungi_log(f"Oggetto '{oggetto.nome}' rubato da {target_personaggio.nome}.")
         target_personaggio.aggiungi_log(f"Oggetto '{oggetto.nome}' rubato da {richiedente.nome}.")
         
@@ -646,7 +624,6 @@ class RubaSerializer(serializers.Serializer):
 
 
 class AcquisisciSerializer(serializers.Serializer):
-    # NOTA: QrCode.id è un CharField, non UUIDField
     qrcode_id = serializers.CharField(max_length=20) 
     
     def validate(self, data):
@@ -655,7 +632,6 @@ class AcquisisciSerializer(serializers.Serializer):
             raise serializers.ValidationError("Nessun personaggio richiedente fornito.")
             
         try:
-            # Convalida come stringa
             qr_code_id_str = str(data.get('qrcode_id'))
             qr_code = QrCode.objects.select_related('vista').get(id=qr_code_id_str)
         except (QrCode.DoesNotExist, ValueError, TypeError):
@@ -685,7 +661,7 @@ class AcquisisciSerializer(serializers.Serializer):
         item = self.context['item']
         
         if isinstance(item, Oggetto):
-            item.sposta_in_inventario(richiedente) # Usa il metodo corretto
+            item.sposta_in_inventario(richiedente)
             richiedente.aggiungi_log(f"Acquisito oggetto: {item.nome}.")
         elif isinstance(item, Attivata):
             richiedente.attivate_possedute.add(item)
@@ -695,3 +671,4 @@ class AcquisisciSerializer(serializers.Serializer):
         qr_code.save()
         
         return item
+    
