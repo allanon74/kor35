@@ -294,18 +294,39 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
     GET /api/personaggio/me/abilita_acquistabili/
     Restituisce un elenco *filtrato* di abilità che il personaggio
     può attualmente acquistare, con i costi già calcolati.
+    Richiede il parametro query 'char_id' per identificare il personaggio.
     """
     permission_classes = [IsAuthenticated]
     serializer_class = AbilitaMasterListSerializer
 
     def get(self, request, format=None):
+        # 1. FIX CHIAVE: Legge l'ID del personaggio dalla query string
+        character_id = request.query_params.get('char_id')
+
+        if not character_id:
+            return Response(
+                {"error": "L'ID del personaggio è richiesto (char_id)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         try:
-            personaggio = Personaggio.objects.select_related('tipologia').get(proprietario=request.user)
+            # 2. FIX CHIAVE: Usa get() filtrando sia per ID (dal frontend) che per proprietario (sicurezza)
+            personaggio = Personaggio.objects.select_related('tipologia').get(
+                id=character_id, 
+                proprietario=request.user
+            )
         except Personaggio.DoesNotExist:
             return Response(
-                {"error": "Nessun personaggio trovato per questo utente."},
+                {"error": "Personaggio non trovato o non appartenente all'utente."},
                 status=status.HTTP_404_NOT_FOUND
             )
+        except Personaggio.MultipleObjectsReturned:
+            # Questo non dovrebbe mai succedere se l'ID è univoco, ma è un buon catch
+            return Response(
+                {"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
         # --- Logica di filtraggio (adattata dal frontend) ---
 
@@ -321,7 +342,6 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         moltiplicatore_costo = Decimal(1) - sconto_percent
 
         # 3. Prendi *tutte* le abilità non possedute, pre-caricando i dati
-        # (Usiamo la stessa ottimizzazione della Soluzione 1)
         master_skills_list = Abilita.objects.exclude(
             id__in=possessed_skill_ids
         ).select_related(
