@@ -4,6 +4,7 @@ from django.forms import Media
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe # Import necessario
 
 # Import aggiornati dai models
 from .models import (
@@ -17,7 +18,7 @@ from .models import (
 )
 from .models import (
     Tabella, Punteggio, Tier, Abilita, Mattone, 
-    Caratteristica, Aura, ModelloAura, MattoneStatistica, PersonaggioModelloAura # Aggiunti nuovi modelli
+    Caratteristica, Aura, ModelloAura, MattoneStatistica, PersonaggioModelloAura
 )
 from .models import (
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
@@ -255,12 +256,12 @@ class MattoneStatisticaInline(StatisticaPivotInlineBase):
 # --- INLINE PER AURA (Lista Mattoni) ---
 class MattoneInlineForAura(admin.TabularInline):
     model = Mattone
-    fk_name = 'aura' # Il campo FK in Mattone che punta ad Aura (Punteggio)
+    fk_name = 'aura'
     extra = 1
     verbose_name = "Mattone associato"
     verbose_name_plural = "Mattoni associati a questa Aura"
     fields = ('nome', 'caratteristica_associata', 'funzionamento_metatalento')
-    show_change_link = True # Permette di andare alla pagina del mattone per editing completo
+    show_change_link = True 
 
 
 # --- NUOVI INLINE PER PERSONAGGIO ---
@@ -288,28 +289,44 @@ class PersonaggioModelloAuraInline(admin.TabularInline):
     verbose_name = "Modello Aura Applicato"
     verbose_name_plural = "Modelli Aura Applicati"
 
-# ----------- HELPER FUNCTION -------------
+# ----------- HELPER FUNCTION CORRETTE -------------
+
 def get_statistica_base_help_text():
     """
-    Crea dinamicamente l'help text con le variabili disponibili
-    basate sulle 'sigle' del modello Statistica.
+    Crea dinamicamente l'help text.
+    CORREZIONE: Evita format_html sul risultato finale che contiene graffe.
     """
     try:
         stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
         if not stats.exists():
             return "Nessuna variabile statistica (parametro) definita."
         
-        base_text = "<b>Variabili Valori Base disponibili:</b><br>"
-        variabili = [f"&bull; <b>{{{{{s.parametro}}}}}</b>: {s.nome}" for s in stats]
+        items = []
+        for s in stats:
+            # Usa {{}} per visualizzare le graffe letterali nel template HTML
+            # {{{}}} diventa {valore}
+            items.append(format_html("&bull; <b>{{{}}}</b>: {}", s.parametro, s.nome))
+            
+        base_text = mark_safe("<b>Variabili Valori Base disponibili:</b><br>")
+        joined_items = mark_safe("<br>").join(items)
         
-        return format_html(base_text + "<br>".join(variabili))
+        return format_html("{}{}", base_text, joined_items)
+        
     except Exception as e:
         return format_html(f"<b style='color:red;'>Errore nel caricare le variabili: {e}</b>")
 
 def get_mattone_help_text():
-    stats_text = get_statistica_base_help_text()
-    extra_text = "<br><b>Variabili Speciali Mattone:</b><br>&bull; <b>{caratt}</b>: Valore della caratteristica associata.<br>&bull; <b>{3*caratt}</b>: Moltiplicatore (es. 3x)."
-    return format_html(str(stats_text) + extra_text)
+    """
+    CORREZIONE: Concatena in modo sicuro senza re-interpretare le graffe.
+    """
+    stats_text = get_statistica_base_help_text() # È già SafeString
+    extra_text = mark_safe(
+        "<br><b>Variabili Speciali Mattone:</b><br>"
+        "&bull; <b>{caratt}</b>: Valore della caratteristica associata.<br>"
+        "&bull; <b>{3*caratt}</b>: Moltiplicatore (es. 3x)."
+    )
+    # Usa un template vuoto per concatenare due SafeString
+    return format_html("{}{}", stats_text, extra_text)
 
 # ----------- CLASSI ADMIN -------------
 
@@ -345,8 +362,8 @@ class PunteggioAdmin(A_Admin):
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        # Escludiamo Caratteristiche e Mattoni (che hanno i loro admin)
-        return qs.exclude(tipo=CARATTERISTICA).exclude(tipo='MA') # 'MA' è il tipo per MATTONE se definito nelle costanti models, altrimenti usa filtro su classe figlia se possibile, ma qui basiamo su tipo stringa
+        # 'MA' per Mattone, 'CA' per Caratteristica
+        return qs.exclude(tipo=CARATTERISTICA).exclude(tipo='MA')
 
 @admin.register(Caratteristica)
 class CaratteristicaAdmin(A_Admin): 
@@ -366,12 +383,10 @@ class CaratteristicaAdmin(A_Admin):
 
 @admin.register(Aura)
 class AuraAdmin(A_Admin):
-    """Admin Proxy per le Aure"""
     form = PunteggioAdminForm
     list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html')
     search_fields = ('nome',)
     summernote_fields = ('descrizione',)
-    # TabularInline richiesta per vedere ed editare i mattoni
     inlines = [MattoneInlineForAura]
 
     def get_queryset(self, request):
@@ -385,7 +400,7 @@ class AuraAdmin(A_Admin):
 class ModelloAuraAdmin(admin.ModelAdmin):
     list_display = ('nome', 'aura')
     list_filter = ('aura',)
-    filter_horizontal = ('mattoni_proibiti',) # Widget comodo per M2M
+    filter_horizontal = ('mattoni_proibiti',)
 
 @admin.register(Mattone)
 class MattoneAdmin(A_Admin):
@@ -395,7 +410,7 @@ class MattoneAdmin(A_Admin):
     search_fields = ('nome', 'testo_addizionale')
     summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
     
-    inlines = [MattoneStatisticaInline] # Pivot table statistiche
+    inlines = [MattoneStatisticaInline]
     
     fieldsets = (
         ('Dati Mattone', {
@@ -419,12 +434,12 @@ class MattoneAdmin(A_Admin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
+        # Applica l'help text corretto usando la funzione fixata
         if 'testo_addizionale' in form.base_fields:
             form.base_fields['testo_addizionale'].help_text = get_mattone_help_text()
         return form
     
     def get_exclude(self, request, obj=None):
-        # Escludiamo campi generici di Punteggio non usati o gestiti diversamente
         return ('tipo', 'descrizione', 'caratteristica_relativa')
 
 
@@ -581,7 +596,7 @@ class PersonaggioAdmin(A_Admin):
     summernote_fields = ('testo',)
     
     inlines = [
-        PersonaggioModelloAuraInline, # Aggiunto per gestire i modelli di aura
+        PersonaggioModelloAuraInline,
         CreditoMovimentoInline,
         PuntiCaratteristicaMovimentoInline,
         PersonaggioLogInline
