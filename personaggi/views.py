@@ -26,6 +26,7 @@ from rest_framework.authtoken.admin import User
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.authtoken.models import Token
 
 from rest_framework import generics
 from django.db import transaction
@@ -66,9 +67,22 @@ def get_csrf_token(request):
     return JsonResponse({'detail': 'CSRF cookie set'})
 
 
-
+# --- MODIFICA 1: Login che restituisce info utente ---
 class MyAuthToken(ObtainAuthToken):
-    permisson_classes = (AllowAny,)
+    permission_classes = (AllowAny,)
+    
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user_id': user.pk,
+            'username': user.username,
+            'is_staff': user.is_staff or user.is_superuser # Fondamentale per il frontend
+        })
+# ----------------------------------------------------
 
 from .models import (
     Abilita, Tier, Spell, Mattone, Punteggio, Tabella,
@@ -283,6 +297,7 @@ class AcquisisciAbilitaView(APIView):
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
 class AbilitaAcquistabiliView(generics.GenericAPIView):
     """
     GET /api/personaggio/me/abilita_acquistabili/
@@ -370,7 +385,6 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
             final_data.append(skill_data)
 
         return Response(final_data, status=status.HTTP_200_OK)
-
 
     
 def qr_code_html_view(request: HttpRequest) -> HttpResponse:
@@ -689,7 +703,7 @@ class PersonaggioMeView(APIView):
         except Personaggio.DoesNotExist:
             return Response(
                 {"error": "Nessun personaggio trovato per questo utente."},
-                status=status.HTTP_4_04_NOT_FOUND
+                status=status.HTTP_404_NOT_FOUND
             )
         
         serializer = PersonaggioDetailSerializer(personaggio)
@@ -858,28 +872,25 @@ class TransazioneConfermaView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     
+# --- MODIFICA 2: PersonaggioListView con filtro opzionale ---
 class PersonaggioListView(APIView):
     """
     GET /api/personaggi/
-    
-    Restituisce un elenco di personaggi.
-    - Se l'utente è staff (admin), restituisce TUTTI i personaggi.
-    - Se l'utente non è staff, restituisce SOLO i personaggi
-      collegati a quell'utente.
+    Query params: ?view_all=true (solo per admin)
     """
-    permission_classes = [IsAuthenticated] # L'utente deve essere loggato
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, format=None):
-        # Controlla se l'utente è un admin
-        if request.user.is_staff or request.user.is_superuser:
-            queryset = Personaggio.objects.all()
-        else:
-            # L'utente normale vede solo i suoi personaggi
-            queryset = Personaggio.objects.filter(proprietario=request.user)
+        # Default: restituisci solo i personaggi dell'utente
+        queryset = Personaggio.objects.filter(proprietario=request.user)
         
-        # Usa il serializer "leggero" per la lista
+        # Se l'utente è staff/admin E richiede esplicitamente 'view_all'
+        if (request.user.is_staff or request.user.is_superuser) and request.query_params.get('view_all') == 'true':
+            queryset = Personaggio.objects.all()
+        
         serializer = PersonaggioListSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+# -----------------------------------------------------------
     
 class PersonaggioDetailView(APIView):
     """
