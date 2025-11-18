@@ -35,7 +35,8 @@ urlpatterns = [
     # --- FINE DELLA PATCH URL ---
     path('personaggi/', include('personaggi.urls')),
     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),
-    path('auth/', obtain_auth_token),
+    # path('auth/', obtain_auth_token),
+    path ('auth/', personaggi_views.MyAuthToken.as_view()),
     path('api/api-token-auth/', obtain_auth_token, name='api_token_auth'),
     re_path(r'^', include('cms.urls')),
     path("icons/", include("dj_iconify.urls")),
