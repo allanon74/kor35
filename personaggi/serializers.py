@@ -580,12 +580,24 @@ class TransazioneConfermaSerializer(serializers.Serializer):
 class PersonaggioListSerializer(serializers.ModelSerializer):
     proprietario = serializers.StringRelatedField(read_only=True)
     tipologia = serializers.StringRelatedField(read_only=True)
+    proprietario_nome = serializers.SerializerMethodField()
     class Meta:
         model = Personaggio
         fields = (
-            'id', 'nome', 'proprietario', 'tipologia',
+            'id', 'nome', 'proprietario', 'tipologia', 'proprietario_nome',
             'data_nascita', 'data_morte'
         )
+        def get_proprietario_nome(self, obj):
+            """
+            Restituisce "Nome Cognome" del proprietario.
+            Se mancano, restituisce lo username.
+            """
+            user = obj.proprietario
+            if not user:
+                return "Nessun Proprietario"
+            
+            full_name = f"{user.last_name} {user.first_name}".strip()
+            return full_name if full_name else user.username
         
 class PuntiCaratteristicaMovimentoCreateSerializer(serializers.Serializer):
     importo = serializers.IntegerField()
