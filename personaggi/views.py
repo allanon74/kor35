@@ -184,106 +184,6 @@ class AbilitaMasterListView(generics.ListAPIView):
         'abilitastatistica_set__statistica',
     ).order_by('nome')
 
-
-class AcquisisciAbilitaView(APIView):
-    """
-    POST /api/personaggio/me/acquisisci_abilita/
-    Esegue l'acquisto di un'abilità per il personaggio loggato.
-    applicando gli sconti PARAMETRO_SCONTO_ABILITA SOLO ai crediti.
-    Richiede: {"abilita_id": <id>}
-    """
-    permission_classes = [IsAuthenticated]
-
-    @transaction.atomic # Assicura che l'intera operazione fallisca o riesca
-    def post(self, request, format=None):
-        try:
-            personaggio = Personaggio.objects.select_related('tipologia').get(proprietario=request.user)
-        except Personaggio.DoesNotExist:
-            return Response(
-                {"error": "Nessun personaggio trovato per questo utente."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        abilita_id = request.data.get('abilita_id')
-        if not abilita_id:
-            return Response({"error": "abilita_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            abilita = Abilita.objects.prefetch_related(
-                'abilita_requisito_set__requisito', 
-                'abilita_prerequisiti'
-            ).get(id=abilita_id)
-        except Abilita.DoesNotExist:
-            return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
-
-        # 1. Controllo: Già posseduta?
-        if personaggio.abilita_possedute.filter(id=abilita_id).exists():
-            return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 2. Controllo: Requisiti di Punteggio
-        character_scores = personaggio.caratteristiche_base
-        for req in abilita.abilita_requisito_set.all():
-            punteggio_nome = req.requisito.nome
-            valore_richiesto = req.valore
-            punteggio_pg = character_scores.get(punteggio_nome, 0)
-            
-            if punteggio_pg < valore_richiesto:
-                return Response(
-                    {"error": f"Requisito non soddisfatto: {punteggio_nome} {valore_richiesto} (possiedi {punteggio_pg})"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-        # 3. Controllo: Prerequisiti di Abilità
-        required_prereqs = [p.prerequisito for p in abilita.abilita_prerequisiti.all()]
-        if required_prereqs:
-            possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
-            for prereq in required_prereqs:
-                if prereq.id not in possessed_skill_ids:
-                    return Response(
-                        {"error": f"Prerequisito non soddisfatto: {prereq.nome}"},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-
-        # 4. Controllo: Costi
-# 4a. Calcola il valore dello sconto
-        mods = personaggio.modificatori_calcolati
-        # Usa la nuova costante 'rid_cos_ab'
-        sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0}) 
-        
-        sconto_valore = max(0, sconto_stat.get('add', 0)) 
-        sconto_percent = Decimal(sconto_valore) / Decimal(100)
-        moltiplicatore_costo = Decimal(1) - sconto_percent
-
-        # 4b. Calcola i costi finali
-        
-        # --- MODIFICA CHIAVE ---
-        # Il costo in PC NON è scontato
-        costo_pc_finale = abilita.costo_pc 
-        # --- FINE MODIFICA ---
-
-        # Il costo in Crediti È scontato
-        costo_crediti_base = Decimal(abilita.costo_crediti)
-        costo_crediti_finale = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal('0.01')) # Arrotonda a 2 decimali
-
-        # 4c. Controlla se il personaggio ha abbastanza fondi
-        if personaggio.punti_caratteristica < costo_pc_finale:
-            return Response({"error": f"Punti Caratteristica insufficenti. Richiesti: {costo_pc_finale}"}, status=status.HTTP_400_BAD_REQUEST) 
-        
-        if personaggio.crediti < costo_crediti_finale:
-            return Response({"error": f"Crediti insufficenti. Richiesti: {costo_crediti_finale} (Costo base: {abilita.costo_crediti}, Sconto: {sconto_valore}%)"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # --- 5. Esecuzione Acquisto (BLOCCO MODIFICATO) ---
-        
-        # Addebita i costi finali (solo crediti scontati)
-        personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
-        personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
-        personaggio.abilita_possedute.add(abilita)
-        
-        # Restituisce i dati aggiornati del personaggio
-        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-
 class AcquisisciAbilitaView(APIView):
     """
     POST /api/personaggio/me/acquisisci_abilita/
@@ -387,6 +287,95 @@ class AcquisisciAbilitaView(APIView):
         # Restituisce i dati aggiornati del personaggio
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AbilitaAcquistabiliView(generics.GenericAPIView):
+    """
+    GET /api/personaggio/me/abilita_acquistabili/
+    Restituisce un elenco *filtrato* di abilità che il personaggio
+    può attualmente acquistare, con i costi già calcolati.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = AbilitaMasterListSerializer
+
+    def get(self, request, format=None):
+        try:
+            personaggio = Personaggio.objects.select_related('tipologia').get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # --- Logica di filtraggio (adattata dal frontend) ---
+
+        # 1. Ottieni i dati del personaggio
+        possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
+        char_scores = personaggio.caratteristiche_base
+        mods = personaggio.modificatori_calcolati
+
+        # 2. Calcola lo sconto (come in AcquisisciAbilitaView)
+        sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0}) 
+        sconto_valore = max(0, sconto_stat.get('add', 0)) 
+        sconto_percent = Decimal(sconto_valore) / Decimal(100)
+        moltiplicatore_costo = Decimal(1) - sconto_percent
+
+        # 3. Prendi *tutte* le abilità non possedute, pre-caricando i dati
+        # (Usiamo la stessa ottimizzazione della Soluzione 1)
+        master_skills_list = Abilita.objects.exclude(
+            id__in=possessed_skill_ids
+        ).select_related(
+            'caratteristica'
+        ).prefetch_related(
+            'abilita_requisito_set__requisito', 
+            'abilita_prerequisiti__prerequisito',
+            'abilita_punteggio_set__punteggio',
+            'abilitastatistica_set__statistica'
+        ).order_by('nome')
+
+        # 4. Filtra in Python (come faceva il frontend)
+        acquirable_skills = []
+        for skill in master_skills_list:
+            
+            # Controlla Requisiti
+            meets_reqs = True
+            for req in skill.abilita_requisito_set.all():
+                if char_scores.get(req.requisito.nome, 0) < req.valore:
+                    meets_reqs = False
+                    break
+            if not meets_reqs:
+                continue
+
+            # Controlla Prerequisiti
+            meets_prereqs = True
+            for pre in skill.abilita_prerequisiti.all():
+                if pre.prerequisito.id not in possessed_skill_ids:
+                    meets_prereqs = False
+                    break
+            if not meets_prereqs:
+                continue
+            
+            # Se passa, è acquistabile
+            acquirable_skills.append(skill)
+
+        # 5. Serializza i dati e aggiungi i costi calcolati
+        serializer = AbilitaMasterListSerializer(acquirable_skills, many=True, context={'request': request})
+        serialized_data = serializer.data
+        
+        final_data = []
+        for skill_data in serialized_data:
+            costo_crediti_base = Decimal(skill_data.get('costo_crediti', 0))
+            costo_pc_base = skill_data.get('costo_pc', 0)
+            
+            # Calcola i costi finali
+            costo_crediti_calc = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal('0.01'))
+            
+            # Aggiungi i costi calcolati al dizionario
+            skill_data['costo_pc_calc'] = costo_pc_base # PC non è scontato
+            skill_data['costo_crediti_calc'] = float(costo_crediti_calc) # float è JSON-friendly
+            final_data.append(skill_data)
+
+        return Response(final_data, status=status.HTTP_200_OK)
 
     
 def qr_code_html_view(request: HttpRequest) -> HttpResponse:
