@@ -8,9 +8,9 @@ from django.contrib.auth.models import User
 # Importa i modelli e le funzioni helper
 from .models import (
     AbilitaStatistica, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
-    Spell, Mattone, Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
+    Mattone, Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
     abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
-    spell_mattone, spell_elemento, Oggetto, Attivata, Manifesto, A_vista, 
+    Oggetto, Attivata, Manifesto, A_vista, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
     OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
     CreditoMovimento, PersonaggioLog, TransazioneSospesa
@@ -206,12 +206,6 @@ class MattoneSerializer(serializers.ModelSerializer):
         model = Mattone
         fields = '__all__'
 
-class SpellSerializer(serializers.ModelSerializer):
-    mattoni = MattoneSerializer(many=True, read_only=True)
-    class Meta:
-        model = Spell
-        fields = '__all__'
-
 #
 # --- Serializer "Through" ---
 #
@@ -240,16 +234,6 @@ class AbilitaPrerequisitoSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_prerequisito
         fields = ['id', 'abilita', 'prerequisito']
-
-class SpellMattoneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = spell_mattone
-        fields = ['id', 'spell', 'mattone', 'valore']
-
-class SpellElementoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = spell_elemento
-        fields = ['id', 'spell', 'elemento']
 
 class AbilitaUpdateSerializer(serializers.ModelSerializer):
     requisiti = AbilitaRequisitoSerializer(many=True, required=False)

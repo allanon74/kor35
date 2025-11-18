@@ -11,10 +11,10 @@ from .views import AbilitaViewSet, UserViewSet
 
 
 from .views import (AbilViewSet,
-    AbilitaViewSet, TierViewSet, SpellViewSet, MattoneViewSet, PunteggioViewSet, TabellaViewSet,
+    AbilitaViewSet, TierViewSet, MattoneViewSet, PunteggioViewSet, TabellaViewSet,
     AbilitaTierViewSet, AbilitaRequisitoViewSet, AbilitaSbloccataViewSet,
     AbilitaPunteggioViewSet, AbilitaPrerequisitoViewSet,
-    SpellMattoneViewSet, SpellElementoViewSet, MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
+    MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
 )
 
 app_name = 'personaggi'
@@ -23,7 +23,6 @@ router = DefaultRouter()
 router.register(r'abilita', AbilitaViewSet)
 router.register(r'abil', AbilViewSet, basename='abil')
 router.register(r'tier', TierViewSet)
-router.register(r'spell', SpellViewSet)
 router.register(r'mattone', MattoneViewSet)
 router.register(r'punteggio', PunteggioViewSet)
 router.register(r'tabella', TabellaViewSet)
@@ -32,8 +31,6 @@ router.register(r'abilita-requisito', AbilitaRequisitoViewSet)
 router.register(r'abilita-sbloccata', AbilitaSbloccataViewSet)
 router.register(r'abilita-punteggio', AbilitaPunteggioViewSet)
 router.register(r'abilita-prerequisito', AbilitaPrerequisitoViewSet)
-router.register(r'spell-mattone', SpellMattoneViewSet)
-router.register(r'spell-elemento', SpellElementoViewSet)
 
 
 

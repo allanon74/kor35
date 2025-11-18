@@ -85,16 +85,15 @@ class MyAuthToken(ObtainAuthToken):
 # ----------------------------------------------------
 
 from .models import (
-    Abilita, Tier, Spell, Mattone, Punteggio, Tabella,
+    Abilita, Tier, Mattone, Punteggio, Tabella,
     abilita_tier, abilita_requisito, abilita_sbloccata,
     abilita_punteggio, abilita_prerequisito,
-    spell_mattone, spell_elemento
 )
 from .serializers import (
-    AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer, SpellSerializer, MattoneSerializer, PunteggioSerializer, TabellaSerializer,
+    AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer, 
+    MattoneSerializer, PunteggioSerializer, TabellaSerializer,
     AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
-    AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer,
-    SpellMattoneSerializer, SpellElementoSerializer, UserSerializer
+    AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer
 )
 
 class AbilitaViewSet(viewsets.ModelViewSet):
@@ -116,10 +115,6 @@ class TierViewSet(viewsets.ModelViewSet):
     serializer_class = TierSerializer
     authentication_classes = (TokenAuthentication,)
 
-class SpellViewSet(viewsets.ModelViewSet):
-    queryset = Spell.objects.all()
-    serializer_class = SpellSerializer
-    authentication_classes = (TokenAuthentication,)
 
 class MattoneViewSet(viewsets.ModelViewSet):
     queryset = Mattone.objects.all()
@@ -161,16 +156,6 @@ class AbilitaPunteggioViewSet(viewsets.ModelViewSet):
 class AbilitaPrerequisitoViewSet(viewsets.ModelViewSet):
     queryset = abilita_prerequisito.objects.all()
     serializer_class = AbilitaPrerequisitoSerializer
-    authentication_classes = (TokenAuthentication,)
-
-class SpellMattoneViewSet(viewsets.ModelViewSet):
-    queryset = spell_mattone.objects.all()
-    serializer_class = SpellMattoneSerializer
-    authentication_classes = (TokenAuthentication,)
-
-class SpellElementoViewSet(viewsets.ModelViewSet):
-    queryset = spell_elemento.objects.all()
-    serializer_class = SpellElementoSerializer
     authentication_classes = (TokenAuthentication,)
 
 class UserViewSet(viewsets.ModelViewSet):

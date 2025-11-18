@@ -14,12 +14,12 @@ from .models import (
     PuntiCaratteristicaMovimento, STATISTICA
 )
 from .models import (
-    Tabella, Punteggio, Tier, Abilita, Spell, Mattone, 
+    Tabella, Punteggio, Tier, Abilita, Mattone, 
     Caratteristica # Importa il modello Proxy
 )
 from .models import (
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
-    spell_mattone, abilita_prerequisito, AbilitaStatistica, 
+    abilita_prerequisito, AbilitaStatistica, 
     CaratteristicaModificatore
 )
 
@@ -158,8 +158,6 @@ class abilita_requisito_inline(A_Multi_Inline):
 class abilita_sbloccata_inline(A_Multi_Inline):
     model = abilita_sbloccata    
     
-class spell_mattone_inline(A_Multi_Inline):
-    model = spell_mattone
 
 class abilita_prerequisiti_inline(A_Multi_Inline):
     model = abilita_prerequisito
