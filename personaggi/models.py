@@ -1,21 +1,27 @@
 from django.db.models import Sum, F
-import re
+
+import re # <-- Importa per le espressioni
 import secrets
 import string
-from django.db import models, IntegrityError, transaction
+# V--- Assicurati che 'transaction' sia qui
+from django.db import models, IntegrityError, transaction 
 from django.db.models import Q
-from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.conf import settings
-from django.contrib.auth.models import User
+
+from django.contrib.auth.models import User # Importa il modello User
+from django.utils import timezone # Importa timezone
+
 from colorfield.fields import ColorField
+
 from django_icon_picker.field import IconField
+
 from cms.models.pluginmodel import CMSPlugin
+
 from django.utils.html import format_html
+
 from icon_widget.fields import CustomIconField
 
-# --- COSTANTI ---
-COSTO_PER_MATTONE = 100
 
 def _get_icon_color_from_bg(hex_color):
     """
@@ -24,13 +30,19 @@ def _get_icon_color_from_bg(hex_color):
     """
     try:
         hex_color = hex_color.lstrip('#')
+        # Converte hex in RGB
         r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        # Formula di luminanza (YIQ)
         luminanza = ((r * 299) + (g * 587) + (b * 114)) / 1000
+        
+        # Se lo sfondo è chiaro (luminanza > 128), usa un'icona nera
         return 'black' if luminanza > 128 else 'white'
     except Exception:
+        # Fallback in caso di colore non valido
         return 'black'
 
 # tipi generici per DDL
+
 CARATTERISTICA = "CA"
 STATISTICA = "ST"
 ELEMENTO = "EL"
@@ -40,7 +52,6 @@ CULTO = "CU"
 VIA = "VI"
 ARTE = "AR"
 ARCHETIPO = "AR"
-MATTONE_TYPE = "MA" # Nuovo tipo per distinguere i Mattoni se necessario, o si può usare ELEMENTO
 
 punteggi_tipo = [
     (CARATTERISTICA, 'Caratteristica'),
@@ -52,8 +63,7 @@ punteggi_tipo = [
     (VIA, 'Via',),
     (ARTE, 'Arte',),
     (ARCHETIPO, 'Archetipo',),
-    (MATTONE_TYPE, 'Mattone (Elemento)',),
-]
+    ]
 
 TIER_1 = "T1"
 TIER_2 = "T2"
@@ -65,27 +75,14 @@ tabelle_tipo = [
     (TIER_2, 'Tier 2'),
     (TIER_3, 'Tier 3'),
     (TIER_4, 'Tier 4'),
-]
+    ]
 
-# --- Scelte per i modificatori ---
+# --- 1. Definisci le scelte per i modificatori ---
 MODIFICATORE_ADDITIVO = 'ADD'
 MODIFICATORE_MOLTIPLICATIVO = 'MOL'
 MODIFICATORE_CHOICES = [
     (MODIFICATORE_ADDITIVO, 'Additivo (+N)'),
     (MODIFICATORE_MOLTIPLICATIVO, 'Moltiplicativo (xN)'),
-]
-
-# --- Scelte per Metatalento ---
-META_NESSUN_EFFETTO = 'NE'
-META_VALORE_PUNTEGGIO = 'VP'
-META_SOLO_TESTO = 'TX'
-META_LIVELLO_INFERIORE = 'LV'
-
-METATALENTO_CHOICES = [
-    (META_NESSUN_EFFETTO, 'Nessun Effetto'),
-    (META_VALORE_PUNTEGGIO, 'Valore per Punteggio'),
-    (META_SOLO_TESTO, 'Solo Testo Addizionale'),
-    (META_LIVELLO_INFERIORE, 'Solo abilità con livello pari o inferiore al punteggio'),
 ]
 
 # Classi astratte
@@ -193,6 +190,7 @@ class Punteggio(Tabella):
                 f"vertical-align: middle;"
             )
             return format_html('<div style="{}"></div>', style)
+        
         return ""
     
     def icona_cerchio(self, inverted=True):
@@ -254,6 +252,10 @@ class Punteggio(Tabella):
         return result.format(nome=self.nome, tipo = self.tipo)
 
 class Caratteristica(Punteggio):
+    """
+    Modello Proxy per filtrare i Punteggi
+    che sono solo di tipo CARATTERISTICA nell'admin.
+    """
     class Meta:
         proxy = True
         verbose_name = "Caratteristica (Gestione)"
@@ -282,10 +284,12 @@ class Statistica(Punteggio):
         default=MODIFICATORE_ADDITIVO,
         help_text="Come questo punteggio si combina con altri."
     )
+    # --- CAMPO CHE HAI AGGIUNTO ---
     is_primaria = models.BooleanField(
         default=False,
         help_text="Seleziona se questa è una statistica primaria da mostrare in homepage."
     )
+    # --- FINE ---
 
     def save(self, *args, **kwargs):
         self.tipo = STATISTICA
@@ -294,105 +298,7 @@ class Statistica(Punteggio):
     class Meta:
         verbose_name = "Statistica"
         verbose_name_plural = "Statistiche"
-
-# --- NUOVO MODELLO MATTONE ---
-class Mattone(Punteggio):
-    aura = models.ForeignKey(
-        Punteggio, 
-        on_delete=models.CASCADE, 
-        limit_choices_to={'tipo': AURA},
-        related_name="mattoni_aura",
-        verbose_name="Aura associata"
-    )
-    caratteristica_associata = models.ForeignKey(
-        Punteggio, 
-        on_delete=models.CASCADE, 
-        limit_choices_to={'tipo': CARATTERISTICA},
-        related_name="mattoni_caratteristica",
-        verbose_name="Caratteristica associata"
-    )
-    descrizione_mattone = models.TextField("Descrizione Mattone", blank=True, null=True)
-    descrizione_metatalento = models.TextField("Descrizione Metatalento", blank=True, null=True)
-    
-    testo_addizionale = models.TextField(
-        "Testo Addizionale", 
-        blank=True, 
-        null=True,
-        help_text="Supporta parametri statistiche (es. {pv}) e il parametro {caratt}. Supporta moltiplicatori: {3*caratt}."
-    )
-    
-    funzionamento_metatalento = models.CharField(
-        max_length=2,
-        choices=METATALENTO_CHOICES,
-        default=META_NESSUN_EFFETTO,
-        verbose_name="Funzionamento del Metatalento"
-    )
-    
-    statistiche = models.ManyToManyField(
-        Statistica,
-        through='MattoneStatistica',
-        blank=True,
-        verbose_name="Statistiche modificate",
-        related_name="mattoni_statistiche"
-    )
-
-    def save(self, *args, **kwargs):
-        self.tipo = MATTONE_TYPE
-        super().save(*args, **kwargs)
-
-    class Meta:
-        verbose_name = "Mattone"
-        verbose_name_plural = "Mattoni"
-        unique_together = ('aura', 'caratteristica_associata')
-
-class MattoneStatistica(models.Model):
-    mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
-    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
-    valore = models.IntegerField(default=0)
-    tipo_modificatore = models.CharField(
-        max_length=3,
-        choices=MODIFICATORE_CHOICES,
-        default=MODIFICATORE_ADDITIVO
-    )
-    class Meta:
-        unique_together = ('mattone', 'statistica')
-
-# --- PROXY MODEL PER AURA ---
-class Aura(Punteggio):
-    class Meta:
-        proxy = True
-        verbose_name = "Aura (Gestione)"
-        verbose_name_plural = "Aure (Gestione)"
-
-# --- MODELLO DI AURA ---
-class ModelloAura(models.Model):
-    aura = models.ForeignKey(
-        Punteggio, 
-        on_delete=models.CASCADE, 
-        limit_choices_to={'tipo': AURA},
-        related_name="modelli_definiti"
-    )
-    nome = models.CharField(max_length=100)
-    mattoni_proibiti = models.ManyToManyField(
-        Mattone, 
-        blank=True, 
-        related_name="proibiti_in_modelli"
-    )
-
-    def clean(self):
-        # Validazione: i mattoni proibiti devono appartenere all'aura selezionata
-        # Nota: questo check funziona bene nel save o clean, ma per M2M serve attenzione
-        # perché le relazioni vengono salvate dopo l'oggetto principale.
-        super().clean()
-
-    def __str__(self):
-        return f"{self.nome} ({self.aura.nome})"
-
-    class Meta:
-        verbose_name = "Modello di Aura"
-        verbose_name_plural = "Modelli di Aura"
-
-
+        
 class CaratteristicaModificatore(models.Model):
     caratteristica = models.ForeignKey(
         Punteggio, 
@@ -491,7 +397,55 @@ class Abilita(A_modello):
     def __str__(self):
         return self.nome
 
-# --- RIMOSSE CLASSI: Spell, Mattone (vecchio), spell_elemento, spell_mattone ---
+class Spell(A_modello):
+    nome = models.CharField("Nome dell'abilità attivata", max_length=90, )
+    descrizione = models.TextField("Descrizione", null=True, blank=True, )
+    mattoni = models.ManyToManyField(
+        "Mattone",
+        related_name = "spells",
+        through = "spell_mattone",
+        help_text = "Mattoni requisito dell'abilità attivata",
+        )
+    aura = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo' : AURA}, 
+        related_name = "aura_spell",
+        )
+    
+    def livello(self):
+        return self.mattoni.all().aggregate(Sum())
+
+    class Meta:
+        verbose_name = "Abilità attivata"
+        verbose_name_plural = "Abilità attivate"
+
+    def __str__(self):
+        return self.nome
+    
+class Mattone(A_modello):
+    nome = models.CharField("Nome del mattone", max_length = 40)
+    descrizione = models.TextField("Descrizione del mattone", null=True, blank=True,)
+    elemento = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo' : ELEMENTO}, 
+        related_name = "elemento_mattone",
+        )
+    aura = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo' : AURA}, 
+        related_name = "aura_mattone",
+        )
+    class Meta:
+        verbose_name = "Mattone"
+        verbose_name_plural = "Mattoni"
+
+    def __str__(self):
+        result = "{nome} ({aura} - {elemento})"
+        
+        return result.format(nome=self.nome, aura=self.aura.sigla, elemento=self.elemento.sigla)
 
 # Classi Through
 
@@ -561,6 +515,32 @@ class abilita_punteggio(A_modello):
         testo = "{abilita} -> {punteggio} ({valore})"
         return testo.format(abilita=self.abilita.nome, punteggio=self.punteggio.nome, valore=self.valore)
     
+class spell_elemento(A_modello):
+    spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
+    elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo' : ELEMENTO}, )
+
+    class Meta:
+        verbose_name = "Spell - Elemento necessario"
+        verbose_name_plural = "Spell - Elementi necessari"
+
+    def __str__(self):
+        testo = "{spell} necessita {elemento}"
+        return testo.format(spell=self.spell.nome, elemento=self.elemento.nome)
+    
+class spell_mattone(A_modello):
+    spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
+    mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE, )
+    valore = models.IntegerField("Ripetizioni del mattone", default=1, )
+
+    class Meta:
+        verbose_name = "Abilità attivata - Mattone necessario"
+        verbose_name_plural = "Abilità attivate - Mattoni necessari"
+
+    def __str__(self):
+        testo = "{spell} necessita {mattone} {liv}"
+        return testo.format(spell=self.spell.nome, mattone=self.mattone.nome, liv=self.valore)
+
+    
 class Attivata(A_vista):
     
     elementi = models.ManyToManyField(
@@ -584,14 +564,6 @@ class Attivata(A_vista):
     @property
     def livello(self):
         return self.elementi.count()
-
-    @property
-    def costo_crediti(self):
-        """
-        Calcola il costo in crediti (che qui è inteso come costo per attivazione/apprendimento?)
-        basato sulla costante.
-        """
-        return self.livello * COSTO_PER_MATTONE
 
     @property
     def TestoFormattato(self):
@@ -736,14 +708,6 @@ class Personaggio(Inventario):
         through='PersonaggioAttivata',
         blank=True
     )
-    
-    # --- Nuova Relazione M2M per i Modelli di Aura ---
-    modelli_aura = models.ManyToManyField(
-        ModelloAura,
-        through='PersonaggioModelloAura',
-        blank=True,
-        verbose_name="Modelli di Aura"
-    )
 
     class Meta:
         verbose_name = "Personaggio"
@@ -799,6 +763,7 @@ class Personaggio(Inventario):
     @property
     def punteggi_base(self):
         """
+        [CALCOLO 1 - AGGIORNATO]
         Calcola i valori base di TUTTI i punteggi (CA, AU, CU, ecc.)
         sommando i bonus 'punteggio_acquisito' dalle abilità possedute.
         Usa una cache.
@@ -806,16 +771,20 @@ class Personaggio(Inventario):
         if hasattr(self, '_punteggi_base_cache'):
             return self._punteggi_base_cache
 
+        # 1. Filtra per le abilità del personaggio
+        # *** MODIFICA: Rimosso il filtro 'punteggio__tipo=CARATTERISTICA' ***
         links = abilita_punteggio.objects.filter(
             abilita__personaggioabilita__personaggio=self
         ).select_related('punteggio')
         
+        # 2. Raggruppa per nome del punteggio e somma i valori
         query_aggregata = links.values(
-            'punteggio__nome' 
+            'punteggio__nome' # Raggruppa per questo campo
         ).annotate(
-            valore_totale=Sum('valore') 
+            valore_totale=Sum('valore') # Somma i valori
         ).order_by('punteggio__nome')
         
+        # 3. Trasforma il risultato in un dizionario
         punteggi = {
             item['punteggio__nome']: item['valore_totale'] 
             for item in query_aggregata
@@ -824,26 +793,40 @@ class Personaggio(Inventario):
         self._punteggi_base_cache = punteggi
         return self._punteggi_base_cache
 
+    # Rinominiamo la vecchia property per compatibilità interna (se serve)
+    # ma la facciamo puntare alla nuova
     @property
     def caratteristiche_base(self):
+        # Filtra 'punteggi_base' per includere solo le Caratteristiche
         return {
             nome: val for nome, val in self.punteggi_base.items()
             if Punteggio.objects.get(nome=nome).tipo == CARATTERISTICA
         }
+        # NOTA: Questo è lento. Se hai problemi di performance,
+        # dovremmo ottimizzare la cache in 'punteggi_base'
+        # per salvare anche il 'tipo'. Per ora, funzionerà.
+
+    # --- FINE BLOCCO MODIFICATO ---
+    
+    # --- INIZIO BLOCCO MODIFICATO ---
 
     @property
     def modificatori_calcolati(self):
         """
         [CALCOLO 2 - AGGIORNATO]
-        Include i Metatalenti (da ModelloAura e Mattoni proibiti).
+        Calcola i modificatori Additivi e Moltiplicativi totali.
+        Usa una cache sull'istanza ('_modificatori_calcolati_cache').
+        
+        *** MODIFICATO: Ora è indicizzato per 'statistica.parametro' (es. 'pv') ***
         """
         if hasattr(self, '_modificatori_calcolati_cache'):
             return self._modificatori_calcolati_cache
 
         mods = {} 
         
-        def _add_mod(stat_parametro, tipo, valore): 
-            if not stat_parametro: return
+        def _add_mod(stat_parametro, tipo, valore): # <-- Modificato: riceve il parametro
+            if not stat_parametro: # Ignora statistiche senza parametro
+                return
                 
             if stat_parametro not in mods:
                 mods[stat_parametro] = {'add': 0, 'mol': 1.0}
@@ -859,6 +842,7 @@ class Personaggio(Inventario):
         ).select_related('statistica')
         
         for link in bonus_abilita:
+            # Usa parametro invece di nome
             _add_mod(link.statistica.parametro, link.tipo_modificatore, link.valore)
 
         # 2. Bonus da Oggetti posseduti (nell'inventario)
@@ -868,11 +852,11 @@ class Personaggio(Inventario):
         ).select_related('statistica')
         
         for link in bonus_oggetti:
+            # Usa parametro invece di nome
             _add_mod(link.statistica.parametro, link.tipo_modificatore, link.valore)
 
+        # 3. Bonus da Caratteristiche base (usa la proprietà che ha già la cache)
         caratteristiche_base = self.caratteristiche_base 
-        
-        # 3. Bonus da Caratteristiche base
         if caratteristiche_base:
             links_caratteristiche = CaratteristicaModificatore.objects.filter(
                 caratteristica__nome__in=caratteristiche_base.keys()
@@ -885,37 +869,8 @@ class Personaggio(Inventario):
                 if punti_caratteristica > 0 and link.ogni_x_punti > 0:
                     bonus = (punti_caratteristica // link.ogni_x_punti) * link.modificatore
                     if bonus > 0:
+                        # Usa parametro invece di nome
                         _add_mod(link.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, bonus)
-
-        # 4. Bonus da Metatalenti (Mattoni Proibiti nei Modelli Aura)
-        # Recuperiamo tutti i modelli aura associati
-        modelli = self.modelli_aura.prefetch_related('mattoni_proibiti__statistiche').all()
-        
-        for modello in modelli:
-            for mattone in modello.mattoni_proibiti.all():
-                funzionamento = mattone.funzionamento_metatalento
-                
-                if funzionamento == META_NESSUN_EFFETTO:
-                    continue
-                
-                # Ottieni il valore della caratteristica associata al mattone
-                nome_caratt = mattone.caratteristica_associata.nome
-                punteggio_caratt = caratteristiche_base.get(nome_caratt, 0)
-                
-                # Condizione "Solo livello pari o inferiore" (qui interpretata come applicazione globale se soddisfatta??
-                # No, il testo dice: "Se il mattona ha... solo le attivate...".
-                # Ma dice anche: "nelle abilità attivate... statistiche vengono modificate".
-                # Qui stiamo calcolando i mod globali.
-                # Se funzionamento è VALORE_PUNTEGGIO o LIVELLO_INFERIORE (con logica applicata all'attivata,
-                # ma se il metatalento dà bonus passivi globali, vanno qui?)
-                # Interpretazione: I bonus statistici del Metatalento si applicano alle *Attivate* di quell'aura.
-                # NON globalmente al personaggio. Quindi NON vanno in `modificatori_calcolati` del personaggio,
-                # ma devono essere calcolati "al volo" nel contesto dell'Attivata specifica o aggiunti temporaneamente.
-                pass
-                
-        # NOTA: I modificatori specifici delle Attivate derivanti dai Metatalenti non vengono
-        # aggiunti ai modificatori globali del personaggio qui, ma calcolati dentro `get_testo_formattato_per_item`
-        # o una funzione specifica per il calcolo finale dell'Attivata.
         
         self._modificatori_calcolati_cache = mods
         return self._modificatori_calcolati_cache
@@ -926,155 +881,88 @@ class Personaggio(Inventario):
         """
         try:
             espressione = match.group(1).strip()
+            
+            # Divide l'espressione in token (statistiche) e operatori
+            # es. "pv+pf-des" -> ['pv', '+', 'pf', '-', 'des']
             tokens = re.split(r'([+\-])', espressione) 
+            
             total = 0
-            current_op = '+'
+            current_op = '+' # L'operatore di default è +
 
             for token in tokens:
                 token = token.strip()
-                if not token: continue
+                if not token:
+                    continue
 
                 if token in ['+', '-']:
                     current_op = token
                 else:
+                    # Questo è un parametro di statistica (es. "pv")
                     valore_base = base_stats.get(token, 0)
                     stat_mods = mods.get(token, {'add': 0, 'mol': 1.0})
+                    
+                    # Calcola il valore finale per *questo* token
                     valore_finale = (valore_base + stat_mods['add']) * stat_mods['mol']
                     
-                    if current_op == '+': total += valore_finale
-                    elif current_op == '-': total -= valore_finale
+                    # Applica l'operazione
+                    if current_op == '+':
+                        total += valore_finale
+                    elif current_op == '-':
+                        total -= valore_finale
                         
             return str(round(total, 2))
         except Exception:
+            # In caso di errore nel parsing (es. {pv+}), restituisce il placeholder originale
             return match.group(0)
 
     
     def get_testo_formattato_per_item(self, item):
         """
-        [CALCOLO 3 - RISCRITTO PER METATALENTI]
+        [CALCOLO 3 - RISCRITTO]
+        Prende un singolo Oggetto o Attivata e ne calcola il
+        TestoFormattato applicando i modificatori del personaggio
+        e gestendo espressioni matematiche {stat1+stat2}.
         """
-        if not item: return ""
-        
-        testo_base = item.testo if item.testo else ""
-        
-        # Identifica se stiamo trattando un'Attivata per applicare logica Metatalenti
-        is_attivata = isinstance(item, Attivata)
-        
-        # Calcola modificatori base del personaggio
-        mods_personaggio = self.modificatori_calcolati
-        
-        # Cloniamo i mods per non sporcare la cache globale se aggiungiamo bonus locali
-        # (Deep copy semplice per dizionari di dizionari)
-        import copy
-        mods_attivi = copy.deepcopy(mods_personaggio)
+        if not item or not item.testo:
+            return ""
 
-        links_base = []
-        statistiche_metatalento_text = ""
+        testo_formattato = item.testo
         
+        # 1. Prendi i modificatori totali (indicizzati per 'parametro' es. 'pv')
+        mods = self.modificatori_calcolati
+        
+        # 2. Determina quali statistiche base usare (Oggetto o Attivata)
+        links_base = None
         if isinstance(item, Oggetto):
             links_base = item.oggettostatisticabase_set.select_related('statistica').all()
-        elif is_attivata:
+        elif isinstance(item, Attivata):
             links_base = item.attivatastatisticabase_set.select_related('statistica').all()
-            
-            # --- LOGICA METATALENTI ---
-            # 1. Trova l'Aura dell'Attivata (prendendo il primo elemento/mattone)
-            primo_elemento = item.elementi.first()
-            aura_attivata = None
-            # Poiché Mattone è un Punteggio, possiamo fare casting o query inversa se necessario,
-            # ma qui assumiamo che item.elementi siano istanze di Mattone (che è Punteggio)
-            if primo_elemento and hasattr(primo_elemento, 'mattone'):
-                 # Se Django gestisce l'ereditarietà multi-tabella implicitamente nelle query,
-                 # potremmo dover accedere all'istanza figlia.
-                 try:
-                     aura_attivata = primo_elemento.mattone.aura
-                 except Mattone.DoesNotExist:
-                     pass
-            elif primo_elemento:
-                 # Fallback: query manuale
-                 try:
-                     m = Mattone.objects.get(pk=primo_elemento.pk)
-                     aura_attivata = m.aura
-                 except Mattone.DoesNotExist:
-                     pass
-            
-            if aura_attivata:
-                # 2. Cerca se il personaggio ha un Modello per quell'Aura
-                modello = self.modelli_aura.filter(aura=aura_attivata).first()
-                
-                if modello:
-                    # 3. Itera sui mattoni proibiti
-                    for mattone in modello.mattoni_proibiti.all():
-                        funzionamento = mattone.funzionamento_metatalento
-                        if funzionamento == META_NESSUN_EFFETTO:
-                            continue
-                        
-                        nome_caratt = mattone.caratteristica_associata.nome
-                        valore_caratt = self.caratteristiche_base.get(nome_caratt, 0)
-                        
-                        applica_effetto = False
-                        if funzionamento in [META_VALORE_PUNTEGGIO, META_SOLO_TESTO]:
-                            applica_effetto = True
-                        elif funzionamento == META_LIVELLO_INFERIORE:
-                            # Applica solo se livello attivata <= valore caratteristica relativa
-                            if item.livello <= valore_caratt:
-                                applica_effetto = True
-                        
-                        if applica_effetto:
-                            # A. Modifica Statistiche (Se previsto)
-                            if funzionamento in [META_VALORE_PUNTEGGIO, META_LIVELLO_INFERIORE]:
-                                # Recupera stats del mattone
-                                stats_mattone = MattoneStatistica.objects.filter(mattone=mattone).select_related('statistica')
-                                for stat_m in stats_mattone:
-                                    param = stat_m.statistica.parametro
-                                    bonus = stat_m.valore * valore_caratt # Moltiplicato per caratteristica
-                                    
-                                    if param:
-                                        if param not in mods_attivi:
-                                            mods_attivi[param] = {'add': 0, 'mol': 1.0}
-                                        
-                                        if stat_m.tipo_modificatore == MODIFICATORE_ADDITIVO:
-                                            mods_attivi[param]['add'] += bonus
-                                        elif stat_m.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO:
-                                            # Nota: applicare moltiplicatore ripetuto per caratteristica potrebbe essere enorme,
-                                            # ma la specifica dice "modificate come da tabella... moltiplicato per valore caratteristica".
-                                            # Assumiamo si applichi al valore additivo solitamente, o se moltiplicativo
-                                            # (1 + (factor * caratt)). Qui semplifico applicando logica base.
-                                            mods_attivi[param]['mol'] *= float(bonus)
+        else:
+            return testo_formattato # Non so come formattare
 
-                            # B. Testo Addizionale
-                            txt_add = mattone.testo_addizionale
-                            if txt_add:
-                                # Parsing parametro {caratt} e {X*caratt}
-                                def replace_caratt(match):
-                                    moltiplicatore = match.group(1)
-                                    molt_val = int(moltiplicatore) if moltiplicatore else 1
-                                    return str(valore_caratt * molt_val)
-                                
-                                txt_add_parsed = re.sub(r'\{(?:(\d+)\*)?caratt\}', replace_caratt, txt_add)
-                                
-                                # Parsing statistiche standard nel testo addizionale
-                                # (Usando placeholder helper ricorsivamente o qui inline?
-                                #  Il testo addizionale potrebbe contenere {pv}, che va risolto con i mods attuali)
-                                # Per ora lo accodiamo grezzo e lo lasciamo risolvere al passo finale insieme al testo base
-                                statistiche_metatalento_text += f"\n<br><em>Metatalento ({mattone.nome}):</em> {txt_add_parsed}"
-
-        # Concatena testo base + testo metatalenti
-        testo_completo = testo_base + statistiche_metatalento_text
-
+        # 3. Crea un dizionario di valori base per un lookup veloce
+        #    es. {'pv': 10, 'pf': 5}
         base_stats = {
             link.statistica.parametro: link.valore_base 
             for link in links_base 
             if link.statistica.parametro
         }
 
-        # Risoluzione finale placeholder
-        testo_finale = re.sub(
-            r'\{([^{}]+)\}', 
-            lambda match: self._processa_placeholder(match, mods_attivi, base_stats), 
-            testo_completo
+        # 4. Trova tutti i placeholder {..} e sostituiscili
+        #    usando il nostro metodo helper _processa_placeholder
+        testo_formattato = re.sub(
+            r'\{([^{}]+)\}', # Regex per trovare {qualsiasi_cosa}
+            lambda match: self._processa_placeholder(match, mods, base_stats), 
+            testo_formattato
         )
             
-        return testo_finale
+        return testo_formattato
+    
+    # --- RIMOSSO BLOCCO DUPLICATO ---
+    # Le vecchie property 'TestoFormattatoPersonale', 'caratteristiche_calcolate', 
+    # e 'modificatori_statistiche' sono state rimosse da qui per
+    # evitare conflitti con le nuove versioni.
+    # --- FINE BLOCCO RIMOSSO ---
 
 # --- 2. MODELLI "THROUGH" PER PERSONAGGIO ---
 class PersonaggioAbilita(models.Model):
@@ -1086,29 +974,6 @@ class PersonaggioAttivata(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
-
-class PersonaggioModelloAura(models.Model):
-    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
-    modello_aura = models.ForeignKey(ModelloAura, on_delete=models.CASCADE)
-    
-    class Meta:
-        verbose_name = "Personaggio - Modello Aura"
-        verbose_name_plural = "Personaggio - Modelli Aura"
-        
-    def clean(self):
-        # Verifica che il personaggio non abbia già un modello per questa Aura
-        aura_target = self.modello_aura.aura
-        esistente = PersonaggioModelloAura.objects.filter(
-            personaggio=self.personaggio,
-            modello_aura__aura=aura_target
-        ).exclude(pk=self.pk)
-        
-        if esistente.exists():
-            raise ValidationError(f"Il personaggio ha già un modello associato per l'aura {aura_target.nome}.")
-            
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
 
 
 # --- 3. MODELLI DI LOG E CREDITI ---
@@ -1182,15 +1047,17 @@ class TransazioneSospesa(models.Model):
         if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
             raise Exception("Transazione già processata.")
         
+        # sposta_in_inventario è un metodo di Oggetto, non self (TransazioneSospesa)
         self.oggetto.sposta_in_inventario(self.richiedente) 
         self.stato = STATO_TRANSAZIONE_ACCETTATA
         self.save()
         
         self.richiedente.aggiungi_log(f"Ricevuto {self.oggetto.nome} da {self.mittente.nome}.")
         if hasattr(self.mittente, 'personaggio'):
+            # Assicurati che mittente sia un Personaggio o abbia un link a Personaggio
             if isinstance(self.mittente, Personaggio):
                 self.mittente.aggiungi_log(f"Consegnato {self.oggetto.nome} a {self.richiedente.nome}.")
-            elif hasattr(self.mittente, 'personaggio'):
+            elif hasattr(self.mittente, 'personaggio'): # Se Inventario ha un FK 'personaggio'
                 self.mittente.personaggio.aggiungi_log(f"Consegnato {self.oggetto.nome} a {self.richiedente.nome}.")
 
     def rifiuta(self):
@@ -1228,8 +1095,8 @@ class AttivataElemento(models.Model):
     elemento = models.ForeignKey(
         Punteggio, 
         on_delete=models.CASCADE,
-        limit_choices_to={'tipo__in': [ELEMENTO, MATTONE_TYPE]}, # Aggiornato per includere Mattoni
-        verbose_name="Elemento / Mattone"
+        limit_choices_to={'tipo': ELEMENTO}, 
+        verbose_name="Elemento"
     )
 
 
@@ -1355,6 +1222,7 @@ class Oggetto(A_vista):
             valore = link.valore_base
         
             if param:
+                # Sostituisce solo se il placeholder è esatto (es. {pv})
                 testo_formattato = re.sub(r'\{' + re.escape(param) + r'\}', str(valore), testo_formattato)
         return testo_formattato
     
@@ -1366,31 +1234,40 @@ class Oggetto(A_vista):
         
         return tracciamento_attuale.inventario if tracciamento_attuale else None
 
+    # --- METODO SPOSTATO ---
     def sposta_in_inventario(self, nuovo_inventario, data_spostamento=None):
         """
         Metodo principale per spostare un oggetto in un nuovo inventario.
+        Gestisce la cronologia in modo atomico per prevenire race conditions.
         """
         if data_spostamento is None:
             data_spostamento = timezone.now()
 
+        # Usa una transazione atomica per sicurezza
         with transaction.atomic():
+            # Blocca l'oggetto nel database per questa transazione
+            # Oggetto.objects.select_for_update().get(pk=self.pk) # Questo può dare errori se self è nuovo
+            
+            # Trova e chiudi il record di tracciamento attuale (se esiste)
             tracciamento_attuale = self.tracciamento_inventario.filter(
                 data_fine__isnull=True
             ).first()
             
             if tracciamento_attuale:
                 if tracciamento_attuale.inventario == nuovo_inventario:
-                    return 
+                    return # È già nell'inventario giusto
                 
                 tracciamento_attuale.data_fine = data_spostamento
                 tracciamento_attuale.save()
 
+            # Crea il nuovo record di tracciamento solo se l'inventario non è None
             if nuovo_inventario is not None:
                 OggettoInInventario.objects.create(
                     oggetto=self,
                     inventario=nuovo_inventario,
                     data_inizio=data_spostamento
                 )
+    # --- FINE METODO SPOSTATO ---
 
 
 # --- MODELLI PER I PLUGIN CMS ---

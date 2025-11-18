@@ -4,8 +4,6 @@ from django.forms import Media
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 from django.utils.html import format_html
-
-# Import aggiornati dai models
 from .models import (
     CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, 
     PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, 
@@ -17,11 +15,11 @@ from .models import (
 )
 from .models import (
     Tabella, Punteggio, Tier, Abilita, Mattone, 
-    Caratteristica, Aura, ModelloAura, MattoneStatistica, PersonaggioModelloAura # Aggiunti nuovi modelli
+    Caratteristica # Importa il modello Proxy
 )
 from .models import (
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
-    abilita_prerequisito, AbilitaStatistica, 
+    spell_mattone, abilita_prerequisito, AbilitaStatistica, 
     CaratteristicaModificatore
 )
 
@@ -37,7 +35,7 @@ class PunteggioAdminForm(forms.ModelForm):
         model = Punteggio
         fields = '__all__'
         widgets = {
-            'icona': CustomIconWidget,
+            'icona': CustomIconWidget, # Applica il widget al campo 'icona
         }
 
 # --- Forms per evidenziare i valori modificati ---
@@ -54,25 +52,11 @@ class AbilitaStatisticaForm(forms.ModelForm):
             current_value = self.instance.valore
             
             if current_value != default_value:
+                # Applica lo stile a tutti i campi della riga
                 for field_name in self.fields:
-                    self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
-
-class MattoneStatisticaForm(forms.ModelForm):
-    """Form specifico per il Mattone per evidenziare modifiche"""
-    class Meta:
-        model = MattoneStatistica
-        fields = '__all__'
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance and self.instance.pk and self.instance.statistica:
-            default_value = self.instance.statistica.valore_predefinito
-            current_value = self.instance.valore
-            
-            if current_value != default_value:
-                for field_name in self.fields:
-                    self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
-
+                    # if field_name != 'statistica': # Non evidenziare il campo readonly
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
+                        
 class OggettoStatisticaBaseForm(forms.ModelForm):
     class Meta:
         model = OggettoStatisticaBase
@@ -85,8 +69,10 @@ class OggettoStatisticaBaseForm(forms.ModelForm):
             current_value = self.instance.valore_base
             
             if current_value != default_value:
+                # Applica lo stile a tutti i campi della riga
                 for field_name in self.fields:
-                    self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
+                    # if field_name != 'statistica':
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
 
 class OggettoStatisticaForm(forms.ModelForm):
     class Meta:
@@ -100,8 +86,10 @@ class OggettoStatisticaForm(forms.ModelForm):
             current_value = self.instance.valore
             
             if current_value != default_value:
+                # Applica lo stile a tutti i campi della riga
                 for field_name in self.fields:
-                    self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
+                    # if field_name != 'statistica':
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
                         
 class AttivataStatisticaBaseForm(forms.ModelForm):
     class Meta:
@@ -115,8 +103,10 @@ class AttivataStatisticaBaseForm(forms.ModelForm):
             current_value = self.instance.valore_base
             
             if current_value != default_value:
+                # Applica lo stile a tutti i campi della riga
                 for field_name in self.fields:
-                    self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
+                    # if field_name != 'statistica':
+                        self.fields[field_name].widget.attrs['style'] = HIGHLIGHT_STYLE
 
 
 # ----------- CLASSI ASTRATTE ADMIN -------------
@@ -168,6 +158,8 @@ class abilita_requisito_inline(A_Multi_Inline):
 class abilita_sbloccata_inline(A_Multi_Inline):
     model = abilita_sbloccata    
     
+class spell_mattone_inline(A_Multi_Inline):
+    model = spell_mattone
 
 class abilita_prerequisiti_inline(A_Multi_Inline):
     model = abilita_prerequisito
@@ -235,33 +227,15 @@ class StatisticaPivotInlineBase(admin.TabularInline):
 
 class AbilitaStatisticaInline(StatisticaPivotInlineBase):
     model = AbilitaStatistica
-    form = AbilitaStatisticaForm 
+    form = AbilitaStatisticaForm  # <-- USA IL FORM PERSONALIZZATO
     fk_name = 'abilita' 
     verbose_name = "Statistica (Modificatore)"
     verbose_name_plural = "Statistiche (Modificatori)"
+    
+    # Sovrascrive i campi base per questa specifica implementazione
     value_field = 'valore'
     default_field = 'valore_predefinito'
-
-# --- INLINE PER MATTONE (STATISTICHE) ---
-class MattoneStatisticaInline(StatisticaPivotInlineBase):
-    model = MattoneStatistica
-    form = MattoneStatisticaForm
-    fk_name = 'mattone'
-    verbose_name = "Statistica (Modificatore Metatalento)"
-    verbose_name_plural = "Statistiche (Modificatori Metatalento)"
-    value_field = 'valore'
-    default_field = 'valore_predefinito'
-
-# --- INLINE PER AURA (Lista Mattoni) ---
-class MattoneInlineForAura(admin.TabularInline):
-    model = Mattone
-    fk_name = 'aura' # Il campo FK in Mattone che punta ad Aura (Punteggio)
-    extra = 1
-    verbose_name = "Mattone associato"
-    verbose_name_plural = "Mattoni associati a questa Aura"
-    fields = ('nome', 'caratteristica_associata', 'funzionamento_metatalento')
-    show_change_link = True # Permette di andare alla pagina del mattone per editing completo
-
+    
 
 # --- NUOVI INLINE PER PERSONAGGIO ---
 class CreditoMovimentoInline(admin.TabularInline):
@@ -281,36 +255,7 @@ class PersonaggioLogInline(admin.TabularInline):
     extra = 0 
     fields = ('testo_log', 'data')
     readonly_fields = ('data',)
-
-class PersonaggioModelloAuraInline(admin.TabularInline):
-    model = PersonaggioModelloAura
-    extra = 1
-    verbose_name = "Modello Aura Applicato"
-    verbose_name_plural = "Modelli Aura Applicati"
-
-# ----------- HELPER FUNCTION -------------
-def get_statistica_base_help_text():
-    """
-    Crea dinamicamente l'help text con le variabili disponibili
-    basate sulle 'sigle' del modello Statistica.
-    """
-    try:
-        stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
-        if not stats.exists():
-            return "Nessuna variabile statistica (parametro) definita."
-        
-        base_text = "<b>Variabili Valori Base disponibili:</b><br>"
-        variabili = [f"&bull; <b>{{{{{s.parametro}}}}}</b>: {s.nome}" for s in stats]
-        
-        return format_html(base_text + "<br>".join(variabili))
-    except Exception as e:
-        return format_html(f"<b style='color:red;'>Errore nel caricare le variabili: {e}</b>")
-
-def get_mattone_help_text():
-    stats_text = get_statistica_base_help_text()
-    extra_text = "<br><b>Variabili Speciali Mattone:</b><br>&bull; <b>{caratt}</b>: Valore della caratteristica associata.<br>&bull; <b>{3*caratt}</b>: Moltiplicatore (es. 3x)."
-    return format_html(str(stats_text) + extra_text)
-
+    
 # ----------- CLASSI ADMIN -------------
 
 @admin.register(TipologiaPersonaggio)
@@ -328,10 +273,12 @@ class AbilitaAdmin(A_Admin):
         AbilitaStatisticaInline, 
         abilita_punteggio_inline, 
         abilita_requisito_inline, 
+        # abilita_sbloccata_inline, 
         abilita_prerequisiti_inline,
+        # abilita_abilitati_inline,
         )
     save_as = True
-    exclude = ('statistiche',)
+    exclude = ('statistiche',) # 'statistiche' è corretto, non 'statistiche_base'
 
 @admin.register(Punteggio)
 class PunteggioAdmin(A_Admin):
@@ -345,15 +292,14 @@ class PunteggioAdmin(A_Admin):
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        # Escludiamo Caratteristiche e Mattoni (che hanno i loro admin)
-        return qs.exclude(tipo=CARATTERISTICA).exclude(tipo='MA') # 'MA' è il tipo per MATTONE se definito nelle costanti models, altrimenti usa filtro su classe figlia se possibile, ma qui basiamo su tipo stringa
+        return qs.exclude(tipo=CARATTERISTICA)
 
 @admin.register(Caratteristica)
-class CaratteristicaAdmin(A_Admin): 
-    form = PunteggioAdminForm
+class CaratteristicaAdmin(A_Admin): # <-- Eredita da A_Admin se vuoi Summernote
+    form = PunteggioAdminForm # Usa lo stesso form per il widget icona
     list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html',)
     search_fields = ('nome', 'sigla')
-    summernote_fields = ('descrizione',) 
+    summernote_fields = ('descrizione',) # Aggiunto
     
     inlines = [CaratteristicaModificatoreInline]
 
@@ -362,71 +308,8 @@ class CaratteristicaAdmin(A_Admin):
         return qs.filter(tipo=CARATTERISTICA)
         
     def get_exclude(self, request, obj=None):
-        return ('tipo', 'descrizione',)
-
-@admin.register(Aura)
-class AuraAdmin(A_Admin):
-    """Admin Proxy per le Aure"""
-    form = PunteggioAdminForm
-    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html')
-    search_fields = ('nome',)
-    summernote_fields = ('descrizione',)
-    # TabularInline richiesta per vedere ed editare i mattoni
-    inlines = [MattoneInlineForAura]
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.filter(tipo=AURA)
-    
-    def get_exclude(self, request, obj=None):
-        return ('tipo', 'descrizione', 'caratteristica_relativa')
-
-@admin.register(ModelloAura)
-class ModelloAuraAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'aura')
-    list_filter = ('aura',)
-    filter_horizontal = ('mattoni_proibiti',) # Widget comodo per M2M
-
-@admin.register(Mattone)
-class MattoneAdmin(A_Admin):
-    form = PunteggioAdminForm
-    list_display = ('nome', 'aura', 'caratteristica_associata', 'funzionamento_metatalento')
-    list_filter = ('aura', 'caratteristica_associata', 'funzionamento_metatalento')
-    search_fields = ('nome', 'testo_addizionale')
-    summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
-    
-    inlines = [MattoneStatisticaInline] # Pivot table statistiche
-    
-    fieldsets = (
-        ('Dati Mattone', {
-            'fields': (
-                'nome', 'aura', 'caratteristica_associata', 
-                'descrizione_mattone', 'icona', 'colore'
-            )
-        }),
-        ('Metatalento', {
-            'fields': (
-                'funzionamento_metatalento', 
-                'descrizione_metatalento', 
-                'testo_addizionale'
-            ),
-        }),
-        ('Sistema', {
-             'fields': ('sigla',),
-             'classes': ('collapse',),
-        })
-    )
-
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if 'testo_addizionale' in form.base_fields:
-            form.base_fields['testo_addizionale'].help_text = get_mattone_help_text()
-        return form
-    
-    def get_exclude(self, request, obj=None):
-        # Escludiamo campi generici di Punteggio non usati o gestiti diversamente
-        return ('tipo', 'descrizione', 'caratteristica_relativa')
-
+        # Escludiamo 'tipo' e altri campi non necessari di Tabella
+        return ('tipo', 'descrizione',) # 'descrizione' è gestita da summernote_fields
 
 @admin.register(abilita_prerequisito)
 class AbilitaPrerequisitoAdmin(A_Admin):
@@ -455,6 +338,25 @@ admin.site.register(abilita_tier)
 admin.site.register(abilita_punteggio)
 admin.site.register(abilita_requisito)
 admin.site.register(abilita_sbloccata)
+admin.site.register(Mattone)
+
+
+def get_statistica_base_help_text():
+    """
+    Crea dinamicamente l'help text con le variabili disponibili
+    basate sulle 'sigle' del modello Statistica.
+    """
+    try:
+        stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
+        if not stats.exists():
+            return "Nessuna variabile statistica (parametro) definita."
+        
+        base_text = "<b>Variabili Valori Base disponibili:</b><br>"
+        variabili = [f"&bull; <b>{{{{{s.parametro}}}}}</b>: {s.nome}" for s in stats]
+        
+        return format_html(base_text + "<br>".join(variabili))
+    except Exception as e:
+        return format_html(f"<b style='color:red;'>Errore nel caricare le variabili: {e}</b>")
 
 
 class PunteggioOggettoInline(admin.TabularInline):
@@ -472,16 +374,18 @@ class PunteggioAttivataInline(admin.TabularInline):
 
 class OggettoStatisticaInline(StatisticaPivotInlineBase):
     model = OggettoStatistica
-    form = OggettoStatisticaForm
+    form = OggettoStatisticaForm      # <-- USA IL FORM PERSONALIZZATO
     fk_name = 'oggetto' 
     verbose_name = "Statistica (Modificatore)"
     verbose_name_plural = "Statistiche (Modificatori)"
+    
+    # Configurazione per la classe base
     value_field = 'valore'
     default_field = 'valore_predefinito'
     
 class OggettoStatisticaBaseInline(StatisticaPivotInlineBase):
     model = OggettoStatisticaBase
-    form = OggettoStatisticaBaseForm
+    form = OggettoStatisticaBaseForm  # <-- USA IL FORM PERSONALIZZATO
     fk_name = 'oggetto'
     value_field = 'valore_base'
     default_field = 'valore_base_predefinito'
@@ -537,7 +441,7 @@ class OggettoAdmin(SModelAdmin):
     
 class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
     model = AttivataStatisticaBase
-    form = AttivataStatisticaBaseForm
+    form = AttivataStatisticaBaseForm # <-- USA IL FORM PERSONALIZZATO
     fk_name = 'attivata'
     value_field = 'valore_base'
     default_field = 'valore_base_predefinito'
@@ -548,8 +452,8 @@ class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
 class AttivataAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome')
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione',) 
-    inlines = [AttivataStatisticaBaseInline, PunteggioAttivataInline]
-    exclude = ('statistiche_base', 'elementi')
+    inlines = [AttivataStatisticaBaseInline, PunteggioAttivataInline] # Aggiunto PunteggioAttivataInline
+    exclude = ('statistiche_base', 'elementi') # Aggiunto elementi
     summernote_fields = ['testo', ]    
 
     fieldsets = (
@@ -573,15 +477,14 @@ class AttivataAdmin(SModelAdmin):
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
     
 @admin.register(Personaggio)
-class PersonaggioAdmin(A_Admin): 
+class PersonaggioAdmin(A_Admin): # Eredita da A_Admin per Summernote
     list_display = ('nome', 'proprietario', 'tipologia', 'crediti', 'punti_caratteristica')
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
     list_filter = ('tipologia',)
     search_fields = ('nome', 'proprietario__username')
-    summernote_fields = ('testo',)
+    summernote_fields = ('testo',) # Aggiunto
     
     inlines = [
-        PersonaggioModelloAuraInline, # Aggiunto per gestire i modelli di aura
         CreditoMovimentoInline,
         PuntiCaratteristicaMovimentoInline,
         PersonaggioLogInline
