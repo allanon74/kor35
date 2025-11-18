@@ -289,44 +289,48 @@ class PersonaggioModelloAuraInline(admin.TabularInline):
     verbose_name = "Modello Aura Applicato"
     verbose_name_plural = "Modelli Aura Applicati"
 
-# ----------- HELPER FUNCTION CORRETTE -------------
+# ----------- HELPER FUNCTION CORRETTE PER IL RENDERING HTML -------------
 
 def get_statistica_base_help_text():
     """
     Crea dinamicamente l'help text.
-    CORREZIONE: Evita format_html sul risultato finale che contiene graffe.
+    Utilizza un approccio semplice di concatenazione stringhe e mark_safe
+    per assicurare che l'HTML non venga auto-escapato.
     """
     try:
         stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
         if not stats.exists():
-            return "Nessuna variabile statistica (parametro) definita."
+            return mark_safe("Nessuna variabile statistica (parametro) definita.")
         
         items = []
         for s in stats:
-            # Usa {{}} per visualizzare le graffe letterali nel template HTML
-            # {{{}}} diventa {valore}
-            items.append(format_html("&bull; <b>{{{}}}</b>: {}", s.parametro, s.nome))
+            # Crea la riga di testo con le graffe letterali e i tag HTML
+            item_html = "&bull; <b>{{{}}}</b>: {}".format(s.parametro, s.nome)
+            items.append(item_html)
             
-        base_text = mark_safe("<b>Variabili Valori Base disponibili:</b><br>")
-        joined_items = mark_safe("<br>").join(items)
+        base_text = "<b>Variabili Valori Base disponibili:</b><br>"
+        joined_items = "<br>".join(items)
         
-        return format_html("{}{}", base_text, joined_items)
+        # Mark_safe sul risultato finale per consentire il rendering HTML
+        return mark_safe(base_text + joined_items)
         
     except Exception as e:
         return format_html(f"<b style='color:red;'>Errore nel caricare le variabili: {e}</b>")
 
 def get_mattone_help_text():
     """
-    CORREZIONE: Concatena in modo sicuro senza re-interpretare le graffe.
+    Concatena il testo base e il testo speciale del Mattone, entrambi marcati come sicuri.
     """
-    stats_text = get_statistica_base_help_text() # È già SafeString
+    stats_text = get_statistica_base_help_text() 
+    
     extra_text = mark_safe(
         "<br><b>Variabili Speciali Mattone:</b><br>"
         "&bull; <b>{caratt}</b>: Valore della caratteristica associata.<br>"
         "&bull; <b>{3*caratt}</b>: Moltiplicatore (es. 3x)."
     )
-    # Usa un template vuoto per concatenare due SafeString
-    return format_html("{}{}", stats_text, extra_text)
+    
+    # Concatenazione diretta di SafeString (risultato è SafeString)
+    return stats_text + extra_text
 
 # ----------- CLASSI ADMIN -------------
 
@@ -434,7 +438,6 @@ class MattoneAdmin(A_Admin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        # Applica l'help text corretto usando la funzione fixata
         if 'testo_addizionale' in form.base_fields:
             form.base_fields['testo_addizionale'].help_text = get_mattone_help_text()
         return form
