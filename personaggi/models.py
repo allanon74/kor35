@@ -397,55 +397,55 @@ class Abilita(A_modello):
     def __str__(self):
         return self.nome
 
-class Spell(A_modello):
-    nome = models.CharField("Nome dell'abilità attivata", max_length=90, )
-    descrizione = models.TextField("Descrizione", null=True, blank=True, )
-    mattoni = models.ManyToManyField(
-        "Mattone",
-        related_name = "spells",
-        through = "spell_mattone",
-        help_text = "Mattoni requisito dell'abilità attivata",
-        )
-    aura = models.ForeignKey(
-        Punteggio, 
-        on_delete=models.CASCADE, 
-        limit_choices_to={'tipo' : AURA}, 
-        related_name = "aura_spell",
-        )
+# class Spell(A_modello):
+#     nome = models.CharField("Nome dell'abilità attivata", max_length=90, )
+#     descrizione = models.TextField("Descrizione", null=True, blank=True, )
+#     mattoni = models.ManyToManyField(
+#         "Mattone",
+#         related_name = "spells",
+#         through = "spell_mattone",
+#         help_text = "Mattoni requisito dell'abilità attivata",
+#         )
+#     aura = models.ForeignKey(
+#         Punteggio, 
+#         on_delete=models.CASCADE, 
+#         limit_choices_to={'tipo' : AURA}, 
+#         related_name = "aura_spell",
+#         )
     
-    def livello(self):
-        return self.mattoni.all().aggregate(Sum())
+#     def livello(self):
+#         return self.mattoni.all().aggregate(Sum())
 
-    class Meta:
-        verbose_name = "Abilità attivata"
-        verbose_name_plural = "Abilità attivate"
+#     class Meta:
+#         verbose_name = "Abilità attivata"
+#         verbose_name_plural = "Abilità attivate"
 
-    def __str__(self):
-        return self.nome
+#     def __str__(self):
+#         return self.nome
     
-class Mattone(A_modello):
-    nome = models.CharField("Nome del mattone", max_length = 40)
-    descrizione = models.TextField("Descrizione del mattone", null=True, blank=True,)
-    elemento = models.ForeignKey(
-        Punteggio, 
-        on_delete=models.CASCADE, 
-        limit_choices_to={'tipo' : ELEMENTO}, 
-        related_name = "elemento_mattone",
-        )
-    aura = models.ForeignKey(
-        Punteggio, 
-        on_delete=models.CASCADE, 
-        limit_choices_to={'tipo' : AURA}, 
-        related_name = "aura_mattone",
-        )
-    class Meta:
-        verbose_name = "Mattone"
-        verbose_name_plural = "Mattoni"
+# class Mattone(A_modello):
+#     nome = models.CharField("Nome del mattone", max_length = 40)
+#     descrizione = models.TextField("Descrizione del mattone", null=True, blank=True,)
+#     elemento = models.ForeignKey(
+#         Punteggio, 
+#         on_delete=models.CASCADE, 
+#         limit_choices_to={'tipo' : ELEMENTO}, 
+#         related_name = "elemento_mattone",
+#         )
+#     aura = models.ForeignKey(
+#         Punteggio, 
+#         on_delete=models.CASCADE, 
+#         limit_choices_to={'tipo' : AURA}, 
+#         related_name = "aura_mattone",
+#         )
+#     class Meta:
+#         verbose_name = "Mattone"
+#         verbose_name_plural = "Mattoni"
 
-    def __str__(self):
-        result = "{nome} ({aura} - {elemento})"
+#     def __str__(self):
+#         result = "{nome} ({aura} - {elemento})"
         
-        return result.format(nome=self.nome, aura=self.aura.sigla, elemento=self.elemento.sigla)
+#         return result.format(nome=self.nome, aura=self.aura.sigla, elemento=self.elemento.sigla)
 
 # Classi Through
 
@@ -515,30 +515,30 @@ class abilita_punteggio(A_modello):
         testo = "{abilita} -> {punteggio} ({valore})"
         return testo.format(abilita=self.abilita.nome, punteggio=self.punteggio.nome, valore=self.valore)
     
-class spell_elemento(A_modello):
-    spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
-    elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo' : ELEMENTO}, )
+# class spell_elemento(A_modello):
+#     spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
+#     elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo' : ELEMENTO}, )
 
-    class Meta:
-        verbose_name = "Spell - Elemento necessario"
-        verbose_name_plural = "Spell - Elementi necessari"
+#     class Meta:
+#         verbose_name = "Spell - Elemento necessario"
+#         verbose_name_plural = "Spell - Elementi necessari"
 
-    def __str__(self):
-        testo = "{spell} necessita {elemento}"
-        return testo.format(spell=self.spell.nome, elemento=self.elemento.nome)
+#     def __str__(self):
+#         testo = "{spell} necessita {elemento}"
+#         return testo.format(spell=self.spell.nome, elemento=self.elemento.nome)
     
-class spell_mattone(A_modello):
-    spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
-    mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE, )
-    valore = models.IntegerField("Ripetizioni del mattone", default=1, )
+# class spell_mattone(A_modello):
+#     spell = models.ForeignKey(Spell, on_delete=models.CASCADE, )    
+#     mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE, )
+#     valore = models.IntegerField("Ripetizioni del mattone", default=1, )
 
-    class Meta:
-        verbose_name = "Abilità attivata - Mattone necessario"
-        verbose_name_plural = "Abilità attivate - Mattoni necessari"
+#     class Meta:
+#         verbose_name = "Abilità attivata - Mattone necessario"
+#         verbose_name_plural = "Abilità attivate - Mattoni necessari"
 
-    def __str__(self):
-        testo = "{spell} necessita {mattone} {liv}"
-        return testo.format(spell=self.spell.nome, mattone=self.mattone.nome, liv=self.valore)
+#     def __str__(self):
+#         testo = "{spell} necessita {mattone} {liv}"
+#         return testo.format(spell=self.spell.nome, mattone=self.mattone.nome, liv=self.valore)
 
     
 class Attivata(A_vista):

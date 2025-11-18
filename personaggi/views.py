@@ -5,7 +5,7 @@ from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 
-from .models import OggettoInInventario, Abilita, Tier, Mattone
+from .models import OggettoInInventario, Abilita, Tier
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
@@ -85,13 +85,14 @@ class MyAuthToken(ObtainAuthToken):
 # ----------------------------------------------------
 
 from .models import (
-    Abilita, Tier, Mattone, Punteggio, Tabella,
+    Abilita, Tier, Punteggio, Tabella,
     abilita_tier, abilita_requisito, abilita_sbloccata,
     abilita_punteggio, abilita_prerequisito,
 )
 from .serializers import (
     AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer, 
-    MattoneSerializer, PunteggioSerializer, TabellaSerializer,
+    # MattoneSerializer, 
+    PunteggioSerializer, TabellaSerializer,
     AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer
 )
@@ -116,10 +117,10 @@ class TierViewSet(viewsets.ModelViewSet):
     authentication_classes = (TokenAuthentication,)
 
 
-class MattoneViewSet(viewsets.ModelViewSet):
-    queryset = Mattone.objects.all()
-    serializer_class = MattoneSerializer
-    authentication_classes = (TokenAuthentication,)
+# class MattoneViewSet(viewsets.ModelViewSet):
+#     queryset = Mattone.objects.all()
+#     serializer_class = MattoneSerializer
+#     authentication_classes = (TokenAuthentication,)
 
 class PunteggioViewSet(viewsets.ModelViewSet):
     queryset = Punteggio.objects.all()

@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 # Importa i modelli e le funzioni helper
 from .models import (
     AbilitaStatistica, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
-    Mattone, Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
+    Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
     abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
     Oggetto, Attivata, Manifesto, A_vista, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
@@ -199,12 +199,6 @@ class AbilitaSmallSerializer(serializers.ModelSerializer):
         model = Abilita
         fields = ("id", "nome", "caratteristica", "descrizione")
 
-class MattoneSerializer(serializers.ModelSerializer):
-    elemento = PunteggioSmallSerializer()
-    aura = PunteggioSmallSerializer()
-    class Meta:
-        model = Mattone
-        fields = '__all__'
 
 #
 # --- Serializer "Through" ---

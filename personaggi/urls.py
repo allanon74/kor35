@@ -11,7 +11,9 @@ from .views import AbilitaViewSet, UserViewSet
 
 
 from .views import (AbilViewSet,
-    AbilitaViewSet, TierViewSet, MattoneViewSet, PunteggioViewSet, TabellaViewSet,
+    AbilitaViewSet, TierViewSet, 
+    # MattoneViewSet, 
+    PunteggioViewSet, TabellaViewSet,
     AbilitaTierViewSet, AbilitaRequisitoViewSet, AbilitaSbloccataViewSet,
     AbilitaPunteggioViewSet, AbilitaPrerequisitoViewSet,
     MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
@@ -23,7 +25,7 @@ router = DefaultRouter()
 router.register(r'abilita', AbilitaViewSet)
 router.register(r'abil', AbilViewSet, basename='abil')
 router.register(r'tier', TierViewSet)
-router.register(r'mattone', MattoneViewSet)
+# router.register(r'mattone', MattoneViewSet)
 router.register(r'punteggio', PunteggioViewSet)
 router.register(r'tabella', TabellaViewSet)
 router.register(r'abilita-tier', AbilitaTierViewSet)
