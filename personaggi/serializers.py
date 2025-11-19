@@ -52,13 +52,15 @@ class PunteggioSerializer(serializers.ModelSerializer):
     """Serializza i campi chiave di un Punteggio (per gli Elementi)."""
     class Meta:
         model = Punteggio
+        # Includiamo 'icona_url' che deriva dalla property del modello
         fields = ('nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'colore')
 
 class PunteggioSmallSerializer(serializers.ModelSerializer):
     """Serializer leggero per Punteggio (usato nei serializer delle abilità)."""
     class Meta:
         model = Punteggio
-        fields = ('id', 'nome', 'sigla', 'colore')
+        # CORREZIONE: Aggiunto 'icona_url' per permettere il rendering dell'icona nelle liste abilità
+        fields = ('id', 'nome', 'sigla', 'colore', 'icona_url')
         
 class AbilitaPunteggioSmallSerializer(serializers.ModelSerializer):
     """Serializza i punteggi dati da un'abilità (es. +1 Forza)."""
@@ -82,6 +84,10 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     icona_html = serializers.SerializerMethodField()
     icona_cerchio_html = serializers.SerializerMethodField()
     icona_cerchio_inverted_html = serializers.SerializerMethodField()
+    
+    # CORREZIONE: Esponiamo esplicitamente l'URL dell'icona per il frontend React
+    icona_url = serializers.SerializerMethodField() 
+    
     is_primaria = serializers.SerializerMethodField()
     valore_predefinito = serializers.SerializerMethodField()
     parametro = serializers.SerializerMethodField()
@@ -90,8 +96,9 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         model = Punteggio
         fields = (
             'id', 'nome', 'sigla', 'tipo', 'colore',
+            'icona_url',  # <-- Aggiunto
             'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html',
-            'is_primaria', 'valore_predefinito', 'parametro',
+            'is_primaria', 'valore_predefinito', 'parametro', 'ordine' # Aggiunto 'ordine' se serve al frontend
         )
 
     def get_base_url(self):
@@ -118,6 +125,10 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             icona_path = icona_path[1:]
             
         return f"{base_url}/{media_url}{icona_path}"
+
+    # Nuovo metodo per il campo icona_url
+    def get_icona_url(self, obj):
+        return self.get_icona_url_assoluto(obj)
 
     def get_icona_html(self, obj):
         url = self.get_icona_url_assoluto(obj)
@@ -649,4 +660,3 @@ class AcquisisciSerializer(serializers.Serializer):
         qr_code.save()
         
         return item
-    
