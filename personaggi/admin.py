@@ -358,11 +358,13 @@ class AbilitaAdmin(A_Admin):
 class PunteggioAdmin(A_Admin):
     form = PunteggioAdminForm
     
-    list_display = ('nome','icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'tipo', 'caratteristica_relativa',)
+    list_display = ('nome','icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'tipo', 'ordine', 'caratteristica_relativa',)
     list_filter = ('tipo', 'caratteristica_relativa',)
+    list_editable = ('ordine',)
     search_fields = ('nome', )
     summernote_fields = ('descrizione',)
     save_as = True
+
     
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -372,7 +374,8 @@ class PunteggioAdmin(A_Admin):
 @admin.register(Caratteristica)
 class CaratteristicaAdmin(A_Admin): 
     form = PunteggioAdminForm
-    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html',)
+    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html','ordine', 'icona_cerchio_inverted_html',)
+    list_editable = ('ordine',)
     search_fields = ('nome', 'sigla')
     summernote_fields = ('descrizione',) 
     
@@ -388,7 +391,8 @@ class CaratteristicaAdmin(A_Admin):
 @admin.register(Aura)
 class AuraAdmin(A_Admin):
     form = PunteggioAdminForm
-    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html')
+    list_display = ('nome', 'sigla', 'icona_html', 'ordine', 'icona_cerchio_html')
+    list_editable = ('ordine',)
     search_fields = ('nome',)
     summernote_fields = ('descrizione',)
     inlines = [MattoneInlineForAura]

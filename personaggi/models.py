@@ -136,6 +136,7 @@ class Punteggio(Tabella):
     tipo = models.CharField('Tipo di punteggio', choices=punteggi_tipo, max_length=2)
     colore = ColorField('Colore', default='#1976D2', help_text="Colore associato al punteggio (es. per icone).")
     icona = CustomIconField(blank=True)
+    ordine = models.IntegerField(default=0, help_text="Valore per l'ordinamento (più basso appare prima)")
     
     caratteristica_relativa = models.ForeignKey(
         "Punteggio",
@@ -155,7 +156,7 @@ class Punteggio(Tabella):
     class Meta:
         verbose_name = "Punteggio"
         verbose_name_plural = "Punteggi"
-        ordering =['tipo', 'nome']
+        ordering =['tipo', 'ordine', 'nome']
         
     def svg_icon(self):
         return format_html(

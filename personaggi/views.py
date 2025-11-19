@@ -1077,4 +1077,4 @@ class PunteggiListView(generics.ListAPIView):
     serializer_class = PunteggioDetailSerializer
     
     # Filtra il queryset per includere solo le Caratteristiche
-    queryset = Punteggio.objects.all().order_by('tipo', 'nome')
+    queryset = Punteggio.objects.all().order_by('tipo','ordine', 'nome')
