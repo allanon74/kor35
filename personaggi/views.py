@@ -313,7 +313,7 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
             # 2. FIX CHIAVE: Usa get() filtrando sia per ID (dal frontend) che per proprietario (sicurezza)
             personaggio = Personaggio.objects.select_related('tipologia').get(
                 id=character_id, 
-                proprietario=request.user
+                # proprietario=request.user
             )
         except Personaggio.DoesNotExist:
             return Response(
@@ -326,7 +326,11 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
                 {"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-
+        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+            return Response(
+                {"error": "Personaggio non appartenente all'utente."},
+                status=status.HTTP_404_NOT_FOUND 
+            )
 
         # --- Logica di filtraggio (adattata dal frontend) ---
 
