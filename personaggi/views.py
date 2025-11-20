@@ -1090,6 +1090,7 @@ class MessaggioListView(generics.ListAPIView):
     """
     GET /api/messaggi/?personaggio_id=<ID>
     Restituisce i messaggi per il personaggio selezionato.
+    Gli Admin possono leggere i messaggi di chiunque.
     """
     serializer_class = MessaggioSerializer
     permission_classes = [IsAuthenticated]
@@ -1101,28 +1102,31 @@ class MessaggioListView(generics.ListAPIView):
         if not personaggio_id:
             return Messaggio.objects.none()
 
-        # Recupera il personaggio in modo sicuro
-        # Usiamo filter().first() per evitare crash se ci fossero duplicati strani,
-        # e controlliamo che appartenga all'utente loggato.
-        personaggio = Personaggio.objects.filter(id=personaggio_id, proprietario=user).first()
-
-        if not personaggio:
+        try:
+            # Recupera il personaggio
+            target_pg = Personaggio.objects.get(id=personaggio_id)
+        except Personaggio.DoesNotExist:
             return Messaggio.objects.none()
 
-        # --- LOGICA DI VISIBILITÀ CORRETTA ---
-        
-        # 1. Broadcast: Visibili SEMPRE, indipendentemente dal flag 'salva_in_cronologia'
+        # --- CONTROLLO PERMESSI ---
+        # Se l'utente NON è il proprietario E NON è staff, blocca l'accesso.
+        if target_pg.proprietario != user and not user.is_staff:
+             return Messaggio.objects.none()
+        # --------------------------
+
+        # Se siamo qui, l'utente è il proprietario O è un admin. Procediamo.
+
+        # 1. Broadcast
         q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST)
         
-        # 2. Individuali: Solo per questo personaggio
-        q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=personaggio)
+        # 2. Individuali
+        q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
         
-        # 3. Gruppo: Solo per i gruppi di questo personaggio
-        gruppi_id = personaggio.gruppi_appartenenza.values_list('id', flat=True)
+        # 3. Gruppo
+        gruppi_id = target_pg.gruppi_appartenenza.values_list('id', flat=True)
         q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
         
         return Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
-
 
 # 2. Vista per l'ADMIN (Cronologia Inviati)
 class MessaggioAdminSentListView(generics.ListAPIView):
