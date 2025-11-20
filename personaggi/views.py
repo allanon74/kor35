@@ -1137,3 +1137,17 @@ class MessaggioBroadcastCreateView(generics.CreateAPIView):
             mittente=self.request.user,
             tipo_messaggio=Messaggio.TIPO_BROADCAST
         )
+
+class MessaggioAdminSentListView(generics.ListAPIView):
+    """
+    GET /api/messaggi/admin/sent/
+    Restituisce tutti i messaggi INVIATI dall'utente corrente (se è staff).
+    """
+    serializer_class = MessaggioSerializer
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def get_queryset(self):
+        # Restituisce i messaggi dove il mittente è l'utente loggato
+        return Messaggio.objects.filter(
+            mittente=self.request.user
+        ).order_by('-data_invio')
