@@ -1184,21 +1184,34 @@ class WebPushSubscribeView(APIView):
             if not endpoint or not p256dh or not auth:
                 return Response({"error": "Dati sottoscrizione incompleti"}, status=400)
 
-            # Salviamo (o aggiorniamo) la sottoscrizione usando i modelli di django-webpush
-            # PushInformation collega l'utente alla sottoscrizione
+            # 1. SALVATAGGIO SOTTOSCRIZIONE
+            # Usiamo get_or_create per evitare duplicati se lo stesso browser 
+            # invia la stessa sottoscrizione più volte.
+            subscription, created = SubscriptionInfo.objects.get_or_create(
+                endpoint=endpoint,
+                defaults={
+                    'browser': request.META.get('HTTP_USER_AGENT', 'Unknown'),
+                    'auth': auth,
+                    'p256dh': p256dh
+                }
+            )
+            
+            # Se esisteva già ma i parametri sono cambiati (raro), aggiorniamola
+            if not created:
+                subscription.auth = auth
+                subscription.p256dh = p256dh
+                subscription.save()
+
+            # 2. COLLEGAMENTO ALL'UTENTE
+            # Ora che 'subscription' è salvata (ha un ID), possiamo collegarla.
             PushInformation.objects.update_or_create(
                 user=request.user,
-                defaults={
-                    'subscription': SubscriptionInfo(
-                        browser=request.META.get('HTTP_USER_AGENT', 'Unknown'),
-                        endpoint=endpoint,
-                        auth=auth,
-                        p256dh=p256dh
-                    )
-                }
+                defaults={'subscription': subscription}
             )
             
             return Response({"status": "success", "message": "Sottoscrizione salvata."}, status=201)
 
         except Exception as e:
+            # Logghiamo l'errore per debugging lato server
+            print(f"Errore salvataggio WebPush: {e}")
             return Response({"error": str(e)}, status=400)
