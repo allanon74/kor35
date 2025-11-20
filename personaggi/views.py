@@ -10,6 +10,7 @@ from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
 from .models import Punteggio, CARATTERISTICA
+
 import uuid # Importa uuid per il type hinting (opzionale ma pulito)
 
 from .models import STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES
@@ -50,6 +51,9 @@ from .serializers import (
 
 from personaggi.serializers import PersonaggioPublicSerializer
 
+from .models import Gruppo, Messaggio
+from .serializers import MessaggioSerializer, MessaggioBroadcastCreateSerializer
+from django.db.models import Q
 
 
 
@@ -1078,3 +1082,47 @@ class PunteggiListView(generics.ListAPIView):
     
     # Filtra il queryset per includere solo le Caratteristiche
     queryset = Punteggio.objects.all().order_by('tipo','ordine', 'nome')
+    
+# Viste per messaggi
+
+class MessaggioListView(generics.ListAPIView):
+    """
+    GET /api/messaggi/
+    Restituisce i messaggi destinati al personaggio loggato (Broadcast, Group, Individuale).
+    """
+    serializer_class = MessaggioSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        try:
+            personaggio = Personaggio.objects.get(proprietario=user)
+        except Personaggio.DoesNotExist:
+            return Messaggio.objects.none()
+
+        # 1. Messaggi Broadcast (salvati in cronologia)
+        q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST) & Q(salva_in_cronologia=True)
+        
+        # 2. Messaggi Individuali
+        q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=personaggio)
+        
+        # 3. Messaggi di Gruppo
+        gruppi_id = personaggio.gruppi_appartenenza.values_list('id', flat=True)
+        q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
+        
+        # Combina le query con OR (|)
+        return Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
+
+
+class MessaggioBroadcastCreateView(generics.CreateAPIView):
+    """
+    POST /api/messaggi/broadcast/send/
+    Permette solo agli utenti staff/superutenti di inviare messaggi Broadcast.
+    """
+    serializer_class = MessaggioBroadcastCreateSerializer
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] 
+    
+    def perform_create(self, serializer):
+        # Aggiunge il mittente e forza il tipo di messaggio
+        serializer.save(mittente=self.request.user)

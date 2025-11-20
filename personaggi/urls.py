@@ -74,6 +74,10 @@ urlpatterns = [
     path('api/personaggio/me/abilita_acquistabili/', views.AbilitaAcquistabiliView.as_view(), name='abilita-acquistabili'),
     path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
     
+    # --- MESSAGING ENDPOINTS (Phase 1) ---
+    path('api/messaggi/', views.MessaggioListView.as_view(), name='api_messaggi_list'),
+    path('api/messaggi/broadcast/send/', views.MessaggioBroadcastCreateView.as_view(), name='api_messaggi_broadcast_send'),
+    
     path('api/', include(router.urls)),
     
 ]

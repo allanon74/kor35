@@ -13,7 +13,8 @@ from .models import (
     Oggetto, Attivata, Manifesto, A_vista, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
     OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
-    CreditoMovimento, PersonaggioLog, TransazioneSospesa
+    CreditoMovimento, PersonaggioLog, TransazioneSospesa,
+    Gruppo, Messaggio,
 )
 
 
@@ -660,3 +661,36 @@ class AcquisisciSerializer(serializers.Serializer):
         qr_code.save()
         
         return item
+    
+
+# Serializers per messaggi
+
+class GruppoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Gruppo
+        fields = ('id', 'nome')
+
+class MessaggioSerializer(serializers.ModelSerializer):
+    mittente = serializers.StringRelatedField(read_only=True)
+    destinatario_personaggio = serializers.StringRelatedField(read_only=True)
+    destinatario_gruppo = GruppoSerializer(read_only=True)
+    
+    class Meta:
+        model = Messaggio
+        fields = ('id', 'mittente', 'tipo_messaggio', 'titolo', 'testo', 'data_invio', 'destinatario_personaggio', 'destinatario_gruppo', 'salva_in_cronologia')
+        read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
+
+class MessaggioBroadcastCreateSerializer(serializers.ModelSerializer):
+    # Serializer usato per creare un messaggio dall'Admin o da un endpoint POST
+    class Meta:
+        model = Messaggio
+        # L'admin invia solo questi campi per un broadcast
+        fields = ('titolo', 'testo', 'salva_in_cronologia') 
+        
+    def create(self, validated_data):
+        # Aggiungi il mittente (utente loggato) e forza il tipo di messaggio
+        return Messaggio.objects.create(
+            mittente=self.context['request'].user, 
+            tipo_messaggio=Messaggio.TIPO_BROADCAST,
+            **validated_data
+        )
