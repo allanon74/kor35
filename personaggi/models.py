@@ -1393,6 +1393,51 @@ class Oggetto(A_vista):
                     data_inizio=data_spostamento
                 )
 
+# --- MESSAGING MODELS ---
+
+class Gruppo(models.Model):
+    nome = models.CharField(max_length=100, unique=True)
+    membri = models.ManyToManyField('Personaggio', related_name="gruppi_appartenenza", blank=True)
+    
+    class Meta:
+        verbose_name = "Gruppo di Personaggi"
+        verbose_name_plural = "Gruppi di Personaggi"
+    
+    def __str__(self):
+        return self.nome
+
+class Messaggio(models.Model):
+    TIPO_BROADCAST = 'BROAD'
+    TIPO_GRUPPO = 'GROUP'
+    TIPO_INDIVIDUALE = 'INDV'
+    TIPO_CHOICES = [
+        (TIPO_BROADCAST, 'Broadcast (Tutti)'),
+        (TIPO_GRUPPO, 'Gruppo'),
+        (TIPO_INDIVIDUALE, 'Individuale'),
+    ]
+    
+    mittente = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="messaggi_inviati")
+    tipo_messaggio = models.CharField(max_length=5, choices=TIPO_CHOICES, default=TIPO_BROADCAST)
+    
+    destinatario_personaggio = models.ForeignKey('Personaggio', on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_individuali")
+    destinatario_gruppo = models.ForeignKey(Gruppo, on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_gruppo")
+    
+    titolo = models.CharField(max_length=150)
+    testo = models.TextField()
+    data_invio = models.DateTimeField(default=timezone.now)
+    
+    # Flag per la cronologia/notifica
+    salva_in_cronologia = models.BooleanField(default=True, help_text="Se disattivato, il messaggio non appare nella cronologia pubblica del gioco.")
+    
+    class Meta:
+        verbose_name = "Messaggio"
+        verbose_name_plural = "Messaggi Inviati"
+        ordering = ['-data_invio']
+        
+    def __str__(self):
+        dest = self.destinatario_personaggio or self.destinatario_gruppo or "Tutti"
+        return f"[{self.get_tipo_messaggio_display()}] {self.titolo} a {dest}"
+
 
 # --- MODELLI PER I PLUGIN CMS ---
 
