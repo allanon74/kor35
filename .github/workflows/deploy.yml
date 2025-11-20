@@ -50,3 +50,6 @@ jobs:
             # Questo funziona solo se Apache è configurato per ricaricare quando il file wsgi.py viene "toccato".
             # Sostituisci il percorso con quello corretto del tuo file wsgi.py
             # touch ~/progetti/kor35/kor35/wsgi.py
+
+            # Riavvia Daphne (per le modifiche ai Consumer/WebSocket)
+            sudo systemctl restart kor35-daphne

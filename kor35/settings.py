@@ -45,6 +45,7 @@ ALLOWED_HOSTS = [
 
 
 INSTALLED_APPS = [
+    'daphne',
 	# 'djangocms_admin_style', #cms
 	'admin_interface', #admin interface
 	'colorfield', 
@@ -87,6 +88,7 @@ INSTALLED_APPS = [
 	'corsheaders', # Django CORS Headers
 	# 'django_yarnpkg', # django-yarnpkg
 	'icon_widget', # icon widget
+    'channels',
 	
 ]
 
@@ -198,6 +200,19 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'kor35.wsgi.application'
+ASGI_APPLICATION = 'kor35.asgi.application'
+
+
+# ASGI settings for Channels
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
 
 # Database

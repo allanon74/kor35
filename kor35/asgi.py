@@ -1,16 +1,17 @@
-"""
-ASGI config for kor35 project.
-
-It exposes the ASGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/4.2/howto/deployment/asgi/
-"""
-
+# kor35/asgi.py
 import os
-
 from django.core.asgi import get_asgi_application
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.auth import AuthMiddlewareStack
+import personaggi.routing
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kor35.settings')
 
-application = get_asgi_application()
+application = ProtocolTypeRouter({
+    "http": get_asgi_application(),
+    "websocket": AuthMiddlewareStack(
+        URLRouter(
+            personaggi.routing.websocket_urlpatterns
+        )
+    ),
+})
