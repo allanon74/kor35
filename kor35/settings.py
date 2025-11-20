@@ -175,6 +175,7 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_URLS_REGEX = r'^/(personaggi/api|auth|webpush)/.*$'
 
+
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
