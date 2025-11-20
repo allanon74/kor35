@@ -1172,11 +1172,9 @@ class WebPushSubscribeView(APIView):
 
     def post(self, request):
         try:
-            # Il browser invia un oggetto JSON con 'endpoint' e 'keys'
             data = request.data
             keys = data.get('keys', {})
 
-            # Estraiamo i dati necessari
             endpoint = data.get('endpoint')
             p256dh = keys.get('p256dh')
             auth = keys.get('auth')
@@ -1184,26 +1182,30 @@ class WebPushSubscribeView(APIView):
             if not endpoint or not p256dh or not auth:
                 return Response({"error": "Dati sottoscrizione incompleti"}, status=400)
 
+            # --- FIX: TRONCAMENTO USER AGENT ---
+            # Recupera lo User Agent e troncalo a 100 caratteri per evitare l'errore DB
+            user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
+            browser_info = user_agent[:100] if user_agent else 'Unknown' 
+            # -----------------------------------
+
             # 1. SALVATAGGIO SOTTOSCRIZIONE
-            # Usiamo get_or_create per evitare duplicati se lo stesso browser 
-            # invia la stessa sottoscrizione più volte.
             subscription, created = SubscriptionInfo.objects.get_or_create(
                 endpoint=endpoint,
                 defaults={
-                    'browser': request.META.get('HTTP_USER_AGENT', 'Unknown'),
+                    'browser': browser_info, # Usa la stringa troncata
                     'auth': auth,
                     'p256dh': p256dh
                 }
             )
             
-            # Se esisteva già ma i parametri sono cambiati (raro), aggiorniamola
             if not created:
                 subscription.auth = auth
                 subscription.p256dh = p256dh
+                # Aggiorniamo anche il browser se è cambiato, sempre troncato
+                subscription.browser = browser_info 
                 subscription.save()
 
             # 2. COLLEGAMENTO ALL'UTENTE
-            # Ora che 'subscription' è salvata (ha un ID), possiamo collegarla.
             PushInformation.objects.update_or_create(
                 user=request.user,
                 defaults={'subscription': subscription}
@@ -1212,6 +1214,5 @@ class WebPushSubscribeView(APIView):
             return Response({"status": "success", "message": "Sottoscrizione salvata."}, status=201)
 
         except Exception as e:
-            # Logghiamo l'errore per debugging lato server
             print(f"Errore salvataggio WebPush: {e}")
             return Response({"error": str(e)}, status=400)
