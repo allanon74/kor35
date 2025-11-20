@@ -1087,19 +1087,28 @@ class PunteggiListView(generics.ListAPIView):
 
 class MessaggioListView(generics.ListAPIView):
     """
-    GET /api/messaggi/
-    Restituisce i messaggi destinati al personaggio loggato (Broadcast, Group, Individuale).
+    GET /api/messaggi/?personaggio_id=<ID_SELEZIONATO>
+    Restituisce i messaggi destinati al personaggio specificato.
     """
     serializer_class = MessaggioSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        user = self.request.user
-        
-        try:
-            personaggio = Personaggio.objects.get(proprietario=user)
-        except Personaggio.DoesNotExist:
+        personaggio_id = self.request.query_params.get('personaggio_id')
+        user = self.request.user # L'utente deve essere comunque loggato
+
+        if not personaggio_id:
             return Messaggio.objects.none()
+
+        try:
+            # Assicurati che l'utente loggato sia il proprietario di quel personaggio
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=user)
+        except Personaggio.DoesNotExist:
+            # Se l'utente non possiede quel PG, restituisce una lista vuota (o solleva 403)
+            return Messaggio.objects.none() 
+        except Personaggio.MultipleObjectsReturned:
+             # Questo non dovrebbe succedere con 'id' come chiave, ma per sicurezza...
+             return Messaggio.objects.none()
 
         # 1. Messaggi Broadcast (salvati in cronologia)
         q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST) & Q(salva_in_cronologia=True)
@@ -1113,7 +1122,6 @@ class MessaggioListView(generics.ListAPIView):
         
         # Combina le query con OR (|)
         return Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
-
 
 class MessaggioBroadcastCreateView(generics.CreateAPIView):
     """
