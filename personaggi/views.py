@@ -1164,8 +1164,8 @@ class MessaggioBroadcastCreateView(generics.CreateAPIView):
         
 class WebPushSubscribeView(APIView):
     """
-    Endpoint personalizzato per salvare la sottoscrizione WebPush 
-    usando TokenAuthentication (compatibile con React).
+    Endpoint personalizzato per salvare la sottoscrizione WebPush.
+    CORRETTO: Supporta multipli dispositivi per lo stesso utente.
     """
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthenticated]
@@ -1182,33 +1182,33 @@ class WebPushSubscribeView(APIView):
             if not endpoint or not p256dh or not auth:
                 return Response({"error": "Dati sottoscrizione incompleti"}, status=400)
 
-            # --- FIX: TRONCAMENTO USER AGENT ---
-            # Recupera lo User Agent e troncalo a 100 caratteri per evitare l'errore DB
+            # Tronchiamo user agent per evitare errore DB
             user_agent = request.META.get('HTTP_USER_AGENT', 'Unknown')
             browser_info = user_agent[:100] if user_agent else 'Unknown' 
-            # -----------------------------------
 
-            # 1. SALVATAGGIO SOTTOSCRIZIONE
+            # 1. SALVATAGGIO SOTTOSCRIZIONE (Identifica il browser fisico)
             subscription, created = SubscriptionInfo.objects.get_or_create(
                 endpoint=endpoint,
                 defaults={
-                    'browser': browser_info, # Usa la stringa troncata
+                    'browser': browser_info, 
                     'auth': auth,
                     'p256dh': p256dh
                 }
             )
             
+            # Aggiorna i dati tecnici se cambiati
             if not created:
                 subscription.auth = auth
                 subscription.p256dh = p256dh
-                # Aggiorniamo anche il browser se è cambiato, sempre troncato
-                subscription.browser = browser_info 
+                subscription.browser = browser_info
                 subscription.save()
 
-            # 2. COLLEGAMENTO ALL'UTENTE
+            # 2. COLLEGAMENTO ALL'UTENTE (CORRETTO)
+            # Nota la differenza: 'subscription' è passato come parametro di ricerca,
+            # NON dentro 'defaults'. Così creiamo una riga PER OGNI dispositivo.
             PushInformation.objects.get_or_create(
                 user=request.user,
-                defaults={'subscription': subscription}
+                subscription=subscription  # <--- ORA È GIUSTO
             )
             
             return Response({"status": "success", "message": "Sottoscrizione salvata."}, status=201)
