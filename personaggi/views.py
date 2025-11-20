@@ -1085,69 +1085,72 @@ class PunteggiListView(generics.ListAPIView):
     
 # Viste per messaggi
 
+# 1. Vista per i GIOCATORI (Messaggi Ricevuti)
 class MessaggioListView(generics.ListAPIView):
     """
-    GET /api/messaggi/?personaggio_id=<ID_SELEZIONATO>
-    Restituisce i messaggi destinati al personaggio specificato.
+    GET /api/messaggi/?personaggio_id=<ID>
+    Restituisce i messaggi per il personaggio selezionato.
     """
     serializer_class = MessaggioSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         personaggio_id = self.request.query_params.get('personaggio_id')
-        user = self.request.user # L'utente deve essere comunque loggato
+        user = self.request.user
 
         if not personaggio_id:
             return Messaggio.objects.none()
 
-        try:
-            # Assicurati che l'utente loggato sia il proprietario di quel personaggio
-            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=user)
-        except Personaggio.DoesNotExist:
-            # Se l'utente non possiede quel PG, restituisce una lista vuota (o solleva 403)
-            return Messaggio.objects.none() 
-        except Personaggio.MultipleObjectsReturned:
-             # Questo non dovrebbe succedere con 'id' come chiave, ma per sicurezza...
-             return Messaggio.objects.none()
+        # Recupera il personaggio in modo sicuro
+        # Usiamo filter().first() per evitare crash se ci fossero duplicati strani,
+        # e controlliamo che appartenga all'utente loggato.
+        personaggio = Personaggio.objects.filter(id=personaggio_id, proprietario=user).first()
 
-        # 1. Messaggi Broadcast (salvati in cronologia)
-        q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST) & Q(salva_in_cronologia=True)
+        if not personaggio:
+            return Messaggio.objects.none()
+
+        # --- LOGICA DI VISIBILITÀ CORRETTA ---
         
-        # 2. Messaggi Individuali
+        # 1. Broadcast: Visibili SEMPRE, indipendentemente dal flag 'salva_in_cronologia'
+        q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST)
+        
+        # 2. Individuali: Solo per questo personaggio
         q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=personaggio)
         
-        # 3. Messaggi di Gruppo
+        # 3. Gruppo: Solo per i gruppi di questo personaggio
         gruppi_id = personaggio.gruppi_appartenenza.values_list('id', flat=True)
         q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
         
-        # Combina le query con OR (|)
         return Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
 
-class MessaggioBroadcastCreateView(generics.CreateAPIView):
-    """
-    POST /api/messaggi/broadcast/send/
-    Permette solo agli utenti staff/superutenti di inviare messaggi Broadcast.
-    """
-    serializer_class = MessaggioBroadcastCreateSerializer
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] 
-    
-    def perform_create(self, serializer):
-        # Qui iniettiamo il mittente e forziamo il tipo
-        serializer.save(
-            mittente=self.request.user,
-            tipo_messaggio=Messaggio.TIPO_BROADCAST
-        )
 
+# 2. Vista per l'ADMIN (Cronologia Inviati)
 class MessaggioAdminSentListView(generics.ListAPIView):
     """
     GET /api/messaggi/admin/sent/
-    Restituisce tutti i messaggi INVIATI dall'utente corrente (se è staff).
+    Restituisce i messaggi inviati dall'admin, MA SOLO quelli 
+    che avevano il flag 'salva_in_cronologia' attivo.
     """
     serializer_class = MessaggioSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
 
     def get_queryset(self):
-        # Restituisce i messaggi dove il mittente è l'utente loggato
         return Messaggio.objects.filter(
-            mittente=self.request.user
+            mittente=self.request.user,
+            salva_in_cronologia=True # <-- Il flag controlla QUESTA lista
         ).order_by('-data_invio')
+
+
+# 3. Vista per INVIO BROADCAST
+class MessaggioBroadcastCreateView(generics.CreateAPIView):
+    """
+    POST /api/messaggi/broadcast/send/
+    """
+    serializer_class = MessaggioBroadcastCreateSerializer
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] 
+    
+    def perform_create(self, serializer):
+        serializer.save(
+            mittente=self.request.user,
+            tipo_messaggio=Messaggio.TIPO_BROADCAST
+        )
