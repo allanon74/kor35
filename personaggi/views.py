@@ -1206,7 +1206,7 @@ class WebPushSubscribeView(APIView):
                 subscription.save()
 
             # 2. COLLEGAMENTO ALL'UTENTE
-            PushInformation.objects.update_or_create(
+            PushInformation.objects.get_or_create(
                 user=request.user,
                 defaults={'subscription': subscription}
             )
