@@ -63,6 +63,9 @@ import requests
 import os
 from django.conf import settings
 
+from webpush.models import PushInformation, SubscriptionInfo
+import json
+
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
 
 
@@ -1158,3 +1161,44 @@ class MessaggioBroadcastCreateView(generics.CreateAPIView):
             mittente=self.request.user,
             tipo_messaggio=Messaggio.TIPO_BROADCAST
         )
+        
+class WebPushSubscribeView(APIView):
+    """
+    Endpoint personalizzato per salvare la sottoscrizione WebPush 
+    usando TokenAuthentication (compatibile con React).
+    """
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # Il browser invia un oggetto JSON con 'endpoint' e 'keys'
+            data = request.data
+            keys = data.get('keys', {})
+
+            # Estraiamo i dati necessari
+            endpoint = data.get('endpoint')
+            p256dh = keys.get('p256dh')
+            auth = keys.get('auth')
+            
+            if not endpoint or not p256dh or not auth:
+                return Response({"error": "Dati sottoscrizione incompleti"}, status=400)
+
+            # Salviamo (o aggiorniamo) la sottoscrizione usando i modelli di django-webpush
+            # PushInformation collega l'utente alla sottoscrizione
+            PushInformation.objects.update_or_create(
+                user=request.user,
+                defaults={
+                    'subscription': SubscriptionInfo(
+                        browser=request.META.get('HTTP_USER_AGENT', 'Unknown'),
+                        endpoint=endpoint,
+                        auth=auth,
+                        p256dh=p256dh
+                    )
+                }
+            )
+            
+            return Response({"status": "success", "message": "Sottoscrizione salvata."}, status=201)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)

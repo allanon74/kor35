@@ -78,6 +78,7 @@ urlpatterns = [
     path('api/messaggi/', views.MessaggioListView.as_view(), name='api_messaggi_list'),
     path('api/messaggi/broadcast/send/', views.MessaggioBroadcastCreateView.as_view(), name='api_messaggi_broadcast_send'),
     path('api/messaggi/admin/sent/', views.MessaggioAdminSentListView.as_view(), name='api_messaggi_admin_sent'),
+    path('api/webpush/subscribe/', views.WebPushSubscribeView.as_view(), name='api_webpush_subscribe'),
     
     path('api/', include(router.urls)),
     
