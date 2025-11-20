@@ -89,6 +89,7 @@ INSTALLED_APPS = [
 	# 'django_yarnpkg', # django-yarnpkg
 	'icon_widget', # icon widget
     'channels',
+    'webpush',
 	
 ]
 
@@ -128,6 +129,14 @@ THUMBNAIL_PROCESSORS = (
 )
 
 # fine sezione
+
+
+# Configurazione WebPush
+WEBPUSH_SETTINGS = {
+    "VAPID_PUBLIC_KEY": "BIOIApSIeJdV1tp5iVxyLtm8KzM43_AQWV2ymS4iMjkIG1R5g399o6WRdZJY-xcUBZPyJ7EFRVgWqlbalOkGSYw",
+    "VAPID_PRIVATE_KEY": "YP8GJDCiP3vGzZp-0ue9lsxK7IFZ5B1OR_TUupfd5pY",
+    "VAPID_ADMIN_EMAIL": "mailto:postmaster@k-o-r-35.it",
+}
 
 MIDDLEWARE = [
    'django.middleware.security.SecurityMiddleware',

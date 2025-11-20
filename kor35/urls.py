@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/api-token-auth/', obtain_auth_token, name='api_token_auth'),
     re_path(r'^', include('cms.urls')),
     path("icons/", include("dj_iconify.urls")),
+    path('webpush/', include('webpush.urls')), # Endpoint per il frontend
     
 ]
 if settings.DEBUG:
