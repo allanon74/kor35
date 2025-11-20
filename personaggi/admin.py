@@ -18,7 +18,8 @@ from .models import (
 )
 from .models import (
     Tabella, Punteggio, Tier, Abilita, Mattone, 
-    Caratteristica, Aura, ModelloAura, MattoneStatistica, PersonaggioModelloAura
+    Caratteristica, Aura, ModelloAura, MattoneStatistica, PersonaggioModelloAura,
+    Messaggio, Gruppo,
 )
 from .models import (
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
@@ -624,3 +625,60 @@ class PersonaggioAdmin(A_Admin):
             )
         }),
     )
+    
+    
+# ----------- MESSAGGISTICA E GRUPPI -------------
+
+@admin.register(Gruppo)
+class GruppoAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'conteggio_membri')
+    search_fields = ('nome',)
+    # filter_horizontal rende molto più facile selezionare molti personaggi
+    filter_horizontal = ('membri',)
+
+    def conteggio_membri(self, obj):
+        return obj.membri.count()
+    conteggio_membri.short_description = "Numero Membri"
+
+
+@admin.register(Messaggio)
+class MessaggioAdmin(SModelAdmin): # Usa Summernote come le altre classi
+    list_display = ('titolo', 'tipo_messaggio', 'mittente', 'get_destinatario', 'data_invio', 'salva_in_cronologia')
+    list_filter = ('tipo_messaggio', 'salva_in_cronologia', 'data_invio')
+    search_fields = ('titolo', 'testo', 'mittente__username', 'destinatario_personaggio__nome', 'destinatario_gruppo__nome')
+    date_hierarchy = 'data_invio'
+    
+    summernote_fields = ('testo',)
+    
+    # Autocomplete aiuta se hai molti personaggi o gruppi
+    autocomplete_fields = ['destinatario_personaggio', 'destinatario_gruppo'] 
+    
+    fieldsets = (
+        ('Dettagli Messaggio', {
+            'fields': ('titolo', 'mittente', 'data_invio', 'salva_in_cronologia')
+        }),
+        ('Contenuto', {
+            'fields': ('testo',)
+        }),
+        ('Destinazione', {
+            'fields': ('tipo_messaggio', 'destinatario_personaggio', 'destinatario_gruppo'),
+            'description': "Seleziona il tipo di messaggio e compila SOLO il campo corrispondente (Personaggio o Gruppo). Se Broadcast, lascia vuoti i destinatari."
+        }),
+    )
+
+    def get_destinatario(self, obj):
+        """Mostra il destinatario corretto nella lista in base al tipo"""
+        if obj.tipo_messaggio == 'BROAD':
+            return format_html("<b>TUTTI (Broadcast)</b>")
+        elif obj.tipo_messaggio == 'GROUP':
+            return format_html(f"Gruppo: {obj.destinatario_gruppo}")
+        elif obj.tipo_messaggio == 'INDV':
+            return format_html(f"Pg: {obj.destinatario_personaggio}")
+        return "-"
+    get_destinatario.short_description = "Destinatario"
+
+    def save_model(self, request, obj, form, change):
+        """Imposta automaticamente il mittente se non specificato"""
+        if not obj.mittente:
+            obj.mittente = request.user
+        super().save_model(request, obj, form, change)
