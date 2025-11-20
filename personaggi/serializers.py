@@ -689,10 +689,10 @@ class MessaggioBroadcastCreateSerializer(serializers.ModelSerializer):
         # L'admin invia solo questi campi per un broadcast
         fields = ('titolo', 'testo', 'salva_in_cronologia') 
         
-    def create(self, validated_data):
-        # Aggiungi il mittente (utente loggato) e forza il tipo di messaggio
-        return Messaggio.objects.create(
-            mittente=self.context['request'].user, 
-            tipo_messaggio=Messaggio.TIPO_BROADCAST,
-            **validated_data
-        )
+    # def create(self, validated_data):
+    #     # Aggiungi il mittente (utente loggato) e forza il tipo di messaggio
+    #     return Messaggio.objects.create(
+    #         mittente=self.context['request'].user, 
+    #         tipo_messaggio=Messaggio.TIPO_BROADCAST,
+    #         **validated_data
+    #     )

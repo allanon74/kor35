@@ -1132,5 +1132,8 @@ class MessaggioBroadcastCreateView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] 
     
     def perform_create(self, serializer):
-        # Aggiunge il mittente e forza il tipo di messaggio
-        serializer.save(mittente=self.request.user)
+        # Qui iniettiamo il mittente e forziamo il tipo
+        serializer.save(
+            mittente=self.request.user,
+            tipo_messaggio=Messaggio.TIPO_BROADCAST
+        )
