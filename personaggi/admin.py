@@ -361,7 +361,7 @@ class PunteggioAdmin(A_Admin):
     
     list_display = ('nome','icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'tipo', 'ordine', 'caratteristica_relativa','colore',)
     list_filter = ('tipo', 'caratteristica_relativa',)
-    list_editable = ('ordine',)
+    list_editable = ('ordine','tipo', )
     search_fields = ('nome', )
     summernote_fields = ('descrizione',)
     save_as = True
@@ -424,7 +424,7 @@ class MattoneAdmin(A_Admin):
     fieldsets = (
         ('Dati Mattone', {
             'fields': (
-                'nome', 'aura', 'caratteristica_associata', 
+                'nome', 'aura', 'caratteristica_associata', 'tipo',
                 'descrizione_mattone', 'icona', 'colore'
             )
         }),
