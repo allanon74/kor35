@@ -17,26 +17,33 @@ from icon_widget.fields import CustomIconField
 # --- COSTANTI ---
 COSTO_PER_MATTONE = 100
 
-# --- COSTANTI RANGO (NUOVO) ---
-RANGO_NORMALE = 1
-RANGO_EROICO = 2
-RANGO_LEGGENDARIO = 3
-RANGO_MITOLOGICO = 4
-RANGO_DIVINO = 5
-RANGO_COSMICO = 6
-
-RANGO_CHOICES = [
-    (RANGO_NORMALE, 'Normale'),
-    (RANGO_EROICO, 'Eroico'),
-    (RANGO_LEGGENDARIO, 'Leggendario'),
-    (RANGO_MITOLOGICO, 'Mitologico'),
-    (RANGO_DIVINO, 'Divino'),
-    (RANGO_COSMICO, 'Cosmico'),
-]
-
+# --- FUNZIONE RANGO AGGIORNATA ---
 def get_testo_rango(valore):
-    dict_rango = dict(RANGO_CHOICES)
-    return dict_rango.get(valore, "Sconosciuto")
+    """
+    Restituisce la stringa del rango in base al valore numerico.
+    """
+    try:
+        valore = int(valore)
+    except (ValueError, TypeError):
+        return ""
+
+    if valore <= 0:
+        return "Mondano! "
+    elif valore == 1:
+        return "" # Stringa vuota per rango 1
+    elif valore == 2:
+        return "Eroico! "
+    elif valore == 3:
+        return "Leggendario! "
+    elif valore == 4:
+        return "Mitologico! "
+    elif valore == 5:
+        return "Divino! "
+    elif valore == 6:
+        return "Cosmico! "
+    else: # >= 7
+        n = valore - 6
+        return f"Cosmico {n}-esimo! "
 
 def _get_icon_color_from_bg(hex_color):
     """
@@ -61,7 +68,6 @@ CULTO = "CU"
 VIA = "VI"
 ARTE = "AR"
 ARCHETIPO = "AR"
-# MATTONE_TYPE = "MA" # Nuovo tipo per distinguere i Mattoni se necessario, o si può usare ELEMENTO
 
 punteggi_tipo = [
     (CARATTERISTICA, 'Caratteristica'),
@@ -73,7 +79,6 @@ punteggi_tipo = [
     (VIA, 'Via',),
     (ARTE, 'Arte',),
     (ARCHETIPO, 'Archetipo',),
-    # (MATTONE_TYPE, 'Mattone (Elemento)',),
 ]
 
 TIER_1 = "T1"
@@ -350,7 +355,7 @@ class Statistica(Punteggio):
         verbose_name = "Statistica"
         verbose_name_plural = "Statistiche"
 
-# --- NUOVO MODELLO MATTONE ---
+# --- MATTONE ---
 class Mattone(Punteggio):
     aura = models.ForeignKey(
         Punteggio, 
@@ -724,6 +729,7 @@ class Tecnica(A_vista):
     def costo_crediti(self):
         return self.livello * COSTO_PER_MATTONE
 
+# --- MODELLO INFUSIONE ---
 class Infusione(Tecnica):
     aura_infusione = models.ForeignKey(
         Punteggio,
@@ -809,8 +815,9 @@ class Tessitura(Tecnica):
     @property
     def TestoFormattato(self):
         """
-        Restituisce un'anteprima combinata di Formula e Testo, con tutti i parametri
+        Restituisce un'anteprima combinata di Testo e Formula (in questo ordine), con tutti i parametri
         (Statistiche Base, {elem}, {rango}) risolti.
+        Ordine: Testo <hr> Formula
         """
         testo_out = self.testo or ""
         formula_out = self.formula or ""
@@ -835,21 +842,21 @@ class Tessitura(Tecnica):
         # 3. Gestione {rango} (Se presente come statistica base "Rango")
         rango_link = next((l for l in links if l.statistica.nome.lower() == "rango"), None)
         if rango_link:
-            # Converte il valore numerico (es. 1) nel testo (es. "Normale")
             rango_txt = get_testo_rango(rango_link.valore_base)
             testo_out = testo_out.replace("{rango}", rango_txt)
             formula_out = formula_out.replace("{rango}", rango_txt)
             
-        # 4. Combinazione Output (Formula in grassetto + Testo)
+        # 4. Combinazione Output (Testo, poi Formula in grassetto)
         html_parts = []
-        if formula_out:
-            html_parts.append(f"<strong>Formula:</strong> {formula_out}")
         
         if testo_out:
-            # Aggiunge separatore se c'è anche la formula
-            if formula_out:
-                html_parts.append("<br/><hr style='margin:5px 0; border:0; border-top:1px dashed #ccc;'/>")
             html_parts.append(testo_out)
+            
+        if formula_out:
+            # Se c'è del testo prima, metti un separatore
+            if testo_out:
+                html_parts.append("<br/><hr style='margin:5px 0; border:0; border-top:1px dashed #ccc;'/>")
+            html_parts.append(f"<strong>Formula:</strong> {formula_out}")
             
         return "".join(html_parts)
 
@@ -1081,11 +1088,12 @@ class Personaggio(Inventario):
         """
         Calcola i valori base di TUTTI i punteggi (CA, AU, CU, ecc.)
         sommando i bonus 'punteggio_acquisito' dalle abilità possedute.
-        Usa una cache.
+        Include il calcolo automatico dell'AURA GENERICA (Max delle altre aure).
         """
         if hasattr(self, '_punteggi_base_cache'):
             return self._punteggi_base_cache
 
+        # 1. Calcolo standard: Somma i bonus delle abilità
         links = abilita_punteggio.objects.filter(
             abilita__personaggioabilita__personaggio=self
         ).select_related('punteggio')
@@ -1100,17 +1108,11 @@ class Personaggio(Inventario):
             item['punteggio__nome']: item['valore_totale'] 
             for item in query_aggregata
         }
-        
+
         # 2. LOGICA AURA GENERICA
-        # Cerchiamo la definizione dell'Aura Generica nel DB
-        # (Usiamo filter().first() per evitare errori se non esiste ancora)
         aura_gen_def = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
 
         if aura_gen_def:
-            # Troviamo il valore massimo tra le ALTRE aure possedute dal PG.
-            # Dobbiamo sapere quali chiavi in 'punteggi' sono effettivamente Aure.
-            
-            # Recuperiamo i nomi di tutte le aure (esclusa la generica stessa)
             nomi_altre_aure = set(
                 Punteggio.objects.filter(tipo=AURA)
                 .exclude(id=aura_gen_def.id)
@@ -1123,9 +1125,7 @@ class Personaggio(Inventario):
                     if valore > max_valore_aura:
                         max_valore_aura = valore
             
-            # Inseriamo (o sovrascriviamo) l'Aura Generica nel dizionario dei risultati
             punteggi[aura_gen_def.nome] = max_valore_aura
-        
             
         self._punteggi_base_cache = punteggi
         return self._punteggi_base_cache
@@ -1418,7 +1418,8 @@ class Personaggio(Inventario):
              # Rango
              rango_stat = next((l for l in links_base if l.statistica.nome.lower() == "rango"), None)
              if rango_stat:
-                 testo_completo = testo_completo.replace("{rango}", get_testo_rango(rango_stat.valore_base))
+                 rango_txt = get_testo_rango(rango_stat.valore_base)
+                 testo_completo = testo_completo.replace("{rango}", rango_txt)
 
         base_stats = {
             link.statistica.parametro: link.valore_base 
