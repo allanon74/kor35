@@ -40,7 +40,7 @@ CULTO = "CU"
 VIA = "VI"
 ARTE = "AR"
 ARCHETIPO = "AR"
-MATTONE_TYPE = "MA" # Nuovo tipo per distinguere i Mattoni se necessario, o si può usare ELEMENTO
+# MATTONE_TYPE = "MA" # Nuovo tipo per distinguere i Mattoni se necessario, o si può usare ELEMENTO
 
 punteggi_tipo = [
     (CARATTERISTICA, 'Caratteristica'),
@@ -52,7 +52,7 @@ punteggi_tipo = [
     (VIA, 'Via',),
     (ARTE, 'Arte',),
     (ARCHETIPO, 'Archetipo',),
-    (MATTONE_TYPE, 'Mattone (Elemento)',),
+    # (MATTONE_TYPE, 'Mattone (Elemento)',),
 ]
 
 TIER_1 = "T1"
@@ -137,6 +137,7 @@ class Punteggio(Tabella):
     colore = ColorField('Colore', default='#1976D2', help_text="Colore associato al punteggio (es. per icone).")
     icona = CustomIconField(blank=True)
     ordine = models.IntegerField(default=0, help_text="Valore per l'ordinamento (più basso appare prima)")
+    mattone = models.BooleanField("")
     
     caratteristica_relativa = models.ForeignKey(
         "Punteggio",
@@ -338,7 +339,7 @@ class Mattone(Punteggio):
     )
 
     def save(self, *args, **kwargs):
-        self.tipo = MATTONE_TYPE
+        self.mattone = True
         super().save(*args, **kwargs)
 
     class Meta:
@@ -1229,7 +1230,7 @@ class AttivataElemento(models.Model):
     elemento = models.ForeignKey(
         Punteggio, 
         on_delete=models.CASCADE,
-        limit_choices_to={'tipo__in': [ELEMENTO, MATTONE_TYPE]}, # Aggiornato per includere Mattoni
+        limit_choices_to={'mattone': True}, # Aggiornato per includere Mattoni
         verbose_name="Elemento / Mattone"
     )
 
