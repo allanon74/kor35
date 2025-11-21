@@ -255,7 +255,7 @@ class PersonaggioModelloAuraInline(admin.TabularInline):
     verbose_name = "Modello Aura Applicato"
     verbose_name_plural = "Modelli Aura Applicati"
 
-# --- NUOVI INLINE PER PERSONAGGIO (INFUSIONI E TESSITURE) ---
+# --- INLINE PER PERSONAGGIO (INFUSIONI E TESSITURE) ---
 class PersonaggioInfusioneInline(admin.TabularInline):
     model = PersonaggioInfusione
     extra = 1
@@ -404,18 +404,7 @@ class PunteggioOggettoInline(admin.TabularInline):
     verbose_name = "Elemento"
     verbose_name_plural = "Elementi dell'Oggetto"
     
-# --- CLASSI LEGACY DISATTIVATE ---
-# Le commentiamo per nasconderle dall'admin ma preservare il codice se servisse in futuro
-"""
-class PunteggioAttivataInline(admin.TabularInline):
-    model = Attivata.elementi.through
-    extra = 1
-    verbose_name = "Elemento"
-    verbose_name_plural = "Elementi dell'Attivata"
-"""
-
 # --- INLINE SPECIALI CONDIZIONALI ---
-# Usiamo StackedInline e filter_horizontal per gestire aure/elementi multipli
 
 class StatisticaCondizionaleInlineBase(admin.StackedInline):
     extra = 0
@@ -450,18 +439,6 @@ class OggettoStatisticaBaseInline(StatisticaPivotInlineBase):
     verbose_name = "Statistica (Valore Base)"
     verbose_name_plural = "Statistiche (Valori Base)"
 
-# --- CLASSI LEGACY DISATTIVATE ---
-"""
-class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
-    model = AttivataStatisticaBase
-    form = AttivataStatisticaBaseForm
-    fk_name = 'attivata'
-    value_field = 'valore_base'
-    default_field = 'valore_base_predefinito'
-    verbose_name = "Statistica (Valore Base)"
-    verbose_name_plural = "Statistiche (Valori Base)"
-"""
-
 @admin.register(Manifesto)
 class ManifestoAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome', )
@@ -490,29 +467,11 @@ class OggettoAdmin(SModelAdmin):
         if 'testo' in form.base_fields:
             form.base_fields['testo'].help_text = get_statistica_base_help_text()
         return form
-    def mostra_testo_formattato(self, obj): return format_html(obj.TestoFormattato)
+    
+    # CORREZIONE: Utilizzo sicuro di format_html
+    def mostra_testo_formattato(self, obj):
+        return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
-
-# --- LEGACY: RIMOSSO ADMIN PER ATTIVATA ---
-"""
-@admin.register(Attivata)
-class AttivataAdmin(SModelAdmin):
-    list_display = ('id', 'data_creazione', 'nome')
-    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione',) 
-    inlines = [AttivataStatisticaBaseInline, PunteggioAttivataInline]
-    exclude = ('statistiche_base', 'elementi')
-    summernote_fields = ['testo', ]    
-    fieldsets = (
-        ('Informazioni Principali', {'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))}),
-        ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
-    )
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
-        return form
-    def mostra_testo_formattato(self, obj): return format_html(obj.TestoFormattato)
-    mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
-"""
 
 # --- NUOVE CONFIGURAZIONI E INLINE PER INFUSIONE E TESSITURA ---
 
@@ -558,7 +517,10 @@ class InfusioneAdmin(SModelAdmin):
         form = super().get_form(request, obj, **kwargs)
         if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
         return form
-    def mostra_testo_formattato(self, obj): return format_html(obj.TestoFormattato)
+    
+    # CORREZIONE: Utilizzo sicuro di format_html
+    def mostra_testo_formattato(self, obj):
+        return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo'
 
 @admin.register(Tessitura)
@@ -584,19 +546,13 @@ class TessituraAdmin(SModelAdmin):
         if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
         if 'formula' in form.base_fields: form.base_fields['formula'].help_text += " Supporta anche {elem} e {rango}."
         return form
-    def mostra_testo_formattato(self, obj): return format_html(obj.TestoFormattato)
+    
+    # CORREZIONE: Utilizzo sicuro di format_html
+    def mostra_testo_formattato(self, obj):
+        return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo'
 
 # --- INLINE PER PERSONAGGIO: RELAZIONI (LEGACY E NUOVE) ---
-
-# --- LEGACY: RIMOSSO INLINE PER PERSONAGGIO-ATTIVATA ---
-"""
-class PersonaggioAttivataInline(admin.TabularInline):
-    model = Personaggio.attivate_possedute.through # Legacy
-    extra = 1
-    verbose_name = "Attivata (Legacy)"
-    verbose_name_plural = "Attivate (Legacy)"
-"""
 
 class PersonaggioInfusioneInline(admin.TabularInline):
     model = PersonaggioInfusione
@@ -624,7 +580,6 @@ class PersonaggioAdmin(A_Admin):
         PersonaggioModelloAuraInline,
         PersonaggioInfusioneInline, # Nuovo
         PersonaggioTessituraInline, # Nuovo
-        # PersonaggioAttivataInline,  # Legacy RIMOSSO
         CreditoMovimentoInline,
         PuntiCaratteristicaMovimentoInline,
         PersonaggioLogInline
@@ -646,31 +601,23 @@ class PersonaggioAdmin(A_Admin):
         }),
     )
     
-    
 # ----------- MESSAGGISTICA E GRUPPI -------------
 
 @admin.register(Gruppo)
 class GruppoAdmin(admin.ModelAdmin):
     list_display = ('nome', 'conteggio_membri')
     search_fields = ('nome',)
-    # filter_horizontal rende molto più facile selezionare molti personaggi
     filter_horizontal = ('membri',)
-
-    def conteggio_membri(self, obj):
-        return obj.membri.count()
+    def conteggio_membri(self, obj): return obj.membri.count()
     conteggio_membri.short_description = "Numero Membri"
 
-
 @admin.register(Messaggio)
-class MessaggioAdmin(SModelAdmin): # Usa Summernote come le altre classi
+class MessaggioAdmin(SModelAdmin): 
     list_display = ('titolo', 'tipo_messaggio', 'mittente', 'get_destinatario', 'data_invio', 'salva_in_cronologia')
     list_filter = ('tipo_messaggio', 'salva_in_cronologia', 'data_invio')
     search_fields = ('titolo', 'testo', 'mittente__username', 'destinatario_personaggio__nome', 'destinatario_gruppo__nome')
     date_hierarchy = 'data_invio'
-    
     summernote_fields = ('testo',)
-    
-    # Autocomplete aiuta se hai molti personaggi o gruppi
     autocomplete_fields = ['destinatario_personaggio', 'destinatario_gruppo'] 
     
     fieldsets = (
@@ -687,18 +634,12 @@ class MessaggioAdmin(SModelAdmin): # Usa Summernote come le altre classi
     )
 
     def get_destinatario(self, obj):
-        """Mostra il destinatario corretto nella lista in base al tipo"""
-        if obj.tipo_messaggio == 'BROAD':
-            return format_html("<b>TUTTI (Broadcast)</b>")
-        elif obj.tipo_messaggio == 'GROUP':
-            return format_html(f"Gruppo: {obj.destinatario_gruppo}")
-        elif obj.tipo_messaggio == 'INDV':
-            return format_html(f"Pg: {obj.destinatario_personaggio}")
+        if obj.tipo_messaggio == 'BROAD': return format_html("<b>TUTTI (Broadcast)</b>")
+        elif obj.tipo_messaggio == 'GROUP': return format_html(f"Gruppo: {obj.destinatario_gruppo}")
+        elif obj.tipo_messaggio == 'INDV': return format_html(f"Pg: {obj.destinatario_personaggio}")
         return "-"
     get_destinatario.short_description = "Destinatario"
 
     def save_model(self, request, obj, form, change):
-        """Imposta automaticamente il mittente se non specificato"""
-        if not obj.mittente:
-            obj.mittente = request.user
+        if not obj.mittente: obj.mittente = request.user
         super().save_model(request, obj, form, change)
