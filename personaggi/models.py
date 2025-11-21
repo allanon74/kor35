@@ -1063,6 +1063,32 @@ class Personaggio(Inventario):
             item['punteggio__nome']: item['valore_totale'] 
             for item in query_aggregata
         }
+        
+        # 2. LOGICA AURA GENERICA
+        # Cerchiamo la definizione dell'Aura Generica nel DB
+        # (Usiamo filter().first() per evitare errori se non esiste ancora)
+        aura_gen_def = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
+
+        if aura_gen_def:
+            # Troviamo il valore massimo tra le ALTRE aure possedute dal PG.
+            # Dobbiamo sapere quali chiavi in 'punteggi' sono effettivamente Aure.
+            
+            # Recuperiamo i nomi di tutte le aure (esclusa la generica stessa)
+            nomi_altre_aure = set(
+                Punteggio.objects.filter(tipo=AURA)
+                .exclude(id=aura_gen_def.id)
+                .values_list('nome', flat=True)
+            )
+
+            max_valore_aura = 0
+            for nome_punteggio, valore in punteggi.items():
+                if nome_punteggio in nomi_altre_aure:
+                    if valore > max_valore_aura:
+                        max_valore_aura = valore
+            
+            # Inseriamo (o sovrascriviamo) l'Aura Generica nel dizionario dei risultati
+            punteggi[aura_gen_def.nome] = max_valore_aura
+        
             
         self._punteggi_base_cache = punteggi
         return self._punteggi_base_cache
