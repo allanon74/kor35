@@ -495,13 +495,13 @@ class OggettoAdmin(SModelAdmin):
 
 # --- NUOVE CONFIGURAZIONI E INLINE PER INFUSIONE E TESSITURA ---
 
-class InfusioneStatisticaInline(StatisticaCondizionaleInlineBase):
+class InfusioneStatisticaInline(StatisticaPivotInlineBase):
     model = InfusioneStatisticaBase
     fk_name = 'infusione'
     value_field = 'valore_base'
     default_field = 'valore_base_predefinito'
 
-class TessituraStatisticaInline(StatisticaCondizionaleInlineBase):
+class TessituraStatisticaInline(StatisticaPivotInlineBase):
     model = TessituraStatisticaBase
     fk_name = 'tessitura'
     value_field = 'valore_base'
