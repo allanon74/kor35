@@ -359,7 +359,7 @@ class AbilitaAdmin(A_Admin):
 class PunteggioAdmin(A_Admin):
     form = PunteggioAdminForm
     
-    list_display = ('nome','icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'tipo', 'ordine', 'caratteristica_relativa',)
+    list_display = ('nome','icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'tipo', 'ordine', 'caratteristica_relativa','colore',)
     list_filter = ('tipo', 'caratteristica_relativa',)
     list_editable = ('ordine',)
     search_fields = ('nome', )
@@ -375,7 +375,7 @@ class PunteggioAdmin(A_Admin):
 @admin.register(Caratteristica)
 class CaratteristicaAdmin(A_Admin): 
     form = PunteggioAdminForm
-    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html','ordine', 'icona_cerchio_inverted_html',)
+    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html','ordine', 'icona_cerchio_inverted_html','colore',)
     list_editable = ('ordine',)
     search_fields = ('nome', 'sigla')
     summernote_fields = ('descrizione',) 
