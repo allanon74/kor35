@@ -365,6 +365,10 @@ class Aura(Punteggio):
         proxy = True
         verbose_name = "Aura (Gestione)"
         verbose_name_plural = "Aure (Gestione)"
+        
+    def save(self, *args, **kwargs):
+        self.type = AURA
+        super().save(*args, **kwargs)
 
 # --- MODELLO DI AURA ---
 class ModelloAura(models.Model):
