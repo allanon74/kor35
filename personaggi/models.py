@@ -137,7 +137,7 @@ class Punteggio(Tabella):
     colore = ColorField('Colore', default='#1976D2', help_text="Colore associato al punteggio (es. per icone).")
     icona = CustomIconField(blank=True)
     ordine = models.IntegerField(default=0, help_text="Valore per l'ordinamento (più basso appare prima)")
-    mattone = models.BooleanField("")
+    is_mattone = models.BooleanField("è un mattone?", default=False)
     
     caratteristica_relativa = models.ForeignKey(
         "Punteggio",
@@ -339,7 +339,7 @@ class Mattone(Punteggio):
     )
 
     def save(self, *args, **kwargs):
-        self.mattone = True
+        self.is_mattone = True
         super().save(*args, **kwargs)
 
     class Meta:
@@ -1230,7 +1230,7 @@ class AttivataElemento(models.Model):
     elemento = models.ForeignKey(
         Punteggio, 
         on_delete=models.CASCADE,
-        limit_choices_to={'mattone': True}, # Aggiornato per includere Mattoni
+        limit_choices_to={'is_mattone': True}, # Aggiornato per includere Mattoni
         verbose_name="Elemento / Mattone"
     )
 
