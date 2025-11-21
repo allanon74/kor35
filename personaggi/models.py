@@ -273,11 +273,107 @@ class Punteggio(Tabella):
     permette_tessiture = models.BooleanField(default=False)
     caratteristica_relativa = models.ForeignKey("Punteggio", on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, null=True, blank=True, related_name="punteggi_caratteristica")
     modifica_statistiche = models.ManyToManyField('Statistica', through='CaratteristicaModificatore', related_name='modificata_da_caratteristiche', blank=True)
-    class Meta: verbose_name="Punteggio"; verbose_name_plural="Punteggi"; ordering=['tipo', 'ordine', 'nome']
+    
+    class Meta: 
+        verbose_name="Punteggio"; 
+        verbose_name_plural="Punteggi"; 
+        ordering=['tipo', 'ordine', 'nome']
+    
     @property
     def icona_url(self): return f"{settings.MEDIA_URL}{self.icona}" if self.icona else None
     def __str__(self): return f"{self.tipo} - {self.nome}"
-    # Metodi grafici omessi
+    
+    def svg_icon(self):
+        return format_html(
+            '<img src="{}" height="30" width="30" alt="{}"/>'.format(
+                f"/{self.icon}"
+                if self.icon.endswith(".svg")
+                else f"https://api.iconify.design/{self.icon}.svg",
+                f"Icon for {self.name}"
+            )
+        )
+
+    @property
+    def icona_url(self):
+        if self.icona:
+            return f"{settings.MEDIA_URL}{self.icona}"
+        return None
+
+    @property
+    def icona_html(self):
+        url = self.icona_url
+        colore = self.colore
+        
+        if url and colore:
+            style = (
+                f"width: 24px; "
+                f"height: 24px; "
+                f"background-color: {colore}; "
+                f"mask-image: url({url}); "
+                f"-webkit-mask-image: url({url}); "
+                f"mask-repeat: no-repeat; "
+                f"-webkit-mask-repeat: no-repeat; "
+                f"mask-size: contain; "
+                f"-webkit-mask-size: contain; "
+                f"display: inline-block; "
+                f"vertical-align: middle;"
+            )
+            return format_html('<div style="{}"></div>', style)
+        return ""
+    
+    def icona_cerchio(self, inverted=True):
+        url_icona_locale = self.icona_url 
+        colore_sfondo = self.colore
+        
+        if not url_icona_locale or not colore_sfondo:
+            return ""
+
+        colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo)
+
+        if inverted:
+            colore_icona_contrasto = self.colore
+            colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
+            
+        stile_cerchio = (
+            f"display: inline-block; "
+            f"width: 30px; "
+            f"height: 30px; "
+            f"background-color: {colore_sfondo}; "
+            f"border-radius: 50%; "
+            f"vertical-align: middle; "
+            f"text-align: center; "
+            f"line-height: 30px;"
+        )
+        
+        stile_icona_maschera = (
+            f"display: inline-block; "
+            f"width: 24px; "
+            f"height: 24px; "
+            f"vertical-align: middle; "
+            f"background-color: {colore_icona_contrasto}; "
+            f"mask-image: url({url_icona_locale}); "
+            f"-webkit-mask-image: url({url_icona_locale}); "
+            f"mask-repeat: no-repeat; "
+            f"-webkit-mask-repeat: no-repeat; "
+            f"mask-size: contain; "
+            f"-webkit-mask-size: contain; "
+        )
+
+        return format_html(
+            '<div style="{}">'
+            '  <div style="{}"></div>'
+            '</div>',
+            stile_cerchio,
+            stile_icona_maschera
+        )
+    
+    @property
+    def icona_cerchio_html(self):
+        return self.icona_cerchio(inverted=False)
+    
+    @property
+    def icona_cerchio_inverted_html(self):
+        return self.icona_cerchio(inverted=True)
 
 class Caratteristica(Punteggio):
     class Meta: proxy=True; verbose_name="Caratteristica (Gestione)"; verbose_name_plural="Caratteristiche (Gestione)"
