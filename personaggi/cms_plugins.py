@@ -1,16 +1,19 @@
-# In /personaggi/cms_plugins.py
-
 from cms.plugin_base import CMSPluginBase
 from cms.plugin_pool import plugin_pool
 from django.utils.translation import gettext_lazy as _
 
-from .models import TabellaPluginModel, Tier, Abilita, Oggetto, Attivata, AbilitaPluginModel, TierPluginModel, OggettoPluginModel, AttivataPluginModel  
+from .models import (
+    TabellaPluginModel, Tier, Abilita, Oggetto, Attivata, 
+    Infusione, Tessitura,
+    AbilitaPluginModel, TierPluginModel, OggettoPluginModel, AttivataPluginModel,
+    InfusionePluginModel, TessituraPluginModel
+)  
 
-# --- 1. Plugin per i TIER (preso da cms_kor e adattato) ---
+# --- 1. Plugin per i TIER ---
 
 @plugin_pool.register_plugin
 class TierPlugin(CMSPluginBase):
-    model = TierPluginModel # Dobbiamo definire questo modello
+    model = TierPluginModel
     name = _("Tier Plugin")
     render_template = "cms/plugins/tier.html"
     cache = False
@@ -25,7 +28,7 @@ class TierPlugin(CMSPluginBase):
 
 @plugin_pool.register_plugin
 class AbilitaPlugin(CMSPluginBase):
-    model = AbilitaPluginModel # Dobbiamo definire questo modello
+    model = AbilitaPluginModel
     name = _("Abilità Plugin")
     render_template = "cms/plugins/abilita.html"
     cache = True
@@ -39,7 +42,7 @@ class AbilitaPlugin(CMSPluginBase):
 
 @plugin_pool.register_plugin
 class OggettoPlugin(CMSPluginBase):
-    model = OggettoPluginModel # Dobbiamo definire questo modello
+    model = OggettoPluginModel
     name = _("Oggetto Plugin")
     render_template = "cms/plugins/oggetto.html"
     cache = True
@@ -49,11 +52,11 @@ class OggettoPlugin(CMSPluginBase):
         context['oggetto'] = instance.oggetto
         return context
 
-# --- 4. Plugin per Attivata Singola ---
+# --- 4. Plugin per Attivata Singola (Legacy) ---
 
 @plugin_pool.register_plugin
 class AttivataPlugin(CMSPluginBase):
-    model = AttivataPluginModel # Dobbiamo definire questo modello
+    model = AttivataPluginModel
     name = _("Attivata Plugin")
     render_template = "cms/plugins/attivata.html"
     cache = True
@@ -61,6 +64,37 @@ class AttivataPlugin(CMSPluginBase):
     def render(self, context, instance, placeholder):
         context = super().render(context, instance, placeholder)
         context['attivata'] = instance.attivata
+        return context
+
+# --- 5. Plugin per Infusione Singola (Nuovo) ---
+
+@plugin_pool.register_plugin
+class InfusionePlugin(CMSPluginBase):
+    model = InfusionePluginModel
+    name = _("Infusione Plugin")
+    # Possiamo riutilizzare il template di attivata se la struttura HTML è simile
+    # o crearne uno nuovo. Per sicurezza qui assumiamo l'uso di quello attivata o uno nuovo.
+    render_template = "cms/plugins/attivata.html" 
+    cache = True
+
+    def render(self, context, instance, placeholder):
+        context = super().render(context, instance, placeholder)
+        # Passiamo 'attivata' al contesto perché il template attivata.html probabilmente usa {{ attivata.nome }}
+        context['attivata'] = instance.infusione 
+        return context
+
+# --- 6. Plugin per Tessitura Singola (Nuovo) ---
+
+@plugin_pool.register_plugin
+class TessituraPlugin(CMSPluginBase):
+    model = TessituraPluginModel
+    name = _("Tessitura Plugin")
+    render_template = "cms/plugins/attivata.html"
+    cache = True
+
+    def render(self, context, instance, placeholder):
+        context = super().render(context, instance, placeholder)
+        context['attivata'] = instance.tessitura
         return context
     
 #@plugin_pool.register_plugin

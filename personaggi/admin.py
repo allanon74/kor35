@@ -10,14 +10,19 @@ from django.utils.safestring import mark_safe # Import necessario
 from .models import (
     CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, 
     PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, Attivata, 
-    AttivataStatisticaBase, TipologiaPersonaggio
+    AttivataStatisticaBase, TipologiaPersonaggio,
+    # NUOVI IMPORT PER TECNICHE
+    Infusione, Tessitura, InfusioneMattone, TessituraMattone,
+    InfusioneStatisticaBase, TessituraStatisticaBase,
+    PersonaggioInfusione, PersonaggioTessitura,
+    # FINE NUOVI IMPORT
 )
 from .models import (
     Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, 
     PuntiCaratteristicaMovimento, STATISTICA
 )
 from .models import (
-    Tabella, Punteggio, Tier, Abilita, Mattone, 
+    Tabella, Tier, Abilita, Mattone, 
     Caratteristica, Aura, ModelloAura, MattoneStatistica, PersonaggioModelloAura,
     Messaggio, Gruppo,
 )
@@ -594,7 +599,123 @@ class AttivataAdmin(SModelAdmin):
     def mostra_testo_formattato(self, obj):
         return format_html(obj.TestoFormattato)
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
+
+# --- NUOVE CONFIGURAZIONI E INLINE PER INFUSIONE E TESSITURA ---
+
+# 1. Classi Inline per Statistiche Condizionali (Nuove)
+# Usiamo StackedInline e filter_horizontal per gestire aure/elementi multipli in modo comodo
+
+class StatisticaCondizionaleInlineBase(admin.StackedInline):
+    extra = 0
+    filter_horizontal = ('limit_a_aure', 'limit_a_elementi') 
+    fieldsets = (
+        (None, {
+            'fields': (('statistica', 'valore_base'),)
+        }),
+        ('Limitazioni Condizionali (Opzionale)', {
+            'classes': ('collapse',),
+            'fields': ('limit_a_aure', 'limit_a_elementi'),
+            'description': "Seleziona elementi/aure per applicare questo bonus SOLO se la tecnica/oggetto corrisponde."
+        }),
+    )
+
+class InfusioneStatisticaInline(StatisticaCondizionaleInlineBase):
+    model = InfusioneStatisticaBase
+    fk_name = 'infusione'
+
+class TessituraStatisticaInline(StatisticaCondizionaleInlineBase):
+    model = TessituraStatisticaBase
+    fk_name = 'tessitura'
+
+# 2. Classi Inline per Mattoni (Nuove)
+
+class InfusioneMattoneInline(admin.TabularInline):
+    model = InfusioneMattone
+    extra = 1
+    autocomplete_fields = ['mattone']
+    ordering = ['ordine']
+
+class TessituraMattoneInline(admin.TabularInline):
+    model = TessituraMattone
+    extra = 1
+    autocomplete_fields = ['mattone']
+    ordering = ['ordine']
+
+# 3. Admin per Infusione e Tessitura (Nuovi)
+
+@admin.register(Infusione)
+class InfusioneAdmin(SModelAdmin):
+    list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'aura_infusione')
+    search_fields = ['nome']  # <--- AGGIUNTA FONDAMENTALE
+    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
+    inlines = [InfusioneMattoneInline, InfusioneStatisticaInline]
+    exclude = ('statistiche_base', 'mattoni')
+    summernote_fields = ['testo']
+    autocomplete_fields = ['aura_richiesta', 'aura_infusione']
     
+    fieldsets = (
+        ('Dati Infusione', {
+            'fields': ('nome', 'aura_richiesta', 'aura_infusione', 'testo', ('id', 'data_creazione', 'livello'))
+        }),
+        ('Anteprima', {
+            'classes': ('wide',), 'fields': ('mostra_testo_formattato',)
+        }),
+    )
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        return form
+    def mostra_testo_formattato(self, obj): return format_html(obj.TestoFormattato)
+    mostra_testo_formattato.short_description = 'Anteprima Testo'
+
+@admin.register(Tessitura)
+class TessituraAdmin(SModelAdmin):
+    list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'elemento_principale')
+    search_fields = ['nome']  # <--- AGGIUNTA FONDAMENTALE
+    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
+    inlines = [TessituraMattoneInline, TessituraStatisticaInline]
+    exclude = ('statistiche_base', 'mattoni')
+    summernote_fields = ['testo', 'formula']
+    autocomplete_fields = ['aura_richiesta', 'elemento_principale']
+    
+    fieldsets = (
+        ('Dati Tessitura', {
+            'fields': ('nome', 'aura_richiesta', 'elemento_principale', 'formula', 'testo', ('id', 'data_creazione', 'livello'))
+        }),
+        ('Anteprima', {
+            'classes': ('wide',), 'fields': ('mostra_testo_formattato',)
+        }),
+    )
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        if 'formula' in form.base_fields: form.base_fields['formula'].help_text += " Supporta anche {elem} e {rango}."
+        return form
+    def mostra_testo_formattato(self, obj): return format_html(obj.TestoFormattato)
+    mostra_testo_formattato.short_description = 'Anteprima Testo'
+    
+# --- INLINE PER PERSONAGGIO: RELAZIONI (LEGACY E NUOVE) ---
+
+class PersonaggioAttivataInline(admin.TabularInline):
+    model = Personaggio.attivate_possedute.through # Legacy
+    extra = 1
+    verbose_name = "Attivata (Legacy)"
+    verbose_name_plural = "Attivate (Legacy)"
+
+class PersonaggioInfusioneInline(admin.TabularInline):
+    model = PersonaggioInfusione
+    extra = 1
+    verbose_name = "Infusione Posseduta"
+    verbose_name_plural = "Infusioni Possedute"
+    autocomplete_fields = ['infusione']
+
+class PersonaggioTessituraInline(admin.TabularInline):
+    model = PersonaggioTessitura
+    extra = 1
+    verbose_name = "Tessitura Posseduta"
+    verbose_name_plural = "Tessiture Possedute"
+    autocomplete_fields = ['tessitura']
+
 @admin.register(Personaggio)
 class PersonaggioAdmin(A_Admin): 
     list_display = ('nome', 'proprietario', 'tipologia', 'crediti', 'punti_caratteristica')
@@ -605,6 +726,9 @@ class PersonaggioAdmin(A_Admin):
     
     inlines = [
         PersonaggioModelloAuraInline,
+        PersonaggioInfusioneInline, # Nuovo
+        PersonaggioTessituraInline, # Nuovo
+        PersonaggioAttivataInline,  # Legacy (MANTENUTO)
         CreditoMovimentoInline,
         PuntiCaratteristicaMovimentoInline,
         PersonaggioLogInline
