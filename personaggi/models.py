@@ -17,6 +17,27 @@ from icon_widget.fields import CustomIconField
 # --- COSTANTI ---
 COSTO_PER_MATTONE = 100
 
+# --- COSTANTI RANGO (NUOVO) ---
+RANGO_NORMALE = 1
+RANGO_EROICO = 2
+RANGO_LEGGENDARIO = 3
+RANGO_MITOLOGICO = 4
+RANGO_DIVINO = 5
+RANGO_COSMICO = 6
+
+RANGO_CHOICES = [
+    (RANGO_NORMALE, 'Normale'),
+    (RANGO_EROICO, 'Eroico'),
+    (RANGO_LEGGENDARIO, 'Leggendario'),
+    (RANGO_MITOLOGICO, 'Mitologico'),
+    (RANGO_DIVINO, 'Divino'),
+    (RANGO_COSMICO, 'Cosmico'),
+]
+
+def get_testo_rango(valore):
+    dict_rango = dict(RANGO_CHOICES)
+    return dict_rango.get(valore, "Sconosciuto")
+
 def _get_icon_color_from_bg(hex_color):
     """
     Determina se un colore di sfondo hex è chiaro o scuro
@@ -96,6 +117,10 @@ class A_modello(models.Model):
         abstract = True
         
 class A_vista(models.Model):
+    """
+    Classe base concreta. Usata da Oggetto, Tecnica (e quindi Infusione/Tessitura) e Attivata (Legacy).
+    NON è abstract per permettere le FK generiche (es. QrCode).
+    """
     id = models.AutoField(primary_key=True)
     data_creazione = models.DateTimeField(auto_now_add=True)
     nome = models.CharField(max_length=100)
@@ -108,6 +133,28 @@ class A_vista(models.Model):
         ordering = ['-data_creazione'] 
         verbose_name = "Elemento dell'Oggetto"
         verbose_name_plural = "Elementi dell'Oggetto"
+
+class CondizioneStatisticaMixin(models.Model):
+    """
+    Mixin per aggiungere filtri condizionali alle statistiche (Oggetti, Tessiture, Infusioni).
+    """
+    limit_a_aure = models.ManyToManyField(
+        'Punteggio', 
+        blank=True, 
+        limit_choices_to={'tipo': AURA},
+        related_name="%(class)s_limit_aure",
+        verbose_name="Applica solo se Aura..."
+    )
+    limit_a_elementi = models.ManyToManyField(
+        'Punteggio', 
+        blank=True, 
+        limit_choices_to={'tipo': ELEMENTO},
+        related_name="%(class)s_limit_elementi",
+        verbose_name="Applica solo se Elemento..."
+    )
+
+    class Meta:
+        abstract = True
 
 
 #definizioni classi
@@ -138,6 +185,12 @@ class Punteggio(Tabella):
     icona = CustomIconField(blank=True)
     ordine = models.IntegerField(default=0, help_text="Valore per l'ordinamento (più basso appare prima)")
     is_mattone = models.BooleanField("è un mattone?", default=False)
+    
+    # NUOVI CAMPI PER LE AURE
+    is_soprannaturale = models.BooleanField("Aura Soprannaturale", default=False, help_text="Se attivo è soprannaturale, altrimenti naturale.")
+    is_generica = models.BooleanField("Aura Generica", default=False, help_text="Se attivo, il valore è calcolato sul max delle altre aure.")
+    permette_infusioni = models.BooleanField(default=False)
+    permette_tessiture = models.BooleanField(default=False)
     
     caratteristica_relativa = models.ForeignKey(
         "Punteggio",
@@ -566,7 +619,8 @@ class abilita_punteggio(A_modello):
     def __str__(self):
         testo = "{abilita} -> {punteggio} ({valore})"
         return testo.format(abilita=self.abilita.nome, punteggio=self.punteggio.nome, valore=self.valore)
-    
+
+# --- LEGACY: ATTIVATA (MANTENUTA TEMPORANEAMENTE) ---
 class Attivata(A_vista):
     
     elementi = models.ManyToManyField(
@@ -585,7 +639,7 @@ class Attivata(A_vista):
     )
 
     def __str__(self):
-        return f"Attivata: {self.nome}"
+        return f"Attivata (LEGACY): {self.nome}"
 
     @property
     def livello(self):
@@ -615,6 +669,175 @@ class Attivata(A_vista):
                 testo_formattato = testo_formattato.replace(f"{{{param}}}", str(valore))
                 
         return testo_formattato
+
+class AttivataElemento(models.Model):
+    attivata = models.ForeignKey(
+        'Attivata', 
+        on_delete=models.CASCADE
+    )
+    elemento = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE,
+        limit_choices_to={'is_mattone': True}, # Aggiornato per includere Mattoni
+        verbose_name="Elemento / Mattone"
+    )
+
+class AttivataStatisticaBase(models.Model):
+    attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+
+    class Meta:
+        unique_together = ('attivata', 'statistica')
+        verbose_name = "Statistica (Valore Base)"
+        verbose_name_plural = "Statistiche (Valori Base)"
+
+    def __str__(self):
+        return f"{self.attivata.nome} - {self.statistica.nome}: {self.valore_base}"
+
+# --- NUOVE CLASSI: TECNICA, INFUSIONE, TESSITURA ---
+
+class Tecnica(A_vista):
+    """
+    Classe base astratta per Infusioni e Tessiture.
+    Inherita da A_vista (concreta) tramite Multi-table inheritance (implicita se non abstract)
+    o usiamo A_vista come semplice mixin di campi se fosse astratta.
+    Qui Tecnica è astratta ma eredita da A_vista Concreta. 
+    """
+    aura_richiesta = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE,
+        limit_choices_to={'tipo': AURA},
+        related_name="%(class)s_associate",
+        verbose_name="Aura Requisito"
+    )
+
+    class Meta:
+        abstract = True
+        ordering = ['nome']
+
+    @property
+    def livello(self):
+        return self.mattoni.count()
+
+    @property
+    def costo_crediti(self):
+        return self.livello * COSTO_PER_MATTONE
+
+class Infusione(Tecnica):
+    aura_infusione = models.ForeignKey(
+        Punteggio,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        limit_choices_to={'tipo': AURA, 'is_soprannaturale': True},
+        related_name="infusioni_secondarie",
+        verbose_name="Aura di Infusione (Secondaria)"
+    )
+    
+    mattoni = models.ManyToManyField(
+        Mattone,
+        through='InfusioneMattone',
+        verbose_name="Mattoni Componenti",
+        related_name="infusioni_utilizzatrici"
+    )
+    
+    statistiche_base = models.ManyToManyField(
+        Statistica,
+        through='InfusioneStatisticaBase',
+        blank=True,
+        verbose_name="Statistiche (Valori Base)",
+        related_name='infusione_statistiche_base'
+    )
+
+    class Meta:
+        verbose_name = "Infusione"
+        verbose_name_plural = "Infusioni"
+
+    @property
+    def TestoFormattato(self):
+        # Wrapper per admin
+        txt = self.testo or ""
+        # Logica parsing stat base locale
+        for link in self.infusionestatisticabase_set.select_related('statistica').all():
+             if link.statistica.parametro:
+                 txt = txt.replace(f"{{{link.statistica.parametro}}}", str(link.valore_base))
+        return txt
+
+class Tessitura(Tecnica):
+    formula = models.TextField(
+        "Formula", 
+        blank=True, null=True, 
+        help_text="Parametri: {elem} (Elem. Principale), {rango} (Testo Rango). Usa anche statistiche pg."
+    )
+    elemento_principale = models.ForeignKey(
+        Punteggio,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        limit_choices_to={'tipo': ELEMENTO},
+        verbose_name="Elemento Principale"
+    )
+    
+    mattoni = models.ManyToManyField(
+        Mattone,
+        through='TessituraMattone',
+        verbose_name="Mattoni Componenti",
+        related_name="tessiture_utilizzatrici"
+    )
+
+    statistiche_base = models.ManyToManyField(
+        Statistica,
+        through='TessituraStatisticaBase',
+        blank=True,
+        verbose_name="Statistiche (Valori Base)",
+        related_name='tessitura_statistiche_base'
+    )
+
+    class Meta:
+        verbose_name = "Tessitura"
+        verbose_name_plural = "Tessiture"
+    
+    @property
+    def TestoFormattato(self):
+        txt = self.testo or ""
+        # Parsing Stat Base
+        for link in self.tessiturastatisticabase_set.select_related('statistica').all():
+             if link.statistica.parametro:
+                 txt = txt.replace(f"{{{link.statistica.parametro}}}", str(link.valore_base))
+        
+        # Parsing Elemento e Rango
+        if self.elemento_principale:
+            txt = txt.replace("{elem}", self.elemento_principale.nome)
+        
+        # Parsing Rango
+        # Cerca statistica 'Rango' nelle stats base di questa tessitura
+        rango_stat = self.tessiturastatisticabase_set.filter(statistica__nome__iexact="Rango").first()
+        if rango_stat:
+            txt = txt.replace("{rango}", get_testo_rango(rango_stat.valore_base))
+            
+        return txt
+
+
+# --- Through Models Tecnica ---
+
+class InfusioneMattone(models.Model):
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
+    mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
+    ordine = models.IntegerField(default=0)
+    
+class TessituraMattone(models.Model):
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
+    mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
+    ordine = models.IntegerField(default=0)
+
+class InfusioneStatisticaBase(CondizioneStatisticaMixin):
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+
+class TessituraStatisticaBase(CondizioneStatisticaMixin):
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
 
     
 class Manifesto(A_vista):
@@ -737,9 +960,23 @@ class Personaggio(Inventario):
         through='PersonaggioAbilita',
         blank=True
     )
+    
+    # LEGACY
     attivate_possedute = models.ManyToManyField(
         Attivata,
         through='PersonaggioAttivata',
+        blank=True
+    )
+    
+    # NEW
+    infusioni_possedute = models.ManyToManyField(
+        Infusione,
+        through='PersonaggioInfusione',
+        blank=True
+    )
+    tessiture_possedute = models.ManyToManyField(
+        Tessitura,
+        through='PersonaggioTessitura',
         blank=True
     )
     
@@ -834,8 +1071,77 @@ class Personaggio(Inventario):
     def caratteristiche_base(self):
         return {
             nome: val for nome, val in self.punteggi_base.items()
-            if Punteggio.objects.get(nome=nome).tipo == CARATTERISTICA
+            if Punteggio.objects.filter(nome=nome, tipo=CARATTERISTICA).exists()
         }
+
+    def get_valore_aura_effettivo(self, aura):
+        """
+        Calcola il valore dell'aura. Se è generica, prende il max delle altre.
+        """
+        punteggi = self.punteggi_base 
+        
+        if aura.is_generica:
+            # Filtra solo le aure (escludendo la generica stessa per evitare loop se mal configurata)
+            valori_aure = [
+                val for nome, val in punteggi.items() 
+                if Punteggio.objects.filter(nome=nome, tipo=AURA, is_generica=False).exists()
+            ]
+            return max(valori_aure) if valori_aure else 0
+            
+        return punteggi.get(aura.nome, 0)
+
+    def valida_acquisto_tecnica(self, tecnica):
+        """
+        Verifica se il personaggio può acquistare la Infusione/Tessitura.
+        Restituisce (Bool, MessaggioErrore).
+        """
+        # 1. Controllo Livello Tecnica vs Punteggio Aura
+        livello_tecnica = tecnica.livello
+        if not tecnica.aura_richiesta:
+             return False, "Tecnica senza Aura richiesta."
+             
+        valore_aura = self.get_valore_aura_effettivo(tecnica.aura_richiesta)
+        
+        if livello_tecnica > valore_aura:
+            return False, f"Livello tecnica ({livello_tecnica}) supera il tuo punteggio in {tecnica.aura_richiesta.nome} ({valore_aura})."
+
+        # 2. Controllo Mattoni (Count vs Caratteristica Relativa)
+        # Conta quanti mattoni di ogni tipo ci sono
+        from collections import Counter
+        mattoni_ids = tecnica.mattoni.values_list('id', flat=True)
+        counter_mattoni = Counter(mattoni_ids)
+        
+        caratteristiche_pg = self.caratteristiche_base
+        
+        for mattone_id, count in counter_mattoni.items():
+            try:
+                mattone = Mattone.objects.get(pk=mattone_id)
+                carat_nome = mattone.caratteristica_associata.nome
+                valore_carat = caratteristiche_pg.get(carat_nome, 0)
+                
+                if count > valore_carat:
+                    return False, f"La tecnica richiede {count}x {mattone.nome}, ma hai solo {valore_carat} in {carat_nome}."
+            except Mattone.DoesNotExist:
+                continue
+
+        # 3. Controllo Modello di Aura (Subset Mattoni)
+        # Cerca se il PG ha un modello per l'aura richiesta
+        modello = self.modelli_aura.filter(aura=tecnica.aura_richiesta).first()
+        
+        if modello:
+            # Se ha un modello, la tecnica DEVE usare SOLO mattoni non proibiti?
+            # La logica del modello è restrittiva: "solo tessiture con mattoni dello specifico subset"
+            # Quindi dobbiamo vedere se TUTTI i mattoni della tecnica SONO nel subset, o se NON sono nei proibiti.
+            # Implementazione basata su "mattoni_proibiti" nel modello:
+            mattoni_tecnica = set(mattoni_ids)
+            mattoni_proibiti = set(modello.mattoni_proibiti.values_list('id', flat=True))
+            
+            intersezione = mattoni_tecnica.intersection(mattoni_proibiti)
+            if intersezione:
+                 nomi_proibiti = ", ".join([m.nome for m in Mattone.objects.filter(id__in=intersezione)])
+                 return False, f"Il tuo modello di aura ({modello.nome}) ti vieta l'uso di: {nomi_proibiti}."
+
+        return True, "Acquisto valido."
 
     @property
     def modificatori_calcolati(self):
@@ -895,33 +1201,8 @@ class Personaggio(Inventario):
 
         # 4. Bonus da Metatalenti (Mattoni Proibiti nei Modelli Aura)
         # Recuperiamo tutti i modelli aura associati
-        modelli = self.modelli_aura.prefetch_related('mattoni_proibiti__statistiche').all()
-        
-        for modello in modelli:
-            for mattone in modello.mattoni_proibiti.all():
-                funzionamento = mattone.funzionamento_metatalento
-                
-                if funzionamento == META_NESSUN_EFFETTO:
-                    continue
-                
-                # Ottieni il valore della caratteristica associata al mattone
-                nome_caratt = mattone.caratteristica_associata.nome
-                punteggio_caratt = caratteristiche_base.get(nome_caratt, 0)
-                
-                # Condizione "Solo livello pari o inferiore" (qui interpretata come applicazione globale se soddisfatta??
-                # No, il testo dice: "Se il mattona ha... solo le attivate...".
-                # Ma dice anche: "nelle abilità attivate... statistiche vengono modificate".
-                # Qui stiamo calcolando i mod globali.
-                # Se funzionamento è VALORE_PUNTEGGIO o LIVELLO_INFERIORE (con logica applicata all'attivata,
-                # ma se il metatalento dà bonus passivi globali, vanno qui?)
-                # Interpretazione: I bonus statistici del Metatalento si applicano alle *Attivate* di quell'aura.
-                # NON globalmente al personaggio. Quindi NON vanno in `modificatori_calcolati` del personaggio,
-                # ma devono essere calcolati "al volo" nel contesto dell'Attivata specifica o aggiunti temporaneamente.
-                pass
-                
         # NOTA: I modificatori specifici delle Attivate derivanti dai Metatalenti non vengono
         # aggiunti ai modificatori globali del personaggio qui, ma calcolati dentro `get_testo_formattato_per_item`
-        # o una funzione specifica per il calcolo finale dell'Attivata.
         
         self._modificatori_calcolati_cache = mods
         return self._modificatori_calcolati_cache
@@ -958,114 +1239,123 @@ class Personaggio(Inventario):
     def get_testo_formattato_per_item(self, item):
         """
         [CALCOLO 3 - RISCRITTO PER METATALENTI]
+        Calcola il testo formattato applicando Metatalenti e Parsing variabili.
+        Supporta Oggetto, Infusione, Tessitura, Attivata (Legacy).
         """
         if not item: return ""
         
         testo_base = item.testo if item.testo else ""
         
-        # Identifica se stiamo trattando un'Attivata per applicare logica Metatalenti
-        is_attivata = isinstance(item, Attivata)
+        is_infusione = isinstance(item, Infusione)
+        is_tessitura = isinstance(item, Tessitura)
+        is_attivata_old = isinstance(item, Attivata)
+        is_tecnica = is_infusione or is_tessitura
         
-        # Calcola modificatori base del personaggio
         mods_personaggio = self.modificatori_calcolati
         
         # Cloniamo i mods per non sporcare la cache globale se aggiungiamo bonus locali
-        # (Deep copy semplice per dizionari di dizionari)
         import copy
         mods_attivi = copy.deepcopy(mods_personaggio)
 
         links_base = []
         statistiche_metatalento_text = ""
         
+        aura_riferimento = None
+        livello_item = 0
+        
         if isinstance(item, Oggetto):
             links_base = item.oggettostatisticabase_set.select_related('statistica').all()
-        elif is_attivata:
+            aura_riferimento = item.aura
+            livello_item = item.livello
+            
+        elif is_tecnica:
+            if is_infusione:
+                links_base = item.infusionestatisticabase_set.select_related('statistica').all()
+            else:
+                links_base = item.tessiturastatisticabase_set.select_related('statistica').all()
+            
+            aura_riferimento = item.aura_richiesta
+            livello_item = item.livello
+            
+        elif is_attivata_old:
             links_base = item.attivatastatisticabase_set.select_related('statistica').all()
-            
-            # --- LOGICA METATALENTI ---
-            # 1. Trova l'Aura dell'Attivata (prendendo il primo elemento/mattone)
+            # Logica legacy: cerca di dedurre l'aura dal primo elemento
             primo_elemento = item.elementi.first()
-            aura_attivata = None
-            # Poiché Mattone è un Punteggio, possiamo fare casting o query inversa se necessario,
-            # ma qui assumiamo che item.elementi siano istanze di Mattone (che è Punteggio)
-            if primo_elemento and hasattr(primo_elemento, 'mattone'):
-                 # Se Django gestisce l'ereditarietà multi-tabella implicitamente nelle query,
-                 # potremmo dover accedere all'istanza figlia.
+            if primo_elemento:
                  try:
-                     aura_attivata = primo_elemento.mattone.aura
-                 except Mattone.DoesNotExist:
-                     pass
-            elif primo_elemento:
-                 # Fallback: query manuale
-                 try:
-                     m = Mattone.objects.get(pk=primo_elemento.pk)
-                     aura_attivata = m.aura
-                 except Mattone.DoesNotExist:
-                     pass
+                     # Assumiamo che l'elemento sia un Mattone o abbia relazione con Aura
+                     # Se Punteggio ha relazione 'mattoni_aura', potremmo risalire
+                     if hasattr(primo_elemento, 'mattone'): 
+                        aura_riferimento = primo_elemento.mattone.aura
+                     else:
+                        # Fallback se Mattone è una sottoclasse di Punteggio ma non linkato direttamente
+                        # In questo modello Mattone eredita da Punteggio.
+                        try:
+                            m = Mattone.objects.get(pk=primo_elemento.pk)
+                            aura_riferimento = m.aura
+                        except Mattone.DoesNotExist:
+                            pass
+                 except: pass
+            livello_item = item.livello
             
-            if aura_attivata:
-                # 2. Cerca se il personaggio ha un Modello per quell'Aura
-                modello = self.modelli_aura.filter(aura=aura_attivata).first()
-                
-                if modello:
-                    # 3. Itera sui mattoni proibiti
-                    for mattone in modello.mattoni_proibiti.all():
-                        funzionamento = mattone.funzionamento_metatalento
-                        if funzionamento == META_NESSUN_EFFETTO:
-                            continue
-                        
-                        nome_caratt = mattone.caratteristica_associata.nome
-                        valore_caratt = self.caratteristiche_base.get(nome_caratt, 0)
-                        
-                        applica_effetto = False
-                        if funzionamento in [META_VALORE_PUNTEGGIO, META_SOLO_TESTO]:
+        # --- LOGICA METATALENTI ---
+        if aura_riferimento:
+            modello = self.modelli_aura.filter(aura=aura_riferimento).first()
+            if modello:
+                for mattone in modello.mattoni_proibiti.all():
+                    funzionamento = mattone.funzionamento_metatalento
+                    if funzionamento == META_NESSUN_EFFETTO:
+                        continue
+                    
+                    nome_caratt = mattone.caratteristica_associata.nome
+                    valore_caratt = self.caratteristiche_base.get(nome_caratt, 0)
+                    
+                    applica_effetto = False
+                    if funzionamento in [META_VALORE_PUNTEGGIO, META_SOLO_TESTO]:
+                        applica_effetto = True
+                    elif funzionamento == META_LIVELLO_INFERIORE:
+                        if livello_item <= valore_caratt:
                             applica_effetto = True
-                        elif funzionamento == META_LIVELLO_INFERIORE:
-                            # Applica solo se livello attivata <= valore caratteristica relativa
-                            if item.livello <= valore_caratt:
-                                applica_effetto = True
-                        
-                        if applica_effetto:
-                            # A. Modifica Statistiche (Se previsto)
-                            if funzionamento in [META_VALORE_PUNTEGGIO, META_LIVELLO_INFERIORE]:
-                                # Recupera stats del mattone
-                                stats_mattone = MattoneStatistica.objects.filter(mattone=mattone).select_related('statistica')
-                                for stat_m in stats_mattone:
-                                    param = stat_m.statistica.parametro
-                                    bonus = stat_m.valore * valore_caratt # Moltiplicato per caratteristica
+                    
+                    if applica_effetto:
+                        # A. Modifica Statistiche (Se previsto)
+                        if funzionamento in [META_VALORE_PUNTEGGIO, META_LIVELLO_INFERIORE]:
+                            stats_mattone = MattoneStatistica.objects.filter(mattone=mattone).select_related('statistica')
+                            for stat_m in stats_mattone:
+                                param = stat_m.statistica.parametro
+                                bonus = stat_m.valore * valore_caratt # Moltiplicato per caratteristica
+                                
+                                if param:
+                                    if param not in mods_attivi:
+                                        mods_attivi[param] = {'add': 0, 'mol': 1.0}
                                     
-                                    if param:
-                                        if param not in mods_attivi:
-                                            mods_attivi[param] = {'add': 0, 'mol': 1.0}
-                                        
-                                        if stat_m.tipo_modificatore == MODIFICATORE_ADDITIVO:
-                                            mods_attivi[param]['add'] += bonus
-                                        elif stat_m.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO:
-                                            # Nota: applicare moltiplicatore ripetuto per caratteristica potrebbe essere enorme,
-                                            # ma la specifica dice "modificate come da tabella... moltiplicato per valore caratteristica".
-                                            # Assumiamo si applichi al valore additivo solitamente, o se moltiplicativo
-                                            # (1 + (factor * caratt)). Qui semplifico applicando logica base.
-                                            mods_attivi[param]['mol'] *= float(bonus)
+                                    if stat_m.tipo_modificatore == MODIFICATORE_ADDITIVO:
+                                        mods_attivi[param]['add'] += bonus
+                                    elif stat_m.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO:
+                                        mods_attivi[param]['mol'] *= float(bonus)
 
-                            # B. Testo Addizionale
-                            txt_add = mattone.testo_addizionale
-                            if txt_add:
-                                # Parsing parametro {caratt} e {X*caratt}
-                                def replace_caratt(match):
-                                    moltiplicatore = match.group(1)
-                                    molt_val = int(moltiplicatore) if moltiplicatore else 1
-                                    return str(valore_caratt * molt_val)
-                                
-                                txt_add_parsed = re.sub(r'\{(?:(\d+)\*)?caratt\}', replace_caratt, txt_add)
-                                
-                                # Parsing statistiche standard nel testo addizionale
-                                # (Usando placeholder helper ricorsivamente o qui inline?
-                                #  Il testo addizionale potrebbe contenere {pv}, che va risolto con i mods attuali)
-                                # Per ora lo accodiamo grezzo e lo lasciamo risolvere al passo finale insieme al testo base
-                                statistiche_metatalento_text += f"\n<br><em>Metatalento ({mattone.nome}):</em> {txt_add_parsed}"
+                        # B. Testo Addizionale
+                        txt_add = mattone.testo_addizionale
+                        if txt_add:
+                            def replace_caratt(match):
+                                moltiplicatore = match.group(1)
+                                molt_val = int(moltiplicatore) if moltiplicatore else 1
+                                return str(valore_caratt * molt_val)
+                            
+                            txt_add_parsed = re.sub(r'\{(?:(\d+)\*)?caratt\}', replace_caratt, txt_add)
+                            statistiche_metatalento_text += f"\n<br><em>Metatalento ({mattone.nome}):</em> {txt_add_parsed}"
 
         # Concatena testo base + testo metatalenti
         testo_completo = testo_base + statistiche_metatalento_text
+        
+        # Parsing Extra per Tessiture (Rango, Elem)
+        if is_tessitura:
+             if item.elemento_principale:
+                 testo_completo = testo_completo.replace("{elem}", item.elemento_principale.nome)
+             # Rango
+             rango_stat = next((l for l in links_base if l.statistica.nome.lower() == "rango"), None)
+             if rango_stat:
+                 testo_completo = testo_completo.replace("{rango}", get_testo_rango(rango_stat.valore_base))
 
         base_stats = {
             link.statistica.parametro: link.valore_base 
@@ -1091,6 +1381,16 @@ class PersonaggioAbilita(models.Model):
 class PersonaggioAttivata(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
+class PersonaggioInfusione(models.Model):
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
+class PersonaggioTessitura(models.Model):
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
 
 class PersonaggioModelloAura(models.Model):
@@ -1226,20 +1526,7 @@ class OggettoElemento(models.Model):
         verbose_name="Elemento"
     )
     
-class AttivataElemento(models.Model):
-    attivata = models.ForeignKey(
-        'Attivata', 
-        on_delete=models.CASCADE
-    )
-    elemento = models.ForeignKey(
-        Punteggio, 
-        on_delete=models.CASCADE,
-        limit_choices_to={'is_mattone': True}, # Aggiornato per includere Mattoni
-        verbose_name="Elemento / Mattone"
-    )
-
-
-class OggettoStatistica(models.Model):
+class OggettoStatistica(CondizioneStatisticaMixin):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
     statistica = models.ForeignKey(
         Statistica, 
@@ -1271,19 +1558,6 @@ class OggettoStatisticaBase(models.Model):
 
     def __str__(self):
         return f"{self.oggetto.nome} - {self.statistica.nome}: {self.valore_base}"
-
-class AttivataStatisticaBase(models.Model):
-    attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
-    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
-    valore_base = models.IntegerField(default=0)
-
-    class Meta:
-        unique_together = ('attivata', 'statistica')
-        verbose_name = "Statistica (Valore Base)"
-        verbose_name_plural = "Statistiche (Valori Base)"
-
-    def __str__(self):
-        return f"{self.attivata.nome} - {self.statistica.nome}: {self.valore_base}"
 
 
 # abstract
@@ -1463,6 +1737,18 @@ class AttivataPluginModel(CMSPlugin):
 
     def __str__(self):
         return self.attivata.nome        
+
+class InfusionePluginModel(CMSPlugin):
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.infusione.nome   
+
+class TessituraPluginModel(CMSPlugin):
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.tessitura.nome      
 
 class TabellaPluginModel(CMSPlugin):
     tabella = models.ForeignKey(Tabella, on_delete = models.CASCADE)
