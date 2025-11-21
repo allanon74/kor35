@@ -755,14 +755,24 @@ class Infusione(Tecnica):
 
     @property
     def TestoFormattato(self):
-        # Wrapper per admin
+        """
+        Restituisce il testo con i placeholder sostituiti dai Valori Base definiti nell'Infusione.
+        Analogo a Oggetto.TestoFormattato.
+        """
         txt = self.testo or ""
-        # Logica parsing stat base locale
-        for link in self.infusionestatisticabase_set.select_related('statistica').all():
-             if link.statistica.parametro:
-                 txt = txt.replace(f"{{{link.statistica.parametro}}}", str(link.valore_base))
+        
+        # Recupera i collegamenti alle statistiche base
+        links = self.infusionestatisticabase_set.select_related('statistica').all()
+        
+        for link in links:
+            if link.statistica.parametro:
+                # Usa regex per sostituzione precisa (es. {pv})
+                pattern = r'\{' + re.escape(link.statistica.parametro) + r'\}'
+                txt = re.sub(pattern, str(link.valore_base), txt)
+                
         return txt
 
+# --- MODELLO TESSITURA ---
 class Tessitura(Tecnica):
     formula = models.TextField(
         "Formula", 
@@ -798,23 +808,50 @@ class Tessitura(Tecnica):
     
     @property
     def TestoFormattato(self):
-        txt = self.testo or ""
-        # Parsing Stat Base
-        for link in self.tessiturastatisticabase_set.select_related('statistica').all():
-             if link.statistica.parametro:
-                 txt = txt.replace(f"{{{link.statistica.parametro}}}", str(link.valore_base))
+        """
+        Restituisce un'anteprima combinata di Formula e Testo, con tutti i parametri
+        (Statistiche Base, {elem}, {rango}) risolti.
+        """
+        testo_out = self.testo or ""
+        formula_out = self.formula or ""
         
-        # Parsing Elemento e Rango
+        # 1. Recupera Statistiche Base e applica sostituzioni
+        links = self.tessiturastatisticabase_set.select_related('statistica').all()
+        
+        for link in links:
+            if link.statistica.parametro:
+                pattern = r'\{' + re.escape(link.statistica.parametro) + r'\}'
+                val_str = str(link.valore_base)
+                
+                testo_out = re.sub(pattern, val_str, testo_out)
+                formula_out = re.sub(pattern, val_str, formula_out)
+        
+        # 2. Gestione {elem} (Elemento Principale)
         if self.elemento_principale:
-            txt = txt.replace("{elem}", self.elemento_principale.nome)
+            nome_elem = self.elemento_principale.nome
+            testo_out = testo_out.replace("{elem}", nome_elem)
+            formula_out = formula_out.replace("{elem}", nome_elem)
         
-        # Parsing Rango
-        # Cerca statistica 'Rango' nelle stats base di questa tessitura
-        rango_stat = self.tessiturastatisticabase_set.filter(statistica__nome__iexact="Rango").first()
-        if rango_stat:
-            txt = txt.replace("{rango}", get_testo_rango(rango_stat.valore_base))
+        # 3. Gestione {rango} (Se presente come statistica base "Rango")
+        rango_link = next((l for l in links if l.statistica.nome.lower() == "rango"), None)
+        if rango_link:
+            # Converte il valore numerico (es. 1) nel testo (es. "Normale")
+            rango_txt = get_testo_rango(rango_link.valore_base)
+            testo_out = testo_out.replace("{rango}", rango_txt)
+            formula_out = formula_out.replace("{rango}", rango_txt)
             
-        return txt
+        # 4. Combinazione Output (Formula in grassetto + Testo)
+        html_parts = []
+        if formula_out:
+            html_parts.append(f"<strong>Formula:</strong> {formula_out}")
+        
+        if testo_out:
+            # Aggiunge separatore se c'è anche la formula
+            if formula_out:
+                html_parts.append("<br/><hr style='margin:5px 0; border:0; border-top:1px dashed #ccc;'/>")
+            html_parts.append(testo_out)
+            
+        return "".join(html_parts)
 
 
 # --- Through Models Tecnica ---
