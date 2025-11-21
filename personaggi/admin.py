@@ -13,17 +13,20 @@ from .models import (
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
     Infusione, Tessitura, InfusioneMattone, TessituraMattone,
     InfusioneStatisticaBase, TessituraStatisticaBase,
-    InfusioneStatistica, TessituraStatistica,
+    # NOTA: InfusioneStatistica e TessituraStatistica non esistono nel model, quindi non si importano
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioModelloAura,
     InfusionePluginModel, TessituraPluginModel,
     Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, 
     PuntiCaratteristicaMovimento, STATISTICA,
     Tabella, Tier, Abilita, Mattone, 
-    Caratteristica, Aura, ModelloAura, MattoneStatistica,
+    Caratteristica, Aura, ModelloAura, MattoneStatistica, 
     Messaggio, Gruppo,
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
     abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore,
-    TransazioneSospesa
+    TransazioneSospesa, STATO_TRANSAZIONE_CHOICES, STATO_TRANSAZIONE_IN_ATTESA, 
+    STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA,
+    PersonaggioAttivata, # Aggiunto
+    PersonaggioAbilita   # Aggiunto
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -39,6 +42,7 @@ class PunteggioAdminForm(forms.ModelForm):
         }
 
 # --- Forms per evidenziare i valori modificati ---
+
 class AbilitaStatisticaForm(forms.ModelForm):
     class Meta: model = AbilitaStatistica; fields = '__all__'
     def __init__(self, *args, **kwargs):
@@ -74,6 +78,20 @@ class AttivataStatisticaBaseForm(forms.ModelForm):
         if self.instance.pk and self.instance.statistica and self.instance.valore_base != self.instance.statistica.valore_base_predefinito:
              for f in self.fields: self.fields[f].widget.attrs['style'] = HIGHLIGHT_STYLE
 
+class InfusioneStatisticaBaseForm(forms.ModelForm):
+    class Meta: model = InfusioneStatisticaBase; fields = '__all__'
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.statistica and self.instance.valore_base != self.instance.statistica.valore_base_predefinito:
+             for f in self.fields: self.fields[f].widget.attrs['style'] = HIGHLIGHT_STYLE
+
+class TessituraStatisticaBaseForm(forms.ModelForm):
+    class Meta: model = TessituraStatisticaBase; fields = '__all__'
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.statistica and self.instance.valore_base != self.instance.statistica.valore_base_predefinito:
+             for f in self.fields: self.fields[f].widget.attrs['style'] = HIGHLIGHT_STYLE
+
 # ----------- CLASSI ASTRATTE ADMIN -------------
 
 class A_Admin(SModelAdmin):
@@ -89,20 +107,12 @@ class A_Multi_Inline (admin.TabularInline):
 
 # MIXIN PER ICONE
 class IconaAdminMixin:
-    def icona_html(self, obj):
-        return obj.icona_html
-    icona_html.short_description = "Icona"
-    icona_html.allow_tags = True
-    
-    def icona_cerchio_html(self, obj):
-        return obj.icona_cerchio_html
-    icona_cerchio_html.short_description = "Cerchio"
-    icona_cerchio_html.allow_tags = True
-
-    def icona_cerchio_inverted_html(self, obj):
-        return obj.icona_cerchio_inverted_html
-    icona_cerchio_inverted_html.short_description = "Cerchio Inv."
-    icona_cerchio_inverted_html.allow_tags = True
+    def icona_html(self, obj): return obj.icona_html
+    icona_html.short_description = "Icona"; icona_html.allow_tags = True
+    def icona_cerchio_html(self, obj): return obj.icona_cerchio_html
+    icona_cerchio_html.short_description = "Cerchio"; icona_cerchio_html.allow_tags = True
+    def icona_cerchio_inverted_html(self, obj): return obj.icona_cerchio_inverted_html
+    icona_cerchio_inverted_html.short_description = "Cerchio Inv."; icona_cerchio_inverted_html.allow_tags = True
 
 # ----------- CLASSI INLINE -------------
 
@@ -126,8 +136,9 @@ class abilita_abilitati_inline(A_Multi_Inline):
     model = abilita_prerequisito; fk_name= "prerequisito"; autocomplete_fields=['abilita']
 
 # PIVOT LOGIC
-class StatisticaPivotInlineBase(admin.TabularInline):
-    readonly_fields = ('statistica',); extra = 0
+class StatisticaPivotMixin:
+    readonly_fields = ('statistica',)
+    extra = 0
     def has_delete_permission(self, request, obj=None): return False
     def get_fields(self, request, obj=None):
         if self.value_field == 'valore': return ('statistica', self.value_field, 'tipo_modificatore')
@@ -144,35 +155,86 @@ class StatisticaPivotInlineBase(admin.TabularInline):
         return super().get_formset(request, obj, **kwargs)
     class Media: css = {'all': ('admin/css/nascondi-inline-header.css',)}
 
-class AbilitaStatisticaInline(StatisticaPivotInlineBase):
-    model = AbilitaStatistica; form = AbilitaStatisticaForm; fk_name = 'abilita'; value_field = 'valore'; default_field = 'valore_predefinito'
-class MattoneStatisticaInline(StatisticaPivotInlineBase):
-    model = MattoneStatistica; form = MattoneStatisticaForm; fk_name = 'mattone'; value_field = 'valore'; default_field = 'valore_predefinito'
+class StatisticaBasePivotInline(StatisticaPivotMixin, admin.TabularInline):
+    verbose_name = "Statistica (Valore Base)"
+    verbose_name_plural = "Statistiche (Valori Base)"
+    value_field = 'valore_base'
+    default_field = 'valore_base_predefinito'
+    def get_fields(self, request, obj=None): return ('statistica', self.value_field)
+
+class StatisticaModificatorePivotInline(StatisticaPivotMixin, admin.StackedInline):
+    verbose_name = "Statistica (Modificatore)"
+    verbose_name_plural = "Statistiche (Modificatori)"
+    value_field = 'valore'
+    default_field = 'valore_predefinito'
+    filter_horizontal = ('limit_a_aure', 'limit_a_elementi') 
+    fieldsets = (
+        (None, {'fields': (('statistica', 'valore', 'tipo_modificatore'),)}),
+        ('Condizioni di Applicazione', {
+            'classes': ('collapse',),
+            'fields': (
+                ('usa_limitazione_aura', 'limit_a_aure'), 
+                ('usa_limitazione_elemento', 'limit_a_elementi')
+            ),
+            'description': "Se i flag sono attivi, il modificatore si applicherà SOLO se l'oggetto/tecnica corrisponde alle aure/elementi indicati."
+        }),
+    )
+
+# --- IMPLEMENTAZIONI INLINE ---
+
+# Abilita: Solo Modificatori
+class AbilitaStatisticaInline(StatisticaModificatorePivotInline):
+    model = AbilitaStatistica; form = AbilitaStatisticaForm; fk_name = 'abilita'
+
+# Mattone: Solo Modificatori
+class MattoneStatisticaInline(StatisticaModificatorePivotInline):
+    model = MattoneStatistica; form = MattoneStatisticaForm; fk_name = 'mattone'
+
 class MattoneInlineForAura(admin.TabularInline):
     model = Mattone; fk_name = 'aura'; extra = 1; fields = ('nome', 'caratteristica_associata', 'funzionamento_metatalento'); show_change_link = True
 
-class CreditoMovimentoInline(admin.TabularInline):
-    model = CreditoMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
-class PuntiCaratteristicaMovimentoInline(admin.TabularInline):
-    model = PuntiCaratteristicaMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
-class PersonaggioLogInline(admin.TabularInline):
-    model = PersonaggioLog; extra = 0; fields = ('testo_log', 'data'); readonly_fields = ('data',)
-class PersonaggioModelloAuraInline(admin.TabularInline):
-    model = PersonaggioModelloAura; extra = 1; verbose_name = "Modello Aura Applicato"
+# Oggetto: Entrambe
+class OggettoStatisticaBaseInline(StatisticaBasePivotInline):
+    model = OggettoStatisticaBase; form = OggettoStatisticaBaseForm; fk_name = 'oggetto'
 
-# HELPERS
+class OggettoStatisticaInline(StatisticaModificatorePivotInline):
+    model = OggettoStatistica; form = OggettoStatisticaForm; fk_name = 'oggetto'
+
+# Infusione: Solo Base (Pivot)
+class InfusioneStatisticaBaseInline(StatisticaBasePivotInline):
+    model = InfusioneStatisticaBase; form = InfusioneStatisticaBaseForm; fk_name = 'infusione'
+
+# Tessitura: Solo Base (Pivot)
+class TessituraStatisticaBaseInline(StatisticaBasePivotInline):
+    model = TessituraStatisticaBase; form = TessituraStatisticaBaseForm; fk_name = 'tessitura'
+
+# Legacy
+class AttivataStatisticaBaseInline(StatisticaBasePivotInline):
+    model = AttivataStatisticaBase; form = AttivataStatisticaBaseForm; fk_name = 'attivata'
+
+# Inlines Personaggio
+class CreditoMovimentoInline(admin.TabularInline): model = CreditoMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
+class PuntiCaratteristicaMovimentoInline(admin.TabularInline): model = PuntiCaratteristicaMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
+class PersonaggioLogInline(admin.TabularInline): model = PersonaggioLog; extra = 0; fields = ('testo_log', 'data'); readonly_fields = ('data',)
+class PersonaggioModelloAuraInline(admin.TabularInline): model = PersonaggioModelloAura; extra = 1; verbose_name = "Modello Aura Applicato"
+
+class PersonaggioInfusioneInline(admin.TabularInline): model = PersonaggioInfusione; extra = 1; autocomplete_fields = ['infusione']
+class PersonaggioTessituraInline(admin.TabularInline): model = PersonaggioTessitura; extra = 1; autocomplete_fields = ['tessitura']
+class PersonaggioAttivataInline(admin.TabularInline): model = PersonaggioAttivata; extra = 1; verbose_name = "Attivata (Legacy)"
+
+# Inlines Item components
+class PunteggioOggettoInline(admin.TabularInline): model = Oggetto.elementi.through; extra = 1; verbose_name_plural = "Elementi dell'Oggetto"
+class InfusioneMattoneInline(admin.TabularInline): model = InfusioneMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
+class TessituraMattoneInline(admin.TabularInline): model = TessituraMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
+class PunteggioAttivataInline(admin.TabularInline): model = Attivata.elementi.through; extra = 1; verbose_name = "Elemento"
+
+# Helpers Testo
 def get_statistica_base_help_text():
-    try:
-        stats = Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact='')
-        if not stats.exists(): return mark_safe("Nessuna variabile statistica definita.")
-        items = ["&bull; <b>{{{}}}</b>: {}".format(s.parametro, s.nome) for s in stats]
-        return mark_safe("<b>Variabili Valori Base disponibili:</b><br>" + "<br>".join(items))
-    except Exception as e: return format_html(f"<b style='color:red;'>Errore: {e}</b>")
-
+    return mark_safe("<b>Variabili Valori Base disponibili:</b><br>Inserire {parametro} nel testo.")
 def get_mattone_help_text():
-    return get_statistica_base_help_text() + mark_safe("<br><b>Variabili Speciali Mattone:</b><br>&bull; <b>{caratt}</b>: Valore della caratteristica associata.<br>&bull; <b>{3*caratt}</b>: Moltiplicatore (es. 3x).")
+    return mark_safe(get_statistica_base_help_text() + "<br><b>Variabili Speciali Mattone:</b> {caratt}, {3*caratt}.")
 
-# ----------- ADMINS -------------
+# --- MODEL ADMINS ---
 
 @admin.register(TipologiaPersonaggio)
 class TipologiaPersonaggioAdmin(admin.ModelAdmin):
@@ -184,22 +246,22 @@ class AbilitaAdmin(A_Admin):
     list_editable = ('costo_pc', 'costo_crediti')
     summernote_fields = ['descrizione']
     search_fields = ['nome', 'descrizione']
+    # ABILITA HA SOLO MODIFICATORI
     inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline)
     save_as = True; exclude = ('statistiche',)
 
 @admin.register(Punteggio)
 class PunteggioAdmin(IconaAdminMixin, A_Admin):
     form = PunteggioAdminForm
-    list_display = ('nome','icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'tipo', 'ordine', 'caratteristica_relativa','colore')
-    list_filter = ('tipo', 'caratteristica_relativa'); list_editable = ('ordine','tipo'); search_fields = ('nome',); summernote_fields = ('descrizione',)
+    list_display = ('nome','icona_html', 'tipo', 'ordine', 'colore')
+    list_filter = ('tipo',); list_editable = ('ordine','tipo'); search_fields = ('nome',); summernote_fields = ('descrizione',)
     save_as = True
-    def get_queryset(self, request):
-        return super().get_queryset(request).exclude(tipo=CARATTERISTICA).exclude(tipo='MA')
+    def get_queryset(self, request): return super().get_queryset(request).exclude(tipo=CARATTERISTICA).exclude(tipo='MA')
 
 @admin.register(Caratteristica)
 class CaratteristicaAdmin(IconaAdminMixin, A_Admin): 
     form = PunteggioAdminForm
-    list_display = ('nome', 'sigla', 'icona_html', 'icona_cerchio_html','ordine', 'icona_cerchio_inverted_html','colore')
+    list_display = ('nome', 'sigla', 'icona_html', 'ordine', 'colore')
     list_editable = ('ordine',); search_fields = ('nome', 'sigla'); summernote_fields = ('descrizione',) 
     inlines = [CaratteristicaModificatoreInline]
     def get_queryset(self, request): return super().get_queryset(request).filter(tipo=CARATTERISTICA)
@@ -208,7 +270,7 @@ class CaratteristicaAdmin(IconaAdminMixin, A_Admin):
 @admin.register(Aura)
 class AuraAdmin(IconaAdminMixin, A_Admin):
     form = PunteggioAdminForm
-    list_display = ('nome', 'sigla', 'icona_html', 'ordine', 'icona_cerchio_html', 'is_soprannaturale', 'is_generica')
+    list_display = ('nome', 'sigla', 'icona_html', 'ordine', 'is_soprannaturale', 'is_generica')
     list_editable = ('ordine', 'is_soprannaturale', 'is_generica'); search_fields = ('nome',); summernote_fields = ('descrizione',)
     inlines = [MattoneInlineForAura]
     def get_queryset(self, request): return super().get_queryset(request).filter(tipo=AURA)
@@ -222,21 +284,19 @@ class ModelloAuraAdmin(admin.ModelAdmin):
 class MattoneAdmin(A_Admin):
     form = PunteggioAdminForm
     list_display = ('nome', 'aura', 'caratteristica_associata', 'funzionamento_metatalento')
-    list_filter = ('aura', 'caratteristica_associata', 'funzionamento_metatalento')
-    search_fields = ('nome', 'testo_addizionale'); summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
+    list_filter = ('aura', 'caratteristica_associata'); search_fields = ('nome',); summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
+    # MATTONE HA SOLO MODIFICATORI (Statistiche influenzate)
     inlines = [MattoneStatisticaInline]
-    fieldsets = (('Dati Mattone', {'fields': ('nome', 'aura', 'caratteristica_associata', 'tipo', 'descrizione_mattone', 'icona', 'colore')}),
-                 ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
-                 ('Sistema', {'fields': ('sigla',), 'classes': ('collapse',)}))
+    fieldsets = (
+        ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore')}),
+        ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
+        ('Sistema', {'fields': ('sigla',), 'classes': ('collapse',)})
+    )
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         if 'testo_addizionale' in form.base_fields: form.base_fields['testo_addizionale'].help_text = get_mattone_help_text()
         return form
     def get_exclude(self, request, obj=None): return ('tipo', 'descrizione', 'caratteristica_relativa')
-
-@admin.register(abilita_prerequisito)
-class AbilitaPrerequisitoAdmin(A_Admin):
-    list_display = ('abilita', 'prerequisito'); search_fields = ['abilita__nome', 'prerequisito__nome']; autocomplete_fields = ['abilita', 'prerequisito']
 
 @admin.register(Tier)
 class TierAdmin(A_Admin):
@@ -244,7 +304,8 @@ class TierAdmin(A_Admin):
 
 @admin.register(Statistica)
 class StatisticaAdmin(A_Admin):
-    form = PunteggioAdminForm; list_display = ('nome', 'parametro', 'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'tipo_modificatore')
+    form = PunteggioAdminForm
+    list_display = ('nome', 'parametro', 'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'tipo_modificatore')
     list_editable = ('is_primaria',); exclude = ('tipo',); summernote_fields = ('descrizione',)
 
 admin.site.register(Tabella)
@@ -252,46 +313,7 @@ admin.site.register(abilita_tier)
 admin.site.register(abilita_punteggio)
 admin.site.register(abilita_requisito)
 admin.site.register(abilita_sbloccata)
-
-class PunteggioOggettoInline(admin.TabularInline):
-    model = Oggetto.elementi.through; extra = 1; verbose_name_plural = "Elementi dell'Oggetto"
-
-# --- INLINE SPECIALI (Conditional + Pivot) ---
-
-class StatisticaCondizionaleInlineBase(admin.StackedInline):
-    extra = 0
-    filter_horizontal = ('limit_a_aure', 'limit_a_elementi') 
-    readonly_fields = ('statistica',)
-    
-    fieldsets = (
-        (None, {'fields': (('statistica', 'valore', 'tipo_modificatore'),)}),
-        ('Condizioni', {
-            'classes': ('collapse',),
-            'fields': (('usa_limitazione_aura', 'limit_a_aure'), ('usa_limitazione_elemento', 'limit_a_elementi'))
-        }),
-    )
-    
-    def has_delete_permission(self, request, obj=None):
-        return False
-    
-    def get_max_num(self, request, obj=None, **kwargs):
-        return Statistica.objects.count()
-    
-    def get_formset(self, request, obj=None, **kwargs):
-        if obj is not None: 
-            fk_name = self.fk_name
-            all_stats = Statistica.objects.all()
-            existing = self.model.objects.filter(**{fk_name: obj}).values_list('statistica_id', flat=True)
-            missing = all_stats.exclude(pk__in=existing)
-            new_objs = [self.model(**{fk_name: obj}, statistica=s, **{self.value_field: getattr(s, self.default_field)}) for s in missing]
-            if new_objs:
-                self.model.objects.bulk_create(new_objs)
-        return super().get_formset(request, obj, **kwargs)
-
-class OggettoStatisticaInline(StatisticaCondizionaleInlineBase):
-    model = OggettoStatistica; fk_name = 'oggetto'; value_field = 'valore'; default_field = 'valore_predefinito'
-class OggettoStatisticaBaseInline(StatisticaPivotInlineBase):
-    model = OggettoStatisticaBase; form = OggettoStatisticaBaseForm; fk_name = 'oggetto'; value_field = 'valore_base'; default_field = 'valore_base_predefinito'; verbose_name="Statistica (Valore Base)"
+admin.site.register(abilita_prerequisito)
 
 @admin.register(Manifesto)
 class ManifestoAdmin(SModelAdmin):
@@ -304,148 +326,92 @@ class QrCodeAdmin(admin.ModelAdmin):
 @admin.register(Oggetto)
 class OggettoAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome', 'livello'); readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    
     fieldsets = (
         ('Info', {'fields': ('nome', 'aura', 'testo', ('id', 'data_creazione', 'livello'))}),
         ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)})
     )
-    
+    # OGGETTO HA ENTRAMBE: BASE e MODIFICATORI
     inlines = [PunteggioOggettoInline, OggettoStatisticaBaseInline, OggettoStatisticaInline]
-    exclude = ('elementi', 'statistiche', 'statistiche_base')
-    summernote_fields = ['testo']
+    exclude = ('elementi', 'statistiche', 'statistiche_base'); summernote_fields = ['testo']
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-            form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
         return form
     
     def mostra_testo_formattato(self, obj):
         return format_html("{}", mark_safe(obj.TestoFormattato))
-    mostra_testo_formattato.short_description = 'Anteprima Testo'
-
-class AttivataStatisticaBaseInline(StatisticaPivotInlineBase):
-    model = AttivataStatisticaBase; form = AttivataStatisticaBaseForm; fk_name = 'attivata'; value_field = 'valore_base'; default_field = 'valore_base_predefinito'
-class PunteggioAttivataInline(admin.TabularInline):
-    model = Attivata.elementi.through; extra = 1; verbose_name = "Elemento"
+    mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
 
 @admin.register(Attivata)
 class AttivataAdmin(SModelAdmin):
+    # LEGACY: Solo Base Stats
     list_display = ('id', 'data_creazione', 'nome'); readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    inlines = [AttivataStatisticaBaseInline, PunteggioAttivataInline]; exclude = ('statistiche_base', 'elementi'); summernote_fields = ['testo']
-    
-    fieldsets = (
-        ('Info', {'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))}),
-        ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)})
-    )
-    
+    inlines = [AttivataStatisticaBaseInline, PunteggioAttivataInline]
+    exclude = ('statistiche_base', 'elementi'); summernote_fields = ['testo']
+    fieldsets = (('Info', {'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))}), ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}))
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-            form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
         return form
-    
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
+    def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
 
 # --- INFUSIONE & TESSITURA ---
-
-class InfusioneStatisticaInline(StatisticaCondizionaleInlineBase):
-    model = InfusioneStatistica; fk_name = 'infusione'; value_field = 'valore'; default_field = 'valore_predefinito'
-class TessituraStatisticaInline(StatisticaCondizionaleInlineBase):
-    model = TessituraStatistica; fk_name = 'tessitura'; value_field = 'valore'; default_field = 'valore_predefinito'
-
-class InfusioneStatisticaBaseInline(StatisticaPivotInlineBase):
-    model = InfusioneStatisticaBase; fk_name = 'infusione'; value_field = 'valore_base'; default_field = 'valore_base_predefinito'
-class TessituraStatisticaBaseInline(StatisticaPivotInlineBase):
-    model = TessituraStatisticaBase; fk_name = 'tessitura'; value_field = 'valore_base'; default_field = 'valore_base_predefinito'
-
-class InfusioneMattoneInline(admin.TabularInline):
-    model = InfusioneMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
-class TessituraMattoneInline(admin.TabularInline):
-    model = TessituraMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
 
 @admin.register(Infusione)
 class InfusioneAdmin(SModelAdmin):
     list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'aura_infusione'); search_fields = ['nome']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    inlines = [InfusioneMattoneInline, InfusioneStatisticaBaseInline, InfusioneStatisticaInline]
+    # INFUSIONE HA SOLO BASE (NO MODIFICATORI)
+    inlines = [InfusioneMattoneInline, InfusioneStatisticaBaseInline]
     exclude = ('statistiche_base', 'statistiche', 'mattoni'); summernote_fields = ['testo']; autocomplete_fields = ['aura_richiesta', 'aura_infusione']
-    
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-            form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
         return form
-    
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
+    def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo'
 
 @admin.register(Tessitura)
 class TessituraAdmin(SModelAdmin):
     list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'elemento_principale'); search_fields = ['nome']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    inlines = [TessituraMattoneInline, TessituraStatisticaBaseInline, TessituraStatisticaInline]
+    # TESSITURA HA SOLO BASE (NO MODIFICATORI)
+    inlines = [TessituraMattoneInline, TessituraStatisticaBaseInline]
     exclude = ('statistiche_base', 'statistiche', 'mattoni'); summernote_fields = ['testo', 'formula']; autocomplete_fields = ['aura_richiesta', 'elemento_principale']
-    
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-            form.base_fields['testo'].help_text = get_statistica_base_help_text()
-        if 'formula' in form.base_fields:
-            form.base_fields['formula'].help_text += " Supporta {elem}, {rango}."
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = get_statistica_base_help_text()
+        if 'formula' in form.base_fields: form.base_fields['formula'].help_text += " Supporta {elem}, {rango}."
         return form
-    
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
+    def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo'
-
-class PersonaggioInfusioneInline(admin.TabularInline):
-    model = PersonaggioInfusione; extra = 1; autocomplete_fields = ['infusione']
-class PersonaggioTessituraInline(admin.TabularInline):
-    model = PersonaggioTessitura; extra = 1; autocomplete_fields = ['tessitura']
 
 @admin.register(Personaggio)
 class PersonaggioAdmin(A_Admin):
     list_display = ('nome', 'proprietario', 'tipologia', 'crediti', 'punti_caratteristica')
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
     list_filter = ('tipologia',); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
-    inlines = [PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline]
-    
-    fieldsets = (
-        ('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'testo', ('data_nascita', 'data_morte'))}),
-        ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))})
-    )
+    inlines = [PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline]
+    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'testo', ('data_nascita', 'data_morte'))}),
+                 ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))}))
 
 @admin.register(Gruppo)
 class GruppoAdmin(admin.ModelAdmin):
     list_display = ('nome', 'conteggio_membri'); search_fields = ('nome',); filter_horizontal = ('membri',)
-    
-    def conteggio_membri(self, obj):
-        return obj.membri.count()
+    def conteggio_membri(self, obj): return obj.membri.count()
 
 @admin.register(Messaggio)
 class MessaggioAdmin(SModelAdmin):
     list_display = ('titolo', 'tipo_messaggio', 'mittente', 'get_destinatario', 'data_invio')
     list_filter = ('tipo_messaggio', 'salva_in_cronologia', 'data_invio'); search_fields = ('titolo', 'testo', 'mittente__username'); date_hierarchy = 'data_invio'; summernote_fields = ('testo',); autocomplete_fields = ['destinatario_personaggio', 'destinatario_gruppo']
-    
-    fieldsets = (
-        ('Dettagli', {'fields': ('titolo', 'mittente', 'data_invio', 'salva_in_cronologia')}),
-        ('Contenuto', {'fields': ('testo',)}),
-        ('Destinazione', {'fields': ('tipo_messaggio', 'destinatario_personaggio', 'destinatario_gruppo')})
-    )
-    
+    fieldsets = (('Dettagli', {'fields': ('titolo', 'mittente', 'data_invio', 'salva_in_cronologia')}), ('Contenuto', {'fields': ('testo',)}), ('Destinazione', {'fields': ('tipo_messaggio', 'destinatario_personaggio', 'destinatario_gruppo')}))
     def get_destinatario(self, obj):
-        if obj.tipo_messaggio == 'BROAD':
-            return format_html("<b>TUTTI</b>")
-        elif obj.tipo_messaggio == 'GROUP':
-            return format_html(f"Gruppo: {obj.destinatario_gruppo}")
+        if obj.tipo_messaggio == 'BROAD': return format_html("<b>TUTTI</b>")
+        elif obj.tipo_messaggio == 'GROUP': return format_html(f"Gruppo: {obj.destinatario_gruppo}")
         return format_html(f"Pg: {obj.destinatario_personaggio}")
-        
     def save_model(self, request, obj, form, change):
-        if not obj.mittente:
-            obj.mittente = request.user
+        if not obj.mittente: obj.mittente = request.user
         super().save_model(request, obj, form, change)
 
 @admin.register(TransazioneSospesa)
