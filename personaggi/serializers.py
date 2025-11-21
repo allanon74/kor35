@@ -106,22 +106,36 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         return format_html('<div style="{}"></div>', style)
     def get_icona_cerchio_html(self, obj): return self._get_icona_cerchio(obj, inverted=False)
     def get_icona_cerchio_inverted_html(self, obj): return self._get_icona_cerchio(obj, inverted=True)
+    
     def _get_icona_cerchio(self, obj, inverted=False):
         url_icona_locale = self.get_icona_url_assoluto(obj)
         if not url_icona_locale or not obj.colore: return ""
         colore_sfondo = obj.colore
-        colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
+        
+        # Calcola colore contrasto
+        try:
+            colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
+        except:
+            colore_icona_contrasto = 'white'
+
         if inverted:
             colore_icona_contrasto = obj.colore
-            colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
+            try:
+                colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
+            except:
+                colore_sfondo = 'black'
+                
         stile_cerchio = (f"display: inline-block; width: 30px; height: 30px; background-color: {colore_sfondo}; border-radius: 50%; vertical-align: middle; text-align: center; line-height: 30px;")
         stile_icona_maschera = (f"display: inline-block; width: 24px; height: 24px; vertical-align: middle; background-color: {colore_icona_contrasto}; mask-image: url({url_icona_locale}); -webkit-mask-image: url({url_icona_locale}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain;")
+        
+        # CORREZIONE QUI: stile_cerchio invece di style_cerchio
         return format_html('<div style="{}"><div style="{}"></div></div>', stile_cerchio, stile_icona_maschera)
+    
     def get_is_primaria(self, obj): return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False
     def get_valore_predefinito(self, obj): return obj.statistica.valore_base_predefinito if hasattr(obj, 'statistica') else 0
     def get_parametro(self, obj): return obj.statistica.parametro if hasattr(obj, 'statistica') else None
 
-# --- Serializer Abilità (Legacy e Through) ---
+# --- Serializer Abilità ---
 
 class AbilSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(many=False)
@@ -245,7 +259,7 @@ class AttivataElementoSerializer(serializers.ModelSerializer):
         model = AttivataElemento 
         fields = ('elemento',)
 
-# --- NUOVI SERIALIZER PER INFUSIONE E TESSITURA ---
+# --- NUOVI SERIALIZER PER INFUSIONE E TESSITURA (CORRETTI) ---
 
 class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
     statistica = StatisticaSerializer(read_only=True)
@@ -260,7 +274,7 @@ class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
         fields = ('statistica', 'valore_base')
 
 class InfusioneMattoneSerializer(serializers.ModelSerializer):
-    mattone = PunteggioSmallSerializer(read_only=True) # Il mattone è un punteggio
+    mattone = PunteggioSmallSerializer(read_only=True)
     class Meta:
         model = InfusioneMattone
         fields = ('mattone', 'ordine')
@@ -310,15 +324,15 @@ class InfusioneSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-    costo_crediti = serializers.IntegerField(read_only=True)
+    costo_crediti = serializers.IntegerField(read_only=True) # <-- AGGIUNTO
+
     class Meta:
         model = Infusione
         fields = (
-            'id', 'nome', 'testo', 'TestoFormattato', 
-            'testo_formattato_personaggio', 'livello', 
-            'aura_richiesta', 'aura_infusione', 'mattoni', 
-            'statistiche_base', 'costo_crediti', 
-            )
+            'id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 
+            'livello', 'aura_richiesta', 'aura_infusione', 'mattoni', 'statistiche_base', 
+            'costo_crediti'
+        )
 
 class TessituraSerializer(serializers.ModelSerializer):
     statistiche_base = TessituraStatisticaBaseSerializer(source='tessiturastatisticabase_set', many=True, read_only=True)
@@ -328,14 +342,15 @@ class TessituraSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-    costo_crediti = serializers.IntegerField(read_only=True)
+    costo_crediti = serializers.IntegerField(read_only=True) # <-- AGGIUNTO
+
     class Meta:
         model = Tessitura
         fields = (
-            'id', 'nome', 'testo', 'formula', 'TestoFormattato', 
-            'testo_formattato_personaggio', 'livello', 'aura_richiesta', 
-            'elemento_principale', 'mattoni', 'statistiche_base', 'costo_crediti',
-            )
+            'id', 'nome', 'testo', 'formula', 'TestoFormattato', 'testo_formattato_personaggio', 
+            'livello', 'aura_richiesta', 'elemento_principale', 'mattoni', 'statistiche_base',
+            'costo_crediti'
+        )
 
 
 class ManifestoSerializer(serializers.ModelSerializer):
@@ -383,7 +398,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     punti_caratteristica = serializers.IntegerField(read_only=True)
     punteggi_base = serializers.JSONField(read_only=True) 
     modificatori_calcolati = serializers.JSONField(read_only=True) 
-    TestoFormattatoPersonale = serializers.JSONField(read_only=True, required=False) # Non esiste nel modello, placeholder se serve
+    TestoFormattatoPersonale = serializers.JSONField(read_only=True, required=False)
     tipologia = TipologiaPersonaggioSerializer(read_only=True)
     
     abilita_possedute = AbilitaMasterListSerializer(many=True, read_only=True)
@@ -418,7 +433,6 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'statistiche_base__statistica', 'oggettostatistica_set__statistica',
             'oggettoelemento_set__elemento', 'aura'
         )
-        # Forza calcolo modificatori per caching
         personaggio.modificatori_calcolati 
         risultati = []
         for obj in oggetti_posseduti:
@@ -428,7 +442,6 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_attivate_possedute(self, personaggio):
-        # Legacy
         attivate = personaggio.attivate_possedute.prefetch_related(
             'statistiche_base__statistica', 'attivataelemento_set__elemento'
         )
