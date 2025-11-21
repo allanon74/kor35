@@ -255,21 +255,6 @@ class PersonaggioModelloAuraInline(admin.TabularInline):
     verbose_name = "Modello Aura Applicato"
     verbose_name_plural = "Modelli Aura Applicati"
 
-# --- INLINE PER PERSONAGGIO (INFUSIONI E TESSITURE) ---
-class PersonaggioInfusioneInline(admin.TabularInline):
-    model = PersonaggioInfusione
-    extra = 1
-    verbose_name = "Infusione Posseduta"
-    verbose_name_plural = "Infusioni Possedute"
-    autocomplete_fields = ['infusione']
-
-class PersonaggioTessituraInline(admin.TabularInline):
-    model = PersonaggioTessitura
-    extra = 1
-    verbose_name = "Tessitura Posseduta"
-    verbose_name_plural = "Tessiture Possedute"
-    autocomplete_fields = ['tessitura']
-
 # ----------- HELPER FUNCTION PER RENDERING HTML -------------
 
 def get_statistica_base_help_text():
@@ -404,11 +389,13 @@ class PunteggioOggettoInline(admin.TabularInline):
     verbose_name = "Elemento"
     verbose_name_plural = "Elementi dell'Oggetto"
     
-# --- INLINE SPECIALI CONDIZIONALI ---
+# --- INLINE SPECIALI CONDIZIONALI (CON PIVOT) ---
 
 class StatisticaCondizionaleInlineBase(admin.StackedInline):
     extra = 0
     filter_horizontal = ('limit_a_aure', 'limit_a_elementi') 
+    readonly_fields = ('statistica',) # La statistica non si cambia, è fissa
+    
     fieldsets = (
         (None, {
             'fields': (('statistica', 'valore_base'),)
@@ -419,6 +406,39 @@ class StatisticaCondizionaleInlineBase(admin.StackedInline):
             'description': "Seleziona elementi/aure per applicare questo bonus SOLO se la tecnica/oggetto corrisponde."
         }),
     )
+
+    def has_delete_permission(self, request, obj=None):
+        return False # Non si possono cancellare le righe, devono esserci tutte
+
+    def get_max_num(self, request, obj=None, **kwargs):
+        return Statistica.objects.count()
+
+    # LOGICA PIVOT AGGIUNTA
+    def get_formset(self, request, obj=None, **kwargs):
+        if obj is not None: 
+            fk_name = self.fk_name
+            all_stats = Statistica.objects.all()
+            
+            existing_stat_pks = self.model.objects.filter(
+                **{fk_name: obj}
+            ).values_list('statistica_id', flat=True)
+
+            missing_stats = all_stats.exclude(pk__in=existing_stat_pks)
+            
+            new_instances_to_create = []
+            for stat in missing_stats:
+                new_instances_to_create.append(
+                    self.model(
+                        **{fk_name: obj},
+                        statistica=stat,
+                        **{self.value_field: getattr(stat, self.default_field)}
+                    )
+                )
+            
+            if new_instances_to_create:
+                self.model.objects.bulk_create(new_instances_to_create)
+        
+        return super().get_formset(request, obj, **kwargs)
 
 # Inline per Oggetto (statistica base)
 class OggettoStatisticaInline(StatisticaPivotInlineBase):
@@ -478,10 +498,14 @@ class OggettoAdmin(SModelAdmin):
 class InfusioneStatisticaInline(StatisticaCondizionaleInlineBase):
     model = InfusioneStatisticaBase
     fk_name = 'infusione'
+    value_field = 'valore_base'
+    default_field = 'valore_base_predefinito'
 
 class TessituraStatisticaInline(StatisticaCondizionaleInlineBase):
     model = TessituraStatisticaBase
     fk_name = 'tessitura'
+    value_field = 'valore_base'
+    default_field = 'valore_base_predefinito'
 
 class InfusioneMattoneInline(admin.TabularInline):
     model = InfusioneMattone
