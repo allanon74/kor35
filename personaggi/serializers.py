@@ -310,9 +310,15 @@ class InfusioneSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
+    costo_crediti = serializers.IntegerField(read_only=True)
     class Meta:
         model = Infusione
-        fields = ('id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 'livello', 'aura_richiesta', 'aura_infusione', 'mattoni', 'statistiche_base')
+        fields = (
+            'id', 'nome', 'testo', 'TestoFormattato', 
+            'testo_formattato_personaggio', 'livello', 
+            'aura_richiesta', 'aura_infusione', 'mattoni', 
+            'statistiche_base', 'costo_crediti', 
+            )
 
 class TessituraSerializer(serializers.ModelSerializer):
     statistiche_base = TessituraStatisticaBaseSerializer(source='tessiturastatisticabase_set', many=True, read_only=True)
@@ -322,9 +328,14 @@ class TessituraSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
+    costo_crediti = serializers.IntegerField(read_only=True)
     class Meta:
         model = Tessitura
-        fields = ('id', 'nome', 'testo', 'formula', 'TestoFormattato', 'testo_formattato_personaggio', 'livello', 'aura_richiesta', 'elemento_principale', 'mattoni', 'statistiche_base')
+        fields = (
+            'id', 'nome', 'testo', 'formula', 'TestoFormattato', 
+            'testo_formattato_personaggio', 'livello', 'aura_richiesta', 
+            'elemento_principale', 'mattoni', 'statistiche_base', 'costo_crediti',
+            )
 
 
 class ManifestoSerializer(serializers.ModelSerializer):

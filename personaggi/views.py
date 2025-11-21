@@ -580,3 +580,186 @@ class WebPushSubscribeView(APIView):
         except Exception as e:
             print(f"Errore salvataggio WebPush: {e}")
             return Response({"error": str(e)}, status=400)
+
+# --- VISTE PER INFUSIONI ---
+
+class InfusioniAcquistabiliView(generics.GenericAPIView):
+    """
+    GET /api/personaggio/me/infusioni_acquistabili/
+    Restituisce le infusioni che il personaggio può acquistare.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = InfusioneSerializer
+
+    def get(self, request, format=None):
+        character_id = request.query_params.get('char_id')
+        if not character_id:
+            return Response({"error": "L'ID del personaggio è richiesto (char_id)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.select_related('tipologia').get(id=character_id)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        
+        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+            return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+
+        # 1. Escludi quelle già possedute
+        possedute_ids = personaggio.infusioni_possedute.values_list('id', flat=True)
+        
+        # 2. Prendi tutte le infusioni (ottimizza query)
+        tutte_infusioni = Infusione.objects.exclude(id__in=possedute_ids).select_related(
+            'aura_richiesta', 'aura_infusione'
+        ).prefetch_related(
+            'infusionemattone_set__mattone',
+            'infusionestatisticabase_set__statistica'
+        ).order_by('livello', 'nome')
+
+        acquistabili = []
+        
+        # 3. Filtra usando la logica del Modello (valida_acquisto_tecnica)
+        # Nota: Questa funzione (definita nel models.py) controlla:
+        # - Livello Aura vs Livello Tecnica
+        # - Requisiti Mattoni (Caratteristiche)
+        # - Modelli Aura (Mattoni proibiti/permessi)
+        
+        for infusione in tutte_infusioni:
+            is_valid, _ = personaggio.valida_acquisto_tecnica(infusione)
+            if is_valid:
+                acquistabili.append(infusione)
+
+        serializer = InfusioneSerializer(acquistabili, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AcquisisciInfusioneView(APIView):
+    """
+    POST /api/personaggio/me/acquisisci_infusione/
+    Body: { "personaggio_id": 1, "infusione_id": 5 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic 
+    def post(self, request, format=None):
+        personaggio_id = request.data.get('personaggio_id')
+        infusione_id = request.data.get('infusione_id')
+
+        if not personaggio_id or not infusione_id:
+            return Response({"error": "Dati mancanti."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            infusione = Infusione.objects.prefetch_related('infusionemattone_set').get(id=infusione_id)
+        except (Personaggio.DoesNotExist, Infusione.DoesNotExist):
+            return Response({"error": "Personaggio o Infusione non trovati."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Validazione Regole di Gioco
+        is_valid, error_msg = personaggio.valida_acquisto_tecnica(infusione)
+        if not is_valid:
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Controllo Già Posseduta
+        if personaggio.infusioni_possedute.filter(id=infusione.id).exists():
+            return Response({"error": "Infusione già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Pagamento (Costo Crediti)
+        costo = infusione.costo_crediti # Property del modello
+        if personaggio.crediti < costo:
+            return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 4. Esecuzione
+        personaggio.modifica_crediti(-costo, f"Acquisito infusione: {infusione.nome}")
+        personaggio.infusioni_possedute.add(infusione)
+        
+        # Logga l'evento
+        personaggio.aggiungi_log(f"Ha appreso l'infusione '{infusione.nome}' (Liv. {infusione.livello}).")
+
+        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# --- VISTE PER TESSITURE ---
+
+class TessitureAcquistabiliView(generics.GenericAPIView):
+    """
+    GET /api/personaggio/me/tessiture_acquistabili/
+    Restituisce le tessiture che il personaggio può acquistare.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = TessituraSerializer
+
+    def get(self, request, format=None):
+        character_id = request.query_params.get('char_id')
+        if not character_id:
+            return Response({"error": "L'ID del personaggio è richiesto."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.select_related('tipologia').get(id=character_id)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        
+        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+            return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+
+        possedute_ids = personaggio.tessiture_possedute.values_list('id', flat=True)
+        
+        tutte_tessiture = Tessitura.objects.exclude(id__in=possedute_ids).select_related(
+            'aura_richiesta', 'elemento_principale'
+        ).prefetch_related(
+            'tessituramattone_set__mattone',
+            'tessiturastatisticabase_set__statistica'
+        ).order_by('livello', 'nome')
+
+        acquistabili = []
+        
+        for tessitura in tutte_tessiture:
+            is_valid, _ = personaggio.valida_acquisto_tecnica(tessitura)
+            if is_valid:
+                acquistabili.append(tessitura)
+
+        serializer = TessituraSerializer(acquistabili, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AcquisisciTessituraView(APIView):
+    """
+    POST /api/personaggio/me/acquisisci_tessitura/
+    Body: { "personaggio_id": 1, "tessitura_id": 8 }
+    """
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic 
+    def post(self, request, format=None):
+        personaggio_id = request.data.get('personaggio_id')
+        tessitura_id = request.data.get('tessitura_id')
+
+        if not personaggio_id or not tessitura_id:
+            return Response({"error": "Dati mancanti."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            tessitura = Tessitura.objects.prefetch_related('tessituramattone_set').get(id=tessitura_id)
+        except (Personaggio.DoesNotExist, Tessitura.DoesNotExist):
+            return Response({"error": "Oggetto non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 1. Validazione
+        is_valid, error_msg = personaggio.valida_acquisto_tecnica(tessitura)
+        if not is_valid:
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        if personaggio.tessiture_possedute.filter(id=tessitura.id).exists():
+            return Response({"error": "Tessitura già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Pagamento
+        costo = tessitura.costo_crediti
+        if personaggio.crediti < costo:
+            return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Esecuzione
+        personaggio.modifica_crediti(-costo, f"Acquisito tessitura: {tessitura.nome}")
+        personaggio.tessiture_possedute.add(tessitura)
+        
+        personaggio.aggiungi_log(f"Ha appreso la tessitura '{tessitura.nome}' (Liv. {tessitura.livello}).")
+
+        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)

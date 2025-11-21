@@ -80,6 +80,14 @@ urlpatterns = [
     path('api/messaggi/admin/sent/', views.MessaggioAdminSentListView.as_view(), name='api_messaggi_admin_sent'),
     path('api/webpush/subscribe/', views.WebPushSubscribeView.as_view(), name='api_webpush_subscribe'),
     
+    # Endpoint per Infusioni
+    path('api/personaggio/me/infusioni_acquistabili/', views.InfusioniAcquistabiliView.as_view(), name='infusioni_acquistabili'),
+    path('api/personaggio/me/acquisisci_infusione/', views.AcquisisciInfusioneView.as_view(), name='acquisisci_infusione'),
+
+    # Endpoint per Tessiture
+    path('api/personaggio/me/tessiture_acquistabili/', views.TessitureAcquistabiliView.as_view(), name='tessiture_acquistabili'),
+    path('api/personaggio/me/acquisisci_tessitura/', views.AcquisisciTessituraView.as_view(), name='acquisisci_tessitura'),
+    
     path('api/', include(router.urls)),
     
 ]
