@@ -1,7 +1,7 @@
 import string
 from decimal import Decimal
 from django.shortcuts import render
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 
@@ -604,24 +604,20 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
         if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
             return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
 
-        # 1. Escludi quelle già possedute
         possedute_ids = personaggio.infusioni_possedute.values_list('id', flat=True)
         
-        # 2. Prendi tutte le infusioni (ottimizza query)
-        tutte_infusioni = Infusione.objects.exclude(id__in=possedute_ids).select_related(
+        # --- CORREZIONE QUI ---
+        # Usiamo annotate per contare i mattoni e ordinare per quel conteggio (che equivale al livello)
+        tutte_infusioni = Infusione.objects.exclude(id__in=possedute_ids).annotate(
+            livello_calc=Count('mattoni') # Calcola il livello in SQL
+        ).select_related(
             'aura_richiesta', 'aura_infusione'
         ).prefetch_related(
             'infusionemattone_set__mattone',
             'infusionestatisticabase_set__statistica'
-        ).order_by('livello', 'nome')
+        ).order_by('livello_calc', 'nome') # Ordina per livello calcolato
 
         acquistabili = []
-        
-        # 3. Filtra usando la logica del Modello (valida_acquisto_tecnica)
-        # Nota: Questa funzione (definita nel models.py) controlla:
-        # - Livello Aura vs Livello Tecnica
-        # - Requisiti Mattoni (Caratteristiche)
-        # - Modelli Aura (Mattoni proibiti/permessi)
         
         for infusione in tutte_infusioni:
             is_valid, _ = personaggio.valida_acquisto_tecnica(infusione)
@@ -703,12 +699,15 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
 
         possedute_ids = personaggio.tessiture_possedute.values_list('id', flat=True)
         
-        tutte_tessiture = Tessitura.objects.exclude(id__in=possedute_ids).select_related(
+        # --- CORREZIONE QUI ---
+        tutte_tessiture = Tessitura.objects.exclude(id__in=possedute_ids).annotate(
+            livello_calc=Count('mattoni') # Calcola il livello in SQL
+        ).select_related(
             'aura_richiesta', 'elemento_principale'
         ).prefetch_related(
             'tessituramattone_set__mattone',
             'tessiturastatisticabase_set__statistica'
-        ).order_by('livello', 'nome')
+        ).order_by('livello_calc', 'nome') # Ordina per livello calcolato
 
         acquistabili = []
         
