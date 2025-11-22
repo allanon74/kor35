@@ -365,8 +365,14 @@ class MattoneStatistica(CondizioneStatisticaMixin):
     class Meta: unique_together=('mattone', 'statistica')
 
 class Aura(Punteggio):
-    class Meta: proxy=True; verbose_name="Aura (Gestione)"; verbose_name_plural="Aure (Gestione)"
-    def save(self, *args, **kwargs): self.type = AURA; super().save(*args, **kwargs)
+    class Meta: 
+        proxy=True; 
+        verbose_name="Aura (Gestione)"; 
+        verbose_name_plural="Aure (Gestione)"
+        
+    def save(self, *args, **kwargs): 
+        self.type = AURA; 
+        super().save(*args, **kwargs)
 
 class ModelloAura(models.Model):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="modelli_definiti")

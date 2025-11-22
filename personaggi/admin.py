@@ -236,8 +236,10 @@ class CaratteristicaAdmin(IconaAdminMixin, A_Admin):
 @admin.register(Aura)
 class AuraAdmin(IconaAdminMixin, A_Admin):
     form = PunteggioAdminForm
-    list_display = ('nome', 'sigla', 'icona_html', 'ordine', 'is_soprannaturale', 'is_generica')
-    list_editable = ('ordine', 'is_soprannaturale', 'is_generica'); search_fields = ('nome',); summernote_fields = ('descrizione',)
+    list_display = ('nome',  'icona_html', 'ordine', 'is_soprannaturale', 'permette_infusioni', 'permette_tessiture', 'colore')
+    list_editable = ('ordine', 'is_soprannaturale', 'permette_infusioni', 'permette_tessiture',)
+    search_fields = ('nome',)
+    summernote_fields = ('descrizione',)
     inlines = [MattoneInlineForAura]
     def get_queryset(self, request): return super().get_queryset(request).filter(tipo=AURA)
     def get_exclude(self, request, obj=None): return ('tipo', 'descrizione', 'caratteristica_relativa')
