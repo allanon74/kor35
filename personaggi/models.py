@@ -486,6 +486,7 @@ class Mattone(Punteggio):
     descrizione_mattone = models.TextField(blank=True, null=True)
     descrizione_metatalento = models.TextField(blank=True, null=True)
     testo_addizionale = models.TextField(blank=True, null=True)
+    dichiarazione = models.CharField(max_length=20, blank=True, null=True)
     
     funzionamento_metatalento = models.CharField(
         max_length=2, choices=METATALENTO_CHOICES, default=META_NESSUN_EFFETTO
