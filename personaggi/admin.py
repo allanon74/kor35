@@ -523,33 +523,33 @@ class OggettoAdmin(SModelAdmin):
         return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
 
-@admin.register(Attivata)
-class AttivataAdmin(SModelAdmin):
-    # LEGACY
-    list_display = ('id', 'data_creazione', 'nome')
-    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    inlines = [AttivataStatisticaBaseInline, PunteggioAttivataInline]
-    exclude = ('statistiche_base', 'elementi')
-    summernote_fields = ['testo']
+# @admin.register(Attivata)
+# class AttivataAdmin(SModelAdmin):
+#     # LEGACY
+#     list_display = ('id', 'data_creazione', 'nome')
+#     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
+#     inlines = [AttivataStatisticaBaseInline, PunteggioAttivataInline]
+#     exclude = ('statistiche_base', 'elementi')
+#     summernote_fields = ['testo']
     
-    fieldsets = (
-        ('Info', {
-            'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))
-        }),
-        ('Anteprima', {
-            'classes': ('wide',), 
-            'fields': ('mostra_testo_formattato',)
-        })
-    )
+#     fieldsets = (
+#         ('Info', {
+#             'fields': ('nome', 'testo', ('id', 'data_creazione', 'livello'))
+#         }),
+#         ('Anteprima', {
+#             'classes': ('wide',), 
+#             'fields': ('mostra_testo_formattato',)
+#         })
+#     )
     
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-            form.base_fields['testo'].help_text = get_statistica_base_help_text()
-        return form
+#     def get_form(self, request, obj=None, **kwargs):
+#         form = super().get_form(request, obj, **kwargs)
+#         if 'testo' in form.base_fields:
+#             form.base_fields['testo'].help_text = get_statistica_base_help_text()
+#         return form
     
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
+#     def mostra_testo_formattato(self, obj):
+#         return format_html("{}", mark_safe(obj.TestoFormattato))
 
 # --- INFUSIONE & TESSITURA ---
 
@@ -633,7 +633,7 @@ class PersonaggioAdmin(A_Admin):
         PersonaggioModelloAuraInline, 
         PersonaggioInfusioneInline, 
         PersonaggioTessituraInline, 
-        PersonaggioAttivataInline, 
+        # PersonaggioAttivataInline, 
         CreditoMovimentoInline, 
         PuntiCaratteristicaMovimentoInline, 
         PersonaggioLogInline
