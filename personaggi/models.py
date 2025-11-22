@@ -7,6 +7,7 @@ from django.db import models, IntegrityError, transaction
 from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.safestring import mark_safe
 from django.conf import settings
 from django.contrib.auth.models import User
 from colorfield.fields import ColorField
@@ -317,12 +318,29 @@ class Statistica(Punteggio):
     
     @classmethod
     def get_help_text_parametri(cls, extra_params=None):
+        """
+        Restituisce una stringa HTML safe con la lista dei parametri disponibili.
+        Args:
+            extra_params (list of tuples): es. [('{elem}', 'Elemento Principale')]
+        """
         stats = cls.objects.filter(parametro__isnull=False).exclude(parametro__exact='').order_by('nome')
+        
         items = []
-        for s in stats: items.append(f"&bull; <b>{{{s.parametro}}}</b>: {s.nome}")
+        # Statistiche standard (es. {pv})
+        for s in stats:
+            # Usiamo escape per evitare injection se il nome contiene HTML, ma le graffe le vogliamo letterali
+            items.append(f"&bull; <b>{{{s.parametro}}}</b>: {s.nome}")
+            
+        # Parametri extra (es. {elem})
         if extra_params:
-            for p_code, p_desc in extra_params: items.append(f"&bull; <b>{p_code}</b>: {p_desc}")
-        return format_html("<b>Variabili disponibili:</b><br>" + "<br>".join(items))
+            for p_code, p_desc in extra_params:
+                items.append(f"&bull; <b>{p_code}</b>: {p_desc}")
+                
+        # Costruiamo l'HTML finale manualmente
+        html_content = "<b>Variabili disponibili:</b><br>" + "<br>".join(items)
+        
+        # Ritorniamo mark_safe per dire a Django "questo HTML è ok, non escaparlo di nuovo e non provare a formattarlo"
+        return mark_safe(html_content)
 
 class Mattone(Punteggio):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="mattoni_aura")
