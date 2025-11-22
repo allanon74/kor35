@@ -9,7 +9,7 @@ from .models import OggettoInInventario, Abilita, Tier
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario, Infusione, Tessitura
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
-from .models import Punteggio, CARATTERISTICA
+from .models import Punteggio, CARATTERISTICA, PersonaggioModelloAura, ModelloAura
 
 import uuid 
 
@@ -47,6 +47,7 @@ from .serializers import (
     RubaSerializer, 
     AcquisisciSerializer,
     PunteggioDetailSerializer,
+    ModelloAuraSerializer,
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
@@ -297,6 +298,15 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
 
         acquistabili = []
         for infusione in tutte_infusioni:
+            aura_req = infusione.aura_richiesta
+            if aura_req:
+            # Se l'aura ha dei modelli definiti nel sistema...
+                if aura_req.modelli_definiti.exists():
+                    # ...controlla se il PG ha scelto un modello per quell'aura
+                    has_model_selected = personaggio.modelli_aura.filter(aura=aura_req).exists()
+                    if not has_model_selected:
+                        # Se non ha scelto, NON mostrare la tecnica
+                        continue
             is_valid, _ = personaggio.valida_acquisto_tecnica(infusione)
             if is_valid:
                 acquistabili.append(infusione)
@@ -363,6 +373,15 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
 
         acquistabili = []
         for tessitura in tutte_tessiture:
+            aura_req = tessitura.aura_richiesta
+            if aura_req:
+            # Se l'aura ha dei modelli definiti nel sistema...
+                if aura_req.modelli_definiti.exists():
+                    # ...controlla se il PG ha scelto un modello per quell'aura
+                    has_model_selected = personaggio.modelli_aura.filter(aura=aura_req).exists()
+                    if not has_model_selected:
+                        # Se non ha scelto, NON mostrare la tecnica
+                        continue
             is_valid, _ = personaggio.valida_acquisto_tecnica(tessitura)
             if is_valid:
                 acquistabili.append(tessitura)
@@ -712,3 +731,47 @@ class WebPushSubscribeView(APIView):
         except Exception as e:
             print(f"Errore salvataggio WebPush: {e}")
             return Response({"error": str(e)}, status=400)
+
+# --- NUOVE VIEW PER GESTIONE MODELLI AURA ---        
+        
+class ModelliAuraListView(APIView):
+    """
+    GET /api/punteggio/<int:aura_id>/modelli/
+    Restituisce i modelli disponibili per una certa aura.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, aura_id):
+        modelli = ModelloAura.objects.filter(aura_id=aura_id).prefetch_related('mattoni_proibiti')
+        serializer = ModelloAuraSerializer(modelli, many=True, context={'request': request})
+        return Response(serializer.data)
+
+class SelezionaModelloAuraView(APIView):
+    """
+    POST /api/personaggio/me/seleziona_modello_aura/
+    Body: { "personaggio_id": 1, "modello_id": 5 }
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        pg_id = request.data.get('personaggio_id')
+        mod_id = request.data.get('modello_id')
+        
+        personaggio = get_object_or_404(Personaggio, id=pg_id, proprietario=request.user)
+        modello = get_object_or_404(ModelloAura, id=mod_id)
+        
+        # Verifica se ha già un modello per questa aura
+        esiste = PersonaggioModelloAura.objects.filter(
+            personaggio=personaggio, 
+            modello_aura__aura=modello.aura
+        ).exists()
+        
+        if esiste:
+            return Response({"error": "Hai già scelto un modello per questa aura. La scelta è definitiva."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        PersonaggioModelloAura.objects.create(personaggio=personaggio, modello_aura=modello)
+        personaggio.aggiungi_log(f"Ha scelto il modello di aura: {modello.nome} per {modello.aura.nome}")
+        
+        # Ritorna il personaggio aggiornato
+        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
+        return Response(serializer.data)

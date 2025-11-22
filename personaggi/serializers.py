@@ -14,7 +14,7 @@ from .models import (
     Oggetto, Attivata, Manifesto, A_vista, 
     # Nuovi Modelli
     Infusione, Tessitura, InfusioneMattone, TessituraMattone, 
-    InfusioneStatisticaBase, TessituraStatisticaBase,
+    InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura,
     
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
     OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
@@ -71,6 +71,14 @@ class AbilitaStatisticaSmallSerializer(serializers.ModelSerializer):
         model = AbilitaStatistica
         fields = ('statistica', 'valore', 'tipo_modificatore')
 
+class ModelloAuraSerializer(serializers.ModelSerializer):
+    # Mostriamo i mattoni proibiti con le loro icone
+    mattoni_proibiti = PunteggioSmallSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ModelloAura
+        fields = ('id', 'nome', 'mattoni_proibiti')
+
 class PunteggioDetailSerializer(serializers.ModelSerializer):
     icona_html = serializers.SerializerMethodField()
     icona_cerchio_html = serializers.SerializerMethodField()
@@ -79,15 +87,21 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     is_primaria = serializers.SerializerMethodField()
     valore_predefinito = serializers.SerializerMethodField()
     parametro = serializers.SerializerMethodField()
+    has_models = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
-        fields = ('id', 'nome', 'sigla', 'tipo', 'colore', 'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'is_primaria', 'valore_predefinito', 'parametro', 'ordine')
+        fields = (
+            'id', 'nome', 'sigla', 'tipo', 'colore', 
+            'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 
+            'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
+            )
 
     def get_base_url(self):
         request = self.context.get('request')
         if request: return f"{request.scheme}://{request.get_host()}"
         return ""
+    
     def get_icona_url_assoluto(self, obj):
         if not obj.icona: return None
         base_url = self.get_base_url()
@@ -98,14 +112,21 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         icona_path = str(obj.icona)
         if icona_path.startswith('/'): icona_path = icona_path[1:]
         return f"{base_url}/{media_url}{icona_path}"
-    def get_icona_url(self, obj): return self.get_icona_url_assoluto(obj)
+    
+    def get_icona_url(self, obj): 
+        return self.get_icona_url_assoluto(obj)
+    
     def get_icona_html(self, obj):
         url = self.get_icona_url_assoluto(obj)
         if not url or not obj.colore: return ""
         style = (f"width: 24px; height: 24px; background-color: {obj.colore}; mask-image: url({url}); -webkit-mask-image: url({url}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain; display: inline-block; vertical-align: middle;")
         return format_html('<div style="{}"></div>', style)
-    def get_icona_cerchio_html(self, obj): return self._get_icona_cerchio(obj, inverted=False)
-    def get_icona_cerchio_inverted_html(self, obj): return self._get_icona_cerchio(obj, inverted=True)
+    
+    def get_icona_cerchio_html(self, obj): 
+        return self._get_icona_cerchio(obj, inverted=False)
+    
+    def get_icona_cerchio_inverted_html(self, obj): 
+        return self._get_icona_cerchio(obj, inverted=True)
     
     def _get_icona_cerchio(self, obj, inverted=False):
         url_icona_locale = self.get_icona_url_assoluto(obj)
@@ -131,10 +152,19 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         # CORREZIONE QUI: stile_cerchio invece di style_cerchio
         return format_html('<div style="{}"><div style="{}"></div></div>', stile_cerchio, stile_icona_maschera)
     
-    def get_is_primaria(self, obj): return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False
-    def get_valore_predefinito(self, obj): return obj.statistica.valore_base_predefinito if hasattr(obj, 'statistica') else 0
-    def get_parametro(self, obj): return obj.statistica.parametro if hasattr(obj, 'statistica') else None
-
+    def get_is_primaria(self, obj): 
+        return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False
+    
+    def get_valore_predefinito(self, obj): 
+        return obj.statistica.valore_base_predefinito if hasattr(obj, 'statistica') else 0
+    
+    def get_parametro(self, obj): 
+        return obj.statistica.parametro if hasattr(obj, 'statistica') else None
+    
+    def get_has_models(self, obj):
+        # Ritorna True se esistono ModelliAura collegati a questo punteggio
+        return obj.modelli_definiti.exists()
+    
 # --- Serializer Abilità ---
 
 class AbilSerializer(serializers.ModelSerializer):
