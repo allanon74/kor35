@@ -258,7 +258,7 @@ class MattoneAdmin(A_Admin):
     inlines = [MattoneStatisticaInline]
     
     fieldsets = (
-        ('Dati Mattone', {'fields': ('nome', 'aura', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore')}),
+        ('Dati Mattone', {'fields': ('nome', 'aura','tipo', 'ordine', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore')}),
         ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
         ('Sistema', {'fields': ('sigla',), 'classes': ('collapse',)})
     )
