@@ -443,6 +443,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     transazioni_in_uscita_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
     transazioni_in_entrata_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
     is_staff = serializers.BooleanField(source='proprietario.is_staff', read_only=True)
+    modelli_aura = ModelloAuraSerializer(many=True, read_only=True)
 
     class Meta:
         model = Personaggio
@@ -455,7 +456,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'log_eventi', 'movimenti_credito',
             'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese', 
             'TestoFormattatoPersonale',
-            'is_staff',
+            'is_staff', 'modelli_aura',
         )
     
     def get_oggetti(self, personaggio):
