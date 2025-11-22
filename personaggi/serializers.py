@@ -77,7 +77,7 @@ class ModelloAuraSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ModelloAura
-        fields = ('id', 'nome', 'mattoni_proibiti')
+        fields = ('id', 'nome', 'aura', 'mattoni_proibiti')
 
 class PunteggioDetailSerializer(serializers.ModelSerializer):
     icona_html = serializers.SerializerMethodField()
