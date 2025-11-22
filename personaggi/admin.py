@@ -271,7 +271,7 @@ class MattoneAdmin(A_Admin):
             form.base_fields['testo_addizionale'].help_text = Statistica.get_help_text_parametri(extras)
         return form
         
-    def get_exclude(self, request, obj=None): return ('tipo', 'descrizione', 'caratteristica_relativa')
+    def get_exclude(self, request, obj=None): return ('descrizione', 'caratteristica_relativa')
 
 @admin.register(Tier)
 class TierAdmin(A_Admin):
