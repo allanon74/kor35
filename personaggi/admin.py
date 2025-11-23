@@ -314,16 +314,21 @@ class ModelloAuraAdmin(admin.ModelAdmin):
         }),
         ('Doppia Formula', {
             'fields': ('usa_doppia_formula', 'elemento_secondario', 'usa_condizione_doppia'),
-            'description': "Impostazioni per mostrare una seconda formula fissa (es. Elemento del Modello)."
+            'description': "Impostazioni per mostrare una seconda formula fissa (es. Elemento del Modello).",
+            'classes': ('collapse', 'anchor-doppia')
         }),
         ('Formula per Caratteristica', {
             'fields': ('usa_formula_per_caratteristica', 'usa_condizione_caratt'),
-            'description': "Impostazioni per generare formule dinamiche basate sulle caratteristiche possedute dal personaggio."
+            'description': "Impostazioni per generare formule dinamiche basate sulle caratteristiche possedute dal personaggio.",
+            'classes': ('collapse', 'anchor-caratt')
         }),
     )
 
     # Aggiungiamo gli Inline definiti sopra
     inlines = [RequisitoDoppiaInline, RequisitoCarattInline]
+    
+    class Media:
+        js = ('admin/js/move_inlines.js',)
 
 @admin.register(Mattone)
 class MattoneAdmin(A_Admin):
