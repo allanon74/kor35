@@ -608,6 +608,7 @@ class Mattone(Punteggio):
         verbose_name = "Mattone"
         verbose_name_plural = "Mattoni"
         unique_together = ('aura', 'caratteristica_associata')
+        ordering = ['tipo', 'ordine', 'nome'] 
 
 class MattoneStatistica(CondizioneStatisticaMixin):
     mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
