@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", function() {
         var inlineGroup = $('#' + inlineId);
 
         if (fieldset.length && inlineGroup.length) {
+            inlineGroup.addClass('moved-inline');
             inlineGroup.appendTo(fieldset);
             inlineGroup.find('h2').hide();
         }

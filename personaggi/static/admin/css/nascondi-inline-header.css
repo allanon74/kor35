@@ -17,3 +17,25 @@
 fieldset.collapsed .inline-group {
     display: none !important;
 }
+
+fieldset.collapse .moved-inline {
+    margin-top: 15px;
+    border-top: 1px solid #eee; /* Una linea separatoria leggera */
+    padding-top: 10px;
+}
+
+/* Nascondi il titolo h2 dell'inline se vuoi che sembri un tutt'uno (Opzionale) */
+fieldset.collapse .moved-inline h2 {
+    font-size: 13px;
+    color: #666;
+    background: none;
+    padding-left: 0;
+}
+
+/* --- REGOLA FONDAMENTALE PER IL COLLASSO --- */
+/* Quando il fieldset ha la classe 'collapsed', nascondi tutto ciò che ha classe 'moved-inline' */
+fieldset.collapsed .moved-inline,
+fieldset.collapsed #modelloaurarequisitodoppia_set-group,
+fieldset.collapsed #modelloaurarequisitocaratt_set-group {
+    display: none !important;
+}
