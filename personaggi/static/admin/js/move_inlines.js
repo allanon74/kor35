@@ -1,40 +1,47 @@
 document.addEventListener("DOMContentLoaded", function() {
-    const $ = django.jQuery;
-
+    
     function moveAndBindInline(inlineId, anchorClass) {
-        var fieldset = $('fieldset.' + anchorClass);
-        // NOTA: Qui l'ID cambia perché nel models.py hai usato related_name
-        var inlineGroup = $('#' + inlineId);
+        // 1. Trova gli elementi usando Javascript puro
+        // Nota: getElementsByClassName restituisce una lista, prendiamo il primo elemento [0]
+        var fieldsets = document.getElementsByClassName(anchorClass);
+        var inlineGroup = document.getElementById(inlineId);
 
-        if (fieldset.length && inlineGroup.length) {
-            // 1. Spostamento
-            inlineGroup.addClass('moved-inline');
-            inlineGroup.appendTo(fieldset);
+        // Se uno dei due non esiste, ci fermiamo
+        if (fieldsets.length === 0 || !inlineGroup) {
+            console.warn('Elementi non trovati:', anchorClass, inlineId);
+            return;
+        }
 
-            // 2. Stato Iniziale
-            if (fieldset.hasClass('collapsed')) {
-                inlineGroup.hide();
+        var fieldset = fieldsets[0];
+
+        // 2. Aggiungi classe per il CSS e SPOSTA fisicamente l'elemento
+        inlineGroup.classList.add('moved-inline');
+        fieldset.appendChild(inlineGroup);
+
+        // 3. Funzione per gestire la visibilità
+        function updateVisibility() {
+            if (fieldset.classList.contains('collapsed')) {
+                inlineGroup.style.display = 'none';
+            } else {
+                inlineGroup.style.display = 'block';
             }
+        }
 
-            // 3. Gestione Click Mostra/Nascondi
-            fieldset.find('h2 .collapse-toggle').on('click', function(e) {
-                setTimeout(function() {
-                    if (fieldset.hasClass('collapsed')) {
-                        inlineGroup.slideUp(200);
-                    } else {
-                        inlineGroup.slideDown(200);
-                    }
-                }, 50);
+        // Stato iniziale
+        updateVisibility();
+
+        // 4. Intercetta il click sul titolo per sincronizzare l'apertura
+        // Cerca il link 'Show/Hide' o l'h2 che Django usa per il toggle
+        var toggleBtn = fieldset.querySelector('h2');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function() {
+                // Un piccolo timeout è necessario per dare tempo a Django di cambiare la classe
+                setTimeout(updateVisibility, 50);
             });
-        } else {
-            console.warn("Impossibile trovare fieldset o inline:", anchorClass, inlineId);
         }
     }
 
-    // USARE QUESTI NUOVI ID:
-    // ID derivato da related_name='req_doppia_rel'
+    // Eseguiamo lo spostamento per le due tabelle
     moveAndBindInline('req_doppia_rel-group', 'anchor-doppia');
-    
-    // ID derivato da related_name='req_caratt_rel'
     moveAndBindInline('req_caratt_rel-group', 'anchor-caratt');
 });
