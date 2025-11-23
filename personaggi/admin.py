@@ -282,12 +282,13 @@ class ModelloAuraAdmin(admin.ModelAdmin):
 @admin.register(Mattone)
 class MattoneAdmin(A_Admin):
     form = PunteggioAdminForm
-    list_display = ('nome', 'aura', 'caratteristica_associata', 'funzionamento_metatalento')
+    list_display = ('nome', 'aura', 'tipo', 'caratteristica_associata','ordine', )
+    list_editable = ('tipo', 'ordine',)
     list_filter = ('aura', 'caratteristica_associata'); search_fields = ('nome',); summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
     inlines = [MattoneStatisticaInline]
     
     fieldsets = (
-        ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
+        ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'ordine', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
         ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
         ('Sistema', {'fields': ('sigla',), 'classes': ('collapse',)})
     )
