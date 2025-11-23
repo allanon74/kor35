@@ -19,8 +19,8 @@ document.addEventListener("DOMContentLoaded", function() {
     // Devono corrispondere ai nomi dei modelli definiti in models.py (minuscoli)
     
     // Sposta la tabella RequisitoDoppia sotto il fieldset Doppia Formula
-    moveInline('modelloaurarequisitodoppia_set-group', 'anchor-doppia');
+    moveInline('req_doppia_rel-group', 'anchor-doppia');
 
     // Sposta la tabella RequisitoCaratt sotto il fieldset Formula Caratteristica
-    moveInline('modelloaurarequisitocaratt_set-group', 'anchor-caratt');
+    moveInline('req_caratt_rel-group', 'anchor-caratt');
 });
