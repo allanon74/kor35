@@ -13,9 +13,8 @@ from .models import (
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
     Infusione, Tessitura, InfusioneMattone, TessituraMattone,
     InfusioneStatisticaBase, TessituraStatisticaBase,
-    # InfusioneStatistica e TessituraStatistica rimosse come richiesto
     PersonaggioInfusione, PersonaggioTessitura, PersonaggioModelloAura,
-    PersonaggioAttivata, 
+    PersonaggioAttivata,
     InfusionePluginModel, TessituraPluginModel,
     Punteggio, punteggi_tipo, AURA, ELEMENTO, Statistica, 
     PuntiCaratteristicaMovimento, STATISTICA,
@@ -79,7 +78,6 @@ class A_Multi_Inline (admin.TabularInline):
     class Meta:
         abstract = True
 
-# MIXIN PER ICONE
 class IconaAdminMixin:
     def icona_html(self, obj): return obj.icona_html
     icona_html.short_description = "Icona"; icona_html.allow_tags = True
@@ -109,12 +107,9 @@ class abilita_prerequisiti_inline(A_Multi_Inline):
 class abilita_abilitati_inline(A_Multi_Inline):
     model = abilita_prerequisito; fk_name= "prerequisito"; autocomplete_fields=['abilita']
 
-# --- LOGICA PIVOT + VISUALIZZAZIONE CUSTOM ---
+# PIVOT LOGIC & VISUALIZZAZIONE
 
 class StatisticaPivotMixin:
-    """
-    Mixin che popola automaticamente le righe delle statistiche mancanti e gestisce la visualizzazione.
-    """
     readonly_fields = ('statistica_label',) 
     extra = 0
     
@@ -123,66 +118,37 @@ class StatisticaPivotMixin:
     default_source_field = 'valore_predefinito'
 
     def statistica_label(self, obj):
-        """
-        Renderizza il nome della statistica in GRASSETTO e PIÙ GRANDE.
-        Inoltre, inietta CSS per NASCONDERE l'header brutto 'MattoneStatistica object...' negli StackedInline.
-        """
-        if not obj or not obj.statistica:
-            return "-"
-        
-        # HTML per il nome della statistica (Leggibile e grande)
-        # Usiamo format_html per il nome per sicurezza
+        if not obj or not obj.statistica: return "-"
         label_html = format_html('<span style="font-size: 15px; font-weight: 800; color: #2c3e50;">{}</span>', obj.statistica.nome)
-        
-        # CSS per nascondere l'intestazione h3 degli StackedInline.
-        # Usiamo mark_safe perché è CSS statico e le graffe {} romperebbero format_html.
-        css_hide_header = mark_safe('<style>.inline-related h3 { display: none !important; } .inline-related { border: 1px solid #e0e0e0 !important; margin-bottom: 5px !important; }</style>')
-        
-        return label_html + css_hide_header
-    
+        css_hide = mark_safe('<style>.inline-related h3 { display: none !important; } .inline-related { border: 1px solid #eee !important; margin-bottom: 5px !important; padding-top: 10px !important; }</style>')
+        return label_html + css_hide
     statistica_label.short_description = "Statistica"
 
-    def has_delete_permission(self, request, obj=None):
-        return False 
-
-    def get_max_num(self, request, obj=None, **kwargs):
-        return Statistica.objects.count()
+    def has_delete_permission(self, request, obj=None): return False 
+    def get_max_num(self, request, obj=None, **kwargs): return Statistica.objects.count()
 
     def get_formset(self, request, obj=None, **kwargs):
         if obj is not None: 
             fk_name = self.fk_name
             all_stats = Statistica.objects.all()
-            
             existing_ids = self.model.objects.filter(**{fk_name: obj}).values_list('statistica_id', flat=True)
             missing_stats = all_stats.exclude(pk__in=existing_ids)
-            
             new_objs = []
             for stat in missing_stats:
                 default_val = getattr(stat, self.default_source_field, 0)
-                kwargs_init = {
-                    fk_name: obj,
-                    'statistica': stat,
-                    self.value_field: default_val
-                }
+                kwargs_init = { fk_name: obj, 'statistica': stat, self.value_field: default_val }
                 new_objs.append(self.model(**kwargs_init))
-            
-            if new_objs:
-                self.model.objects.bulk_create(new_objs)
-        
+            if new_objs: self.model.objects.bulk_create(new_objs)
         return super().get_formset(request, obj, **kwargs)
-    
-    class Media:
-        css = {'all': ('admin/css/nascondi-inline-header.css',)}
+    class Media: css = {'all': ('admin/css/nascondi-inline-header.css',)}
 
-# 1. PIVOT BASE (Tabular, Semplice)
+# 1. PIVOT BASE (Tabular)
 class StatisticaBasePivotInline(StatisticaPivotMixin, admin.TabularInline):
     verbose_name = "Statistica (Valore Base)"
     verbose_name_plural = "Statistiche (Valori Base)"
     value_field = 'valore_base'
     default_source_field = 'valore_base_predefinito'
-    
-    def get_fields(self, request, obj=None):
-        return ('statistica_label', self.value_field)
+    def get_fields(self, request, obj=None): return ('statistica_label', self.value_field)
 
 # 2. PIVOT MODIFICATORE (Stacked, Condizionale)
 class StatisticaModificatorePivotInline(StatisticaPivotMixin, admin.StackedInline):
@@ -190,63 +156,48 @@ class StatisticaModificatorePivotInline(StatisticaPivotMixin, admin.StackedInlin
     verbose_name_plural = "Statistiche (Modificatori)"
     value_field = 'valore'
     default_source_field = 'valore_predefinito'
-    
     filter_horizontal = ('limit_a_aure', 'limit_a_elementi') 
-    
     fieldsets = (
-        (None, {
-            'fields': (('statistica_label', 'valore', 'tipo_modificatore'),)
-        }),
+        (None, {'fields': (('statistica_label', 'valore', 'tipo_modificatore'),)}),
         ('Condizioni di Applicazione', {
             'classes': ('collapse',),
             'fields': (
                 ('usa_limitazione_aura', 'limit_a_aure'), 
-                ('usa_limitazione_elemento', 'limit_a_elementi')
+                ('usa_limitazione_elemento', 'limit_a_elementi'),
+                ('usa_condizione_text', 'condizione_text')
             ),
-            'description': "Se i flag sono attivi, il modificatore si applicherà SOLO se l'oggetto/tecnica corrisponde alle aure/elementi indicati."
+            'description': "Se i flag sono attivi, il modificatore si applicherà SOLO se la condizione è soddisfatta."
         }),
     )
 
 # --- IMPLEMENTAZIONI INLINE ---
 
-# Abilita: Solo Modificatori
 class AbilitaStatisticaInline(StatisticaModificatorePivotInline):
     model = AbilitaStatistica; form = AbilitaStatisticaForm; fk_name = 'abilita'
 
-# Mattone: Solo Modificatori
 class MattoneStatisticaInline(StatisticaModificatorePivotInline):
     model = MattoneStatistica; form = MattoneStatisticaForm; fk_name = 'mattone'
 
 class MattoneInlineForAura(admin.TabularInline):
     model = Mattone; fk_name = 'aura'; extra = 1; fields = ('nome', 'caratteristica_associata', 'funzionamento_metatalento'); show_change_link = True
 
-# Oggetto: Entrambe
 class OggettoStatisticaBaseInline(StatisticaBasePivotInline):
     model = OggettoStatisticaBase; form = OggettoStatisticaBaseForm; fk_name = 'oggetto'
 
 class OggettoStatisticaInline(StatisticaModificatorePivotInline):
     model = OggettoStatistica; form = OggettoStatisticaForm; fk_name = 'oggetto'
 
-# Infusione: Solo Base
 class InfusioneStatisticaBaseInline(StatisticaBasePivotInline):
     model = InfusioneStatisticaBase; form = InfusioneStatisticaBaseForm; fk_name = 'infusione'
 
-# Tessitura: Solo Base
 class TessituraStatisticaBaseInline(StatisticaBasePivotInline):
     model = TessituraStatisticaBase; form = TessituraStatisticaBaseForm; fk_name = 'tessitura'
 
-# Legacy
 class AttivataStatisticaBaseInline(StatisticaBasePivotInline):
     model = AttivataStatisticaBase; form = AttivataStatisticaBaseForm; fk_name = 'attivata'
 
 
 # --- ALTRE INLINE ---
-
-class CaratteristicaModificatoreInline(admin.TabularInline):
-    model = CaratteristicaModificatore; fk_name = "caratteristica"; extra = 1
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "statistica_modificata": kwargs["queryset"] = Statistica.objects.all()
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 class CreditoMovimentoInline(admin.TabularInline):
     model = CreditoMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
@@ -271,7 +222,6 @@ class InfusioneMattoneInline(admin.TabularInline):
     model = InfusioneMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
 class TessituraMattoneInline(admin.TabularInline):
     model = TessituraMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
-    
 class PunteggioAttivataInline(admin.TabularInline):
     model = Attivata.elementi.through; extra = 1; verbose_name = "Elemento"
 
@@ -279,7 +229,6 @@ class PunteggioAttivataInline(admin.TabularInline):
 # Helpers Testo
 def get_statistica_base_help_text():
     return Statistica.get_help_text_parametri()
-
 def get_mattone_help_text():
     extras = [('{caratt}', 'Valore Caratteristica'), ('{3*caratt}', 'Moltiplicatore (es. 3x)')]
     return Statistica.get_help_text_parametri(extras)
@@ -297,7 +246,6 @@ class AbilitaAdmin(A_Admin):
     list_editable = ('costo_pc', 'costo_crediti')
     summernote_fields = ['descrizione']
     search_fields = ['nome', 'descrizione']
-    # ABILITA HA SOLO MODIFICATORI
     inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline)
     save_as = True; exclude = ('statistiche',)
 
@@ -336,7 +284,6 @@ class MattoneAdmin(A_Admin):
     form = PunteggioAdminForm
     list_display = ('nome', 'aura', 'caratteristica_associata', 'funzionamento_metatalento')
     list_filter = ('aura', 'caratteristica_associata'); search_fields = ('nome',); summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
-    # MATTONE HA SOLO MODIFICATORI
     inlines = [MattoneStatisticaInline]
     
     fieldsets = (
@@ -346,8 +293,7 @@ class MattoneAdmin(A_Admin):
     )
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if 'testo_addizionale' in form.base_fields:
-             form.base_fields['testo_addizionale'].help_text = get_mattone_help_text()
+        if 'testo_addizionale' in form.base_fields: form.base_fields['testo_addizionale'].help_text = get_mattone_help_text()
         return form
     def get_exclude(self, request, obj=None): return ('descrizione', 'caratteristica_relativa')
 
