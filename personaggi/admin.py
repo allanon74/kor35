@@ -329,6 +329,9 @@ class ModelloAuraAdmin(admin.ModelAdmin):
     
     class Media:
         js = ('admin/js/move_inlines.js',)
+        css = {
+         'all': ('admin/css/nascondi-inline-header.css',)
+    }
 
 @admin.register(Mattone)
 class MattoneAdmin(A_Admin):
