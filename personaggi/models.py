@@ -255,7 +255,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 if t in ['+', '-']: op = t
                 else:
                     base = base_values.get(t, 0)
-                    mods = mods_attivi.get(t, {'add': 0, 'mol': 1.0})
+                    mods = mods_attivi.get(t, {'add': 0.0, 'mol': 1.0})
                     val = (base + mods['add']) * mods['mol']
                     if op == '+': total += val
                     elif op == '-': total -= val
@@ -1151,11 +1151,14 @@ class Personaggio(Inventario):
         mods = {}
         def _add(p, t, v):
             if not p: return
-            if p not in mods: mods[p] = {'add': 0, 'mol': 1.0}
-            if t == MODIFICATORE_ADDITIVO: mods[p]['add'] += v
-            elif t == MODIFICATORE_MOLTIPLICATIVO: mods[p]['mol'] *= float(v)
-        for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
-        for l in OggettoStatistica.objects.filter(oggetto__tracciamento_inventario__inventario=self.inventario_ptr, oggetto__tracciamento_inventario__data_fine__isnull=True).select_related('statistica'): _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+            if p not in mods: mods[p] = {'add': 0.0, 'mol': 1.0}
+            valore = float(v)
+            if t == MODIFICATORE_ADDITIVO: mods[p]['add'] += valore
+            elif t == MODIFICATORE_MOLTIPLICATIVO: mods[p]['mol'] *= valore 
+        for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): 
+            _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+        for l in OggettoStatistica.objects.filter(oggetto__tracciamento_inventario__inventario=self.inventario_ptr, oggetto__tracciamento_inventario__data_fine__isnull=True).select_related('statistica'): 
+            _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
         cb = self.caratteristiche_base
         if cb:
             for l in CaratteristicaModificatore.objects.filter(caratteristica__nome__in=cb.keys()).select_related('caratteristica', 'statistica_modificata'):
