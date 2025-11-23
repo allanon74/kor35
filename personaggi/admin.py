@@ -24,7 +24,9 @@ from .models import (
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
     abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore,
     TransazioneSospesa, STATO_TRANSAZIONE_CHOICES, STATO_TRANSAZIONE_IN_ATTESA, 
-    STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA
+    STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA,
+    ModelloAuraRequisitoDoppia, 
+    ModelloAuraRequisitoCaratt,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -225,6 +227,20 @@ class TessituraMattoneInline(admin.TabularInline):
 class PunteggioAttivataInline(admin.TabularInline):
     model = Attivata.elementi.through; extra = 1; verbose_name = "Elemento"
 
+class RequisitoDoppiaInline(admin.TabularInline):
+    model = ModelloAuraRequisitoDoppia
+    extra = 1 # Numero di righe vuote da mostrare
+    verbose_name = "Condizione per Doppia Formula"
+    verbose_name_plural = "Condizioni per Doppia Formula"
+    autocomplete_fields = ['requisito'] # Consigliato se hai molti punteggi
+
+class RequisitoCarattInline(admin.TabularInline):
+    model = ModelloAuraRequisitoCaratt
+    extra = 1
+    verbose_name = "Condizione per F. Caratteristica"
+    verbose_name_plural = "Condizioni per F. Caratteristica"
+    autocomplete_fields = ['requisito']
+
 
 # Helpers Testo
 def get_statistica_base_help_text():
@@ -277,9 +293,37 @@ class AuraAdmin(IconaAdminMixin, A_Admin):
 
 @admin.register(ModelloAura)
 class ModelloAuraAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'aura')
+    list_display = ('nome', 'aura', 'usa_doppia_formula', 'usa_formula_per_caratteristica')
     list_filter = ('aura',)
-    filter_horizontal = ('mattoni_proibiti', 'mattoni_obbligatori',)
+    search_fields = ('nome',)
+    
+    # Campi ManyToMany semplici (senza valore extra) gestiti con widget orizzontale
+    filter_horizontal = ('mattoni_proibiti', 'mattoni_obbligatori')
+    
+    # Campi per l'autocompletamento (opzionale, migliora performance se hai tanti elementi)
+    autocomplete_fields = ['aura', 'elemento_secondario']
+
+    # Organizzazione dei campi in sezioni (Fieldsets) per pulizia
+    fieldsets = (
+        (None, {
+            'fields': ('nome', 'aura')
+        }),
+        ('Limitazioni Mattoni', {
+            'fields': ('mattoni_proibiti', 'mattoni_obbligatori'),
+            'classes': ('collapse',), # Rende la sezione chiudibile
+        }),
+        ('Doppia Formula', {
+            'fields': ('usa_doppia_formula', 'elemento_secondario', 'usa_condizione_doppia'),
+            'description': "Impostazioni per mostrare una seconda formula fissa (es. Elemento del Modello)."
+        }),
+        ('Formula per Caratteristica', {
+            'fields': ('usa_formula_per_caratteristica', 'usa_condizione_caratt'),
+            'description': "Impostazioni per generare formule dinamiche basate sulle caratteristiche possedute dal personaggio."
+        }),
+    )
+
+    # Aggiungiamo gli Inline definiti sopra
+    inlines = [RequisitoDoppiaInline, RequisitoCarattInline]
 
 @admin.register(Mattone)
 class MattoneAdmin(A_Admin):
