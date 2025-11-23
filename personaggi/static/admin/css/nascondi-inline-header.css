@@ -24,13 +24,6 @@ fieldset.collapse .moved-inline {
     padding-top: 10px;
 }
 
-fieldset .moved-inline {
-    margin-top: 15px;
-    padding-top: 10px;
-    border-top: 1px solid #eee;
-    clear: both;
-}
-
 /* Nascondi il titolo h2 dell'inline se vuoi che sembri un tutt'uno (Opzionale) */
 fieldset.collapse .moved-inline h2 {
     font-size: 13px;
@@ -44,35 +37,5 @@ fieldset.collapse .moved-inline h2 {
 fieldset.collapsed .moved-inline,
 fieldset.collapsed #req_doppia_rel-group,
 fieldset.collapsed #req_caratt_rel-group {
-    display: none !important;
-}
-
-/* Spaziatura e separazione quando la tabella è dentro il fieldset */
-fieldset .moved-inline {
-    margin-top: 20px;
-    border-top: 1px solid var(--admin-interface-module-background-color, #444); /* Usa colore del tema o grigio */
-    padding-top: 15px;
-    clear: both;
-    width: 100%;
-}
-
-/* Corregge eventuali margini negativi del tema admin-interface */
-fieldset .moved-inline .inline-related {
-    border: none;
-    box-shadow: none;
-}
-
-/* Nascondi il titolo della tabella se ridondante (opzionale) */
-fieldset .moved-inline h2 {
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 10px;
-    background: transparent !important; /* Rimuove sfondo blu/scuro dai titoli interni */
-    padding-left: 0;
-}
-
-/* ASSICURAZIONE EXTRA: Se il fieldset è chiuso, nascondi la tabella */
-fieldset.collapsed .moved-inline {
     display: none !important;
 }

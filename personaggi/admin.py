@@ -310,17 +310,23 @@ class ModelloAuraAdmin(admin.ModelAdmin):
         }),
         ('Limitazioni Mattoni', {
             'fields': ('mattoni_proibiti', 'mattoni_obbligatori'),
-            'classes': ('collapse',), # Rende la sezione chiudibile
+            # 'classes': ('collapse',), # Rende la sezione chiudibile
         }),
         ('Doppia Formula', {
             'fields': ('usa_doppia_formula', 'elemento_secondario', 'usa_condizione_doppia'),
             'description': "Impostazioni per mostrare una seconda formula fissa (es. Elemento del Modello).",
-            'classes': ('collapse', 'anchor-doppia')
+            'classes': (
+                # 'collapse', 
+                'anchor-doppia',
+                )
         }),
         ('Formula per Caratteristica', {
             'fields': ('usa_formula_per_caratteristica', 'usa_condizione_caratt'),
             'description': "Impostazioni per generare formule dinamiche basate sulle caratteristiche possedute dal personaggio.",
-            'classes': ('collapse', 'anchor-caratt')
+            'classes': (
+                # 'collapse', 
+                'anchor-caratt',
+                )
         }),
     )
 

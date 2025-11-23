@@ -1,47 +1,28 @@
 document.addEventListener("DOMContentLoaded", function() {
-    
-    function moveAndBindInline(inlineId, anchorClass) {
-        // 1. Trova gli elementi usando Javascript puro
-        // Nota: getElementsByClassName restituisce una lista, prendiamo il primo elemento [0]
-        var fieldsets = document.getElementsByClassName(anchorClass);
-        var inlineGroup = document.getElementById(inlineId);
+    const $ = django.jQuery;
 
-        // Se uno dei due non esiste, ci fermiamo
-        if (fieldsets.length === 0 || !inlineGroup) {
-            console.warn('Elementi non trovati:', anchorClass, inlineId);
-            return;
-        }
+    // Funzione helper per spostare l'inline dopo il fieldset
+    function moveInline(inlineId, anchorClass) {
+        // Trova il fieldset che ha la nostra classe specifica
+        var fieldset = $('fieldset.' + anchorClass);
+        // Trova il gruppo inline (Django assegna ID basati sul nome del modello M2M)
+        // Nota: Gli ID sono tutti minuscoli
+        var inlineGroup = $('#' + inlineId);
 
-        var fieldset = fieldsets[0];
-
-        // 2. Aggiungi classe per il CSS e SPOSTA fisicamente l'elemento
-        inlineGroup.classList.add('moved-inline');
-        fieldset.appendChild(inlineGroup);
-
-        // 3. Funzione per gestire la visibilità
-        function updateVisibility() {
-            if (fieldset.classList.contains('collapsed')) {
-                inlineGroup.style.display = 'none';
-            } else {
-                inlineGroup.style.display = 'block';
-            }
-        }
-
-        // Stato iniziale
-        updateVisibility();
-
-        // 4. Intercetta il click sul titolo per sincronizzare l'apertura
-        // Cerca il link 'Show/Hide' o l'h2 che Django usa per il toggle
-        var toggleBtn = fieldset.querySelector('h2');
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', function() {
-                // Un piccolo timeout è necessario per dare tempo a Django di cambiare la classe
-                setTimeout(updateVisibility, 50);
-            });
+        if (fieldset.length && inlineGroup.length) {
+            inlineGroup.addClass('moved-inline');
+            inlineGroup.appendTo(fieldset);
+            inlineGroup.find('h2').hide();
         }
     }
 
-    // Eseguiamo lo spostamento per le due tabelle
-    moveAndBindInline('req_doppia_rel-group', 'anchor-doppia');
-    moveAndBindInline('req_caratt_rel-group', 'anchor-caratt');
+    // Eseguiamo lo spostamento.
+    // Gli ID degli inline group in Django sono tipicamente: #nometabella_set-group
+    // Devono corrispondere ai nomi dei modelli definiti in models.py (minuscoli)
+    
+    // Sposta la tabella RequisitoDoppia sotto il fieldset Doppia Formula
+    moveInline('req_doppia_rel-group', 'anchor-doppia');
+
+    // Sposta la tabella RequisitoCaratt sotto il fieldset Formula Caratteristica
+    moveInline('req_caratt_rel-group', 'anchor-caratt');
 });
