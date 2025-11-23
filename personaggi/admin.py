@@ -340,7 +340,7 @@ class MattoneAdmin(A_Admin):
     inlines = [MattoneStatisticaInline]
     
     fieldsets = (
-        ('Dati Mattone', {'fields': ('nome', 'aura', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
+        ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
         ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
         ('Sistema', {'fields': ('sigla',), 'classes': ('collapse',)})
     )
@@ -349,7 +349,7 @@ class MattoneAdmin(A_Admin):
         if 'testo_addizionale' in form.base_fields:
              form.base_fields['testo_addizionale'].help_text = get_mattone_help_text()
         return form
-    def get_exclude(self, request, obj=None): return ('tipo', 'descrizione', 'caratteristica_relativa')
+    def get_exclude(self, request, obj=None): return ('descrizione', 'caratteristica_relativa')
 
 @admin.register(Tier)
 class TierAdmin(A_Admin):
