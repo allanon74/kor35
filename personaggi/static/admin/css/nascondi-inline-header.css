@@ -24,6 +24,13 @@ fieldset.collapse .moved-inline {
     padding-top: 10px;
 }
 
+fieldset .moved-inline {
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+    clear: both;
+}
+
 /* Nascondi il titolo h2 dell'inline se vuoi che sembri un tutt'uno (Opzionale) */
 fieldset.collapse .moved-inline h2 {
     font-size: 13px;
@@ -39,3 +46,4 @@ fieldset.collapsed #req_doppia_rel-group,
 fieldset.collapsed #req_caratt_rel-group {
     display: none !important;
 }
+

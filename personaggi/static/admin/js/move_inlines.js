@@ -1,28 +1,40 @@
 document.addEventListener("DOMContentLoaded", function() {
     const $ = django.jQuery;
 
-    // Funzione helper per spostare l'inline dopo il fieldset
-    function moveInline(inlineId, anchorClass) {
-        // Trova il fieldset che ha la nostra classe specifica
+    function moveAndBindInline(inlineId, anchorClass) {
         var fieldset = $('fieldset.' + anchorClass);
-        // Trova il gruppo inline (Django assegna ID basati sul nome del modello M2M)
-        // Nota: Gli ID sono tutti minuscoli
+        // NOTA: Qui l'ID cambia perché nel models.py hai usato related_name
         var inlineGroup = $('#' + inlineId);
 
         if (fieldset.length && inlineGroup.length) {
+            // 1. Spostamento
             inlineGroup.addClass('moved-inline');
             inlineGroup.appendTo(fieldset);
-            inlineGroup.find('h2').hide();
+
+            // 2. Stato Iniziale
+            if (fieldset.hasClass('collapsed')) {
+                inlineGroup.hide();
+            }
+
+            // 3. Gestione Click Mostra/Nascondi
+            fieldset.find('h2 .collapse-toggle').on('click', function(e) {
+                setTimeout(function() {
+                    if (fieldset.hasClass('collapsed')) {
+                        inlineGroup.slideUp(200);
+                    } else {
+                        inlineGroup.slideDown(200);
+                    }
+                }, 50);
+            });
+        } else {
+            console.warn("Impossibile trovare fieldset o inline:", anchorClass, inlineId);
         }
     }
 
-    // Eseguiamo lo spostamento.
-    // Gli ID degli inline group in Django sono tipicamente: #nometabella_set-group
-    // Devono corrispondere ai nomi dei modelli definiti in models.py (minuscoli)
+    // USARE QUESTI NUOVI ID:
+    // ID derivato da related_name='req_doppia_rel'
+    moveAndBindInline('req_doppia_rel-group', 'anchor-doppia');
     
-    // Sposta la tabella RequisitoDoppia sotto il fieldset Doppia Formula
-    moveInline('req_doppia_rel-group', 'anchor-doppia');
-
-    // Sposta la tabella RequisitoCaratt sotto il fieldset Formula Caratteristica
-    moveInline('req_caratt_rel-group', 'anchor-caratt');
+    // ID derivato da related_name='req_caratt_rel'
+    moveAndBindInline('req_caratt_rel-group', 'anchor-caratt');
 });
