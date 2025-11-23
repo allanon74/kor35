@@ -35,7 +35,7 @@ fieldset.collapse .moved-inline h2 {
 /* --- REGOLA FONDAMENTALE PER IL COLLASSO --- */
 /* Quando il fieldset ha la classe 'collapsed', nascondi tutto ciò che ha classe 'moved-inline' */
 fieldset.collapsed .moved-inline,
-fieldset.collapsed #modelloaurarequisitodoppia_set-group,
-fieldset.collapsed #modelloaurarequisitocaratt_set-group {
+fieldset.collapsed #req_doppia_rel-group,
+fieldset.collapsed #req_caratt_rel-group {
     display: none !important;
 }
