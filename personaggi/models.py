@@ -632,6 +632,24 @@ class Aura(Punteggio):
         self.type = AURA
         super().save(*args, **kwargs)
 
+class ModelloAuraRequisitoDoppia(models.Model):
+    modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_doppia_rel')
+    requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
+    valore = models.IntegerField(default=1)
+
+    class Meta:
+        verbose_name = "Requisito Doppia Formula"
+        verbose_name_plural = "Requisiti Doppia Formula"
+
+class ModelloAuraRequisitoCaratt(models.Model):
+    modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_caratt_rel')
+    requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
+    valore = models.IntegerField(default=1)
+
+    class Meta:
+        verbose_name = "Requisito Formula x Caratteristica"
+        verbose_name_plural = "Requisiti Formula x Caratteristica"
+
 class ModelloAura(models.Model):
     aura = models.ForeignKey(
         Punteggio, 
@@ -656,6 +674,39 @@ class ModelloAura(models.Model):
         verbose_name="Mattoni Obbligatori",
         help_text="Le tessiture DEVONO contenere almeno uno di questi mattoni per poter essere apprese."
     )
+    
+    # --- DOPPIA FORMULA ---
+    usa_doppia_formula = models.BooleanField(default=False, verbose_name="Abilita Doppia Formula")
+    elemento_secondario = models.ForeignKey(
+        Punteggio, on_delete=models.SET_NULL, null=True, blank=True,
+        limit_choices_to={'tipo': ELEMENTO}, related_name="modelli_secondari"
+    )
+    
+    # Condizionale Doppia Formula
+    usa_condizione_doppia = models.BooleanField(
+        default=False, 
+        verbose_name="Richiede Condizione per Doppia",
+        help_text="Se attivo, la doppia formula appare solo se i requisiti sotto sono soddisfatti."
+    )
+    requisiti_doppia = models.ManyToManyField(
+        Punteggio, through=ModelloAuraRequisitoDoppia, blank=True, related_name="modelli_req_doppia"
+    )
+
+    # --- FORMULA PER CARATTERISTICA ---
+    usa_formula_per_caratteristica = models.BooleanField(
+        default=False, verbose_name="Abilita Formula per Caratteristica"
+    )
+    
+    # Condizionale Formula Caratteristica
+    usa_condizione_caratt = models.BooleanField(
+        default=False, 
+        verbose_name="Richiede Condizione per F. Caratt.",
+        help_text="Se attivo, le formule extra appaiono solo se i requisiti sotto sono soddisfatti."
+    )
+    requisiti_caratt = models.ManyToManyField(
+        Punteggio, through=ModelloAuraRequisitoCaratt, blank=True, related_name="modelli_req_caratt"
+    )
+    
     class Meta:
         verbose_name = "Modello di Aura"
         verbose_name_plural = "Modelli di Aura"
@@ -1116,24 +1167,174 @@ class Personaggio(Inventario):
         return mods
 
     def get_testo_formattato_per_item(self, item):
+        """
+        Genera il testo formattato (descrizione + formule) per un dato item (Oggetto, Tecnica, etc.)
+        considerando il contesto del personaggio (statistiche, aura, elementi).
+        """
         if not item: return ""
-        ctx = {}
-        stats = []
-        item_mods = []
-        formula = getattr(item, 'formula', None)
+        
+        # --- LOGICA OGGETTO ---
         if isinstance(item, Oggetto):
             stats = item.oggettostatisticabase_set.select_related('statistica').all()
             item_mods = item.oggettostatistica_set.select_related('statistica').all()
             ctx = {'livello': item.livello, 'aura': item.aura, 'item_modifiers': item_mods}
+            return formatta_testo_generico(
+                item.testo, 
+                formula=getattr(item, 'formula', None), 
+                statistiche_base=stats, 
+                personaggio=self, 
+                context=ctx
+            )
+            
+        # --- LOGICA INFUSIONE ---
         elif isinstance(item, Infusione):
             stats = item.infusionestatisticabase_set.select_related('statistica').all()
             ctx = {'livello': item.livello, 'aura': item.aura_richiesta}
-        elif isinstance(item, Tessitura):
-            stats = item.tessiturastatisticabase_set.select_related('statistica').all()
-            ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+            return formatta_testo_generico(
+                item.testo, 
+                statistiche_base=stats, 
+                personaggio=self, 
+                context=ctx
+            )
+
+        # --- LOGICA ATTIVATA ---
         elif isinstance(item, Attivata):
             stats = item.attivatastatisticabase_set.select_related('statistica').all()
-        return formatta_testo_generico(item.testo, formula=formula, statistiche_base=stats, personaggio=self, context=ctx)
+            return formatta_testo_generico(
+                item.testo, 
+                statistiche_base=stats, 
+                personaggio=self
+            )
+
+        # --- LOGICA TESSITURA (Avanzata: Multi-Formula) ---
+        elif isinstance(item, Tessitura):
+            stats = item.tessiturastatisticabase_set.select_related('statistica').all()
+            modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
+            
+            # Usiamo un dizionario {ID_Elemento: Oggetto_Elemento} per evitare duplicati
+            elementi_map = {} 
+            
+            # 1. Elemento Principale della Tessitura (se esiste)
+            if item.elemento_principale:
+                elementi_map[item.elemento_principale.id] = item.elemento_principale
+            
+            # 2. Logica Modello Aura (Elementi Aggiuntivi)
+            if modello:
+                # Carichiamo i punteggi base una volta sola per efficienza
+                punteggi_pg = self.punteggi_base 
+
+                # Helper interno per verificare le condizioni (Punteggio >= Valore)
+                def verifica_requisiti(requisiti_queryset):
+                    for req_link in requisiti_queryset:
+                        nome_req = req_link.requisito.nome
+                        valore_posseduto = punteggi_pg.get(nome_req, 0)
+                        if valore_posseduto < req_link.valore:
+                            return False
+                    return True
+
+                # A. Doppia Formula
+                if modello.usa_doppia_formula and modello.elemento_secondario:
+                    attiva_doppia = True
+                    if modello.usa_condizione_doppia:
+                        attiva_doppia = verifica_requisiti(modello.req_doppia_rel.select_related('requisito').all())
+                    
+                    if attiva_doppia:
+                        elementi_map[modello.elemento_secondario.id] = modello.elemento_secondario
+
+                # B. Formula per Caratteristica
+                if modello.usa_formula_per_caratteristica:
+                    attiva_caratt = True
+                    if modello.usa_condizione_caratt:
+                        attiva_caratt = verifica_requisiti(modello.req_caratt_rel.select_related('requisito').all())
+                    
+                    if attiva_caratt:
+                        # Trova tutti gli elementi la cui caratteristica relativa è posseduta dal PG (>0)
+                        elementi_extra = Punteggio.objects.filter(
+                            tipo=ELEMENTO, 
+                            caratteristica_relativa__nome__in=punteggi_pg.keys()
+                        )
+                        for el in elementi_extra:
+                            if punteggi_pg.get(el.caratteristica_relativa.nome, 0) > 0:
+                                elementi_map[el.id] = el
+
+            # Lista definitiva degli elementi da calcolare
+            elementi_da_calcolare = list(elementi_map.values())
+
+            # Se non ci sono elementi (tessitura generica), fallback standard
+            if not elementi_da_calcolare:
+                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None}
+                return formatta_testo_generico(
+                    item.testo, 
+                    formula=item.formula, 
+                    statistiche_base=stats, 
+                    personaggio=self, 
+                    context=ctx
+                )
+
+            # 3. Generazione Output Combinato
+            
+            # A. Descrizione Testuale (usando l'elemento principale come contesto base)
+            ctx_base = {
+                'livello': item.livello, 
+                'aura': item.aura_richiesta, 
+                'elemento': item.elemento_principale
+            }
+            descrizione_html = formatta_testo_generico(
+                item.testo, 
+                formula=None, # Non stampiamo la formula qui
+                statistiche_base=stats, 
+                personaggio=self, 
+                context=ctx_base
+            )
+            
+            # B. Loop Formule per ogni Elemento
+            formule_html = []
+            for elem in elementi_da_calcolare:
+                val_caratt = 0
+                if elem.caratteristica_relativa:
+                    val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0)
+                
+                ctx_loop = {
+                    'livello': item.livello, 
+                    'aura': item.aura_richiesta, 
+                    'elemento': elem,
+                    'caratteristica_associata_valore': val_caratt
+                }
+                
+                # Calcoliamo solo la formula, passando None come testo
+                risultato_formula = formatta_testo_generico(
+                    None, 
+                    formula=item.formula, 
+                    statistiche_base=stats, 
+                    personaggio=self, 
+                    context=ctx_loop
+                )
+                
+                # Pulizia stringa: formatta_testo_generico aggiunge "<strong>Formula:</strong>" che qui è ridondante
+                valore_pura_formula = risultato_formula.replace("<strong>Formula:</strong>", "").strip()
+                
+                if valore_pura_formula:
+                    # Styling del blocco formula
+                    style_container = f"margin-top: 4px; padding: 4px 8px; border-left: 3px solid {elem.colore}; background-color: rgba(255,255,255,0.05); border-radius: 0 4px 4px 0;"
+                    style_label = f"color: {elem.colore}; font-weight: bold; margin-right: 6px;"
+                    
+                    block = (
+                        f"<div style='{style_container}'>"
+                        f"<span style='{style_label}'>{elem.nome}:</span>{valore_pura_formula}"
+                        f"</div>"
+                    )
+                    formule_html.append(block)
+
+            # Assemblaggio Finale
+            if formule_html:
+                separator = "<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/>"
+                sezione_formule = "".join(formule_html)
+                return f"{descrizione_html}{separator}<div style='font-size: 0.95em;'><strong>Formule di Infusione:</strong>{sezione_formule}</div>"
+            
+            return descrizione_html
+
+        return ""
+        
 
 class PersonaggioAbilita(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)

@@ -8,7 +8,7 @@ from decimal import Decimal
 
 # Importa i modelli e le funzioni helper
 from .models import (
-    AbilitaStatistica, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
+    AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
     Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
     abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
     Oggetto, Attivata, Manifesto, A_vista, 
@@ -20,6 +20,7 @@ from .models import (
     OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
     CreditoMovimento, PersonaggioLog, TransazioneSospesa,
     Gruppo, Messaggio,
+    ModelloAuraRequisitoCaratt, ModelloAuraRequisitoDoppia,
 )
 
 # --- Serializer di Base ---
@@ -655,3 +656,38 @@ class MessaggioBroadcastCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Messaggio
         fields = ('titolo', 'testo', 'salva_in_cronologia')
+        
+
+# Serializer per i requisiti condizionali
+class ModelloAuraRequisitoDoppiaSerializer(serializers.ModelSerializer):
+    requisito = PunteggioSmallSerializer(read_only=True)
+    class Meta:
+        model = ModelloAuraRequisitoDoppia
+        fields = ('requisito', 'valore')
+
+class ModelloAuraRequisitoCarattSerializer(serializers.ModelSerializer):
+    requisito = PunteggioSmallSerializer(read_only=True)
+    class Meta:
+        model = ModelloAuraRequisitoCaratt
+        fields = ('requisito', 'valore')
+
+class ModelloAuraSerializer(serializers.ModelSerializer):
+    mattoni_proibiti = PunteggioSmallSerializer(many=True, read_only=True)
+    elemento_secondario = PunteggioSmallSerializer(read_only=True)
+    
+    # Campi nidificati per i requisiti
+    requisiti_doppia = ModelloAuraRequisitoDoppiaSerializer(source='req_doppia_rel', many=True, read_only=True)
+    requisiti_caratt = ModelloAuraRequisitoCarattSerializer(source='req_caratt_rel', many=True, read_only=True)
+
+    class Meta:
+        model = ModelloAura
+        fields = (
+            'id', 'nome', 'aura', 
+            'mattoni_proibiti', 'mattoni_obbligatori',
+            # Doppia Formula
+            'usa_doppia_formula', 'elemento_secondario', 
+            'usa_condizione_doppia', 'requisiti_doppia',
+            # Formula Caratteristica
+            'usa_formula_per_caratteristica', 
+            'usa_condizione_caratt', 'requisiti_caratt'
+        )
