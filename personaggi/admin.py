@@ -115,7 +115,6 @@ class StatisticaPivotMixin:
     """
     Mixin che popola automaticamente le righe delle statistiche mancanti e gestisce la visualizzazione.
     """
-    # Usiamo statistica_label invece di statistica raw per applicare stili
     readonly_fields = ('statistica_label',) 
     extra = 0
     
@@ -131,14 +130,15 @@ class StatisticaPivotMixin:
         if not obj or not obj.statistica:
             return "-"
         
-        # HTML per il nome della statistica (Goal 2: Leggibile e grande)
-        label_html = f'<span style="font-size: 15px; font-weight: 800; color: #2c3e50;">{obj.statistica.nome}</span>'
+        # HTML per il nome della statistica (Leggibile e grande)
+        # Usiamo format_html per il nome per sicurezza
+        label_html = format_html('<span style="font-size: 15px; font-weight: 800; color: #2c3e50;">{}</span>', obj.statistica.nome)
         
-        # CSS Hack per nascondere l'intestazione h3 degli StackedInline (Goal 1: Far sparire la riga)
-        # .inline-related h3 è il selettore standard di Django Admin per il titolo del blocco
-        css_hide_header = '<style>.inline-related h3 { display: none !important; } .inline-related { border: 1px solid #e0e0e0 !important; margin-bottom: 5px !important; }</style>'
+        # CSS per nascondere l'intestazione h3 degli StackedInline.
+        # Usiamo mark_safe perché è CSS statico e le graffe {} romperebbero format_html.
+        css_hide_header = mark_safe('<style>.inline-related h3 { display: none !important; } .inline-related { border: 1px solid #e0e0e0 !important; margin-bottom: 5px !important; }</style>')
         
-        return format_html(label_html + css_hide_header)
+        return label_html + css_hide_header
     
     statistica_label.short_description = "Statistica"
 
@@ -182,7 +182,6 @@ class StatisticaBasePivotInline(StatisticaPivotMixin, admin.TabularInline):
     default_source_field = 'valore_base_predefinito'
     
     def get_fields(self, request, obj=None):
-        # Usiamo statistica_label per la visualizzazione custom
         return ('statistica_label', self.value_field)
 
 # 2. PIVOT MODIFICATORE (Stacked, Condizionale)
@@ -196,7 +195,6 @@ class StatisticaModificatorePivotInline(StatisticaPivotMixin, admin.StackedInlin
     
     fieldsets = (
         (None, {
-            # Usiamo statistica_label qui
             'fields': (('statistica_label', 'valore', 'tipo_modificatore'),)
         }),
         ('Condizioni di Applicazione', {
@@ -241,21 +239,41 @@ class TessituraStatisticaBaseInline(StatisticaBasePivotInline):
 class AttivataStatisticaBaseInline(StatisticaBasePivotInline):
     model = AttivataStatisticaBase; form = AttivataStatisticaBaseForm; fk_name = 'attivata'
 
-# Inlines Personaggio
-class CreditoMovimentoInline(admin.TabularInline): model = CreditoMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
-class PuntiCaratteristicaMovimentoInline(admin.TabularInline): model = PuntiCaratteristicaMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
-class PersonaggioLogInline(admin.TabularInline): model = PersonaggioLog; extra = 0; fields = ('testo_log', 'data'); readonly_fields = ('data',)
-class PersonaggioModelloAuraInline(admin.TabularInline): model = PersonaggioModelloAura; extra = 1; verbose_name = "Modello Aura Applicato"
 
-class PersonaggioInfusioneInline(admin.TabularInline): model = PersonaggioInfusione; extra = 1; autocomplete_fields = ['infusione']
-class PersonaggioTessituraInline(admin.TabularInline): model = PersonaggioTessitura; extra = 1; autocomplete_fields = ['tessitura']
-class PersonaggioAttivataInline(admin.TabularInline): model = PersonaggioAttivata; extra = 1; verbose_name = "Attivata (Legacy)"
+# --- ALTRE INLINE ---
 
-# Inlines Item components
-class PunteggioOggettoInline(admin.TabularInline): model = Oggetto.elementi.through; extra = 1; verbose_name_plural = "Elementi dell'Oggetto"
-class InfusioneMattoneInline(admin.TabularInline): model = InfusioneMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
-class TessituraMattoneInline(admin.TabularInline): model = TessituraMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
-class PunteggioAttivataInline(admin.TabularInline): model = Attivata.elementi.through; extra = 1; verbose_name = "Elemento"
+class CaratteristicaModificatoreInline(admin.TabularInline):
+    model = CaratteristicaModificatore; fk_name = "caratteristica"; extra = 1
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "statistica_modificata": kwargs["queryset"] = Statistica.objects.all()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+class CreditoMovimentoInline(admin.TabularInline):
+    model = CreditoMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
+class PuntiCaratteristicaMovimentoInline(admin.TabularInline):
+    model = PuntiCaratteristicaMovimento; extra = 1; fields = ('importo', 'descrizione', 'data'); readonly_fields = ('data',)
+class PersonaggioLogInline(admin.TabularInline):
+    model = PersonaggioLog; extra = 0; fields = ('testo_log', 'data'); readonly_fields = ('data',)
+class PersonaggioModelloAuraInline(admin.TabularInline):
+    model = PersonaggioModelloAura; extra = 1; verbose_name = "Modello Aura Applicato"
+
+class PersonaggioInfusioneInline(admin.TabularInline):
+    model = PersonaggioInfusione; extra = 1; autocomplete_fields = ['infusione']
+class PersonaggioTessituraInline(admin.TabularInline):
+    model = PersonaggioTessitura; extra = 1; autocomplete_fields = ['tessitura']
+    
+class PersonaggioAttivataInline(admin.TabularInline):
+    model = PersonaggioAttivata; extra = 1; verbose_name = "Attivata (Legacy)"
+
+class PunteggioOggettoInline(admin.TabularInline):
+    model = Oggetto.elementi.through; extra = 1; verbose_name_plural = "Elementi dell'Oggetto"
+class InfusioneMattoneInline(admin.TabularInline):
+    model = InfusioneMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
+class TessituraMattoneInline(admin.TabularInline):
+    model = TessituraMattone; extra = 1; autocomplete_fields = ['mattone']; ordering = ['ordine']
+    
+class PunteggioAttivataInline(admin.TabularInline):
+    model = Attivata.elementi.through; extra = 1; verbose_name = "Elemento"
 
 
 # Helpers Testo
@@ -279,6 +297,7 @@ class AbilitaAdmin(A_Admin):
     list_editable = ('costo_pc', 'costo_crediti')
     summernote_fields = ['descrizione']
     search_fields = ['nome', 'descrizione']
+    # ABILITA HA SOLO MODIFICATORI
     inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline)
     save_as = True; exclude = ('statistiche',)
 
@@ -317,6 +336,7 @@ class MattoneAdmin(A_Admin):
     form = PunteggioAdminForm
     list_display = ('nome', 'aura', 'caratteristica_associata', 'funzionamento_metatalento')
     list_filter = ('aura', 'caratteristica_associata'); search_fields = ('nome',); summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
+    # MATTONE HA SOLO MODIFICATORI
     inlines = [MattoneStatisticaInline]
     
     fieldsets = (
@@ -370,7 +390,7 @@ class OggettoAdmin(SModelAdmin):
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         if 'testo' in form.base_fields:
-             form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
+            form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
         return form
     
     def mostra_testo_formattato(self, obj):
@@ -435,7 +455,15 @@ class PersonaggioAdmin(A_Admin):
     list_display = ('nome', 'proprietario', 'tipologia', 'crediti', 'punti_caratteristica')
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
     list_filter = ('tipologia',); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
-    inlines = [PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline]
+    inlines = [
+        PersonaggioModelloAuraInline, 
+        PersonaggioInfusioneInline, 
+        PersonaggioTessituraInline, 
+        PersonaggioAttivataInline, 
+        CreditoMovimentoInline, 
+        PuntiCaratteristicaMovimentoInline, 
+        PersonaggioLogInline
+    ]
     fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'testo', ('data_nascita', 'data_morte'))}),
                  ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))}))
 
