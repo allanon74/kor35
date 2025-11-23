@@ -634,15 +634,28 @@ class Aura(Punteggio):
 
 class ModelloAura(models.Model):
     aura = models.ForeignKey(
-        Punteggio, on_delete=models.CASCADE, 
-        limit_choices_to={'tipo': AURA}, related_name="modelli_definiti"
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo': AURA}, 
+        related_name="modelli_definiti"
     )
     nome = models.CharField(max_length=100)
-    mattoni_proibiti = models.ManyToManyField(Mattone, blank=True, related_name="proibiti_in_modelli")
     
-    def __str__(self):
-        return f"{self.nome} ({self.aura.nome})"
-
+    mattoni_proibiti = models.ManyToManyField(
+        Mattone, 
+        blank=True, 
+        related_name="proibiti_in_modelli",
+        verbose_name="Mattoni Proibiti"
+    )
+    
+    # NUOVO CAMPO
+    mattoni_obbligatori = models.ManyToManyField(
+        Mattone, 
+        blank=True, 
+        related_name="obbligatori_in_modelli",
+        verbose_name="Mattoni Obbligatori",
+        help_text="Le tessiture DEVONO contenere almeno uno di questi mattoni per poter essere apprese."
+    )
     class Meta:
         verbose_name = "Modello di Aura"
         verbose_name_plural = "Modelli di Aura"
@@ -1033,23 +1046,54 @@ class Personaggio(Inventario):
         pb = self.punteggi_base
         if aura.is_generica: return max([v for k,v in pb.items() if Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists()] or [0])
         return pb.get(aura.nome, 0)
+    
     def valida_acquisto_tecnica(self, t):
-        if not t.aura_richiesta: return False, "Aura mancante."
-        if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): return False, "Livello > Aura."
+        # 1. Controllo Aura
+        if not t.aura_richiesta: 
+            return False, "Aura mancante."
+        
+        if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): 
+            return False, "Livello tecnica superiore al valore Aura."
+
+        # 2. Controllo Requisiti Mattoni (Quantità vs Caratteristica)
         from collections import Counter
-        cnt = Counter(t.mattoni.values_list('id', flat=True))
+        # Ottieni gli ID dei mattoni della tecnica
+        mattoni_tecnica_ids = list(t.mattoni.values_list('id', flat=True))
+        cnt = Counter(mattoni_tecnica_ids)
         base = self.caratteristiche_base
+        
         for mid, c in cnt.items():
             try:
                 m = Mattone.objects.get(pk=mid)
-                if c > base.get(m.caratteristica_associata.nome, 0): return False, f"Requisito {m.nome} non soddisfatto."
+                if c > base.get(m.caratteristica_associata.nome, 0): 
+                    return False, f"Requisito {m.nome} non soddisfatto (Richiede {c}, hai {base.get(m.caratteristica_associata.nome, 0)})."
             except: pass
-        mod = self.modelli_aura.filter(aura=t.aura_richiesta).first()
-        if mod:
-            ids = set(cnt.keys())
-            bad = set(mod.mattoni_proibiti.values_list('id', flat=True))
-            if ids.intersection(bad): return False, "Mattoni proibiti."
+
+        # 3. Controllo Modello Aura (Proibiti e Obbligatori)
+        modello = self.modelli_aura.filter(aura=t.aura_richiesta).first()
+        
+        if modello:
+            set_mattoni_tecnica = set(mattoni_tecnica_ids)
+            
+            # A. Check Proibiti (Nessuno dei mattoni della tecnica deve essere proibito)
+            ids_proibiti = set(modello.mattoni_proibiti.values_list('id', flat=True))
+            intersezione_proibiti = set_mattoni_tecnica.intersection(ids_proibiti)
+            
+            if intersezione_proibiti:
+                nomi_vietati = ", ".join(Mattone.objects.filter(id__in=intersezione_proibiti).values_list('nome', flat=True))
+                return False, f"Usa mattoni proibiti dal tuo modello aura: {nomi_vietati}."
+
+            # B. Check Obbligatori (La tecnica DEVE contenere TUTTI i tipi di mattoni obbligatori elencati)
+            ids_obbligatori = set(modello.mattoni_obbligatori.values_list('id', flat=True))
+            
+            # Se ci sono obblighi, verifichiamo che l'insieme degli obbligatori sia un sottoinsieme dei mattoni della tecnica
+            if ids_obbligatori and not ids_obbligatori.issubset(set_mattoni_tecnica):
+                mancanti = ids_obbligatori - set_mattoni_tecnica
+                nomi_mancanti = ", ".join(Mattone.objects.filter(id__in=mancanti).values_list('nome', flat=True))
+                return False, f"La tecnica non contiene i mattoni obbligatori richiesti dal modello: {nomi_mancanti}."
+
         return True, "OK"
+    
     @property
     def modificatori_calcolati(self):
         if hasattr(self, '_modificatori_calcolati_cache'): return self._modificatori_calcolati_cache

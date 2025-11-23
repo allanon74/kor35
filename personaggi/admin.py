@@ -277,7 +277,9 @@ class AuraAdmin(IconaAdminMixin, A_Admin):
 
 @admin.register(ModelloAura)
 class ModelloAuraAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'aura'); list_filter = ('aura',); filter_horizontal = ('mattoni_proibiti',)
+    list_display = ('nome', 'aura')
+    list_filter = ('aura',)
+    filter_horizontal = ('mattoni_proibiti', 'mattoni_obbligatori',)
 
 @admin.register(Mattone)
 class MattoneAdmin(A_Admin):
