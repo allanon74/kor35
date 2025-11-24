@@ -1385,7 +1385,7 @@ class Personaggio(Inventario):
             if formule_html:
                 separator = "<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/>"
                 sezione_formule = "".join(formule_html)
-                return f"{descrizione_html}{separator}<div style='font-size: 0.95em;'><strong>Formule di Infusione:</strong>{sezione_formule}</div>"
+                return f"{descrizione_html}{separator}<div style='font-size: 0.95em;'><strong>Formule:</strong>{sezione_formule}</div>"
             
             return descrizione_html
 
