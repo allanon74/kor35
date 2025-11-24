@@ -252,9 +252,26 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
     prerequisiti = AbilitaPrerequisitoSmallSerializer(source='abilita_prerequisiti', many=True, read_only=True)
     punteggi_assegnati = AbilitaPunteggioSmallSerializer(source='abilita_punteggio_set', many=True, read_only=True)
     statistiche_modificate = AbilitaStatisticaSmallSerializer(source='abilitastatistica_set', many=True, read_only=True)
+    
+    # Gestione Costi
+    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_effettivo = serializers.SerializerMethodField()
+    
     class Meta:
         model = Abilita
-        fields = ('id', 'nome', 'descrizione', 'costo_pc', 'costo_crediti', 'caratteristica', 'requisiti', 'prerequisiti', 'punteggi_assegnati', 'statistiche_modificate',)
+        fields = (
+            'id', 'nome', 'descrizione', 
+            'costo_pc', 'costo_crediti', 
+            'caratteristica', 'requisiti', 'prerequisiti', 
+            'punteggi_assegnati', 'statistiche_modificate',
+            'costo_pieno', 'costo_effettivo',
+            )
+        
+    def get_costo_effettivo(self, obj):
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return personaggio.get_costo_item_scontato(obj)
+        return obj.costo_crediti
 
 class AbilitaSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(read_only=True) 
@@ -331,9 +348,25 @@ class OggettoSerializer(serializers.ModelSerializer):
     livello = serializers.IntegerField(read_only=True)
     aura = PunteggioSmallSerializer(read_only=True)
     inventario_corrente = serializers.StringRelatedField(read_only=True)
+    
+    # Gestione Costi
+    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_effettivo = serializers.SerializerMethodField()
+    
     class Meta:
         model = Oggetto
-        fields = ('id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 'livello', 'aura', 'elementi', 'statistiche', 'statistiche_base', 'inventario_corrente',)
+        fields = (
+            'id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 
+            'livello', 'aura', 'elementi', 
+            'statistiche', 'statistiche_base', 'inventario_corrente', 
+            'costo_pieno', 'costo_effettivo',
+            )
+        
+    def get_costo_effettivo(self, obj):
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return personaggio.get_costo_item_scontato(obj)
+        return obj.costo_crediti
 
 # Legacy
 class AttivataSerializer(serializers.ModelSerializer):
@@ -342,9 +375,24 @@ class AttivataSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
+    
+    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_effettivo = serializers.SerializerMethodField()
+    
     class Meta:
         model = Attivata
-        fields = ('id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 'livello', 'elementi', 'statistiche_base')
+        fields = (
+            'id', 'nome', 'testo', 
+            'TestoFormattato', 'testo_formattato_personaggio', 
+            'livello', 'elementi', 'statistiche_base',
+            'costo_pieno', 'costo_effettivo',
+            )
+        
+    def get_costo_effettivo(self, obj):
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return personaggio.get_costo_item_scontato(obj)
+        return obj.costo_crediti
 
 # New
 class InfusioneSerializer(serializers.ModelSerializer):
@@ -356,14 +404,24 @@ class InfusioneSerializer(serializers.ModelSerializer):
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
     costo_crediti = serializers.IntegerField(read_only=True) # <-- AGGIUNTO
+    
+    # Gestione Costi
+    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_effettivo = serializers.SerializerMethodField()
 
     class Meta:
         model = Infusione
         fields = (
             'id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 
             'livello', 'aura_richiesta', 'aura_infusione', 'mattoni', 'statistiche_base', 
-            'costo_crediti'
+            'costo_crediti', 'costo_pieno', 'costo_effettivo',
         )
+    
+    def get_costo_effettivo(self, obj):
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return personaggio.get_costo_item_scontato(obj)
+        return obj.costo_crediti
 
 class TessituraSerializer(serializers.ModelSerializer):
     statistiche_base = TessituraStatisticaBaseSerializer(source='tessiturastatisticabase_set', many=True, read_only=True)
@@ -374,14 +432,24 @@ class TessituraSerializer(serializers.ModelSerializer):
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
     costo_crediti = serializers.IntegerField(read_only=True) # <-- AGGIUNTO
+    
+    # Gestione Costi
+    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_effettivo = serializers.SerializerMethodField()
 
     class Meta:
         model = Tessitura
         fields = (
             'id', 'nome', 'testo', 'formula', 'TestoFormattato', 'testo_formattato_personaggio', 
             'livello', 'aura_richiesta', 'elemento_principale', 'mattoni', 'statistiche_base',
-            'costo_crediti'
+            'costo_crediti', 'costo_pieno', 'costo_effettivo',
         )
+    
+    def get_costo_effettivo(self, obj):
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            return personaggio.get_costo_item_scontato(obj)
+        return obj.costo_crediti
 
 
 class ManifestoSerializer(serializers.ModelSerializer):
@@ -473,13 +541,34 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             risultati.append(dati_oggetto)
         return risultati
 
+    def get_oggetti(self, personaggio):
+        oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
+            'statistiche_base__statistica', 'oggettostatistica_set__statistica',
+            'oggettoelemento_set__elemento', 'aura'
+        )
+        # Trigger calcolo modificatori prima della serializzazione
+        personaggio.modificatori_calcolati 
+        
+        risultati = []
+        # Creiamo un contesto che include esplicitamente il personaggio corrente
+        context_con_pg = {**self.context, 'personaggio': personaggio}
+        
+        for obj in oggetti_posseduti:
+            # Passiamo il contesto aggiornato
+            dati_oggetto = OggettoSerializer(obj, context=context_con_pg).data 
+            dati_oggetto['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(obj)
+            risultati.append(dati_oggetto)
+        return risultati
+
     def get_attivate_possedute(self, personaggio):
         attivate = personaggio.attivate_possedute.prefetch_related(
             'statistiche_base__statistica', 'attivataelemento_set__elemento'
         )
         risultati = []
+        context_con_pg = {**self.context, 'personaggio': personaggio}
+        
         for att in attivate:
-            dati = AttivataSerializer(att, context=self.context).data 
+            dati = AttivataSerializer(att, context=context_con_pg).data 
             dati['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(att)
             risultati.append(dati)
         return risultati
@@ -490,8 +579,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'aura_richiesta', 'aura_infusione'
         )
         risultati = []
+        context_con_pg = {**self.context, 'personaggio': personaggio}
+        
         for inf in infusioni:
-            dati = InfusioneSerializer(inf, context=self.context).data
+            dati = InfusioneSerializer(inf, context=context_con_pg).data
             dati['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(inf)
             risultati.append(dati)
         return risultati
@@ -502,8 +593,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'aura_richiesta', 'elemento_principale'
         )
         risultati = []
+        context_con_pg = {**self.context, 'personaggio': personaggio}
+        
         for tes in tessiture:
-            dati = TessituraSerializer(tes, context=self.context).data
+            dati = TessituraSerializer(tes, context=context_con_pg).data
             dati['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(tes)
             risultati.append(dati)
         return risultati
