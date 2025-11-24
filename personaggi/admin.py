@@ -27,6 +27,7 @@ from .models import (
     STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA,
     ModelloAuraRequisitoDoppia, 
     ModelloAuraRequisitoCaratt,
+    ModelloAuraRequisitoMattone,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -233,6 +234,13 @@ class RequisitoDoppiaInline(admin.TabularInline):
     verbose_name = "Condizione per Doppia Formula"
     verbose_name_plural = "Condizioni per Doppia Formula"
     autocomplete_fields = ['requisito'] # Consigliato se hai molti punteggi
+    
+class RequisitoMattoneInline(admin.TabularInline):
+    model = ModelloAuraRequisitoMattone
+    extra = 1
+    verbose_name = "Condizione per F. Mattone"
+    verbose_name_plural = "Condizioni per F. Mattone"
+    autocomplete_fields = ['requisito']
 
 class RequisitoCarattInline(admin.TabularInline):
     model = ModelloAuraRequisitoCaratt
@@ -320,6 +328,14 @@ class ModelloAuraAdmin(admin.ModelAdmin):
                 'anchor-doppia',
                 )
         }),
+        ('Formula per Mattone', {   # <--- NUOVA SEZIONE
+            'fields': ('usa_formula_per_mattone', 'usa_condizione_mattone'),
+            'description': "Impostazioni per generare formule dinamiche basate sugli elementi associati ai mattoni della Tessitura.",
+            'classes': (
+                # 'collapse', 
+                'anchor-mattone',
+                )
+        }),
         ('Formula per Caratteristica', {
             'fields': ('usa_formula_per_caratteristica', 'usa_condizione_caratt'),
             'description': "Impostazioni per generare formule dinamiche basate sulle caratteristiche possedute dal personaggio.",
@@ -331,7 +347,7 @@ class ModelloAuraAdmin(admin.ModelAdmin):
     )
 
     # Aggiungiamo gli Inline definiti sopra
-    inlines = [RequisitoDoppiaInline, RequisitoCarattInline]
+    inlines = [RequisitoDoppiaInline,RequisitoMattoneInline, RequisitoCarattInline, ]
     
     class Media:
         js = ('admin/js/move_inlines.js',)

@@ -640,6 +640,15 @@ class ModelloAuraRequisitoDoppia(models.Model):
     class Meta:
         verbose_name = "Requisito Doppia Formula"
         verbose_name_plural = "Requisiti Doppia Formula"
+        
+class ModelloAuraRequisitoMattone(models.Model):
+    modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_mattone_rel')
+    requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
+    valore = models.IntegerField(default=1)
+
+    class Meta:
+        verbose_name = "Requisito Formula x Mattone"
+        verbose_name_plural = "Requisiti Formula x Mattone"
 
 class ModelloAuraRequisitoCaratt(models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_caratt_rel')
@@ -691,7 +700,22 @@ class ModelloAura(models.Model):
     requisiti_doppia = models.ManyToManyField(
         Punteggio, through=ModelloAuraRequisitoDoppia, blank=True, related_name="modelli_req_doppia"
     )
-
+    
+    # --- NUOVO: FORMULA PER MATTONE ---
+    usa_formula_per_mattone = models.BooleanField(
+        default=False, verbose_name="Abilita Formula per Mattone"
+    )
+    
+    # Condizionale Formula Mattone
+    usa_condizione_mattone = models.BooleanField(
+        default=False, 
+        verbose_name="Richiede Condizione per F. Mattone",
+        help_text="Se attivo, le formule dei mattoni appaiono solo se i requisiti sotto sono soddisfatti."
+    )
+    requisiti_mattone = models.ManyToManyField(
+        Punteggio, through=ModelloAuraRequisitoMattone, blank=True, related_name="modelli_req_mattone"
+    )
+    
     # --- FORMULA PER CARATTERISTICA ---
     usa_formula_per_caratteristica = models.BooleanField(
         default=False, verbose_name="Abilita Formula per Caratteristica"
@@ -1273,6 +1297,27 @@ class Personaggio(Inventario):
                         for el in elementi_extra:
                             if punteggi_pg.get(el.caratteristica_relativa.nome, 0) > 0:
                                 elementi_map[el.id] = el
+                
+                # C. Formula per Mattone (NUOVO)
+                if modello.usa_formula_per_mattone:
+                    attiva_mattone = True
+                    if modello.usa_condizione_mattone:
+                        attiva_mattone = verifica_requisiti(modello.req_mattone_rel.select_related('requisito').all())
+                    
+                    if attiva_mattone:
+                        # Recupera le caratteristiche associate ai mattoni di questa specifica tessitura
+                        # Nota: item qui è la Tessitura
+                        caratt_mattoni_ids = item.mattoni.values_list('caratteristica_associata', flat=True)
+                        
+                        # Trova gli Elementi che sono "relativi" a quelle caratteristiche
+                        elementi_da_mattoni = Punteggio.objects.filter(
+                            tipo=ELEMENTO,
+                            caratteristica_relativa__id__in=caratt_mattoni_ids
+                        )
+                        
+                        for el in elementi_da_mattoni:
+                            # Aggiungiamo alla mappa (evita duplicati grazie alla chiave id)
+                            elementi_map[el.id] = el
 
             elementi_da_calcolare = list(elementi_map.values())
 

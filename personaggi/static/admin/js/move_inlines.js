@@ -23,6 +23,9 @@ document.addEventListener("DOMContentLoaded", function() {
     // Sposta la tabella RequisitoDoppia sotto il fieldset Doppia Formula
     moveInline('req_doppia_rel-group', 'anchor-doppia');
 
+        // Sposta la tabella RequisitoMatt sotto il fieldset Formula Mattone
+    moveInline('req_mattone_rel-group', 'anchor-mattone');
+
     // Sposta la tabella RequisitoCaratt sotto il fieldset Formula Caratteristica
     moveInline('req_caratt_rel-group', 'anchor-caratt');
 });
