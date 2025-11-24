@@ -670,6 +670,7 @@ class ModelloAura(models.Model):
         related_name="modelli_definiti"
     )
     nome = models.CharField(max_length=100)
+    descrizione = models.TextField(blank=True, null=True, verbose_name="Descrizione Breve")
     
     mattoni_proibiti = models.ManyToManyField(
         Mattone, 
@@ -737,6 +738,9 @@ class ModelloAura(models.Model):
     class Meta:
         verbose_name = "Modello di Aura"
         verbose_name_plural = "Modelli di Aura"
+        
+    def __str__(self):
+        return f"Modello {self.aura.nome} - {self.nome}"
 
 class CaratteristicaModificatore(models.Model):
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, related_name="modificatori_dati")

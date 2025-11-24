@@ -21,6 +21,7 @@ from .models import (
     CreditoMovimento, PersonaggioLog, TransazioneSospesa,
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoDoppia,
+    ModelloAuraRequisitoMattone,
 )
 
 # --- Serializer di Base ---
@@ -754,13 +755,22 @@ class ModelloAuraRequisitoCarattSerializer(serializers.ModelSerializer):
         model = ModelloAuraRequisitoCaratt
         fields = ('requisito', 'valore')
 
+class ModelloAuraRequisitoMattoneSerializer(serializers.ModelSerializer):
+    requisito = PunteggioSmallSerializer(read_only=True)
+    class Meta:
+        model = ModelloAuraRequisitoMattone
+        fields = ('requisito', 'valore')
+
 class ModelloAuraSerializer(serializers.ModelSerializer):
     mattoni_proibiti = PunteggioSmallSerializer(many=True, read_only=True)
+    mattoni_obbligatori = PunteggioSmallSerializer(many=True, read_only=True) 
+    elemento_secondario = PunteggioSmallSerializer(read_only=True)
     elemento_secondario = PunteggioSmallSerializer(read_only=True)
     
     # Campi nidificati per i requisiti
     requisiti_doppia = ModelloAuraRequisitoDoppiaSerializer(source='req_doppia_rel', many=True, read_only=True)
     requisiti_caratt = ModelloAuraRequisitoCarattSerializer(source='req_caratt_rel', many=True, read_only=True)
+    requisiti_mattone = ModelloAuraRequisitoMattoneSerializer(source='req_mattone_rel', many=True, read_only=True)
 
     class Meta:
         model = ModelloAura
@@ -772,5 +782,9 @@ class ModelloAuraSerializer(serializers.ModelSerializer):
             'usa_condizione_doppia', 'requisiti_doppia',
             # Formula Caratteristica
             'usa_formula_per_caratteristica', 
-            'usa_condizione_caratt', 'requisiti_caratt'
+            'usa_condizione_caratt', 'requisiti_caratt',
+            'usa_formula_per_mattone',
+            'usa_condizione_mattone', 
+            'requisiti_mattone',
         )
+        

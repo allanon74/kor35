@@ -314,7 +314,7 @@ class ModelloAuraAdmin(admin.ModelAdmin):
     # Organizzazione dei campi in sezioni (Fieldsets) per pulizia
     fieldsets = (
         (None, {
-            'fields': ('nome', 'aura')
+            'fields': ('nome', 'aura', 'descrizione',)
         }),
         ('Limitazioni Mattoni', {
             'fields': ('mattoni_proibiti', 'mattoni_obbligatori'),
@@ -364,9 +364,8 @@ class MattoneAdmin(A_Admin):
     inlines = [MattoneStatisticaInline]
     
     fieldsets = (
-        ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'ordine', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
+        ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'ordine', 'sigla', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
         ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
-        ('Sistema', {'fields': ('sigla',), 'classes': ('collapse',)})
     )
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
