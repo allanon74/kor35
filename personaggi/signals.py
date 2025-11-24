@@ -32,7 +32,7 @@ def invia_notifica_messaggio(sender, instance, created, **kwargs):
                 "head": instance.titolo,
                 "body": "Nuovo messaggio su KOR-35",
                 "icon": "/pwa-192x192.png",
-                "url": "https://app.kor35.it" 
+                "url": "https://app.kor35.it/?tab=messaggi"  # Puoi personalizzare l'URL di destinazione
             }
 
             # A. Individuale
