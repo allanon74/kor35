@@ -533,28 +533,15 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'statistiche_base__statistica', 'oggettostatistica_set__statistica',
             'oggettoelemento_set__elemento', 'aura'
         )
-        personaggio.modificatori_calcolati 
-        risultati = []
-        for obj in oggetti_posseduti:
-            dati_oggetto = OggettoSerializer(obj, context=self.context).data 
-            dati_oggetto['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(obj)
-            risultati.append(dati_oggetto)
-        return risultati
-
-    def get_oggetti(self, personaggio):
-        oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
-            'statistiche_base__statistica', 'oggettostatistica_set__statistica',
-            'oggettoelemento_set__elemento', 'aura'
-        )
         # Trigger calcolo modificatori prima della serializzazione
         personaggio.modificatori_calcolati 
         
         risultati = []
-        # Creiamo un contesto che include esplicitamente il personaggio corrente
+        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for obj in oggetti_posseduti:
-            # Passiamo il contesto aggiornato
+            # Usiamo context_con_pg invece di self.context
             dati_oggetto = OggettoSerializer(obj, context=context_con_pg).data 
             dati_oggetto['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(obj)
             risultati.append(dati_oggetto)
@@ -565,6 +552,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'statistiche_base__statistica', 'attivataelemento_set__elemento'
         )
         risultati = []
+        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for att in attivate:
@@ -579,6 +567,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'aura_richiesta', 'aura_infusione'
         )
         risultati = []
+        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for inf in infusioni:
@@ -593,6 +582,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'aura_richiesta', 'elemento_principale'
         )
         risultati = []
+        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for tes in tessiture:
