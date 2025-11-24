@@ -58,7 +58,7 @@ class PunteggioSerializer(serializers.ModelSerializer):
 class PunteggioSmallSerializer(serializers.ModelSerializer):
     class Meta:
         model = Punteggio
-        fields = ('id', 'nome', 'sigla', 'colore', 'icona_url')
+        fields = ('id', 'nome', 'sigla', 'colore', 'icona_url', 'ordine',)
         
 class AbilitaPunteggioSmallSerializer(serializers.ModelSerializer):
     punteggio = PunteggioSmallSerializer(read_only=True)
