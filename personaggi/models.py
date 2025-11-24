@@ -1018,6 +1018,7 @@ class Oggetto(A_vista):
     statistiche = models.ManyToManyField(Statistica, through='OggettoStatistica', blank=True, related_name="oggetti_statistiche")
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoStatisticaBase', blank=True, related_name='oggetti_statistiche_base')
     aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, related_name="oggetti_aura")
+    costo_crediti = models.IntegerField("Valore in Crediti", default=0)
     
     @property
     def livello(self): return self.elementi.count()
@@ -1344,6 +1345,67 @@ class Personaggio(Inventario):
             return descrizione_html
 
         return ""
+    
+    def get_valore_statistica(self, sigla):
+        """
+        Recupera il valore totale (base + modificatori) di una statistica data la sua SIGLA.
+        Utile per statistiche derivate come RCT (Tecniche), RCO (Oggetti), RCA (Abilità).
+        """
+        try:
+            # Cerca la statistica per sigla (es. 'RCT', 'RCO')
+            stat_obj = Statistica.objects.filter(sigla=sigla).first()
+            if not stat_obj or not stat_obj.parametro:
+                return 0
+            
+            # Recupera i modificatori calcolati per quel parametro
+            mods = self.modificatori_calcolati.get(stat_obj.parametro, {'add': 0, 'mol': 1.0})
+            
+            # Calcolo valore: (BaseDefault + Add) * Mol
+            # Nota: Le statistiche di sconto spesso partono da base 0
+            valore_base = stat_obj.valore_base_predefinito
+            valore_finale = (valore_base + mods['add']) * mods['mol']
+            return int(round(valore_finale))
+        except Exception:
+            return 0
+
+    def get_costo_item_scontato(self, item):
+        """
+        Calcola il costo effettivo in crediti di un oggetto/tecnica applicando gli sconti.
+        Restituisce il valore intero scontato.
+        """
+        # 1. Determina il costo base
+        costo_base = 0
+        if hasattr(item, 'costo_crediti'):
+            costo_base = item.costo_crediti
+            # Per le tecniche (Infusione, ecc.) costo_crediti è una property calcolata (livello * 100)
+            # Per Oggetti e Abilità è un campo del database.
+        
+        if costo_base <= 0: 
+            return 0
+        
+        # 2. Determina la percentuale di sconto in base al tipo
+        sconto_perc = 0
+        
+        if isinstance(item, (Infusione, Tessitura, Attivata)):
+            # RCT: Riduzione Costi Tecniche
+            sconto_perc = self.get_valore_statistica('RCT')
+            
+        elif isinstance(item, Oggetto):
+            # RCO: Riduzione Costi Oggetti
+            sconto_perc = self.get_valore_statistica('RCO')
+            
+        elif isinstance(item, Abilita):
+            # RCA: Riduzione Costi Abilità
+            sconto_perc = self.get_valore_statistica('RCA')
+            
+        # 3. Applica lo sconto
+        if sconto_perc > 0:
+            # Limite massimo sconto (es. 90% per evitare costi negativi o zero se non voluto)
+            sconto_perc = min(sconto_perc, 50) # Limite massimo di sconto al 50% 
+            riduzione = (costo_base * sconto_perc) / 100
+            return int(max(0, costo_base - riduzione))
+            
+        return int(costo_base)
         
 
 class PersonaggioAbilita(models.Model):
