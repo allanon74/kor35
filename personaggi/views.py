@@ -286,7 +286,7 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
 
         possedute_ids = personaggio.infusioni_possedute.values_list('id', flat=True)
         
-        # FIX: Uso annotate per ordinare per livello calcolato
+        # Calcolo livello per ordinamento
         tutte_infusioni = Infusione.objects.exclude(id__in=possedute_ids).annotate(
             livello_calc=Count('mattoni')
         ).select_related(
@@ -300,20 +300,19 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
         for infusione in tutte_infusioni:
             aura_req = infusione.aura_richiesta
             if aura_req:
-            # Se l'aura ha dei modelli definiti nel sistema...
                 if aura_req.modelli_definiti.exists():
-                    # ...controlla se il PG ha scelto un modello per quell'aura
                     has_model_selected = personaggio.modelli_aura.filter(aura=aura_req).exists()
                     if not has_model_selected:
-                        # Se non ha scelto, NON mostrare la tecnica
                         continue
             is_valid, _ = personaggio.valida_acquisto_tecnica(infusione)
             if is_valid:
                 acquistabili.append(infusione)
 
-        serializer = InfusioneSerializer(acquistabili, many=True, context={'request': request})
+        # MODIFICA FONDAMENTALE: Passiamo 'personaggio' nel contesto
+        context = {'request': request, 'personaggio': personaggio}
+        
+        serializer = InfusioneSerializer(acquistabili, many=True, context=context)
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 class AcquisisciInfusioneView(APIView):
     permission_classes = [IsAuthenticated]
@@ -361,7 +360,6 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
 
         possedute_ids = personaggio.tessiture_possedute.values_list('id', flat=True)
         
-        # FIX: Uso annotate per ordinare per livello calcolato
         tutte_tessiture = Tessitura.objects.exclude(id__in=possedute_ids).annotate(
             livello_calc=Count('mattoni')
         ).select_related(
@@ -375,18 +373,18 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
         for tessitura in tutte_tessiture:
             aura_req = tessitura.aura_richiesta
             if aura_req:
-            # Se l'aura ha dei modelli definiti nel sistema...
                 if aura_req.modelli_definiti.exists():
-                    # ...controlla se il PG ha scelto un modello per quell'aura
                     has_model_selected = personaggio.modelli_aura.filter(aura=aura_req).exists()
                     if not has_model_selected:
-                        # Se non ha scelto, NON mostrare la tecnica
                         continue
             is_valid, _ = personaggio.valida_acquisto_tecnica(tessitura)
             if is_valid:
                 acquistabili.append(tessitura)
 
-        serializer = TessituraSerializer(acquistabili, many=True, context={'request': request})
+        # MODIFICA FONDAMENTALE: Passiamo 'personaggio' nel contesto
+        context = {'request': request, 'personaggio': personaggio}
+
+        serializer = TessituraSerializer(acquistabili, many=True, context=context)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
