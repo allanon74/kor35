@@ -1171,8 +1171,8 @@ class Personaggio(Inventario):
 
     def get_testo_formattato_per_item(self, item):
         """
-        Genera il testo formattato (descrizione + formule) per un dato item (Oggetto, Tecnica, etc.)
-        considerando il contesto del personaggio (statistiche, aura, elementi).
+        Genera il testo formattato (descrizione + formule) per un dato item.
+        Gestisce logiche condizionali, modelli aura e formule multiple.
         """
         if not item: return ""
         
@@ -1209,24 +1209,38 @@ class Personaggio(Inventario):
                 personaggio=self
             )
 
-        # --- LOGICA TESSITURA (Avanzata: Multi-Formula) ---
+        # --- LOGICA TESSITURA ---
         elif isinstance(item, Tessitura):
             stats = item.tessiturastatisticabase_set.select_related('statistica').all()
-            modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
             
-            # Usiamo un dizionario {ID_Elemento: Oggetto_Elemento} per evitare duplicati
+            # 1. CHECK PRELIMINARE: La formula usa il parametro {elem}?
+            # Se NO, non ha senso generare varianti multiple basate sull'elemento.
+            formula_text = item.formula or ""
+            if "{elem}" not in formula_text:
+                ctx = {
+                    'livello': item.livello, 
+                    'aura': item.aura_richiesta, 
+                    'elemento': item.elemento_principale
+                }
+                return formatta_testo_generico(
+                    item.testo, 
+                    formula=formula_text, 
+                    statistiche_base=stats, 
+                    personaggio=self, 
+                    context=ctx
+                )
+
+            # 2. LOGICA AVANZATA (Formule Multiple)
+            modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
             elementi_map = {} 
             
-            # 1. Elemento Principale della Tessitura (se esiste)
+            # Elemento Principale (Base)
             if item.elemento_principale:
                 elementi_map[item.elemento_principale.id] = item.elemento_principale
             
-            # 2. Logica Modello Aura (Elementi Aggiuntivi)
             if modello:
-                # Carichiamo i punteggi base una volta sola per efficienza
                 punteggi_pg = self.punteggi_base 
 
-                # Helper interno per verificare le condizioni (Punteggio >= Valore)
                 def verifica_requisiti(requisiti_queryset):
                     for req_link in requisiti_queryset:
                         nome_req = req_link.requisito.nome
@@ -1251,7 +1265,6 @@ class Personaggio(Inventario):
                         attiva_caratt = verifica_requisiti(modello.req_caratt_rel.select_related('requisito').all())
                     
                     if attiva_caratt:
-                        # Trova tutti gli elementi la cui caratteristica relativa è posseduta dal PG (>0)
                         elementi_extra = Punteggio.objects.filter(
                             tipo=ELEMENTO, 
                             caratteristica_relativa__nome__in=punteggi_pg.keys()
@@ -1260,10 +1273,9 @@ class Personaggio(Inventario):
                             if punteggi_pg.get(el.caratteristica_relativa.nome, 0) > 0:
                                 elementi_map[el.id] = el
 
-            # Lista definitiva degli elementi da calcolare
             elementi_da_calcolare = list(elementi_map.values())
 
-            # Se non ci sono elementi (tessitura generica), fallback standard
+            # Fallback se nessun elemento è trovato (raro se {elem} è presente, ma per sicurezza)
             if not elementi_da_calcolare:
                 ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None}
                 return formatta_testo_generico(
@@ -1274,9 +1286,8 @@ class Personaggio(Inventario):
                     context=ctx
                 )
 
-            # 3. Generazione Output Combinato
-            
-            # A. Descrizione Testuale (usando l'elemento principale come contesto base)
+            # 3. GENERAZIONE OUTPUT MULTIPLO
+            # A. Descrizione (usa elemento principale come contesto base)
             ctx_base = {
                 'livello': item.livello, 
                 'aura': item.aura_richiesta, 
@@ -1284,13 +1295,13 @@ class Personaggio(Inventario):
             }
             descrizione_html = formatta_testo_generico(
                 item.testo, 
-                formula=None, # Non stampiamo la formula qui
+                formula=None, 
                 statistiche_base=stats, 
                 personaggio=self, 
                 context=ctx_base
             )
             
-            # B. Loop Formule per ogni Elemento
+            # B. Loop Formule
             formule_html = []
             for elem in elementi_da_calcolare:
                 val_caratt = 0
@@ -1304,7 +1315,6 @@ class Personaggio(Inventario):
                     'caratteristica_associata_valore': val_caratt
                 }
                 
-                # Calcoliamo solo la formula, passando None come testo
                 risultato_formula = formatta_testo_generico(
                     None, 
                     formula=item.formula, 
@@ -1313,11 +1323,9 @@ class Personaggio(Inventario):
                     context=ctx_loop
                 )
                 
-                # Pulizia stringa: formatta_testo_generico aggiunge "<strong>Formula:</strong>" che qui è ridondante
                 valore_pura_formula = risultato_formula.replace("<strong>Formula:</strong>", "").strip()
                 
                 if valore_pura_formula:
-                    # Styling del blocco formula
                     style_container = f"margin-top: 4px; padding: 4px 8px; border-left: 3px solid {elem.colore}; background-color: rgba(255,255,255,0.05); border-radius: 0 4px 4px 0;"
                     style_label = f"color: {elem.colore}; font-weight: bold; margin-right: 6px;"
                     
@@ -1328,7 +1336,6 @@ class Personaggio(Inventario):
                     )
                     formule_html.append(block)
 
-            # Assemblaggio Finale
             if formule_html:
                 separator = "<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/>"
                 sezione_formule = "".join(formule_html)
