@@ -99,7 +99,7 @@ def evaluate_expression(expression, context_dict):
     except Exception:
         return 0
 
-def formatta_testo_generico(testo, formula=None, statistiche_base=None, personaggio=None, context=None):
+def formatta_testo_generico(testo, formula=None, statistiche_base=None, personaggio=None, context=None, solo_formula=False):
     """
     Funzione universale per la formattazione dei testi con parametri.
     """
@@ -270,6 +270,9 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         if evaluate_expression(condizione, eval_context):
             return contenuto
         return ""
+    
+    if solo_formula:
+        testo_metatalenti = ""
 
     testo_completo = testo_out + testo_metatalenti
     
@@ -1366,7 +1369,8 @@ class Personaggio(Inventario):
                     formula=item.formula, 
                     statistiche_base=stats, 
                     personaggio=self, 
-                    context=ctx_loop
+                    context=ctx_loop, 
+                    solo_formula=True,
                 )
                 
                 valore_pura_formula = risultato_formula.replace("<strong>Formula:</strong>", "").strip()
