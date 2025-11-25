@@ -1543,7 +1543,24 @@ class Messaggio(models.Model):
     destinatario_personaggio = models.ForeignKey('Personaggio', on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_individuali")
     destinatario_gruppo = models.ForeignKey(Gruppo, on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_gruppo")
     titolo = models.CharField(max_length=150); testo = models.TextField(); data_invio = models.DateTimeField(default=timezone.now); salva_in_cronologia = models.BooleanField(default=True)
-    class Meta: ordering=['-data_invio']
+    
+    class Meta: 
+        ordering=['-data_invio']
+    
+class LetturaMessaggio(models.Model):
+    messaggio = models.ForeignKey(Messaggio, on_delete=models.CASCADE, related_name="stati_lettura")
+    personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="messaggi_stati")
+    letto = models.BooleanField(default=False)
+    data_lettura = models.DateTimeField(null=True, blank=True)
+    cancellato = models.BooleanField(default=False)  # Soft delete per il ricevente
+
+    class Meta:
+        unique_together = ('messaggio', 'personaggio')
+        verbose_name = "Stato Lettura Messaggio"
+        verbose_name_plural = "Stati Lettura Messaggi"
+
+    def __str__(self):
+        return f"{self.personaggio.nome} - {self.messaggio.titolo} ({'Letto' if self.letto else 'Non letto'})"
 
 class AbilitaPluginModel(CMSPlugin):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
