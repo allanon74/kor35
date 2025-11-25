@@ -14,6 +14,7 @@ from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario, Infusione
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
 from .models import Punteggio, CARATTERISTICA, PersonaggioModelloAura, ModelloAura
 from .models import PropostaTecnica, PropostaTecnicaMattone, STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE
+from .models import LetturaMessaggio
 
 import uuid 
 
@@ -702,6 +703,18 @@ class PunteggiListView(generics.ListAPIView):
 class MessaggioListView(generics.ListAPIView):
     serializer_class = MessaggioSerializer
     permission_classes = [IsAuthenticated]
+    
+    def get_serializer_context(self):
+        # Passiamo il personaggio al serializer per calcolare 'is_letto'
+        context = super().get_serializer_context()
+        personaggio_id = self.request.query_params.get('personaggio_id')
+        if personaggio_id:
+            try:
+                context['personaggio'] = Personaggio.objects.get(id=personaggio_id)
+            except Personaggio.DoesNotExist:
+                pass
+        return context
+    
     def get_queryset(self):
         personaggio_id = self.request.query_params.get('personaggio_id')
         user = self.request.user
@@ -714,7 +727,54 @@ class MessaggioListView(generics.ListAPIView):
         q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
         gruppi_id = target_pg.gruppi_appartenenza.values_list('id', flat=True)
         q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
-        return Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
+        messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
+
+        # NUOVA LOGICA: Escludi quelli che il PG ha segnato come cancellati
+        # Otteniamo gli ID dei messaggi cancellati da questo PG
+        ids_cancellati = LetturaMessaggio.objects.filter(
+            personaggio=target_pg, 
+            cancellato=True
+        ).values_list('messaggio_id', flat=True)
+
+        return messaggi.exclude(id__in=ids_cancellati)
+    
+class MessaggioActionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk, action_type):
+        """
+        action_type può essere 'leggi' o 'cancella'
+        Body richiesto: { "personaggio_id": 1 }
+        """
+        personaggio_id = request.data.get('personaggio_id')
+        if not personaggio_id:
+            return Response({"error": "personaggio_id mancante"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            messaggio = Messaggio.objects.get(pk=pk) # Qui potresti aggiungere check se il msg è per lui davvero
+        except (Personaggio.DoesNotExist, Messaggio.DoesNotExist):
+            return Response({"error": "Dati non validi"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get or Create dello stato
+        stato, created = LetturaMessaggio.objects.get_or_create(
+            messaggio=messaggio,
+            personaggio=personaggio
+        )
+
+        if action_type == 'leggi':
+            stato.letto = True
+            if not stato.data_lettura:
+                stato.data_lettura = timezone.now()
+            stato.save()
+            return Response({"status": "Messaggio segnato come letto"})
+
+        elif action_type == 'cancella':
+            stato.cancellato = True
+            stato.save()
+            return Response({"status": "Messaggio cancellato"})
+
+        return Response({"error": "Azione non valida"}, status=status.HTTP_400_BAD_REQUEST)
 
 class MessaggioAdminSentListView(generics.ListAPIView):
     serializer_class = MessaggioSerializer

@@ -23,7 +23,9 @@ from .models import (
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoDoppia,
     ModelloAuraRequisitoMattone,
-    PropostaTecnica, PropostaTecnicaMattone, STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA,
+    PropostaTecnica, PropostaTecnicaMattone, 
+    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA,
+    LetturaMessaggio,
 )
 
 # --- Serializer di Base ---
@@ -756,10 +758,35 @@ class MessaggioSerializer(serializers.ModelSerializer):
     mittente = serializers.StringRelatedField(read_only=True)
     destinatario_personaggio = serializers.StringRelatedField(read_only=True)
     destinatario_gruppo = GruppoSerializer(read_only=True)
+    is_letto = serializers.SerializerMethodField()
+    
     class Meta:
         model = Messaggio
-        fields = ('id', 'mittente', 'tipo_messaggio', 'titolo', 'testo', 'data_invio', 'destinatario_personaggio', 'destinatario_gruppo', 'salva_in_cronologia')
+        fields = (
+            'id', 'mittente', 'tipo_messaggio', 'titolo', 'testo', 'data_invio', 
+            'destinatario_personaggio', 'destinatario_gruppo', 'salva_in_cronologia'
+            , 'is_letto',
+            )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
+        
+    def get_is_letto(self, obj):
+        # Recuperiamo il personaggio dal contesto della request
+        request = self.context.get('request')
+        # In alcune view potresti passare 'personaggio_visualizzatore' nel context
+        personaggio = self.context.get('personaggio') 
+        
+        # Se non abbiamo il personaggio nel context, proviamo a dedurlo (logica custom se serve)
+        if not personaggio and request:
+             # Qui dovresti idealmente passare il personaggio esplicitamente dal context della View
+             pass
+
+        if personaggio:
+            try:
+                stato = LetturaMessaggio.objects.get(messaggio=obj, personaggio=personaggio)
+                return stato.letto
+            except LetturaMessaggio.DoesNotExist:
+                return False # Se non esiste il record, è sicuramente non letto
+        return False
 
 class MessaggioBroadcastCreateSerializer(serializers.ModelSerializer):
     class Meta:
