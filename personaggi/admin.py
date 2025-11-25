@@ -272,7 +272,7 @@ class PropostaMattoneInline(admin.TabularInline):
 
 class InfusioneCreationInline(admin.StackedInline):
     model = Infusione
-    fields = ('nome', 'testo', 'aura_richiesta', 'aura_infusione', 'costo_crediti_override') # Aggiungi campi necessari
+    fields = ('nome', 'testo', 'aura_richiesta', 'aura_infusione', ) # Aggiungi campi necessari
     # Nota: costo_crediti è una property nel model, ma se vuoi editarlo serve un campo fisico o logica custom.
     # Per ora usiamo i campi standard modificabili.
     extra = 0
@@ -281,13 +281,13 @@ class InfusioneCreationInline(admin.StackedInline):
 # Inline per Creare Tessitura da Proposta
 class TessituraCreationInline(admin.StackedInline):
     model = Tessitura
-    fields = ('nome', 'testo', 'formula', 'aura_richiesta', 'elemento_principale')
+    fields = ('nome', 'testo', 'formula', 'aura_richiesta', 'elemento_principale',)
     extra = 0
     verbose_name = "Crea Tessitura da questa proposta"
 
 @admin.register(PropostaTecnica)
 class PropostaTecnicaAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'tipo', 'personaggio', 'stato', 'data_creazione')
+    list_display = ('nome', 'tipo', 'personaggio', 'stato', 'data_creazione',)
     list_filter = ('stato', 'tipo')
     inlines = [PropostaMattoneInline, InfusioneCreationInline, TessituraCreationInline]
     readonly_fields = ('personaggio', 'mattoni_text', 'costo_invio_pagato', 'data_invio')
