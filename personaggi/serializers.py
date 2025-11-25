@@ -99,6 +99,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'id', 'nome', 'sigla', 'tipo', 'colore', 
             'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 
             'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
+            'permette_infusioni', 'permette_tessiture',
             )
 
     def get_base_url(self):
