@@ -175,14 +175,20 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         return obj.modelli_definiti.exists()
     
     def get_aura_id(self, obj):
-        # Se è un mattone, restituisce l'ID dell'aura padre
-        if hasattr(obj, 'mattone'): return obj.mattone.aura_id
+        # Usa try/except per evitare crash se la relazione è mancante o corrotta
+        try:
+            if hasattr(obj, 'mattone'): 
+                return obj.mattone.aura_id
+        except Exception:
+            pass
         return None
 
     def get_caratteristica_associata_nome(self, obj):
-        # Se è un mattone, restituisce il nome della caratteristica (es. "Forza")
-        if hasattr(obj, 'mattone') and obj.mattone.caratteristica_associata:
-            return obj.mattone.caratteristica_associata.nome
+        try:
+            if hasattr(obj, 'mattone') and obj.mattone.caratteristica_associata:
+                return obj.mattone.caratteristica_associata.nome
+        except Exception:
+            pass
         return None
     
 # --- Serializer Abilità ---
