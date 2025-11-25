@@ -31,7 +31,7 @@ from .models import (
     ModelloAuraRequisitoMattone,
     PropostaTecnica, Infusione, Tessitura, 
     PropostaTecnicaMattone, PersonaggioInfusione, PersonaggioTessitura,
-    STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
+    STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
 )
 
@@ -320,6 +320,30 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
             filtered_instances.append(inline)
 
         return filtered_instances
+    
+    def save_model(self, request, obj, form, change):
+        """
+        Gestisce il salvataggio diretto del modello (es. cambio stato manuale).
+        Invia notifica se la proposta viene RIFIUTATA.
+        """
+        super().save_model(request, obj, form, change)
+        
+        # Verifica se lo stato è cambiato in RIFIUTATA
+        if change and 'stato' in form.changed_data and obj.stato == STATO_PROPOSTA_RIFIUTATA:
+            motivo = obj.note_staff if obj.note_staff else "Nessuna motivazione specifica fornita."
+            
+            # Crea il messaggio per il giocatore
+            Messaggio.objects.create(
+                mittente=request.user, # L'admin che ha fatto l'azione
+                destinatario_personaggio=obj.personaggio,
+                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+                titolo=f"Esito Proposta: {obj.nome}",
+                testo=f"La tua proposta '{obj.nome}' è stata valutata e RIFIUTATA.\n\nMOTIVAZIONE STAFF:\n{motivo}",
+                salva_in_cronologia=True
+            )
+            # Log opzionale sul personaggio
+            obj.personaggio.aggiungi_log(f"Proposta '{obj.nome}' rifiutata dallo staff.")
+    
     
     def save_related(self, request, form, formsets, change):
         """
