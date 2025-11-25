@@ -92,6 +92,9 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     valore_predefinito = serializers.SerializerMethodField()
     parametro = serializers.SerializerMethodField()
     has_models = serializers.SerializerMethodField()
+    
+    aura_id = serializers.SerializerMethodField()
+    caratteristica_associata_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
@@ -100,6 +103,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 
             'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
             'permette_infusioni', 'permette_tessiture',
+            'aura_id', 'caratteristica_associata_nome',
             )
 
     def get_base_url(self):
@@ -169,6 +173,17 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     def get_has_models(self, obj):
         # Ritorna True se esistono ModelliAura collegati a questo punteggio
         return obj.modelli_definiti.exists()
+    
+    def get_aura_id(self, obj):
+        # Se è un mattone, restituisce l'ID dell'aura padre
+        if hasattr(obj, 'mattone'): return obj.mattone.aura_id
+        return None
+
+    def get_caratteristica_associata_nome(self, obj):
+        # Se è un mattone, restituisce il nome della caratteristica (es. "Forza")
+        if hasattr(obj, 'mattone') and obj.mattone.caratteristica_associata:
+            return obj.mattone.caratteristica_associata.nome
+        return None
     
 # --- Serializer Abilità ---
 
