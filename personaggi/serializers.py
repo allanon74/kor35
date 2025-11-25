@@ -103,6 +103,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 
             'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
             'permette_infusioni', 'permette_tessiture',
+            'is_mattone', 
             'aura_id', 'caratteristica_associata_nome',
             )
 
