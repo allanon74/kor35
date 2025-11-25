@@ -278,6 +278,7 @@ class InfusioneCreationInline(admin.StackedInline):
     # Per ora usiamo i campi standard modificabili.
     extra = 0
     verbose_name = "Crea Infusione da questa proposta"
+    show_change_link = True
 
 # Inline per Creare Tessitura da Proposta
 class TessituraCreationInline(admin.StackedInline):
@@ -285,6 +286,7 @@ class TessituraCreationInline(admin.StackedInline):
     fields = ('nome', 'testo', 'formula', 'aura_richiesta', 'elemento_principale',)
     extra = 0
     verbose_name = "Crea Tessitura da questa proposta"
+    show_change_link = True
 
 @admin.register(PropostaTecnica)
 class PropostaTecnicaAdmin(admin.ModelAdmin):
@@ -320,15 +322,19 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         return filtered_instances
     
     def save_related(self, request, form, formsets, change):
+        """
+        Gestisce il salvataggio degli inline e le automazioni:
+        1. Copia i mattoni dalla Proposta alla nuova Tecnica.
+        2. Approva la proposta.
+        3. Assegna la tecnica al creatore.
+        """
         super().save_related(request, form, formsets, change)
         obj = form.instance
         
-        # Logica: Se è stata creata una tecnica collegata, APPROVA la proposta e ASSEGNA la tecnica
         tecnica_creata = None
         tipo_tecnica = None
 
-        # Controlla se esiste una relazione inversa creata
-        # Nota: i related_name nel model sono 'infusione_generata' e 'tessitura_generata'
+        # Identifica se è stata creata/collegata una tecnica
         try:
             if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
                 tecnica_creata = obj.infusione_generata
@@ -340,12 +346,41 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
             pass
 
         if tecnica_creata and obj.stato != STATO_PROPOSTA_APPROVATA:
-            # 1. Aggiorna stato proposta
+            # --- AUTOMAZIONE 1: COPIA MATTONI ---
+            # Verifica se la tecnica ha già mattoni (per evitare duplicati in caso di salvataggi multipli)
+            has_mattoni = False
+            if tipo_tecnica == 'infusione':
+                has_mattoni = tecnica_creata.infusionemattone_set.exists()
+            else:
+                has_mattoni = tecnica_creata.tessituramattone_set.exists()
+
+            if not has_mattoni:
+                # Recupera i mattoni della proposta
+                mattoni_proposta = obj.propostatecnicamattone_set.all().order_by('ordine')
+                
+                for pm in mattoni_proposta:
+                    if tipo_tecnica == 'infusione':
+                        InfusioneMattone.objects.create(
+                            infusione=tecnica_creata,
+                            mattone=pm.mattone,
+                            ordine=pm.ordine
+                        )
+                    elif tipo_tecnica == 'tessitura':
+                        TessituraMattone.objects.create(
+                            tessitura=tecnica_creata,
+                            mattone=pm.mattone,
+                            ordine=pm.ordine
+                        )
+                
+                # Aggiorna eventuali statistiche calcolate o log
+                obj.note_staff = (obj.note_staff or "") + f"\n[System] Mattoni copiati automaticamente su {tecnica_creata.nome}."
+
+            # --- AUTOMAZIONE 2: STATO E ASSEGNAZIONE ---
             obj.stato = STATO_PROPOSTA_APPROVATA
-            obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
+            if not obj.note_staff:
+                obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
             obj.save()
 
-            # 2. Assegna GRATIS al creatore
             pg = obj.personaggio
             if tipo_tecnica == 'infusione':
                 if not pg.infusioni_possedute.filter(id=tecnica_creata.id).exists():
