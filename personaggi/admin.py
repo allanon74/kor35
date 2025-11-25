@@ -305,12 +305,16 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         tipo_tecnica = None
 
         # Controlla se esiste una relazione inversa creata
-        if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
-            tecnica_creata = obj.infusione_generata
-            tipo_tecnica = 'infusione'
-        elif hasattr(obj, 'tessitura_generata') and obj.tessitura_generata:
-            tecnica_creata = obj.tessitura_generata
-            tipo_tecnica = 'tessitura'
+        # Nota: i related_name nel model sono 'infusione_generata' e 'tessitura_generata'
+        try:
+            if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
+                tecnica_creata = obj.infusione_generata
+                tipo_tecnica = 'infusione'
+            elif hasattr(obj, 'tessitura_generata') and obj.tessitura_generata:
+                tecnica_creata = obj.tessitura_generata
+                tipo_tecnica = 'tessitura'
+        except Exception:
+            pass
 
         if tecnica_creata and obj.stato != STATO_PROPOSTA_APPROVATA:
             # 1. Aggiorna stato proposta
@@ -336,8 +340,9 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
                         tessitura=tecnica_creata,
                         data_acquisizione=timezone.now()
                     )
-                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente la tessitura '{tecnica_creata.nome}'.")    
-    
+                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente la tessitura '{tecnica_creata.nome}'.")
+                    
+                        
 # --- MODEL ADMINS ---
 
 @admin.register(TipologiaPersonaggio)
