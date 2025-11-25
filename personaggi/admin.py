@@ -32,6 +32,7 @@ from .models import (
     PropostaTecnica, Infusione, Tessitura, 
     PropostaTecnicaMattone, PersonaggioInfusione, PersonaggioTessitura,
     STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
+    TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -296,6 +297,28 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         return ", ".join([f"{m.mattone.nome}" for m in obj.propostatecnicamattone_set.all()])
     mattoni_text.short_description = "Mattoni Richiesti"
 
+    def get_inline_instances(self, request, obj=None):
+        # Ottieni tutte le istanze inline standard
+        instances = super().get_inline_instances(request, obj)
+        
+        # Se non c'è oggetto (es. creazione nuova proposta da admin), mostra tutto o filtra a piacere
+        if not obj:
+            return instances
+
+        filtered_instances = []
+        for inline in instances:
+            # Se la proposta è TESSITURA, nascondi l'inline per creare INFUSIONE
+            if isinstance(inline, InfusioneCreationInline) and obj.tipo == TIPO_PROPOSTA_TESSITURA:
+                continue
+            
+            # Se la proposta è INFUSIONE, nascondi l'inline per creare TESSITURA
+            if isinstance(inline, TessituraCreationInline) and obj.tipo == TIPO_PROPOSTA_INFUSIONE:
+                continue
+            
+            filtered_instances.append(inline)
+
+        return filtered_instances
+    
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         obj = form.instance
