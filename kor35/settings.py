@@ -173,7 +173,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://app.kor35.it",       
 ]
 
-CORS_URLS_REGEX = r'^/(personaggi/api|auth|webpush)/.*$'
+CORS_URLS_REGEX = r'^/(personaggi/api|auth|webpush|punteggi)/.*$'
 
 
 CORS_ALLOW_HEADERS = [
