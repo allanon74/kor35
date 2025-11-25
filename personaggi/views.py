@@ -31,6 +31,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
+from rest_framework.decorators import action
 
 from rest_framework import generics
 from django.db import transaction
@@ -811,6 +812,7 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         instance.delete()
 
     @transaction.atomic
+    @action(detail=True, methods=['post'])
     def invia_proposta(self, request, pk=None):
         """
         Action custom per inviare la proposta (Bozza -> Valutazione)
