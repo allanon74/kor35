@@ -17,7 +17,9 @@ from django.utils.html import format_html
 from icon_widget.fields import CustomIconField
 
 # --- COSTANTI ---
-COSTO_PER_MATTONE = 100
+COSTO_PER_MATTONE_INFUSIONE = 100
+COSTO_PER_MATTONE_TESSITURA = 100
+COSTO_PER_MATTONE_OGGETTO = 100
 
 # --- COSTANTI TRANSAZIONI ---
 STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
@@ -817,7 +819,7 @@ class Attivata(A_vista):
     def livello(self): return self.elementi.count()
     
     @property
-    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE
+    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_TESSITURA
     
     @property
     def TestoFormattato(self):
@@ -851,9 +853,6 @@ class Tecnica(A_vista):
         
     @property
     def livello(self): return self.mattoni.count()
-    
-    @property
-    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE
 
 class Infusione(Tecnica):
     aura_infusione = models.ForeignKey(
@@ -871,6 +870,9 @@ class Infusione(Tecnica):
     class Meta:
         verbose_name = "Infusione"
         verbose_name_plural = "Infusioni"
+    
+    @property
+    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_INFUSIONE
         
     @property
     def TestoFormattato(self):
@@ -897,6 +899,9 @@ class Tessitura(Tecnica):
     class Meta:
         verbose_name = "Tessitura"
         verbose_name_plural = "Tessiture"
+    
+    @property
+    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_TESSITURA
     
     @property
     def TestoFormattato(self):
