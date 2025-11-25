@@ -888,6 +888,14 @@ class Infusione(Tecnica):
         blank=True, related_name='infusione_statistiche_base'
     )
     
+    proposta_creazione = models.OneToOneField(
+        'PropostaTecnica', 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True, 
+        related_name='infusione_generata',
+        verbose_name="Proposta Originale"
+    )
+    
     class Meta:
         verbose_name = "Infusione"
         verbose_name_plural = "Infusioni"
@@ -915,6 +923,14 @@ class Tessitura(Tecnica):
     statistiche_base = models.ManyToManyField(
         Statistica, through='TessituraStatisticaBase', 
         blank=True, related_name='tessitura_statistiche_base'
+    )
+    
+    proposta_creazione = models.OneToOneField(
+        'PropostaTecnica', 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True, 
+        related_name='tessitura_generata',
+        verbose_name="Proposta Originale"
     )
     
     class Meta:
