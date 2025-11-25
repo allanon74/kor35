@@ -344,6 +344,15 @@ class AcquisisciInfusioneView(APIView):
         personaggio.modifica_crediti(-costo, f"Acquisito infusione: {infusione.nome}")
         personaggio.infusioni_possedute.add(infusione)
         personaggio.aggiungi_log(f"Ha appreso l'infusione '{infusione.nome}' (Liv. {infusione.livello}).")
+        
+        if hasattr(infusione, 'proposta_creazione') and infusione.proposta_creazione:
+            creatore = infusione.proposta_creazione.personaggio
+            # Evita royalty se compri la tua stessa tecnica (anche se l'hai avuta gratis, per sicurezza)
+            if creatore.id != personaggio.id:
+                royalty = int(round(costo * 0.10))
+                if royalty > 0:
+                    creatore.modifica_crediti(royalty, f"Royalty per l'acquisto di '{infusione.nome}' da parte di {personaggio.nome}")
+                    creatore.aggiungi_log(f"Ha ricevuto {royalty} CR di royalty per la tecnica '{infusione.nome}'.")
 
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -418,6 +427,14 @@ class AcquisisciTessituraView(APIView):
         personaggio.modifica_crediti(-costo, f"Acquisito tessitura: {tessitura.nome}")
         personaggio.tessiture_possedute.add(tessitura)
         personaggio.aggiungi_log(f"Ha appreso la tessitura '{tessitura.nome}' (Liv. {tessitura.livello}).")
+        
+        if hasattr(tessitura, 'proposta_creazione') and tessitura.proposta_creazione:
+            creatore = tessitura.proposta_creazione.personaggio
+            if creatore.id != personaggio.id:
+                royalty = int(round(costo * 0.10))
+                if royalty > 0:
+                    creatore.modifica_crediti(royalty, f"Royalty per l'acquisto di '{tessitura.nome}' da parte di {personaggio.nome}")
+                    creatore.aggiungi_log(f"Ha ricevuto {royalty} CR di royalty per la tecnica '{tessitura.nome}'.")
 
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -889,3 +906,13 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         proposta.save()
         
         return Response(PropostaTecnicaSerializer(proposta).data, status=status.HTTP_200_OK)
+    
+class AdminPendingProposalsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({"count": 0})
+        
+        count = PropostaTecnica.objects.filter(stato=STATO_PROPOSTA_IN_VALUTAZIONE).count()
+        return Response({"count": count})

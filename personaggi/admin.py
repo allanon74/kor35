@@ -5,6 +5,7 @@ from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe 
+from django.utils import timezone
 
 # Import aggiornati dai models
 from .models import (
@@ -28,6 +29,9 @@ from .models import (
     ModelloAuraRequisitoDoppia, 
     ModelloAuraRequisitoCaratt,
     ModelloAuraRequisitoMattone,
+    PropostaTecnica, Infusione, Tessitura, 
+    PropostaTecnicaMattone, PersonaggioInfusione, PersonaggioTessitura,
+    STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -257,7 +261,83 @@ def get_mattone_help_text():
     extras = [('{caratt}', 'Valore Caratteristica'), ('{3*caratt}', 'Moltiplicatore (es. 3x)')]
     return Statistica.get_help_text_parametri(extras)
 
+class PropostaMattoneInline(admin.TabularInline):
+    model = PropostaTecnicaMattone
+    extra = 0
+    readonly_fields = ('mattone', 'ordine')
+    can_delete = False
 
+    def has_add_permission(self, request, obj=None):
+        return False
+
+class InfusioneCreationInline(admin.StackedInline):
+    model = Infusione
+    fields = ('nome', 'testo', 'aura_richiesta', 'aura_infusione', 'costo_crediti_override') # Aggiungi campi necessari
+    # Nota: costo_crediti è una property nel model, ma se vuoi editarlo serve un campo fisico o logica custom.
+    # Per ora usiamo i campi standard modificabili.
+    extra = 0
+    verbose_name = "Crea Infusione da questa proposta"
+
+# Inline per Creare Tessitura da Proposta
+class TessituraCreationInline(admin.StackedInline):
+    model = Tessitura
+    fields = ('nome', 'testo', 'formula', 'aura_richiesta', 'elemento_principale')
+    extra = 0
+    verbose_name = "Crea Tessitura da questa proposta"
+
+@admin.register(PropostaTecnica)
+class PropostaTecnicaAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'tipo', 'personaggio', 'stato', 'data_creazione')
+    list_filter = ('stato', 'tipo')
+    inlines = [PropostaMattoneInline, InfusioneCreationInline, TessituraCreationInline]
+    readonly_fields = ('personaggio', 'mattoni_text', 'costo_invio_pagato', 'data_invio')
+    
+    def mattoni_text(self, obj):
+        return ", ".join([f"{m.mattone.nome}" for m in obj.propostatecnicamattone_set.all()])
+    mattoni_text.short_description = "Mattoni Richiesti"
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        obj = form.instance
+        
+        # Logica: Se è stata creata una tecnica collegata, APPROVA la proposta e ASSEGNA la tecnica
+        tecnica_creata = None
+        tipo_tecnica = None
+
+        # Controlla se esiste una relazione inversa creata
+        if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
+            tecnica_creata = obj.infusione_generata
+            tipo_tecnica = 'infusione'
+        elif hasattr(obj, 'tessitura_generata') and obj.tessitura_generata:
+            tecnica_creata = obj.tessitura_generata
+            tipo_tecnica = 'tessitura'
+
+        if tecnica_creata and obj.stato != STATO_PROPOSTA_APPROVATA:
+            # 1. Aggiorna stato proposta
+            obj.stato = STATO_PROPOSTA_APPROVATA
+            obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
+            obj.save()
+
+            # 2. Assegna GRATIS al creatore
+            pg = obj.personaggio
+            if tipo_tecnica == 'infusione':
+                if not pg.infusioni_possedute.filter(id=tecnica_creata.id).exists():
+                    PersonaggioInfusione.objects.create(
+                        personaggio=pg, 
+                        infusione=tecnica_creata,
+                        data_acquisizione=timezone.now()
+                    )
+                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente l'infusione '{tecnica_creata.nome}'.")
+            
+            elif tipo_tecnica == 'tessitura':
+                if not pg.tessiture_possedute.filter(id=tecnica_creata.id).exists():
+                    PersonaggioTessitura.objects.create(
+                        personaggio=pg, 
+                        tessitura=tecnica_creata,
+                        data_acquisizione=timezone.now()
+                    )
+                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente la tessitura '{tecnica_creata.nome}'.")    
+    
 # --- MODEL ADMINS ---
 
 @admin.register(TipologiaPersonaggio)

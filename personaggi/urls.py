@@ -93,6 +93,7 @@ urlpatterns = [
     # Endpoint per Modelli Aura
     path('api/punteggio/<int:aura_id>/modelli/', views.ModelliAuraListView.as_view(), name='lista_modelli_aura'),
     path('api/personaggio/me/seleziona_modello_aura/', views.SelezionaModelloAuraView.as_view(), name='seleziona_modello_aura'),
+    path('api/admin/pending_proposals_count/', views.AdminPendingProposalsView.as_view(), name='admin_pending_count'),
     
     path('api/', include(router.urls)),
     
