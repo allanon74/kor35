@@ -32,6 +32,27 @@ STATO_TRANSAZIONE_CHOICES = [
     (STATO_TRANSAZIONE_RIFIUTATA, 'Rifiutata'),
 ]
 
+STATO_PROPOSTA_BOZZA = 'BOZZA'
+STATO_PROPOSTA_IN_VALUTAZIONE = 'VALUTAZIONE'
+STATO_PROPOSTA_APPROVATA = 'APPROVATA'
+STATO_PROPOSTA_RIFIUTATA = 'RIFIUTATA'
+
+STATO_PROPOSTA_CHOICES = [
+    (STATO_PROPOSTA_BOZZA, 'Bozza'),
+    (STATO_PROPOSTA_IN_VALUTAZIONE, 'In Valutazione'),
+    (STATO_PROPOSTA_APPROVATA, 'Approvata'),
+    (STATO_PROPOSTA_RIFIUTATA, 'Rifiutata'),
+]
+
+TIPO_PROPOSTA_INFUSIONE = 'INF'
+TIPO_PROPOSTA_TESSITURA = 'TES'
+
+TIPO_PROPOSTA_CHOICES = [
+    (TIPO_PROPOSTA_INFUSIONE, 'Infusione'),
+    (TIPO_PROPOSTA_TESSITURA, 'Tessitura'),
+]
+
+
 # --- FUNZIONI DI UTILITÀ ---
 
 def get_testo_rango(valore):
@@ -1529,3 +1550,54 @@ class TabellaPluginModel(CMSPlugin):
 class TierPluginModel(CMSPlugin):
     tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='cms_kor_tier_plugin')
     def __str__(self): return self.tier.nome
+    
+    
+class PropostaTecnica(models.Model):
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='proposte_tecniche')
+    tipo = models.CharField(max_length=3, choices=TIPO_PROPOSTA_CHOICES)
+    stato = models.CharField(max_length=15, choices=STATO_PROPOSTA_CHOICES, default=STATO_PROPOSTA_BOZZA)
+    
+    nome = models.CharField(max_length=100)
+    descrizione = models.TextField("Ragionamento/Descrizione")
+    
+    # AGGIUNTO related_name='proposte_aura'
+    aura = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo': AURA},
+        related_name='proposte_aura'
+    )
+    
+    # AGGIUNTO related_name='proposte_in_cui_usato'
+    mattoni = models.ManyToManyField(
+        Mattone, 
+        through='PropostaTecnicaMattone',
+        related_name='proposte_in_cui_usato'
+    )
+    
+    costo_invio_pagato = models.IntegerField(default=0, help_text="Crediti spesi per l'invio")
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_invio = models.DateTimeField(null=True, blank=True)
+    
+    note_staff = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Proposta Tecnica"
+        verbose_name_plural = "Proposte Tecniche"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} - {self.nome} ({self.personaggio.nome})"
+
+    @property
+    def livello(self):
+        return self.mattoni.count()
+
+class PropostaTecnicaMattone(models.Model):
+    proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE)
+    mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
+    # L'ordine è importante per le tessere
+    ordine = models.IntegerField(default=0) 
+
+    class Meta:
+        ordering = ['ordine']

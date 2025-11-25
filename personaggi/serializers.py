@@ -11,7 +11,8 @@ from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
     Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
     abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
-    Oggetto, Attivata, Manifesto, A_vista, 
+    Oggetto, Attivata, Manifesto, A_vista, Mattone,
+    AURA, 
     # Nuovi Modelli
     Infusione, Tessitura, InfusioneMattone, TessituraMattone, 
     InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura,
@@ -22,6 +23,7 @@ from .models import (
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoDoppia,
     ModelloAuraRequisitoMattone,
+    PropostaTecnica, PropostaTecnicaMattone, STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA,
 )
 
 # --- Serializer di Base ---
@@ -788,3 +790,64 @@ class ModelloAuraSerializer(serializers.ModelSerializer):
             'requisiti_mattone',
         )
         
+class PropostaTecnicaMattoneSerializer(serializers.ModelSerializer):
+    mattone = PunteggioSmallSerializer(read_only=True)
+    mattone_id = serializers.PrimaryKeyRelatedField(
+        queryset=Mattone.objects.all(), source='mattone', write_only=True
+    )
+    
+    class Meta:
+        model = PropostaTecnicaMattone
+        fields = ('id', 'mattone', 'mattone_id', 'ordine')
+
+class PropostaTecnicaSerializer(serializers.ModelSerializer):
+    mattoni = PropostaTecnicaMattoneSerializer(source='propostatecnicamattone_set', many=True, read_only=True)
+    mattoni_ids = serializers.ListField(
+        child=serializers.IntegerField(), write_only=True, required=False
+    )
+    aura_details = PunteggioSmallSerializer(source='aura', read_only=True)
+    aura = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.filter(tipo=AURA))
+    
+    class Meta:
+        model = PropostaTecnica
+        fields = (
+            'id', 'tipo', 'stato', 'nome', 'descrizione', 
+            'aura', 'aura_details', 'mattoni', 'mattoni_ids', 
+            'livello', 'costo_invio_pagato', 'note_staff', 'data_creazione'
+        )
+        read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
+
+    def create(self, validated_data):
+        mattoni_ids = validated_data.pop('mattoni_ids', [])
+        personaggio = self.context['personaggio']
+        
+        proposta = PropostaTecnica.objects.create(personaggio=personaggio, **validated_data)
+        
+        for idx, m_id in enumerate(mattoni_ids):
+            try:
+                m = Mattone.objects.get(pk=m_id)
+                PropostaTecnicaMattone.objects.create(proposta=proposta, mattone=m, ordine=idx)
+            except Mattone.DoesNotExist:
+                pass
+        return proposta
+
+    def update(self, instance, validated_data):
+        if instance.stato != STATO_PROPOSTA_BOZZA:
+            raise serializers.ValidationError("Non puoi modificare una proposta già inviata.")
+            
+        mattoni_ids = validated_data.pop('mattoni_ids', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        if mattoni_ids is not None:
+            # Ricrea i mattoni
+            instance.propostatecnicamattone_set.all().delete()
+            for idx, m_id in enumerate(mattoni_ids):
+                try:
+                    m = Mattone.objects.get(pk=m_id)
+                    PropostaTecnicaMattone.objects.create(proposta=instance, mattone=m, ordine=idx)
+                except Mattone.DoesNotExist:
+                    pass
+        return instance

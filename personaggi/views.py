@@ -1,15 +1,18 @@
 import string
+from collections import Counter
 from decimal import Decimal
 from django.shortcuts import render
 from django.db.models import Count, Prefetch # Importato Count
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
+from rest_framework import serializers
 
 from .models import OggettoInInventario, Abilita, Tier
 from .models import QrCode
 from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario, Infusione, Tessitura
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
 from .models import Punteggio, CARATTERISTICA, PersonaggioModelloAura, ModelloAura
+from .models import PropostaTecnica, PropostaTecnicaMattone, STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE
 
 import uuid 
 
@@ -48,6 +51,7 @@ from .serializers import (
     AcquisisciSerializer,
     PunteggioDetailSerializer,
     ModelloAuraSerializer,
+    PropostaTecnicaSerializer,
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
@@ -773,3 +777,112 @@ class SelezionaModelloAuraView(APIView):
         # Ritorna il personaggio aggiornato
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data)
+    
+class PropostaTecnicaViewSet(viewsets.ModelViewSet):
+    serializer_class = PropostaTecnicaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        character_id = self.request.query_params.get('char_id')
+        user = self.request.user
+        
+        if character_id:
+            return PropostaTecnica.objects.filter(personaggio_id=character_id, personaggio__proprietario=user)
+        
+        # Default fallback (sicurezza)
+        return PropostaTecnica.objects.filter(personaggio__proprietario=user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # Necessario per create() nel serializer
+        if self.request.method == 'POST':
+            char_id = self.request.data.get('personaggio_id')
+            if char_id:
+                try:
+                    pg = Personaggio.objects.get(id=char_id, proprietario=self.request.user)
+                    context['personaggio'] = pg
+                except Personaggio.DoesNotExist:
+                    pass
+        return context
+
+    def perform_destroy(self, instance):
+        if instance.stato != STATO_PROPOSTA_BOZZA:
+            raise serializers.ValidationError("Non puoi cancellare una proposta già inviata.")
+        instance.delete()
+
+    @transaction.atomic
+    def invia_proposta(self, request, pk=None):
+        """
+        Action custom per inviare la proposta (Bozza -> Valutazione)
+        Deduce i crediti e valida i vincoli.
+        """
+        proposta = self.get_object()
+        personaggio = proposta.personaggio
+        
+        if proposta.stato != STATO_PROPOSTA_BOZZA:
+            return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Calcolo Costo
+        livello = proposta.livello
+        if livello == 0:
+            return Response({"error": "La proposta deve avere almeno un mattone."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        costo_invio = livello * 10
+        
+        if personaggio.crediti < costo_invio:
+            return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Validazioni Logiche (Anti-Cheat / Coerenza)
+        
+        # A. Aura Posseduta e Cap Livello
+        val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
+        if val_aura < 1:
+            return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
+        if livello > val_aura:
+            return Response({"error": f"Troppi mattoni ({livello}) per il valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # B. Mattoni Validi e Cap Caratteristica
+        mattoni_objs = [pm.mattone for pm in proposta.propostatecnicamattone_set.select_related('mattone__caratteristica_associata').all().order_by('ordine')]
+        mattoni_ids = [m.id for m in mattoni_objs]
+        counter_mattoni = Counter(mattoni_ids)
+        punteggi_pg = personaggio.caratteristiche_base
+        
+        for m in mattoni_objs:
+            # Controllo aura mattone
+            if m.aura_id != proposta.aura_id:
+                 return Response({"error": f"Il mattone {m.nome} non appartiene all'aura della proposta."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Controllo Caratteristica Posseduta (>=1)
+            caratt_nome = m.caratteristica_associata.nome
+            val_caratt = punteggi_pg.get(caratt_nome, 0)
+            if val_caratt < 1:
+                return Response({"error": f"Non possiedi la caratteristica {caratt_nome} per il mattone {m.nome}."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Controllo Quantità <= Valore Caratteristica
+            qty = counter_mattoni[m.id]
+            if qty > val_caratt:
+                return Response({"error": f"Hai usato il mattone {m.nome} {qty} volte, ma hai solo {val_caratt} in {caratt_nome}."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # C. Validazione Modello Aura (Proibiti / Obbligatori)
+        modello = personaggio.modelli_aura.filter(aura=proposta.aura).first()
+        if modello:
+            set_ids_proposta = set(mattoni_ids)
+            
+            # Proibiti
+            proibiti_ids = set(modello.mattoni_proibiti.values_list('id', flat=True))
+            if set_ids_proposta.intersection(proibiti_ids):
+                return Response({"error": "La proposta contiene mattoni proibiti dal tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obbligatori (Tutti i tipi obbligatori devono essere presenti)
+            obbligatori_ids = set(modello.mattoni_obbligatori.values_list('id', flat=True))
+            if not obbligatori_ids.issubset(set_ids_proposta):
+                return Response({"error": "La proposta non contiene tutti i mattoni obbligatori del tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Esecuzione Pagamento e Cambio Stato
+        personaggio.modifica_crediti(-costo_invio, f"Invio proposta {proposta.tipo}: {proposta.nome}")
+        proposta.costo_invio_pagato = costo_invio
+        proposta.stato = STATO_PROPOSTA_IN_VALUTAZIONE
+        proposta.data_invio = timezone.now()
+        proposta.save()
+        
+        return Response(PropostaTecnicaSerializer(proposta).data, status=status.HTTP_200_OK)

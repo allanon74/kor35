@@ -17,6 +17,7 @@ from .views import (AbilViewSet,
     AbilitaTierViewSet, AbilitaRequisitoViewSet, AbilitaSbloccataViewSet,
     AbilitaPunteggioViewSet, AbilitaPrerequisitoViewSet,
     MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
+    PropostaTecnicaViewSet,
 )
 
 app_name = 'personaggi'
@@ -33,6 +34,7 @@ router.register(r'abilita-requisito', AbilitaRequisitoViewSet)
 router.register(r'abilita-sbloccata', AbilitaSbloccataViewSet)
 router.register(r'abilita-punteggio', AbilitaPunteggioViewSet)
 router.register(r'abilita-prerequisito', AbilitaPrerequisitoViewSet)
+router.register(r'proposte', PropostaTecnicaViewSet, basename='proposte')
 
 
 
