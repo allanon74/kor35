@@ -893,3 +893,26 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
                 except Mattone.DoesNotExist:
                     pass
         return instance
+    
+class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
+    """Restituisce solo ID e Nome per la ricerca veloce"""
+    class Meta:
+        model = Personaggio
+        fields = ('id', 'nome')
+
+class MessaggioCreateSerializer(serializers.ModelSerializer):
+    destinatario_id = serializers.PrimaryKeyRelatedField(
+        queryset=Personaggio.objects.all(), source='destinatario_personaggio', write_only=True
+    )
+
+    class Meta:
+        model = Messaggio
+        fields = ('destinatario_id', 'titolo', 'testo')
+
+    def create(self, validated_data):
+        # Il mittente viene iniettato dalla view (request.user)
+        # Nota: il tipo è INDIVIDUALE di default per questi messaggi
+        mittente = self.context['request'].user
+        validated_data['mittente'] = mittente
+        validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
+        return super().create(validated_data)

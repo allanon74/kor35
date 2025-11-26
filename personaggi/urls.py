@@ -100,6 +100,9 @@ urlpatterns = [
     path('api/personaggio/me/logs/', views.PersonaggioLogsListView.as_view(), name='personaggio-logs'),
     path('api/personaggio/me/transazioni/', views.PersonaggioTransazioniListView.as_view(), name='personaggio-transazioni'),
     
+    path('api/personaggi/search/', views.PersonaggioAutocompleteView.as_view(), name='personaggio-search'),
+    path('api/messaggi/send/', views.MessaggioPrivateCreateView.as_view(), name='messaggio-send'),
+    
     path('api/', include(router.urls)),
     
 ]
