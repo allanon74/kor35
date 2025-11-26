@@ -58,6 +58,8 @@ from .serializers import (
     ModelloAuraSerializer,
     PropostaTecnicaSerializer,
     PersonaggioLogSerializer,
+    PersonaggioAutocompleteSerializer,
+    MessaggioCreateSerializer,
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
@@ -1042,25 +1044,39 @@ class AdminPendingProposalsView(APIView):
         count = PropostaTecnica.objects.filter(stato=STATO_PROPOSTA_IN_VALUTAZIONE).count()
         return Response({"count": count})
     
-class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
-    """Restituisce solo ID e Nome per la ricerca veloce"""
-    class Meta:
-        model = Personaggio
-        fields = ('id', 'nome')
+class PersonaggioAutocompleteView(generics.ListAPIView):
+    """
+    GET /api/personaggi/search/?q=ini
+    Restituisce personaggi il cui nome inizia o contiene la query.
+    Esclude il personaggio che sta effettuando la ricerca.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = PersonaggioAutocompleteSerializer
+    pagination_class = None  # Disabilita paginazione per l'autocomplete
 
-class MessaggioCreateSerializer(serializers.ModelSerializer):
-    destinatario_id = serializers.PrimaryKeyRelatedField(
-        queryset=Personaggio.objects.all(), source='destinatario_personaggio', write_only=True
-    )
+    def get_queryset(self):
+        query = self.request.query_params.get('q', '')
+        current_char_id = self.request.query_params.get('current_char_id')
+        
+        if len(query) < 2:
+            return Personaggio.objects.none()
 
-    class Meta:
-        model = Messaggio
-        fields = ('destinatario_id', 'titolo', 'testo')
+        qs = Personaggio.objects.filter(nome__icontains=query)
+        
+        # Escludi il personaggio corrente (se specificato)
+        if current_char_id:
+            qs = qs.exclude(id=current_char_id)
+            
+        return qs[:10]  # Limita a 10 risultati
 
-    def create(self, validated_data):
-        # Il mittente viene iniettato dalla view (request.user)
-        # Nota: il tipo è INDIVIDUALE di default per questi messaggi
-        mittente = self.context['request'].user
-        validated_data['mittente'] = mittente
-        validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
-        return super().create(validated_data)
+class MessaggioPrivateCreateView(generics.CreateAPIView):
+    """
+    POST /api/messaggi/send/
+    Invia un messaggio da un Utente (proprietario del PG mittente) a un PG destinatario.
+    """
+    permission_classes = [IsAuthenticated]
+    serializer_class = MessaggioCreateSerializer
+
+    def perform_create(self, serializer):
+        # Salviamo il messaggio impostando l'utente corrente come mittente
+        serializer.save(mittente=self.request.user)
