@@ -609,17 +609,34 @@ class PersonaggioTransazioniListView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         tipo = self.request.query_params.get('tipo', 'entrata') # 'entrata' o 'uscita'
+        char_id = self.request.query_params.get('char_id') # Parametro opzionale
         
-        try:
-            pg = Personaggio.objects.get(proprietario=user)
-        except Personaggio.DoesNotExist:
+        # Base queryset: personaggi dell'utente
+        qs_pg = Personaggio.objects.filter(proprietario=user)
+        
+        # Se specificato un ID, filtriamo per quello (sicurezza extra: deve essere tuo)
+        if char_id:
+            qs_pg = qs_pg.filter(id=char_id)
+            
+        # Se non trova personaggi (o ID non valido per l'utente), ritorna vuoto
+        if not qs_pg.exists():
             return TransazioneSospesa.objects.none()
 
-        if tipo == 'uscita':
-            return TransazioneSospesa.objects.filter(mittente=pg.inventario_ptr).order_by('-data_richiesta')
-        else:
-            return TransazioneSospesa.objects.filter(richiedente=pg).order_by('-data_richiesta')
+        # Recuperiamo gli ID dei personaggi (o del singolo personaggio)
+        # Nota: usiamo una lista per supportare sia singolo che multipli se necessario
+        pg_ids = list(qs_pg.values_list('id', flat=True))
+        inventari_ids = list(qs_pg.values_list('inventario_ptr_id', flat=True))
 
+        if tipo == 'uscita':
+            # Transazioni in cui uno dei miei inventari è il MITTENTE
+            return TransazioneSospesa.objects.filter(
+                mittente__id__in=inventari_ids
+            ).order_by('-data_richiesta')
+        else:
+            # Transazioni in cui uno dei miei personaggi è il RICHIEDENTE
+            return TransazioneSospesa.objects.filter(
+                richiedente__id__in=pg_ids
+            ).order_by('-data_richiesta')
 
 class CreditoMovimentoCreateView(APIView):
     permission_classes = [IsAuthenticated]
