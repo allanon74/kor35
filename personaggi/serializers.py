@@ -86,9 +86,9 @@ class ModelloAuraSerializer(serializers.ModelSerializer):
         fields = ('id', 'nome', 'aura', 'mattoni_proibiti')
 
 class PunteggioDetailSerializer(serializers.ModelSerializer):
-    icona_html = serializers.SerializerMethodField()
-    icona_cerchio_html = serializers.SerializerMethodField()
-    icona_cerchio_inverted_html = serializers.SerializerMethodField()
+    # icona_html = serializers.SerializerMethodField()
+    # icona_cerchio_html = serializers.SerializerMethodField()
+    # icona_cerchio_inverted_html = serializers.SerializerMethodField()
     icona_url = serializers.SerializerMethodField() 
     is_primaria = serializers.SerializerMethodField()
     valore_predefinito = serializers.SerializerMethodField()
@@ -102,7 +102,8 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         model = Punteggio
         fields = (
             'id', 'nome', 'sigla', 'tipo', 'colore', 
-            'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 
+            'icona_url',
+            # 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 
             'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
             'permette_infusioni', 'permette_tessiture',
             'is_mattone', 
@@ -129,41 +130,41 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     def get_icona_url(self, obj): 
         return self.get_icona_url_assoluto(obj)
     
-    def get_icona_html(self, obj):
-        url = self.get_icona_url_assoluto(obj)
-        if not url or not obj.colore: return ""
-        style = (f"width: 24px; height: 24px; background-color: {obj.colore}; mask-image: url({url}); -webkit-mask-image: url({url}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain; display: inline-block; vertical-align: middle;")
-        return format_html('<div style="{}"></div>', style)
+    # def get_icona_html(self, obj):
+    #     url = self.get_icona_url_assoluto(obj)
+    #     if not url or not obj.colore: return ""
+    #     style = (f"width: 24px; height: 24px; background-color: {obj.colore}; mask-image: url({url}); -webkit-mask-image: url({url}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain; display: inline-block; vertical-align: middle;")
+    #     return format_html('<div style="{}"></div>', style)
     
-    def get_icona_cerchio_html(self, obj): 
-        return self._get_icona_cerchio(obj, inverted=False)
+    # def get_icona_cerchio_html(self, obj): 
+    #     return self._get_icona_cerchio(obj, inverted=False)
     
-    def get_icona_cerchio_inverted_html(self, obj): 
-        return self._get_icona_cerchio(obj, inverted=True)
+    # def get_icona_cerchio_inverted_html(self, obj): 
+    #     return self._get_icona_cerchio(obj, inverted=True)
     
-    def _get_icona_cerchio(self, obj, inverted=False):
-        url_icona_locale = self.get_icona_url_assoluto(obj)
-        if not url_icona_locale or not obj.colore: return ""
-        colore_sfondo = obj.colore
+    # def _get_icona_cerchio(self, obj, inverted=False):
+    #     url_icona_locale = self.get_icona_url_assoluto(obj)
+    #     if not url_icona_locale or not obj.colore: return ""
+    #     colore_sfondo = obj.colore
         
-        # Calcola colore contrasto
-        try:
-            colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
-        except:
-            colore_icona_contrasto = 'white'
+        # # Calcola colore contrasto
+        # try:
+        #     colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
+        # except:
+        #     colore_icona_contrasto = 'white'
 
-        if inverted:
-            colore_icona_contrasto = obj.colore
-            try:
-                colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
-            except:
-                colore_sfondo = 'black'
+        # if inverted:
+        #     colore_icona_contrasto = obj.colore
+        #     try:
+        #         colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
+        #     except:
+        #         colore_sfondo = 'black'
                 
-        stile_cerchio = (f"display: inline-block; width: 30px; height: 30px; background-color: {colore_sfondo}; border-radius: 50%; vertical-align: middle; text-align: center; line-height: 30px;")
-        stile_icona_maschera = (f"display: inline-block; width: 24px; height: 24px; vertical-align: middle; background-color: {colore_icona_contrasto}; mask-image: url({url_icona_locale}); -webkit-mask-image: url({url_icona_locale}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain;")
+        # stile_cerchio = (f"display: inline-block; width: 30px; height: 30px; background-color: {colore_sfondo}; border-radius: 50%; vertical-align: middle; text-align: center; line-height: 30px;")
+        # stile_icona_maschera = (f"display: inline-block; width: 24px; height: 24px; vertical-align: middle; background-color: {colore_icona_contrasto}; mask-image: url({url_icona_locale}); -webkit-mask-image: url({url_icona_locale}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain;")
         
-        # CORREZIONE QUI: stile_cerchio invece di style_cerchio
-        return format_html('<div style="{}"><div style="{}"></div></div>', stile_cerchio, stile_icona_maschera)
+        # # CORREZIONE QUI: stile_cerchio invece di style_cerchio
+        # return format_html('<div style="{}"><div style="{}"></div></div>', stile_cerchio, stile_icona_maschera)
     
     def get_is_primaria(self, obj): 
         return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False
@@ -536,10 +537,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     infusioni_possedute = serializers.SerializerMethodField() # Nuovo
     tessiture_possedute = serializers.SerializerMethodField() # Nuovo
     
-    log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
+    # log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
-    transazioni_in_uscita_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
-    transazioni_in_entrata_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
+    # transazioni_in_uscita_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
+    # transazioni_in_entrata_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
     is_staff = serializers.BooleanField(source='proprietario.is_staff', read_only=True)
     modelli_aura = ModelloAuraSerializer(many=True, read_only=True)
 
@@ -551,17 +552,22 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'punteggi_base', 'modificatori_calcolati', 
             'abilita_possedute', 'oggetti', 
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
-            'log_eventi', 'movimenti_credito',
-            'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese', 
+            'movimenti_credito',
+            # 'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese', 'log_eventi',
             'TestoFormattatoPersonale',
             'is_staff', 'modelli_aura',
         )
     
     def get_oggetti(self, personaggio):
-        oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
-            'statistiche_base__statistica', 'oggettostatistica_set__statistica',
-            'oggettoelemento_set__elemento', 'aura'
-        )
+        if hasattr(personaggio.inventario_ptr, 'tracciamento_oggetti_correnti'):
+            oggetti_in_inv = personaggio.inventario_ptr.tracciamento_oggetti_correnti
+            # Estraiamo gli oggetti dai modelli intermedi OggettoInInventario
+            oggetti_posseduti = [x.oggetto for x in oggetti_in_inv]
+        else:
+            oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
+                'statistiche_base__statistica', 'oggettostatistica_set__statistica',
+                'oggettoelemento_set__elemento', 'aura'
+            )
         # Trigger calcolo modificatori prima della serializzazione
         personaggio.modificatori_calcolati 
         
@@ -577,9 +583,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_attivate_possedute(self, personaggio):
-        attivate = personaggio.attivate_possedute.prefetch_related(
-            'statistiche_base__statistica', 'attivataelemento_set__elemento'
-        )
+        # attivate = personaggio.attivate_possedute.prefetch_related(
+        #     'statistiche_base__statistica', 'attivataelemento_set__elemento'
+        # )
+        attivate = personaggio.attivate_possedute.all()
         risultati = []
         # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
@@ -591,10 +598,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_infusioni_possedute(self, personaggio):
-        infusioni = personaggio.infusioni_possedute.prefetch_related(
-            'statistiche_base__statistica', 'infusionemattone_set__mattone', 
-            'aura_richiesta', 'aura_infusione'
-        )
+        # infusioni = personaggio.infusioni_possedute.prefetch_related(
+        #     'statistiche_base__statistica', 'infusionemattone_set__mattone', 
+        #     'aura_richiesta', 'aura_infusione'
+        # )
+        infusioni = personaggio.infusioni_possedute.all()
         risultati = []
         # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
@@ -606,10 +614,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_tessiture_possedute(self, personaggio):
-        tessiture = personaggio.tessiture_possedute.prefetch_related(
-            'statistiche_base__statistica', 'tessituramattone_set__mattone', 
-            'aura_richiesta', 'elemento_principale'
-        )
+        # tessiture = personaggio.tessiture_possedute.prefetch_related(
+        #     'statistiche_base__statistica', 'tessituramattone_set__mattone', 
+        #     'aura_richiesta', 'elemento_principale'
+        # )
+        tessiture = personaggio.tessiture_possedute.all()
         risultati = []
         # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
@@ -759,7 +768,7 @@ class MessaggioSerializer(serializers.ModelSerializer):
     mittente = serializers.StringRelatedField(read_only=True)
     destinatario_personaggio = serializers.StringRelatedField(read_only=True)
     destinatario_gruppo = GruppoSerializer(read_only=True)
-    is_letto = serializers.SerializerMethodField()
+    is_letto = serializers.BooleanField(source='is_letto_db', read_only=True)
     
     class Meta:
         model = Messaggio
@@ -770,24 +779,6 @@ class MessaggioSerializer(serializers.ModelSerializer):
             )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
         
-    def get_is_letto(self, obj):
-        # Recuperiamo il personaggio dal contesto della request
-        request = self.context.get('request')
-        # In alcune view potresti passare 'personaggio_visualizzatore' nel context
-        personaggio = self.context.get('personaggio') 
-        
-        # Se non abbiamo il personaggio nel context, proviamo a dedurlo (logica custom se serve)
-        if not personaggio and request:
-             # Qui dovresti idealmente passare il personaggio esplicitamente dal context della View
-             pass
-
-        if personaggio:
-            try:
-                stato = LetturaMessaggio.objects.get(messaggio=obj, personaggio=personaggio)
-                return stato.letto
-            except LetturaMessaggio.DoesNotExist:
-                return False # Se non esiste il record, è sicuramente non letto
-        return False
 
 class MessaggioBroadcastCreateSerializer(serializers.ModelSerializer):
     class Meta:

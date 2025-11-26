@@ -2,11 +2,12 @@ import string
 from collections import Counter
 from decimal import Decimal
 from django.shortcuts import render
-from django.db.models import Count, Prefetch # Importato Count
+from django.db.models import Count, Prefetch, OuterRef, Exists # Importato Count
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from rest_framework import serializers
 from django.utils import timezone
+from django.core.cache import cache
 
 from .models import OggettoInInventario, Abilita, Tier
 from .models import QrCode
@@ -14,7 +15,7 @@ from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario, Infusione
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
 from .models import Punteggio, CARATTERISTICA, PersonaggioModelloAura, ModelloAura
 from .models import PropostaTecnica, PropostaTecnicaMattone, STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE
-from .models import LetturaMessaggio
+from .models import LetturaMessaggio, PersonaggioLog
 
 import uuid 
 
@@ -34,6 +35,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 
 from rest_framework import generics
 from django.db import transaction
@@ -55,6 +57,7 @@ from .serializers import (
     PunteggioDetailSerializer,
     ModelloAuraSerializer,
     PropostaTecnicaSerializer,
+    PersonaggioLogSerializer,
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
@@ -226,6 +229,7 @@ class AcquisisciAbilitaView(APIView):
 class AbilitaAcquistabiliView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = AbilitaMasterListSerializer
+    
     def get(self, request, format=None):
         character_id = request.query_params.get('char_id')
         if not character_id: return Response({"error": "L'ID del personaggio è richiesto (char_id)."}, status=status.HTTP_400_BAD_REQUEST)
@@ -236,6 +240,11 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
             return Response({"error": "Personaggio non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
 
+        cache_key = f"acquirable_skills_{character_id}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+        
         possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
         char_scores = personaggio.caratteristiche_base
         mods = personaggio.modificatori_calcolati
@@ -272,6 +281,7 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
             skill_data['costo_pc_calc'] = costo_pc_base 
             skill_data['costo_crediti_calc'] = float(costo_crediti_calc)
             final_data.append(skill_data)
+        cache.set(cache_key, final_data, timeout=600)
         return Response(final_data, status=status.HTTP_200_OK)
 
 # --- NUOVE VISTE PER INFUSIONI E TESSITURE (CORRETTE) ---
@@ -543,22 +553,71 @@ class PersonaggioMeView(APIView):
             personaggio = Personaggio.objects.select_related(
                 'tipologia', 'inventario_ptr'
             ).prefetch_related(
-                'log_eventi', 'movimenti_credito', 'movimenti_pc', 'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese',
+                'movimenti_credito', 'movimenti_pc', 
+                # 'log_eventi', 'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese',
                 'abilita_possedute', 'attivate_possedute__statistiche_base__statistica', 'attivate_possedute__elementi__elemento',
                 'infusioni_possedute__statistiche_base__statistica', 'infusioni_possedute__mattoni__mattone',
                 'tessiture_possedute__statistiche_base__statistica', 'tessiture_possedute__mattoni__mattone',
                 
                 Prefetch(
                     'inventario_ptr__tracciamento_oggetti',
-                    queryset=OggettoInInventario.objects.filter(data_fine__isnull=True).select_related('oggetto__aura').prefetch_related('oggetto__oggettostatisticabase_set__statistica', 'oggetto__oggettostatistica_set__statistica', 'oggetto__oggettoelemento_set__elemento'),
+                    queryset=OggettoInInventario.objects.filter(data_fine__isnull=True).select_related(
+                        'oggetto__aura'
+                    ).prefetch_related(
+                        'oggetto__oggettostatisticabase_set__statistica', 
+                        'oggetto__oggettostatistica_set__statistica', 
+                        'oggetto__oggettoelemento_set__elemento',
+                    ),
                     to_attr='tracciamento_oggetti_correnti'
                 ),
-                'abilita_possedute__statistiche__statistica', 'abilita_possedute__punteggio_acquisito__modifica_statistiche__statistica_modificata', 'inventario_ptr__tracciamento_oggetti__oggetto__statistiche__statistica',
+                'abilita_possedute__statistiche__statistica', 
+                'abilita_possedute__punteggio_acquisito__modifica_statistiche__statistica_modificata', 
+                'inventario_ptr__tracciamento_oggetti__oggetto__statistiche__statistica',
             ).get(proprietario=request.user)
-        except Personaggio.DoesNotExist: return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
         
-        serializer = PersonaggioDetailSerializer(personaggio)
+        except Personaggio.DoesNotExist: 
+            return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+# 3. Nuove View per Log e Transazioni (Lazy Loading)
+
+class PersonaggioLogsListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = PersonaggioLogSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        # Restituisce solo i log del personaggio dell'utente loggato
+        return PersonaggioLog.objects.filter(
+            personaggio__proprietario=self.request.user
+        ).order_by('-data')
+
+class PersonaggioTransazioniListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = TransazioneSospesaSerializer
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        tipo = self.request.query_params.get('tipo', 'entrata') # 'entrata' o 'uscita'
+        
+        try:
+            pg = Personaggio.objects.get(proprietario=user)
+        except Personaggio.DoesNotExist:
+            return TransazioneSospesa.objects.none()
+
+        if tipo == 'uscita':
+            return TransazioneSospesa.objects.filter(mittente=pg.inventario_ptr).order_by('-data_richiesta')
+        else:
+            return TransazioneSospesa.objects.filter(richiedente=pg).order_by('-data_richiesta')
+
 
 class CreditoMovimentoCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -736,7 +795,13 @@ class MessaggioListView(generics.ListAPIView):
             cancellato=True
         ).values_list('messaggio_id', flat=True)
 
-        return messaggi.exclude(id__in=ids_cancellati)
+        lettura_esistente = LetturaMessaggio.objects.filter(
+            messaggio=OuterRef('pk'),
+            personaggio=target_pg,
+            letto=True
+        )
+        
+        return messaggi.exclude(id__in=ids_cancellati).annotate(is_letto_db=Exists(lettura_esistente))
     
 class MessaggioActionView(APIView):
     permission_classes = [IsAuthenticated]
