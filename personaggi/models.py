@@ -504,7 +504,13 @@ class Punteggio(Tabella):
         related_name='modificata_da_caratteristiche', 
         blank=True
     )
-    
+    aure_infusione_consentite = models.ManyToManyField(
+        'self', 
+        blank=True, 
+        symmetrical=False, 
+        related_name='puo_essere_infusa_in',
+        help_text="Seleziona quali aure possono essere usate come fonte di mattoni quando questa aura è selezionata come 'Aura Richiesta'."
+    )    
     class Meta:
         verbose_name = "Punteggio"
         verbose_name_plural = "Punteggi"

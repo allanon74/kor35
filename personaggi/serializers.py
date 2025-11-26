@@ -58,7 +58,7 @@ class StatisticaSerializer(serializers.ModelSerializer):
 class PunteggioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Punteggio
-        fields = ('nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'colore')
+        fields = ('nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 'colore', 'aure_infusione_consentite', 'ordine',)
 
 class PunteggioSmallSerializer(serializers.ModelSerializer):
     class Meta:
@@ -107,6 +107,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'permette_infusioni', 'permette_tessiture',
             'is_mattone', 
             'aura_id', 'caratteristica_associata_nome',
+            'aure_infusione_consentite',
             )
 
     def get_base_url(self):
