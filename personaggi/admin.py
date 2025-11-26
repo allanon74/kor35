@@ -31,7 +31,7 @@ from .models import (
     ModelloAuraRequisitoMattone,
     PropostaTecnica, Infusione, Tessitura, 
     PropostaTecnicaMattone, PersonaggioInfusione, PersonaggioTessitura,
-    STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA,
+    STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
 )
 
@@ -329,7 +329,7 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         
         # Verifica se lo stato è cambiato in RIFIUTATA
-        if change and 'stato' in form.changed_data and obj.stato == STATO_PROPOSTA_RIFIUTATA:
+        if change and 'stato' in form.changed_data and obj.stato in (STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA):
             motivo = obj.note_staff if obj.note_staff else "Nessuna motivazione specifica fornita."
             
             # Crea il messaggio per il giocatore
@@ -415,6 +415,7 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
                     )
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente l'infusione '{tecnica_creata.nome}'.")
             
+            
             elif tipo_tecnica == 'tessitura':
                 if not pg.tessiture_possedute.filter(id=tecnica_creata.id).exists():
                     PersonaggioTessitura.objects.create(
@@ -423,6 +424,15 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
                         data_acquisizione=timezone.now()
                     )
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente la tessitura '{tecnica_creata.nome}'.")
+
+            Messaggio.objects.create(
+                mittente=request.user, # L'admin che ha fatto l'azione
+                destinatario_personaggio=obj.personaggio,
+                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+                titolo=f"Esito Proposta: {obj.nome}",
+                testo=f"La tua proposta '{obj.nome}' è stata valutata e ACCETTATA!\n\nHai ottenuto gratuitamente la tecnica '{tecnica_creata.nome}'.",
+                salva_in_cronologia=True
+            )
                     
                         
 # --- MODEL ADMINS ---
@@ -586,7 +596,7 @@ class OggettoAdmin(SModelAdmin):
         return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
 
-@admin.register(Attivata)
+# @admin.register(Attivata)
 class AttivataAdmin(SModelAdmin):
     # LEGACY
     list_display = ('id', 'data_creazione', 'nome'); readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
