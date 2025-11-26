@@ -814,11 +814,21 @@ class abilita_tier(A_modello):
 class abilita_prerequisito(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_prerequisiti")
     prerequisito = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_abilitati")
+    
+    class Meta:
+        verbose_name = "Abilità richieste come prerequisito di acquisto"
 
 class abilita_requisito(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
-    requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
+    requisito = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE, 
+        limit_choices_to={'tipo__in': (CARATTERISTICA, CONDIZIONE, STATISTICA)}
+        )
     valore = models.IntegerField(default=1)
+    
+    class Meta:
+        verbose_name = "Punteggi richiesti come requisito di acquisto"
 
 class abilita_sbloccata(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
@@ -828,6 +838,9 @@ class abilita_punteggio(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     punteggio = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
+    
+    class Meta:
+        verbose_name = "Punteggi assegnati dall'abilità"
 
 # --- LEGACY: ATTIVATA ---
 class Attivata(A_vista):
