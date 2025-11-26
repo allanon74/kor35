@@ -472,6 +472,7 @@ class AuraAdmin(IconaAdminMixin, A_Admin):
     form = PunteggioAdminForm
     list_display = ('nome', 'sigla', 'icona_html', 'ordine', 'is_soprannaturale', 'is_generica')
     list_editable = ('ordine', 'is_soprannaturale', 'is_generica'); search_fields = ('nome',); summernote_fields = ('descrizione',)
+    filter_horizontal = ('aure_infusione_consentite',)
     inlines = [MattoneInlineForAura]
     def get_queryset(self, request): return super().get_queryset(request).filter(tipo=AURA)
     def get_exclude(self, request, obj=None): return ('tipo', 'descrizione', 'caratteristica_relativa')
