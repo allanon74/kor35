@@ -11,7 +11,7 @@ from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
     Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
     abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
-    Oggetto, Attivata, Manifesto, A_vista, Mattone,
+    Attivata, Manifesto, A_vista, Mattone,
     AURA, 
     # Nuovi Modelli
     Infusione, Tessitura, InfusioneMattone, TessituraMattone, 
@@ -26,6 +26,7 @@ from .models import (
     PropostaTecnica, PropostaTecnicaMattone, 
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA,
     LetturaMessaggio,
+    Oggetto, ClasseOggetto, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA,
 )
 
 # --- Serializer di Base ---
@@ -369,35 +370,102 @@ class OggettoElementoSerializer(serializers.ModelSerializer):
         model = OggettoElemento
         fields = ('elemento',)
 
+class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
+    """
+    Serializer leggero per mostrare Mod e Materia installate dentro un oggetto padre.
+    Serve per evitare ricorsioni infinite e mostrare solo i dati essenziali nella lista.
+    """
+    infusione_nome = serializers.CharField(source='infusione_generatrice.nome', read_only=True)
+    tipo_oggetto_display = serializers.CharField(source='get_tipo_oggetto_display', read_only=True)
+    
+    class Meta:
+        model = Oggetto
+        fields = [
+            'id', 
+            'nome', 
+            'tipo_oggetto', 
+            'tipo_oggetto_display',
+            'cariche_attuali', 
+            'infusione_nome'
+        ]
+
+# --- SERIALIZER PRINCIPALE ---
 class OggettoSerializer(serializers.ModelSerializer):
+    # Relazioni esistenti (Statistiche ed Elementi)
     statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
     statistiche_base = OggettoStatisticaBaseSerializer(source='oggettostatisticabase_set', many=True, read_only=True)
     elementi = OggettoElementoSerializer(source='oggettoelemento_set', many=True, read_only=True)
+    
+    # Campi calcolati/display esistenti
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
     aura = PunteggioSmallSerializer(read_only=True)
     inventario_corrente = serializers.StringRelatedField(read_only=True)
     
-    # Gestione Costi
-    costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
+    # --- NUOVI CAMPI PER LA LOGICA KOR35 AVANZATA ---
+    
+    # 1. Classificazione e Tipo
+    tipo_oggetto_display = serializers.CharField(source='get_tipo_oggetto_display', read_only=True)
+    classe_oggetto_nome = serializers.CharField(source='classe_oggetto.nome', read_only=True, default="")
+    
+    # 2. Origine (Crafting)
+    infusione_nome = serializers.CharField(source='infusione_generatrice.nome', read_only=True, default=None)
+    
+    # 3. Socketing (Cosa c'è montato sopra?)
+    potenziamenti_installati = OggettoPotenziamentoSerializer(many=True, read_only=True)
+    
+    # 4. Gestione Costi (Aggiornato al campo 'costo_acquisto' del nuovo modello)
+    # Nota: Assicurati che nel model il campo sia 'costo_acquisto' come da Step 1, 
+    # altrimenti rimetti 'costo_crediti'.
+    costo_pieno = serializers.IntegerField(source='costo_acquisto', read_only=True)
     costo_effettivo = serializers.SerializerMethodField()
     
     class Meta:
         model = Oggetto
         fields = (
-            'id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 
-            'livello', 'aura', 'elementi', 
-            'statistiche', 'statistiche_base', 'inventario_corrente', 
-            'costo_pieno', 'costo_effettivo',
-            )
+            'id', 
+            'nome', 
+            'testo', 
+            'TestoFormattato', 
+            'testo_formattato_personaggio', 
+            'livello', 
+            'aura', 
+            'elementi', 
+            'statistiche', 
+            'statistiche_base', 
+            'inventario_corrente',
+            
+            # Costi
+            'costo_pieno', 
+            'costo_effettivo',
+            'in_vendita', # Utile per il frontend del negozio
+
+            # Nuovi Campi Logici
+            'tipo_oggetto',
+            'tipo_oggetto_display',
+            'classe_oggetto',       # ID della classe (per logiche frontend)
+            'classe_oggetto_nome',  # Nome della classe (per display)
+            'is_tecnologico',
+            'slot_corpo',           # Per innesti
+            'attacco_base',         # Per armi
+            
+            # Gestione Cariche e Origine
+            'cariche_attuali',
+            'infusione_generatrice', # ID
+            'infusione_nome',        # Nome Display
+            
+            # Socketing
+            'potenziamenti_installati'
+        )
         
     def get_costo_effettivo(self, obj):
         personaggio = self.context.get('personaggio')
         if personaggio:
             return personaggio.get_costo_item_scontato(obj)
-        return obj.costo_crediti
-
+        # Fallback al costo base se non c'è personaggio nel contesto
+        return getattr(obj, 'costo_acquisto', 0)
+    
 # Legacy
 class AttivataSerializer(serializers.ModelSerializer):
     statistiche_base = AttivataStatisticaBaseSerializer(source='attivatastatisticabase_set', many=True, read_only=True)

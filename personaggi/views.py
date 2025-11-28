@@ -8,6 +8,7 @@ from django.http import HttpResponse, HttpRequest
 from rest_framework import serializers
 from django.utils import timezone
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 
 from .models import OggettoInInventario, Abilita, Tier
 from .models import QrCode
@@ -76,6 +77,7 @@ from django.conf import settings
 
 from webpush.models import PushInformation, SubscriptionInfo
 import json
+from .services import monta_potenziamento, crea_oggetto_da_infusione
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
 
@@ -1097,3 +1099,203 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
     def perform_create(self, serializer):
         # Salviamo il messaggio impostando l'utente corrente come mittente
         serializer.save(mittente=self.request.user)
+        
+        
+class OggettoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet per la gestione completa degli oggetti:
+    - CRUD standard
+    - Crafting da Infusione
+    - Gestione Mod/Materia (Monta/Smonta)
+    - Gestione Cariche (Usa/Ricarica)
+    """
+    queryset = Oggetto.objects.all()
+    serializer_class = OggettoSerializer
+
+    def get_queryset(self):
+        """
+        Opzionale: Filtra gli oggetti per mostrare solo quelli del giocatore loggato,
+        o mantieni .all() se gestisci i permessi diversamente.
+        Qui mostriamo tutto per ora.
+        """
+        return super().get_queryset()
+
+    @action(detail=False, methods=['post'])
+    def craft(self, request):
+        """
+        Endpoint: [POST] /api/oggetti/craft/
+        Crea un nuovo Oggetto fisico a partire da un'Infusione.
+        Body richiesto: { "infusione_id": <int> }
+        """
+        infusione_id = request.data.get('infusione_id')
+        if not infusione_id:
+            return Response({'error': 'infusione_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
+
+        infusione = get_object_or_404(Infusione, pk=infusione_id)
+        
+        # Determina il proprietario (Personaggio associato all'utente loggato)
+        if not hasattr(request.user, 'personaggi'):
+             return Response({'error': 'Utente senza personaggi associati'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Prende il primo personaggio (o implementa logica di selezione se ne ha più di uno)
+        personaggio = request.user.personaggi.first() 
+        if not personaggio:
+             return Response({'error': 'Nessun personaggio trovato per questo utente'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Chiama il servizio di crafting
+            nuovo_oggetto = crea_oggetto_da_infusione(infusione, personaggio)
+            
+            # Serializza e restituisce l'oggetto creato
+            serializer = self.get_serializer(nuovo_oggetto)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': f"Errore interno: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'])
+    def monta(self, request, pk=None):
+        """
+        Endpoint: [POST] /api/oggetti/{id_ospite}/monta/
+        Installa un potenziamento (Mod/Materia) su questo oggetto.
+        Body richiesto: { "potenziamento_id": <int> }
+        """
+        oggetto_ospite = self.get_object() # L'oggetto su cui montare (es. Fucile)
+        potenziamento_id = request.data.get('potenziamento_id')
+        
+        if not potenziamento_id:
+            return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
+
+        potenziamento = get_object_or_404(Oggetto, pk=potenziamento_id)
+        
+        try:
+            # Chiama il servizio di socketing che gestisce le validazioni complesse
+            monta_potenziamento(oggetto_ospite, potenziamento)
+            
+            # Restituisce l'oggetto ospite aggiornato (così il frontend vede il nuovo potenziamento)
+            serializer = self.get_serializer(oggetto_ospite)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def smonta(self, request, pk=None):
+        """
+        Endpoint: [POST] /api/oggetti/{id_ospite}/smonta/
+        Rimuove un potenziamento installato e lo rimette nell'inventario del proprietario.
+        Body richiesto: { "potenziamento_id": <int> }
+        """
+        oggetto_ospite = self.get_object()
+        potenziamento_id = request.data.get('potenziamento_id')
+        
+        if not potenziamento_id:
+            return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Verifica che il potenziamento sia effettivamente montato su QUESTO oggetto
+        potenziamento = get_object_or_404(Oggetto, pk=potenziamento_id, ospitato_su=oggetto_ospite)
+        
+        try:
+            with transaction.atomic():
+                # 1. Distacca il potenziamento
+                potenziamento.ospitato_su = None
+                potenziamento.save()
+                
+                # 2. Trova dove mettere il potenziamento smontato
+                # Lo mettiamo nello stesso inventario dove si trova l'oggetto ospite (es. Zaino PG)
+                inventario_destinazione = oggetto_ospite.inventario_corrente
+                
+                if inventario_destinazione:
+                    potenziamento.sposta_in_inventario(inventario_destinazione)
+                
+            serializer = self.get_serializer(oggetto_ospite)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def usa_carica(self, request, pk=None):
+        """
+        Endpoint: [POST] /api/oggetti/{id}/usa_carica/
+        Consuma 1 carica. Restituisce le cariche residue e la durata per il timer frontend.
+        """
+        oggetto = self.get_object()
+        
+        if oggetto.cariche_attuali <= 0:
+            return Response({'error': 'Oggetto scarico o privo di cariche.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Decrementa
+        oggetto.cariche_attuali -= 1
+        oggetto.save()
+        
+        # Recupera dati per il timer (se l'infusione ha una durata)
+        durata_secondi = 0
+        if oggetto.infusione_generatrice:
+            durata_secondi = oggetto.infusione_generatrice.durata_attivazione
+            
+        return Response({
+            'status': 'success',
+            'cariche_residue': oggetto.cariche_attuali,
+            'timer_durata': durata_secondi
+        })
+
+    @action(detail=True, methods=['post'])
+    def ricarica(self, request, pk=None):
+        """
+        Endpoint: [POST] /api/oggetti/{id}/ricarica/
+        Ricarica completamente l'oggetto pagando il costo in crediti dal personaggio proprietario.
+        """
+        oggetto = self.get_object()
+        infusione = oggetto.infusione_generatrice
+        
+        # Verifiche preliminari
+        if not infusione or not infusione.statistica_cariche:
+            return Response({'error': 'Questo oggetto non supporta la ricarica.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Calcolo cariche mancanti
+        # Nota: Qui assumiamo che il max cariche sia il valore predefinito della statistica nell'infusione.
+        # Se volessi calcolarlo dinamicamente sul PG (es. +Cariche bonus), servirebbe logica extra.
+        max_cariche = infusione.statistica_cariche.valore_predefinito 
+        cariche_mancanti = max_cariche - oggetto.cariche_attuali
+        
+        if cariche_mancanti <= 0:
+            return Response({'message': 'Oggetto già completamente carico.'}, status=status.HTTP_200_OK)
+            
+        # Calcolo Costo
+        costo_totale = cariche_mancanti * infusione.costo_ricarica_crediti
+        
+        # Gestione Pagamento
+        # Dobbiamo risalire al Personaggio proprietario per scalare i crediti
+        inventario = oggetto.inventario_corrente
+        personaggio = None
+        
+        # Tenta di ottenere il personaggio dall'inventario
+        if inventario:
+            if hasattr(inventario, 'personaggio'):
+                personaggio = inventario.personaggio
+            elif hasattr(inventario, 'personaggio_ptr'): # Caso ereditarietà multi-tabella django
+                 personaggio = inventario.personaggio_ptr
+
+        if not personaggio:
+             return Response({'error': 'Impossibile determinare il proprietario per il pagamento.'}, status=status.HTTP_400_BAD_REQUEST)
+             
+        if personaggio.crediti < costo_totale:
+            return Response({
+                'error': f'Crediti insufficienti. Servono {costo_totale} crediti, ne hai {personaggio.crediti}.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Esegui Transazione
+        with transaction.atomic():
+            personaggio.modifica_crediti(-costo_totale, f"Ricarica oggetto: {oggetto.nome}")
+            oggetto.cariche_attuali = max_cariche
+            oggetto.save()
+            
+        return Response({
+            'status': 'success',
+            'cariche_attuali': oggetto.cariche_attuali,
+            'costo_pagato': costo_totale,
+            'crediti_residui': personaggio.crediti
+        })

@@ -52,6 +52,37 @@ TIPO_PROPOSTA_CHOICES = [
     (TIPO_PROPOSTA_TESSITURA, 'Tessitura'),
 ]
 
+# Aggiungi enum per i tipi
+TIPO_OGGETTO_FISICO = 'FIS'
+TIPO_OGGETTO_MATERIA = 'MAT'
+TIPO_OGGETTO_MOD = 'MOD'
+TIPO_OGGETTO_INNESTO = 'INN'
+TIPO_OGGETTO_MUTAZIONE = 'MUT'
+
+TIPO_OGGETTO_CHOICES = [
+    (TIPO_OGGETTO_FISICO, 'Oggetto Fisico'),
+    (TIPO_OGGETTO_MATERIA, 'Materia (Mondana)'),
+    (TIPO_OGGETTO_MOD, 'Mod (Tecnologica)'),
+    (TIPO_OGGETTO_INNESTO, 'Innesto (Tecnologico)'),
+    (TIPO_OGGETTO_MUTAZIONE, 'Mutazione (Innata)'),
+]
+
+# Enum per slot corpo (Innesti/Mutazioni)
+SLOT_TESTA = 'HD'
+SLOT_TRONCO = 'TR'
+SLOT_BRACCIO_DX = 'RA'
+SLOT_BRACCIO_SX = 'LA'
+SLOT_GAMBA_DX = 'RL'
+SLOT_GAMBA_SX = 'LL'
+
+SLOT_CORPO_CHOICES = [
+    (SLOT_TESTA, 'Testa'),
+    (SLOT_TRONCO, 'Tronco'),
+    (SLOT_BRACCIO_DX, 'Braccio Dx'),
+    (SLOT_BRACCIO_SX, 'Braccio Sx'),
+    (SLOT_GAMBA_DX, 'Gamba Dx'),
+    (SLOT_GAMBA_SX, 'Gamba Sx'),
+]
 
 # --- FUNZIONI DI UTILITÀ ---
 
@@ -914,6 +945,40 @@ class Infusione(Tecnica):
         related_name='infusione_generata',
         verbose_name="Proposta Originale"
     )
+    statistica_cariche = models.ForeignKey(
+        Statistica, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True,
+        related_name="infusioni_cariche",
+        verbose_name="Statistica per Cariche Max",
+        help_text="Se vuoto, l'oggetto non ha cariche."
+    )    
+    metodo_ricarica = models.TextField(
+        "Metodo di Ricarica", 
+        blank=True, null=True, 
+        help_text="Descrizione parametrizzata (es. 'Spendi {costo} crediti'). Obbligatorio per Tech."
+    )
+    costo_ricarica_crediti = models.IntegerField(
+        "Costo Ricarica (Crediti)", 
+        default=0,
+        help_text="Costo per ricaricare una singola carica (default 0)."
+    )
+    durata_attivazione = models.IntegerField(
+        "Durata Attivazione (secondi)", 
+        default=0, 
+        help_text="Se > 0, attiva un timer nel frontend all'uso della carica."
+    )
+
+    def clean(self):
+        super().clean()
+        # Validazione Regola Tecnologica: Obbligo ricarica e cariche
+        # Assumiamo che l'aura tecnologica abbia un nome o ID specifico, 
+        # qui uso una logica generica basata sul nome, adattala al tuo DB.
+        if self.aura_richiesta and "tecnologic" in self.aura_richiesta.nome.lower():
+            if not self.statistica_cariche:
+                raise ValidationError("Le infusioni tecnologiche devono definire una statistica per le cariche massime.")
+            if not self.metodo_ricarica:
+                raise ValidationError("Le infusioni tecnologiche devono specificare il metodo di ricarica.")
     
     class Meta:
         verbose_name = "Infusione"
@@ -1104,19 +1169,144 @@ class QrCode(models.Model):
                     self.id = generate_short_id()
         else:
             super().save(*args, **kwargs)
+            
+class ClasseOggetto(models.Model):
+    """
+    Definisce una categoria di oggetti (es. Spada, Fucile, Armatura)
+    e le regole per l'installazione di Mod e Materia.
+    """
+    nome = models.CharField(max_length=50, unique=True)
+    
+    # Limite GLOBALE di Mod installabili su questa classe
+    max_mod_totali = models.IntegerField(
+        default=0, 
+        verbose_name="Max Mod Totali",
+        help_text="Numero massimo assoluto di Mod installabili."
+    )
+
+    # Relazione per definire i limiti specifici per caratteristica (Through Model)
+    limitazioni_mod = models.ManyToManyField(
+        Punteggio,
+        through='ClasseOggettoLimiteMod',
+        related_name='classi_oggetti_regole_mod',
+        verbose_name="Limiti Mod per Caratteristica"
+    )
+    
+    # Per le Materia: quali caratteristiche sono permesse
+    mattoni_materia_permessi = models.ManyToManyField(
+        Punteggio, 
+        limit_choices_to={'tipo': CARATTERISTICA},
+        related_name='classi_oggetti_materia_permessa',
+        blank=True,
+        verbose_name="Caratt. Materia Permesse"
+    )
+
+    class Meta:
+        verbose_name = "Classe Oggetto (Regole)"
+        verbose_name_plural = "Classi Oggetto (Regole)"
+
+    def __str__(self):
+        return self.nome
+
+class ClasseOggettoLimiteMod(models.Model):
+    """
+    Definisce quante Mod basate su una certa Caratteristica 
+    possono essere montate su una specifica ClasseOggetto.
+    Es: Su 'Spada' -> Max 1 Mod di 'Forza'.
+    """
+    classe_oggetto = models.ForeignKey(ClasseOggetto, on_delete=models.CASCADE)
+    caratteristica = models.ForeignKey(
+        Punteggio, 
+        on_delete=models.CASCADE,
+        limit_choices_to={'tipo': CARATTERISTICA}
+    )
+    max_installabili = models.IntegerField(
+        default=1,
+        verbose_name="Max Mod di questo tipo",
+        help_text="Quante mod con mattoni di questa caratteristica possono essere montate."
+    )
+
+    class Meta:
+        unique_together = ('classe_oggetto', 'caratteristica')
+        verbose_name = "Limite Mod per Caratteristica"
+        
 
 class Oggetto(A_vista):
-    elementi = models.ManyToManyField(Punteggio, blank=True, through='OggettoElemento')
-    statistiche = models.ManyToManyField(Statistica, through='OggettoStatistica', blank=True, related_name="oggetti_statistiche")
-    statistiche_base = models.ManyToManyField(Statistica, through='OggettoStatisticaBase', blank=True, related_name='oggetti_statistiche_base')
-    aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, related_name="oggetti_aura")
-    costo_crediti = models.IntegerField("Valore in Crediti", default=0)
+    # --- CAMPI ESISTENTI (Relazioni base) ---
+    elementi = models.ManyToManyField(
+        Punteggio, blank=True, through='OggettoElemento'
+    )
+    statistiche = models.ManyToManyField(
+        Statistica, through='OggettoStatistica', blank=True, 
+        related_name="oggetti_statistiche"
+    )
+    statistiche_base = models.ManyToManyField(
+        Statistica, through='OggettoStatisticaBase', blank=True, 
+        related_name='oggetti_statistiche_base'
+    )
+    aura = models.ForeignKey(
+        Punteggio, blank=True, null=True, on_delete=models.SET_NULL, 
+        limit_choices_to={'tipo' : AURA}, related_name="oggetti_aura"
+    )
+
+    # --- NUOVI CAMPI GESTIONE AVANZATA (Nuovo Sistema) ---
+    tipo_oggetto = models.CharField(
+        max_length=3, 
+        choices=TIPO_OGGETTO_CHOICES, 
+        default=TIPO_OGGETTO_FISICO
+    )
     
+    classe_oggetto = models.ForeignKey(
+        ClasseOggetto, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True,
+        verbose_name="Classe (Slot/Regole)"
+    )
+    
+    is_tecnologico = models.BooleanField(default=False, verbose_name="È Tecnologico?")
+    
+    # Dati Vendita / Gioco
+    costo_acquisto = models.IntegerField(default=0, verbose_name="Costo (Crediti)")
+    attacco_base = models.CharField(max_length=50, blank=True, null=True, help_text="Es. 2d6")
+    in_vendita = models.BooleanField(default=False, verbose_name="In vendita al negozio?")
+
+    # --- ORIGINE (Per Materia/Mod/Innesti) ---
+    # Punta a 'Infusione' definita nello stesso file (personaggi/models.py)
+    infusione_generatrice = models.ForeignKey(
+        'Infusione', 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True,
+        related_name='oggetti_generati',
+        help_text="L'infusione da cui deriva questa Materia/Mod/Innesto"
+    )
+
+    # --- INCASTONAMENTO (Socketing) ---
+    ospitato_su = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='potenziamenti_installati',
+        help_text="L'oggetto su cui questo potenziamento è montato."
+    )
+    
+    # --- SLOT CORPO (Per Innesti/Mutazioni) ---
+    slot_corpo = models.CharField(
+        max_length=2,
+        choices=SLOT_CORPO_CHOICES,
+        blank=True, null=True,
+        help_text="Solo per Innesti e Mutazioni"
+    )
+
+    # --- GESTIONE CARICHE ---
+    cariche_attuali = models.IntegerField(default=0)
+
+    # --- METODI ---
     @property
     def livello(self): return self.elementi.count()
     
     @property
     def TestoFormattato(self):
+        # ... (Logica esistente per il testo, aggiornala se necessario per usare cariche) ...
         return formatta_testo_generico(
             self.testo, 
             statistiche_base=self.oggettostatisticabase_set.select_related('statistica').all(), 
@@ -1135,11 +1325,25 @@ class Oggetto(A_vista):
     def sposta_in_inventario(self, nuovo, data=None):
         if data is None: data = timezone.now()
         with transaction.atomic():
+            # Se l'oggetto era montato su qualcosa, smontalo
+            if self.ospitato_su:
+                self.ospitato_su = None
+                self.save()
+
             curr = self.tracciamento_inventario.filter(data_fine__isnull=True).first()
             if curr:
                 if curr.inventario == nuovo: return
                 curr.data_fine = data; curr.save()
             if nuovo: OggettoInInventario.objects.create(oggetto=self, inventario=nuovo, data_inizio=data)
+
+    def clean(self):
+        # Validazioni di base per il database
+        if self.ospitato_su == self:
+            raise ValidationError("Un oggetto non può essere installato su se stesso.")
+        
+        # Le validazioni complesse (limiti mod, tipi materia, ecc.) 
+        # verranno gestite nel Service Layer (Passo 2/3) per avere messaggi d'errore migliori
+        # e accesso ai dati correlati senza appesantire il save() del modello base.
 
 class Personaggio(Inventario):
     proprietario = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
@@ -1240,18 +1444,87 @@ class Personaggio(Inventario):
     
     @property
     def modificatori_calcolati(self):
-        if hasattr(self, '_modificatori_calcolati_cache'): return self._modificatori_calcolati_cache
+        if hasattr(self, '_modificatori_calcolati_cache'): 
+            return self._modificatori_calcolati_cache
+        
+        # Import locale per evitare circular dependency con oggetti.models
+        # Assumiamo che le costanti siano state definite in oggetti/models.py come da Passo 1
+        from oggetti.models import (
+            TIPO_OGGETTO_FISICO, 
+            TIPO_OGGETTO_MATERIA, 
+            TIPO_OGGETTO_MOD, 
+            TIPO_OGGETTO_INNESTO, 
+            TIPO_OGGETTO_MUTAZIONE
+        )
+
         mods = {}
+        
+        # Funzione helper interna per sommare i modificatori
         def _add(p, t, v):
             if not p: return
             if p not in mods: mods[p] = {'add': 0.0, 'mol': 1.0}
             valore = float(v)
             if t == MODIFICATORE_ADDITIVO: mods[p]['add'] += valore
             elif t == MODIFICATORE_MOLTIPLICATIVO: mods[p]['mol'] *= valore 
+
+        # --- 1. ABILITÀ (Logica esistente) ---
         for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): 
             _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
-        for l in OggettoStatistica.objects.filter(oggetto__tracciamento_inventario__inventario=self.inventario_ptr, oggetto__tracciamento_inventario__data_fine__isnull=True).select_related('statistica'): 
-            _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+        
+        # --- 2. OGGETTI E POTENZIAMENTI (Nuova Logica) ---
+        # Recuperiamo tutti gli oggetti nell'inventario del personaggio
+        # Usiamo prefetch_related per ottimizzare le query:
+        # - oggettostatistica_set: i modificatori dell'oggetto stesso
+        # - potenziamenti_installati: Materia/Mod montate sull'oggetto
+        # - potenziamenti_installati__oggettostatistica_set: i modificatori dei potenziamenti
+        
+        oggetti_inventario = self.get_oggetti().prefetch_related(
+            'oggettostatistica_set__statistica',
+            'potenziamenti_installati__oggettostatistica_set__statistica'
+        )
+        
+        for oggetto in oggetti_inventario:
+            is_oggetto_attivo = False
+            
+            # A. Determina se l'oggetto genitore è attivo
+            if oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO:
+                # Assumiamo che gli oggetti fisici in inventario siano attivi (o equipaggiati)
+                is_oggetto_attivo = True
+            elif oggetto.tipo_oggetto == TIPO_OGGETTO_MUTAZIONE:
+                # Le mutazioni sono sempre attive
+                is_oggetto_attivo = True
+            elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO:
+                # Gli innesti sono attivi solo se hanno cariche
+                if oggetto.cariche_attuali > 0:
+                    is_oggetto_attivo = True
+            
+            # Nota: MATERIA e MOD sciolte in inventario (non montate) sono ignorate qui (rimangono False)
+
+            if is_oggetto_attivo:
+                # B. Applica i modificatori dell'oggetto stesso
+                for stat_link in oggetto.oggettostatistica_set.all():
+                    _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                
+                # C. Controlla i potenziamenti installati (Materia/Mod)
+                # 'potenziamenti_installati' è il related_name definito in Oggetto.ospitato_su
+                for potenziamento in oggetto.potenziamenti_installati.all():
+                    is_potenziamento_attivo = False
+                    
+                    if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+                        # La Materia è attiva se è incastonata (che è vero se siamo in questo loop)
+                        is_potenziamento_attivo = True
+                    
+                    elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD:
+                        # La Mod è attiva se incastonata AND ha cariche > 0
+                        if potenziamento.cariche_attuali > 0:
+                            is_potenziamento_attivo = True
+                    
+                    # Se il potenziamento è attivo, somma le sue statistiche al personaggio
+                    if is_potenziamento_attivo:
+                        for stat_link_pot in potenziamento.oggettostatistica_set.all():
+                            _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+
+        # --- 3. CARATTERISTICHE (Logica esistente) ---
         cb = self.caratteristiche_base
         if cb:
             for l in CaratteristicaModificatore.objects.filter(caratteristica__nome__in=cb.keys()).select_related('caratteristica', 'statistica_modificata'):
@@ -1259,6 +1532,7 @@ class Personaggio(Inventario):
                 if pts > 0 and l.ogni_x_punti > 0:
                     b = (pts // l.ogni_x_punti) * l.modificatore
                     if b > 0: _add(l.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, b)
+        
         self._modificatori_calcolati_cache = mods
         return mods
 
