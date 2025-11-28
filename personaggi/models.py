@@ -1449,13 +1449,13 @@ class Personaggio(Inventario):
         
         # Import locale per evitare circular dependency con oggetti.models
         # Assumiamo che le costanti siano state definite in oggetti/models.py come da Passo 1
-        from oggetti.models import (
-            TIPO_OGGETTO_FISICO, 
-            TIPO_OGGETTO_MATERIA, 
-            TIPO_OGGETTO_MOD, 
-            TIPO_OGGETTO_INNESTO, 
-            TIPO_OGGETTO_MUTAZIONE
-        )
+        # from oggetti.models import (
+        #     TIPO_OGGETTO_FISICO, 
+        #     TIPO_OGGETTO_MATERIA, 
+        #     TIPO_OGGETTO_MOD, 
+        #     TIPO_OGGETTO_INNESTO, 
+        #     TIPO_OGGETTO_MUTAZIONE
+        # )
 
         mods = {}
         
