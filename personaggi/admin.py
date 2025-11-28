@@ -456,9 +456,14 @@ class AbilitaAdmin(A_Admin):
 class PunteggioAdmin(IconaAdminMixin, A_Admin):
     form = PunteggioAdminForm
     list_display = ('nome','icona_html', 'icona_cerchio_html','icona_cerchio_inverted_html', 'tipo', 'ordine', 'colore')
-    list_filter = ('tipo',); list_editable = ('ordine','tipo'); search_fields = ('nome',); summernote_fields = ('descrizione',)
+    list_filter = ('tipo',)
+    list_editable = ('ordine','tipo')
+    search_fields = ('nome',)
+    summernote_fields = ('descrizione',)
     save_as = True
-    def get_queryset(self, request): return super().get_queryset(request).exclude(tipo=CARATTERISTICA).exclude(tipo='MA')
+    
+    # def get_queryset(self, request): 
+    #     return super().get_queryset(request).exclude(tipo=CARATTERISTICA).exclude(tipo='MA')
 
 @admin.register(Caratteristica)
 class CaratteristicaAdmin(IconaAdminMixin, A_Admin): 
