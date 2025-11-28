@@ -561,7 +561,12 @@ class TierAdmin(A_Admin):
 class StatisticaAdmin(A_Admin):
     form = PunteggioAdminForm
     list_display = ('nome', 'parametro', 'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'tipo_modificatore')
-    list_editable = ('is_primaria',); exclude = ('tipo',); summernote_fields = ('descrizione',)
+    list_editable = ('is_primaria',)
+    exclude = ('tipo',)
+    summernote_fields = ('descrizione',)
+    
+    # --- AGGIUNGI QUESTA RIGA ---
+    search_fields = ['nome', 'parametro']
 
 admin.site.register(Tabella)
 admin.site.register(abilita_tier)
@@ -578,26 +583,6 @@ class ManifestoAdmin(SModelAdmin):
 class QrCodeAdmin(admin.ModelAdmin):
     list_display = ('id', 'data_creazione'); readonly_fields = ('id', 'data_creazione'); summernote_fields = ['testo']
 
-@admin.register(Oggetto)
-class OggettoAdmin(SModelAdmin):
-    list_display = ('id', 'data_creazione', 'nome', 'livello'); readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    fieldsets = (
-        ('Info', {'fields': ('nome', 'aura', 'testo', ('id', 'data_creazione', 'livello'))}),
-        ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)})
-    )
-    # OGGETTO HA ENTRAMBE
-    inlines = [PunteggioOggettoInline, OggettoStatisticaBaseInline, OggettoStatisticaInline]
-    exclude = ('elementi', 'statistiche', 'statistiche_base'); summernote_fields = ['testo']
-    
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-            form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
-        return form
-    
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
-    mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
 
 # @admin.register(Attivata)
 class AttivataAdmin(SModelAdmin):
@@ -615,11 +600,31 @@ class AttivataAdmin(SModelAdmin):
 
 @admin.register(Infusione)
 class InfusioneAdmin(SModelAdmin):
-    list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'aura_infusione'); search_fields = ['nome']
+    list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'aura_infusione', 'statistica_cariche')
+    search_fields = ['nome', 'testo']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    # SOLO BASE
+    
     inlines = [InfusioneMattoneInline, InfusioneStatisticaBaseInline]
-    exclude = ('statistiche_base', 'statistiche', 'mattoni'); summernote_fields = ['testo']; autocomplete_fields = ['aura_richiesta', 'aura_infusione']
+    
+    # Escludiamo i campi gestiti dagli inline o non usati
+    exclude = ('statistiche_base', 'statistiche', 'mattoni')
+    
+    summernote_fields = ['testo']
+    autocomplete_fields = ['aura_richiesta', 'aura_infusione', 'statistica_cariche']
+    
+    fieldsets = (
+        ('Dati Base', {
+            'fields': ('nome', 'testo', 'aura_richiesta', 'aura_infusione', 'proposta_creazione')
+        }),
+        ('Anteprima', {
+            'classes': ('wide',), 
+            'fields': ('mostra_testo_formattato',)
+        }),
+        ('Logica Ricarica & Durata', {
+            'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'),
+            'description': "Definisci qui come l'oggetto generato gestisce le cariche (Obbligatorio per Tech)."
+        }),
+    )
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
@@ -755,7 +760,7 @@ class TracciamentoInventarioInline(admin.TabularInline):
     ordering = ['-data_inizio']
 
 @admin.register(Oggetto)
-class OggettoAdmin(admin.ModelAdmin):
+class OggettoAdmin(SModelAdmin):
     list_display = [
         'nome', 'tipo_oggetto', 'classe_oggetto', 
         'is_tecnologico', 'livello', 'costo_acquisto', 
@@ -770,7 +775,8 @@ class OggettoAdmin(admin.ModelAdmin):
     ]
     search_fields = ['nome', 'testo']
     autocomplete_fields = ['aura', 'infusione_generatrice', 'ospitato_su', 'classe_oggetto']
-    
+    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
+    summernote_fields = ['testo']
     # Organizzazione campi in Fieldsets
     fieldsets = (
         ('Dati Generali', {
@@ -782,6 +788,7 @@ class OggettoAdmin(admin.ModelAdmin):
                 'is_tecnologico', 'slot_corpo', 'attacco_base'
             )
         }),
+        ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
         ('Stato & Origine', {
             'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su')
         }),
@@ -801,7 +808,17 @@ class OggettoAdmin(admin.ModelAdmin):
         inv = obj.inventario_corrente
         return inv.nome if inv else "Nessuno (A terra)"
     get_inventario_attuale.short_description = "Posizione Attuale"
-
+    
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if 'testo' in form.base_fields:
+            form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
+        return form
+    
+    def mostra_testo_formattato(self, obj):
+        return format_html("{}", mark_safe(obj.TestoFormattato))
+    mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
+ 
 # --- INFUSIONE ADMIN (Aggiornato) ---
 
 class InfusioneMattoneInline(admin.TabularInline):
@@ -813,22 +830,3 @@ class InfusioneStatisticaBaseInline(admin.TabularInline):
     model = Infusione.statistiche_base.through
     extra = 1
     autocomplete_fields = ['statistica']
-
-@admin.register(Infusione)
-class InfusioneAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'aura_richiesta', 'livello', 'statistica_cariche', 'costo_ricarica_crediti']
-    list_filter = ['aura_richiesta']
-    search_fields = ['nome', 'testo']
-    autocomplete_fields = ['aura_richiesta', 'aura_infusione', 'statistica_cariche']
-    
-    fieldsets = (
-        ('Dati Base', {
-            'fields': ('nome', 'testo', 'aura_richiesta', 'aura_infusione', 'proposta_creazione')
-        }),
-        ('Logica Ricarica & Durata', {
-            'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'),
-            'description': "Definisci qui come l'oggetto generato gestisce le cariche (Obbligatorio per Tech)."
-        }),
-    )
-    
-    inlines = [InfusioneMattoneInline, InfusioneStatisticaBaseInline]
