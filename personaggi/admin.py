@@ -33,6 +33,8 @@ from .models import (
     PropostaTecnicaMattone, PersonaggioInfusione, PersonaggioTessitura,
     STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
+    ClasseOggetto, ClasseOggettoLimiteMod,  # <--- NUOVI MODELLI
+    OggettoInInventario, OggettoElemento,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -690,3 +692,143 @@ class TransazioneSospesaAdmin(admin.ModelAdmin):
     list_display = ('id', 'oggetto', 'mittente', 'richiedente', 'stato', 'data_richiesta')
     list_filter = ('stato', 'data_richiesta')
     search_fields = ('oggetto__nome', 'mittente__nome', 'richiedente__nome')
+    
+class ClasseOggettoLimiteModInline(admin.TabularInline):
+    model = ClasseOggettoLimiteMod
+    extra = 1
+    autocomplete_fields = ['caratteristica']
+    verbose_name = "Limite Mod per Caratteristica"
+    verbose_name_plural = "Limiti Mod per Caratteristica"
+
+@admin.register(ClasseOggetto)
+class ClasseOggettoAdmin(admin.ModelAdmin):
+    list_display = ['nome', 'max_mod_totali', 'get_permessi_materia']
+    search_fields = ['nome']
+    inlines = [ClasseOggettoLimiteModInline]
+    filter_horizontal = ['mattoni_materia_permessi'] # Widget comodo per ManyToMany semplice
+
+    def get_permessi_materia(self, obj):
+        return ", ".join([p.nome for p in obj.mattoni_materia_permessi.all()])
+    get_permessi_materia.short_description = "Mattoni Materia Permessi"
+
+# --- INLINES PER OGGETTO ---
+
+class OggettoElementoInline(admin.TabularInline):
+    model = OggettoElemento
+    extra = 1
+    autocomplete_fields = ['elemento']
+
+class OggettoStatisticaInline(admin.TabularInline):
+    model = OggettoStatistica
+    extra = 1
+    autocomplete_fields = ['statistica']
+    verbose_name = "Statistica (Modificatore Finale)"
+    verbose_name_plural = "Statistiche (Modificatori Finali)"
+
+class OggettoStatisticaBaseInline(admin.TabularInline):
+    model = OggettoStatisticaBase
+    extra = 1
+    autocomplete_fields = ['statistica']
+    verbose_name = "Statistica (Valore Base)"
+    verbose_name_plural = "Statistiche (Valori Base)"
+
+class PotenziamentiInstallatiInline(admin.TabularInline):
+    """
+    Mostra gli oggetti che sono montati SU questo oggetto.
+    Es: Se sto guardando un Fucile, qui vedo le Mod installate.
+    """
+    model = Oggetto
+    fk_name = 'ospitato_su' # Specifica quale FK usare (self relation)
+    fields = ['nome', 'tipo_oggetto', 'cariche_attuali', 'infusione_generatrice']
+    readonly_fields = ['nome', 'tipo_oggetto', 'cariche_attuali', 'infusione_generatrice']
+    extra = 0
+    can_delete = False # Gestione complessa, meglio non cancellare da qui
+    show_change_link = True
+    verbose_name = "Potenziamento Installato"
+    verbose_name_plural = "Potenziamenti Installati (Mod/Materia)"
+
+class TracciamentoInventarioInline(admin.TabularInline):
+    model = OggettoInInventario
+    extra = 0
+    readonly_fields = ['data_inizio', 'data_fine']
+    raw_id_fields = ['inventario']
+    ordering = ['-data_inizio']
+
+@admin.register(Oggetto)
+class OggettoAdmin(admin.ModelAdmin):
+    list_display = [
+        'nome', 'tipo_oggetto', 'classe_oggetto', 
+        'is_tecnologico', 'livello', 'costo_acquisto', 
+        'cariche_attuali', 'get_inventario_attuale'
+    ]
+    list_filter = [
+        'tipo_oggetto', 
+        'classe_oggetto', 
+        'is_tecnologico', 
+        'in_vendita', 
+        'aura'
+    ]
+    search_fields = ['nome', 'testo']
+    autocomplete_fields = ['aura', 'infusione_generatrice', 'ospitato_su', 'classe_oggetto']
+    
+    # Organizzazione campi in Fieldsets
+    fieldsets = (
+        ('Dati Generali', {
+            'fields': ('nome', 'testo', 'aura', 'costo_acquisto', 'in_vendita')
+        }),
+        ('Classificazione & Logica', {
+            'fields': (
+                'tipo_oggetto', 'classe_oggetto', 
+                'is_tecnologico', 'slot_corpo', 'attacco_base'
+            )
+        }),
+        ('Stato & Origine', {
+            'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su')
+        }),
+    )
+    
+    inlines = [
+        OggettoElementoInline, 
+        OggettoStatisticaBaseInline, # Valori base (es. Danno arma)
+        OggettoStatisticaInline,     # Modificatori (es. +1 Forza conferito)
+        PotenziamentiInstallatiInline, # Cosa c'è dentro?
+        TracciamentoInventarioInline   # Dove si trova?
+    ]
+    
+    def get_inventario_attuale(self, obj):
+        if obj.ospitato_su:
+            return f"Montato su: {obj.ospitato_su.nome}"
+        inv = obj.inventario_corrente
+        return inv.nome if inv else "Nessuno (A terra)"
+    get_inventario_attuale.short_description = "Posizione Attuale"
+
+# --- INFUSIONE ADMIN (Aggiornato) ---
+
+class InfusioneMattoneInline(admin.TabularInline):
+    model = Infusione.mattoni.through
+    extra = 1
+    autocomplete_fields = ['mattone']
+
+class InfusioneStatisticaBaseInline(admin.TabularInline):
+    model = Infusione.statistiche_base.through
+    extra = 1
+    autocomplete_fields = ['statistica']
+
+@admin.register(Infusione)
+class InfusioneAdmin(admin.ModelAdmin):
+    list_display = ['nome', 'aura_richiesta', 'livello', 'statistica_cariche', 'costo_ricarica_crediti']
+    list_filter = ['aura_richiesta']
+    search_fields = ['nome', 'testo']
+    autocomplete_fields = ['aura_richiesta', 'aura_infusione', 'statistica_cariche']
+    
+    fieldsets = (
+        ('Dati Base', {
+            'fields': ('nome', 'testo', 'aura_richiesta', 'aura_infusione', 'proposta_creazione')
+        }),
+        ('Logica Ricarica & Durata', {
+            'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'),
+            'description': "Definisci qui come l'oggetto generato gestisce le cariche (Obbligatorio per Tech)."
+        }),
+    )
+    
+    inlines = [InfusioneMattoneInline, InfusioneStatisticaBaseInline]
