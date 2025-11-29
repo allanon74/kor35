@@ -35,7 +35,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 
 from rest_framework import generics
@@ -77,7 +77,7 @@ from django.conf import settings
 
 from webpush.models import PushInformation, SubscriptionInfo
 import json
-from .services import monta_potenziamento, crea_oggetto_da_infusione
+from .services import monta_potenziamento, crea_oggetto_da_infusione, GestioneOggettiService
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
 
@@ -1299,3 +1299,34 @@ class OggettoViewSet(viewsets.ModelViewSet):
             'costo_pagato': costo_totale,
             'crediti_residui': personaggio.crediti
         })
+        
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def equipaggia_item_view(request):
+    """Gestisce il toggle Equip/Unequip"""
+    pg = request.user.personaggi.first() # O logica selezione PG
+    item_id = request.data.get('item_id')
+    oggetto = get_object_or_404(Oggetto, pk=item_id)
+    
+    try:
+        stato = GestioneOggettiService.equipaggia_oggetto(pg, oggetto)
+        return Response({"status": "success", "nuovo_stato": stato})
+    except ValidationError as e:
+        return Response({"error": str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def assembla_item_view(request):
+    """Gestisce montaggio Mod/Materia"""
+    pg = request.user.personaggi.first()
+    host_id = request.data.get('host_id')
+    mod_id = request.data.get('mod_id')
+    
+    host = get_object_or_404(Oggetto, pk=host_id)
+    mod = get_object_or_404(Oggetto, pk=mod_id)
+    
+    try:
+        GestioneOggettiService.assembla_mod(pg, host, mod)
+        return Response({"status": "success", "message": "Assemblaggio completato"})
+    except ValidationError as e:
+        return Response({"error": str(e)}, status=400)

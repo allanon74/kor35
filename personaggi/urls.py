@@ -103,6 +103,9 @@ urlpatterns = [
     path('api/personaggi/search/', views.PersonaggioAutocompleteView.as_view(), name='personaggio-search'),
     path('api/messaggi/send/', views.MessaggioPrivateCreateView.as_view(), name='messaggio-send'),
     
+    path('api/oggetti/equipaggia/', views.equipaggia_item_view, name='api_equipaggia_item'),
+    path('api/oggetti/assembla/', views.assembla_item_view, name='api_assembla_item'),
+    
     path('api/', include(router.urls)),
     
 ]

@@ -4,10 +4,10 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .models import (
-    Oggetto, OggettoStatistica, 
-    TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, 
-    TIPO_OGGETTO_FISICO, OggettoInInventario,
-    STATISTICA  # Assumendo che STATISTICA sia importabile o usiamo stringhe
+    Oggetto, Infusione, Mattone, Personaggio, OggettoInInventario, 
+    TIPO_OGGETTO_FISICO, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, 
+    TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE,
+    COSTO_PER_MATTONE_OGGETTO, QrCode, OggettoStatistica, Inventario,
 )
 
 def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
@@ -142,3 +142,177 @@ def monta_potenziamento(oggetto_ospite, potenziamento):
             
         potenziamento.ospitato_su = oggetto_ospite
         potenziamento.save()
+        
+class GestioneOggettiService:
+    
+    @staticmethod
+    def calcola_cog_utilizzata(pg: Personaggio):
+        """Calcola la Capacità Oggetti (COG) attualmente occupata."""
+        # Recupera oggetti nell'inventario corrente del PG
+        oggetti = pg.get_oggetti().filter(
+            # Filtra solo quelli che "pesano" sulla COG
+            # 1. Oggetti Fisici Equipaggiati
+            # 2. Innesti e Mutazioni (sempre equipaggiati se posseduti/installati)
+        )
+        
+        cog_totale = 0
+        for obj in oggetti:
+            if obj.tipo_oggetto in [TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE]:
+                cog_totale += 1
+            elif obj.tipo_oggetto == TIPO_OGGETTO_FISICO and obj.is_equipaggiato:
+                # Un oggetto fisico conta 1 se equipaggiato (o logica più complessa se pesa di più)
+                cog_totale += 1
+                
+        return cog_totale
+
+    @staticmethod
+    def verifica_consenso(target: Personaggio, qrcode_id: str):
+        """Verifica se il QR code appartiene al target (per operazioni su altri)."""
+        try:
+            qr = QrCode.objects.get(id=qrcode_id)
+            # Logica: Il QR deve puntare al Personaggio target (tramite vista)
+            if qr.vista and hasattr(qr.vista, 'personaggio') and qr.vista.personaggio == target:
+                return True
+            return False
+        except QrCode.DoesNotExist:
+            return False
+
+    @staticmethod
+    def craft_oggetto(crafter: Personaggio, infusione: Infusione, target: Personaggio = None, qrcode_id: str = None):
+        """
+        Gestisce la creazione di QUALSIASI oggetto da Infusione (Fisico, Mod, Materia, Innesto, Mutazione).
+        """
+        target = target or crafter # Se target è None, è self-cast
+        
+        # 1. Determina Tipo e Aura Richiesta dal Crafter
+        tipo_output = TIPO_OGGETTO_FISICO # Default
+        aura_richiesta_craft = "Aura Mondana - Trasmutatore" # Esempio nome
+        costo_base = COSTO_PER_MATTONE_OGGETTO
+        
+        # Logica euristica per capire il tipo dall'infusione (o dai tag dell'infusione)
+        # Qui assumiamo che l'infusione abbia un modo per dirci cosa crea, oppure lo deduciamo dall'aura richiesta
+        if "Tecnologica" in infusione.aura_richiesta.nome:
+            aura_richiesta_craft = "Aura Tecnologica"
+            # Se ha slot corpo è un innesto, altrimenti Mod (semplificazione)
+            # Bisognerebbe aggiungere un campo 'tipo_risultato' a Infusione per essere precisi
+            tipo_output = TIPO_OGGETTO_MOD 
+            
+        elif "Innata" in infusione.aura_richiesta.nome:
+            aura_richiesta_craft = "Aura Innata"
+            tipo_output = TIPO_OGGETTO_MUTAZIONE
+
+        # 2. Verifica Livello Aura del Crafter
+        livello_aura_crafter = crafter.get_valore_aura_effettivo_by_name(aura_richiesta_craft) # Da implementare helper
+        if infusione.livello > livello_aura_crafter:
+            raise ValidationError(f"Livello Aura insufficiente. Richiesto: {infusione.livello}, Hai: {livello_aura_crafter}")
+
+        # 3. Verifica Requisiti Mattoni (Caratteristiche)
+        # I requisiti dei mattoni dell'infusione devono essere soddisfatti dal Crafter
+        # (Logica già presente in valida_acquisto_tecnica, riutilizzabile)
+
+        # 4. Verifica Consenso e Installazione Immediata (Innesti/Mutazioni)
+        if tipo_output in [TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE]:
+            if target != crafter:
+                if not qrcode_id or not GestioneOggettiService.verifica_consenso(target, qrcode_id):
+                    raise ValidationError("Consenso del bersaglio mancante o QR non valido.")
+            
+            # Verifica Slot Libero (Solo per Innesti)
+            # Implementare logica per determinare lo slot target dall'infusione
+            
+            # Verifica COG Target
+            cog_used = GestioneOggettiService.calcola_cog_utilizzata(target)
+            cog_max = target.get_valore_statistica('COG') # Assumiamo esista statistica COG
+            if cog_used >= cog_max:
+                raise ValidationError("Capacità Oggetti del bersaglio esaurita.")
+
+        # 5. Pagamento
+        costo_totale = infusione.livello * costo_base
+        if crafter.crediti < costo_totale:
+            raise ValidationError("Crediti insufficienti.")
+        crafter.modifica_crediti(-costo_totale, f"Creazione {infusione.nome}")
+
+        # 6. Creazione Oggetto
+        with transaction.atomic():
+            nuovo_oggetto = Oggetto.objects.create(
+                nome=infusione.nome,
+                testo=infusione.testo,
+                tipo_oggetto=tipo_output,
+                infusione_generatrice=infusione,
+                aura=infusione.aura_infusione, # L'aura dell'oggetto è quella infusa
+                # ... altri campi copiati dall'infusione ...
+            )
+            
+            # Assegna statistiche base
+            for stat_link in infusione.infusionestatisticabase_set.all():
+                nuovo_oggetto.statistiche_base.add(
+                    stat_link.statistica, 
+                    through_defaults={'valore_base': stat_link.valore_base}
+                )
+
+            # Assegna al target (tramite tracciamento inventario)
+            nuovo_oggetto.sposta_in_inventario(target) # target è un Personaggio (che è un Inventario)
+            
+            # Se Innesto/Mutazione, equipaggia subito
+            if tipo_output in [TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE]:
+                # Qui dovresti mappare lo slot dall'infusione all'oggetto
+                # nuovo_oggetto.slot_corpo = ... 
+                nuovo_oggetto.is_equipaggiato = True # Gli innesti nascono equipaggiati
+                nuovo_oggetto.save()
+
+        return nuovo_oggetto
+
+    @staticmethod
+    def assembla_mod(assemblatore: Personaggio, oggetto_host: Oggetto, mod: Oggetto):
+        """
+        Monta una MOD (o Materia) su un oggetto ospite.
+        """
+        # 1. Verifiche di Possesso
+        if oggetto_host.inventario_corrente != assemblatore or mod.inventario_corrente != assemblatore:
+            raise ValidationError("Devi possedere entrambi gli oggetti.")
+
+        # 2. Verifica Aura Assemblatore
+        aura_nec = "Aura Tecnologica" if mod.tipo_oggetto == TIPO_OGGETTO_MOD else "Aura Mondana - Assemblatore"
+        liv_aura = assemblatore.get_valore_aura_effettivo_by_name(aura_nec)
+        if mod.livello > liv_aura:
+             raise ValidationError(f"Livello {aura_nec} insufficiente per assemblare questa mod.")
+
+        # 3. Verifica Regole Classe Oggetto (Compatibilità)
+        classe = oggetto_host.classe_oggetto
+        if not classe:
+            raise ValidationError("L'oggetto ospite non ha una classe definita, non può essere modificato.")
+
+        # Esempio check limite totale mod
+        num_mod_attuali = oggetto_host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).count()
+        if mod.tipo_oggetto == TIPO_OGGETTO_MOD and num_mod_attuali >= classe.max_mod_totali:
+             raise ValidationError("Slot Mod esauriti su questo oggetto.")
+        
+        # 4. Esegui Assemblaggio
+        with transaction.atomic():
+            mod.ospitato_su = oggetto_host
+            mod.sposta_in_inventario(None) # Rimuovi dall'inventario "a terra", ora è dentro l'oggetto
+            mod.save()
+
+    @staticmethod
+    def equipaggia_oggetto(personaggio: Personaggio, oggetto: Oggetto):
+        """
+        Attiva/Equipaggia un oggetto fisico (arma/armatura).
+        """
+        if oggetto.inventario_corrente != personaggio:
+             raise ValidationError("Non possiedi l'oggetto.")
+        
+        if oggetto.is_equipaggiato:
+            # Sta provando a disequipaggiare
+            oggetto.is_equipaggiato = False
+            oggetto.save()
+            return "Disequipaggiato"
+        
+        # Sta provando a equipaggiare: Check COG
+        cog_used = GestioneOggettiService.calcola_cog_utilizzata(personaggio)
+        cog_max = personaggio.get_valore_statistica('COG')
+        
+        if cog_used >= cog_max:
+             raise ValidationError(f"Capacità Oggetti raggiunta ({cog_used}/{cog_max}). Libera slot prima.")
+        
+        oggetto.is_equipaggiato = True
+        oggetto.save()
+        return "Equipaggiato"

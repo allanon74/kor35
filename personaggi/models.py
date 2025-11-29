@@ -20,6 +20,9 @@ from icon_widget.fields import CustomIconField
 COSTO_PER_MATTONE_INFUSIONE = 100
 COSTO_PER_MATTONE_TESSITURA = 100
 COSTO_PER_MATTONE_OGGETTO = 100
+COSTO_CREAZIONE_OGGETTO_PER_MATTONE = 100 # Esempio
+COSTO_CREAZIONE_MOD_PER_MATTONE = 150
+COSTO_CREAZIONE_MUTAZIONE_PER_MATTONE = 120
 
 # --- COSTANTI TRANSAZIONI ---
 STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
@@ -1264,6 +1267,11 @@ class Oggetto(A_vista):
     )
     
     is_tecnologico = models.BooleanField(default=False, verbose_name="È Tecnologico?")
+    is_equipaggiato = models.BooleanField(
+        default=False, 
+        verbose_name="Equipaggiato?",
+        help_text="Se True, l'oggetto sta fornendo i suoi bonus e occupa Capacità Oggetti."
+    )
     
     # Dati Vendita / Gioco
     costo_acquisto = models.IntegerField(default=0, verbose_name="Costo (Crediti)")
@@ -1486,16 +1494,20 @@ class Personaggio(Inventario):
         for oggetto in oggetti_inventario:
             is_oggetto_attivo = False
             
-            # A. Determina se l'oggetto genitore è attivo
+            # 1. Oggetti Fisici (Armi, Armature): Attivi solo se equipaggiati esplicitamente
             if oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO:
-                # Assumiamo che gli oggetti fisici in inventario siano attivi (o equipaggiati)
-                is_oggetto_attivo = True
+                if oggetto.is_equipaggiato:
+                    is_oggetto_attivo = True
+
+            # 2. Mutazioni: Sempre attive (fanno parte del corpo)
             elif oggetto.tipo_oggetto == TIPO_OGGETTO_MUTAZIONE:
-                # Le mutazioni sono sempre attive
                 is_oggetto_attivo = True
+
+            # 3. Innesti: Attivi se hanno cariche (o logica specifica) e sono nello slot
             elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO:
-                # Gli innesti sono attivi solo se hanno cariche
-                if oggetto.cariche_attuali > 0:
+                # Nota: Gli innesti nascono "equipaggiati" nel senso che occupano uno slot,
+                # ma potresti voler controllare le cariche o un flag di attivazione.
+                if oggetto.slot_corpo and oggetto.cariche_attuali > 0:
                     is_oggetto_attivo = True
             
             # Nota: MATERIA e MOD sciolte in inventario (non montate) sono ignorate qui (rimangono False)
