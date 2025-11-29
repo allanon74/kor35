@@ -34,7 +34,7 @@ from .models import (
     STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
     ClasseOggetto, ClasseOggettoLimiteMod,  # <--- NUOVI MODELLI
-    OggettoInInventario, OggettoElemento,
+    OggettoInInventario, OggettoElemento, Inventario
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -728,19 +728,19 @@ class OggettoElementoInline(admin.TabularInline):
     extra = 1
     autocomplete_fields = ['elemento']
 
-class OggettoStatisticaInline(admin.TabularInline):
-    model = OggettoStatistica
-    extra = 1
-    autocomplete_fields = ['statistica']
-    verbose_name = "Statistica (Modificatore Finale)"
-    verbose_name_plural = "Statistiche (Modificatori Finali)"
+# class OggettoStatisticaInline(admin.TabularInline):
+#     model = OggettoStatistica
+#     extra = 1
+#     autocomplete_fields = ['statistica']
+#     verbose_name = "Statistica (Modificatore Finale)"
+#     verbose_name_plural = "Statistiche (Modificatori Finali)"
 
-class OggettoStatisticaBaseInline(admin.TabularInline):
-    model = OggettoStatisticaBase
-    extra = 1
-    autocomplete_fields = ['statistica']
-    verbose_name = "Statistica (Valore Base)"
-    verbose_name_plural = "Statistiche (Valori Base)"
+# class OggettoStatisticaBaseInline(admin.TabularInline):
+#     model = OggettoStatisticaBase
+#     extra = 1
+#     autocomplete_fields = ['statistica']
+#     verbose_name = "Statistica (Valore Base)"
+#     verbose_name_plural = "Statistiche (Valori Base)"
 
 class PotenziamentiInstallatiInline(admin.TabularInline):
     """
@@ -756,6 +756,15 @@ class PotenziamentiInstallatiInline(admin.TabularInline):
     show_change_link = True
     verbose_name = "Potenziamento Installato"
     verbose_name_plural = "Potenziamenti Installati (Mod/Materia)"
+
+@admin.register(Inventario)
+class InventarioAdmin(admin.ModelAdmin):
+    list_display = ['nome', 'id']
+    search_fields = ['nome']  # <--- QUESTO ABILITA LA LENTE DI RICERCA
+    
+    # Opzionale: se vuoi vedere di che tipo è l'inventario (Personaggio, Cesta, ecc.)
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related()
 
 class TracciamentoInventarioInline(admin.TabularInline):
     model = OggettoInInventario
