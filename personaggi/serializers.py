@@ -447,6 +447,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'classe_oggetto',       # ID della classe (per logiche frontend)
             'classe_oggetto_nome',  # Nome della classe (per display)
             'is_tecnologico',
+            'is_equipaggiato',
             'slot_corpo',           # Per innesti
             'attacco_base',         # Per armi
             
