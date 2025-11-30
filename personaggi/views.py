@@ -1310,10 +1310,15 @@ def equipaggia_item_view(request):
     char_id = request.data.get('char_id')
     item_id = request.data.get('item_id')
 
-    # 2. Recupera il personaggio, verificando che appartenga all'utente loggato
-    pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    # --- LOGICA DI SICUREZZA ROBUSTA ---
+    # 2. Se sei un Admin (is_staff), puoi modificare QUALSIASI personaggio.
+    if request.user.is_staff:
+        pg = get_object_or_404(Personaggio, id=char_id)
+    # 3. Se sei un utente normale, puoi modificare SOLO i tuoi.
+    else:
+        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    # -----------------------------------
     
-    # 3. Recupera l'oggetto
     oggetto = get_object_or_404(Oggetto, pk=item_id)
     
     try:
@@ -1334,7 +1339,13 @@ def assembla_item_view(request):
     host_id = request.data.get('host_id')
     mod_id = request.data.get('mod_id')
     
-    pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    # --- LOGICA DI SICUREZZA ROBUSTA ---
+    if request.user.is_staff:
+        pg = get_object_or_404(Personaggio, id=char_id)
+    else:
+        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    # -----------------------------------
+    
     host = get_object_or_404(Oggetto, pk=host_id)
     mod = get_object_or_404(Oggetto, pk=mod_id)
     
