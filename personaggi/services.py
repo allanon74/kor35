@@ -297,11 +297,16 @@ class GestioneOggettiService:
         """
         Attiva/Equipaggia un oggetto fisico (arma/armatura).
         """
-        if oggetto.inventario_corrente != personaggio:
-             raise ValidationError("Non possiedi l'oggetto.")
+        # Recupera l'inventario attuale dell'oggetto
+        inv_corrente = oggetto.inventario_corrente
         
+        # Verifica rigorosa tramite ID:
+        # L'oggetto deve avere un inventario E l'ID dell'inventario deve corrispondere al personaggio
+        if not inv_corrente or inv_corrente.id != personaggio.id:
+             raise ValidationError(f"Non possiedi l'oggetto '{oggetto.nome}'. Si trova in: {inv_corrente.nome if inv_corrente else 'Nessun luogo'}")
+        
+        # ... (il resto del codice rimane uguale: controllo equipaggiato, controllo COG, ecc.)
         if oggetto.is_equipaggiato:
-            # Sta provando a disequipaggiare
             oggetto.is_equipaggiato = False
             oggetto.save()
             return "Disequipaggiato"

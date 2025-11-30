@@ -1300,28 +1300,36 @@ class OggettoViewSet(viewsets.ModelViewSet):
             'crediti_residui': personaggio.crediti
         })
         
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
 def equipaggia_item_view(request):
     """Gestisce il toggle Equip/Unequip"""
-    pg = request.user.personaggi.first() # O logica selezione PG
+    # 1. Leggiamo l'ID del personaggio inviato dal frontend
+    char_id = request.data.get('char_id') 
     item_id = request.data.get('item_id')
+
+    # 2. Recuperiamo QUEL personaggio specifico, verificando che sia dell'utente
+    pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    
     oggetto = get_object_or_404(Oggetto, pk=item_id)
     
     try:
+        # 3. Passiamo il personaggio corretto al servizio
         stato = GestioneOggettiService.equipaggia_oggetto(pg, oggetto)
         return Response({"status": "success", "nuovo_stato": stato})
     except ValidationError as e:
-        return Response({"error": str(e)}, status=400)
+        # Gestiamo l'errore in modo che il frontend lo legga bene
+        msg = e.message if hasattr(e, 'message') else str(e)
+        return Response({"error": msg}, status=400)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def assembla_item_view(request):
     """Gestisce montaggio Mod/Materia"""
-    pg = request.user.personaggi.first()
+    # Anche qui, recuperiamo l'ID esplicito
+    char_id = request.data.get('char_id')
     host_id = request.data.get('host_id')
     mod_id = request.data.get('mod_id')
     
+    pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
     host = get_object_or_404(Oggetto, pk=host_id)
     mod = get_object_or_404(Oggetto, pk=mod_id)
     
@@ -1329,4 +1337,5 @@ def assembla_item_view(request):
         GestioneOggettiService.assembla_mod(pg, host, mod)
         return Response({"status": "success", "message": "Assemblaggio completato"})
     except ValidationError as e:
-        return Response({"error": str(e)}, status=400)
+        msg = e.message if hasattr(e, 'message') else str(e)
+        return Response({"error": msg}, status=400)
