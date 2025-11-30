@@ -35,7 +35,7 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
 from rest_framework.pagination import PageNumberPagination
 
 from rest_framework import generics
@@ -1300,31 +1300,36 @@ class OggettoViewSet(viewsets.ModelViewSet):
             'crediti_residui': personaggio.crediti
         })
         
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication]) # <--- FONDAMENTALE: Risolve l'errore 403
+@permission_classes([IsAuthenticated])
 def equipaggia_item_view(request):
     """Gestisce il toggle Equip/Unequip"""
-    # 1. Leggiamo l'ID del personaggio inviato dal frontend
-    char_id = request.data.get('char_id') 
+    # 1. Recupera l'ID specifico del personaggio inviato dal frontend
+    char_id = request.data.get('char_id')
     item_id = request.data.get('item_id')
 
-    # 2. Recuperiamo QUEL personaggio specifico, verificando che sia dell'utente
+    # 2. Recupera il personaggio, verificando che appartenga all'utente loggato
     pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
     
+    # 3. Recupera l'oggetto
     oggetto = get_object_or_404(Oggetto, pk=item_id)
     
     try:
-        # 3. Passiamo il personaggio corretto al servizio
+        # 4. Chiama il servizio
         stato = GestioneOggettiService.equipaggia_oggetto(pg, oggetto)
         return Response({"status": "success", "nuovo_stato": stato})
     except ValidationError as e:
-        # Gestiamo l'errore in modo che il frontend lo legga bene
+        # Gestione errore pulita
         msg = e.message if hasattr(e, 'message') else str(e)
         return Response({"error": msg}, status=400)
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication]) # <--- FONDAMENTALE ANCHE QUI
 @permission_classes([IsAuthenticated])
 def assembla_item_view(request):
     """Gestisce montaggio Mod/Materia"""
-    # Anche qui, recuperiamo l'ID esplicito
     char_id = request.data.get('char_id')
     host_id = request.data.get('host_id')
     mod_id = request.data.get('mod_id')
