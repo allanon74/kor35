@@ -216,6 +216,9 @@ class AcquisisciAbilitaView(APIView):
         personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
         personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
         personaggio.abilita_possedute.add(abilita)
+        
+        cache.delete(f"acquirable_skills_{personaggio.id}")
+        
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
