@@ -20,7 +20,7 @@ from .models import LetturaMessaggio, PersonaggioLog
 
 import uuid 
 
-from .models import STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES
+from .models import STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES, ForgiaturaInCorso
 
 import qrcode
 import io
@@ -77,7 +77,7 @@ from django.conf import settings
 
 from webpush.models import PushInformation, SubscriptionInfo
 import json
-from .services import monta_potenziamento, crea_oggetto_da_infusione, GestioneOggettiService
+from .services import monta_potenziamento, crea_oggetto_da_infusione, GestioneOggettiService, GestioneCraftingService
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
 
@@ -1355,3 +1355,108 @@ def assembla_item_view(request):
     except ValidationError as e:
         msg = e.message if hasattr(e, 'message') else str(e)
         return Response({"error": msg}, status=400)
+    
+    
+class CraftingViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['post'])
+    def avvia_forgiatura(self, request):
+        """
+        POST /api/crafting/avvia_forgiatura/
+        Body: { "infusione_id": 1, "char_id": 1, "slot_target": "HD" (opzionale) }
+        """
+        char_id = request.data.get('char_id')
+        inf_id = request.data.get('infusione_id')
+        slot = request.data.get('slot_target')
+        
+        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        try:
+            forgiatura = GestioneCraftingService.avvia_forgiatura(personaggio, inf_id, slot)
+            return Response({
+                "status": "started", 
+                "fine_prevista": forgiatura.data_fine_prevista,
+                "id_forgiatura": forgiatura.id
+            }, status=status.HTTP_201_CREATED)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
+
+    @action(detail=False, methods=['post'])
+    def completa_forgiatura(self, request):
+        """
+        POST /api/crafting/completa_forgiatura/
+        Body: { "forgiatura_id": 12, "char_id": 1 }
+        """
+        char_id = request.data.get('char_id')
+        forg_id = request.data.get('forgiatura_id')
+        
+        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        try:
+            oggetto = GestioneCraftingService.completa_forgiatura(forg_id, personaggio)
+            return Response({"status": "completed", "oggetto_id": oggetto.id}, status=200)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
+
+    @action(detail=False, methods=['get'])
+    def coda_forgiatura(self, request):
+        """
+        GET /api/crafting/coda_forgiatura/?char_id=1
+        Restituisce le forgiature in corso per il timer frontend.
+        """
+        char_id = request.query_params.get('char_id')
+        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        coda = ForgiaturaInCorso.objects.filter(personaggio=personaggio)
+        data = []
+        now = timezone.now()
+        for task in coda:
+            data.append({
+                "id": task.id,
+                "infusione_nome": task.infusione.nome,
+                "data_inizio": task.data_inizio,
+                "data_fine": task.data_fine_prevista,
+                "secondi_rimanenti": max(0, (task.data_fine_prevista - now).total_seconds()),
+                "is_pronta": task.is_pronta
+            })
+        return Response(data)
+
+class NegozioViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def listino(self, request):
+        """
+        GET /api/negozio/listino/
+        Restituisce tutti gli oggetti di livello 0 in vendita.
+        """
+        # Filtra oggetti 'Template' (livello 0 e in vendita)
+        oggetti = Oggetto.objects.filter(elementi__isnull=True, in_vendita=True).distinct() 
+        # Nota: il filtro sul livello 0 è meglio farlo controllando che non abbiano mattoni (elementi)
+        # Oppure aggiungere un campo 'livello' denormalizzato se la property calcolata è lenta.
+        # Qui usiamo la logica: se non ha elementi è liv 0. 
+        # Oppure se hai aggiunto il campo livello al model come da best practice, usa filter(livello=0).
+        
+        # Filtro Python per sicurezza sulla property se non c'è campo db
+        items = [o for o in oggetti if o.livello == 0]
+        
+        serializer = OggettoSerializer(items, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def acquista(self, request):
+        """
+        POST /api/negozio/acquista/
+        Body: { "oggetto_id": 1, "char_id": 1 }
+        """
+        char_id = request.data.get('char_id')
+        obj_id = request.data.get('oggetto_id')
+        
+        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        try:
+            nuovo = GestioneCraftingService.acquista_da_negozio(personaggio, obj_id)
+            return Response({"status": "success", "nuovo_oggetto_id": nuovo.id}, status=200)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)

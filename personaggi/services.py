@@ -3,11 +3,13 @@
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from datetime import timedelta
 from .models import (
     Oggetto, Infusione, Mattone, Personaggio, OggettoInInventario, 
     TIPO_OGGETTO_FISICO, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, 
     TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE,
     COSTO_PER_MATTONE_OGGETTO, QrCode, OggettoStatistica, Inventario,
+    ForgiaturaInCorso, 
 )
 
 def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
@@ -321,3 +323,172 @@ class GestioneOggettiService:
         oggetto.is_equipaggiato = True
         oggetto.save()
         return "Equipaggiato"
+    
+    
+class GestioneCraftingService:
+
+    @staticmethod
+    def get_valore_statistica_aura(personaggio, aura, campo_configurazione):
+        """
+        Recupera il valore della statistica associata all'aura per una certa operazione.
+        Esempio: aura.stat_tempo_forgiatura -> 'Velocità Forgia' -> Valore PG.
+        Se non configurata, ritorna un default (es. 100 o 60).
+        """
+        statistica_ref = getattr(aura, campo_configurazione, None)
+        
+        # Default se l'admin non ha configurato l'aura
+        DEFAULT_COSTO = 100
+        DEFAULT_TEMPO = 60 # secondi
+        
+        if not statistica_ref:
+            if 'tempo' in campo_configurazione: return DEFAULT_TEMPO
+            return DEFAULT_COSTO
+
+        # Recupera il valore effettivo dal personaggio (Base + Modificatori)
+        # Assumiamo che il 'parametro' della statistica sia quello usato per i calcoli
+        valore = personaggio.get_valore_statistica(statistica_ref.sigla) 
+        
+        # Se la statistica non è trovata o è 0, usiamo il valore base della statistica stessa
+        if valore <= 0:
+            valore = statistica_ref.valore_base_predefinito
+            
+        return max(1, valore) # Evitiamo divisioni per zero o costi negativi
+
+    @staticmethod
+    def calcola_costi_forgiatura(personaggio, infusione):
+        aura = infusione.aura_richiesta
+        if not aura: return 0, 0 # Fallback
+        
+        # 1. Recupera costo per mattone dalla configurazione Aura
+        costo_per_mattone = GestioneCraftingService.get_valore_statistica_aura(
+            personaggio, aura, 'stat_costo_forgiatura'
+        )
+        
+        # 2. Recupera tempo per mattone dalla configurazione Aura
+        tempo_per_mattone = GestioneCraftingService.get_valore_statistica_aura(
+            personaggio, aura, 'stat_tempo_forgiatura'
+        )
+        
+        livello = infusione.livello
+        if livello == 0: livello = 1 # Minimo 1 per i calcoli base
+        
+        costo_totale = livello * costo_per_mattone
+        tempo_totale = livello * tempo_per_mattone
+        
+        return costo_totale, tempo_totale
+
+    @staticmethod
+    def avvia_forgiatura(personaggio, infusione_id, slot_target=None):
+        infusione = Infusione.objects.get(pk=infusione_id)
+        
+        # 1. Validazioni
+        is_valid, msg = personaggio.valida_acquisto_tecnica(infusione)
+        # Nota: Qui potresti voler saltare la validazione se l'ha già acquisita, 
+        # ma controlliamo se possiede i requisiti per usarla ora.
+        
+        if not personaggio.infusioni_possedute.filter(pk=infusione_id).exists():
+             raise ValidationError("Non conosci questa infusione.")
+
+        # 2. Calcolo Costi e Tempi Dinamici
+        costo_crediti, durata_secondi = GestioneCraftingService.calcola_costi_forgiatura(personaggio, infusione)
+        
+        if personaggio.crediti < costo_crediti:
+            raise ValidationError(f"Crediti insufficienti. Richiesti: {costo_crediti}")
+
+        # 3. Transazione
+        with transaction.atomic():
+            personaggio.modifica_crediti(-costo_crediti, f"Avvio forgiatura: {infusione.nome}")
+            
+            fine_prevista = timezone.now() + timedelta(seconds=durata_secondi)
+            
+            forgiatura = ForgiaturaInCorso.objects.create(
+                personaggio=personaggio,
+                infusione=infusione,
+                data_fine_prevista=fine_prevista,
+                slot_target=slot_target
+            )
+            
+        return forgiatura
+
+    @staticmethod
+    def completa_forgiatura(forgiatura_id, personaggio):
+        try:
+            task = ForgiaturaInCorso.objects.get(pk=forgiatura_id, personaggio=personaggio)
+        except ForgiaturaInCorso.DoesNotExist:
+            raise ValidationError("Forgiatura non trovata.")
+            
+        if not task.is_pronta:
+            raise ValidationError("La forgiatura non è ancora completata.")
+            
+        if task.completata:
+             raise ValidationError("Oggetto già ritirato.")
+
+        # Creazione Oggetto (Usiamo il servizio esistente o logica simile)
+        from .services import crea_oggetto_da_infusione # Importa la funzione helper esistente
+        
+        with transaction.atomic():
+            # Crea fisicamente l'oggetto
+            # Nota: Passiamo None come target iniziale, poi lo spostiamo noi per sicurezza
+            nuovo_oggetto = crea_oggetto_da_infusione(task.infusione, personaggio)
+            
+            # Se c'era uno slot target (es. Innesti), gestisci equipaggiamento
+            if task.slot_target:
+                nuovo_oggetto.slot_corpo = task.slot_target
+                nuovo_oggetto.is_equipaggiato = True # Innesti nascono equipaggiati
+                nuovo_oggetto.save()
+            
+            # Elimina il task (o segnalo completato per lo storico)
+            task.delete()
+            
+            personaggio.aggiungi_log(f"Forgiatura completata: {nuovo_oggetto.nome}")
+            
+        return nuovo_oggetto
+
+    @staticmethod
+    def acquista_da_negozio(personaggio, oggetto_template_id):
+        """
+        Gestisce l'acquisto di oggetti Livello 0 dal negozio.
+        Copia l'oggetto template e lo assegna al PG.
+        """
+        template = Oggetto.objects.get(pk=oggetto_template_id)
+        
+        if template.livello > 0:
+            raise ValidationError("Solo oggetti di Livello 0 possono essere acquistati direttamente.")
+            
+        costo = template.costo_acquisto
+        
+        if personaggio.crediti < costo:
+            raise ValidationError(f"Crediti insufficienti. Costo: {costo}")
+            
+        with transaction.atomic():
+            personaggio.modifica_crediti(-costo, f"Acquisto negozio: {template.nome}")
+            
+            # CLONAZIONE OGGETTO
+            nuovo_oggetto = Oggetto.objects.create(
+                nome=template.nome,
+                testo=template.testo,
+                tipo_oggetto=template.tipo_oggetto,
+                classe_oggetto=template.classe_oggetto,
+                is_tecnologico=template.is_tecnologico,
+                costo_acquisto=template.costo_acquisto,
+                attacco_base=template.attacco_base,
+                # Non copiamo 'in_vendita' perché la copia utente non è il template del negozio
+                in_vendita=False 
+            )
+            
+            # Copia Statistiche Base
+            for stat_b in template.statistiche_base.all():
+                # Nota: bisogna recuperare il valore through model se diverso dal default, 
+                # ma per semplicità assumiamo che il template abbia i valori nel through model
+                val = template.oggettostatisticabase_set.get(statistica=stat_b).valore_base
+                nuovo_oggetto.statistiche_base.add(stat_b, through_defaults={'valore_base': val})
+
+            # Copia Modificatori (se presenti su oggetto liv 0)
+            for stat_m in template.statistiche.all():
+                val = template.oggettostatistica_set.get(statistica=stat_m).valore
+                nuovo_oggetto.statistiche.add(stat_m, through_defaults={'valore': val, 'tipo_modificatore': 'ADD'})
+                
+            # Assegna all'inventario
+            nuovo_oggetto.sposta_in_inventario(personaggio)
+            
+        return nuovo_oggetto

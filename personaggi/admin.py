@@ -29,12 +29,13 @@ from .models import (
     ModelloAuraRequisitoDoppia, 
     ModelloAuraRequisitoCaratt,
     ModelloAuraRequisitoMattone,
-    PropostaTecnica, Infusione, Tessitura, 
-    PropostaTecnicaMattone, PersonaggioInfusione, PersonaggioTessitura,
+    PropostaTecnica, 
+    PropostaTecnicaMattone, 
     STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
-    ClasseOggetto, ClasseOggettoLimiteMod,  # <--- NUOVI MODELLI
-    OggettoInInventario, OggettoElemento, Inventario
+    ClasseOggetto, ClasseOggettoLimiteMod,
+    OggettoInInventario, OggettoElemento, Inventario,
+    ForgiaturaInCorso  # <--- NUOVO IMPORT
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -123,7 +124,6 @@ class StatisticaPivotMixin:
     readonly_fields = ('statistica_label',) 
     extra = 0
     
-    # Da sovrascrivere nelle sottoclassi
     value_field = 'valore' 
     default_source_field = 'valore_predefinito'
 
@@ -236,25 +236,13 @@ class PunteggioAttivataInline(admin.TabularInline):
     model = Attivata.elementi.through; extra = 1; verbose_name = "Elemento"
 
 class RequisitoDoppiaInline(admin.TabularInline):
-    model = ModelloAuraRequisitoDoppia
-    extra = 1 # Numero di righe vuote da mostrare
-    verbose_name = "Condizione per Doppia Formula"
-    verbose_name_plural = "Condizioni per Doppia Formula"
-    autocomplete_fields = ['requisito'] # Consigliato se hai molti punteggi
+    model = ModelloAuraRequisitoDoppia; extra = 1; verbose_name = "Condizione per Doppia Formula"; verbose_name_plural = "Condizioni per Doppia Formula"; autocomplete_fields = ['requisito']
     
 class RequisitoMattoneInline(admin.TabularInline):
-    model = ModelloAuraRequisitoMattone
-    extra = 1
-    verbose_name = "Condizione per F. Mattone"
-    verbose_name_plural = "Condizioni per F. Mattone"
-    autocomplete_fields = ['requisito']
+    model = ModelloAuraRequisitoMattone; extra = 1; verbose_name = "Condizione per F. Mattone"; verbose_name_plural = "Condizioni per F. Mattone"; autocomplete_fields = ['requisito']
 
 class RequisitoCarattInline(admin.TabularInline):
-    model = ModelloAuraRequisitoCaratt
-    extra = 1
-    verbose_name = "Condizione per F. Caratteristica"
-    verbose_name_plural = "Condizioni per F. Caratteristica"
-    autocomplete_fields = ['requisito']
+    model = ModelloAuraRequisitoCaratt; extra = 1; verbose_name = "Condizione per F. Caratteristica"; verbose_name_plural = "Condizioni per F. Caratteristica"; autocomplete_fields = ['requisito']
 
 
 # Helpers Testo
@@ -269,20 +257,15 @@ class PropostaMattoneInline(admin.TabularInline):
     extra = 0
     readonly_fields = ('mattone', 'ordine')
     can_delete = False
-
-    def has_add_permission(self, request, obj=None):
-        return False
+    def has_add_permission(self, request, obj=None): return False
 
 class InfusioneCreationInline(admin.StackedInline):
     model = Infusione
-    fields = ('nome', 'testo', 'aura_richiesta', 'aura_infusione', ) # Aggiungi campi necessari
-    # Nota: costo_crediti è una property nel model, ma se vuoi editarlo serve un campo fisico o logica custom.
-    # Per ora usiamo i campi standard modificabili.
+    fields = ('nome', 'testo', 'aura_richiesta', 'aura_infusione', )
     extra = 0
     verbose_name = "Crea Infusione da questa proposta"
     show_change_link = True
 
-# Inline per Creare Tessitura da Proposta
 class TessituraCreationInline(admin.StackedInline):
     model = Tessitura
     fields = ('nome', 'testo', 'formula', 'aura_richiesta', 'elemento_principale',)
@@ -302,133 +285,71 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
     mattoni_text.short_description = "Mattoni Richiesti"
 
     def get_inline_instances(self, request, obj=None):
-        # Ottieni tutte le istanze inline standard
         instances = super().get_inline_instances(request, obj)
-        
-        # Se non c'è oggetto (es. creazione nuova proposta da admin), mostra tutto o filtra a piacere
-        if not obj:
-            return instances
-
+        if not obj: return instances
         filtered_instances = []
         for inline in instances:
-            # Se la proposta è TESSITURA, nascondi l'inline per creare INFUSIONE
-            if isinstance(inline, InfusioneCreationInline) and obj.tipo == TIPO_PROPOSTA_TESSITURA:
-                continue
-            
-            # Se la proposta è INFUSIONE, nascondi l'inline per creare TESSITURA
-            if isinstance(inline, TessituraCreationInline) and obj.tipo == TIPO_PROPOSTA_INFUSIONE:
-                continue
-            
+            if isinstance(inline, InfusioneCreationInline) and obj.tipo == TIPO_PROPOSTA_TESSITURA: continue
+            if isinstance(inline, TessituraCreationInline) and obj.tipo == TIPO_PROPOSTA_INFUSIONE: continue
             filtered_instances.append(inline)
-
         return filtered_instances
     
     def save_model(self, request, obj, form, change):
-        """
-        Gestisce il salvataggio diretto del modello (es. cambio stato manuale).
-        Invia notifica se la proposta viene RIFIUTATA.
-        """
         super().save_model(request, obj, form, change)
-        
-        # Verifica se lo stato è cambiato in RIFIUTATA
         if change and 'stato' in form.changed_data and obj.stato in (STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA):
             motivo = obj.note_staff if obj.note_staff else "Nessuna motivazione specifica fornita."
-            
-            # Crea il messaggio per il giocatore
             Messaggio.objects.create(
-                mittente=request.user, # L'admin che ha fatto l'azione
+                mittente=request.user,
                 destinatario_personaggio=obj.personaggio,
                 tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 titolo=f"Esito Proposta: {obj.nome}",
                 testo=f"La tua proposta '{obj.nome}' è stata valutata e RIFIUTATA.\n\nMOTIVAZIONE STAFF:\n{motivo}",
                 salva_in_cronologia=True
             )
-            # Log opzionale sul personaggio
             obj.personaggio.aggiungi_log(f"Proposta '{obj.nome}' rifiutata dallo staff.")
     
-    
     def save_related(self, request, form, formsets, change):
-        """
-        Gestisce il salvataggio degli inline e le automazioni:
-        1. Copia i mattoni dalla Proposta alla nuova Tecnica.
-        2. Approva la proposta.
-        3. Assegna la tecnica al creatore.
-        """
         super().save_related(request, form, formsets, change)
         obj = form.instance
-        
         tecnica_creata = None
         tipo_tecnica = None
-
-        # Identifica se è stata creata/collegata una tecnica
         try:
             if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
-                tecnica_creata = obj.infusione_generata
-                tipo_tecnica = 'infusione'
+                tecnica_creata = obj.infusione_generata; tipo_tecnica = 'infusione'
             elif hasattr(obj, 'tessitura_generata') and obj.tessitura_generata:
-                tecnica_creata = obj.tessitura_generata
-                tipo_tecnica = 'tessitura'
-        except Exception:
-            pass
+                tecnica_creata = obj.tessitura_generata; tipo_tecnica = 'tessitura'
+        except Exception: pass
 
         if tecnica_creata and obj.stato != STATO_PROPOSTA_APPROVATA:
-            # --- AUTOMAZIONE 1: COPIA MATTONI ---
-            # Verifica se la tecnica ha già mattoni (per evitare duplicati in caso di salvataggi multipli)
             has_mattoni = False
-            if tipo_tecnica == 'infusione':
-                has_mattoni = tecnica_creata.infusionemattone_set.exists()
-            else:
-                has_mattoni = tecnica_creata.tessituramattone_set.exists()
+            if tipo_tecnica == 'infusione': has_mattoni = tecnica_creata.infusionemattone_set.exists()
+            else: has_mattoni = tecnica_creata.tessituramattone_set.exists()
 
             if not has_mattoni:
-                # Recupera i mattoni della proposta
                 mattoni_proposta = obj.propostatecnicamattone_set.all().order_by('ordine')
-                
                 for pm in mattoni_proposta:
                     if tipo_tecnica == 'infusione':
-                        InfusioneMattone.objects.create(
-                            infusione=tecnica_creata,
-                            mattone=pm.mattone,
-                            ordine=pm.ordine
-                        )
+                        InfusioneMattone.objects.create(infusione=tecnica_creata, mattone=pm.mattone, ordine=pm.ordine)
                     elif tipo_tecnica == 'tessitura':
-                        TessituraMattone.objects.create(
-                            tessitura=tecnica_creata,
-                            mattone=pm.mattone,
-                            ordine=pm.ordine
-                        )
-                
-                # Aggiorna eventuali statistiche calcolate o log
+                        TessituraMattone.objects.create(tessitura=tecnica_creata, mattone=pm.mattone, ordine=pm.ordine)
                 obj.note_staff = (obj.note_staff or "") + f"\n[System] Mattoni copiati automaticamente su {tecnica_creata.nome}."
 
-            # --- AUTOMAZIONE 2: STATO E ASSEGNAZIONE ---
             obj.stato = STATO_PROPOSTA_APPROVATA
-            if not obj.note_staff:
-                obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
+            if not obj.note_staff: obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
             obj.save()
 
             pg = obj.personaggio
             if tipo_tecnica == 'infusione':
                 if not pg.infusioni_possedute.filter(id=tecnica_creata.id).exists():
-                    PersonaggioInfusione.objects.create(
-                        personaggio=pg, 
-                        infusione=tecnica_creata,
-                        data_acquisizione=timezone.now()
-                    )
+                    PersonaggioInfusione.objects.create(personaggio=pg, infusione=tecnica_creata, data_acquisizione=timezone.now())
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente l'infusione '{tecnica_creata.nome}'.")
-            
-            
             elif tipo_tecnica == 'tessitura':
                 if not pg.tessiture_possedute.filter(id=tecnica_creata.id).exists():
-                    PersonaggioTessitura.objects.create(
-                        personaggio=pg, 
-                        tessitura=tecnica_creata,
-                        data_acquisizione=timezone.now()
-                    )
+                    PersonaggioTessitura.objects.create(personaggio=pg, tessitura=tecnica_creata, data_acquisizione=timezone.now())
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente la tessitura '{tecnica_creata.nome}'.")
 
             Messaggio.objects.create(
-                mittente=request.user, # L'admin che ha fatto l'azione
+                mittente=request.user,
                 destinatario_personaggio=obj.personaggio,
                 tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 titolo=f"Esito Proposta: {obj.nome}",
@@ -436,7 +357,6 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
                 salva_in_cronologia=True
             )
                     
-                        
 # --- MODEL ADMINS ---
 
 @admin.register(TipologiaPersonaggio)
@@ -462,8 +382,21 @@ class PunteggioAdmin(IconaAdminMixin, A_Admin):
     summernote_fields = ('descrizione',)
     save_as = True
     
-    # def get_queryset(self, request): 
-    #     return super().get_queryset(request).exclude(tipo=CARATTERISTICA).exclude(tipo='MA')
+    fieldsets = (
+        ('Dati Generali', {
+            'fields': (('nome', 'sigla'), ('tipo', 'ordine'), ('icona', 'colore'), 'descrizione')
+        }),
+        ('Configurazione Aura (Solo se Tipo = Aura)', {
+            'classes': ('collapse',),
+            'description': "Definisci le statistiche da usare per calcolare costi e tempi. Se vuoto, usa i default (100cr / 60s).",
+            'fields': (
+                ('stat_costo_creazione_infusione', 'stat_costo_creazione_tessitura'),
+                ('stat_costo_acquisto_infusione', 'stat_costo_acquisto_tessitura'),
+                ('stat_costo_forgiatura', 'stat_tempo_forgiatura'),
+                'aure_infusione_consentite'
+            )
+        }),
+    )
 
 @admin.register(Caratteristica)
 class CaratteristicaAdmin(IconaAdminMixin, A_Admin): 
@@ -489,56 +422,18 @@ class ModelloAuraAdmin(admin.ModelAdmin):
     list_display = ('nome', 'aura', 'usa_doppia_formula', 'usa_formula_per_caratteristica')
     list_filter = ('aura',)
     search_fields = ('nome',)
-    
-    # Campi ManyToMany semplici (senza valore extra) gestiti con widget orizzontale
     filter_horizontal = ('mattoni_proibiti', 'mattoni_obbligatori')
-    
-    # Campi per l'autocompletamento (opzionale, migliora performance se hai tanti elementi)
     autocomplete_fields = ['aura', 'elemento_secondario']
-
-    # Organizzazione dei campi in sezioni (Fieldsets) per pulizia
     fieldsets = (
-        (None, {
-            'fields': ('nome', 'aura', 'descrizione',)
-        }),
-        ('Limitazioni Mattoni', {
-            'fields': ('mattoni_proibiti', 'mattoni_obbligatori'),
-            # 'classes': ('collapse',), # Rende la sezione chiudibile
-        }),
-        ('Doppia Formula', {
-            'fields': ('usa_doppia_formula', 'elemento_secondario', 'usa_condizione_doppia'),
-            'description': "Impostazioni per mostrare una seconda formula fissa (es. Elemento del Modello).",
-            'classes': (
-                # 'collapse', 
-                'anchor-doppia',
-                )
-        }),
-        ('Formula per Mattone', {   # <--- NUOVA SEZIONE
-            'fields': ('usa_formula_per_mattone', 'usa_condizione_mattone'),
-            'description': "Impostazioni per generare formule dinamiche basate sugli elementi associati ai mattoni della Tessitura.",
-            'classes': (
-                # 'collapse', 
-                'anchor-mattone',
-                )
-        }),
-        ('Formula per Caratteristica', {
-            'fields': ('usa_formula_per_caratteristica', 'usa_condizione_caratt'),
-            'description': "Impostazioni per generare formule dinamiche basate sulle caratteristiche possedute dal personaggio.",
-            'classes': (
-                # 'collapse', 
-                'anchor-caratt',
-                )
-        }),
+        (None, {'fields': ('nome', 'aura', 'descrizione',)}),
+        ('Limitazioni Mattoni', {'fields': ('mattoni_proibiti', 'mattoni_obbligatori')}),
+        ('Doppia Formula', {'fields': ('usa_doppia_formula', 'elemento_secondario', 'usa_condizione_doppia'), 'description': "Impostazioni per mostrare una seconda formula fissa.", 'classes': ('anchor-doppia',)}),
+        ('Formula per Mattone', {'fields': ('usa_formula_per_mattone', 'usa_condizione_mattone'), 'description': "Formule dinamiche basate sugli elementi dei mattoni.", 'classes': ('anchor-mattone',)}),
+        ('Formula per Caratteristica', {'fields': ('usa_formula_per_caratteristica', 'usa_condizione_caratt'), 'description': "Formule dinamiche basate sulle caratteristiche.", 'classes': ('anchor-caratt',)}),
     )
-
-    # Aggiungiamo gli Inline definiti sopra
-    inlines = [RequisitoDoppiaInline,RequisitoMattoneInline, RequisitoCarattInline, ]
-    
+    inlines = [RequisitoDoppiaInline, RequisitoMattoneInline, RequisitoCarattInline]
     class Media:
-        js = ('admin/js/move_inlines.js',)
-        css = {
-         'all': ('admin/css/nascondi-inline-header.css',)
-    }
+        js = ('admin/js/move_inlines.js',); css = {'all': ('admin/css/nascondi-inline-header.css',)}
 
 @admin.register(Mattone)
 class MattoneAdmin(A_Admin):
@@ -569,8 +464,6 @@ class StatisticaAdmin(A_Admin):
     list_editable = ('is_primaria',)
     exclude = ('tipo',)
     summernote_fields = ('descrizione',)
-    
-    # --- AGGIUNGI QUESTA RIGA ---
     search_fields = ['nome', 'parametro']
 
 admin.site.register(Tabella)
@@ -587,7 +480,6 @@ class ManifestoAdmin(SModelAdmin):
 @admin.register(QrCode)
 class QrCodeAdmin(admin.ModelAdmin):
     list_display = ('id', 'data_creazione'); readonly_fields = ('id', 'data_creazione'); summernote_fields = ['testo']
-
 
 # @admin.register(Attivata)
 class AttivataAdmin(SModelAdmin):
@@ -608,44 +500,29 @@ class InfusioneAdmin(SModelAdmin):
     list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'aura_infusione', 'statistica_cariche')
     search_fields = ['nome', 'testo']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    
     inlines = [InfusioneMattoneInline, InfusioneStatisticaBaseInline]
-    
-    # Escludiamo i campi gestiti dagli inline o non usati
     exclude = ('statistiche_base', 'statistiche', 'mattoni')
-    
     summernote_fields = ['testo']
     autocomplete_fields = ['aura_richiesta', 'aura_infusione', 'statistica_cariche']
     
     fieldsets = (
-        ('Dati Base', {
-            'fields': ('nome', 'testo', 'aura_richiesta', 'aura_infusione', 'proposta_creazione')
-        }),
-        ('Anteprima', {
-            'classes': ('wide',), 
-            'fields': ('mostra_testo_formattato',)
-        }),
-        ('Logica Ricarica & Durata', {
-            'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'),
-            'description': "Definisci qui come l'oggetto generato gestisce le cariche (Obbligatorio per Tech)."
-        }),
+        ('Dati Base', {'fields': ('nome', 'testo', 'aura_richiesta', 'aura_infusione', 'proposta_creazione')}),
+        ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
+        ('Logica Ricarica & Durata', {'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'), 'description': "Definisci qui come l'oggetto generato gestisce le cariche."}),
     )
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-             form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
         return form
     
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
+    def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo'
 
 @admin.register(Tessitura)
 class TessituraAdmin(SModelAdmin):
     list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'elemento_principale'); search_fields = ['nome']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    # SOLO BASE
     inlines = [TessituraMattoneInline, TessituraStatisticaBaseInline]
     exclude = ('statistiche_base', 'statistiche', 'mattoni'); summernote_fields = ['testo', 'formula']; autocomplete_fields = ['aura_richiesta', 'elemento_principale']
     
@@ -653,13 +530,11 @@ class TessituraAdmin(SModelAdmin):
         form = super().get_form(request, obj, **kwargs)
         extras = [('{elem}', 'Elemento Principale'), ('{liv}', 'Livello Tessitura'), ('aura}', 'Aura Richiesta')]
         help_txt = Statistica.get_help_text_parametri(extras)
-        
         if 'testo' in form.base_fields: form.base_fields['testo'].help_text = help_txt
         if 'formula' in form.base_fields: form.base_fields['formula'].help_text = help_txt
         return form
     
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
+    def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo'
 
 @admin.register(Personaggio)
@@ -668,13 +543,8 @@ class PersonaggioAdmin(A_Admin):
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
     list_filter = ('tipologia',); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
     inlines = [
-        PersonaggioModelloAuraInline, 
-        PersonaggioInfusioneInline, 
-        PersonaggioTessituraInline, 
-        PersonaggioAttivataInline, 
-        CreditoMovimentoInline, 
-        PuntiCaratteristicaMovimentoInline, 
-        PersonaggioLogInline
+        PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, 
+        CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline
     ]
     fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'testo', ('data_nascita', 'data_morte'))}),
                  ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))}))
@@ -715,132 +585,67 @@ class ClasseOggettoAdmin(admin.ModelAdmin):
     list_display = ['nome', 'max_mod_totali', 'get_permessi_materia']
     search_fields = ['nome']
     inlines = [ClasseOggettoLimiteModInline]
-    filter_horizontal = ['mattoni_materia_permessi'] # Widget comodo per ManyToMany semplice
-
-    def get_permessi_materia(self, obj):
-        return ", ".join([p.nome for p in obj.mattoni_materia_permessi.all()])
+    filter_horizontal = ['mattoni_materia_permessi']
+    def get_permessi_materia(self, obj): return ", ".join([p.nome for p in obj.mattoni_materia_permessi.all()])
     get_permessi_materia.short_description = "Mattoni Materia Permessi"
 
 # --- INLINES PER OGGETTO ---
 
 class OggettoElementoInline(admin.TabularInline):
-    model = OggettoElemento
-    extra = 1
-    autocomplete_fields = ['elemento']
-
-# class OggettoStatisticaInline(admin.TabularInline):
-#     model = OggettoStatistica
-#     extra = 1
-#     autocomplete_fields = ['statistica']
-#     verbose_name = "Statistica (Modificatore Finale)"
-#     verbose_name_plural = "Statistiche (Modificatori Finali)"
-
-# class OggettoStatisticaBaseInline(admin.TabularInline):
-#     model = OggettoStatisticaBase
-#     extra = 1
-#     autocomplete_fields = ['statistica']
-#     verbose_name = "Statistica (Valore Base)"
-#     verbose_name_plural = "Statistiche (Valori Base)"
+    model = OggettoElemento; extra = 1; autocomplete_fields = ['elemento']
 
 class PotenziamentiInstallatiInline(admin.TabularInline):
-    """
-    Mostra gli oggetti che sono montati SU questo oggetto.
-    Es: Se sto guardando un Fucile, qui vedo le Mod installate.
-    """
-    model = Oggetto
-    fk_name = 'ospitato_su' # Specifica quale FK usare (self relation)
+    model = Oggetto; fk_name = 'ospitato_su'
     fields = ['nome', 'tipo_oggetto', 'cariche_attuali', 'infusione_generatrice']
     readonly_fields = ['nome', 'tipo_oggetto', 'cariche_attuali', 'infusione_generatrice']
-    extra = 0
-    can_delete = False # Gestione complessa, meglio non cancellare da qui
-    show_change_link = True
-    verbose_name = "Potenziamento Installato"
-    verbose_name_plural = "Potenziamenti Installati (Mod/Materia)"
+    extra = 0; can_delete = False; show_change_link = True
+    verbose_name = "Potenziamento Installato"; verbose_name_plural = "Potenziamenti Installati (Mod/Materia)"
 
 @admin.register(Inventario)
 class InventarioAdmin(admin.ModelAdmin):
-    list_display = ['nome', 'id']
-    search_fields = ['nome']  # <--- QUESTO ABILITA LA LENTE DI RICERCA
-    
-    # Opzionale: se vuoi vedere di che tipo è l'inventario (Personaggio, Cesta, ecc.)
-    def get_queryset(self, request):
-        return super().get_queryset(request).select_related()
+    list_display = ['nome', 'id']; search_fields = ['nome']
+    def get_queryset(self, request): return super().get_queryset(request).select_related()
 
 class TracciamentoInventarioInline(admin.TabularInline):
-    model = OggettoInInventario
-    extra = 0
-    readonly_fields = ['data_inizio', 'data_fine']
-    raw_id_fields = ['inventario']
-    ordering = ['-data_inizio']
+    model = OggettoInInventario; extra = 0; readonly_fields = ['data_inizio', 'data_fine']; raw_id_fields = ['inventario']; ordering = ['-data_inizio']
 
 @admin.register(Oggetto)
 class OggettoAdmin(SModelAdmin):
-    list_display = [
-        'nome', 'tipo_oggetto', 'classe_oggetto', 
-        'is_tecnologico', 'livello', 'costo_acquisto', 
-        'cariche_attuali', 'get_inventario_attuale'
-    ]
-    list_filter = [
-        'tipo_oggetto', 
-        'classe_oggetto', 
-        'is_tecnologico', 
-        'in_vendita', 
-        'aura'
-    ]
+    list_display = ['nome', 'tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'livello', 'costo_acquisto', 'cariche_attuali', 'get_inventario_attuale']
+    list_filter = ['tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'in_vendita', 'aura']
     search_fields = ['nome', 'testo']
     autocomplete_fields = ['aura', 'infusione_generatrice', 'ospitato_su', 'classe_oggetto']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
     summernote_fields = ['testo']
-    # Organizzazione campi in Fieldsets
-    fieldsets = (
-        ('Dati Generali', {
-            'fields': ('nome', 'testo', 'aura', 'costo_acquisto', 'in_vendita')
-        }),
-        ('Classificazione & Logica', {
-            'fields': (
-                'tipo_oggetto', 'classe_oggetto', 
-                'is_tecnologico', 'slot_corpo', 'attacco_base'
-            )
-        }),
-        ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
-        ('Stato & Origine', {
-            'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su')
-        }),
-    )
     
-    inlines = [
-        OggettoElementoInline, 
-        OggettoStatisticaBaseInline, # Valori base (es. Danno arma)
-        OggettoStatisticaInline,     # Modificatori (es. +1 Forza conferito)
-        PotenziamentiInstallatiInline, # Cosa c'è dentro?
-        TracciamentoInventarioInline   # Dove si trova?
-    ]
+    fieldsets = (
+        ('Dati Generali', {'fields': ('nome', 'testo', 'aura', 'costo_acquisto', 'in_vendita')}),
+        ('Classificazione & Logica', {'fields': ('tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'slot_corpo', 'attacco_base')}),
+        ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
+        ('Stato & Origine', {'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su')}),
+    )
+    inlines = [OggettoElementoInline, OggettoStatisticaBaseInline, OggettoStatisticaInline, PotenziamentiInstallatiInline, TracciamentoInventarioInline]
     
     def get_inventario_attuale(self, obj):
-        if obj.ospitato_su:
-            return f"Montato su: {obj.ospitato_su.nome}"
+        if obj.ospitato_su: return f"Montato su: {obj.ospitato_su.nome}"
         inv = obj.inventario_corrente
         return inv.nome if inv else "Nessuno (A terra)"
     get_inventario_attuale.short_description = "Posizione Attuale"
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        if 'testo' in form.base_fields:
-            form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
+        if 'testo' in form.base_fields: form.base_fields['testo'].help_text = Statistica.get_help_text_parametri()
         return form
     
-    def mostra_testo_formattato(self, obj):
-        return format_html("{}", mark_safe(obj.TestoFormattato))
+    def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
- 
-# --- INFUSIONE ADMIN (Aggiornato) ---
 
-class InfusioneMattoneInline(admin.TabularInline):
-    model = Infusione.mattoni.through
-    extra = 1
-    autocomplete_fields = ['mattone']
-
-class InfusioneStatisticaBaseInline(admin.TabularInline):
-    model = Infusione.statistiche_base.through
-    extra = 1
-    autocomplete_fields = ['statistica']
+@admin.register(ForgiaturaInCorso)
+class ForgiaturaInCorsoAdmin(admin.ModelAdmin):
+    list_display = ('personaggio', 'infusione', 'data_inizio', 'data_fine_prevista', 'completata', 'is_pronta_display')
+    list_filter = ('completata', 'data_fine_prevista')
+    search_fields = ('personaggio__nome', 'infusione__nome')
+    
+    def is_pronta_display(self, obj): return obj.is_pronta
+    is_pronta_display.boolean = True
+    is_pronta_display.short_description = "Pronta?"

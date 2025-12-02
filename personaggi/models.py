@@ -525,6 +525,39 @@ class Punteggio(Tabella):
     permette_infusioni = models.BooleanField(default=False)
     permette_tessiture = models.BooleanField(default=False)
     
+    stat_costo_creazione_infusione = models.ForeignKey(
+        'Statistica', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='aure_costo_creazione_inf',
+        help_text="Statistica che definisce il costo (crediti) per mattone per creare un'infusione."
+    )
+    stat_costo_creazione_tessitura = models.ForeignKey(
+        'Statistica', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='aure_costo_creazione_tes',
+        help_text="Statistica che definisce il costo per mattone per creare una tessitura."
+    )
+    stat_costo_acquisto_infusione = models.ForeignKey(
+        'Statistica', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='aure_costo_acquisto_inf',
+        help_text="Statistica che definisce il costo per mattone per acquistare (apprendere) un'infusione."
+    )
+    stat_costo_acquisto_tessitura = models.ForeignKey(
+        'Statistica', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='aure_costo_acquisto_tes',
+        help_text="Statistica che definisce il costo per mattone per acquistare una tessitura."
+    )
+    
+    # FORGIATURA (Crafting Oggetto da Infusione)
+    stat_costo_forgiatura = models.ForeignKey(
+        'Statistica', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='aure_costo_forgia',
+        help_text="Statistica che definisce il costo (crediti) per mattone per forgiare l'oggetto."
+    )
+    stat_tempo_forgiatura = models.ForeignKey(
+        'Statistica', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='aure_tempo_forgia',
+        help_text="Statistica che definisce il tempo (secondi) per mattone per forgiare l'oggetto."
+    )
+    
     caratteristica_relativa = models.ForeignKey(
         "Punteggio", 
         on_delete=models.CASCADE, 
@@ -1939,3 +1972,25 @@ class PropostaTecnicaMattone(models.Model):
 
     class Meta:
         ordering = ['ordine']
+        
+class ForgiaturaInCorso(models.Model):
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='forgiature_attive')
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
+    
+    # Timestamp
+    data_inizio = models.DateTimeField(auto_now_add=True)
+    data_fine_prevista = models.DateTimeField()
+    
+    # Dati per il completamento (se servono slot specifici o target, salvali qui)
+    slot_target = models.CharField(max_length=2, blank=True, null=True) 
+    
+    completata = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['data_fine_prevista']
+        verbose_name = "Forgiatura in Corso"
+        verbose_name_plural = "Forgiature in Corso"
+
+    @property
+    def is_pronta(self):
+        return timezone.now() >= self.data_fine_prevista
