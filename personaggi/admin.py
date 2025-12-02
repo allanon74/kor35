@@ -35,7 +35,8 @@ from .models import (
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
     ClasseOggetto, ClasseOggettoLimiteMod,
     OggettoInInventario, OggettoElemento, Inventario,
-    ForgiaturaInCorso  # <--- NUOVO IMPORT
+    ForgiaturaInCorso,  # <--- NUOVO IMPORT
+    OggettoBase, OggettoStatisticaBase, OggettoBaseModificatore, OggettoBaseStatisticaBase, 
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -649,3 +650,33 @@ class ForgiaturaInCorsoAdmin(admin.ModelAdmin):
     def is_pronta_display(self, obj): return obj.is_pronta
     is_pronta_display.boolean = True
     is_pronta_display.short_description = "Pronta?"
+    
+class OggettoBaseStatisticaBaseInline(admin.TabularInline):
+    model = OggettoBaseStatisticaBase
+    extra = 1
+    autocomplete_fields = ['statistica']
+    verbose_name = "Statistica Base (Es. Danno)"
+
+class OggettoBaseModificatoreInline(admin.TabularInline):
+    model = OggettoBaseModificatore
+    extra = 1
+    autocomplete_fields = ['statistica']
+    verbose_name = "Modificatore (Es. Bonus)"
+
+@admin.register(OggettoBase)
+class OggettoBaseAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'tipo_oggetto', 'classe_oggetto', 'costo', 'in_vendita')
+    list_filter = ('tipo_oggetto', 'is_tecnologico', 'in_vendita')
+    search_fields = ('nome',)
+    autocomplete_fields = ['classe_oggetto']
+    
+    fieldsets = (
+        ('Info Generali', {
+            'fields': ('nome', 'descrizione', 'costo', 'in_vendita')
+        }),
+        ('Scheda Tecnica', {
+            'fields': ('tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'attacco_base')
+        }),
+    )
+    
+    inlines = [OggettoBaseStatisticaBaseInline, OggettoBaseModificatoreInline]

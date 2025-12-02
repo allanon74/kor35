@@ -27,6 +27,7 @@ from .models import (
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA,
     LetturaMessaggio,
     Oggetto, ClasseOggetto, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA,
+    OggettoBase, 
 )
 
 # --- Serializer di Base ---
@@ -985,3 +986,24 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         validated_data['mittente'] = mittente
         validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
         return super().create(validated_data)
+    
+class OggettoBaseSerializer(serializers.ModelSerializer):
+    classe_oggetto_nome = serializers.CharField(source='classe_oggetto.nome', read_only=True, default="")
+    
+    # Opzionale: Se vuoi mostrare le statistiche nel tooltip del negozio
+    stats_text = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OggettoBase
+        fields = ('id', 'nome', 'descrizione', 'costo', 'tipo_oggetto', 'classe_oggetto_nome', 'is_tecnologico', 'attacco_base', 'stats_text')
+
+    def get_stats_text(self, obj):
+        # Genera una stringa riassuntiva (es: "Danno: 2, DIF: 1")
+        parts = []
+        if obj.attacco_base: parts.append(f"Attacco: {obj.attacco_base}")
+        for s in obj.oggettobasestatisticabase_set.all():
+            parts.append(f"{s.statistica.nome}: {s.valore_base}")
+        for m in obj.oggettobasemodificatore_set.all():
+            sign = "+" if m.valore > 0 else ""
+            parts.append(f"{m.statistica.nome} {sign}{m.valore}")
+        return ", ".join(parts)

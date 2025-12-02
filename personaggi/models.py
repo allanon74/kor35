@@ -1266,6 +1266,80 @@ class ClasseOggettoLimiteMod(models.Model):
         unique_together = ('classe_oggetto', 'caratteristica')
         verbose_name = "Limite Mod per Caratteristica"
         
+class OggettoBase(models.Model):
+    """
+    Rappresenta un 'modello' di oggetto acquistabile al negozio (es. Spada Lunga, Kit Medico).
+    Non è un oggetto fisico posseduto, ma il listino prezzi/statistiche.
+    """
+    nome = models.CharField(max_length=100)
+    descrizione = models.TextField(blank=True, null=True)
+    
+    # Classificazione
+    tipo_oggetto = models.CharField(
+        max_length=3, 
+        choices=TIPO_OGGETTO_CHOICES, 
+        default=TIPO_OGGETTO_FISICO
+    )
+    classe_oggetto = models.ForeignKey(
+        ClasseOggetto, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True,
+        verbose_name="Classe (es. Fucile, Spada)"
+    )
+    is_tecnologico = models.BooleanField(default=False)
+    
+    # Dati di Gioco
+    costo = models.IntegerField(default=0, verbose_name="Costo in Crediti")
+    attacco_base = models.CharField(max_length=50, blank=True, null=True, help_text="Es. 2d6")
+    
+    # Statistiche fornite dall'oggetto base (Es. Danno, Protezione)
+    statistiche_base = models.ManyToManyField(
+        Statistica, 
+        through='OggettoBaseStatisticaBase', 
+        blank=True, 
+        related_name='template_base'
+    )
+    
+    # Modificatori forniti (Es. +1 Mira)
+    statistiche_modificatori = models.ManyToManyField(
+        Statistica, 
+        through='OggettoBaseModificatore', 
+        blank=True, 
+        related_name='template_modificatori'
+    )
+    
+    in_vendita = models.BooleanField(default=True, verbose_name="Visibile in Negozio")
+
+    class Meta:
+        verbose_name = "Oggetto Base (Listino)"
+        verbose_name_plural = "Oggetti Base (Listino)"
+        ordering = ['tipo_oggetto', 'nome']
+
+    def __str__(self):
+        return f"{self.nome} ({self.costo} CR)"
+
+# --- TABELLE DI RACCORDO PER OGGETTO BASE ---
+
+class OggettoBaseStatisticaBase(models.Model):
+    oggetto_base = models.ForeignKey(OggettoBase, on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore_base = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Statistica Base Template"
+        verbose_name_plural = "Statistiche Base Template"
+
+class OggettoBaseModificatore(models.Model):
+    oggetto_base = models.ForeignKey(OggettoBase, on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore = models.IntegerField(default=0)
+    tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
+
+    class Meta:
+        verbose_name = "Modificatore Template"
+        verbose_name_plural = "Modificatori Template"
+        
+
 
 class Oggetto(A_vista):
     # --- CAMPI ESISTENTI (Relazioni base) ---
@@ -1340,6 +1414,14 @@ class Oggetto(A_vista):
 
     # --- GESTIONE CARICHE ---
     cariche_attuali = models.IntegerField(default=0)
+    
+    oggetto_base_generatore = models.ForeignKey(
+        OggettoBase, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True,
+        related_name='istanze_generate',
+        help_text="Se creato dal negozio, punta al template originale."
+    )
 
     # --- METODI ---
     @property

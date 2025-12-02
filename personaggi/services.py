@@ -9,6 +9,7 @@ from .models import (
     TIPO_OGGETTO_FISICO, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, 
     TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE,
     COSTO_PER_MATTONE_OGGETTO, QrCode, OggettoStatistica, Inventario,
+    OggettoBase, OggettoStatisticaBase, 
     ForgiaturaInCorso, 
 )
 
@@ -445,17 +446,23 @@ class GestioneCraftingService:
         return nuovo_oggetto
 
     @staticmethod
-    def acquista_da_negozio(personaggio, oggetto_template_id):
+    def acquista_da_negozio(personaggio, oggetto_base_id):
         """
-        Gestisce l'acquisto di oggetti Livello 0 dal negozio.
-        Copia l'oggetto template e lo assegna al PG.
+        Crea un Oggetto reale a partire da un OggettoBase (Template).
         """
-        template = Oggetto.objects.get(pk=oggetto_template_id)
-        
-        if template.livello > 0:
-            raise ValidationError("Solo oggetti di Livello 0 possono essere acquistati direttamente.")
+        try:
+            template = OggettoBase.objects.get(pk=oggetto_base_id)
+        except OggettoBase.DoesNotExist:
+            raise ValidationError("Oggetto non trovato nel listino.")
             
-        costo = template.costo_acquisto
+        if not template.in_vendita:
+            raise ValidationError("Questo oggetto non è più in vendita.")
+            
+        costo = template.costo
+        
+        # Sconti (Opzionale: qui puoi applicare la logica RCO - Riduzione Costo Oggetti)
+        # sconto_perc = personaggio.get_valore_statistica('RCO')
+        # costo = int(costo * (1 - sconto_perc/100))
         
         if personaggio.crediti < costo:
             raise ValidationError(f"Crediti insufficienti. Costo: {costo}")
@@ -463,32 +470,43 @@ class GestioneCraftingService:
         with transaction.atomic():
             personaggio.modifica_crediti(-costo, f"Acquisto negozio: {template.nome}")
             
-            # CLONAZIONE OGGETTO
+            # ISTANZIAZIONE DELL'OGGETTO
             nuovo_oggetto = Oggetto.objects.create(
                 nome=template.nome,
-                testo=template.testo,
+                testo=template.descrizione, # Copia la descrizione statica
                 tipo_oggetto=template.tipo_oggetto,
                 classe_oggetto=template.classe_oggetto,
                 is_tecnologico=template.is_tecnologico,
-                costo_acquisto=template.costo_acquisto,
+                costo_acquisto=costo, # Salviamo quanto è stato pagato
                 attacco_base=template.attacco_base,
-                # Non copiamo 'in_vendita' perché la copia utente non è il template del negozio
-                in_vendita=False 
+                
+                # Riferimenti
+                oggetto_base_generatore=template,
+                
+                # Default
+                in_vendita=False,
+                is_equipaggiato=False,
+                cariche_attuali=0 # Default, gli oggetti base non hanno cariche di solito
             )
             
-            # Copia Statistiche Base
-            for stat_b in template.statistiche_base.all():
-                # Nota: bisogna recuperare il valore through model se diverso dal default, 
-                # ma per semplicità assumiamo che il template abbia i valori nel through model
-                val = template.oggettostatisticabase_set.get(statistica=stat_b).valore_base
-                nuovo_oggetto.statistiche_base.add(stat_b, through_defaults={'valore_base': val})
+            # COPIA STATISTICHE BASE (Es. Valore Armatura, Danno)
+            for stat_link in template.oggettobasestatisticabase_set.all():
+                OggettoStatisticaBase.objects.create(
+                    oggetto=nuovo_oggetto,
+                    statistica=stat_link.statistica,
+                    valore_base=stat_link.valore_base
+                )
 
-            # Copia Modificatori (se presenti su oggetto liv 0)
-            for stat_m in template.statistiche.all():
-                val = template.oggettostatistica_set.get(statistica=stat_m).valore
-                nuovo_oggetto.statistiche.add(stat_m, through_defaults={'valore': val, 'tipo_modificatore': 'ADD'})
+            # COPIA MODIFICATORI (Es. +1 a Forza)
+            for mod_link in template.oggettobasemodificatore_set.all():
+                OggettoStatistica.objects.create(
+                    oggetto=nuovo_oggetto,
+                    statistica=mod_link.statistica,
+                    valore=mod_link.valore,
+                    tipo_modificatore=mod_link.tipo_modificatore
+                )
                 
-            # Assegna all'inventario
+            # Assegna all'inventario del PG
             nuovo_oggetto.sposta_in_inventario(personaggio)
             
         return nuovo_oggetto

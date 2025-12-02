@@ -16,7 +16,7 @@ from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario, Infusione
 from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
 from .models import Punteggio, CARATTERISTICA, PersonaggioModelloAura, ModelloAura
 from .models import PropostaTecnica, PropostaTecnicaMattone, STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE
-from .models import LetturaMessaggio, PersonaggioLog
+from .models import LetturaMessaggio, PersonaggioLog, OggettoBase
 
 import uuid 
 
@@ -61,6 +61,7 @@ from .serializers import (
     PersonaggioLogSerializer,
     PersonaggioAutocompleteSerializer,
     MessaggioCreateSerializer,
+    OggettoBaseSerializer, 
 )
 
 from personaggi.serializers import PersonaggioPublicSerializer
@@ -1460,3 +1461,52 @@ class NegozioViewSet(viewsets.ViewSet):
             return Response({"status": "success", "nuovo_oggetto_id": nuovo.id}, status=200)
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
+        
+class NegozioViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def listino(self, request):
+        """
+        GET /api/negozio/listino/
+        Restituisce il catalogo degli oggetti acquistabili (OggettoBase).
+        """
+        # Recupera solo gli archetipi in vendita
+        oggetti_base = OggettoBase.objects.filter(in_vendita=True).order_by('tipo_oggetto', 'costo')
+        serializer = OggettoBaseSerializer(oggetti_base, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def acquista(self, request):
+        """
+        POST /api/negozio/acquista/
+        Body: { "oggetto_id": <int>, "char_id": <int> }
+        
+        Nota: In questo contesto, 'oggetto_id' corrisponde all'ID di un 'OggettoBase' (il template del negozio),
+        non a un oggetto fisico già esistente.
+        """
+        char_id = request.data.get('char_id')
+        oggetto_base_id = request.data.get('oggetto_id') # Dal frontend arriva come 'oggetto_id'
+        
+        # 1. Recupera il Personaggio (con verifica proprietà)
+        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        try:
+            # 2. Chiama il servizio passando l'ID del template (OggettoBase)
+            nuovo_oggetto_reale = GestioneCraftingService.acquista_da_negozio(personaggio, oggetto_base_id)
+            
+            # 3. Serializza l'oggetto REALE appena creato per restituirlo al frontend
+            # (Così l'inventario si aggiorna subito senza dover ricaricare tutto)
+            serializer = OggettoSerializer(nuovo_oggetto_reale, context={'personaggio': personaggio})
+            
+            return Response({
+                "status": "success", 
+                "message": f"Acquistato {nuovo_oggetto_reale.nome}",
+                "nuovo_oggetto": serializer.data,
+                "crediti_residui": personaggio.crediti
+            }, status=status.HTTP_200_OK)
+            
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": f"Errore imprevisto: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
