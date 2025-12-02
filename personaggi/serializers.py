@@ -8,26 +8,30 @@ from decimal import Decimal
 
 # Importa i modelli e le funzioni helper
 from .models import (
-    AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, 
-    Punteggio, Tabella, TipologiaPersonaggio, abilita_tier, 
+    AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
+    QrCode, # <--- RISOLTO ERRORE PYLANCE
+    Abilita, PuntiCaratteristicaMovimento, # <--- RISOLTO ERRORE PYLANCE
+    Tier, Punteggio, Tabella, 
+    TipologiaPersonaggio, # <--- RISOLTO ERRORE PYLANCE
+    abilita_tier, 
     abilita_requisito, abilita_sbloccata, abilita_punteggio, abilita_prerequisito, 
     Attivata, Manifesto, A_vista, Mattone,
     AURA, 
-    # Nuovi Modelli
+    # Nuovi Modelli Crafting & Shop
     Infusione, Tessitura, InfusioneMattone, TessituraMattone, 
     InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura,
+    OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, # <--- NUOVI MODELLI
+    ForgiaturaInCorso, # <--- NUOVO MODELLO
     
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
     OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
     CreditoMovimento, PersonaggioLog, TransazioneSospesa,
     Gruppo, Messaggio,
-    ModelloAuraRequisitoCaratt, ModelloAuraRequisitoDoppia,
-    ModelloAuraRequisitoMattone,
+    ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
     PropostaTecnica, PropostaTecnicaMattone, 
-    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA,
+    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA, # <--- RISOLTO ERRORE
     LetturaMessaggio,
     Oggetto, ClasseOggetto, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA,
-    OggettoBase, 
 )
 
 # --- Serializer di Base ---
@@ -88,15 +92,11 @@ class ModelloAuraSerializer(serializers.ModelSerializer):
         fields = ('id', 'nome', 'aura', 'mattoni_proibiti')
 
 class PunteggioDetailSerializer(serializers.ModelSerializer):
-    # icona_html = serializers.SerializerMethodField()
-    # icona_cerchio_html = serializers.SerializerMethodField()
-    # icona_cerchio_inverted_html = serializers.SerializerMethodField()
     icona_url = serializers.SerializerMethodField() 
     is_primaria = serializers.SerializerMethodField()
     valore_predefinito = serializers.SerializerMethodField()
     parametro = serializers.SerializerMethodField()
     has_models = serializers.SerializerMethodField()
-    
     aura_id = serializers.SerializerMethodField()
     caratteristica_associata_nome = serializers.SerializerMethodField()
 
@@ -105,7 +105,6 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'nome', 'sigla', 'tipo', 'colore', 
             'icona_url',
-            # 'icona_html', 'icona_cerchio_html', 'icona_cerchio_inverted_html', 
             'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
             'permette_infusioni', 'permette_tessiture',
             'is_mattone', 
@@ -132,42 +131,6 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     def get_icona_url(self, obj): 
         return self.get_icona_url_assoluto(obj)
     
-    # def get_icona_html(self, obj):
-    #     url = self.get_icona_url_assoluto(obj)
-    #     if not url or not obj.colore: return ""
-    #     style = (f"width: 24px; height: 24px; background-color: {obj.colore}; mask-image: url({url}); -webkit-mask-image: url({url}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain; display: inline-block; vertical-align: middle;")
-    #     return format_html('<div style="{}"></div>', style)
-    
-    # def get_icona_cerchio_html(self, obj): 
-    #     return self._get_icona_cerchio(obj, inverted=False)
-    
-    # def get_icona_cerchio_inverted_html(self, obj): 
-    #     return self._get_icona_cerchio(obj, inverted=True)
-    
-    # def _get_icona_cerchio(self, obj, inverted=False):
-    #     url_icona_locale = self.get_icona_url_assoluto(obj)
-    #     if not url_icona_locale or not obj.colore: return ""
-    #     colore_sfondo = obj.colore
-        
-        # # Calcola colore contrasto
-        # try:
-        #     colore_icona_contrasto = _get_icon_color_from_bg(colore_sfondo) 
-        # except:
-        #     colore_icona_contrasto = 'white'
-
-        # if inverted:
-        #     colore_icona_contrasto = obj.colore
-        #     try:
-        #         colore_sfondo = _get_icon_color_from_bg(colore_sfondo)
-        #     except:
-        #         colore_sfondo = 'black'
-                
-        # stile_cerchio = (f"display: inline-block; width: 30px; height: 30px; background-color: {colore_sfondo}; border-radius: 50%; vertical-align: middle; text-align: center; line-height: 30px;")
-        # stile_icona_maschera = (f"display: inline-block; width: 24px; height: 24px; vertical-align: middle; background-color: {colore_icona_contrasto}; mask-image: url({url_icona_locale}); -webkit-mask-image: url({url_icona_locale}); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-size: contain; -webkit-mask-size: contain;")
-        
-        # # CORREZIONE QUI: stile_cerchio invece di style_cerchio
-        # return format_html('<div style="{}"><div style="{}"></div></div>', stile_cerchio, stile_icona_maschera)
-    
     def get_is_primaria(self, obj): 
         return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False
     
@@ -178,11 +141,9 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         return obj.statistica.parametro if hasattr(obj, 'statistica') else None
     
     def get_has_models(self, obj):
-        # Ritorna True se esistono ModelliAura collegati a questo punteggio
         return obj.modelli_definiti.exists()
     
     def get_aura_id(self, obj):
-        # Usa try/except per evitare crash se la relazione è mancante o corrotta
         try:
             if hasattr(obj, 'mattone'): 
                 return obj.mattone.aura_id
@@ -374,7 +335,6 @@ class OggettoElementoSerializer(serializers.ModelSerializer):
 class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     """
     Serializer leggero per mostrare Mod e Materia installate dentro un oggetto padre.
-    Serve per evitare ricorsioni infinite e mostrare solo i dati essenziali nella lista.
     """
     infusione_nome = serializers.CharField(source='infusione_generatrice.nome', read_only=True)
     tipo_oggetto_display = serializers.CharField(source='get_tipo_oggetto_display', read_only=True)
@@ -390,35 +350,23 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'infusione_nome'
         ]
 
-# --- SERIALIZER PRINCIPALE ---
+# --- SERIALIZER PRINCIPALE OGGETTO ---
 class OggettoSerializer(serializers.ModelSerializer):
-    # Relazioni esistenti (Statistiche ed Elementi)
     statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
     statistiche_base = OggettoStatisticaBaseSerializer(source='oggettostatisticabase_set', many=True, read_only=True)
     elementi = OggettoElementoSerializer(source='oggettoelemento_set', many=True, read_only=True)
     
-    # Campi calcolati/display esistenti
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
     aura = PunteggioSmallSerializer(read_only=True)
     inventario_corrente = serializers.StringRelatedField(read_only=True)
     
-    # --- NUOVI CAMPI PER LA LOGICA KOR35 AVANZATA ---
-    
-    # 1. Classificazione e Tipo
+    # --- NUOVI CAMPI ---
     tipo_oggetto_display = serializers.CharField(source='get_tipo_oggetto_display', read_only=True)
     classe_oggetto_nome = serializers.CharField(source='classe_oggetto.nome', read_only=True, default="")
-    
-    # 2. Origine (Crafting)
     infusione_nome = serializers.CharField(source='infusione_generatrice.nome', read_only=True, default=None)
-    
-    # 3. Socketing (Cosa c'è montato sopra?)
     potenziamenti_installati = OggettoPotenziamentoSerializer(many=True, read_only=True)
-    
-    # 4. Gestione Costi (Aggiornato al campo 'costo_acquisto' del nuovo modello)
-    # Nota: Assicurati che nel model il campo sia 'costo_acquisto' come da Step 1, 
-    # altrimenti rimetti 'costo_crediti'.
     costo_pieno = serializers.IntegerField(source='costo_acquisto', read_only=True)
     costo_effettivo = serializers.SerializerMethodField()
     
@@ -440,22 +388,22 @@ class OggettoSerializer(serializers.ModelSerializer):
             # Costi
             'costo_pieno', 
             'costo_effettivo',
-            'in_vendita', # Utile per il frontend del negozio
+            'in_vendita', 
 
             # Nuovi Campi Logici
             'tipo_oggetto',
             'tipo_oggetto_display',
-            'classe_oggetto',       # ID della classe (per logiche frontend)
-            'classe_oggetto_nome',  # Nome della classe (per display)
+            'classe_oggetto',       
+            'classe_oggetto_nome',  
             'is_tecnologico',
             'is_equipaggiato',
-            'slot_corpo',           # Per innesti
-            'attacco_base',         # Per armi
+            'slot_corpo',           
+            'attacco_base',         
             
             # Gestione Cariche e Origine
             'cariche_attuali',
-            'infusione_generatrice', # ID
-            'infusione_nome',        # Nome Display
+            'infusione_generatrice', 
+            'infusione_nome',        
             
             # Socketing
             'potenziamenti_installati'
@@ -465,7 +413,6 @@ class OggettoSerializer(serializers.ModelSerializer):
         personaggio = self.context.get('personaggio')
         if personaggio:
             return personaggio.get_costo_item_scontato(obj)
-        # Fallback al costo base se non c'è personaggio nel contesto
         return getattr(obj, 'costo_acquisto', 0)
     
 # Legacy
@@ -503,7 +450,7 @@ class InfusioneSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-    costo_crediti = serializers.IntegerField(read_only=True) # <-- AGGIUNTO
+    costo_crediti = serializers.IntegerField(read_only=True) 
     
     # Gestione Costi
     costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
@@ -531,7 +478,7 @@ class TessituraSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
     livello = serializers.IntegerField(read_only=True)
-    costo_crediti = serializers.IntegerField(read_only=True) # <-- AGGIUNTO
+    costo_crediti = serializers.IntegerField(read_only=True) 
     
     # Gestione Costi
     costo_pieno = serializers.IntegerField(source='costo_crediti', read_only=True)
@@ -604,13 +551,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     
     oggetti = serializers.SerializerMethodField()
     attivate_possedute = serializers.SerializerMethodField()
-    infusioni_possedute = serializers.SerializerMethodField() # Nuovo
-    tessiture_possedute = serializers.SerializerMethodField() # Nuovo
+    infusioni_possedute = serializers.SerializerMethodField() 
+    tessiture_possedute = serializers.SerializerMethodField() 
     
-    # log_eventi = PersonaggioLogSerializer(many=True, read_only=True)
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
-    # transazioni_in_uscita_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
-    # transazioni_in_entrata_sospese = TransazioneSospesaSerializer(many=True, read_only=True)
     is_staff = serializers.BooleanField(source='proprietario.is_staff', read_only=True)
     modelli_aura = ModelloAuraSerializer(many=True, read_only=True)
 
@@ -623,7 +567,6 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'abilita_possedute', 'oggetti', 
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
             'movimenti_credito',
-            # 'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese', 'log_eventi',
             'TestoFormattatoPersonale',
             'is_staff', 'modelli_aura',
         )
@@ -631,34 +574,26 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     def get_oggetti(self, personaggio):
         if hasattr(personaggio.inventario_ptr, 'tracciamento_oggetti_correnti'):
             oggetti_in_inv = personaggio.inventario_ptr.tracciamento_oggetti_correnti
-            # Estraiamo gli oggetti dai modelli intermedi OggettoInInventario
             oggetti_posseduti = [x.oggetto for x in oggetti_in_inv]
         else:
             oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
                 'statistiche_base__statistica', 'oggettostatistica_set__statistica',
                 'oggettoelemento_set__elemento', 'aura'
             )
-        # Trigger calcolo modificatori prima della serializzazione
         personaggio.modificatori_calcolati 
         
         risultati = []
-        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for obj in oggetti_posseduti:
-            # Usiamo context_con_pg invece di self.context
             dati_oggetto = OggettoSerializer(obj, context=context_con_pg).data 
             dati_oggetto['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(obj)
             risultati.append(dati_oggetto)
         return risultati
 
     def get_attivate_possedute(self, personaggio):
-        # attivate = personaggio.attivate_possedute.prefetch_related(
-        #     'statistiche_base__statistica', 'attivataelemento_set__elemento'
-        # )
         attivate = personaggio.attivate_possedute.all()
         risultati = []
-        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for att in attivate:
@@ -668,13 +603,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_infusioni_possedute(self, personaggio):
-        # infusioni = personaggio.infusioni_possedute.prefetch_related(
-        #     'statistiche_base__statistica', 'infusionemattone_set__mattone', 
-        #     'aura_richiesta', 'aura_infusione'
-        # )
         infusioni = personaggio.infusioni_possedute.all()
         risultati = []
-        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for inf in infusioni:
@@ -684,13 +614,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_tessiture_possedute(self, personaggio):
-        # tessiture = personaggio.tessiture_possedute.prefetch_related(
-        #     'statistiche_base__statistica', 'tessituramattone_set__mattone', 
-        #     'aura_richiesta', 'elemento_principale'
-        # )
         tessiture = personaggio.tessiture_possedute.all()
         risultati = []
-        # FONDAMENTALE: Creiamo il contesto con il personaggio
         context_con_pg = {**self.context, 'personaggio': personaggio}
         
         for tes in tessiture:
@@ -879,7 +804,6 @@ class ModelloAuraSerializer(serializers.ModelSerializer):
     mattoni_proibiti = PunteggioSmallSerializer(many=True, read_only=True)
     mattoni_obbligatori = PunteggioSmallSerializer(many=True, read_only=True) 
     elemento_secondario = PunteggioSmallSerializer(read_only=True)
-    elemento_secondario = PunteggioSmallSerializer(read_only=True)
     
     # Campi nidificati per i requisiti
     requisiti_doppia = ModelloAuraRequisitoDoppiaSerializer(source='req_doppia_rel', many=True, read_only=True)
@@ -986,11 +910,10 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         validated_data['mittente'] = mittente
         validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
         return super().create(validated_data)
-    
+
+# --- NUOVO: SERIALIZER PER OGGETTO BASE (NEGOZIO) ---
 class OggettoBaseSerializer(serializers.ModelSerializer):
     classe_oggetto_nome = serializers.CharField(source='classe_oggetto.nome', read_only=True, default="")
-    
-    # Opzionale: Se vuoi mostrare le statistiche nel tooltip del negozio
     stats_text = serializers.SerializerMethodField()
 
     class Meta:
@@ -998,12 +921,11 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
         fields = ('id', 'nome', 'descrizione', 'costo', 'tipo_oggetto', 'classe_oggetto_nome', 'is_tecnologico', 'attacco_base', 'stats_text')
 
     def get_stats_text(self, obj):
-        # Genera una stringa riassuntiva (es: "Danno: 2, DIF: 1")
         parts = []
         if obj.attacco_base: parts.append(f"Attacco: {obj.attacco_base}")
-        for s in obj.oggettobasestatisticabase_set.all():
+        for s in obj.oggettobasestatisticabase_set.select_related('statistica').all():
             parts.append(f"{s.statistica.nome}: {s.valore_base}")
-        for m in obj.oggettobasemodificatore_set.all():
+        for m in obj.oggettobasemodificatore_set.select_related('statistica').all():
             sign = "+" if m.valore > 0 else ""
             parts.append(f"{m.statistica.nome} {sign}{m.valore}")
         return ", ".join(parts)

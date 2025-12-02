@@ -2,7 +2,7 @@ import string
 from collections import Counter
 from decimal import Decimal
 from django.shortcuts import render
-from django.db.models import Count, Prefetch, OuterRef, Exists # Importato Count
+from django.db.models import Count, Prefetch, OuterRef, Exists
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from rest_framework import serializers
@@ -10,18 +10,22 @@ from django.utils import timezone
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 
-from .models import OggettoInInventario, Abilita, Tier
-from .models import QrCode
-from .models import Oggetto, Attivata, Manifesto, A_vista, Inventario, Infusione, Tessitura
-from .models import Personaggio, TransazioneSospesa, CreditoMovimento, PuntiCaratteristicaMovimento
-from .models import Punteggio, CARATTERISTICA, PersonaggioModelloAura, ModelloAura
-from .models import PropostaTecnica, PropostaTecnicaMattone, STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE
-from .models import LetturaMessaggio, PersonaggioLog, OggettoBase
+# --- IMPORT MODELLI (Mantenuti tutti gli originali + Nuovi) ---
+from .models import (
+    OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, 
+    A_vista, Inventario, Infusione, Tessitura, Personaggio, TransazioneSospesa, 
+    CreditoMovimento, PuntiCaratteristicaMovimento, Punteggio, CARATTERISTICA, 
+    PersonaggioModelloAura, ModelloAura, PropostaTecnica, PropostaTecnicaMattone, 
+    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, LetturaMessaggio, PersonaggioLog,
+    STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES,
+    Gruppo, Messaggio, Tabella, Mattone, # <--- Tabella e Mattone ripristinati
+    # NUOVI IMPORT
+    OggettoBase, ForgiaturaInCorso, 
+    abilita_tier, abilita_requisito, abilita_sbloccata, # Through models necessari per i viewset esistenti
+    abilita_punteggio, abilita_prerequisito
+)
 
 import uuid 
-
-from .models import STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES, ForgiaturaInCorso
-
 import qrcode
 import io
 import base64
@@ -37,48 +41,42 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
 from rest_framework.pagination import PageNumberPagination
-
 from rest_framework import generics
 from django.db import transaction
-from .serializers import AbilitaMasterListSerializer
-
-
-from .serializers import (
-    OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
-    ManifestoSerializer, A_vistaSerializer, 
-    InventarioSerializer,
-    PersonaggioDetailSerializer, 
-    CreditoMovimentoCreateSerializer, PersonaggioListSerializer, 
-    PuntiCaratteristicaMovimentoCreateSerializer, 
-    TransazioneCreateSerializer, 
-    TransazioneSospesaSerializer, 
-    TransazioneConfermaSerializer, 
-    RubaSerializer, 
-    AcquisisciSerializer,
-    PunteggioDetailSerializer,
-    ModelloAuraSerializer,
-    PropostaTecnicaSerializer,
-    PersonaggioLogSerializer,
-    PersonaggioAutocompleteSerializer,
-    MessaggioCreateSerializer,
-    OggettoBaseSerializer, 
-)
-
-from personaggi.serializers import PersonaggioPublicSerializer
-
-from .models import Gruppo, Messaggio
-from .serializers import MessaggioSerializer, MessaggioBroadcastCreateSerializer
 from django.db.models import Q
-
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from django.http import JsonResponse
 import requests
 import os
 from django.conf import settings
-
 from webpush.models import PushInformation, SubscriptionInfo
 import json
-from .services import monta_potenziamento, crea_oggetto_da_infusione, GestioneOggettiService, GestioneCraftingService
+
+# --- IMPORT SERVICES ---
+from .services import (
+    monta_potenziamento, crea_oggetto_da_infusione, GestioneOggettiService, 
+    GestioneCraftingService # <--- NUOVO SERVICE
+)
+
+# --- IMPORT SERIALIZERS ---
+from .serializers import (
+    OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
+    ManifestoSerializer, A_vistaSerializer, InventarioSerializer,
+    PersonaggioDetailSerializer, CreditoMovimentoCreateSerializer, PersonaggioListSerializer, 
+    PuntiCaratteristicaMovimentoCreateSerializer, TransazioneCreateSerializer, 
+    TransazioneSospesaSerializer, TransazioneConfermaSerializer, RubaSerializer, 
+    AcquisisciSerializer, PunteggioDetailSerializer, ModelloAuraSerializer,
+    PropostaTecnicaSerializer, PersonaggioLogSerializer, PersonaggioAutocompleteSerializer,
+    MessaggioCreateSerializer, MessaggioSerializer, MessaggioBroadcastCreateSerializer,
+    AbilitaMasterListSerializer, PersonaggioPublicSerializer,
+    # Serializers per ViewSet originali
+    AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer, 
+    PunteggioSerializer, TabellaSerializer,
+    AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
+    AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
+    # NUOVO SERIALIZER
+    OggettoBaseSerializer
+)
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
 
@@ -100,17 +98,7 @@ class MyAuthToken(ObtainAuthToken):
             'is_staff': user.is_staff or user.is_superuser 
         })
 
-from .models import (
-    Abilita, Tier, Punteggio, Tabella,
-    abilita_tier, abilita_requisito, abilita_sbloccata,
-    abilita_punteggio, abilita_prerequisito,
-)
-from .serializers import (
-    AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer, 
-    PunteggioSerializer, TabellaSerializer,
-    AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
-    AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer
-)
+# --- VIEWSETS ORIGINALI ---
 
 class AbilitaViewSet(viewsets.ModelViewSet):
     queryset = Abilita.objects.all()
@@ -193,7 +181,7 @@ class AcquisisciAbilitaView(APIView):
         try:
             personaggio = Personaggio.objects.select_related('tipologia').get(id=personaggio_id, proprietario=request.user)
         except Personaggio.DoesNotExist: return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
-        except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         try:
             abilita = Abilita.objects.prefetch_related('abilita_requisito_set__requisito', 'abilita_prerequisiti').get(id=abilita_id)
         except Abilita.DoesNotExist: return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
@@ -289,8 +277,6 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         cache.set(cache_key, final_data, timeout=600)
         return Response(final_data, status=status.HTTP_200_OK)
 
-# --- NUOVE VISTE PER INFUSIONI E TESSITURE (CORRETTE) ---
-
 class InfusioniAcquistabiliView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = InfusioneSerializer
@@ -308,7 +294,6 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
 
         possedute_ids = personaggio.infusioni_possedute.values_list('id', flat=True)
         
-        # Calcolo livello per ordinamento
         tutte_infusioni = Infusione.objects.exclude(id__in=possedute_ids).annotate(
             livello_calc=Count('mattoni')
         ).select_related(
@@ -330,9 +315,7 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
             if is_valid:
                 acquistabili.append(infusione)
 
-        # MODIFICA FONDAMENTALE: Passiamo 'personaggio' nel contesto
         context = {'request': request, 'personaggio': personaggio}
-        
         serializer = InfusioneSerializer(acquistabili, many=True, context=context)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -363,7 +346,6 @@ class AcquisisciInfusioneView(APIView):
         
         if hasattr(infusione, 'proposta_creazione') and infusione.proposta_creazione:
             creatore = infusione.proposta_creazione.personaggio
-            # Evita royalty se compri la tua stessa tecnica (anche se l'hai avuta gratis, per sicurezza)
             if creatore.id != personaggio.id:
                 royalty = int(round(costo * 0.10))
                 if royalty > 0:
@@ -412,9 +394,7 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
             if is_valid:
                 acquistabili.append(tessitura)
 
-        # MODIFICA FONDAMENTALE: Passiamo 'personaggio' nel contesto
         context = {'request': request, 'personaggio': personaggio}
-
         serializer = TessituraSerializer(acquistabili, many=True, context=context)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -591,15 +571,12 @@ class StandardResultsSetPagination(PageNumberPagination):
     page_size_query_param = 'page_size'
     max_page_size = 100
 
-# 3. Nuove View per Log e Transazioni (Lazy Loading)
-
 class PersonaggioLogsListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PersonaggioLogSerializer
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        # Restituisce solo i log del personaggio dell'utente loggato
         return PersonaggioLog.objects.filter(
             personaggio__proprietario=self.request.user
         ).order_by('-data')
@@ -611,35 +588,23 @@ class PersonaggioTransazioniListView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        tipo = self.request.query_params.get('tipo', 'entrata') # 'entrata' o 'uscita'
-        char_id = self.request.query_params.get('char_id') # Parametro opzionale
+        tipo = self.request.query_params.get('tipo', 'entrata')
+        char_id = self.request.query_params.get('char_id')
         
-        # Base queryset: personaggi dell'utente
         qs_pg = Personaggio.objects.filter(proprietario=user)
-        
-        # Se specificato un ID, filtriamo per quello (sicurezza extra: deve essere tuo)
         if char_id:
             qs_pg = qs_pg.filter(id=char_id)
             
-        # Se non trova personaggi (o ID non valido per l'utente), ritorna vuoto
         if not qs_pg.exists():
             return TransazioneSospesa.objects.none()
 
-        # Recuperiamo gli ID dei personaggi (o del singolo personaggio)
-        # Nota: usiamo una lista per supportare sia singolo che multipli se necessario
         pg_ids = list(qs_pg.values_list('id', flat=True))
         inventari_ids = list(qs_pg.values_list('inventario_ptr_id', flat=True))
 
         if tipo == 'uscita':
-            # Transazioni in cui uno dei miei inventari è il MITTENTE
-            return TransazioneSospesa.objects.filter(
-                mittente__id__in=inventari_ids
-            ).order_by('-data_richiesta')
+            return TransazioneSospesa.objects.filter(mittente__id__in=inventari_ids).order_by('-data_richiesta')
         else:
-            # Transazioni in cui uno dei miei personaggi è il RICHIEDENTE
-            return TransazioneSospesa.objects.filter(
-                richiedente__id__in=pg_ids
-            ).order_by('-data_richiesta')
+            return TransazioneSospesa.objects.filter(richiedente__id__in=pg_ids).order_by('-data_richiesta')
 
 class CreditoMovimentoCreateView(APIView):
     permission_classes = [IsAuthenticated]
@@ -786,7 +751,6 @@ class MessaggioListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_serializer_context(self):
-        # Passiamo il personaggio al serializer per calcolare 'is_letto'
         context = super().get_serializer_context()
         personaggio_id = self.request.query_params.get('personaggio_id')
         if personaggio_id:
@@ -810,8 +774,6 @@ class MessaggioListView(generics.ListAPIView):
         q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
         messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
 
-        # NUOVA LOGICA: Escludi quelli che il PG ha segnato come cancellati
-        # Otteniamo gli ID dei messaggi cancellati da questo PG
         ids_cancellati = LetturaMessaggio.objects.filter(
             personaggio=target_pg, 
             cancellato=True
@@ -822,45 +784,31 @@ class MessaggioListView(generics.ListAPIView):
             personaggio=target_pg,
             letto=True
         )
-        
         return messaggi.exclude(id__in=ids_cancellati).annotate(is_letto_db=Exists(lettura_esistente))
     
 class MessaggioActionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk, action_type):
-        """
-        action_type può essere 'leggi' o 'cancella'
-        Body richiesto: { "personaggio_id": 1 }
-        """
         personaggio_id = request.data.get('personaggio_id')
-        if not personaggio_id:
-            return Response({"error": "personaggio_id mancante"}, status=status.HTTP_400_BAD_REQUEST)
-        
+        if not personaggio_id: return Response({"error": "personaggio_id mancante"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
-            messaggio = Messaggio.objects.get(pk=pk) # Qui potresti aggiungere check se il msg è per lui davvero
+            messaggio = Messaggio.objects.get(pk=pk) 
         except (Personaggio.DoesNotExist, Messaggio.DoesNotExist):
             return Response({"error": "Dati non validi"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Get or Create dello stato
-        stato, created = LetturaMessaggio.objects.get_or_create(
-            messaggio=messaggio,
-            personaggio=personaggio
-        )
+        stato, created = LetturaMessaggio.objects.get_or_create(messaggio=messaggio, personaggio=personaggio)
 
         if action_type == 'leggi':
             stato.letto = True
-            if not stato.data_lettura:
-                stato.data_lettura = timezone.now()
+            if not stato.data_lettura: stato.data_lettura = timezone.now()
             stato.save()
             return Response({"status": "Messaggio segnato come letto"})
-
         elif action_type == 'cancella':
             stato.cancellato = True
             stato.save()
             return Response({"status": "Messaggio cancellato"})
-
         return Response({"error": "Azione non valida"}, status=status.HTTP_400_BAD_REQUEST)
 
 class MessaggioAdminSentListView(generics.ListAPIView):
@@ -897,50 +845,26 @@ class WebPushSubscribeView(APIView):
             PushInformation.objects.get_or_create(user=request.user, subscription=subscription)
             return Response({"status": "success", "message": "Sottoscrizione salvata."}, status=201)
         except Exception as e:
-            print(f"Errore salvataggio WebPush: {e}")
             return Response({"error": str(e)}, status=400)
-
-# --- NUOVE VIEW PER GESTIONE MODELLI AURA ---        
         
 class ModelliAuraListView(APIView):
-    """
-    GET /api/punteggio/<int:aura_id>/modelli/
-    Restituisce i modelli disponibili per una certa aura.
-    """
     permission_classes = [IsAuthenticated]
-    
     def get(self, request, aura_id):
         modelli = ModelloAura.objects.filter(aura_id=aura_id).prefetch_related('mattoni_proibiti')
         serializer = ModelloAuraSerializer(modelli, many=True, context={'request': request})
         return Response(serializer.data)
 
 class SelezionaModelloAuraView(APIView):
-    """
-    POST /api/personaggio/me/seleziona_modello_aura/
-    Body: { "personaggio_id": 1, "modello_id": 5 }
-    """
     permission_classes = [IsAuthenticated]
-    
     def post(self, request):
         pg_id = request.data.get('personaggio_id')
         mod_id = request.data.get('modello_id')
-        
         personaggio = get_object_or_404(Personaggio, id=pg_id, proprietario=request.user)
         modello = get_object_or_404(ModelloAura, id=mod_id)
-        
-        # Verifica se ha già un modello per questa aura
-        esiste = PersonaggioModelloAura.objects.filter(
-            personaggio=personaggio, 
-            modello_aura__aura=modello.aura
-        ).exists()
-        
-        if esiste:
-            return Response({"error": "Hai già scelto un modello per questa aura. La scelta è definitiva."}, status=status.HTTP_400_BAD_REQUEST)
-            
+        esiste = PersonaggioModelloAura.objects.filter(personaggio=personaggio, modello_aura__aura=modello.aura).exists()
+        if esiste: return Response({"error": "Hai già scelto un modello per questa aura. La scelta è definitiva."}, status=status.HTTP_400_BAD_REQUEST)
         PersonaggioModelloAura.objects.create(personaggio=personaggio, modello_aura=modello)
         personaggio.aggiungi_log(f"Ha scelto il modello di aura: {modello.nome} per {modello.aura.nome}")
-        
-        # Ritorna il personaggio aggiornato
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data)
     
@@ -951,422 +875,255 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         character_id = self.request.query_params.get('char_id')
         user = self.request.user
-        
-        if character_id:
-            return PropostaTecnica.objects.filter(personaggio_id=character_id, personaggio__proprietario=user)
-        
-        # Default fallback (sicurezza)
+        if character_id: return PropostaTecnica.objects.filter(personaggio_id=character_id, personaggio__proprietario=user)
         return PropostaTecnica.objects.filter(personaggio__proprietario=user)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        # Necessario per create() nel serializer
         if self.request.method == 'POST':
             char_id = self.request.data.get('personaggio_id')
             if char_id:
                 try:
                     pg = Personaggio.objects.get(id=char_id, proprietario=self.request.user)
                     context['personaggio'] = pg
-                except Personaggio.DoesNotExist:
-                    pass
+                except Personaggio.DoesNotExist: pass
         return context
 
     def perform_destroy(self, instance):
-        if instance.stato != STATO_PROPOSTA_BOZZA:
-            raise serializers.ValidationError("Non puoi cancellare una proposta già inviata.")
+        if instance.stato != STATO_PROPOSTA_BOZZA: raise serializers.ValidationError("Non puoi cancellare una proposta già inviata.")
         instance.delete()
 
     @transaction.atomic
     @action(detail=True, methods=['post'])
     def invia_proposta(self, request, pk=None):
-        """
-        Action custom per inviare la proposta (Bozza -> Valutazione)
-        Deduce i crediti e valida i vincoli.
-        """
         proposta = self.get_object()
         personaggio = proposta.personaggio
-        
-        if proposta.stato != STATO_PROPOSTA_BOZZA:
-            return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # 1. Calcolo Costo
+        if proposta.stato != STATO_PROPOSTA_BOZZA: return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
         livello = proposta.livello
-        if livello == 0:
-            return Response({"error": "La proposta deve avere almeno un mattone."}, status=status.HTTP_400_BAD_REQUEST)
-            
+        if livello == 0: return Response({"error": "La proposta deve avere almeno un mattone."}, status=status.HTTP_400_BAD_REQUEST)
         costo_invio = livello * 10
-        
-        if personaggio.crediti < costo_invio:
-            return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
+        if personaggio.crediti < costo_invio: return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. Validazioni Logiche (Anti-Cheat / Coerenza)
-        
-        # A. Aura Posseduta e Cap Livello
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
-        if val_aura < 1:
-            return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
-        if livello > val_aura:
-            return Response({"error": f"Troppi mattoni ({livello}) per il valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
+        if val_aura < 1: return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
+        if livello > val_aura: return Response({"error": f"Troppi mattoni ({livello}) per il valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # B. Mattoni Validi e Cap Caratteristica
         mattoni_objs = [pm.mattone for pm in proposta.propostatecnicamattone_set.select_related('mattone__caratteristica_associata').all().order_by('ordine')]
         mattoni_ids = [m.id for m in mattoni_objs]
         counter_mattoni = Counter(mattoni_ids)
         punteggi_pg = personaggio.caratteristiche_base
         
         for m in mattoni_objs:
-            # Controllo aura mattone
-            if m.aura_id != proposta.aura_id:
-                 return Response({"error": f"Il mattone {m.nome} non appartiene all'aura della proposta."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Controllo Caratteristica Posseduta (>=1)
+            if m.aura_id != proposta.aura_id: return Response({"error": f"Il mattone {m.nome} non appartiene all'aura della proposta."}, status=status.HTTP_400_BAD_REQUEST)
             caratt_nome = m.caratteristica_associata.nome
             val_caratt = punteggi_pg.get(caratt_nome, 0)
-            if val_caratt < 1:
-                return Response({"error": f"Non possiedi la caratteristica {caratt_nome} per il mattone {m.nome}."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Controllo Quantità <= Valore Caratteristica
+            if val_caratt < 1: return Response({"error": f"Non possiedi la caratteristica {caratt_nome} per il mattone {m.nome}."}, status=status.HTTP_400_BAD_REQUEST)
             qty = counter_mattoni[m.id]
-            if qty > val_caratt:
-                return Response({"error": f"Hai usato il mattone {m.nome} {qty} volte, ma hai solo {val_caratt} in {caratt_nome}."}, status=status.HTTP_400_BAD_REQUEST)
+            if qty > val_caratt: return Response({"error": f"Hai usato il mattone {m.nome} {qty} volte, ma hai solo {val_caratt} in {caratt_nome}."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # C. Validazione Modello Aura (Proibiti / Obbligatori)
         modello = personaggio.modelli_aura.filter(aura=proposta.aura).first()
         if modello:
             set_ids_proposta = set(mattoni_ids)
-            
-            # Proibiti
             proibiti_ids = set(modello.mattoni_proibiti.values_list('id', flat=True))
-            if set_ids_proposta.intersection(proibiti_ids):
-                return Response({"error": "La proposta contiene mattoni proibiti dal tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Obbligatori (Tutti i tipi obbligatori devono essere presenti)
+            if set_ids_proposta.intersection(proibiti_ids): return Response({"error": "La proposta contiene mattoni proibiti dal tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
             obbligatori_ids = set(modello.mattoni_obbligatori.values_list('id', flat=True))
-            if not obbligatori_ids.issubset(set_ids_proposta):
-                return Response({"error": "La proposta non contiene tutti i mattoni obbligatori del tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
+            if not obbligatori_ids.issubset(set_ids_proposta): return Response({"error": "La proposta non contiene tutti i mattoni obbligatori del tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 3. Esecuzione Pagamento e Cambio Stato
         personaggio.modifica_crediti(-costo_invio, f"Invio proposta {proposta.tipo}: {proposta.nome}")
         proposta.costo_invio_pagato = costo_invio
         proposta.stato = STATO_PROPOSTA_IN_VALUTAZIONE
         proposta.data_invio = timezone.now()
         proposta.save()
-        
         return Response(PropostaTecnicaSerializer(proposta).data, status=status.HTTP_200_OK)
     
 class AdminPendingProposalsView(APIView):
     permission_classes = [IsAuthenticated]
-
     def get(self, request):
-        if not (request.user.is_staff or request.user.is_superuser):
-            return Response({"count": 0})
-        
+        if not (request.user.is_staff or request.user.is_superuser): return Response({"count": 0})
         count = PropostaTecnica.objects.filter(stato=STATO_PROPOSTA_IN_VALUTAZIONE).count()
         return Response({"count": count})
     
 class PersonaggioAutocompleteView(generics.ListAPIView):
-    """
-    GET /api/personaggi/search/?q=ini
-    Restituisce personaggi il cui nome inizia o contiene la query.
-    Esclude il personaggio che sta effettuando la ricerca.
-    """
     permission_classes = [IsAuthenticated]
     serializer_class = PersonaggioAutocompleteSerializer
-    pagination_class = None  # Disabilita paginazione per l'autocomplete
-
+    pagination_class = None
     def get_queryset(self):
         query = self.request.query_params.get('q', '')
         current_char_id = self.request.query_params.get('current_char_id')
-        
-        if len(query) < 2:
-            return Personaggio.objects.none()
-
+        if len(query) < 2: return Personaggio.objects.none()
         qs = Personaggio.objects.filter(nome__icontains=query)
-        
-        # Escludi il personaggio corrente (se specificato)
-        if current_char_id:
-            qs = qs.exclude(id=current_char_id)
-            
-        return qs[:10]  # Limita a 10 risultati
+        if current_char_id: qs = qs.exclude(id=current_char_id)
+        return qs[:10]
 
 class MessaggioPrivateCreateView(generics.CreateAPIView):
-    """
-    POST /api/messaggi/send/
-    Invia un messaggio da un Utente (proprietario del PG mittente) a un PG destinatario.
-    """
     permission_classes = [IsAuthenticated]
     serializer_class = MessaggioCreateSerializer
-
-    def perform_create(self, serializer):
-        # Salviamo il messaggio impostando l'utente corrente come mittente
-        serializer.save(mittente=self.request.user)
+    def perform_create(self, serializer): serializer.save(mittente=self.request.user)
         
         
 class OggettoViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet per la gestione completa degli oggetti:
-    - CRUD standard
-    - Crafting da Infusione
-    - Gestione Mod/Materia (Monta/Smonta)
-    - Gestione Cariche (Usa/Ricarica)
-    """
     queryset = Oggetto.objects.all()
     serializer_class = OggettoSerializer
 
-    def get_queryset(self):
-        """
-        Opzionale: Filtra gli oggetti per mostrare solo quelli del giocatore loggato,
-        o mantieni .all() se gestisci i permessi diversamente.
-        Qui mostriamo tutto per ora.
-        """
-        return super().get_queryset()
+    def get_queryset(self): return super().get_queryset()
 
     @action(detail=False, methods=['post'])
     def craft(self, request):
-        """
-        Endpoint: [POST] /api/oggetti/craft/
-        Crea un nuovo Oggetto fisico a partire da un'Infusione.
-        Body richiesto: { "infusione_id": <int> }
-        """
         infusione_id = request.data.get('infusione_id')
-        if not infusione_id:
-            return Response({'error': 'infusione_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
-
+        if not infusione_id: return Response({'error': 'infusione_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
         infusione = get_object_or_404(Infusione, pk=infusione_id)
-        
-        # Determina il proprietario (Personaggio associato all'utente loggato)
-        if not hasattr(request.user, 'personaggi'):
-             return Response({'error': 'Utente senza personaggi associati'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Prende il primo personaggio (o implementa logica di selezione se ne ha più di uno)
+        if not hasattr(request.user, 'personaggi'): return Response({'error': 'Utente senza personaggi associati'}, status=status.HTTP_400_BAD_REQUEST)
         personaggio = request.user.personaggi.first() 
-        if not personaggio:
-             return Response({'error': 'Nessun personaggio trovato per questo utente'}, status=status.HTTP_400_BAD_REQUEST)
-
+        if not personaggio: return Response({'error': 'Nessun personaggio trovato per questo utente'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            # Chiama il servizio di crafting
             nuovo_oggetto = crea_oggetto_da_infusione(infusione, personaggio)
-            
-            # Serializza e restituisce l'oggetto creato
             serializer = self.get_serializer(nuovo_oggetto)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
-        except ValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({'error': f"Errore interno: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except ValidationError as e: return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e: return Response({'error': f"Errore interno: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'])
     def monta(self, request, pk=None):
-        """
-        Endpoint: [POST] /api/oggetti/{id_ospite}/monta/
-        Installa un potenziamento (Mod/Materia) su questo oggetto.
-        Body richiesto: { "potenziamento_id": <int> }
-        """
-        oggetto_ospite = self.get_object() # L'oggetto su cui montare (es. Fucile)
+        oggetto_ospite = self.get_object() 
         potenziamento_id = request.data.get('potenziamento_id')
-        
-        if not potenziamento_id:
-            return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
-
+        if not potenziamento_id: return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
         potenziamento = get_object_or_404(Oggetto, pk=potenziamento_id)
-        
         try:
-            # Chiama il servizio di socketing che gestisce le validazioni complesse
             monta_potenziamento(oggetto_ospite, potenziamento)
-            
-            # Restituisce l'oggetto ospite aggiornato (così il frontend vede il nuovo potenziamento)
             serializer = self.get_serializer(oggetto_ospite)
             return Response(serializer.data, status=status.HTTP_200_OK)
-            
-        except ValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as e: return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def smonta(self, request, pk=None):
-        """
-        Endpoint: [POST] /api/oggetti/{id_ospite}/smonta/
-        Rimuove un potenziamento installato e lo rimette nell'inventario del proprietario.
-        Body richiesto: { "potenziamento_id": <int> }
-        """
         oggetto_ospite = self.get_object()
         potenziamento_id = request.data.get('potenziamento_id')
-        
-        if not potenziamento_id:
-            return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Verifica che il potenziamento sia effettivamente montato su QUESTO oggetto
+        if not potenziamento_id: return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
         potenziamento = get_object_or_404(Oggetto, pk=potenziamento_id, ospitato_su=oggetto_ospite)
-        
         try:
             with transaction.atomic():
-                # 1. Distacca il potenziamento
                 potenziamento.ospitato_su = None
                 potenziamento.save()
-                
-                # 2. Trova dove mettere il potenziamento smontato
-                # Lo mettiamo nello stesso inventario dove si trova l'oggetto ospite (es. Zaino PG)
                 inventario_destinazione = oggetto_ospite.inventario_corrente
-                
-                if inventario_destinazione:
-                    potenziamento.sposta_in_inventario(inventario_destinazione)
-                
+                if inventario_destinazione: potenziamento.sposta_in_inventario(inventario_destinazione)
             serializer = self.get_serializer(oggetto_ospite)
             return Response(serializer.data, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e: return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def usa_carica(self, request, pk=None):
-        """
-        Endpoint: [POST] /api/oggetti/{id}/usa_carica/
-        Consuma 1 carica. Restituisce le cariche residue e la durata per il timer frontend.
-        """
         oggetto = self.get_object()
-        
-        if oggetto.cariche_attuali <= 0:
-            return Response({'error': 'Oggetto scarico o privo di cariche.'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Decrementa
+        if oggetto.cariche_attuali <= 0: return Response({'error': 'Oggetto scarico o privo di cariche.'}, status=status.HTTP_400_BAD_REQUEST)
         oggetto.cariche_attuali -= 1
         oggetto.save()
-        
-        # Recupera dati per il timer (se l'infusione ha una durata)
         durata_secondi = 0
-        if oggetto.infusione_generatrice:
-            durata_secondi = oggetto.infusione_generatrice.durata_attivazione
-            
-        return Response({
-            'status': 'success',
-            'cariche_residue': oggetto.cariche_attuali,
-            'timer_durata': durata_secondi
-        })
+        if oggetto.infusione_generatrice: durata_secondi = oggetto.infusione_generatrice.durata_attivazione
+        return Response({'status': 'success', 'cariche_residue': oggetto.cariche_attuali, 'timer_durata': durata_secondi})
 
     @action(detail=True, methods=['post'])
     def ricarica(self, request, pk=None):
-        """
-        Endpoint: [POST] /api/oggetti/{id}/ricarica/
-        Ricarica completamente l'oggetto pagando il costo in crediti dal personaggio proprietario.
-        """
         oggetto = self.get_object()
         infusione = oggetto.infusione_generatrice
-        
-        # Verifiche preliminari
-        if not infusione or not infusione.statistica_cariche:
-            return Response({'error': 'Questo oggetto non supporta la ricarica.'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Calcolo cariche mancanti
-        # Nota: Qui assumiamo che il max cariche sia il valore predefinito della statistica nell'infusione.
-        # Se volessi calcolarlo dinamicamente sul PG (es. +Cariche bonus), servirebbe logica extra.
+        if not infusione or not infusione.statistica_cariche: return Response({'error': 'Questo oggetto non supporta la ricarica.'}, status=status.HTTP_400_BAD_REQUEST)
         max_cariche = infusione.statistica_cariche.valore_predefinito 
         cariche_mancanti = max_cariche - oggetto.cariche_attuali
-        
-        if cariche_mancanti <= 0:
-            return Response({'message': 'Oggetto già completamente carico.'}, status=status.HTTP_200_OK)
-            
-        # Calcolo Costo
+        if cariche_mancanti <= 0: return Response({'message': 'Oggetto già completamente carico.'}, status=status.HTTP_200_OK)
         costo_totale = cariche_mancanti * infusione.costo_ricarica_crediti
-        
-        # Gestione Pagamento
-        # Dobbiamo risalire al Personaggio proprietario per scalare i crediti
         inventario = oggetto.inventario_corrente
         personaggio = None
-        
-        # Tenta di ottenere il personaggio dall'inventario
         if inventario:
-            if hasattr(inventario, 'personaggio'):
-                personaggio = inventario.personaggio
-            elif hasattr(inventario, 'personaggio_ptr'): # Caso ereditarietà multi-tabella django
-                 personaggio = inventario.personaggio_ptr
-
-        if not personaggio:
-             return Response({'error': 'Impossibile determinare il proprietario per il pagamento.'}, status=status.HTTP_400_BAD_REQUEST)
-             
-        if personaggio.crediti < costo_totale:
-            return Response({
-                'error': f'Crediti insufficienti. Servono {costo_totale} crediti, ne hai {personaggio.crediti}.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-        # Esegui Transazione
+            if hasattr(inventario, 'personaggio'): personaggio = inventario.personaggio
+            elif hasattr(inventario, 'personaggio_ptr'): personaggio = inventario.personaggio_ptr
+        if not personaggio: return Response({'error': 'Impossibile determinare il proprietario per il pagamento.'}, status=status.HTTP_400_BAD_REQUEST)
+        if personaggio.crediti < costo_totale: return Response({'error': f'Crediti insufficienti. Servono {costo_totale} crediti, ne hai {personaggio.crediti}.'}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
             personaggio.modifica_crediti(-costo_totale, f"Ricarica oggetto: {oggetto.nome}")
             oggetto.cariche_attuali = max_cariche
             oggetto.save()
-            
-        return Response({
-            'status': 'success',
-            'cariche_attuali': oggetto.cariche_attuali,
-            'costo_pagato': costo_totale,
-            'crediti_residui': personaggio.crediti
-        })
+        return Response({'status': 'success', 'cariche_attuali': oggetto.cariche_attuali, 'costo_pagato': costo_totale, 'crediti_residui': personaggio.crediti})
         
-
 @api_view(['POST'])
-@authentication_classes([TokenAuthentication]) # <--- FONDAMENTALE: Risolve l'errore 403
+@authentication_classes([TokenAuthentication])
 @permission_classes([IsAuthenticated])
 def equipaggia_item_view(request):
-    """Gestisce il toggle Equip/Unequip"""
-    # 1. Recupera l'ID specifico del personaggio inviato dal frontend
     char_id = request.data.get('char_id')
     item_id = request.data.get('item_id')
-
-    # --- LOGICA DI SICUREZZA ROBUSTA ---
-    # 2. Se sei un Admin (is_staff), puoi modificare QUALSIASI personaggio.
-    if request.user.is_staff:
-        pg = get_object_or_404(Personaggio, id=char_id)
-    # 3. Se sei un utente normale, puoi modificare SOLO i tuoi.
-    else:
-        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
-    # -----------------------------------
-    
+    if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
+    else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
     oggetto = get_object_or_404(Oggetto, pk=item_id)
-    
     try:
-        # 4. Chiama il servizio
         stato = GestioneOggettiService.equipaggia_oggetto(pg, oggetto)
         return Response({"status": "success", "nuovo_stato": stato})
     except ValidationError as e:
-        # Gestione errore pulita
         msg = e.message if hasattr(e, 'message') else str(e)
         return Response({"error": msg}, status=400)
 
 @api_view(['POST'])
-@authentication_classes([TokenAuthentication]) # <--- FONDAMENTALE ANCHE QUI
+@authentication_classes([TokenAuthentication]) 
 @permission_classes([IsAuthenticated])
 def assembla_item_view(request):
-    """Gestisce montaggio Mod/Materia"""
     char_id = request.data.get('char_id')
     host_id = request.data.get('host_id')
     mod_id = request.data.get('mod_id')
-    
-    # --- LOGICA DI SICUREZZA ROBUSTA ---
-    if request.user.is_staff:
-        pg = get_object_or_404(Personaggio, id=char_id)
-    else:
-        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
-    # -----------------------------------
-    
+    if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
+    else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
     host = get_object_or_404(Oggetto, pk=host_id)
     mod = get_object_or_404(Oggetto, pk=mod_id)
-    
     try:
         GestioneOggettiService.assembla_mod(pg, host, mod)
         return Response({"status": "success", "message": "Assemblaggio completato"})
     except ValidationError as e:
         msg = e.message if hasattr(e, 'message') else str(e)
         return Response({"error": msg}, status=400)
-    
-    
+
+# --- NUOVE CLASSI AGGIUNTE PER NEGOZIO E CRAFTING ---
+
+class NegozioViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def listino(self, request):
+        """
+        GET /api/negozio/listino/
+        Restituisce tutti gli OggettiBase in vendita.
+        """
+        try:
+            oggetti = OggettoBase.objects.filter(in_vendita=True).order_by('tipo_oggetto', 'costo')
+            serializer = OggettoBaseSerializer(oggetti, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            return Response({"error": f"Errore server: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def acquista(self, request):
+        """
+        POST /api/negozio/acquista/
+        """
+        char_id = request.data.get('char_id')
+        oggetto_base_id = request.data.get('oggetto_id')
+        
+        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        try:
+            # Usa il service per creare l'oggetto fisico dal template
+            nuovo_oggetto = GestioneCraftingService.acquista_da_negozio(personaggio, oggetto_base_id)
+            serializer = OggettoSerializer(nuovo_oggetto, context={'personaggio': personaggio})
+            
+            return Response({
+                "status": "success", 
+                "nuovo_oggetto": serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class CraftingViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'])
     def avvia_forgiatura(self, request):
-        """
-        POST /api/crafting/avvia_forgiatura/
-        Body: { "infusione_id": 1, "char_id": 1, "slot_target": "HD" (opzionale) }
-        """
         char_id = request.data.get('char_id')
         inf_id = request.data.get('infusione_id')
         slot = request.data.get('slot_target')
@@ -1385,10 +1142,6 @@ class CraftingViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def completa_forgiatura(self, request):
-        """
-        POST /api/crafting/completa_forgiatura/
-        Body: { "forgiatura_id": 12, "char_id": 1 }
-        """
         char_id = request.data.get('char_id')
         forg_id = request.data.get('forgiatura_id')
         
@@ -1402,10 +1155,6 @@ class CraftingViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def coda_forgiatura(self, request):
-        """
-        GET /api/crafting/coda_forgiatura/?char_id=1
-        Restituisce le forgiature in corso per il timer frontend.
-        """
         char_id = request.query_params.get('char_id')
         personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
         
@@ -1422,91 +1171,3 @@ class CraftingViewSet(viewsets.ViewSet):
                 "is_pronta": task.is_pronta
             })
         return Response(data)
-
-class NegozioViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
-
-    @action(detail=False, methods=['get'])
-    def listino(self, request):
-        """
-        GET /api/negozio/listino/
-        Restituisce tutti gli oggetti di livello 0 in vendita.
-        """
-        # Filtra oggetti 'Template' (livello 0 e in vendita)
-        oggetti = Oggetto.objects.filter(elementi__isnull=True, in_vendita=True).distinct() 
-        # Nota: il filtro sul livello 0 è meglio farlo controllando che non abbiano mattoni (elementi)
-        # Oppure aggiungere un campo 'livello' denormalizzato se la property calcolata è lenta.
-        # Qui usiamo la logica: se non ha elementi è liv 0. 
-        # Oppure se hai aggiunto il campo livello al model come da best practice, usa filter(livello=0).
-        
-        # Filtro Python per sicurezza sulla property se non c'è campo db
-        items = [o for o in oggetti if o.livello == 0]
-        
-        serializer = OggettoSerializer(items, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
-    def acquista(self, request):
-        """
-        POST /api/negozio/acquista/
-        Body: { "oggetto_id": 1, "char_id": 1 }
-        """
-        char_id = request.data.get('char_id')
-        obj_id = request.data.get('oggetto_id')
-        
-        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
-        
-        try:
-            nuovo = GestioneCraftingService.acquista_da_negozio(personaggio, obj_id)
-            return Response({"status": "success", "nuovo_oggetto_id": nuovo.id}, status=200)
-        except ValidationError as e:
-            return Response({"error": str(e)}, status=400)
-        
-class NegozioViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
-
-    @action(detail=False, methods=['get'])
-    def listino(self, request):
-        """
-        GET /api/negozio/listino/
-        Restituisce il catalogo degli oggetti acquistabili (OggettoBase).
-        """
-        # Recupera solo gli archetipi in vendita
-        oggetti_base = OggettoBase.objects.filter(in_vendita=True).order_by('tipo_oggetto', 'costo')
-        serializer = OggettoBaseSerializer(oggetti_base, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
-    def acquista(self, request):
-        """
-        POST /api/negozio/acquista/
-        Body: { "oggetto_id": <int>, "char_id": <int> }
-        
-        Nota: In questo contesto, 'oggetto_id' corrisponde all'ID di un 'OggettoBase' (il template del negozio),
-        non a un oggetto fisico già esistente.
-        """
-        char_id = request.data.get('char_id')
-        oggetto_base_id = request.data.get('oggetto_id') # Dal frontend arriva come 'oggetto_id'
-        
-        # 1. Recupera il Personaggio (con verifica proprietà)
-        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
-        
-        try:
-            # 2. Chiama il servizio passando l'ID del template (OggettoBase)
-            nuovo_oggetto_reale = GestioneCraftingService.acquista_da_negozio(personaggio, oggetto_base_id)
-            
-            # 3. Serializza l'oggetto REALE appena creato per restituirlo al frontend
-            # (Così l'inventario si aggiorna subito senza dover ricaricare tutto)
-            serializer = OggettoSerializer(nuovo_oggetto_reale, context={'personaggio': personaggio})
-            
-            return Response({
-                "status": "success", 
-                "message": f"Acquistato {nuovo_oggetto_reale.nome}",
-                "nuovo_oggetto": serializer.data,
-                "crediti_residui": personaggio.crediti
-            }, status=status.HTTP_200_OK)
-            
-        except ValidationError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            return Response({"error": f"Errore imprevisto: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

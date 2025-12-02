@@ -36,10 +36,14 @@ router.register(r'abilita-punteggio', AbilitaPunteggioViewSet)
 router.register(r'abilita-prerequisito', AbilitaPrerequisitoViewSet)
 router.register(r'proposte', PropostaTecnicaViewSet, basename='proposte')
 
-
+# --- ROTTE AGGIUNTE PER NEGOZIO E CRAFTING ---
+router.register(r'negozio', views.NegozioViewSet, basename='negozio')
+router.register(r'crafting', views.CraftingViewSet, basename='crafting')
+# ---------------------------------------------
 
 # router.register('abil', AbilViewSet)
 router.register('users', UserViewSet)
+router.register(r'oggetti', views.OggettoViewSet, basename='oggetti') # Era fuori router, meglio dentro
 
 urlpatterns = [
     
