@@ -427,6 +427,7 @@ class PunteggioAdmin(IconaAdminMixin, A_Admin):
             'fields': (
                 ('stat_costo_creazione_infusione', 'stat_costo_creazione_tessitura'),
                 ('stat_costo_acquisto_infusione', 'stat_costo_acquisto_tessitura'),
+                ('stat_costo_invio_proposta_infusione', 'stat_costo_invio_proposta_tessitura'),
                 ('stat_costo_forgiatura', 'stat_tempo_forgiatura'),
                 'aure_infusione_consentite'
             )

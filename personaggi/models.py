@@ -21,6 +21,7 @@ COSTO_PER_MATTONE_TESSITURA = 100
 COSTO_PER_MATTONE_OGGETTO = 100
 COSTO_PER_MATTONE_CREAZIONE = 10 # Costo invio proposta
 COSTO_DEFAULT_PER_MATTONE = 100
+COSTO_DEFAULT_INVIO_PROPOSTA = 10
 
 # --- COSTANTI TRANSAZIONI ---
 STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
@@ -310,10 +311,17 @@ class Punteggio(Tabella):
     permette_infusioni = models.BooleanField(default=False)
     permette_tessiture = models.BooleanField(default=False)
     
+    # COSTI CREAZIONE / ACQUISTO (Tecnica approvata)
     stat_costo_creazione_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_inf')
     stat_costo_creazione_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_tes')
     stat_costo_acquisto_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_inf')
     stat_costo_acquisto_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_tes')
+    
+    # NUOVI CAMPI: COSTO INVIO PROPOSTA (Burocrazia)
+    stat_costo_invio_proposta_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_invio_prop_inf', verbose_name="Stat. Costo Invio Proposta (Inf)")
+    stat_costo_invio_proposta_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_invio_prop_tes', verbose_name="Stat. Costo Invio Proposta (Tes)")
+
+    # COSTI CRAFTING (Forgiatura)
     stat_costo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_forgia')
     stat_tempo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_tempo_forgia')
     

@@ -25,7 +25,8 @@ from .models import (
     abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_prerequisito,
     # Costanti
-    COSTO_PER_MATTONE_CREAZIONE
+    COSTO_PER_MATTONE_CREAZIONE, 
+    COSTO_DEFAULT_INVIO_PROPOSTA,
 )
 
 import uuid 
@@ -915,20 +916,24 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         livello = proposta.livello
         if livello == 0: return Response({"error": "La proposta deve avere almeno un componente."}, status=status.HTTP_400_BAD_REQUEST)
         
-        # CALCOLO COSTO DINAMICO CON FALLBACK
-        costo_base = COSTO_PER_MATTONE_CREAZIONE
+# --- CALCOLO COSTO INVIO (BUROCRAZIA) ---
+        costo_base = COSTO_DEFAULT_INVIO_PROPOSTA # Default 10
+        
         if proposta.tipo == 'INF':
-             if proposta.aura.stat_costo_creazione_infusione:
-                 val = proposta.aura.stat_costo_creazione_infusione.valore_base_predefinito
+             # Cerca la statistica specifica per l'invio proposta INF
+             if proposta.aura.stat_costo_invio_proposta_infusione:
+                 val = proposta.aura.stat_costo_invio_proposta_infusione.valore_base_predefinito
                  if val > 0: costo_base = val
         else: # TES
-             if proposta.aura.stat_costo_creazione_tessitura:
-                 val = proposta.aura.stat_costo_creazione_tessitura.valore_base_predefinito
+             # Cerca la statistica specifica per l'invio proposta TES
+             if proposta.aura.stat_costo_invio_proposta_tessitura:
+                 val = proposta.aura.stat_costo_invio_proposta_tessitura.valore_base_predefinito
                  if val > 0: costo_base = val
                  
         costo_invio = livello * costo_base
 
-        if personaggio.crediti < costo_invio: return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
+        if personaggio.crediti < costo_invio: 
+            return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
 
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
         if val_aura < 1: return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
