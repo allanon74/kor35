@@ -11,18 +11,16 @@ from django.utils.safestring import mark_safe
 from django.conf import settings
 from django.contrib.auth.models import User
 from colorfield.fields import ColorField
-# from django_icon_picker.field import IconField # Rimosso se non usato o sostituito
 from cms.models.pluginmodel import CMSPlugin
 from django.utils.html import format_html
 from icon_widget.fields import CustomIconField
 
-# --- COSTANTI ---
+# --- COSTANTI DI SISTEMA (FALLBACK) ---
 COSTO_PER_MATTONE_INFUSIONE = 100
 COSTO_PER_MATTONE_TESSITURA = 100
 COSTO_PER_MATTONE_OGGETTO = 100
-COSTO_CREAZIONE_OGGETTO_PER_MATTONE = 100 
-COSTO_CREAZIONE_MOD_PER_MATTONE = 150
-COSTO_CREAZIONE_MUTAZIONE_PER_MATTONE = 120
+COSTO_PER_MATTONE_CREAZIONE = 10 # Costo invio proposta
+COSTO_DEFAULT_PER_MATTONE = 100
 
 # --- COSTANTI TRANSAZIONI ---
 STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
@@ -55,7 +53,6 @@ TIPO_PROPOSTA_CHOICES = [
     (TIPO_PROPOSTA_TESSITURA, 'Tessitura'),
 ]
 
-# Aggiungi enum per i tipi
 TIPO_OGGETTO_FISICO = 'FIS'
 TIPO_OGGETTO_MATERIA = 'MAT'
 TIPO_OGGETTO_MOD = 'MOD'
@@ -70,7 +67,6 @@ TIPO_OGGETTO_CHOICES = [
     (TIPO_OGGETTO_MUTAZIONE, 'Mutazione (Innata)'),
 ]
 
-# Enum per slot corpo (Innesti/Mutazioni)
 SLOT_TESTA = 'HD'
 SLOT_TRONCO = 'TR'
 SLOT_BRACCIO_DX = 'RA'
@@ -87,14 +83,9 @@ SLOT_CORPO_CHOICES = [
     (SLOT_GAMBA_SX, 'Gamba Sx'),
 ]
 
-# --- FUNZIONI DI UTILITÀ ---
-
 def get_testo_rango(valore):
-    try:
-        valore = int(valore)
-    except (ValueError, TypeError):
-        return ""
-
+    try: valore = int(valore)
+    except (ValueError, TypeError): return ""
     if valore <= 0: return "Mondano! "
     elif valore == 1: return "" 
     elif valore == 2: return "Eroico! "
@@ -102,30 +93,24 @@ def get_testo_rango(valore):
     elif valore == 4: return "Mitologico! "
     elif valore == 5: return "Divino! "
     elif valore == 6: return "Cosmico! "
-    else: 
-        n = valore - 6
-        return f"Cosmico {n}-esimo! "
+    else: return f"Cosmico {valore - 6}-esimo! "
 
 def _get_icon_color_from_bg(hex_color):
     try:
         hex_color = hex_color.lstrip('#')
         r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-        luminanza = ((r * 299) + (g * 587) + (b * 114)) / 1000
-        return 'black' if luminanza > 128 else 'white'
-    except Exception:
-        return 'black'
+        return 'black' if ((r*299)+(g*587)+(b*114))/1000 > 128 else 'white'
+    except Exception: return 'black'
 
 def generate_short_id(length=14):
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
-# --- FUNZIONI PER FORMATTAZIONE TESTO ---
-
 def evaluate_expression(expression, context_dict):
     if not expression: return 0
     if "__" in expression or "import" in expression or "lambda" in expression: return 0
     safe_context = {str(k).lower(): v for k, v in context_dict.items() if k}
-    safe_context['max'] = max; safe_context['min'] = min; safe_context['abs'] = abs; safe_context['int'] = int; safe_context['round'] = round
+    safe_context.update({'max': max, 'min': min, 'abs': abs, 'int': int, 'round': round})
     try: return eval(str(expression).lower(), {"__builtins__": {}}, safe_context)
     except Exception: return 0
 
@@ -166,19 +151,14 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         current_elem = context.get('elemento')
 
         for mod in item_modifiers:
-            passa_aura = True
-            if mod.usa_limitazione_aura:
-                if not current_aura or not mod.limit_a_aure.filter(pk=current_aura.pk).exists(): passa_aura = False
-            passa_elem = True
-            if mod.usa_limitazione_elemento:
-                if not current_elem or not mod.limit_a_elementi.filter(pk=current_elem.pk).exists(): passa_elem = False
+            passa_aura = not mod.usa_limitazione_aura or (current_aura and mod.limit_a_aure.filter(pk=current_aura.pk).exists())
+            passa_elem = not mod.usa_limitazione_elemento or (current_elem and mod.limit_a_elementi.filter(pk=current_elem.pk).exists())
             passa_text = True
             if mod.usa_condizione_text and mod.condizione_text:
                 local_ctx = eval_context.copy()
                 if hasattr(mod, 'mattone') and mod.mattone.caratteristica_associata:
                     nome_c = mod.mattone.caratteristica_associata.nome
-                    val_c = eval_context.get(nome_c, 0)
-                    local_ctx['caratt'] = val_c
+                    local_ctx['caratt'] = eval_context.get(nome_c, 0)
                 if not evaluate_expression(mod.condizione_text, local_ctx): passa_text = False
 
             if passa_aura and passa_elem and passa_text:
@@ -199,11 +179,8 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 for mattone in modello.mattoni_proibiti.all():
                     funz = mattone.funzionamento_metatalento
                     if funz == META_NESSUN_EFFETTO: continue 
-                    nome_caratt = mattone.caratteristica_associata.nome
-                    val_caratt = caratteristiche_pg.get(nome_caratt, 0)
-                    applica = False
-                    if funz in [META_VALORE_PUNTEGGIO, META_SOLO_TESTO]: applica = True
-                    elif funz == META_LIVELLO_INFERIORE and livello_item <= val_caratt: applica = True
+                    val_caratt = caratteristiche_pg.get(mattone.caratteristica_associata.nome, 0)
+                    applica = (funz in [META_VALORE_PUNTEGGIO, META_SOLO_TESTO]) or (funz == META_LIVELLO_INFERIORE and livello_item <= val_caratt)
                     
                     if applica:
                         if funz in [META_VALORE_PUNTEGGIO, META_LIVELLO_INFERIORE]:
@@ -214,12 +191,9 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                                     if p not in mods_attivi: mods_attivi[p] = {'add': 0, 'mol': 1.0}
                                     if stat_m.tipo_modificatore == MODIFICATORE_ADDITIVO: mods_attivi[p]['add'] += b
                                     elif stat_m.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO: mods_attivi[p]['mol'] *= float(b)
-                        txt_add = mattone.testo_addizionale
-                        if txt_add:
-                            def repl(m):
-                                factor = int(m.group(1)) if m.group(1) else 1
-                                return str(val_caratt * factor)
-                            parsed = re.sub(r'\{(?:(\d+)\*)?caratt\}', repl, txt_add)
+                        if mattone.testo_addizionale:
+                            def repl(m): return str(val_caratt * (int(m.group(1)) if m.group(1) else 1))
+                            parsed = re.sub(r'\{(?:(\d+)\*)?caratt\}', repl, mattone.testo_addizionale)
                             testo_metatalenti += f"<br><em>Metatalento ({mattone.nome}):</em> {parsed}"
 
     def resolve_placeholder(match):
@@ -245,9 +219,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         except: return match.group(0)
 
     def replace_conditional_block(match):
-        condizione = match.group(1)
-        contenuto = match.group(2)
-        if evaluate_expression(condizione, eval_context): return contenuto
+        if evaluate_expression(match.group(1), eval_context): return match.group(2)
         return ""
     
     if solo_formula: testo_metatalenti = ""
@@ -256,9 +228,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     if context:
         if context.get('elemento'):
             elem_obj = context['elemento']
-            repl = elem_obj.nome
-            if hasattr(elem_obj, 'dichiarazione') and elem_obj.dichiarazione: repl = elem_obj.dichiarazione
-            elif hasattr(elem_obj, 'mattone') and elem_obj.mattone.dichiarazione: repl = elem_obj.mattone.dichiarazione
+            repl = getattr(elem_obj, 'dichiarazione', None) or (elem_obj.mattone.dichiarazione if hasattr(elem_obj, 'mattone') else elem_obj.nome)
             testo_completo = testo_completo.replace("{elem}", repl)
             formula_out = formula_out.replace("{elem}", repl)
         
@@ -266,7 +236,6 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         if rango_val is None and statistiche_base:
              r_obj = next((x for x in statistiche_base if getattr(x.statistica, 'nome', '').lower() == "rango"), None)
              if r_obj: rango_val = r_obj.valore_base
-        
         if rango_val is not None:
              r_txt = get_testo_rango(rango_val)
              testo_completo = testo_completo.replace("{rango}", r_txt)
@@ -287,63 +256,15 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         
     return "".join(parts)
 
-
-# --- TIPI GENERICI ---
-
-CARATTERISTICA = "CA"
-STATISTICA = "ST"
-ELEMENTO = "EL"
-AURA = "AU"
-CONDIZIONE = "CO"
-CULTO = "CU"   
-VIA = "VI"
-ARTE = "AR"
-ARCHETIPO = "AR"
-
-punteggi_tipo = [
-    (CARATTERISTICA, 'Caratteristica'),
-    (STATISTICA, 'Statistica'),
-    (ELEMENTO, 'Elemento'),
-    (AURA, 'Aura',),
-    (CONDIZIONE, 'Condizione',),
-    (CULTO, 'Culto',),
-    (VIA, 'Via',),
-    (ARTE, 'Arte',),
-    (ARCHETIPO, 'Archetipo',),
-]
-
-TIER_1 = "T1"
-TIER_2 = "T2"
-TIER_3 = "T3"
-TIER_4 = "T4"
-
-tabelle_tipo = [
-    (TIER_1, 'Tier 1'),
-    (TIER_2, 'Tier 2'),
-    (TIER_3, 'Tier 3'),
-    (TIER_4, 'Tier 4'),
-]
-
-MODIFICATORE_ADDITIVO = 'ADD'
-MODIFICATORE_MOLTIPLICATIVO = 'MOL'
-MODIFICATORE_CHOICES = [
-    (MODIFICATORE_ADDITIVO, 'Additivo (+N)'),
-    (MODIFICATORE_MOLTIPLICATIVO, 'Moltiplicativo (xN)'),
-]
-
-META_NESSUN_EFFETTO = 'NE'
-META_VALORE_PUNTEGGIO = 'VP'
-META_SOLO_TESTO = 'TX'
-META_LIVELLO_INFERIORE = 'LV'
-
-METATALENTO_CHOICES = [
-    (META_NESSUN_EFFETTO, 'Nessun Effetto'),
-    (META_VALORE_PUNTEGGIO, 'Valore per Punteggio'),
-    (META_SOLO_TESTO, 'Solo Testo Addizionale'),
-    (META_LIVELLO_INFERIORE, 'Solo abilità con livello pari o inferiore'),
-]
-
-# --- CLASSI ASTRATTE ---
+# --- TIPI ---
+CARATTERISTICA = "CA"; STATISTICA = "ST"; ELEMENTO = "EL"; AURA = "AU"; CONDIZIONE = "CO"; CULTO = "CU"; VIA = "VI"; ARTE = "AR"; ARCHETIPO = "AR"
+punteggi_tipo = [(CARATTERISTICA, 'Caratteristica'), (STATISTICA, 'Statistica'), (ELEMENTO, 'Elemento'), (AURA, 'Aura'), (CONDIZIONE, 'Condizione'), (CULTO, 'Culto'), (VIA, 'Via'), (ARTE, 'Arte'), (ARCHETIPO, 'Archetipo')]
+TIER_1 = "T1"; TIER_2 = "T2"; TIER_3 = "T3"; TIER_4 = "T4"
+tabelle_tipo = [(TIER_1, 'Tier 1'), (TIER_2, 'Tier 2'), (TIER_3, 'Tier 3'), (TIER_4, 'Tier 4')]
+MODIFICATORE_ADDITIVO = 'ADD'; MODIFICATORE_MOLTIPLICATIVO = 'MOL'
+MODIFICATORE_CHOICES = [(MODIFICATORE_ADDITIVO, 'Additivo (+N)'), (MODIFICATORE_MOLTIPLICATIVO, 'Moltiplicativo (xN)')]
+META_NESSUN_EFFETTO = 'NE'; META_VALORE_PUNTEGGIO = 'VP'; META_SOLO_TESTO = 'TX'; META_LIVELLO_INFERIORE = 'LV'
+METATALENTO_CHOICES = [(META_NESSUN_EFFETTO, 'Nessun Effetto'), (META_VALORE_PUNTEGGIO, 'Valore per Punteggio'), (META_SOLO_TESTO, 'Solo Testo Addizionale'), (META_LIVELLO_INFERIORE, 'Solo abilità con livello pari o inferiore')]
 
 class A_modello(models.Model):
     id = models.AutoField("Codice Identificativo", primary_key=True)
@@ -363,10 +284,8 @@ class CondizioneStatisticaMixin(models.Model):
     usa_limitazione_elemento = models.BooleanField("Usa Limitazione Elemento", default=False)
     limit_a_elementi = models.ManyToManyField('Punteggio', blank=True, limit_choices_to={'tipo': ELEMENTO}, related_name="%(class)s_limit_elementi", verbose_name="Elementi consentiti")
     usa_condizione_text = models.BooleanField("Usa Condizione Testuale", default=False)
-    condizione_text = models.CharField("Condizione (es. caratt>6)", max_length=255, blank=True, null=True, help_text="Espressione logica. Variabili: {caratt}, {livello}, {pv}, ecc.")
+    condizione_text = models.CharField("Condizione", max_length=255, blank=True, null=True, help_text="Es. caratt>6")
     class Meta: abstract = True
-
-# --- CORE MODELS ---
 
 class Tabella(A_modello):
     nome = models.CharField(max_length=90)
@@ -385,7 +304,6 @@ class Punteggio(Tabella):
     colore = ColorField(default='#1976D2')
     icona = CustomIconField(blank=True)
     ordine = models.IntegerField(default=0)
-    
     is_mattone = models.BooleanField(default=False)
     is_soprannaturale = models.BooleanField(default=False)
     is_generica = models.BooleanField(default=False)
@@ -403,23 +321,17 @@ class Punteggio(Tabella):
     modifica_statistiche = models.ManyToManyField('Statistica', through='CaratteristicaModificatore', related_name='modificata_da_caratteristiche', blank=True)
     aure_infusione_consentite = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='puo_essere_infusa_in')    
     class Meta: verbose_name = "Punteggio"; verbose_name_plural = "Punteggi"; ordering = ['tipo', 'ordine', 'nome']
-        
     @property
     def icona_url(self): return f"{settings.MEDIA_URL}{self.icona}" if self.icona else None
-
     @property
     def icona_html(self):
-        url = self.icona_url; colore = self.colore
-        if url and colore: return format_html('<div style="width: 24px; height: 24px; background-color: {}; mask-image: url({}); -webkit-mask-image: url({}); mask-size: contain; -webkit-mask-size: contain; display: inline-block; vertical-align: middle;"></div>', colore, url, url)
+        if self.icona and self.colore: return format_html('<div style="width: 24px; height: 24px; background-color: {}; mask-image: url({}); -webkit-mask-image: url({}); mask-size: contain; -webkit-mask-size: contain; display: inline-block; vertical-align: middle;"></div>', self.colore, self.icona_url, self.icona_url)
         return ""
-    
     def icona_cerchio(self, inverted=True):
-        url = self.icona_url 
-        if not url or not self.colore: return ""
-        colore_sfondo = _get_icon_color_from_bg(self.colore) if inverted else self.colore
-        colore_icona = self.colore if inverted else _get_icon_color_from_bg(self.colore)
-        return format_html('<div style="display: inline-block; width: 30px; height: 30px; background-color: {}; border-radius: 50%; vertical-align: middle; text-align: center; line-height: 30px;"><div style="display: inline-block; width: 24px; height: 24px; vertical-align: middle; background-color: {}; mask-image: url({}); -webkit-mask-image: url({}); mask-size: contain; -webkit-mask-size: contain;"></div></div>', colore_sfondo, colore_icona, url, url)
-    
+        if not self.icona or not self.colore: return ""
+        bg = _get_icon_color_from_bg(self.colore) if inverted else self.colore
+        fg = self.colore if inverted else _get_icon_color_from_bg(self.colore)
+        return format_html('<div style="display: inline-block; width: 30px; height: 30px; background-color: {}; border-radius: 50%; vertical-align: middle; text-align: center; line-height: 30px;"><div style="display: inline-block; width: 24px; height: 24px; vertical-align: middle; background-color: {}; mask-image: url({}); -webkit-mask-image: url({}); mask-size: contain; -webkit-mask-size: contain;"></div></div>', bg, fg, self.icona_url, self.icona_url)
     @property
     def icona_cerchio_html(self): return self.icona_cerchio(inverted=False)
     @property
@@ -427,7 +339,7 @@ class Punteggio(Tabella):
     def __str__(self): return f"{self.tipo} - {self.nome}"
 
 class Caratteristica(Punteggio):
-    class Meta: proxy = True; verbose_name = "Caratteristica (Gestione)"; verbose_name_plural = "Caratteristiche (Gestione)"
+    class Meta: proxy = True; verbose_name = "Caratteristica"; verbose_name_plural = "Caratteristiche"
 
 class Statistica(Punteggio):
     parametro = models.CharField(max_length=10, unique=True, blank=True, null=True)
@@ -450,7 +362,7 @@ class Mattone(Punteggio):
     descrizione_mattone = models.TextField(blank=True, null=True)
     descrizione_metatalento = models.TextField(blank=True, null=True)
     testo_addizionale = models.TextField(blank=True, null=True)
-    dichiarazione = models.TextField("Dichiarazione", blank=True, null=True, help_text="Testo per {elem}.")
+    dichiarazione = models.TextField("Dichiarazione", blank=True, null=True)
     funzionamento_metatalento = models.CharField(max_length=2, choices=METATALENTO_CHOICES, default=META_NESSUN_EFFETTO)
     statistiche = models.ManyToManyField(Statistica, through='MattoneStatistica', blank=True, related_name="mattoni_statistiche")
     def save(self, *args, **kwargs): self.is_mattone = True; super().save(*args, **kwargs)
@@ -465,26 +377,23 @@ class MattoneStatistica(CondizioneStatisticaMixin):
     def __str__(self): return f"{self.statistica.nome}: {self.valore}"
 
 class Aura(Punteggio):
-    class Meta: proxy = True; verbose_name = "Aura (Gestione)"; verbose_name_plural = "Aure (Gestione)"
+    class Meta: proxy = True; verbose_name = "Aura"; verbose_name_plural = "Aure"
     def save(self, *args, **kwargs): self.type = AURA; super().save(*args, **kwargs)
 
 class ModelloAuraRequisitoDoppia(models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_doppia_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
-    class Meta: verbose_name = "Requisito Doppia Formula"; verbose_name_plural = "Requisiti Doppia Formula"
         
 class ModelloAuraRequisitoMattone(models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_mattone_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
-    class Meta: verbose_name = "Requisito Formula x Mattone"; verbose_name_plural = "Requisiti Formula x Mattone"
 
 class ModelloAuraRequisitoCaratt(models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_caratt_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
-    class Meta: verbose_name = "Requisito Formula x Caratteristica"; verbose_name_plural = "Requisiti Formula x Caratteristica"
 
 class ModelloAura(models.Model):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="modelli_definiti")
@@ -492,16 +401,13 @@ class ModelloAura(models.Model):
     descrizione = models.TextField(blank=True, null=True, verbose_name="Descrizione Breve")
     mattoni_proibiti = models.ManyToManyField(Mattone, blank=True, related_name="proibiti_in_modelli", verbose_name="Mattoni Proibiti")
     mattoni_obbligatori = models.ManyToManyField(Mattone, blank=True, related_name="obbligatori_in_modelli", verbose_name="Mattoni Obbligatori")
-    
     usa_doppia_formula = models.BooleanField(default=False, verbose_name="Abilita Doppia Formula")
     elemento_secondario = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO}, related_name="modelli_secondari")
     usa_condizione_doppia = models.BooleanField(default=False, verbose_name="Richiede Condizione per Doppia")
     requisiti_doppia = models.ManyToManyField(Punteggio, through=ModelloAuraRequisitoDoppia, blank=True, related_name="modelli_req_doppia")
-    
     usa_formula_per_mattone = models.BooleanField(default=False, verbose_name="Abilita Formula per Mattone")
     usa_condizione_mattone = models.BooleanField(default=False, verbose_name="Richiede Condizione per F. Mattone")
     requisiti_mattone = models.ManyToManyField(Punteggio, through=ModelloAuraRequisitoMattone, blank=True, related_name="modelli_req_mattone")
-    
     usa_formula_per_caratteristica = models.BooleanField(default=False, verbose_name="Abilita Formula per Caratteristica")
     usa_condizione_caratt = models.BooleanField(default=False, verbose_name="Richiede Condizione per F. Caratt.")
     requisiti_caratt = models.ManyToManyField(Punteggio, through=ModelloAuraRequisitoCaratt, blank=True, related_name="modelli_req_caratt")
@@ -545,13 +451,11 @@ class abilita_tier(A_modello):
 class abilita_prerequisito(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_prerequisiti")
     prerequisito = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_abilitati")
-    class Meta: verbose_name = "Abilità richieste come prerequisito di acquisto"
 
 class abilita_requisito(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo__in': (CARATTERISTICA, CONDIZIONE, STATISTICA)})
     valore = models.IntegerField(default=1)
-    class Meta: verbose_name = "Punteggi richiesti come requisito di acquisto"
 
 class abilita_sbloccata(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
@@ -561,7 +465,6 @@ class abilita_punteggio(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     punteggio = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
-    class Meta: verbose_name = "Punteggi assegnati dall'abilità"
 
 class Attivata(A_vista):
     elementi = models.ManyToManyField(Punteggio, blank=True, through='AttivataElemento')
@@ -596,7 +499,7 @@ class Tecnica(A_vista):
 class Infusione(Tecnica):
     aura_infusione = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': AURA, 'is_soprannaturale': True}, related_name="infusioni_secondarie")
     caratteristiche = models.ManyToManyField(Punteggio, through='InfusioneCaratteristica', related_name="infusioni_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
-    formula_attacco = models.CharField("Formula Attacco", max_length=255, blank=True, null=True, help_text="Es. {forza} + {livello} o 2d6 + {mira}. Se l'oggetto è un'arma, questo valore sovrascrive l'attacco base.")
+    formula_attacco = models.CharField("Formula Attacco", max_length=255, blank=True, null=True)
     statistiche_base = models.ManyToManyField(Statistica, through='InfusioneStatisticaBase', blank=True, related_name='infusione_statistiche_base')
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='infusione_generata', verbose_name="Proposta Originale")
     statistica_cariche = models.ForeignKey(Statistica, on_delete=models.SET_NULL, null=True, blank=True, related_name="infusioni_cariche", verbose_name="Statistica per Cariche Max")    
@@ -605,20 +508,34 @@ class Infusione(Tecnica):
     durata_attivazione = models.IntegerField("Durata Attivazione (secondi)", default=0)
 
     class Meta: verbose_name = "Infusione"; verbose_name_plural = "Infusioni"
+    
     @property
-    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_INFUSIONE
+    def costo_crediti(self): 
+        base = COSTO_PER_MATTONE_INFUSIONE
+        if self.aura_richiesta and self.aura_richiesta.stat_costo_acquisto_infusione:
+            val = self.aura_richiesta.stat_costo_acquisto_infusione.valore_base_predefinito
+            if val > 0: base = val
+        return self.livello * base
+        
     @property
     def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.infusionestatisticabase_set.select_related('statistica').all(), context={'livello': self.livello, 'aura': self.aura_richiesta}, formula=self.formula_attacco)
 
 class Tessitura(Tecnica):
-    formula = models.TextField("Formula", blank=True, null=True, help_text="Parametri: {elem}, {rango}.")
+    formula = models.TextField("Formula", blank=True, null=True)
     elemento_principale = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO})
     caratteristiche = models.ManyToManyField(Punteggio, through='TessituraCaratteristica', related_name="tessiture_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     statistiche_base = models.ManyToManyField(Statistica, through='TessituraStatisticaBase', blank=True, related_name='tessitura_statistiche_base')
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='tessitura_generata', verbose_name="Proposta Originale")
     class Meta: verbose_name = "Tessitura"; verbose_name_plural = "Tessiture"
+    
     @property
-    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_TESSITURA
+    def costo_crediti(self): 
+        base = COSTO_PER_MATTONE_TESSITURA
+        if self.aura_richiesta and self.aura_richiesta.stat_costo_acquisto_tessitura:
+            val = self.aura_richiesta.stat_costo_acquisto_tessitura.valore_base_predefinito
+            if val > 0: base = val
+        return self.livello * base
+        
     @property
     def TestoFormattato(self): return formatta_testo_generico(self.testo, formula=self.formula, statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').all(), context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta})
 
@@ -633,10 +550,6 @@ class TessituraCaratteristica(models.Model):
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
     class Meta: unique_together = ('tessitura', 'caratteristica')
-
-# Per compatibilità, manteniamo i vecchi modelli come "dead code" o li rimuoviamo. 
-# Se il database li ha ancora, Django potrebbe lamentarsi se non li trova nelle migrazioni. 
-# Per ora rimuoviamo InfusioneMattone e TessituraMattone se non servono più.
 
 class InfusioneStatisticaBase(models.Model):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)

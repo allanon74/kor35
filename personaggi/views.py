@@ -2,7 +2,6 @@ import string
 from collections import Counter
 from decimal import Decimal
 from django.shortcuts import render
-# MODIFICA: Aggiunto Sum agli import
 from django.db.models import Count, Sum, Prefetch, OuterRef, Exists
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
@@ -24,7 +23,9 @@ from .models import (
     Gruppo, Messaggio, Tabella, Mattone, 
     OggettoBase, ForgiaturaInCorso, 
     abilita_tier, abilita_requisito, abilita_sbloccata, 
-    abilita_punteggio, abilita_prerequisito
+    abilita_punteggio, abilita_prerequisito,
+    # Costanti
+    COSTO_PER_MATTONE_CREAZIONE
 )
 
 import uuid 
@@ -914,7 +915,19 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         livello = proposta.livello
         if livello == 0: return Response({"error": "La proposta deve avere almeno un componente."}, status=status.HTTP_400_BAD_REQUEST)
         
-        costo_invio = livello * 10
+        # CALCOLO COSTO DINAMICO CON FALLBACK
+        costo_base = COSTO_PER_MATTONE_CREAZIONE
+        if proposta.tipo == 'INF':
+             if proposta.aura.stat_costo_creazione_infusione:
+                 val = proposta.aura.stat_costo_creazione_infusione.valore_base_predefinito
+                 if val > 0: costo_base = val
+        else: # TES
+             if proposta.aura.stat_costo_creazione_tessitura:
+                 val = proposta.aura.stat_costo_creazione_tessitura.valore_base_predefinito
+                 if val > 0: costo_base = val
+                 
+        costo_invio = livello * costo_base
+
         if personaggio.crediti < costo_invio: return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
 
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
