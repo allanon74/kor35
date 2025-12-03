@@ -331,12 +331,12 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         obj = form.instance
         tecnica_creata = None
         tipo_tecnica = None
-        try:
-            if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
-                tecnica_creata = obj.infusione_generata; tipo_tecnica = 'infusione'
-            elif hasattr(obj, 'tessitura_generata') and obj.tessitura_generata:
-                tecnica_creata = obj.tessitura_generata; tipo_tecnica = 'tessitura'
-        except Exception: pass
+        
+        # Rimosso il try-except silenzioso per vedere eventuali errori
+        if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
+            tecnica_creata = obj.infusione_generata; tipo_tecnica = 'infusione'
+        elif hasattr(obj, 'tessitura_generata') and obj.tessitura_generata:
+            tecnica_creata = obj.tessitura_generata; tipo_tecnica = 'tessitura'
 
         if tecnica_creata and obj.stato != STATO_PROPOSTA_APPROVATA:
             has_componenti = False
@@ -365,23 +365,32 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
             obj.stato = STATO_PROPOSTA_APPROVATA
             if not obj.note_staff: obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
             obj.save()
+            
+            # --- LOGICA PAGAMENTO ATTIVATA ---
+            # Scala i crediti per la creazione (costo acquisto tecnica personale)
+            # Permette saldo negativo
+            costo = tecnica_creata.costo_crediti
+            if costo > 0:
+                obj.personaggio.modifica_crediti(-costo, f"Approvazione e creazione tecnica: {tecnica_creata.nome}")
+                obj.personaggio.aggiungi_log(f"Ha speso {costo} CR per la creazione della tecnica '{tecnica_creata.nome}'.")
+            # --------------------------------
 
             pg = obj.personaggio
             if tipo_tecnica == 'infusione':
                 if not pg.infusioni_possedute.filter(id=tecnica_creata.id).exists():
                     PersonaggioInfusione.objects.create(personaggio=pg, infusione=tecnica_creata, data_acquisizione=timezone.now())
-                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente l'infusione '{tecnica_creata.nome}'.")
+                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto l'infusione '{tecnica_creata.nome}'.")
             elif tipo_tecnica == 'tessitura':
                 if not pg.tessiture_possedute.filter(id=tecnica_creata.id).exists():
                     PersonaggioTessitura.objects.create(personaggio=pg, tessitura=tecnica_creata, data_acquisizione=timezone.now())
-                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto gratuitamente la tessitura '{tecnica_creata.nome}'.")
+                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto la tessitura '{tecnica_creata.nome}'.")
 
             Messaggio.objects.create(
                 mittente=request.user,
                 destinatario_personaggio=obj.personaggio,
                 tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 titolo=f"Esito Proposta: {obj.nome}",
-                testo=f"La tua proposta '{obj.nome}' è stata valutata e ACCETTATA!\n\nHai ottenuto gratuitamente la tecnica '{tecnica_creata.nome}'.",
+                testo=f"La tua proposta '{obj.nome}' è stata valutata e ACCETTATA!\n\nHai ottenuto la tecnica '{tecnica_creata.nome}'.",
                 salva_in_cronologia=True
             )
                     
