@@ -2,7 +2,8 @@ import string
 from collections import Counter
 from decimal import Decimal
 from django.shortcuts import render
-from django.db.models import Count, Prefetch, OuterRef, Exists
+# MODIFICA: Aggiunto Sum agli import
+from django.db.models import Count, Sum, Prefetch, OuterRef, Exists
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from rest_framework import serializers
@@ -10,18 +11,19 @@ from django.utils import timezone
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 
-# --- IMPORT MODELLI (Mantenuti tutti gli originali + Nuovi) ---
+# --- IMPORT MODELLI AGGIORNATI ---
 from .models import (
     OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, 
     A_vista, Inventario, Infusione, Tessitura, Personaggio, TransazioneSospesa, 
     CreditoMovimento, PuntiCaratteristicaMovimento, Punteggio, CARATTERISTICA, 
-    PersonaggioModelloAura, ModelloAura, PropostaTecnica, PropostaTecnicaMattone, 
+    PersonaggioModelloAura, ModelloAura, PropostaTecnica, 
+    # NUOVI MODELLI INTERMEDI
+    PropostaTecnicaCaratteristica, InfusioneCaratteristica, TessituraCaratteristica,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, LetturaMessaggio, PersonaggioLog,
     STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES,
-    Gruppo, Messaggio, Tabella, Mattone, # <--- Tabella e Mattone ripristinati
-    # NUOVI IMPORT
+    Gruppo, Messaggio, Tabella, Mattone, 
     OggettoBase, ForgiaturaInCorso, 
-    abilita_tier, abilita_requisito, abilita_sbloccata, # Through models necessari per i viewset esistenti
+    abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_prerequisito
 )
 
@@ -55,7 +57,7 @@ import json
 # --- IMPORT SERVICES ---
 from .services import (
     monta_potenziamento, crea_oggetto_da_infusione, GestioneOggettiService, 
-    GestioneCraftingService # <--- NUOVO SERVICE
+    GestioneCraftingService 
 )
 
 # --- IMPORT SERIALIZERS ---
@@ -69,12 +71,10 @@ from .serializers import (
     PropostaTecnicaSerializer, PersonaggioLogSerializer, PersonaggioAutocompleteSerializer,
     MessaggioCreateSerializer, MessaggioSerializer, MessaggioBroadcastCreateSerializer,
     AbilitaMasterListSerializer, PersonaggioPublicSerializer,
-    # Serializers per ViewSet originali
     AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer, 
     PunteggioSerializer, TabellaSerializer,
     AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
-    # NUOVO SERIALIZER
     OggettoBaseSerializer
 )
 
@@ -297,12 +297,13 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
 
         possedute_ids = personaggio.infusioni_possedute.values_list('id', flat=True)
         
+        # MODIFICA: Uso Sum('componenti__valore') per calcolare il livello
         tutte_infusioni = Infusione.objects.exclude(id__in=possedute_ids).annotate(
-            livello_calc=Count('mattoni')
+            livello_calc=Sum('componenti__valore')
         ).select_related(
             'aura_richiesta', 'aura_infusione'
         ).prefetch_related(
-            'infusionemattone_set__mattone',
+            'componenti__caratteristica',
             'infusionestatisticabase_set__statistica'
         ).order_by('livello_calc', 'nome')
 
@@ -332,7 +333,8 @@ class AcquisisciInfusioneView(APIView):
 
         try:
             personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
-            infusione = Infusione.objects.prefetch_related('infusionemattone_set').get(id=infusione_id)
+            # MODIFICA: Prefetch su componenti
+            infusione = Infusione.objects.prefetch_related('componenti').get(id=infusione_id)
         except (Personaggio.DoesNotExist, Infusione.DoesNotExist): return Response({"error": "Personaggio o Infusione non trovati."}, status=status.HTTP_404_NOT_FOUND)
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(infusione)
@@ -376,12 +378,13 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
 
         possedute_ids = personaggio.tessiture_possedute.values_list('id', flat=True)
         
+        # MODIFICA: Uso Sum('componenti__valore') per calcolare il livello
         tutte_tessiture = Tessitura.objects.exclude(id__in=possedute_ids).annotate(
-            livello_calc=Count('mattoni')
+            livello_calc=Sum('componenti__valore')
         ).select_related(
             'aura_richiesta', 'elemento_principale'
         ).prefetch_related(
-            'tessituramattone_set__mattone',
+            'componenti__caratteristica',
             'tessiturastatisticabase_set__statistica'
         ).order_by('livello_calc', 'nome')
 
@@ -412,7 +415,8 @@ class AcquisisciTessituraView(APIView):
 
         try:
             personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
-            tessitura = Tessitura.objects.prefetch_related('tessituramattone_set').get(id=tessitura_id)
+            # MODIFICA: Prefetch su componenti
+            tessitura = Tessitura.objects.prefetch_related('componenti').get(id=tessitura_id)
         except (Personaggio.DoesNotExist, Tessitura.DoesNotExist): return Response({"error": "Oggetto non trovato."}, status=status.HTTP_404_NOT_FOUND)
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(tessitura)
@@ -538,14 +542,16 @@ class PersonaggioMeView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
         try:
+            # MODIFICA: Prefetch aggiornati per usare componenti__caratteristica
             personaggio = Personaggio.objects.select_related(
                 'tipologia', 'inventario_ptr'
             ).prefetch_related(
                 'movimenti_credito', 'movimenti_pc', 
-                # 'log_eventi', 'transazioni_in_uscita_sospese', 'transazioni_in_entrata_sospese',
                 'abilita_possedute', 'attivate_possedute__statistiche_base__statistica', 'attivate_possedute__elementi__elemento',
-                'infusioni_possedute__statistiche_base__statistica', 'infusioni_possedute__mattoni__mattone',
-                'tessiture_possedute__statistiche_base__statistica', 'tessiture_possedute__mattoni__mattone',
+                
+                # Aggiornato da __mattoni__mattone a __componenti__caratteristica
+                'infusioni_possedute__statistiche_base__statistica', 'infusioni_possedute__componenti__caratteristica',
+                'tessiture_possedute__statistiche_base__statistica', 'tessiture_possedute__componenti__caratteristica',
                 
                 Prefetch(
                     'inventario_ptr__tracciamento_oggetti',
@@ -899,38 +905,67 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     @action(detail=True, methods=['post'])
     def invia_proposta(self, request, pk=None):
+        # LOGICA AGGIORNATA PER USARE COMPONENTI INVECE DI MATTONI
         proposta = self.get_object()
         personaggio = proposta.personaggio
         if proposta.stato != STATO_PROPOSTA_BOZZA: return Response({"error": "La proposta non è in stato di bozza."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Livello calcolato sui valori delle caratteristiche
         livello = proposta.livello
-        if livello == 0: return Response({"error": "La proposta deve avere almeno un mattone."}, status=status.HTTP_400_BAD_REQUEST)
+        if livello == 0: return Response({"error": "La proposta deve avere almeno un componente."}, status=status.HTTP_400_BAD_REQUEST)
+        
         costo_invio = livello * 10
         if personaggio.crediti < costo_invio: return Response({"error": f"Crediti insufficienti. Richiesti: {costo_invio} CR."}, status=status.HTTP_400_BAD_REQUEST)
 
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
         if val_aura < 1: return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
-        if livello > val_aura: return Response({"error": f"Troppi mattoni ({livello}) per il valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
+        if livello > val_aura: return Response({"error": f"Troppi componenti ({livello}) per il valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
 
-        mattoni_objs = [pm.mattone for pm in proposta.propostatecnicamattone_set.select_related('mattone__caratteristica_associata').all().order_by('ordine')]
-        mattoni_ids = [m.id for m in mattoni_objs]
-        counter_mattoni = Counter(mattoni_ids)
+        # CHECK CARATTERISTICHE
+        componenti = proposta.componenti.select_related('caratteristica').all()
         punteggi_pg = personaggio.caratteristiche_base
         
-        for m in mattoni_objs:
-            if m.aura_id != proposta.aura_id: return Response({"error": f"Il mattone {m.nome} non appartiene all'aura della proposta."}, status=status.HTTP_400_BAD_REQUEST)
-            caratt_nome = m.caratteristica_associata.nome
-            val_caratt = punteggi_pg.get(caratt_nome, 0)
-            if val_caratt < 1: return Response({"error": f"Non possiedi la caratteristica {caratt_nome} per il mattone {m.nome}."}, status=status.HTTP_400_BAD_REQUEST)
-            qty = counter_mattoni[m.id]
-            if qty > val_caratt: return Response({"error": f"Hai usato il mattone {m.nome} {qty} volte, ma hai solo {val_caratt} in {caratt_nome}."}, status=status.HTTP_400_BAD_REQUEST)
+        # Insieme dei mattoni virtuali usati (Aura Proposta + Caratteristica Componente)
+        # Ci serve per i check del Modello Aura
+        caratteristiche_usate_ids = set()
 
+        for comp in componenti:
+            caratt = comp.caratteristica
+            caratteristiche_usate_ids.add(caratt.id)
+            
+            val_richiesto = comp.valore
+            val_posseduto = punteggi_pg.get(caratt.nome, 0)
+            
+            if val_posseduto < val_richiesto:
+                return Response({"error": f"Non hai abbastanza {caratt.nome} per sostenere questa tecnica (Richiesto: {val_richiesto}, Hai: {val_posseduto})."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # CHECK MODELLO AURA
         modello = personaggio.modelli_aura.filter(aura=proposta.aura).first()
         if modello:
-            set_ids_proposta = set(mattoni_ids)
+            # 1. Mattoni Proibiti
+            # Se esiste un mattone proibito che corrisponde a (Aura Proposta, Caratteristica Usata) -> ERRORE
             proibiti_ids = set(modello.mattoni_proibiti.values_list('id', flat=True))
-            if set_ids_proposta.intersection(proibiti_ids): return Response({"error": "La proposta contiene mattoni proibiti dal tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
-            obbligatori_ids = set(modello.mattoni_obbligatori.values_list('id', flat=True))
-            if not obbligatori_ids.issubset(set_ids_proposta): return Response({"error": "La proposta non contiene tutti i mattoni obbligatori del tuo modello aura."}, status=status.HTTP_400_BAD_REQUEST)
+            if proibiti_ids:
+                # Troviamo se tra i componenti c'è una caratteristica che forma un mattone proibito
+                # Un mattone è definito da (aura, caratteristica_associata)
+                # Quindi cerchiamo Mattone where id in proibiti AND aura = proposta.aura AND caratt in usate
+                mattoni_violati = Mattone.objects.filter(
+                    id__in=proibiti_ids,
+                    aura=proposta.aura,
+                    caratteristica_associata__id__in=caratteristiche_usate_ids
+                )
+                if mattoni_violati.exists():
+                    nomi = ", ".join([m.nome for m in mattoni_violati])
+                    return Response({"error": f"La proposta usa combinazioni (mattoni) proibite dal modello: {nomi}."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # 2. Mattoni Obbligatori
+            # Per ogni mattone obbligatorio, deve esserci la caratteristica corrispondente nella proposta
+            mattoni_obbligatori = modello.mattoni_obbligatori.all()
+            if mattoni_obbligatori.exists():
+                for m_obb in mattoni_obbligatori:
+                    # Se il mattone obbligatorio richiede caratteristica X, la proposta deve avere X nei componenti
+                    if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids:
+                        return Response({"error": f"La proposta manca di un componente obbligatorio: {m_obb.nome} ({m_obb.caratteristica_associata.nome})."}, status=status.HTTP_400_BAD_REQUEST)
 
         personaggio.modifica_crediti(-costo_invio, f"Invio proposta {proposta.tipo}: {proposta.nome}")
         proposta.costo_invio_pagato = costo_invio
