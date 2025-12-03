@@ -959,14 +959,29 @@ class Tecnica(A_vista):
         ordering = ['nome']
         
     @property
-    def livello(self): return self.mattoni.count()
+    def livello(self): 
+        return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
 
 class Infusione(Tecnica):
     aura_infusione = models.ForeignKey(
         Punteggio, on_delete=models.SET_NULL, null=True, blank=True, 
         limit_choices_to={'tipo': AURA, 'is_soprannaturale': True}, related_name="infusioni_secondarie"
     )
-    mattoni = models.ManyToManyField(Mattone, through='InfusioneMattone', related_name="infusioni_utilizzatrici")
+    # mattoni = models.ManyToManyField(Mattone, through='InfusioneMattone', related_name="infusioni_utilizzatrici")
+    
+    caratteristiche = models.ManyToManyField(
+        Punteggio, 
+        through='InfusioneCaratteristica', 
+        related_name="infusioni_utilizzatrici",
+        limit_choices_to={'tipo': CARATTERISTICA}
+    )
+    
+    formula_attacco = models.CharField(
+        "Formula Attacco", 
+        max_length=255, 
+        blank=True, null=True, 
+        help_text="Formula di attacco se l'oggetto è un'arma. "
+    )
     
     # Infusione ha SOLO statistiche_base
     statistiche_base = models.ManyToManyField(
@@ -1028,7 +1043,11 @@ class Infusione(Tecnica):
         return formatta_testo_generico(
             self.testo, 
             statistiche_base=self.infusionestatisticabase_set.select_related('statistica').all(),
-            context={'livello': self.livello, 'aura': self.aura_richiesta}
+            context={
+                'livello': self.livello, 
+                'aura': self.aura_richiesta, 
+                'aura_sec': self.aura_infusione, 
+                }
         )
 
 class Tessitura(Tecnica):
@@ -1037,7 +1056,14 @@ class Tessitura(Tecnica):
         Punteggio, on_delete=models.SET_NULL, null=True, blank=True, 
         limit_choices_to={'tipo': ELEMENTO}
     )
-    mattoni = models.ManyToManyField(Mattone, through='TessituraMattone', related_name="tessiture_utilizzatrici")
+    # mattoni = models.ManyToManyField(Mattone, through='TessituraMattone', related_name="tessiture_utilizzatrici")
+    
+    caratteristiche = models.ManyToManyField(
+        Punteggio, 
+        through='TessituraCaratteristica', 
+        related_name="tessiture_utilizzatrici",
+        limit_choices_to={'tipo': CARATTERISTICA}
+    )   
     
     # Tessitura ha SOLO statistiche_base
     statistiche_base = models.ManyToManyField(
@@ -1058,7 +1084,8 @@ class Tessitura(Tecnica):
         verbose_name_plural = "Tessiture"
     
     @property
-    def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_TESSITURA
+    def costo_crediti(self): 
+        return self.livello * COSTO_PER_MATTONE_TESSITURA
     
     @property
     def TestoFormattato(self):
@@ -1072,6 +1099,22 @@ class Tessitura(Tecnica):
                 'aura': self.aura_richiesta
             }
         )
+
+class InfusioneCaratteristica(models.Model):
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE, related_name='componenti')
+    caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
+    valore = models.IntegerField(default=1)
+    
+    class Meta:
+        unique_together = ('infusione', 'caratteristica')
+
+class TessituraCaratteristica(models.Model):
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE, related_name='componenti')
+    caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
+    valore = models.IntegerField(default=1)
+
+    class Meta:
+        unique_together = ('tessitura', 'caratteristica')
 
 class InfusioneMattone(models.Model):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
@@ -1519,51 +1562,106 @@ class Personaggio(Inventario):
         return pb.get(aura.nome, 0)
     
     def valida_acquisto_tecnica(self, t):
-        # 1. Controllo Aura
+        # 1. Controllo Aura (Livello vs Aura PG)
         if not t.aura_richiesta: 
             return False, "Aura mancante."
         
-        if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): 
+        livello_tecnica = t.livello
+        if livello_tecnica > self.get_valore_aura_effettivo(t.aura_richiesta): 
             return False, "Livello tecnica superiore al valore Aura."
 
-        # 2. Controllo Requisiti Mattoni (Quantità vs Caratteristica)
-        from collections import Counter
-        # Ottieni gli ID dei mattoni della tecnica
-        mattoni_tecnica_ids = list(t.mattoni.values_list('id', flat=True))
-        cnt = Counter(mattoni_tecnica_ids)
+        # 2. Controllo Requisiti Caratteristiche (Valore richiesto vs Caratteristica PG)
         base = self.caratteristiche_base
         
-        for mid, c in cnt.items():
-            try:
-                m = Mattone.objects.get(pk=mid)
-                if c > base.get(m.caratteristica_associata.nome, 0): 
-                    return False, f"Requisito {m.nome} non soddisfatto (Richiede {c}, hai {base.get(m.caratteristica_associata.nome, 0)})."
-            except: pass
+        # 'componenti' è il related_name definito nelle tabelle intermedie sopra
+        for comp in t.componenti.select_related('caratteristica').all():
+            nome_car = comp.caratteristica.nome
+            val_richiesto = comp.valore
+            val_posseduto = base.get(nome_car, 0)
+            
+            if val_richiesto > val_posseduto:
+                return False, f"Requisito {nome_car} non soddisfatto (Serve {val_richiesto}, hai {val_posseduto})."
 
         # 3. Controllo Modello Aura (Proibiti e Obbligatori)
         modello = self.modelli_aura.filter(aura=t.aura_richiesta).first()
         
         if modello:
-            set_mattoni_tecnica = set(mattoni_tecnica_ids)
+            # Ricostruiamo i "Mattoni Virtuali" usati dalla tecnica.
+            # Un mattone "esiste" logicamente se stiamo usando una certa Caratteristica sotto una certa Aura.
             
-            # A. Check Proibiti (Nessuno dei mattoni della tecnica deve essere proibito)
+            caratteristiche_usate_ids = set(t.componenti.values_list('caratteristica_id', flat=True))
+            
+            # Recuperiamo i mattoni proibiti/obbligatori definiti nel modello
             ids_proibiti = set(modello.mattoni_proibiti.values_list('id', flat=True))
-            intersezione_proibiti = set_mattoni_tecnica.intersection(ids_proibiti)
             
-            if intersezione_proibiti:
-                nomi_vietati = ", ".join(Mattone.objects.filter(id__in=intersezione_proibiti).values_list('nome', flat=True))
-                return False, f"Usa mattoni proibiti dal tuo modello aura: {nomi_vietati}."
+            if ids_proibiti:
+                # Cerca se esiste un mattone proibito che corrisponde alla coppia (Aura Tecnica, Caratteristica Usata)
+                mattoni_violati = Mattone.objects.filter(
+                    id__in=ids_proibiti,
+                    aura=t.aura_richiesta,
+                    caratteristica_associata__id__in=caratteristiche_usate_ids
+                )
+                
+                if mattoni_violati.exists():
+                     nomi = ", ".join([m.nome for m in mattoni_violati])
+                     return False, f"La tecnica usa combinazioni proibite dal tuo modello aura: {nomi}."
 
-            # B. Check Obbligatori (La tecnica DEVE contenere TUTTI i tipi di mattoni obbligatori elencati)
-            ids_obbligatori = set(modello.mattoni_obbligatori.values_list('id', flat=True))
-            
-            # Se ci sono obblighi, verifichiamo che l'insieme degli obbligatori sia un sottoinsieme dei mattoni della tecnica
-            if ids_obbligatori and not ids_obbligatori.issubset(set_mattoni_tecnica):
-                mancanti = ids_obbligatori - set_mattoni_tecnica
-                nomi_mancanti = ", ".join(Mattone.objects.filter(id__in=mancanti).values_list('nome', flat=True))
-                return False, f"La tecnica non contiene i mattoni obbligatori richiesti dal modello: {nomi_mancanti}."
+            # Controllo Obbligatori
+            mattoni_obbligatori = modello.mattoni_obbligatori.all()
+            if mattoni_obbligatori.exists():
+                # Ogni mattone obbligatorio (es. "Fuoco") implica che la tecnica DEVE usare la caratteristica associata (es. "Forza")
+                for m_obb in mattoni_obbligatori:
+                    if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids:
+                        return False, f"Manca un componente obbligatorio per il modello: {m_obb.nome} ({m_obb.caratteristica_associata.nome})."
 
         return True, "OK"
+    
+    # def valida_acquisto_tecnica(self, t): # old model su mattoni
+    #     # 1. Controllo Aura
+    #     if not t.aura_richiesta: 
+    #         return False, "Aura mancante."
+        
+    #     if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): 
+    #         return False, "Livello tecnica superiore al valore Aura."
+
+    #     # 2. Controllo Requisiti Mattoni (Quantità vs Caratteristica)
+    #     from collections import Counter
+    #     # Ottieni gli ID dei mattoni della tecnica
+    #     mattoni_tecnica_ids = list(t.mattoni.values_list('id', flat=True))
+    #     cnt = Counter(mattoni_tecnica_ids)
+    #     base = self.caratteristiche_base
+        
+    #     for mid, c in cnt.items():
+    #         try:
+    #             m = Mattone.objects.get(pk=mid)
+    #             if c > base.get(m.caratteristica_associata.nome, 0): 
+    #                 return False, f"Requisito {m.nome} non soddisfatto (Richiede {c}, hai {base.get(m.caratteristica_associata.nome, 0)})."
+    #         except: pass
+
+    #     # 3. Controllo Modello Aura (Proibiti e Obbligatori)
+    #     modello = self.modelli_aura.filter(aura=t.aura_richiesta).first()
+        
+    #     if modello:
+    #         set_mattoni_tecnica = set(mattoni_tecnica_ids)
+            
+    #         # A. Check Proibiti (Nessuno dei mattoni della tecnica deve essere proibito)
+    #         ids_proibiti = set(modello.mattoni_proibiti.values_list('id', flat=True))
+    #         intersezione_proibiti = set_mattoni_tecnica.intersection(ids_proibiti)
+            
+    #         if intersezione_proibiti:
+    #             nomi_vietati = ", ".join(Mattone.objects.filter(id__in=intersezione_proibiti).values_list('nome', flat=True))
+    #             return False, f"Usa mattoni proibiti dal tuo modello aura: {nomi_vietati}."
+
+    #         # B. Check Obbligatori (La tecnica DEVE contenere TUTTI i tipi di mattoni obbligatori elencati)
+    #         ids_obbligatori = set(modello.mattoni_obbligatori.values_list('id', flat=True))
+            
+    #         # Se ci sono obblighi, verifichiamo che l'insieme degli obbligatori sia un sottoinsieme dei mattoni della tecnica
+    #         if ids_obbligatori and not ids_obbligatori.issubset(set_mattoni_tecnica):
+    #             mancanti = ids_obbligatori - set_mattoni_tecnica
+    #             nomi_mancanti = ", ".join(Mattone.objects.filter(id__in=mancanti).values_list('nome', flat=True))
+    #             return False, f"La tecnica non contiene i mattoni obbligatori richiesti dal modello: {nomi_mancanti}."
+
+    #     return True, "OK"
     
     @property
     def modificatori_calcolati(self):
@@ -2020,12 +2118,23 @@ class PropostaTecnica(models.Model):
         limit_choices_to={'tipo': AURA},
         related_name='proposte_aura'
     )
+    aura_infusione = models.ForeignKey(
+        Punteggio, on_delete=models.SET_NULL, null=True, blank=True,
+        limit_choices_to={'tipo': AURA}, related_name='proposte_infusione'
+    )
     
-    # AGGIUNTO related_name='proposte_in_cui_usato'
-    mattoni = models.ManyToManyField(
-        Mattone, 
-        through='PropostaTecnicaMattone',
-        related_name='proposte_in_cui_usato'
+    # # AGGIUNTO related_name='proposte_in_cui_usato'
+    # mattoni = models.ManyToManyField(
+    #     Mattone, 
+    #     through='PropostaTecnicaMattone',
+    #     related_name='proposte_in_cui_usato'
+    # )
+    
+    caratteristiche = models.ManyToManyField(
+        Punteggio, 
+        through='PropostaTecnicaCaratteristica',
+        related_name='proposte_in_cui_usato',
+        limit_choices_to={'tipo': CARATTERISTICA}
     )
     
     costo_invio_pagato = models.IntegerField(default=0, help_text="Crediti spesi per l'invio")
@@ -2044,7 +2153,16 @@ class PropostaTecnica(models.Model):
 
     @property
     def livello(self):
-        return self.mattoni.count()
+        return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
+
+class PropostaTecnicaCaratteristica(models.Model):
+    proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE, related_name='componenti')
+    caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
+    valore = models.IntegerField(default=1)
+
+    class Meta:
+        ordering = ['caratteristica__nome']
+        unique_together = ('proposta', 'caratteristica')
 
 class PropostaTecnicaMattone(models.Model):
     proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE)

@@ -32,6 +32,7 @@ from .models import (
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_RIFIUTATA, # <--- RISOLTO ERRORE
     LetturaMessaggio,
     Oggetto, ClasseOggetto, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA,
+    PropostaTecnicaCaratteristica,
 )
 
 # --- Serializer di Base ---
@@ -441,10 +442,17 @@ class AttivataSerializer(serializers.ModelSerializer):
             return personaggio.get_costo_item_scontato(obj)
         return obj.costo_crediti
 
+class ComponenteTecnicaSerializer(serializers.Serializer):
+    """ Serializer generico per InfusioneCaratteristica, TessituraCaratteristica """
+    caratteristica = PunteggioSmallSerializer(read_only=True)
+    # Per la scrittura (se servisse in contesti admin, ma qui è principalmente read-only per il frontend)
+    valore = serializers.IntegerField()
+
 # New
 class InfusioneSerializer(serializers.ModelSerializer):
     statistiche_base = InfusioneStatisticaBaseSerializer(source='infusionestatisticabase_set', many=True, read_only=True)
-    mattoni = InfusioneMattoneSerializer(source='infusionemattone_set', many=True, read_only=True)
+    # mattoni = InfusioneMattoneSerializer(source='infusionemattone_set', many=True, read_only=True)
+    componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     aura_infusione = PunteggioSmallSerializer(read_only=True)
     TestoFormattato = serializers.CharField(read_only=True)
@@ -459,8 +467,9 @@ class InfusioneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Infusione
         fields = (
-            'id', 'nome', 'testo', 'TestoFormattato', 'testo_formattato_personaggio', 
-            'livello', 'aura_richiesta', 'aura_infusione', 'mattoni', 'statistiche_base', 
+            'id', 'nome', 'testo', 'formula_attacco', 'TestoFormattato', 'testo_formattato_personaggio', 
+            'livello', 'aura_richiesta', 'aura_infusione', 'componenti', 'statistiche_base', 
+            # 'mattoni', 
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
         )
     
@@ -472,7 +481,8 @@ class InfusioneSerializer(serializers.ModelSerializer):
 
 class TessituraSerializer(serializers.ModelSerializer):
     statistiche_base = TessituraStatisticaBaseSerializer(source='tessiturastatisticabase_set', many=True, read_only=True)
-    mattoni = TessituraMattoneSerializer(source='tessituramattone_set', many=True, read_only=True)
+    # mattoni = TessituraMattoneSerializer(source='tessituramattone_set', many=True, read_only=True)
+    componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     elemento_principale = PunteggioSmallSerializer(read_only=True)
     TestoFormattato = serializers.CharField(read_only=True)
@@ -488,7 +498,9 @@ class TessituraSerializer(serializers.ModelSerializer):
         model = Tessitura
         fields = (
             'id', 'nome', 'testo', 'formula', 'TestoFormattato', 'testo_formattato_personaggio', 
-            'livello', 'aura_richiesta', 'elemento_principale', 'mattoni', 'statistiche_base',
+            'livello', 'aura_richiesta', 'elemento_principale', 
+            # 'mattoni', 
+            'componenti', 'statistiche_base',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
         )
     
@@ -835,57 +847,110 @@ class PropostaTecnicaMattoneSerializer(serializers.ModelSerializer):
     class Meta:
         model = PropostaTecnicaMattone
         fields = ('id', 'mattone', 'mattone_id', 'ordine')
+        
+class PropostaTecnicaCaratteristicaSerializer(serializers.ModelSerializer):
+    caratteristica = PunteggioSmallSerializer(read_only=True)
+    caratteristica_id = serializers.PrimaryKeyRelatedField(
+        queryset=Punteggio.objects.filter(tipo='CA'), source='caratteristica', write_only=True
+    )
+    
+    class Meta:
+        model = PropostaTecnicaCaratteristica
+        fields = ('id', 'caratteristica', 'caratteristica_id', 'valore')
 
 class PropostaTecnicaSerializer(serializers.ModelSerializer):
-    mattoni = PropostaTecnicaMattoneSerializer(source='propostatecnicamattone_set', many=True, read_only=True)
-    mattoni_ids = serializers.ListField(
-        child=serializers.IntegerField(), write_only=True, required=False
+    # mattoni = PropostaTecnicaMattoneSerializer(source='propostatecnicamattone_set', many=True, read_only=True)
+    componenti = PropostaTecnicaCaratteristicaSerializer(many=True, read_only=True)
+    componenti_data = serializers.ListField(
+        child=serializers.DictField(), write_only=True, required=False
     )
+    # mattoni_ids = serializers.ListField(
+    #     child=serializers.IntegerField(), write_only=True, required=False
+    # )
     aura_details = PunteggioSmallSerializer(source='aura', read_only=True)
     aura = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.filter(tipo=AURA))
+    aura_infusione = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.filter(tipo='AU'), required=False, allow_null=True)
     
     class Meta:
         model = PropostaTecnica
         fields = (
             'id', 'tipo', 'stato', 'nome', 'descrizione', 
-            'aura', 'aura_details', 'mattoni', 'mattoni_ids', 
+            'aura', 'aura_details', 'aura_infusione', 
+            # 'mattoni', 'mattoni_ids', 
+            'componenti', 'componenti_data',
             'livello', 'costo_invio_pagato', 'note_staff', 'data_creazione'
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
 
     def create(self, validated_data):
-        mattoni_ids = validated_data.pop('mattoni_ids', [])
+        # mattoni_ids = validated_data.pop('mattoni_ids', [])
+        comp_data = validated_data.pop('componenti_data', [])
         personaggio = self.context['personaggio']
         
         proposta = PropostaTecnica.objects.create(personaggio=personaggio, **validated_data)
         
-        for idx, m_id in enumerate(mattoni_ids):
-            try:
-                m = Mattone.objects.get(pk=m_id)
-                PropostaTecnicaMattone.objects.create(proposta=proposta, mattone=m, ordine=idx)
-            except Mattone.DoesNotExist:
-                pass
+        # for idx, m_id in enumerate(mattoni_ids):
+        #     try:
+        #         m = Mattone.objects.get(pk=m_id)
+        #         PropostaTecnicaMattone.objects.create(proposta=proposta, mattone=m, ordine=idx)
+        #     except Mattone.DoesNotExist:
+        #         pass
+        # return proposta
+        
+        for item in comp_data:
+            c_id = item.get('id') 
+            val = item.get('valore', 1)
+            if c_id:
+                PropostaTecnicaCaratteristica.objects.create(
+                    proposta=proposta, 
+                    caratteristica_id=c_id, 
+                    valore=val
+                )
         return proposta
 
+    # def update(self, instance, validated_data):
+    #     if instance.stato != STATO_PROPOSTA_BOZZA:
+    #         raise serializers.ValidationError("Non puoi modificare una proposta già inviata.")
+            
+    #     mattoni_ids = validated_data.pop('mattoni_ids', None)
+        
+    #     for attr, value in validated_data.items():
+    #         setattr(instance, attr, value)
+    #     instance.save()
+        
+    #     if mattoni_ids is not None:
+    #         # Ricrea i mattoni
+    #         instance.propostatecnicamattone_set.all().delete()
+    #         for idx, m_id in enumerate(mattoni_ids):
+    #             try:
+    #                 m = Mattone.objects.get(pk=m_id)
+    #                 PropostaTecnicaMattone.objects.create(proposta=instance, mattone=m, ordine=idx)
+    #             except Mattone.DoesNotExist:
+    #                 pass
+    #     return instance
+    
     def update(self, instance, validated_data):
         if instance.stato != STATO_PROPOSTA_BOZZA:
             raise serializers.ValidationError("Non puoi modificare una proposta già inviata.")
             
-        mattoni_ids = validated_data.pop('mattoni_ids', None)
+        comp_data = validated_data.pop('componenti_data', None)
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
-        if mattoni_ids is not None:
-            # Ricrea i mattoni
-            instance.propostatecnicamattone_set.all().delete()
-            for idx, m_id in enumerate(mattoni_ids):
-                try:
-                    m = Mattone.objects.get(pk=m_id)
-                    PropostaTecnicaMattone.objects.create(proposta=instance, mattone=m, ordine=idx)
-                except Mattone.DoesNotExist:
-                    pass
+        if comp_data is not None:
+            # Ricrea i componenti
+            instance.componenti.all().delete()
+            for item in comp_data:
+                c_id = item.get('id')
+                val = item.get('valore', 1)
+                if c_id:
+                    PropostaTecnicaCaratteristica.objects.create(
+                        proposta=instance, 
+                        caratteristica_id=c_id, 
+                        valore=val
+                    )
         return instance
     
 class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
