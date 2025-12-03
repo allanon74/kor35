@@ -298,8 +298,8 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
     readonly_fields = ('personaggio', 'componenti_text', 'costo_invio_pagato', 'data_invio')
     
     def componenti_text(self, obj):
-        # Mostra una lista testuale delle caratteristiche e valori
-        return ", ".join([f"{c.caratteristica.nome} ({c.valore})" for c in obj.propostatecnicacaratteristica_set.all()])
+        # CORREZIONE: Usa 'componenti' (related_name)
+        return ", ".join([f"{c.caratteristica.nome} ({c.valore})" for c in obj.componenti.all()])
     componenti_text.short_description = "Componenti Richiesti"
 
     def get_inline_instances(self, request, obj=None):
@@ -340,13 +340,12 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
 
         if tecnica_creata and obj.stato != STATO_PROPOSTA_APPROVATA:
             has_componenti = False
-            # Verifichiamo se esistono già componenti copiati sulla tecnica finale
-            if tipo_tecnica == 'infusione': has_componenti = tecnica_creata.infusionecaratteristica_set.exists()
-            else: has_componenti = tecnica_creata.tessituracaratteristica_set.exists()
+            # CORREZIONE: Usa 'componenti' (related_name), valido per entrambi
+            has_componenti = tecnica_creata.componenti.exists()
 
             if not has_componenti:
-                # Copia Caratteristiche dalla Proposta alla Tecnica
-                componenti_proposta = obj.propostatecnicacaratteristica_set.all()
+                # CORREZIONE: Usa 'componenti' anche per la proposta
+                componenti_proposta = obj.componenti.all()
                 for cp in componenti_proposta:
                     if tipo_tecnica == 'infusione':
                         InfusioneCaratteristica.objects.create(
@@ -368,7 +367,6 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
             
             # --- LOGICA PAGAMENTO ATTIVATA ---
             # Scala i crediti per la creazione (costo acquisto tecnica personale)
-            # Permette saldo negativo
             costo = tecnica_creata.costo_crediti
             if costo > 0:
                 obj.personaggio.modifica_crediti(-costo, f"Approvazione e creazione tecnica: {tecnica_creata.nome}")
