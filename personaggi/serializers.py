@@ -423,7 +423,8 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
 class OggettoSerializer(serializers.ModelSerializer):
     statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
     statistiche_base = OggettoStatisticaBaseSerializer(source='oggettostatisticabase_set', many=True, read_only=True)
-    elementi = OggettoComponenteSerializer(many=True, read_only=True)
+    # elementi = OggettoComponenteSerializer(many=True, read_only=True)
+    componenti = OggettoComponenteSerializer(many=True, read_only=True)
 
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
