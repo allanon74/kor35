@@ -39,8 +39,6 @@ router.register(r'proposte', PropostaTecnicaViewSet, basename='proposte')
 # --- ROTTE AGGIUNTE PER NEGOZIO E CRAFTING ---
 router.register(r'negozio', views.NegozioViewSet, basename='negozio')
 router.register(r'crafting', views.CraftingViewSet, basename='crafting')
-
-router.register(r'richieste-assemblaggio', views.RichiestaAssemblaggioViewSet, basename='richieste-assemblaggio')
 # ---------------------------------------------
 
 # router.register('abil', AbilViewSet)
