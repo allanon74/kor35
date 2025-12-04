@@ -59,8 +59,8 @@ import json
 
 # --- IMPORT SERVICES ---
 from .services import (
-    monta_potenziamento, crea_oggetto_da_infusione, GestioneOggettiService, 
-    GestioneCraftingService 
+    # monta_potenziamento, crea_oggetto_da_infusione, 
+    GestioneOggettiService, GestioneCraftingService 
 )
 
 # --- IMPORT SERIALIZERS ---
