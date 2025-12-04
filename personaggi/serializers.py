@@ -389,7 +389,7 @@ class AttivataElementoSerializer(serializers.ModelSerializer):
 #         model = OggettoElemento
 #         fields = ('elemento',)
 
-class OggettoMattoneSerializer(serializers.ModelSerializer):
+class OggettoComponenteSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(read_only=True)
     
     class Meta:
@@ -423,7 +423,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
 class OggettoSerializer(serializers.ModelSerializer):
     statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
     statistiche_base = OggettoStatisticaBaseSerializer(source='oggettostatisticabase_set', many=True, read_only=True)
-    elementi = OggettoMattoneSerializer(many=True, read_only=True)
+    elementi = OggettoComponenteSerializer(many=True, read_only=True)
 
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
@@ -785,7 +785,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         else:
             oggetti_posseduti = personaggio.get_oggetti().prefetch_related(
                 'statistiche_base__statistica', 'oggettostatistica_set__statistica',
-                'oggettoelemento_set__elemento', 'aura'
+                'componenti__caratteristica', 'aura'
             )
         personaggio.modificatori_calcolati
         risultati = []

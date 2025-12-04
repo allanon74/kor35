@@ -563,7 +563,7 @@ class PersonaggioMeView(APIView):
                     ).prefetch_related(
                         'oggetto__oggettostatisticabase_set__statistica', 
                         'oggetto__oggettostatistica_set__statistica', 
-                        'oggetto__oggettoelemento_set__elemento',
+                        'oggetto__componenti__caratteristica',
                     ),
                     to_attr='tracciamento_oggetti_correnti'
                 ),
