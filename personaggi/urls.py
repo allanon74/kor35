@@ -39,6 +39,8 @@ router.register(r'proposte', PropostaTecnicaViewSet, basename='proposte')
 # --- ROTTE AGGIUNTE PER NEGOZIO E CRAFTING ---
 router.register(r'negozio', views.NegozioViewSet, basename='negozio')
 router.register(r'crafting', views.CraftingViewSet, basename='crafting')
+
+router.register(r'richieste-assemblaggio', views.RichiestaAssemblaggioViewSet, basename='richieste-assemblaggio')
 # ---------------------------------------------
 
 # router.register('abil', AbilViewSet)
@@ -111,6 +113,8 @@ urlpatterns = [
     
     path('api/oggetti/equipaggia/', views.equipaggia_item_view, name='api_equipaggia_item'),
     path('api/oggetti/assembla/', views.assembla_item_view, name='api_assembla_item'),
+    # ### NUOVO: Endpoint Validazione Assemblaggio (Mancava questo!)
+    path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'),
     
     path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'), # <-- AGGIUNTO
     
