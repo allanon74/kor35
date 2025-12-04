@@ -14,6 +14,8 @@ from .models import (
     OggettoCaratteristica,
 )
 
+import sys
+
 def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
     """
     Crea un'istanza fisica (Oggetto) a partire da un'Infusione (Crafting).
@@ -64,27 +66,52 @@ def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
 def monta_potenziamento(oggetto_ospite, potenziamento):
     """
     Gestisce l'installazione di Mod/Materia su un oggetto ospite.
+    Include log di debug per tracciare i problemi di compatibilità.
     """
     
+    # 1. Controlli preliminari
     if oggetto_ospite.pk == potenziamento.pk:
         raise ValidationError("Non puoi montare un oggetto su se stesso.")
     if potenziamento.ospitato_su:
         raise ValidationError("Il potenziamento è già montato altrove.")
 
+    # --- LOGICA MATERIA ---
     if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+        # Check esclusività
         if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MATERIA).exists():
             raise ValidationError("È già presente una Materia.")
         if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).exists():
             raise ValidationError("Impossibile installare Materia: presenti Mod.")
         
         if oggetto_ospite.classe_oggetto:
-            if potenziamento.infusione_generatrice:
-                caratts_infusione = set(potenziamento.infusione_generatrice.caratteristiche.values_list('id', flat=True))
-                permessi_ids = set(oggetto_ospite.classe_oggetto.mattoni_materia_permessi.values_list('id', flat=True))
-                
-                if not caratts_infusione.issubset(permessi_ids):
-                     raise ValidationError("Questa Materia contiene caratteristiche non compatibili con questo oggetto.")
+            # A. Recupera caratteristiche (ID) dalla Materia (Oggetto Fisico)
+            # Usa il campo M2M 'caratteristiche' definito nel modello Oggetto
+            caratts_item = set(potenziamento.caratteristiche.values_list('id', flat=True))
+            
+            # Fallback: Se l'oggetto non ha caratteristiche salvate, guarda l'infusione originale
+            if not caratts_item and potenziamento.infusione_generatrice:
+                 # Nota: Infusione usa 'componenti' che punta a 'caratteristica'
+                 caratts_item = set(potenziamento.infusione_generatrice.componenti.values_list('caratteristica__id', flat=True))
 
+            # B. Recupera permessi (ID) dalla Classe Oggetto
+            permessi_ids = set(oggetto_ospite.classe_oggetto.mattoni_materia_permessi.values_list('id', flat=True))
+            
+            # --- DEBUG LOG (Visibile in error.log di Apache) ---
+            print(f"--- DEBUG MONTAGGIO MATERIA ---", file=sys.stderr)
+            print(f"Oggetto Ospite: {oggetto_ospite.nome} (Classe: {oggetto_ospite.classe_oggetto.nome})", file=sys.stderr)
+            print(f"Materia: {potenziamento.nome}", file=sys.stderr)
+            print(f"ID Caratteristiche Trovate su Materia: {caratts_item}", file=sys.stderr)
+            print(f"ID Permessi Classe Ospite: {permessi_ids}", file=sys.stderr)
+            diff = caratts_item - permessi_ids
+            print(f"Caratteristiche NON permesse (Differenza): {diff}", file=sys.stderr)
+            # ---------------------------------------------------
+
+            # C. Validazione
+            if not caratts_item.issubset(permessi_ids):
+                 # Opzionale: mostra i nomi delle caratteristiche mancanti nell'errore
+                 raise ValidationError(f"Questa Materia contiene caratteristiche non supportate dalla classe dell'oggetto (ID invalidi: {diff}).")
+
+    # --- LOGICA MOD ---
     elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD:
         if not oggetto_ospite.is_tecnologico:
             raise ValidationError("Le Mod richiedono un oggetto Tecnologico.")
@@ -99,37 +126,50 @@ def monta_potenziamento(oggetto_ospite, potenziamento):
         if count_mods >= classe.max_mod_totali:
             raise ValidationError(f"Slot Mod esauriti (Max {classe.max_mod_totali}).")
 
-        infusione = potenziamento.infusione_generatrice
-        if infusione:
-            caratts_new = set(infusione.caratteristiche.values_list('id', flat=True))
-            mods_installate = oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD)
-            
-            for c_id in caratts_new:
-                regola = classe.limitazioni_mod.through.objects.filter(
-                    classe_oggetto=classe, caratteristica_id=c_id
-                ).first()
-                
-                max_allowed = regola.max_installabili if regola else 0
-                if max_allowed == 0:
-                    raise ValidationError(f"Mod con caratteristica ID {c_id} non permesse su {classe.nome}.")
-                
-                count_existing = 0
-                for m in mods_installate:
-                    if m.infusione_generatrice and m.infusione_generatrice.caratteristiche.filter(id=c_id).exists():
-                        count_existing += 1
-                
-                if count_existing >= max_allowed:
-                    raise ValidationError(f"Limite Mod per caratteristica ID {c_id} raggiunto ({count_existing}/{max_allowed}).")
+        # Recupera caratteristiche Mod (Simile alla logica Materia)
+        caratts_new = set(potenziamento.caratteristiche.values_list('id', flat=True))
+        if not caratts_new and potenziamento.infusione_generatrice:
+             caratts_new = set(potenziamento.infusione_generatrice.componenti.values_list('caratteristica__id', flat=True))
 
+        mods_installate = oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD)
+        
+        for c_id in caratts_new:
+            # Controlla limite per specifica caratteristica nella classe
+            regola = classe.classi_oggetti_regole_mod.through.objects.filter(
+                classe_oggetto=classe, caratteristica_id=c_id
+            ).first()
+            
+            max_allowed = regola.max_installabili if regola else 0
+            if max_allowed == 0:
+                raise ValidationError(f"Mod con caratteristica ID {c_id} non permesse su {classe.nome}.")
+            
+            count_existing = 0
+            for m in mods_installate:
+                # Recupera caratteristiche della mod installata
+                m_caratts = set(m.caratteristiche.values_list('id', flat=True))
+                if not m_caratts and m.infusione_generatrice:
+                    m_caratts = set(m.infusione_generatrice.componenti.values_list('caratteristica__id', flat=True))
+                
+                if c_id in m_caratts:
+                    count_existing += 1
+            
+            if count_existing >= max_allowed:
+                raise ValidationError(f"Limite Mod per caratteristica ID {c_id} raggiunto ({count_existing}/{max_allowed}).")
+
+    # --- ESECUZIONE ---
     with transaction.atomic():
+        # Chiude tracciamento inventario precedente
         tracc = potenziamento.tracciamento_inventario.filter(data_fine__isnull=True).first()
         if tracc:
             tracc.data_fine = timezone.now()
             tracc.save()
             
+        # Assegna all'oggetto ospite
         potenziamento.ospitato_su = oggetto_ospite
         potenziamento.save()
-        
+
+
+
 class GestioneOggettiService:
     
     @staticmethod
