@@ -1033,23 +1033,26 @@ class OggettoViewSet(viewsets.ModelViewSet):
         personaggio = request.user.personaggi.first() 
         if not personaggio: return Response({'error': 'Nessun personaggio trovato per questo utente'}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            nuovo_oggetto = crea_oggetto_da_infusione(infusione, personaggio)
+            nuovo_oggetto = GestioneOggettiService.crea_oggetto_da_infusione(infusione, personaggio)
             serializer = self.get_serializer(nuovo_oggetto)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         except ValidationError as e: return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e: return Response({'error': f"Errore interno: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=True, methods=['post'])
-    def monta(self, request, pk=None):
-        oggetto_ospite = self.get_object() 
-        potenziamento_id = request.data.get('potenziamento_id')
-        if not potenziamento_id: return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
-        potenziamento = get_object_or_404(Oggetto, pk=potenziamento_id)
-        try:
-            monta_potenziamento(oggetto_ospite, potenziamento)
-            serializer = self.get_serializer(oggetto_ospite)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except ValidationError as e: return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    # @action(detail=True, methods=['post'])
+    # def monta(self, request, pk=None):
+    #     oggetto_ospite = self.get_object() 
+    #     potenziamento_id = request.data.get('potenziamento_id')
+    #     if not potenziamento_id: return Response({'error': 'potenziamento_id mancante'}, status=status.HTTP_400_BAD_REQUEST)
+    #     potenziamento = get_object_or_404(Oggetto, pk=potenziamento_id)
+    #     personaggio = request.user.personaggi.first() # O logica migliore se ne ha più di uno
+    #     if not personaggio:
+    #         return Response({'error': 'Nessun personaggio attivo.'}, status=400)
+    #     try:
+    #         GestioneOggettiService.assembla_mod(personaggio, oggetto_ospite, potenziamento)
+    #         serializer = self.get_serializer(oggetto_ospite)
+    #         return Response(serializer.data, status=status.HTTP_200_OK)
+    #     except ValidationError as e: return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def smonta(self, request, pk=None):
