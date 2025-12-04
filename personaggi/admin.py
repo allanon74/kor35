@@ -232,8 +232,8 @@ class PersonaggioTessituraInline(admin.TabularInline):
 class PersonaggioAttivataInline(admin.TabularInline):
     model = PersonaggioAttivata; extra = 1; verbose_name = "Attivata (Legacy)"
 
-class PunteggioOggettoInline(admin.TabularInline):
-    model = Oggetto.elementi.through; extra = 1; verbose_name_plural = "Elementi dell'Oggetto"
+# class PunteggioOggettoInline(admin.TabularInline):
+#     model = Oggetto.elementi.through; extra = 1; verbose_name_plural = "Elementi dell'Oggetto"
 
 # --- NUOVE INLINE PER CARATTERISTICHE (ex Mattoni) ---
 class InfusioneCaratteristicaInline(admin.TabularInline):
