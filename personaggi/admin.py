@@ -40,6 +40,7 @@ from .models import (
     OggettoInInventario, OggettoElemento, Inventario,
     ForgiaturaInCorso,
     OggettoBase, OggettoStatisticaBase, OggettoBaseModificatore, OggettoBaseStatisticaBase, 
+    RichiestaAssemblaggio, 
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -717,3 +718,10 @@ class OggettoBaseAdmin(admin.ModelAdmin):
     )
     
     inlines = [OggettoBaseStatisticaBaseInline, OggettoBaseModificatoreInline]
+    
+@admin.register(RichiestaAssemblaggio)
+class RichiestaAssemblaggioAdmin(admin.ModelAdmin):
+    list_display = ('id', 'committente', 'artigiano', 'oggetto_host', 'componente', 'stato', 'offerta_crediti', 'data_creazione')
+    list_filter = ('stato', 'data_creazione')
+    search_fields = ('committente__nome', 'artigiano__nome', 'oggetto_host__nome')
+    autocomplete_fields = ['committente', 'artigiano', 'oggetto_host', 'componente']

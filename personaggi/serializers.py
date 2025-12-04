@@ -26,7 +26,8 @@ from .models import (
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
     PropostaTecnica, 
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, 
-    LetturaMessaggio, Oggetto, ClasseOggetto
+    LetturaMessaggio, Oggetto, ClasseOggetto,
+    RichiestaAssemblaggio, 
 )
 
 # -----------------------------------------------------------------------------
@@ -1011,3 +1012,20 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         validated_data['mittente'] = self.context['request'].user
         validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
         return super().create(validated_data)
+    
+class RichiestaAssemblaggioSerializer(serializers.ModelSerializer):
+    committente_nome = serializers.CharField(source='committente.nome', read_only=True)
+    artigiano_nome = serializers.CharField(source='artigiano.nome', read_only=True)
+    oggetto_host_nome = serializers.CharField(source='oggetto_host.nome', read_only=True)
+    componente_nome = serializers.CharField(source='componente.nome', read_only=True)
+    
+    class Meta:
+        model = RichiestaAssemblaggio
+        fields = (
+            'id', 'committente', 'committente_nome', 
+            'artigiano', 'artigiano_nome',
+            'oggetto_host', 'oggetto_host_nome',
+            'componente', 'componente_nome',
+            'offerta_crediti', 'stato', 'data_creazione'
+        )
+        read_only_fields = ('data_creazione', 'stato')

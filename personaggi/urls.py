@@ -45,6 +45,8 @@ router.register(r'crafting', views.CraftingViewSet, basename='crafting')
 router.register('users', UserViewSet)
 router.register(r'oggetti', views.OggettoViewSet, basename='oggetti') # Era fuori router, meglio dentro
 
+router.register(r'richieste-assemblaggio', views.RichiestaAssemblaggioViewSet, basename='richieste-assemblaggio') # <-- AGGIUNTO
+
 urlpatterns = [
     
     path('auth/', MyAuthToken.as_view()),
@@ -109,6 +111,8 @@ urlpatterns = [
     
     path('api/oggetti/equipaggia/', views.equipaggia_item_view, name='api_equipaggia_item'),
     path('api/oggetti/assembla/', views.assembla_item_view, name='api_assembla_item'),
+    
+    path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'), # <-- AGGIUNTO
     
     path('api/', include(router.urls)),
     

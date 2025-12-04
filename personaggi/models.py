@@ -1051,3 +1051,38 @@ class ForgiaturaInCorso(models.Model):
     class Meta: ordering = ['data_fine_prevista']; verbose_name = "Forgiatura in Corso"; verbose_name_plural = "Forgiature in Corso"
     @property
     def is_pronta(self): return timezone.now() >= self.data_fine_prevista
+    
+    # --- STATI RICHIESTA LAVORO ---
+STATO_RICHIESTA_PENDENTE = 'PEND'
+STATO_RICHIESTA_COMPLETATA = 'COMP'
+STATO_RICHIESTA_RIFIUTATA = 'RIFI'
+
+STATO_RICHIESTA_CHOICES = [
+    (STATO_RICHIESTA_PENDENTE, 'In Attesa'),
+    (STATO_RICHIESTA_COMPLETATA, 'Completata'),
+    (STATO_RICHIESTA_RIFIUTATA, 'Rifiutata'),
+]
+
+class RichiestaAssemblaggio(models.Model):
+    """
+    Rappresenta una richiesta di lavoro da un PG (committente) a un altro (artigiano).
+    Il committente possiede gli oggetti, l'artigiano ci mette la competenza.
+    """
+    committente = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='richieste_assemblaggio_inviate')
+    artigiano = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='richieste_assemblaggio_ricevute')
+    
+    oggetto_host = models.ForeignKey(Oggetto, on_delete=models.CASCADE, related_name='richieste_host')
+    componente = models.ForeignKey(Oggetto, on_delete=models.CASCADE, related_name='richieste_componente')
+    
+    offerta_crediti = models.IntegerField(default=0, verbose_name="Offerta pagamento")
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    stato = models.CharField(max_length=4, choices=STATO_RICHIESTA_CHOICES, default=STATO_RICHIESTA_PENDENTE)
+    
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Richiesta Assemblaggio"
+        verbose_name_plural = "Richieste Assemblaggio"
+
+    def clean(self):
+        if self.committente == self.artigiano:
+            raise ValidationError("Non puoi inviare una richiesta a te stesso.")

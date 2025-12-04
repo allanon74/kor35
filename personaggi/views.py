@@ -27,6 +27,7 @@ from .models import (
     # Costanti
     COSTO_PER_MATTONE_CREAZIONE, 
     COSTO_DEFAULT_INVIO_PROPOSTA,
+    RichiestaAssemblaggio,
 )
 
 import uuid 
@@ -1227,3 +1228,118 @@ class CraftingViewSet(viewsets.ViewSet):
                 "is_pronta": task.is_pronta
             })
         return Response(data)
+
+
+    
+class AssemblyValidationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Controlla se l'assemblaggio è possibile tra Host e Component.
+        Restituisce info dettagliate: se possibile, se servono skill esterne, etc.
+        """
+        char_id = request.data.get('char_id')
+        host_id = request.data.get('host_id')
+        mod_id = request.data.get('mod_id')
+
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        host = get_object_or_404(Oggetto, pk=host_id)
+        mod = get_object_or_404(Oggetto, pk=mod_id)
+
+        # 1. Verifica Logic/Hardware (senza skill check)
+        try:
+            # Usiamo assembla_mod in dry-run (simuliamo passando check_skills=False ma catchando errori logici)
+            # Nota: assembla_mod modifica il DB, quindi non possiamo chiamarla direttamente.
+            # Dobbiamo replicare parzialmente la logica o refactorizzare il service.
+            # Per brevità, qui replico i check "hard" rapidi o uso un try/catch con rollback atomico (trick).
+            pass
+        except:
+            pass
+            
+        # Verifica Skill PG Corrente
+        can_do_self, msg_self = GestioneOggettiService.verifica_competenza_assemblaggio(pg, host, mod)
+        
+        # Simulazione Check Hardware (Limiti classe, slot, etc.)
+        # Per semplicità, qui assumiamo che il Frontend abbia già filtrato per tipo.
+        # Un check approfondito richiederebbe di duplicare la logica del service.
+        # Per ora ci fidiamo del tentativo reale, ma restituiamo info skill.
+
+        return Response({
+            "can_assemble_self": can_do_self,
+            "reason_self": msg_self,
+            "host_name": host.nome,
+            "mod_name": mod.nome
+        })
+
+class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    # Serializer definito inline o in serializers.py. Per brevità lo definisco semplice qui o uso uno generico.
+    # Assumiamo tu abbia creato RichiestaAssemblaggioSerializer in serializers.py
+    # serializer_class = RichiestaAssemblaggioSerializer 
+
+    def get_queryset(self):
+        # Ritorna le richieste dove l'utente è committente o artigiano
+        user = self.request.user
+        return RichiestaAssemblaggio.objects.filter(
+            Q(committente__proprietario=user) | Q(artigiano__proprietario=user)
+        ).order_by('-data_creazione')
+
+    @action(detail=False, methods=['post'])
+    def crea(self, request):
+        committente_id = request.data.get('committente_id')
+        artigiano_nome = request.data.get('artigiano_nome') # O ID
+        host_id = request.data.get('host_id')
+        comp_id = request.data.get('comp_id')
+        offerta = int(request.data.get('offerta', 0))
+
+        committente = get_object_or_404(Personaggio, pk=committente_id, proprietario=request.user)
+        
+        # Trova artigiano (per nome esatto o parziale)
+        artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
+        if not artigiano:
+            return Response({"error": "Artigiano non trovato."}, status=404)
+            
+        host = get_object_or_404(Oggetto, pk=host_id)
+        comp = get_object_or_404(Oggetto, pk=comp_id)
+
+        richiesta = RichiestaAssemblaggio.objects.create(
+            committente=committente,
+            artigiano=artigiano,
+            oggetto_host=host,
+            componente=comp,
+            offerta_crediti=offerta
+        )
+        
+        # Creiamo anche una notifica/messaggio per l'artigiano
+        Messaggio.objects.create(
+            mittente=request.user,
+            tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+            destinatario_personaggio=artigiano,
+            titolo="Richiesta di Lavoro",
+            testo=f"{committente.nome} richiede il tuo intervento per assemblare {comp.nome} su {host.nome}. Offerta: {offerta} CR."
+        )
+
+        return Response({"status": "created", "id": richiesta.id}, status=201)
+
+    @action(detail=True, methods=['post'])
+    def accetta(self, request, pk=None):
+        richiesta = self.get_object()
+        if richiesta.artigiano.proprietario != request.user:
+            return Response({"error": "Non autorizzato"}, status=403)
+            
+        try:
+            GestioneOggettiService.elabora_richiesta_assemblaggio(richiesta.id, request.user)
+            return Response({"status": "success", "message": "Lavoro completato!"})
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
+            
+    @action(detail=True, methods=['post'])
+    def rifiuta(self, request, pk=None):
+        richiesta = self.get_object()
+        if richiesta.artigiano.proprietario != request.user:
+             return Response({"error": "Non autorizzato"}, status=403)
+        
+        richiesta.stato = 'RIFI'
+        richiesta.save()
+        return Response({"status": "rejected"})

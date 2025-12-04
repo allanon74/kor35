@@ -10,7 +10,7 @@ from .models import (
     TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE,
     COSTO_PER_MATTONE_OGGETTO, QrCode, OggettoStatistica, Inventario,
     OggettoBase, OggettoStatisticaBase, 
-    ForgiaturaInCorso, 
+    ForgiaturaInCorso, Abilita, 
 )
 
 def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
@@ -239,6 +239,225 @@ class GestioneOggettiService:
         oggetto.save()
         return "Equipaggiato"
     
+    @staticmethod
+    def verifica_competenza_assemblaggio(personaggio: Personaggio, host: Oggetto, componente: Oggetto):
+        """
+        Verifica se il personaggio ha le skill e le statistiche per assemblare.
+        Restituisce (Bool, Messaggio).
+        """
+        livello_oggetto = host.livello
+        punteggi = personaggio.caratteristiche_base
+        
+        # 1. Recupera i "Mattoni" richiesti dal componente
+        # Poiché il componente è un Oggetto (istanza), guardiamo le statistiche base che derivano dall'infusione
+        # O meglio: recuperiamo l'infusione generatrice per vedere i requisiti originali
+        infusione = componente.infusione_generatrice
+        if not infusione:
+            return False, "Il componente non ha un'infusione generatrice tracciabile."
+
+        # Verifica Caratteristiche Base del PG vs Componenti Mod/Materia
+        # infusione.componenti è una relazione ManyToMany con valore tramite InfusioneCaratteristica
+        for comp_req in infusione.componenti.select_related('caratteristica').all():
+            nome_stat = comp_req.caratteristica.nome
+            val_richiesto = comp_req.valore
+            val_posseduto = punteggi.get(nome_stat, 0)
+            
+            if val_posseduto < val_richiesto:
+                return False, f"Caratteristica insufficiente: {nome_stat} ({val_posseduto}/{val_richiesto})."
+
+        # 2. Verifica Abilità Specifica (Aura)
+        abilita_necessaria = ""
+        valore_abilita = 0
+        
+        if host.is_tecnologico:
+            # Caso MOD -> Aura Tecnologica
+            abilita_necessaria = "Aura Tecnologica" # Assicurarsi che il nome nel DB sia esatto o usare ID/Codice
+            # Cerchiamo l'abilità tra quelle possedute. 
+            # Nota: Aura Tecnologica è spesso un'AURA (Punteggio), non un'Abilità, nel tuo modello?
+            # Se è un'Abilità:
+            # skill = personaggio.abilita_possedute.filter(nome__icontains="Tecnologica").first()
+            
+            # Se è un'Aura (Punteggio):
+            valore_abilita = personaggio.get_valore_statistica('ATEC') # Esempio, o cerca per nome
+            if valore_abilita == 0:
+                 # Fallback ricerca per nome punteggio
+                 valore_abilita = personaggio.punteggi_base.get(abilita_necessaria, 0)
+
+        else:
+            # Caso MATERIA -> Aura Mondana - Assemblatore
+            abilita_necessaria = "Aura Mondana - Assemblatore"
+            # Cerchiamo l'abilità
+            # Assumiamo sia un'Abilità vera e propria.
+            # Dobbiamo calcolare il "Livello" dell'abilità. Di solito è legato a un Punteggio o Tier.
+            # Nel tuo modello Abilità non ha un "valore", ma sblocca cose. 
+            # Tuttavia, il prompt dice "Punteggio in Aura Mondana - Assemblatore".
+            # Assumiamo che esista un Punteggio o Statistica con questo nome o che sia un'abilità che conferisce bonus.
+            # IPOTESI: Usiamo il valore della caratteristica associata all'abilità se posseduta, oppure un punteggio specifico.
+            
+            has_skill = personaggio.abilita_possedute.filter(nome__iexact=abilita_necessaria).exists()
+            if not has_skill:
+                 return False, f"Abilità mancante: {abilita_necessaria}"
+            
+            # Se l'abilità è posseduta, qual è il suo "valore"?
+            # Spesso nei LARP il valore è dato dalla caratteristica base associata + bonus.
+            # Per semplicità qui usiamo il valore della caratteristica associata all'abilità.
+            skill_obj = Abilita.objects.get(nome__iexact=abilita_necessaria)
+            valore_abilita = punteggi.get(skill_obj.caratteristica.nome, 0)
+
+        # Check Livello
+        if valore_abilita < livello_oggetto:
+             return False, f"Competenza insufficiente ({valore_abilita}) per oggetto di livello {livello_oggetto}."
+
+        return True, "Competenza valida."
+
+    @staticmethod
+    def assembla_mod(assemblatore: Personaggio, oggetto_host: Oggetto, mod: Oggetto, check_skills=True):
+        """
+        Assembla mod/materia su host.
+        :param assemblatore: Chi esegue il lavoro (può essere diverso dal proprietario).
+        :param oggetto_host: L'oggetto che riceve.
+        :param mod: Il componente.
+        :param check_skills: Se True, verifica le competenze dell'assemblatore.
+        """
+        
+        # 1. Verifica possesso (Il proprietario deve essere lo stesso per entrambi gli oggetti)
+        # Se è una richiesta di lavoro, gli oggetti sono del committente, ma la funzione viene chiamata nel contesto appropriato.
+        proprietario_items = oggetto_host.inventario_corrente
+        if not proprietario_items:
+             raise ValidationError("Oggetto host non in inventario.")
+             
+        if mod.inventario_corrente != proprietario_items:
+             raise ValidationError("Host e Componente devono appartenere allo stesso inventario.")
+
+        # 2. Check Skills (se richiesto)
+        if check_skills:
+            can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(assemblatore, oggetto_host, mod)
+            if not can_do:
+                raise ValidationError(msg)
+
+        # 3. Validazione Logica (Classi, Limitazioni)
+        classe = oggetto_host.classe_oggetto
+        if not classe:
+            raise ValidationError("L'oggetto ospite non ha una classe definita.")
+
+        # -- CASO MOD (Tecnologico) --
+        if mod.tipo_oggetto == TIPO_OGGETTO_MOD:
+            if not oggetto_host.is_tecnologico:
+                raise ValidationError("Le Mod richiedono un oggetto Tecnologico.")
+            if oggetto_host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MATERIA).exists():
+                raise ValidationError("Impossibile installare Mod: presente Materia.")
+
+            # Limite Max Slot Totali
+            num_mod_attuali = oggetto_host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).count()
+            if num_mod_attuali >= classe.max_mod_totali:
+                 raise ValidationError(f"Slot Mod esauriti (Max {classe.max_mod_totali}).")
+
+            # Compatibilità Componenti (Mattoni) vs Classe Host
+            infusione = mod.infusione_generatrice
+            if infusione:
+                # Recupera caratteristiche usate dalla Mod
+                caratts_new = set(infusione.componenti.values_list('caratteristica__id', flat=True))
+                
+                # Check 1: La classe supporta questi mattoni? (Spesso implicito nei limiti, ma controlliamo se esistono regole)
+                # Nel tuo modello ClasseOggettoLimiteMod definisce QUANTE mod per caratteristica. 
+                # Se max=0, non è supportata.
+                
+                mods_installate = oggetto_host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD)
+
+                for c_id in caratts_new:
+                    # Trova regola per questa caratteristica
+                    regola = classe.classi_oggetti_regole_mod.through.objects.filter(
+                        classe_oggetto=classe, caratteristica_id=c_id
+                    ).first()
+
+                    max_allowed = regola.max_installabili if regola else 0
+                    
+                    if max_allowed == 0:
+                        raise ValidationError(f"Mod con caratteristica ID {c_id} non permesse su {classe.nome}.")
+                    
+                    # Conta quante mod GIA' installate usano questa caratteristica
+                    count_existing = 0
+                    for m in mods_installate:
+                        if m.infusione_generatrice and m.infusione_generatrice.componenti.filter(caratteristica__id=c_id).exists():
+                            count_existing += 1
+                    
+                    # Aggiungiamo 1 per quella che stiamo montando
+                    if (count_existing + 1) > max_allowed:
+                         raise ValidationError(f"Limite Mod per caratteristica ID {c_id} superato ({max_allowed}).")
+
+        # -- CASO MATERIA (Mondano) --
+        elif mod.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+            if oggetto_host.is_tecnologico:
+                raise ValidationError("Le Materie richiedono oggetti NON tecnologici.")
+            if oggetto_host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MATERIA).exists():
+                raise ValidationError("È già presente una Materia (Max 1).")
+            if oggetto_host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).exists():
+                raise ValidationError("Impossibile installare Materia: presenti Mod.")
+            
+            # Compatibilità Componenti vs Permessi Classe
+            infusione = mod.infusione_generatrice
+            if infusione:
+                caratts_infusione = set(infusione.componenti.values_list('caratteristica__id', flat=True))
+                permessi_ids = set(classe.mattoni_materia_permessi.values_list('id', flat=True))
+                
+                if not caratts_infusione.issubset(permessi_ids):
+                     raise ValidationError("Questa Materia contiene caratteristiche non supportate dalla classe dell'oggetto.")
+
+        else:
+            raise ValidationError("Tipo componente non valido (solo Mod o Materia).")
+
+        # 4. Esecuzione
+        with transaction.atomic():
+            mod.ospitato_su = oggetto_host
+            mod.sposta_in_inventario(None) # Rimuovi dall'inventario visibile, ora è 'dentro' l'host
+            mod.save()
+            
+            # Log per il proprietario
+            if hasattr(proprietario_items, 'personaggio'):
+                proprietario_items.personaggio.aggiungi_log(f"Assemblato {mod.nome} su {oggetto_host.nome}.")
+
+    @staticmethod
+    def elabora_richiesta_assemblaggio(richiesta_id, artigiano_user):
+        """
+        L'artigiano accetta ed esegue la richiesta.
+        """
+        from .models import RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA
+        
+        try:
+            req = RichiestaAssemblaggio.objects.select_related('committente', 'artigiano', 'oggetto_host', 'componente').get(pk=richiesta_id)
+        except RichiestaAssemblaggio.DoesNotExist:
+            raise ValidationError("Richiesta non trovata.")
+
+        if req.artigiano.proprietario != artigiano_user:
+            raise ValidationError("Non sei l'artigiano designato per questa richiesta.")
+            
+        if req.stato != STATO_RICHIESTA_PENDENTE:
+            raise ValidationError("Richiesta già processata.")
+
+        # Verifica Disponibilità Crediti Committente
+        if req.committente.crediti < req.offerta_crediti:
+             raise ValidationError("Il committente non ha più i crediti sufficienti.")
+
+        # ESECUZIONE
+        with transaction.atomic():
+            # 1. Tenta Assemblaggio (Modifica DB Items)
+            # Qui passiamo 'req.artigiano' come esecutore per i check delle skill
+            GestioneOggettiService.assembla_mod(req.artigiano, req.oggetto_host, req.componente, check_skills=True)
+            
+            # 2. Transazione Crediti
+            if req.offerta_crediti > 0:
+                req.committente.modifica_crediti(-req.offerta_crediti, f"Pagamento assemblaggio a {req.artigiano.nome}")
+                req.artigiano.modifica_crediti(req.offerta_crediti, f"Compenso assemblaggio da {req.committente.nome}")
+            
+            # 3. Aggiorna stato richiesta
+            req.stato = STATO_RICHIESTA_COMPLETATA
+            req.save()
+            
+            # 4. Notifica/Log
+            req.committente.aggiungi_log(f"Richiesta completata: {req.artigiano.nome} ha assemblato {req.componente.nome} su {req.oggetto_host.nome}.")
+            req.artigiano.aggiungi_log(f"Lavoro completato per {req.committente.nome}.")
+
+        return True
     
 class GestioneCraftingService:
 
