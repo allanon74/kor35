@@ -727,6 +727,7 @@ class Oggetto(A_vista):
     cariche_attuali = models.IntegerField(default=0)
     oggetto_base_generatore = models.ForeignKey(OggettoBase, on_delete=models.SET_NULL, null=True, blank=True, related_name='istanze_generate', help_text="Se creato dal negozio, punta al template originale.")
 
+    @property
     def livello(self):
         # Aggiorna il calcolo del livello basandosi sui nuovi componenti
         return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
