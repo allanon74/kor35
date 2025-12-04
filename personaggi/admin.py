@@ -10,7 +10,8 @@ from django.utils import timezone
 # Import aggiornati dai models
 from .models import (
     CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, 
-    PersonaggioLog, QrCode, Oggetto, Manifesto, OggettoStatistica, 
+    PersonaggioLog, QrCode, Oggetto, OggettoCaratteristica, 
+    Manifesto, OggettoStatistica, 
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -37,7 +38,7 @@ from .models import (
     STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE, STATO_PROPOSTA_RIFIUTATA, STATO_PROPOSTA_BOZZA,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA,
     ClasseOggetto, ClasseOggettoLimiteMod,
-    OggettoInInventario, OggettoElemento, Inventario,
+    OggettoInInventario, Inventario,
     ForgiaturaInCorso,
     OggettoBase, OggettoStatisticaBase, OggettoBaseModificatore, OggettoBaseStatisticaBase, 
     RichiestaAssemblaggio, 
@@ -630,8 +631,15 @@ class ClasseOggettoAdmin(admin.ModelAdmin):
 
 # --- INLINES PER OGGETTO ---
 
-class OggettoElementoInline(admin.TabularInline):
-    model = OggettoElemento; extra = 1; autocomplete_fields = ['elemento']
+# class OggettoElementoInline(admin.TabularInline):
+#     model = OggettoElemento; extra = 1; autocomplete_fields = ['elemento']
+
+class OggettoCaratteristicaInline(admin.TabularInline):
+    model = OggettoCaratteristica
+    extra = 0 # Non mostriamo righe vuote extra di default per pulizia
+    autocomplete_fields = ['caratteristica']
+    verbose_name = "Caratteristica (Mattone)"
+    verbose_name_plural = "Caratteristiche (Mattoni)"
 
 class PotenziamentiInstallatiInline(admin.TabularInline):
     model = Oggetto; fk_name = 'ospitato_su'
@@ -663,7 +671,13 @@ class OggettoAdmin(SModelAdmin):
         ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
         ('Stato & Origine', {'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su')}),
     )
-    inlines = [OggettoElementoInline, OggettoStatisticaBaseInline, OggettoStatisticaInline, PotenziamentiInstallatiInline, TracciamentoInventarioInline]
+    inlines = [
+        OggettoCaratteristicaInline, 
+        TracciamentoInventarioInline, 
+        PotenziamentiInstallatiInline,
+        OggettoStatisticaBaseInline, 
+        OggettoStatisticaInline,  
+        ]
     
     def get_inventario_attuale(self, obj):
         if obj.ospitato_su: return f"Montato su: {obj.ospitato_su.nome}"

@@ -11,24 +11,22 @@ from .models import (
     COSTO_PER_MATTONE_OGGETTO, QrCode, OggettoStatistica, Inventario,
     OggettoBase, OggettoStatisticaBase, 
     ForgiaturaInCorso, Abilita, 
+    OggettoCaratteristica,
 )
 
 def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
     """
     Crea un'istanza fisica (Oggetto) a partire da un'Infusione (Crafting).
-    Trasforma le 'Statistiche Base' dell'infusione in 'Modificatori' dell'oggetto.
+    Copia Statistiche Base e Caratteristiche (Componenti).
     """
     if not infusione.aura_richiesta:
         raise ValidationError("Infusione non valida (manca Aura).")
 
-    # 1. Determina il tipo di oggetto in base all'Aura
+    # 1. Determina il tipo (logica esistente...)
     tipo = TIPO_OGGETTO_FISICO
     aura_nome = infusione.aura_richiesta.nome.lower()
-    
-    if "tecnologic" in aura_nome:
-        tipo = TIPO_OGGETTO_MOD 
-    elif "mondan" in aura_nome:
-        tipo = TIPO_OGGETTO_MATERIA
+    if "tecnologic" in aura_nome: tipo = TIPO_OGGETTO_MOD 
+    elif "mondan" in aura_nome: tipo = TIPO_OGGETTO_MATERIA
     
     # 2. Crea l'Oggetto
     nuovo_oggetto = Oggetto.objects.create(
@@ -39,7 +37,7 @@ def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
         cariche_attuali=infusione.statistica_cariche.valore_predefinito if infusione.statistica_cariche else 0
     )
 
-    # 3. Copia le Statistiche
+    # 3. Copia le Statistiche (logica esistente...)
     for stat_inf in infusione.infusionestatisticabase_set.all():
         OggettoStatistica.objects.create(
             oggetto=nuovo_oggetto,
@@ -47,8 +45,17 @@ def crea_oggetto_da_infusione(infusione, personaggio, nome_personalizzato=None):
             valore=stat_inf.valore_base,
             tipo_modificatore='ADD'
         )
+
+    # 4. [NUOVO] Copia le Caratteristiche (Componenti)
+    # Prende i dati da InfusioneCaratteristica e crea OggettoCaratteristica
+    for comp in infusione.componenti.all():
+        OggettoCaratteristica.objects.create(
+            oggetto=nuovo_oggetto,
+            caratteristica=comp.caratteristica,
+            valore=comp.valore
+        )
     
-    # 4. Assegna al Personaggio
+    # 5. Assegna al Personaggio
     nuovo_oggetto.sposta_in_inventario(personaggio)
     
     return nuovo_oggetto

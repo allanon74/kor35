@@ -20,14 +20,14 @@ from .models import (
     OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, 
     ForgiaturaInCorso, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
-    OggettoElemento, AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
+    AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
     CreditoMovimento, PersonaggioLog, TransazioneSospesa,
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
     PropostaTecnica, 
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, 
     LetturaMessaggio, Oggetto, ClasseOggetto,
-    RichiestaAssemblaggio, 
+    RichiestaAssemblaggio, OggettoCaratteristica, 
 )
 
 # -----------------------------------------------------------------------------
@@ -382,12 +382,19 @@ class AttivataElementoSerializer(serializers.ModelSerializer):
         fields = ('elemento',)
 
 
-class OggettoElementoSerializer(serializers.ModelSerializer):
-    elemento = PunteggioSmallSerializer(read_only=True)
+# class OggettoElementoSerializer(serializers.ModelSerializer):
+#     elemento = PunteggioSmallSerializer(read_only=True)
 
+#     class Meta:
+#         model = OggettoElemento
+#         fields = ('elemento',)
+
+class OggettoMattoneSerializer(serializers.ModelSerializer):
+    caratteristica = PunteggioSmallSerializer(read_only=True)
+    
     class Meta:
-        model = OggettoElemento
-        fields = ('elemento',)
+        model = OggettoCaratteristica
+        fields = ('caratteristica', 'valore')
 
 
 class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
@@ -416,7 +423,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
 class OggettoSerializer(serializers.ModelSerializer):
     statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
     statistiche_base = OggettoStatisticaBaseSerializer(source='oggettostatisticabase_set', many=True, read_only=True)
-    elementi = OggettoElementoSerializer(source='oggettoelemento_set', many=True, read_only=True)
+    elementi = OggettoMattoneSerializer(many=True, read_only=True)
 
     TestoFormattato = serializers.CharField(read_only=True)
     testo_formattato_personaggio = serializers.CharField(read_only=True, default=None)
@@ -442,7 +449,8 @@ class OggettoSerializer(serializers.ModelSerializer):
             'testo_formattato_personaggio',
             'livello',
             'aura',
-            'elementi',
+            # 'elementi',
+            'componenti',
             'statistiche',
             'statistiche_base',
             'inventario_corrente',

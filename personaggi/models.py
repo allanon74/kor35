@@ -620,9 +620,19 @@ class PersonaggioLog(models.Model):
     testo_log = models.TextField()
     class Meta: ordering=['-data']
 
-class OggettoElemento(models.Model):
-    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
-    elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': ELEMENTO})
+# class OggettoElemento(models.Model):
+#     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
+#     elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': ELEMENTO})
+    
+class OggettoCaratteristica(models.Model):
+    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE, related_name='componenti')
+    caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
+    valore = models.IntegerField(default=1)
+    
+    class Meta:
+        unique_together = ('oggetto', 'caratteristica')
+        verbose_name = "Caratteristica Oggetto"
+        verbose_name_plural = "Caratteristiche Oggetto"
 
 class OggettoStatistica(CondizioneStatisticaMixin):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
@@ -693,7 +703,14 @@ class OggettoBaseModificatore(models.Model):
     class Meta: verbose_name = "Modificatore Template"; verbose_name_plural = "Modificatori Template"
 
 class Oggetto(A_vista):
-    elementi = models.ManyToManyField(Punteggio, blank=True, through='OggettoElemento')
+    # elementi = models.ManyToManyField(Punteggio, blank=True, through='OggettoElemento')
+    caratteristiche = models.ManyToManyField(
+        Punteggio, 
+        blank=True, 
+        through='OggettoCaratteristica', 
+        related_name="oggetti_utilizzatori",
+        limit_choices_to={'tipo': CARATTERISTICA}
+    )
     statistiche = models.ManyToManyField(Statistica, through='OggettoStatistica', blank=True, related_name="oggetti_statistiche")
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoStatisticaBase', blank=True, related_name='oggetti_statistiche_base')
     aura = models.ForeignKey(Punteggio, blank=True, null=True, on_delete=models.SET_NULL, limit_choices_to={'tipo' : AURA}, related_name="oggetti_aura")
@@ -710,8 +727,10 @@ class Oggetto(A_vista):
     cariche_attuali = models.IntegerField(default=0)
     oggetto_base_generatore = models.ForeignKey(OggettoBase, on_delete=models.SET_NULL, null=True, blank=True, related_name='istanze_generate', help_text="Se creato dal negozio, punta al template originale.")
 
-    @property
-    def livello(self): return self.elementi.count()
+    def livello(self):
+        # Aggiorna il calcolo del livello basandosi sui nuovi componenti
+        return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
+    
     @property
     def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.oggettostatisticabase_set.select_related('statistica').all(), context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': self.oggettostatistica_set.select_related('statistica').all()})
     @property
