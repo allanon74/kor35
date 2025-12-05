@@ -1125,13 +1125,38 @@ def assembla_item_view(request):
     char_id = request.data.get('char_id')
     host_id = request.data.get('host_id')
     mod_id = request.data.get('mod_id')
-    if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
-    else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    use_academy = request.data.get('use_academy', False) # NUOVO PARAMETRO
+
+    if request.user.is_staff: 
+        pg = get_object_or_404(Personaggio, id=char_id)
+    else: 
+        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+
     host = get_object_or_404(Oggetto, pk=host_id)
     mod = get_object_or_404(Oggetto, pk=mod_id)
+
     try:
-        GestioneOggettiService.assembla_mod(pg, host, mod)
-        return Response({"status": "success", "message": "Assemblaggio completato"})
+        if use_academy:
+            # --- LOGICA ACCADEMIA ---
+            COSTO_ACCADEMIA = 100
+            if pg.crediti < COSTO_ACCADEMIA:
+                return Response({"error": f"Crediti insufficienti per l'Accademia. Servono {COSTO_ACCADEMIA} CR."}, status=400)
+            
+            with transaction.atomic():
+                # 1. Pagamento
+                pg.modifica_crediti(-COSTO_ACCADEMIA, "Pagamento servizio assemblaggio Accademia")
+                
+                # 2. Assemblaggio Forzato (check_skills=False)
+                # L'Accademia ha sempre le skill necessarie.
+                GestioneOggettiService.assembla_mod(pg, host, mod, check_skills=False)
+                
+            return Response({"status": "success", "message": "L'Accademia ha completato il lavoro."})
+        
+        else:
+            # --- LOGICA STANDARD (Assemblaggio Fai-da-te) ---
+            GestioneOggettiService.assembla_mod(pg, host, mod, check_skills=True)
+            return Response({"status": "success", "message": "Assemblaggio completato"})
+
     except ValidationError as e:
         msg = e.message if hasattr(e, 'message') else str(e)
         return Response({"error": msg}, status=400)
@@ -1441,3 +1466,42 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         richiesta.stato = 'RIFI' # Usa la costante importata se disponibile
         richiesta.save()
         return Response({"status": "rejected"})
+    
+class CapableArtisansView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        """
+        Restituisce la lista di personaggi (escluso il richiedente) 
+        che hanno i requisiti per assemblare il Mod sull'Host specificato.
+        """
+        char_id = request.data.get('char_id')
+        host_id = request.data.get('host_id')
+        mod_id = request.data.get('mod_id')
+
+        try:
+            # Recupera gli oggetti
+            requester = Personaggio.objects.get(pk=char_id) # Chi fa la richiesta
+            host = Oggetto.objects.get(pk=host_id)
+            mod = Oggetto.objects.get(pk=mod_id)
+            
+            # Filtra candidati: escludi il richiedente e (opzionale) utenti inattivi
+            candidati = Personaggio.objects.exclude(id=requester.id).filter(is_active=True) # Assumi un campo is_active o logica simile
+            
+            capaci = []
+            for artigiano in candidati:
+                # Usa il service esistente per verificare la competenza
+                # Nota: verifica_competenza_assemblaggio è statica
+                can_do, _ = GestioneOggettiService.verifica_competenza_assemblaggio(artigiano, host, mod)
+                if can_do:
+                    capaci.append({
+                        "id": artigiano.id, 
+                        "nome": artigiano.nome,
+                        # Opzionale: aggiungi il nome del giocatore se vuoi "nome (Giocatore)"
+                        # "giocatore": artigiano.proprietario.username 
+                    })
+            
+            return Response(capaci)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)

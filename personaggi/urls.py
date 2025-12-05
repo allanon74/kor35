@@ -115,6 +115,7 @@ urlpatterns = [
     path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'),
     
     path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'), # <-- AGGIUNTO
+    path('api/assembly/artisans/', views.CapableArtisansView.as_view(), name='capable-artisans'),
     
     path('api/', include(router.urls)),
     
