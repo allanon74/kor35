@@ -1160,6 +1160,46 @@ def assembla_item_view(request):
     except ValidationError as e:
         msg = e.message if hasattr(e, 'message') else str(e)
         return Response({"error": msg}, status=400)
+    
+    
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication]) 
+@permission_classes([IsAuthenticated])
+def smonta_item_view(request):
+    char_id = request.data.get('char_id')
+    host_id = request.data.get('host_id')
+    mod_id = request.data.get('mod_id')
+    use_academy = request.data.get('use_academy', False)
+
+    if request.user.is_staff: 
+        pg = get_object_or_404(Personaggio, id=char_id)
+    else: 
+        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+
+    host = get_object_or_404(Oggetto, pk=host_id)
+    mod = get_object_or_404(Oggetto, pk=mod_id)
+
+    try:
+        if use_academy:
+            # Costo fisso Accademia (es. 100 crediti anche per smontare)
+            COSTO_ACCADEMIA = 100
+            if pg.crediti < COSTO_ACCADEMIA:
+                return Response({"error": f"Crediti insufficienti. Servono {COSTO_ACCADEMIA} CR."}, status=400)
+            
+            with transaction.atomic():
+                pg.modifica_crediti(-COSTO_ACCADEMIA, "Servizio smontaggio Accademia")
+                # Skip skill check
+                GestioneOggettiService.rimuovi_mod(pg, host, mod, check_skills=False)
+                
+            return Response({"status": "success", "message": "Smontaggio completato dall'Accademia."})
+        else:
+            # Fai da te (con check skill)
+            GestioneOggettiService.rimuovi_mod(pg, host, mod, check_skills=True)
+            return Response({"status": "success", "message": "Oggetto smontato con successo."})
+
+    except ValidationError as e:
+        return Response({"error": str(e)}, status=400)
+    
 
 # --- NUOVE CLASSI AGGIUNTE PER NEGOZIO E CRAFTING ---
 

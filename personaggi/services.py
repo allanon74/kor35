@@ -316,6 +316,44 @@ class GestioneOggettiService:
         oggetto.is_equipaggiato = True
         oggetto.save()
         return "Equipaggiato"
+    
+    @staticmethod
+    def rimuovi_mod(pg, host, mod, check_skills=True):
+        """
+        Smonta un potenziamento.
+        Supporta check_skills per verificare se il PG ha le competenze (o paga l'Accademia).
+        """
+        # 1. Verifica Proprietà
+        if host.inventario_corrente != pg and host.proprietario != pg:
+             # Nota: verifica lasca per permettere gestione inventario corrente
+             raise ValidationError("Non possiedi l'oggetto ospite.")
+        
+        # Verifica che il mod sia effettivamente dentro l'host
+        if mod not in host.potenziamenti_installati.all():
+            raise ValidationError("Questo modulo non è installato sull'oggetto specificato.")
+
+        # 2. Check Skills (Se richiesto)
+        # I requisiti per smontare sono gli stessi del montare
+        if check_skills:
+            can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(pg, host, mod)
+            if not can_do:
+                raise ValidationError(f"Non hai le competenze per smontare questo oggetto: {msg}")
+
+        # 3. Esecuzione
+        with transaction.atomic():
+            host.potenziamenti_installati.remove(mod)
+            
+            mod.ospitato_su = None
+            mod.sposta_in_inventario(pg) # Torna nell'inventario del PG
+            mod.save()
+            
+            # Ricalcola stats host senza il mod
+            GestioneOggettiService.ricalcola_stats(host)
+            host.save()
+            
+            pg.aggiungi_log(f"Ha smontato {mod.nome} da {host.nome}.")
+            
+        return True
 
 
 class GestioneCraftingService:
