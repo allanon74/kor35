@@ -1670,37 +1670,32 @@ class CapableArtisansView(APIView):
             capaci = []
             
             if infusione_id:
-                # --- LOGICA FORGIATURA COOPERATIVA ---
+                # --- FORGIATURA COOPERATIVA ---
                 inf = Infusione.objects.get(pk=infusione_id)
                 
-                # Check Preliminare: Il richiedente (Forgiatore) HA l'aura principale?
-                # Se non ce l'ha, non può nemmeno chiedere aiuto.
+                # Il richiedente DEVE avere l'aura principale per poter chiedere aiuto
                 if requester.get_valore_aura_effettivo(inf.aura_richiesta) < inf.livello:
-                    # Ritorna lista vuota o errore specifico? 
-                    # Meglio lista vuota così il frontend capisce che non ci sono opzioni
-                    return Response([]) 
+                    # Se manca la base, nessuno può aiutarlo
+                    return Response([])
 
                 for p in candidati:
-                    # Verifica se questo candidato (p), agendo come aiutante, completa i requisiti del richiedente
+                    # Verifica se p (Aiutante) completa requester (Forgiatore)
                     ok, _ = GestioneCraftingService.verifica_competenza_forgiatura(
                         forgiatore=requester, 
                         infusione=inf, 
                         aiutante=p
                     )
-                    if ok: 
-                        capaci.append({"id": p.id, "nome": p.nome})
-                        
+                    if ok: capaci.append({"id": p.id, "nome": p.nome})
+            
             else:
-                # --- LOGICA ASSEMBLAGGIO (Invariata) ---
+                # --- ASSEMBLAGGIO (Operatore Singolo) ---
                 host = Oggetto.objects.get(pk=host_id)
                 mod = Oggetto.objects.get(pk=mod_id)
                 for p in candidati:
-                    # Qui l'artigiano fa tutto da solo
                     ok, _ = GestioneOggettiService.verifica_competenza_assemblaggio(p, host, mod)
                     if ok: capaci.append({"id": p.id, "nome": p.nome})
             
             return Response(capaci)
-
         except Exception as e:
             return Response({"error": str(e)}, status=400)
         
