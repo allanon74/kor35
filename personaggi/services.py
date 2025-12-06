@@ -321,32 +321,56 @@ class GestioneCraftingService:
     
     @staticmethod
     def completa_forgiatura(task_id, attore):
+        """
+        Termina il processo temporale e crea l'oggetto.
+        Autorizza il ritiro se l'attore è il creatore O il destinatario.
+        """
         try:
-            task = ForgiaturaInCorso.objects.get(pk=task_id, personaggio=attore)
+            # 1. Recupera il task solo per ID (senza filtrare subito per personaggio)
+            task = ForgiaturaInCorso.objects.get(pk=task_id)
         except ForgiaturaInCorso.DoesNotExist:
             raise ValidationError("Task non trovato.")
+
+        # 2. Controllo Permessi: Chi sta ritirando?
+        # È il creatore (artigiano) o il cliente (destinatario)?
+        is_creator = task.personaggio.id == attore.id
+        is_recipient = task.destinatario_finale and task.destinatario_finale.id == attore.id
+
+        if not is_creator and not is_recipient:
+             raise ValidationError("Non sei autorizzato a ritirare o gestire questo lavoro.")
             
         if not task.is_pronta: 
-            raise ValidationError("Forgiatura non ancora completata.")
+            raise ValidationError("La forgiatura non è ancora completata.")
         
         with transaction.atomic():
-            proprietario = task.destinatario_finale if task.destinatario_finale else attore
-            nuovo_obj = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, proprietario)
+            # 3. Determina il proprietario finale
+            # Se c'è un destinatario (lavoro conto terzi), l'oggetto è suo. 
+            # Altrimenti è di chi ha fatto il lavoro.
+            proprietario = task.destinatario_finale if task.destinatario_finale else task.personaggio
             
-            if task.slot_target and proprietario == attore:
-                nuovo_obj.slot_corpo = task.slot_target
-                nuovo_obj.is_equipaggiato = True
-                nuovo_obj.save()
+            # 4. Crea l'oggetto fisico
+            nuovo_oggetto = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, proprietario)
             
-            task.delete() # Libera lo slot di forgiatura
+            # Equipaggia automaticamente SOLO se forgiato per se stessi (Fai da te)
+            if task.slot_target and proprietario.id == task.personaggio.id:
+                nuovo_oggetto.slot_corpo = task.slot_target
+                nuovo_oggetto.is_equipaggiato = True
+                nuovo_oggetto.save()
             
+            # 5. Rimuovi dalla coda
+            task.delete()
+            
+            # 6. Log
             if task.destinatario_finale:
-                attore.aggiungi_log(f"Lavoro terminato: {nuovo_obj.nome} inviato a {task.destinatario_finale.nome}.")
-                task.destinatario_finale.aggiungi_log(f"Consegna ricevuta: {nuovo_obj.nome} da {attore.nome}.")
+                # Log Artigiano
+                task.personaggio.aggiungi_log(f"Lavoro completato: {nuovo_oggetto.nome} consegnato a {task.destinatario_finale.nome}.")
+                # Log Cliente (se diverso dall'attore che sta cliccando, anche se qui è ridondante perché vede l'oggetto)
+                if task.destinatario_finale.id != task.personaggio.id:
+                    task.destinatario_finale.aggiungi_log(f"Hai ritirato la forgiatura: {nuovo_oggetto.nome} (Artigiano: {task.personaggio.nome}).")
             else:
-                attore.aggiungi_log(f"Forgiatura completata: {nuovo_obj.nome}.")
+                task.personaggio.aggiungi_log(f"Forgiatura completata: {nuovo_oggetto.nome}.")
                 
-        return nuovo_obj
+        return nuovo_oggetto
 
     
     @staticmethod
