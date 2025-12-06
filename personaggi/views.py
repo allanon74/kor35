@@ -1254,9 +1254,10 @@ class CraftingViewSet(viewsets.ViewSet):
         slot = request.data.get('slot_target')
         
         personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        infusione = get_object_or_404(Infusione, pk=inf_id)
         
         try:
-            forgiatura = GestioneCraftingService.avvia_forgiatura(personaggio, inf_id, slot)
+            forgiatura = GestioneCraftingService.avvia_forgiatura(personaggio, infusione, slot)
             return Response({
                 "status": "started", 
                 "fine_prevista": forgiatura.data_fine_prevista,
