@@ -257,16 +257,20 @@ class GestioneOggettiService:
                 proprietario_items.personaggio.aggiungi_log(msg)
 
     @staticmethod
-    def elabora_richiesta_assemblaggio(richiesta_id, artigiano_user):
+    def elabora_richiesta_assemblaggio(richiesta_id, esecutore_user):
         """
-        L'artigiano accetta ed esegue la richiesta.
+        L'artigiano (o un admin) accetta ed esegue la richiesta.
         """
         try:
             req = RichiestaAssemblaggio.objects.select_related('committente', 'artigiano', 'oggetto_host', 'componente').get(pk=richiesta_id)
         except RichiestaAssemblaggio.DoesNotExist:
             raise ValidationError("Richiesta non trovata.")
 
-        if req.artigiano.proprietario != artigiano_user:
+        # MODIFICA: Check permessi esteso agli Admin
+        is_owner = req.artigiano.proprietario == esecutore_user
+        is_admin = esecutore_user.is_staff or esecutore_user.is_superuser
+
+        if not is_owner and not is_admin:
             raise ValidationError("Non sei l'artigiano designato per questa richiesta.")
             
         if req.stato != STATO_RICHIESTA_PENDENTE:
@@ -278,7 +282,8 @@ class GestioneOggettiService:
 
         # ESECUZIONE
         with transaction.atomic():
-            # 1. Esegui Assemblaggio (usando l'artigiano come esecutore per i check skill)
+            # Nota: Usiamo 'req.artigiano' (il personaggio) per verificare le skill, 
+            # indipendentemente da chi (admin o player) ha cliccato il bottone.
             GestioneOggettiService.assembla_mod(req.artigiano, req.oggetto_host, req.componente, check_skills=True)
             
             # 2. Transazione Crediti
@@ -291,7 +296,11 @@ class GestioneOggettiService:
             req.save()
             
             # 4. Log
-            req.committente.aggiungi_log(f"Richiesta completata: {req.artigiano.nome} ha assemblato {req.componente.nome}.")
+            msg_log = f"Richiesta completata: {req.artigiano.nome} ha assemblato {req.componente.nome}."
+            if is_admin and not is_owner:
+                msg_log += f" (Forzato da Admin {esecutore_user.username})"
+                
+            req.committente.aggiungi_log(msg_log)
             req.artigiano.aggiungi_log(f"Lavoro completato per {req.committente.nome}.")
 
         return True

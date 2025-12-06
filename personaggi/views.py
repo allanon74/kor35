@@ -1488,10 +1488,16 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def accetta(self, request, pk=None):
         richiesta = self.get_object()
-        if richiesta.artigiano.proprietario != request.user:
+        
+        # MODIFICA: Permetti l'azione se sei il proprietario O se sei Admin/Staff
+        is_owner = richiesta.artigiano.proprietario == request.user
+        is_admin = request.user.is_staff or request.user.is_superuser
+        
+        if not is_owner and not is_admin:
             return Response({"error": "Non autorizzato"}, status=403)
-
+            
         try:
+            # Passiamo l'utente che sta eseguendo l'azione (admin o proprietario)
             GestioneOggettiService.elabora_richiesta_assemblaggio(richiesta.id, request.user)
             return Response({"status": "success", "message": "Lavoro completato!"})
         except ValidationError as e:
