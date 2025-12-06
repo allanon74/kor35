@@ -1526,6 +1526,14 @@ class CapableArtisansView(APIView):
             host = Oggetto.objects.get(pk=host_id)
             mod = Oggetto.objects.get(pk=mod_id)
             
+            # Filtro semplificato per DEBUG: Prende tutti tranne me
+            # Rimuoviamo temporaneamente proprietario__is_active per testare
+            candidati = Personaggio.objects.exclude(id=requester.id).filter(data_morte__isnull=True)
+            
+            print(f"--- DEBUG ARTIGIANI ---")
+            print(f"Richiedente: {requester.nome}")
+            print(f"Candidati trovati (grezzi): {candidati.count()}")
+            
             # --- CORREZIONE QUI ---
             # Filtriamo i candidati:
             # 1. Escludiamo chi fa la richiesta (exclude id=requester.id)
@@ -1538,8 +1546,9 @@ class CapableArtisansView(APIView):
             
             capaci = []
             for artigiano in candidati:
-                # Verifica competenza (nota: usa il metodo statico del service)
-                can_do, _ = GestioneOggettiService.verifica_competenza_assemblaggio(artigiano, host, mod)
+                can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(artigiano, host, mod)
+                print(f"Check {artigiano.nome}: {can_do} -> {msg}") # VEDI QUESTO NEL LOG
+                
                 if can_do:
                     capaci.append({
                         "id": artigiano.id, 
