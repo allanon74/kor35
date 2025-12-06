@@ -368,7 +368,7 @@ class GestioneOggettiService:
             mod.sposta_in_inventario(pg) 
             mod.save()
             
-            GestioneOggettiService.ricalcola_stats(host)
+            # GestioneOggettiService.ricalcola_stats(host)
             host.save()
             
             pg.aggiungi_log(f"Ha smontato {mod.nome} da {host.nome}.")
