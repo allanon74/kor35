@@ -137,21 +137,32 @@ class GestioneOggettiService:
         return True, "Competenza valida."
 
     @staticmethod
-    def assembla_mod(assemblatore: Personaggio, oggetto_ospite: Oggetto, potenziamento: Oggetto, check_skills=True):
+    def assembla_mod(assemblatore, oggetto_ospite, potenziamento, check_skills=True):
         """
         Gestisce l'installazione di Mod/Materia su un oggetto ospite.
         Unifica la logica di 'monta_potenziamento' e 'assembla_mod'.
         """
         
         # 1. Controlli di base e Proprietà
+        # Recupera chi detiene fisicamente l'oggetto (Inventario o Personaggio)
         proprietario_items = oggetto_ospite.inventario_corrente
         
         if not proprietario_items:
              raise ValidationError("Oggetto host non in inventario.")
         
-        # Se stiamo processando una richiesta di lavoro, l'assemblatore può essere diverso dal proprietario.
-        # Ma i due oggetti devono essere nello stesso posto (o gestiti dalla logica della richiesta).
-        if potenziamento.inventario_corrente != proprietario_items:
+        # --- CORREZIONE IMPORTANTE: Confronto tramite ID ---
+        # Verifichiamo che l'assemblatore (chi fa l'azione) abbia l'oggetto nel suo inventario.
+        # Se è una richiesta di lavoro, l'assemblatore è l'artigiano, ma gli oggetti sono del committente?
+        # NOTA: Se la logica prevede che l'artigiano operi su oggetti altrui, questo check va adattato.
+        # Tuttavia, per l'uso standard (Accademia o Fai-da-te), l'assemblatore possiede l'oggetto.
+        # Se assemblatore != proprietario (caso Artigiano), assumiamo che il check sia stato fatto a monte (nella View Richiesta)
+        # o che 'assemblatore' qui rappresenti chi sta *tenendo* l'oggetto.
+        
+        # Per sicurezza, controlliamo che i due oggetti siano nello STESSO inventario
+        if not potenziamento.inventario_corrente:
+             raise ValidationError("Il potenziamento non è in nessun inventario.")
+
+        if potenziamento.inventario_corrente.id != proprietario_items.id:
              raise ValidationError("Host e Componente devono trovarsi nello stesso inventario.")
 
         if oggetto_ospite.pk == potenziamento.pk:
@@ -169,14 +180,14 @@ class GestioneOggettiService:
         classe = oggetto_ospite.classe_oggetto
         
         # --- LOGICA MATERIA ---
-        if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+        if potenziamento.tipo_oggetto == 'MAT': # Usa il codice corretto dal tuo modello (TIPO_OGGETTO_MATERIA)
             if oggetto_ospite.is_tecnologico:
                  raise ValidationError("Le Materie non possono essere montate su oggetti Tecnologici.")
 
             # Check esclusività
-            if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MATERIA).exists():
+            if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto='MAT').exists():
                 raise ValidationError("È già presente una Materia.")
-            if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).exists():
+            if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto='MOD').exists():
                 raise ValidationError("Impossibile installare Materia: presenti Mod.")
             
             if classe:
@@ -195,16 +206,16 @@ class GestioneOggettiService:
                      raise ValidationError(f"Questa Materia contiene caratteristiche non supportate dalla classe dell'oggetto (ID invalidi: {diff}).")
 
         # --- LOGICA MOD ---
-        elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD:
+        elif potenziamento.tipo_oggetto == 'MOD': # Usa il codice corretto (TIPO_OGGETTO_MOD)
             if not oggetto_ospite.is_tecnologico:
                 raise ValidationError("Le Mod richiedono un oggetto Tecnologico.")
-            if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MATERIA).exists():
+            if oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto='MAT').exists():
                 raise ValidationError("Impossibile installare Mod: presente Materia.")
 
             if not classe:
                 raise ValidationError("Oggetto privo di Classe, impossibile montare Mod.")
 
-            count_mods = oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).count()
+            count_mods = oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto='MOD').count()
             if count_mods >= classe.max_mod_totali:
                 raise ValidationError(f"Slot Mod esauriti (Max {classe.max_mod_totali}).")
 
@@ -213,7 +224,7 @@ class GestioneOggettiService:
             if not caratts_new and potenziamento.infusione_generatrice:
                  caratts_new = set(potenziamento.infusione_generatrice.componenti.values_list('caratteristica__id', flat=True))
 
-            mods_installate = oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD)
+            mods_installate = oggetto_ospite.potenziamenti_installati.filter(tipo_oggetto='MOD')
             
             # Verifica regole specifiche per caratteristica (es. max 1 mod 'Ottica')
             for c_id in caratts_new:
@@ -238,7 +249,8 @@ class GestioneOggettiService:
                     raise ValidationError(f"Limite Mod per caratteristica ID {c_id} raggiunto ({count_existing}/{max_allowed}).")
         
         else:
-             raise ValidationError("Tipo oggetto non supportato per l'assemblaggio (solo Mod o Materia).")
+             # Se arrivi qui, il tipo non è né MAT né MOD
+             raise ValidationError(f"Tipo oggetto '{potenziamento.tipo_oggetto}' non supportato per l'assemblaggio.")
 
         # 3. ESECUZIONE
         with transaction.atomic():
@@ -252,7 +264,8 @@ class GestioneOggettiService:
             # Log
             if hasattr(proprietario_items, 'personaggio'):
                 msg = f"Installato {potenziamento.nome} su {oggetto_ospite.nome}."
-                if assemblatore != proprietario_items.personaggio:
+                # Se l'assemblatore non è il proprietario (es. Admin o Artigiano), lo annotiamo
+                if assemblatore.id != proprietario_items.personaggio.id:
                     msg += f" (Eseguito da {assemblatore.nome})"
                 proprietario_items.personaggio.aggiungi_log(msg)
 
@@ -331,14 +344,11 @@ class GestioneOggettiService:
         """
         Smonta un potenziamento.
         """
-        # --- CORREZIONE: Verifica proprietà tramite inventario_corrente ---
-        # host.inventario_corrente è un riferimento a Personaggio (o Inventario)
-        # Verifichiamo se l'oggetto è nell'inventario del PG che richiede l'azione
-        
-        # Se inventario_corrente è un oggetto Personaggio:
-        if host.inventario_corrente != pg:
-             # Se inventario_corrente è un ID o un puntatore generico, adatta il check
-             # Esempio alternativo: if host.inventario_corrente.id != pg.id:
+        # --- CORREZIONE QUI ---
+        # Confrontiamo gli ID per evitare problemi di ereditarietà (Personaggio vs Inventario)
+        # Se inventario_corrente è None (es. oggetto perso), il check fallisce correttamente.
+        if not host.inventario_corrente or host.inventario_corrente.id != pg.id:
+             # Debug opzionale: print(f"DEBUG: Host Inv ID: {host.inventario_corrente.id if host.inventario_corrente else 'None'} vs PG ID: {pg.id}")
              raise ValidationError("Non possiedi l'oggetto ospite.")
         
         if mod not in host.potenziamenti_installati.all():
@@ -355,7 +365,7 @@ class GestioneOggettiService:
             host.potenziamenti_installati.remove(mod)
             
             mod.ospitato_su = None
-            mod.sposta_in_inventario(pg) # Torna nell'inventario
+            mod.sposta_in_inventario(pg) 
             mod.save()
             
             GestioneOggettiService.ricalcola_stats(host)
