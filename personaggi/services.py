@@ -330,19 +330,21 @@ class GestioneOggettiService:
     def rimuovi_mod(pg, host, mod, check_skills=True):
         """
         Smonta un potenziamento.
-        Supporta check_skills per verificare se il PG ha le competenze (o paga l'Accademia).
         """
-        # 1. Verifica Proprietà
-        if host.inventario_corrente != pg and host.proprietario != pg:
-             # Nota: verifica lasca per permettere gestione inventario corrente
+        # --- CORREZIONE: Verifica proprietà tramite inventario_corrente ---
+        # host.inventario_corrente è un riferimento a Personaggio (o Inventario)
+        # Verifichiamo se l'oggetto è nell'inventario del PG che richiede l'azione
+        
+        # Se inventario_corrente è un oggetto Personaggio:
+        if host.inventario_corrente != pg:
+             # Se inventario_corrente è un ID o un puntatore generico, adatta il check
+             # Esempio alternativo: if host.inventario_corrente.id != pg.id:
              raise ValidationError("Non possiedi l'oggetto ospite.")
         
-        # Verifica che il mod sia effettivamente dentro l'host
         if mod not in host.potenziamenti_installati.all():
             raise ValidationError("Questo modulo non è installato sull'oggetto specificato.")
 
-        # 2. Check Skills (Se richiesto)
-        # I requisiti per smontare sono gli stessi del montare
+        # 2. Check Skills
         if check_skills:
             can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(pg, host, mod)
             if not can_do:
@@ -353,10 +355,9 @@ class GestioneOggettiService:
             host.potenziamenti_installati.remove(mod)
             
             mod.ospitato_su = None
-            mod.sposta_in_inventario(pg) # Torna nell'inventario del PG
+            mod.sposta_in_inventario(pg) # Torna nell'inventario
             mod.save()
             
-            # Ricalcola stats host senza il mod
             GestioneOggettiService.ricalcola_stats(host)
             host.save()
             
