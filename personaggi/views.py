@@ -1621,7 +1621,7 @@ def forgia_item_view(request):
 # --- RICERCA ARTIGIANI ---
 class CapableArtisansView(APIView):
     permission_classes = [IsAuthenticated]
-    
+
     def post(self, request):
         char_id = request.data.get('char_id')
         infusione_id = request.data.get('infusione_id')
@@ -1630,7 +1630,6 @@ class CapableArtisansView(APIView):
 
         try:
             requester = Personaggio.objects.get(pk=char_id)
-            # Cerca PG attivi diversi dal richiedente
             candidati = Personaggio.objects.exclude(id=requester.id).filter(
                 data_morte__isnull=True, proprietario__is_active=True
             )
@@ -1638,19 +1637,36 @@ class CapableArtisansView(APIView):
             capaci = []
             
             if infusione_id:
-                # MODO FORGIATURA
+                # --- LOGICA FORGIATURA COOPERATIVA ---
                 inf = Infusione.objects.get(pk=infusione_id)
+                
+                # Check Preliminare: Il richiedente (Forgiatore) HA l'aura principale?
+                # Se non ce l'ha, non può nemmeno chiedere aiuto.
+                if requester.get_valore_aura_effettivo(inf.aura_richiesta) < inf.livello:
+                    # Ritorna lista vuota o errore specifico? 
+                    # Meglio lista vuota così il frontend capisce che non ci sono opzioni
+                    return Response([]) 
+
                 for p in candidati:
-                    ok, _ = GestioneCraftingService.verifica_competenza_forgiatura(p, inf)
-                    if ok: capaci.append({"id": p.id, "nome": p.nome})
+                    # Verifica se questo candidato (p), agendo come aiutante, completa i requisiti del richiedente
+                    ok, _ = GestioneCraftingService.verifica_competenza_forgiatura(
+                        forgiatore=requester, 
+                        infusione=inf, 
+                        aiutante=p
+                    )
+                    if ok: 
+                        capaci.append({"id": p.id, "nome": p.nome})
+                        
             else:
-                # MODO ASSEMBLAGGIO
+                # --- LOGICA ASSEMBLAGGIO (Invariata) ---
                 host = Oggetto.objects.get(pk=host_id)
                 mod = Oggetto.objects.get(pk=mod_id)
                 for p in candidati:
+                    # Qui l'artigiano fa tutto da solo
                     ok, _ = GestioneOggettiService.verifica_competenza_assemblaggio(p, host, mod)
                     if ok: capaci.append({"id": p.id, "nome": p.nome})
             
             return Response(capaci)
+
         except Exception as e:
             return Response({"error": str(e)}, status=400)

@@ -284,7 +284,9 @@ class GestioneOggettiService:
                 GestioneCraftingService.avvia_forgiatura(
                     personaggio=req.artigiano, 
                     infusione=req.infusione, 
-                    destinatario_finale=req.committente
+                    destinatario_finale=req.committente,
+                    is_academy=False,
+                    aiutante=req.artigiano # Passiamo esplicitamente l'artigiano come aiutante
                 )
                 req.artigiano.aggiungi_log(f"Ha iniziato a forgiare {req.infusione.nome} per {req.committente.nome}.")
                 
@@ -327,26 +329,62 @@ class GestioneCraftingService:
         return livello * costo_per_mattone, livello * tempo_per_mattone
 
     @staticmethod
-    def verifica_competenza_forgiatura(personaggio, infusione):
-        """Controlla Aure e Caratteristiche."""
-        livello = infusione.livello
-        punteggi = personaggio.caratteristiche_base
+    def verifica_competenza_forgiatura(forgiatore, infusione, aiutante=None):
+        """
+        Verifica i requisiti per la forgiatura, eventualmente con un aiutante.
         
-        # 1. Aura
-        if not infusione.aura_richiesta: return False, "Infusione non valida."
-        if personaggio.get_valore_aura_effettivo(infusione.aura_richiesta) < livello:
-            return False, f"Aura {infusione.aura_richiesta.nome} insufficiente."
+        REGOLE:
+        1. Forgiatore: DEVE avere Aura Richiesta >= Livello.
+        2. Aiutante (se c'è): DEVE avere Aura Richiesta O Aura Infusione >= Livello.
+        3. Combinata: Aura Infusione (se c'è) e Caratteristiche devono essere soddisfatte 
+           da ALMENO UNO dei due.
+        """
+        livello = infusione.livello
+        
+        # --- 1. CHECK AURA PRINCIPALE (Vincolo Forgiatore) ---
+        if not infusione.aura_richiesta:
+            return False, "Infusione non valida (manca Aura Richiesta)."
             
-        # 2. Aura Secondaria
-        if infusione.aura_infusione and personaggio.get_valore_aura_effettivo(infusione.aura_infusione) < livello:
-            return False, f"Aura {infusione.aura_infusione.nome} insufficiente."
+        val_aura_main_forgiatore = forgiatore.get_valore_aura_effettivo(infusione.aura_richiesta)
+        if val_aura_main_forgiatore < livello:
+            return False, f"Il Forgiatore non ha l'Aura richiesta ({infusione.aura_richiesta.nome}) al livello necessario ({val_aura_main_forgiatore}/{livello})."
+
+        # --- 2. CHECK AIUTANTE (Vincolo di partecipazione) ---
+        if aiutante:
+            val_aura_main_aiutante = aiutante.get_valore_aura_effettivo(infusione.aura_richiesta)
+            has_valid_main = val_aura_main_aiutante >= livello
             
-        # 3. Componenti
+            has_valid_sec = False
+            if infusione.aura_infusione:
+                val_aura_sec_aiutante = aiutante.get_valore_aura_effettivo(infusione.aura_infusione)
+                has_valid_sec = val_aura_sec_aiutante >= livello
+            
+            if not (has_valid_main or has_valid_sec):
+                return False, "L'Aiutante non possiede né l'Aura Richiesta né l'Aura Infusione al livello corretto."
+
+        # --- 3. CHECK AURA SECONDARIA (Combinata) ---
+        if infusione.aura_infusione:
+            val_f = forgiatore.get_valore_aura_effettivo(infusione.aura_infusione)
+            val_a = aiutante.get_valore_aura_effettivo(infusione.aura_infusione) if aiutante else 0
+            
+            if max(val_f, val_a) < livello:
+                return False, f"Livello Aura Infusione insufficiente ({infusione.aura_infusione.nome}). Max posseduto: {max(val_f, val_a)}/{livello}."
+
+        # --- 4. CHECK CARATTERISTICHE (Combinata) ---
+        stats_f = forgiatore.caratteristiche_base
+        stats_a = aiutante.caratteristiche_base if aiutante else {}
+        
         for comp in infusione.componenti.select_related('caratteristica').all():
-            val = punteggi.get(comp.caratteristica.nome, 0)
-            if val < comp.valore: return False, f"Caratteristica {comp.caratteristica.nome} insufficiente."
+            nome = comp.caratteristica.nome
+            req = comp.valore
             
-        return True, "OK"
+            val_f = stats_f.get(nome, 0)
+            val_a = stats_a.get(nome, 0)
+            
+            if max(val_f, val_a) < req:
+                return False, f"Caratteristica {nome} insufficiente. Max posseduto: {max(val_f, val_a)}/{req}."
+
+        return True, "Requisiti soddisfatti."
 
     @staticmethod
     def get_valore_statistica_aura(personaggio, aura, campo):
@@ -383,8 +421,10 @@ class GestioneCraftingService:
             descrizione_pagamento = f"Forgiatura Accademia: {infusione.nome}"
             # Accademia ignora i requisiti di competenza del PG
         else:
+            forgiatore = destinatario_finale if destinatario_finale else personaggio
+            helper = personaggio if destinatario_finale else None # Se faccio da solo, helper è None
             # Verifica competenze (se non è accademia)
-            can_do, msg = GestioneCraftingService.verifica_competenza_forgiatura(personaggio, infusione)
+            can_do, msg = GestioneCraftingService.verifica_competenza_forgiatura(personaggio, infusione, aiutante=helper)
             if not can_do: raise ValidationError(msg)
             
             # Calcolo costi materiali
