@@ -1455,33 +1455,51 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
     def crea(self, request):
         committente_id = request.data.get('committente_id')
         artigiano_nome = request.data.get('artigiano_nome')
+        offerta = int(request.data.get('offerta', 0))
+        tipo_op = request.data.get('tipo_operazione', 'INST')
+        
+        # Parametri opzionali
         host_id = request.data.get('host_id')
         comp_id = request.data.get('comp_id')
-        offerta = int(request.data.get('offerta', 0))
-        
-        # NUOVO: Leggi il tipo operazione (Default a 'INST')
-        tipo_op = request.data.get('tipo_operazione', 'INST') 
         infusione_id = request.data.get('infusione_id')
 
         committente = get_object_or_404(Personaggio, pk=committente_id, proprietario=request.user)
-        # Trova artigiano (case insensitive, escluso se stesso)
+        # Trova artigiano (escluso se stesso)
         artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
-
-        host = None
-        comp = None
-        infusione = None
 
         if not artigiano:
             return Response({"error": "Artigiano non trovato."}, status=404)
 
-        if tipo_op =='FORG':
-            if not infusione_id: return Response({"error": "Infusione mancante"}, status=400)
+        host = None
+        comp = None
+        infusione = None
+        messaggio_testo = ""
+
+        # --- 1. GESTIONE FORGIATURA ---
+        if tipo_op == 'FORG':
+            if not infusione_id: 
+                return Response({"error": "Infusione mancante per la forgiatura."}, status=400)
             infusione = get_object_or_404(Infusione, pk=infusione_id)
+            
+            messaggio_testo = (
+                f"{committente.nome} richiede il tuo intervento per FORGIARE "
+                f"l'oggetto '{infusione.nome}'. Offerta: {offerta} CR."
+            )
+
+        # --- 2. GESTIONE ASSEMBLAGGIO / SMONTAGGIO ---
         else:
+            if not host_id or not comp_id:
+                return Response({"error": "Host e Componente mancanti."}, status=400)
             host = get_object_or_404(Oggetto, pk=host_id)
             comp = get_object_or_404(Oggetto, pk=comp_id)
-        
+            
+            verbo = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
+            messaggio_testo = (
+                f"{committente.nome} richiede il tuo intervento per {verbo.upper()} "
+                f"'{comp.nome}' su '{host.nome}'. Offerta: {offerta} CR."
+            )
 
+        # Creazione Richiesta DB
         richiesta = RichiestaAssemblaggio.objects.create(
             committente=committente,
             artigiano=artigiano,
@@ -1492,20 +1510,13 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             tipo_operazione=tipo_op
         )
         
-        verbo = "---"
-        if tipo_op == "RIMO":
-            verbo = "rimuovere" 
-        elif tipo_op == "FORG":
-            verbo = "forgiare"
-        else:
-            verbo = "assemblare"
-        
+        # Creazione Notifica
         Messaggio.objects.create(
             mittente=request.user,
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
             destinatario_personaggio=artigiano,
             titolo="Nuova Richiesta di Lavoro",
-            testo=f"{committente.nome} richiede il tuo intervento per {verbo} {comp.nome} su {host.nome}. Offerta: {offerta} CR."
+            testo=messaggio_testo
         )
 
         return Response({"status": "created", "id": richiesta.id}, status=201)
