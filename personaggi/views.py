@@ -1282,19 +1282,40 @@ class CraftingViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'])
     def coda_forgiatura(self, request):
         char_id = request.query_params.get('char_id')
-        personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        if request.user.is_staff: 
+            pg = get_object_or_404(Personaggio, id=char_id)
+        else: 
+            pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
         
-        coda = ForgiaturaInCorso.objects.filter(personaggio=personaggio)
+        # --- CORREZIONE VISIBILITÀ ---
+        # Mostra i task se sei l'artigiano (personaggio) OPPURE il destinatario finale
+        coda = ForgiaturaInCorso.objects.filter(
+            Q(personaggio=pg) | Q(destinatario_finale=pg)
+        ).select_related('infusione', 'personaggio', 'destinatario_finale')
+        
         data = []
         now = timezone.now()
         for task in coda:
+            # Aggiungi info extra per capire chi sta lavorando per chi
+            info_extra = ""
+            if task.destinatario_finale and task.destinatario_finale.id != pg.id:
+                 info_extra = f"Stai forgiando per: {task.destinatario_finale.nome}"
+            elif task.personaggio.id != pg.id:
+                 info_extra = f"Artigiano al lavoro: {task.personaggio.nome}"
+                 
             data.append({
                 "id": task.id,
                 "infusione_nome": task.infusione.nome,
                 "data_inizio": task.data_inizio,
                 "data_fine": task.data_fine_prevista,
                 "secondi_rimanenti": max(0, (task.data_fine_prevista - now).total_seconds()),
-                "is_pronta": task.is_pronta
+                "is_pronta": task.is_pronta,
+                "info_extra": info_extra,
+                # Flag per il frontend: posso ritirarlo io?
+                "can_collect": (task.is_pronta and (
+                    (task.destinatario_finale and task.destinatario_finale.id == pg.id) or 
+                    (not task.destinatario_finale and task.personaggio.id == pg.id)
+                ))
             })
         return Response(data)
 

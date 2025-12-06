@@ -1069,15 +1069,37 @@ class ForgiaturaInCorso(models.Model):
     slot_target = models.CharField(max_length=2, blank=True, null=True) 
     completata = models.BooleanField(default=False)
     
-    # NUOVO: Se impostato, l'oggetto finale viene trasferito a questo PG
-    destinatario_finale = models.ForeignKey(Personaggio, on_delete=models.SET_NULL, null=True, blank=True, related_name='forgiature_in_arrivo')
+    # NUOVO: Se presente, l'oggetto creato andrà a questo personaggio (es. Committente)
+    destinatario_finale = models.ForeignKey(
+        Personaggio, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True, 
+        related_name='forgiature_in_arrivo',
+        verbose_name="Destinatario Finale (se conto terzi)"
+    )
 
-    class Meta: ordering = ['data_fine_prevista']; verbose_name = "Forgiatura in Corso"; verbose_name_plural = "Forgiature in Corso"
+    class Meta:
+        ordering = ['data_fine_prevista']
+        verbose_name = "Forgiatura in Corso"
+        verbose_name_plural = "Forgiature in Corso"
+
     @property
-    def is_pronta(self): 
+    def is_pronta(self):
         return timezone.now() >= self.data_fine_prevista
-    
-    # --- STATI RICHIESTA LAVORO ---
+
+
+# --- TIPI OPERAZIONE ---
+TIPO_OPERAZIONE_INSTALLAZIONE = 'INST'
+TIPO_OPERAZIONE_RIMOZIONE = 'RIMO'
+TIPO_OPERAZIONE_FORGIATURA = 'FORG'
+
+TIPO_OPERAZIONE_CHOICES = [
+    (TIPO_OPERAZIONE_INSTALLAZIONE, 'Installazione'),
+    (TIPO_OPERAZIONE_RIMOZIONE, 'Rimozione'),
+    (TIPO_OPERAZIONE_FORGIATURA, 'Forgiatura'),
+]
+
+# --- STATI RICHIESTA ---
 STATO_RICHIESTA_PENDENTE = 'PEND'
 STATO_RICHIESTA_COMPLETATA = 'COMP'
 STATO_RICHIESTA_RIFIUTATA = 'RIFI'
@@ -1088,34 +1110,17 @@ STATO_RICHIESTA_CHOICES = [
     (STATO_RICHIESTA_RIFIUTATA, 'Rifiutata'),
 ]
 
-# --- TIPI OPERAZIONE RICHIESTA (Nuovo) ---
-TIPO_OPERAZIONE_INSTALLAZIONE = 'INST'
-TIPO_OPERAZIONE_RIMOZIONE = 'RIMO'
-TIPO_OPERAZIONE_FORGIATURA = 'FORG'
-# Qui potrai aggiungere in futuro: RIPARAZIONE, RICARICA, CRAFTING, ecc.
-
-TIPO_OPERAZIONE_CHOICES = [
-    (TIPO_OPERAZIONE_INSTALLAZIONE, 'Installazione'),
-    (TIPO_OPERAZIONE_RIMOZIONE, 'Rimozione'),
-    (TIPO_OPERAZIONE_FORGIATURA, 'Forgiatura'),
-]
-
 class RichiestaAssemblaggio(models.Model):
-    """
-    Rappresenta una richiesta di lavoro generica da un PG (committente) a un altro (artigiano).
-    Il committente possiede gli oggetti, l'artigiano ci mette la competenza.
-    """
     committente = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='richieste_assemblaggio_inviate')
     artigiano = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='richieste_assemblaggio_ricevute')
     
-    # MODIFICA: Ora possono essere nulli (per la forgiatura)
-    oggetto_host = models.ForeignKey(Oggetto, on_delete=models.CASCADE, related_name='richieste_host', null=True, blank=True)
-    componente = models.ForeignKey(Oggetto, on_delete=models.CASCADE, related_name='richieste_componente', null=True, blank=True)
+    # Opzionali per supportare la forgiatura (dove non c'è ancora l'oggetto fisico)
+    oggetto_host = models.ForeignKey('Oggetto', on_delete=models.CASCADE, related_name='richieste_host', null=True, blank=True)
+    componente = models.ForeignKey('Oggetto', on_delete=models.CASCADE, related_name='richieste_componente', null=True, blank=True)
     
-    # NUOVO CAMPO: L'infusione da forgiare
-    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE, related_name='richieste_forgiatura', null=True, blank=True)
-     
-    # NUOVO CAMPO: Specifica cosa deve fare l'artigiano
+    # NUOVO: L'infusione da forgiare
+    infusione = models.ForeignKey('Infusione', on_delete=models.CASCADE, related_name='richieste_forgiatura', null=True, blank=True)
+    
     tipo_operazione = models.CharField(
         max_length=4, 
         choices=TIPO_OPERAZIONE_CHOICES, 
@@ -1133,12 +1138,14 @@ class RichiestaAssemblaggio(models.Model):
         verbose_name_plural = "Richieste Lavoro"
 
     def clean(self):
-        if self.committente == self.artigiano: 
-            raise ValidationError("Richiesta non valida verso se stessi.")
-        if self.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA and not self.infusione:
-            raise ValidationError("Forgiatura richiede un'Infusione.")
-        if self.tipo_operazione != TIPO_OPERAZIONE_FORGIATURA and (not self.oggetto_host or not self.componente):
-            raise ValidationError("Assemblaggio/Smontaggio richiedono Host e Componente.")
+        if self.committente == self.artigiano:
+            raise ValidationError("Non puoi inviare una richiesta a te stesso.")
             
+        if self.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA and not self.infusione:
+            raise ValidationError("Per la forgiatura è obbligatorio specificare l'infusione.")
+            
+        if self.tipo_operazione != TIPO_OPERAZIONE_FORGIATURA and (not self.oggetto_host or not self.componente):
+             raise ValidationError("Installazione e Rimozione richiedono Host e Componente.")
+    
     def __str__(self):
         return f"{self.get_tipo_operazione_display()} - {self.committente} -> {self.artigiano}"
