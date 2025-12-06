@@ -1083,9 +1083,19 @@ STATO_RICHIESTA_CHOICES = [
     (STATO_RICHIESTA_RIFIUTATA, 'Rifiutata'),
 ]
 
+# --- TIPI OPERAZIONE RICHIESTA (Nuovo) ---
+TIPO_OPERAZIONE_INSTALLAZIONE = 'INST'
+TIPO_OPERAZIONE_RIMOZIONE = 'RIMO'
+# Qui potrai aggiungere in futuro: RIPARAZIONE, RICARICA, CRAFTING, ecc.
+
+TIPO_OPERAZIONE_CHOICES = [
+    (TIPO_OPERAZIONE_INSTALLAZIONE, 'Installazione'),
+    (TIPO_OPERAZIONE_RIMOZIONE, 'Rimozione'),
+]
+
 class RichiestaAssemblaggio(models.Model):
     """
-    Rappresenta una richiesta di lavoro da un PG (committente) a un altro (artigiano).
+    Rappresenta una richiesta di lavoro generica da un PG (committente) a un altro (artigiano).
     Il committente possiede gli oggetti, l'artigiano ci mette la competenza.
     """
     committente = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='richieste_assemblaggio_inviate')
@@ -1094,15 +1104,26 @@ class RichiestaAssemblaggio(models.Model):
     oggetto_host = models.ForeignKey(Oggetto, on_delete=models.CASCADE, related_name='richieste_host')
     componente = models.ForeignKey(Oggetto, on_delete=models.CASCADE, related_name='richieste_componente')
     
+    # NUOVO CAMPO: Specifica cosa deve fare l'artigiano
+    tipo_operazione = models.CharField(
+        max_length=4, 
+        choices=TIPO_OPERAZIONE_CHOICES, 
+        default=TIPO_OPERAZIONE_INSTALLAZIONE,
+        verbose_name="Tipo Operazione"
+    )
+    
     offerta_crediti = models.IntegerField(default=0, verbose_name="Offerta pagamento")
     data_creazione = models.DateTimeField(auto_now_add=True)
     stato = models.CharField(max_length=4, choices=STATO_RICHIESTA_CHOICES, default=STATO_RICHIESTA_PENDENTE)
     
     class Meta:
         ordering = ['-data_creazione']
-        verbose_name = "Richiesta Assemblaggio"
-        verbose_name_plural = "Richieste Assemblaggio"
+        verbose_name = "Richiesta Lavoro"
+        verbose_name_plural = "Richieste Lavoro"
 
     def clean(self):
         if self.committente == self.artigiano:
             raise ValidationError("Non puoi inviare una richiesta a te stesso.")
+            
+    def __str__(self):
+        return f"{self.get_tipo_operazione_display()} - {self.committente} -> {self.artigiano}"
