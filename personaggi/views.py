@@ -1457,8 +1457,12 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         host_id = request.data.get('host_id')
         comp_id = request.data.get('comp_id')
         offerta = int(request.data.get('offerta', 0))
+        
+        # NUOVO: Leggi il tipo operazione (Default a 'INST')
+        tipo_op = request.data.get('tipo_operazione', 'INST') 
 
         committente = get_object_or_404(Personaggio, pk=committente_id, proprietario=request.user)
+        # Trova artigiano (case insensitive, escluso se stesso)
         artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
 
         if not artigiano:
@@ -1472,15 +1476,17 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             artigiano=artigiano,
             oggetto_host=host,
             componente=comp,
-            offerta_crediti=offerta
+            offerta_crediti=offerta,
+            tipo_operazione=tipo_op
         )
-
+        
+        verbo = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
         Messaggio.objects.create(
             mittente=request.user,
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
             destinatario_personaggio=artigiano,
-            titolo="Richiesta di Lavoro",
-            testo=f"{committente.nome} richiede il tuo intervento per assemblare {comp.nome} su {host.nome}. Offerta: {offerta} CR."
+            titolo="Nuova Richiesta di Lavoro",
+            testo=f"{committente.nome} richiede il tuo intervento per {verbo} {comp.nome} su {host.nome}. Offerta: {offerta} CR."
         )
 
         return Response({"status": "created", "id": richiesta.id}, status=201)
