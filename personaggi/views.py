@@ -1671,3 +1671,24 @@ class CapableArtisansView(APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=400)
+        
+class ForgingValidationView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """Controlla se il PG ha i requisiti per l'infusione."""
+        char_id = request.data.get('char_id')
+        inf_id = request.data.get('infusione_id')
+        
+        try:
+            pg = Personaggio.objects.get(pk=char_id)
+            inf = Infusione.objects.get(pk=inf_id)
+            
+            can_do, msg = GestioneCraftingService.verifica_competenza_forgiatura(pg, inf)
+            
+            return Response({
+                "can_forge": can_do,
+                "reason": msg if not can_do else "OK"
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
