@@ -1025,16 +1025,22 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
 class RichiestaAssemblaggioSerializer(serializers.ModelSerializer):
     committente_nome = serializers.CharField(source='committente.nome', read_only=True)
     artigiano_nome = serializers.CharField(source='artigiano.nome', read_only=True)
-    oggetto_host_nome = serializers.CharField(source='oggetto_host.nome', read_only=True)
-    componente_nome = serializers.CharField(source='componente.nome', read_only=True)
     
+    host_nome = serializers.CharField(source='oggetto_host.nome', read_only=True)
+    componente_nome = serializers.CharField(source='componente.nome', read_only=True)
+    infusione_nome = serializers.CharField(source='infusione.nome', read_only=True) # Nuovo
+    
+    tipo_display = serializers.CharField(source='get_tipo_operazione_display', read_only=True)
+
     class Meta:
         model = RichiestaAssemblaggio
-        fields = (
-            'id', 'committente', 'committente_nome', 
-            'artigiano', 'artigiano_nome',
-            'oggetto_host', 'oggetto_host_nome',
+        fields = [
+            'id', 
+            'committente', 'committente_nome', 
+            'artigiano', 'artigiano_nome', 
+            'oggetto_host', 'host_nome',
             'componente', 'componente_nome',
+            'infusione', 'infusione_nome',
+            'tipo_operazione', 'tipo_display',
             'offerta_crediti', 'stato', 'data_creazione'
-        )
-        read_only_fields = ('data_creazione', 'stato')
+        ]

@@ -1460,27 +1460,45 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         
         # NUOVO: Leggi il tipo operazione (Default a 'INST')
         tipo_op = request.data.get('tipo_operazione', 'INST') 
+        infusione_id = request.data.get('infusione_id')
 
         committente = get_object_or_404(Personaggio, pk=committente_id, proprietario=request.user)
         # Trova artigiano (case insensitive, escluso se stesso)
         artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
 
+        host = None
+        comp = None
+        infusione = None
+
         if not artigiano:
             return Response({"error": "Artigiano non trovato."}, status=404)
 
-        host = get_object_or_404(Oggetto, pk=host_id)
-        comp = get_object_or_404(Oggetto, pk=comp_id)
+        if tipo_op =='FORG':
+            if not infusione_id: return Response({"error": "Infusione mancante"}, status=400)
+            infusione = get_object_or_404(Infusione, pk=infusione_id)
+        else:
+            host = get_object_or_404(Oggetto, pk=host_id)
+            comp = get_object_or_404(Oggetto, pk=comp_id)
+        
 
         richiesta = RichiestaAssemblaggio.objects.create(
             committente=committente,
             artigiano=artigiano,
             oggetto_host=host,
             componente=comp,
+            infusione=infusione,
             offerta_crediti=offerta,
             tipo_operazione=tipo_op
         )
         
-        verbo = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
+        verbo = "---"
+        if tipo_op == "RIMO":
+            verbo = "rimuovere" 
+        elif tipo_op == "FORG":
+            verbo = "forgiare"
+        else:
+            verbo = "assemblare"
+        
         Messaggio.objects.create(
             mittente=request.user,
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
@@ -1563,5 +1581,76 @@ class CapableArtisansView(APIView):
             
             return Response(capaci)
 
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+        
+# --- VIEW FORGIATURA AGGIORNATA ---
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication]) 
+@permission_classes([IsAuthenticated])
+def forgia_item_view(request):
+    """
+    Avvia la forgiatura.
+    - use_academy=True: Paga 200, ignora requisiti, avvia timer.
+    - use_academy=False: Paga materiali, check requisiti, avvia timer.
+    """
+    char_id = request.data.get('char_id')
+    infusione_id = request.data.get('infusione_id')
+    use_academy = request.data.get('use_academy', False)
+
+    if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
+    else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+
+    infusione = get_object_or_404(Infusione, pk=infusione_id)
+
+    try:
+        # Il Service gestisce tutto (costi differenziati e timer)
+        GestioneCraftingService.avvia_forgiatura(
+            personaggio=pg, 
+            infusione=infusione, 
+            is_academy=use_academy
+        )
+        
+        msg = "Lavoro Accademia avviato." if use_academy else "Forgiatura avviata."
+        return Response({"status": "success", "message": f"{msg} Controlla la coda di lavoro."})
+
+    except ValidationError as e:
+        return Response({"error": str(e)}, status=400)
+
+
+# --- RICERCA ARTIGIANI ---
+class CapableArtisansView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        char_id = request.data.get('char_id')
+        infusione_id = request.data.get('infusione_id')
+        host_id = request.data.get('host_id')
+        mod_id = request.data.get('mod_id')
+
+        try:
+            requester = Personaggio.objects.get(pk=char_id)
+            # Cerca PG attivi diversi dal richiedente
+            candidati = Personaggio.objects.exclude(id=requester.id).filter(
+                data_morte__isnull=True, proprietario__is_active=True
+            )
+            
+            capaci = []
+            
+            if infusione_id:
+                # MODO FORGIATURA
+                inf = Infusione.objects.get(pk=infusione_id)
+                for p in candidati:
+                    ok, _ = GestioneCraftingService.verifica_competenza_forgiatura(p, inf)
+                    if ok: capaci.append({"id": p.id, "nome": p.nome})
+            else:
+                # MODO ASSEMBLAGGIO
+                host = Oggetto.objects.get(pk=host_id)
+                mod = Oggetto.objects.get(pk=mod_id)
+                for p in candidati:
+                    ok, _ = GestioneOggettiService.verifica_competenza_assemblaggio(p, host, mod)
+                    if ok: capaci.append({"id": p.id, "nome": p.nome})
+            
+            return Response(capaci)
         except Exception as e:
             return Response({"error": str(e)}, status=400)

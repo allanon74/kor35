@@ -14,7 +14,8 @@ from .models import (
     OggettoBase, OggettoStatisticaBase, 
     ForgiaturaInCorso, Abilita, 
     OggettoCaratteristica, RichiestaAssemblaggio,
-    STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA
+    STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA, 
+    TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE,
 )
 
 class GestioneOggettiService:
@@ -42,54 +43,30 @@ class GestioneOggettiService:
             return False
 
     @staticmethod
-    def crea_oggetto_da_infusione(infusione, proprietario, nome_personalizzato=None):
-        """
-        Metodo 'fabbrica' di basso livello. 
-        Crea fisicamente l'istanza Oggetto copiando dati dall'Infusione.
-        NON gestisce pagamenti o tempi (demandato a GestioneCraftingService o craft_oggetto_istantaneo).
-        """
-        if not infusione.aura_richiesta:
-            raise ValidationError("Infusione non valida (manca Aura).")
-
-        # 1. Determina il tipo
+    def crea_oggetto_da_infusione(infusione, proprietario, nome_pers=None):
+        """Factory pura: crea record DB."""
         tipo = TIPO_OGGETTO_FISICO
-        aura_nome = infusione.aura_richiesta.nome.lower()
-        if "tecnologic" in aura_nome: 
-            tipo = TIPO_OGGETTO_MOD 
-        elif "mondan" in aura_nome: 
-            tipo = TIPO_OGGETTO_MATERIA
-        # Aggiungi qui altre logiche per Innesti/Mutazioni se basate sull'aura
-
-        # 2. Crea l'Oggetto
-        nuovo_oggetto = Oggetto.objects.create(
-            nome=nome_personalizzato or f"Manufatto di {infusione.nome}",
-            tipo_oggetto=tipo,
+        if infusione.aura_richiesta:
+             nome_a = infusione.aura_richiesta.nome.lower()
+             if "tecnologic" in nome_a: tipo = TIPO_OGGETTO_MOD
+             elif "mondan" in nome_a: tipo = TIPO_OGGETTO_MATERIA
+        
+        obj = Oggetto.objects.create(
+            nome=nome_pers or infusione.nome, 
+            tipo_oggetto=tipo, 
             infusione_generatrice=infusione,
             is_tecnologico=(tipo in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_INNESTO]),
-            cariche_attuali=infusione.statistica_cariche.valore_predefinito if infusione.statistica_cariche else 0
+            proprietario=proprietario
         )
+        # Copia statistiche e caratteristiche...
+        for s in infusione.infusionestatisticabase_set.all():
+            OggettoStatisticaBase.objects.create(oggetto=obj, statistica=s.statistica, valore_base=s.valore_base)
+        for c in infusione.componenti.all():
+            OggettoCaratteristica.objects.create(oggetto=obj, caratteristica=c.caratteristica, valore=c.valore)
+            
+        obj.sposta_in_inventario(proprietario)
+        return obj
 
-        # 3. Copia le Statistiche Base
-        for stat_inf in infusione.infusionestatisticabase_set.all():
-            OggettoStatistica.objects.create(
-                oggetto=nuovo_oggetto,
-                statistica=stat_inf.statistica,
-                valore=stat_inf.valore_base,
-                tipo_modificatore='ADD'
-            )
-
-        # 4. Copia le Caratteristiche (Componenti)
-        for comp in infusione.componenti.all():
-            OggettoCaratteristica.objects.create(
-                oggetto=nuovo_oggetto,
-                caratteristica=comp.caratteristica,
-                valore=comp.valore
-            )
-        
-        # 5. Assegna al Personaggio
-        nuovo_oggetto.sposta_in_inventario(proprietario)
-        
-        return nuovo_oggetto
 
     @staticmethod
     def verifica_competenza_assemblaggio(personaggio: Personaggio, host: Oggetto, componente: Oggetto):
@@ -282,54 +259,47 @@ class GestioneOggettiService:
         return True
 
     @staticmethod
-    def elabora_richiesta_assemblaggio(richiesta_id, esecutore_user):
+    def elabora_richiesta_assemblaggio(richiesta_id, esecutore):
         """
-        Esegue la richiesta (Installazione o Rimozione) in base al tipo.
+        Gestisce l'accettazione del lavoro.
         """
-        from .models import RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, TIPO_OPERAZIONE_RIMOZIONE
-        
-        try:
-            req = RichiestaAssemblaggio.objects.select_related('committente', 'artigiano', 'oggetto_host', 'componente').get(pk=richiesta_id)
-        except RichiestaAssemblaggio.DoesNotExist:
-            raise ValidationError("Richiesta non trovata.")
+        try: req = RichiestaAssemblaggio.objects.get(pk=richiesta_id)
+        except: raise ValidationError("Richiesta non trovata.")
 
-        # Permessi: Proprietario (Artigiano) o Admin
-        is_owner = req.artigiano.proprietario == esecutore_user
-        is_admin = esecutore_user.is_staff or esecutore_user.is_superuser
-
-        if not is_owner and not is_admin:
-            raise ValidationError("Non sei autorizzato a gestire questa richiesta.")
-            
-        if req.stato != STATO_RICHIESTA_PENDENTE:
-            raise ValidationError("Richiesta già processata.")
-
-        if req.committente.crediti < req.offerta_crediti:
-             raise ValidationError("Il committente non ha più i crediti sufficienti.")
+        if req.artigiano.proprietario != esecutore and not (esecutore.is_staff):
+             raise ValidationError("Non autorizzato.")
+        if req.stato != STATO_RICHIESTA_PENDENTE: raise ValidationError("Già processata.")
 
         with transaction.atomic():
-            # Dispatcher operazione
-            azione_verbo = "lavorato su"
-            if req.tipo_operazione == TIPO_OPERAZIONE_RIMOZIONE:
-                GestioneOggettiService.rimuovi_mod(req.artigiano, req.oggetto_host, req.componente, check_skills=True)
-                azione_verbo = "smontato"
-            else:
-                GestioneOggettiService.assembla_mod(req.artigiano, req.oggetto_host, req.componente, check_skills=True)
-                azione_verbo = "installato"
-            
-            # Pagamento
+            # 1. Pagamento Offerta (Committente -> Artigiano)
             if req.offerta_crediti > 0:
-                req.committente.modifica_crediti(-req.offerta_crediti, f"Pagamento a {req.artigiano.nome} ({azione_verbo})")
-                req.artigiano.modifica_crediti(req.offerta_crediti, f"Compenso da {req.committente.nome} ({azione_verbo})")
-            
+                if req.committente.crediti < req.offerta_crediti: raise ValidationError("Committente senza fondi.")
+                req.committente.modifica_crediti(-req.offerta_crediti, f"Pagamento a {req.artigiano.nome}")
+                req.artigiano.modifica_crediti(req.offerta_crediti, f"Lavoro da {req.committente.nome}")
+
+            # 2. Dispatcher
+            if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
+                # L'artigiano avvia il timer. Paga i MATERIALI.
+                # L'oggetto andrà al committente alla fine.
+                GestioneCraftingService.avvia_forgiatura(
+                    personaggio=req.artigiano, 
+                    infusione=req.infusione, 
+                    destinatario_finale=req.committente
+                )
+                req.artigiano.aggiungi_log(f"Ha iniziato a forgiare {req.infusione.nome} per {req.committente.nome}.")
+                
+            elif req.tipo_operazione == TIPO_OPERAZIONE_RIMOZIONE:
+                # Immediato
+                from .services import GestioneOggettiService # Import locale
+                GestioneOggettiService.rimuovi_mod(req.artigiano, req.oggetto_host, req.componente)
+                
+            else: # Installazione
+                # Immediato
+                from .services import GestioneOggettiService
+                GestioneOggettiService.assembla_mod(req.artigiano, req.oggetto_host, req.componente)
+
             req.stato = STATO_RICHIESTA_COMPLETATA
             req.save()
-            
-            # Log
-            log_msg = f"Richiesta completata: {req.artigiano.nome} ha {azione_verbo} {req.componente.nome} su {req.oggetto_host.nome}."
-            if is_admin and not is_owner: log_msg += " (Forzato da Admin)"
-                
-            req.committente.aggiungi_log(log_msg)
-            req.artigiano.aggiungi_log(f"Lavoro completato per {req.committente.nome} ({azione_verbo}).")
 
         return True    
 
@@ -342,21 +312,6 @@ class GestioneCraftingService:
     Si appoggia a GestioneOggettiService per la creazione fisica degli item.
     """
 
-    @staticmethod
-    def get_valore_statistica_aura(personaggio, aura, campo_configurazione):
-        statistica_ref = getattr(aura, campo_configurazione, None)
-        DEFAULT_COSTO = 100
-        DEFAULT_TEMPO = 60
-        
-        if not statistica_ref:
-            if 'tempo' in campo_configurazione: return DEFAULT_TEMPO
-            return DEFAULT_COSTO
-
-        valore = personaggio.get_valore_statistica(statistica_ref.sigla) 
-        if valore <= 0:
-            valore = statistica_ref.valore_base_predefinito
-            
-        return max(1, valore)
 
     @staticmethod
     def calcola_costi_forgiatura(personaggio, infusione):
@@ -372,59 +327,119 @@ class GestioneCraftingService:
         return livello * costo_per_mattone, livello * tempo_per_mattone
 
     @staticmethod
-    def avvia_forgiatura(personaggio, infusione_id, slot_target=None):
-        infusione = Infusione.objects.get(pk=infusione_id)
+    def verifica_competenza_forgiatura(personaggio, infusione):
+        """Controlla Aure e Caratteristiche."""
+        livello = infusione.livello
+        punteggi = personaggio.caratteristiche_base
         
-        is_valid, msg = personaggio.valida_acquisto_tecnica(infusione)
-        if not is_valid: # Check basico (es. auree conosciute)
-             pass # O raise ValidationError(msg) se vuoi essere stretto
-        
-        if not personaggio.infusioni_possedute.filter(pk=infusione_id).exists():
-             raise ValidationError("Non conosci questa infusione.")
-
-        costo_crediti, durata_secondi = GestioneCraftingService.calcola_costi_forgiatura(personaggio, infusione)
-        
-        if personaggio.crediti < costo_crediti:
-            raise ValidationError(f"Crediti insufficienti. Richiesti: {costo_crediti}")
-
-        with transaction.atomic():
-            personaggio.modifica_crediti(-costo_crediti, f"Avvio forgiatura: {infusione.nome}")
-            fine_prevista = timezone.now() + timedelta(seconds=durata_secondi)
-            forgiatura = ForgiaturaInCorso.objects.create(
-                personaggio=personaggio, 
-                infusione=infusione, 
-                data_fine_prevista=fine_prevista, 
-                slot_target=slot_target
-            )
+        # 1. Aura
+        if not infusione.aura_richiesta: return False, "Infusione non valida."
+        if personaggio.get_valore_aura_effettivo(infusione.aura_richiesta) < livello:
+            return False, f"Aura {infusione.aura_richiesta.nome} insufficiente."
             
-        return forgiatura
+        # 2. Aura Secondaria
+        if infusione.aura_infusione and personaggio.get_valore_aura_effettivo(infusione.aura_infusione) < livello:
+            return False, f"Aura {infusione.aura_infusione.nome} insufficiente."
+            
+        # 3. Componenti
+        for comp in infusione.componenti.select_related('caratteristica').all():
+            val = punteggi.get(comp.caratteristica.nome, 0)
+            if val < comp.valore: return False, f"Caratteristica {comp.caratteristica.nome} insufficiente."
+            
+        return True, "OK"
 
     @staticmethod
-    def completa_forgiatura(forgiatura_id, personaggio):
+    def get_valore_statistica_aura(personaggio, aura, campo):
+        stat = getattr(aura, campo, None)
+        default = 60 if 'tempo' in campo else 100
+        if not stat: return default
+        val = personaggio.get_valore_statistica(stat.sigla)
+        return max(1, val) if val > 0 else stat.valore_base_predefinito
+
+    @staticmethod
+    def calcola_costi_tempi(personaggio, infusione):
+        """Restituisce (Costo Materiali, Durata Secondi)"""
+        aura = infusione.aura_richiesta
+        if not aura: return 0, 0
+        c_unit = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, 'stat_costo_forgiatura')
+        t_unit = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, 'stat_tempo_forgiatura')
+        lvl = max(1, infusione.livello)
+        return lvl * c_unit, lvl * t_unit
+
+    @staticmethod
+    def avvia_forgiatura(personaggio, infusione, slot_target=None, destinatario_finale=None, is_academy=False):
+        """
+        Avvia il timer di crafting.
+        - is_academy=True: Ignora skill, Costo fisso 200, Timer parte comunque.
+        - is_academy=False: Check skill, Costo materiali, Timer parte.
+        """
+        
+        # LOGICA COSTI E REQUISITI
+        costo_da_pagare = 0
+        descrizione_pagamento = ""
+        
+        if is_academy:
+            costo_da_pagare = 200 # Costo fisso Accademia
+            descrizione_pagamento = f"Forgiatura Accademia: {infusione.nome}"
+            # Accademia ignora i requisiti di competenza del PG
+        else:
+            # Verifica competenze (se non è accademia)
+            can_do, msg = GestioneCraftingService.verifica_competenza_forgiatura(personaggio, infusione)
+            if not can_do: raise ValidationError(msg)
+            
+            # Calcolo costi materiali
+            costo_mat, _ = GestioneCraftingService.calcola_costi_tempi(personaggio, infusione)
+            costo_da_pagare = costo_mat
+            descrizione_pagamento = f"Materiali forgiatura: {infusione.nome}"
+
+        # Verifica fondi
+        if personaggio.crediti < costo_da_pagare:
+            raise ValidationError(f"Crediti insufficienti. Servono {costo_da_pagare} CR.")
+            
+        # Calcolo Tempi (Vale per tutti, anche Accademia)
+        _, durata = GestioneCraftingService.calcola_costi_tempi(personaggio, infusione)
+        fine = timezone.now() + timedelta(seconds=durata)
+
+        with transaction.atomic():
+            personaggio.modifica_crediti(-costo_da_pagare, descrizione_pagamento)
+            
+            ForgiaturaInCorso.objects.create(
+                personaggio=personaggio,
+                infusione=infusione,
+                data_fine_prevista=fine,
+                slot_target=slot_target,
+                destinatario_finale=destinatario_finale
+            )
+            
+        return True
+
+    @staticmethod
+    def completa_forgiatura(task_id, attore):
         try:
-            task = ForgiaturaInCorso.objects.get(pk=forgiatura_id, personaggio=personaggio)
+            task = ForgiaturaInCorso.objects.get(pk=task_id, personaggio=attore)
         except ForgiaturaInCorso.DoesNotExist:
-            raise ValidationError("Forgiatura non trovata.")
-            
-        if not task.is_pronta:
-            raise ValidationError("La forgiatura non è ancora completata.")
-            
-        if task.completata:
-             raise ValidationError("Oggetto già ritirato.")
+            raise ValidationError("Task non trovato.")
+        
+        if not task.is_pronta: raise ValidationError("Non ancora completata.")
         
         with transaction.atomic():
-            # USA IL METODO UNIFICATO IN GestioneOggettiService
-            nuovo_oggetto = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, personaggio)
+            # Determina chi riceve l'oggetto
+            proprietario = task.destinatario_finale if task.destinatario_finale else attore
             
-            if task.slot_target:
-                nuovo_oggetto.slot_corpo = task.slot_target
-                nuovo_oggetto.is_equipaggiato = True
-                nuovo_oggetto.save()
+            # Crea Fisicamente (Factory in GestioneOggetti)
+            nuovo_obj = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, proprietario)
             
-            task.delete() # Rimuove il task dalla coda
-            personaggio.aggiungi_log(f"Forgiatura completata: {nuovo_oggetto.nome}")
+            task.delete()
             
-        return nuovo_oggetto
+            if task.destinatario_finale:
+                attore.aggiungi_log(f"Lavoro terminato: {nuovo_obj.nome} inviato a {task.destinatario_finale.nome}.")
+                task.destinatario_finale.aggiungi_log(f"Consegna ricevuta: {nuovo_obj.nome} da {attore.nome}.")
+            else:
+                attore.aggiungi_log(f"Forgiatura completata: {nuovo_obj.nome}.")
+                
+        return nuovo_obj
+
+    
 
     @staticmethod
     def acquista_da_negozio(personaggio, oggetto_base_id):
