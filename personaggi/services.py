@@ -25,13 +25,13 @@ class GestioneOggettiService:
 
     @staticmethod
     def crea_oggetto_da_infusione(infusione, proprietario, nome_pers=None):
-        """Factory: crea il record DB dell'oggetto (senza passare 'proprietario' al create)."""
         tipo = TIPO_OGGETTO_FISICO
         if infusione.aura_richiesta:
              nome_a = infusione.aura_richiesta.nome.lower()
              if "tecnologic" in nome_a: tipo = TIPO_OGGETTO_MOD
              elif "mondan" in nome_a: tipo = TIPO_OGGETTO_MATERIA
         
+        # NOTA: Rimosso proprietario=proprietario per evitare TypeError
         obj = Oggetto.objects.create(
             nome=nome_pers or infusione.nome, 
             tipo_oggetto=tipo, 
@@ -50,6 +50,16 @@ class GestioneOggettiService:
 
     @staticmethod
     def verifica_competenza_assemblaggio(personaggio, host, componente):
+        punteggi = personaggio.caratteristiche_base
+        if componente.infusione_generatrice:
+            for comp_req in componente.infusione_generatrice.componenti.select_related('caratteristica').all():
+                val_posseduto = punteggi.get(comp_req.caratteristica.nome, 0)
+                if val_posseduto < comp_req.valore:
+                    return False, f"Caratteristica insufficiente: {comp_req.caratteristica.nome}"
+        return True, "Competenza valida."
+
+    @staticmethod
+    def verifica_competenza_assemblaggio(personaggio, host, componente):
         """Check per Installazione/Rimozione (Resta invariato: serve un solo operatore)."""
         punteggi = personaggio.caratteristiche_base
         if componente.infusione_generatrice:
@@ -61,7 +71,6 @@ class GestioneOggettiService:
 
     @staticmethod
     def assembla_mod(assemblatore, oggetto_host, potenziamento, check_skills=True):
-        """ Gestisce l'installazione. """
         proprietario_items = oggetto_host.inventario_corrente
         if not proprietario_items: raise ValidationError("Oggetto host non in inventario.")
         
@@ -75,14 +84,15 @@ class GestioneOggettiService:
         if check_skills:
             can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(assemblatore, oggetto_host, potenziamento)
             if not can_do: raise ValidationError(msg)
-            
-        # [Logica compatibilità Materia/Mod omessa per brevità, assumiamo presente]
+        
+        # Logica Mod/Materia semplificata per brevità (assumiamo i check del tipo qui)
+        if potenziamento.tipo_oggetto == 'MAT' and oggetto_host.is_tecnologico:
+             raise ValidationError("Materia su Tecno non ammessa.")
 
         with transaction.atomic():
             potenziamento.sposta_in_inventario(None)
             potenziamento.ospitato_su = oggetto_host
             potenziamento.save()
-            
             if hasattr(proprietario_items, 'personaggio'):
                 msg = f"Installato {potenziamento.nome} su {oggetto_host.nome}."
                 if assemblatore.id != proprietario_items.personaggio.id:
@@ -91,10 +101,8 @@ class GestioneOggettiService:
 
     @staticmethod
     def rimuovi_mod(assemblatore, host, mod, check_skills=True):
-        """Gestisce lo smontaggio."""
         proprietario_items = host.inventario_corrente
         if not proprietario_items: raise ValidationError("Oggetto host non in inventario.")
-        
         if mod not in host.potenziamenti_installati.all(): raise ValidationError("Modulo non installato.")
 
         if check_skills:
@@ -107,19 +115,17 @@ class GestioneOggettiService:
             mod.sposta_in_inventario(proprietario_items) 
             mod.save()
             host.save()
-            
             if hasattr(proprietario_items, 'personaggio'):
                 msg = f"Smontato {mod.nome} da {host.nome}."
                 if assemblatore.id != proprietario_items.personaggio.id:
                     msg += f" (Eseguito da {assemblatore.nome})"
                 proprietario_items.personaggio.aggiungi_log(msg)
-            
         return True
 
     @staticmethod
     def elabora_richiesta_assemblaggio(richiesta_id, esecutore):
         """
-        Accetta la richiesta. Avvia timer o esegue.
+        Accetta la richiesta e avvia il lavoro SE l'artigiano è libero.
         """
         try: req = RichiestaAssemblaggio.objects.select_related('committente', 'artigiano', 'infusione').get(pk=richiesta_id)
         except: raise ValidationError("Richiesta non trovata.")
@@ -128,23 +134,28 @@ class GestioneOggettiService:
              raise ValidationError("Non autorizzato.")
         if req.stato != STATO_RICHIESTA_PENDENTE: raise ValidationError("Già processata.")
 
+        # --- NUOVO CONTROLLO: SLOT OCCUPATO ARTIGIANO ---
+        if ForgiaturaInCorso.objects.filter(personaggio=req.artigiano).exists():
+            raise ValidationError("Sei già occupato in una forgiatura. Completa il lavoro attuale prima di accettarne uno nuovo.")
+
         with transaction.atomic():
+            # Pagamento
             if req.offerta_crediti > 0:
                 if req.committente.crediti < req.offerta_crediti: raise ValidationError("Committente senza fondi.")
                 req.committente.modifica_crediti(-req.offerta_crediti, f"Pagamento a {req.artigiano.nome}")
                 req.artigiano.modifica_crediti(req.offerta_crediti, f"Lavoro da {req.committente.nome}")
 
+            # Esecuzione
             if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
-                # La richiesta definisce i ruoli:
-                # Committente = Forgiatore (destinatario_finale)
-                # Artigiano = Aiutante (personaggio che lavora)
+                # Avvia timer (include check competenza cooperativa)
                 GestioneCraftingService.avvia_forgiatura(
-                    personaggio=req.artigiano, 
+                    personaggio=req.artigiano, # Chi lavora (Aiutante)
                     infusione=req.infusione, 
-                    destinatario_finale=req.committente,
-                    is_academy=False
+                    destinatario_finale=req.committente, # Chi ha richiesto (Forgiatore)
+                    is_academy=False,
+                    aiutante=req.artigiano # Passiamo l'artigiano come aiutante esplicito
                 )
-                req.artigiano.aggiungi_log(f"Iniziata forgiatura {req.infusione.nome} per {req.committente.nome}.")
+                req.artigiano.aggiungi_log(f"Ha iniziato a forgiare {req.infusione.nome} per {req.committente.nome}.")
                 
             elif req.tipo_operazione == TIPO_OPERAZIONE_RIMOZIONE:
                 GestioneOggettiService.rimuovi_mod(req.artigiano, req.oggetto_host, req.componente)
@@ -182,52 +193,46 @@ class GestioneCraftingService:
     @staticmethod
     def verifica_competenza_forgiatura(forgiatore, infusione, aiutante=None):
         """
-        Verifica i requisiti per la forgiatura, supportando la modalità cooperativa.
-        
-        REGOLE:
-        1. Forgiatore (Committente): DEVE avere Aura Richiesta >= Livello.
-        2. Aiutante (Artigiano): DEVE avere Aura Richiesta O Aura Infusione >= Livello.
-        3. Combinata: Aura Infusione e Caratteristiche devono essere soddisfatte 
-           da ALMENO UNO dei due (si usa il max).
+        Verifica se il PG ha i requisiti per forgiare l'infusione.
         """
-        livello = infusione.livello
+        livello_target = infusione.livello
+        punteggi = forgiatore.caratteristiche_base # Default: forgiatore singolo
         
-        # --- 1. VALIDITÀ INFUSIONE ---
+        # --- 1. CHECK AURA PRINCIPALE (Vincolo Forgiatore) ---
         if not infusione.aura_richiesta: 
             return False, "Infusione non valida (Manca Aura)."
             
-        # --- 2. CHECK FORGIATORE (Principale) ---
-        # "il Forgiatore DEVE avere l'aura richiesta del corretto livello"
         val_aura_main_f = forgiatore.get_valore_aura_effettivo(infusione.aura_richiesta)
-        if val_aura_main_f < livello:
-            return False, f"Il Forgiatore non ha l'Aura richiesta ({infusione.aura_richiesta.nome}) al livello necessario ({val_aura_main_f}/{livello})."
+        if val_aura_main_f < livello_target:
+            return False, f"Il Forgiatore non ha l'Aura richiesta ({infusione.aura_richiesta.nome}) al livello necessario ({val_aura_main_f}/{livello_target})."
 
-        # --- 3. CHECK AIUTANTE (Partecipazione) ---
+        # --- 2. GESTIONE AIUTANTE ---
+        stats_f = forgiatore.caratteristiche_base
+        stats_a = {}
+        
         if aiutante:
-            # "l'aiutante DEVE avere aura infusione o aura richiesta del livello corretto"
+            stats_a = aiutante.caratteristiche_base
+            # Check requisiti base aiutante (deve avere un'aura valida)
             val_aura_main_a = aiutante.get_valore_aura_effettivo(infusione.aura_richiesta)
-            has_valid_main = val_aura_main_a >= livello
+            has_valid_main = val_aura_main_a >= livello_target
             
             has_valid_sec = False
             if infusione.aura_infusione:
                 val_aura_sec_a = aiutante.get_valore_aura_effettivo(infusione.aura_infusione)
-                has_valid_sec = val_aura_sec_a >= livello
+                has_valid_sec = val_aura_sec_a >= livello_target
             
             if not (has_valid_main or has_valid_sec):
                 return False, "L'Aiutante non possiede né l'Aura Richiesta né l'Aura Infusione al livello corretto."
 
-        # --- 4. CHECK AURA SECONDARIA (Combinata) ---
+        # --- 3. CHECK AURA SECONDARIA (Combinata: Max tra i due) ---
         if infusione.aura_infusione:
             val_f = forgiatore.get_valore_aura_effettivo(infusione.aura_infusione)
             val_a = aiutante.get_valore_aura_effettivo(infusione.aura_infusione) if aiutante else 0
             
-            if max(val_f, val_a) < livello:
-                return False, f"Aura Secondaria ({infusione.aura_infusione.nome}) insufficiente. Max posseduto: {max(val_f, val_a)}/{livello}."
+            if max(val_f, val_a) < livello_target:
+                return False, f"Livello Aura Infusione insufficiente ({infusione.aura_infusione.nome}). Max posseduto: {max(val_f, val_a)}/{livello_target}."
 
-        # --- 5. CHECK CARATTERISTICHE (Combinata) ---
-        stats_f = forgiatore.caratteristiche_base
-        stats_a = aiutante.caratteristiche_base if aiutante else {}
-        
+        # --- 4. CHECK CARATTERISTICHE (Combinata: Max tra i due) ---
         for comp in infusione.componenti.select_related('caratteristica').all():
             nome = comp.caratteristica.nome
             req_val = comp.valore
@@ -239,7 +244,7 @@ class GestioneCraftingService:
                 return False, f"Caratteristica {nome} insufficiente. Max posseduto: {max(val_f, val_a)}/{req_val}."
                 
         return True, "Requisiti soddisfatti."
-
+    
     @staticmethod
     def get_valore_statistica_aura(personaggio, aura, campo):
         """Helper per leggere statistiche dinamiche dall'Aura."""
@@ -262,44 +267,41 @@ class GestioneCraftingService:
         return lvl * c_unit, lvl * t_unit
 
     @staticmethod
-    def avvia_forgiatura(personaggio, infusione, slot_target=None, destinatario_finale=None, is_academy=False):
+    def avvia_forgiatura(personaggio, infusione, slot_target=None, destinatario_finale=None, is_academy=False, aiutante=None):
         """
         Avvia il timer di crafting.
-        Gestisce correttamente i ruoli Forgiatore (Destinatario) e Aiutante (Esecutore).
         """
+        # --- 1. CONTROLLO SEQUENZIALITÀ (SLOT UNICO) ---
+        # Se il personaggio ha già una forgiatura attiva (non completata/ritirata), non può iniziarne un'altra.
+        if ForgiaturaInCorso.objects.filter(personaggio=personaggio).exists():
+            raise ValidationError("Hai già una forgiatura in corso. Devi completarla e ritirare l'oggetto prima di iniziarne una nuova.")
+
         costo_da_pagare = 0
         descrizione_pagamento = ""
         
+        # --- 2. GESTIONE COSTI E COMPETENZE ---
         if is_academy:
-            # ACCADEMIA: Costo fisso, ignora skill
             costo_da_pagare = 200
             descrizione_pagamento = f"Servizio Accademia: {infusione.nome}"
         else:
-            # DETERMINAZIONE RUOLI PER VALIDAZIONE
-            # Se c'è un destinatario_finale, stiamo lavorando per lui -> Lui è il Forgiatore
-            if destinatario_finale:
-                forgiatore = destinatario_finale
-                aiutante = personaggio
-            else:
-                # Faccio da solo -> Io sono il Forgiatore, nessun aiutante
-                forgiatore = personaggio
-                aiutante = None
-
-            # CHECK COMPETENZE
-            can_do, msg = GestioneCraftingService.verifica_competenza_forgiatura(forgiatore, infusione, aiutante=aiutante)
-            if not can_do: 
-                raise ValidationError(msg)
+            # Determina chi è il forgiatore principale per il controllo skill
+            # Se c'è un destinatario (richiesta lavoro), LUI è il forgiatore, 'personaggio' (artigiano) è l'aiutante.
+            # Se faccio da solo, forgiatore = personaggio, aiutante = None
+            forgiatore = destinatario_finale if destinatario_finale else personaggio
+            helper = personaggio if destinatario_finale else None
             
-            # COSTI MATERIALI (Paga chi esegue il lavoro, cioè 'personaggio')
+            can_do, msg = GestioneCraftingService.verifica_competenza_forgiatura(forgiatore, infusione, aiutante=helper)
+            if not can_do: 
+                raise ValidationError(f"Requisiti mancanti: {msg}")
+            
             costo_mat, _ = GestioneCraftingService.calcola_costi_tempi(personaggio, infusione)
             costo_da_pagare = costo_mat
             descrizione_pagamento = f"Materiali forgiatura: {infusione.nome}"
 
-        # Verifica Fondi (di chi esegue)
         if personaggio.crediti < costo_da_pagare:
             raise ValidationError(f"Crediti insufficienti. Servono {costo_da_pagare} CR.")
             
-        # Calcolo Tempi
+        # --- 3. AVVIO TIMER ---
         _, durata = GestioneCraftingService.calcola_costi_tempi(personaggio, infusione)
         fine = timezone.now() + timedelta(seconds=durata)
 
@@ -315,10 +317,10 @@ class GestioneCraftingService:
             )
             
         return True
-
+    
+    
     @staticmethod
     def completa_forgiatura(task_id, attore):
-        """Termina il processo temporale e crea l'oggetto."""
         try:
             task = ForgiaturaInCorso.objects.get(pk=task_id, personaggio=attore)
         except ForgiaturaInCorso.DoesNotExist:
@@ -329,17 +331,14 @@ class GestioneCraftingService:
         
         with transaction.atomic():
             proprietario = task.destinatario_finale if task.destinatario_finale else attore
-            
-            # Crea Fisicamente
             nuovo_obj = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, proprietario)
             
-            # Equipaggia solo se forgiato per se stessi
             if task.slot_target and proprietario == attore:
                 nuovo_obj.slot_corpo = task.slot_target
                 nuovo_obj.is_equipaggiato = True
                 nuovo_obj.save()
             
-            task.delete()
+            task.delete() # Libera lo slot di forgiatura
             
             if task.destinatario_finale:
                 attore.aggiungi_log(f"Lavoro terminato: {nuovo_obj.nome} inviato a {task.destinatario_finale.nome}.")
@@ -350,7 +349,6 @@ class GestioneCraftingService:
         return nuovo_obj
 
     
-
     @staticmethod
     def acquista_da_negozio(personaggio, oggetto_base_id):
         try:
