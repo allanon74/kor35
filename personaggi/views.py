@@ -1517,34 +1517,33 @@ class CapableArtisansView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        """
-        Restituisce la lista di personaggi (escluso il richiedente) 
-        che hanno i requisiti per assemblare il Mod sull'Host specificato.
-        """
         char_id = request.data.get('char_id')
         host_id = request.data.get('host_id')
         mod_id = request.data.get('mod_id')
 
         try:
-            # Recupera gli oggetti
-            requester = Personaggio.objects.get(pk=char_id) # Chi fa la richiesta
+            requester = Personaggio.objects.get(pk=char_id)
             host = Oggetto.objects.get(pk=host_id)
             mod = Oggetto.objects.get(pk=mod_id)
             
-            # Filtra candidati: escludi il richiedente e (opzionale) utenti inattivi
-            candidati = Personaggio.objects.exclude(id=requester.id).filter(is_active=True) # Assumi un campo is_active o logica simile
+            # --- CORREZIONE QUI ---
+            # Filtriamo i candidati:
+            # 1. Escludiamo chi fa la richiesta (exclude id=requester.id)
+            # 2. Escludiamo i personaggi morti (data_morte__isnull=True)
+            # 3. (Opzionale) Escludiamo utenti bannati/inattivi (proprietario__is_active=True)
+            candidati = Personaggio.objects.exclude(id=requester.id).filter(
+                data_morte__isnull=True, 
+                proprietario__is_active=True
+            )
             
             capaci = []
             for artigiano in candidati:
-                # Usa il service esistente per verificare la competenza
-                # Nota: verifica_competenza_assemblaggio è statica
+                # Verifica competenza (nota: usa il metodo statico del service)
                 can_do, _ = GestioneOggettiService.verifica_competenza_assemblaggio(artigiano, host, mod)
                 if can_do:
                     capaci.append({
                         "id": artigiano.id, 
                         "nome": artigiano.nome,
-                        # Opzionale: aggiungi il nome del giocatore se vuoi "nome (Giocatore)"
-                        # "giocatore": artigiano.proprietario.username 
                     })
             
             return Response(capaci)
