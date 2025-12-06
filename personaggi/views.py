@@ -28,6 +28,7 @@ from .models import (
     COSTO_PER_MATTONE_CREAZIONE, 
     COSTO_DEFAULT_INVIO_PROPOSTA,
     RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE,
+    ClasseOggetto, 
 )
 
 import uuid 
@@ -79,6 +80,7 @@ from .serializers import (
     AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
+    ClasseOggettoSerializer, 
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -1719,3 +1721,11 @@ class ForgingValidationView(APIView):
             })
         except Exception as e:
             return Response({"error": str(e)}, status=400)
+        
+class ClasseOggettoListView(generics.ListAPIView):
+    """
+    API per ottenere la lista delle classi oggetto e le loro regole di compatibilità.
+    """
+    queryset = ClasseOggetto.objects.all().order_by('nome')
+    serializer_class = ClasseOggettoSerializer
+    permission_classes = [IsAuthenticated]

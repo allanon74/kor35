@@ -1044,3 +1044,24 @@ class RichiestaAssemblaggioSerializer(serializers.ModelSerializer):
             'tipo_operazione', 'tipo_display',
             'offerta_crediti', 'stato', 'data_creazione'
         ]
+        
+# personaggi/serializers.py
+
+class ClasseOggettoSerializer(serializers.ModelSerializer):
+    # Restituisce la lista di ID delle caratteristiche permesse per le MOD
+    mod_allowed_ids = serializers.SerializerMethodField()
+    
+    # Restituisce la lista di ID delle caratteristiche permesse per le MATERIE
+    materia_allowed_ids = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClasseOggetto
+        fields = ['id', 'nome', 'mod_allowed_ids', 'materia_allowed_ids']
+
+    def get_mod_allowed_ids(self, obj):
+        # Recupera gli ID delle caratteristiche dalla relazione ManyToMany 'limitazioni_mod'
+        return list(obj.limitazioni_mod.values_list('id', flat=True))
+
+    def get_materia_allowed_ids(self, obj):
+        # Recupera gli ID delle caratteristiche dalla relazione 'mattoni_materia_permessi'
+        return list(obj.mattoni_materia_permessi.values_list('id', flat=True))

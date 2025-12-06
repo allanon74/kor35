@@ -119,6 +119,7 @@ urlpatterns = [
     path('api/assembly/artisans/', views.CapableArtisansView.as_view(), name='capable-artisans'),
     
     path('api/forging/validate/', views.ForgingValidationView.as_view(), name='validate_forging'),
+    path('api/classi_oggetto/', views.ClasseOggettoListView.as_view(), name='lista_classi_oggetto'),
     
     path('api/', include(router.urls)),
     
