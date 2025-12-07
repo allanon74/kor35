@@ -6,6 +6,8 @@ from .models import Messaggio
 from django.contrib.auth.models import User 
 from webpush import send_user_notification 
 
+from.models import Infusione
+
 @receiver(post_save, sender=Messaggio)
 def invia_notifica_messaggio(sender, instance, created, **kwargs):
     if created: 
@@ -59,3 +61,13 @@ def invia_notifica_messaggio(sender, instance, created, **kwargs):
 
         except Exception as e:
             print(f"Errore invio Web Push: {e}")
+            
+@receiver(post_save, sender=Infusione)
+def copia_dati_da_proposta(sender, instance, created, **kwargs):
+    """
+    Quando un'Infusione viene creata e collegata a una PropostaTecnica,
+    copia automaticamente gli slot permessi se non definiti.
+    """
+    if created and instance.proposta_creazione and not instance.slot_corpo_permessi:
+        instance.slot_corpo_permessi = instance.proposta_creazione.slot_corpo_permessi
+        instance.save()

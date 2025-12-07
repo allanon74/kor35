@@ -1012,9 +1012,19 @@ class ModelloAuraRequisitoMattoneSerializer(serializers.ModelSerializer):
 
 
 class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
+    slots_occupati = serializers.SerializerMethodField()
+
     class Meta:
         model = Personaggio
-        fields = ('id', 'nome')
+        fields = ('id', 'nome', 'slots_occupati')
+
+    def get_slots_occupati(self, obj):
+        # Recupera tutti gli oggetti installati che occupano uno slot
+        return list(Oggetto.objects.filter(
+            tracciamento_inventario__inventario=obj,
+            tracciamento_inventario__data_fine__isnull=True,
+            slot_corpo__isnull=False
+        ).exclude(slot_corpo='').values_list('slot_corpo', flat=True))
 
 
 class MessaggioCreateSerializer(serializers.ModelSerializer):
