@@ -630,7 +630,8 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'id', 'tipo', 'stato', 'nome', 'descrizione',
             'aura', 'aura_details', 'aura_infusione',
             'componenti', 'componenti_data',
-            'livello', 'costo_invio_pagato', 'note_staff', 'data_creazione'
+            'livello', 'costo_invio_pagato', 'note_staff', 'data_creazione',
+            'slot_corpo_permessi' # <--- CAMPO MANCANTE AGGIUNTO!
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
 
