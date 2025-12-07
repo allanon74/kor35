@@ -68,16 +68,21 @@ TIPO_OGGETTO_CHOICES = [
     (TIPO_OGGETTO_MUTAZIONE, 'Mutazione (Innata)'),
 ]
 
-SLOT_TESTA = 'HD'
-SLOT_TRONCO = 'TR'
+# --- COSTANTI SLOT CORPO ---
+SLOT_TESTA_1 = 'HD1'
+SLOT_TESTA_2 = 'HD2'
+SLOT_TRONCO_1 = 'TR1'
+SLOT_TRONCO_2 = 'TR2'
 SLOT_BRACCIO_DX = 'RA'
 SLOT_BRACCIO_SX = 'LA'
 SLOT_GAMBA_DX = 'RL'
 SLOT_GAMBA_SX = 'LL'
 
 SLOT_CORPO_CHOICES = [
-    (SLOT_TESTA, 'Testa'),
-    (SLOT_TRONCO, 'Tronco'),
+    (SLOT_TESTA_1, 'Testa 1'),
+    (SLOT_TESTA_2, 'Testa 2'),
+    (SLOT_TRONCO_1, 'Tronco 1'),
+    (SLOT_TRONCO_2, 'Tronco 2'),
     (SLOT_BRACCIO_DX, 'Braccio Dx'),
     (SLOT_BRACCIO_SX, 'Braccio Sx'),
     (SLOT_GAMBA_DX, 'Gamba Dx'),
@@ -310,6 +315,11 @@ class Punteggio(Tabella):
     is_generica = models.BooleanField(default=False)
     permette_infusioni = models.BooleanField(default=False)
     permette_tessiture = models.BooleanField(default=False)
+    # NUOVI FLAG: Cosa può produrre questa Aura?
+    produce_mod = models.BooleanField(default=False, verbose_name="Produce MOD (Oggetti)")
+    produce_materia = models.BooleanField(default=False, verbose_name="Produce MATERIA (Oggetti)")
+    produce_innesti = models.BooleanField(default=False, verbose_name="Produce INNESTI (Corpo)")
+    produce_mutazioni = models.BooleanField(default=False, verbose_name="Produce MUTAZIONI (Corpo)")
     
     # COSTI CREAZIONE / ACQUISTO (Tecnica approvata)
     stat_costo_creazione_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_inf')
@@ -514,6 +524,11 @@ class Infusione(Tecnica):
     metodo_ricarica = models.TextField("Metodo di Ricarica", blank=True, null=True)
     costo_ricarica_crediti = models.IntegerField("Costo Ricarica (Crediti)", default=0)
     durata_attivazione = models.IntegerField("Durata Attivazione (secondi)", default=0)
+    slot_corpo_permessi = models.CharField(
+        max_length=50, 
+        blank=True, null=True, 
+        verbose_name="Slot Corpo Consentiti"
+    )
 
     class Meta: verbose_name = "Infusione"; verbose_name_plural = "Infusioni"
     
@@ -723,7 +738,7 @@ class Oggetto(A_vista):
     in_vendita = models.BooleanField(default=False, verbose_name="In vendita al negozio?")
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")
     ospitato_su = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='potenziamenti_installati', help_text="L'oggetto su cui questo potenziamento è montato.")
-    slot_corpo = models.CharField(max_length=2, choices=SLOT_CORPO_CHOICES, blank=True, null=True, help_text="Solo per Innesti e Mutazioni")
+    slot_corpo = models.CharField(max_length=3, choices=SLOT_CORPO_CHOICES, blank=True, null=True, help_text="Solo per Innesti e Mutazioni")
     cariche_attuali = models.IntegerField(default=0)
     oggetto_base_generatore = models.ForeignKey(OggettoBase, on_delete=models.SET_NULL, null=True, blank=True, related_name='istanze_generate', help_text="Se creato dal negozio, punta al template originale.")
 
@@ -1044,16 +1059,32 @@ class PropostaTecnica(models.Model):
     data_creazione = models.DateTimeField(auto_now_add=True)
     data_invio = models.DateTimeField(null=True, blank=True)
     note_staff = models.TextField(blank=True, null=True)
-    class Meta: ordering = ['-data_creazione']; verbose_name = "Proposta Tecnica"; verbose_name_plural = "Proposte Tecniche"
-    def __str__(self): return f"{self.get_tipo_display()} - {self.nome} ({self.personaggio.nome})"
+    slot_corpo_permessi = models.CharField(
+        max_length=50, 
+        blank=True, null=True, 
+        help_text="Lista slot separati da virgola (es. HD1,TR1)"
+    )
+    
+    class Meta: 
+        ordering = ['-data_creazione']
+        verbose_name = "Proposta Tecnica"
+        verbose_name_plural = "Proposte Tecniche"
+    
+    def __str__(self): 
+        return f"{self.get_tipo_display()} - {self.nome} ({self.personaggio.nome})"
+    
     @property
-    def livello(self): return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
+    def livello(self): 
+        return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
 
 class PropostaTecnicaCaratteristica(models.Model):
     proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE, related_name='componenti')
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
-    class Meta: ordering = ['caratteristica__nome']; unique_together = ('proposta', 'caratteristica')
+
+    class Meta: 
+        ordering = ['caratteristica__nome']
+        unique_together = ('proposta', 'caratteristica')
 
 class PropostaTecnicaMattone(models.Model):
     # LEGACY: Mantenuto per evitare errori di importazione se ci sono riferimenti, ma non usato
@@ -1092,11 +1123,13 @@ class ForgiaturaInCorso(models.Model):
 TIPO_OPERAZIONE_INSTALLAZIONE = 'INST'
 TIPO_OPERAZIONE_RIMOZIONE = 'RIMO'
 TIPO_OPERAZIONE_FORGIATURA = 'FORG'
+TIPO_OPERAZIONE_INNESTO = 'GRAF' # Graft/Innesto
 
 TIPO_OPERAZIONE_CHOICES = [
-    (TIPO_OPERAZIONE_INSTALLAZIONE, 'Installazione'),
+    (TIPO_OPERAZIONE_INSTALLAZIONE, 'Installazione Mod/Materia'),
     (TIPO_OPERAZIONE_RIMOZIONE, 'Rimozione'),
-    (TIPO_OPERAZIONE_FORGIATURA, 'Forgiatura'),
+    (TIPO_OPERAZIONE_FORGIATURA, 'Forgiatura Conto Terzi'),
+    (TIPO_OPERAZIONE_INNESTO, 'Operazione Chirurgica (Innesto/Mutazione)'),
 ]
 
 # --- STATI RICHIESTA ---
@@ -1120,6 +1153,13 @@ class RichiestaAssemblaggio(models.Model):
     
     # NUOVO: L'infusione da forgiare
     infusione = models.ForeignKey('Infusione', on_delete=models.CASCADE, related_name='richieste_forgiatura', null=True, blank=True)
+    
+    # Per l'installazione di Innesti, colleghiamo la richiesta a una forgiatura esistente
+    # (L'oggetto non esiste ancora fisicamente, è nel limbo della forgia)
+    forgiatura_target = models.ForeignKey('ForgiaturaInCorso', on_delete=models.SET_NULL, null=True, blank=True, related_name='richieste_installazione')
+    
+    # Slot dove montare l'innesto
+    slot_destinazione = models.CharField(max_length=3, choices=SLOT_CORPO_CHOICES, blank=True, null=True)
     
     tipo_operazione = models.CharField(
         max_length=4, 

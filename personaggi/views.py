@@ -1272,11 +1272,12 @@ class CraftingViewSet(viewsets.ViewSet):
     def completa_forgiatura(self, request):
         char_id = request.data.get('char_id')
         forg_id = request.data.get('forgiatura_id')
+        slot_scelto = request.data.get('slot_scelto') # <--- LEGGI LO SLOT
         
         personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
         
         try:
-            oggetto = GestioneCraftingService.completa_forgiatura(forg_id, personaggio)
+            oggetto = GestioneCraftingService.completa_forgiatura(forg_id, personaggio, slot_scelto=slot_scelto)
             return Response({"status": "completed", "oggetto_id": oggetto.id}, status=200)
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
@@ -1485,6 +1486,8 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         host_id = request.data.get('host_id')
         comp_id = request.data.get('comp_id')
         infusione_id = request.data.get('infusione_id')
+        forgia_id = request.data.get('forgiatura_id')
+        slot_dest = request.data.get('slot_destinazione')
 
         committente = get_object_or_404(Personaggio, pk=committente_id, proprietario=request.user)
         # Trova artigiano (escluso se stesso)
@@ -1497,6 +1500,22 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         comp = None
         infusione = None
         messaggio_testo = ""
+        forgiatura_obj = None
+        
+        if tipo_op == 'GRAF': # Innesto (TIPO_OPERAZIONE_INNESTO)
+            if not forgia_id or not slot_dest:
+                return Response({"error": "Dati mancanti per operazione chirurgica."}, status=400)
+            
+            forgiatura_obj = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
+            
+            # Verifica che la forgiatura sia pronta e destinata al committente
+            if not forgiatura_obj.is_pronta:
+                return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
+            
+            # (Opzionale) Verifica che l'oggetto sia effettivamente un Innesto/Mutazione
+            # ...
+            
+            messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Offerta: {offerta} CR."
 
         # --- 1. GESTIONE FORGIATURA ---
         if tipo_op == 'FORG':

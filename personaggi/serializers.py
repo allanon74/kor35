@@ -1031,6 +1031,9 @@ class RichiestaAssemblaggioSerializer(serializers.ModelSerializer):
     infusione_nome = serializers.CharField(source='infusione.nome', read_only=True) # Nuovo
     
     tipo_display = serializers.CharField(source='get_tipo_operazione_display', read_only=True)
+    
+    slot_destinazione = serializers.CharField(read_only=True)
+    forgiatura_nome = serializers.CharField(source='forgiatura_target.infusione.nome', read_only=True)
 
     class Meta:
         model = RichiestaAssemblaggio
@@ -1042,7 +1045,8 @@ class RichiestaAssemblaggioSerializer(serializers.ModelSerializer):
             'componente', 'componente_nome',
             'infusione', 'infusione_nome',
             'tipo_operazione', 'tipo_display',
-            'offerta_crediti', 'stato', 'data_creazione'
+            'offerta_crediti', 'stato', 'data_creazione',
+            'forgiatura_target', 'forgiatura_nome', 'slot_destinazione'
         ]
         
 # personaggi/serializers.py

@@ -15,7 +15,7 @@ from .models import (
     ForgiaturaInCorso, Abilita, 
     OggettoCaratteristica, RichiestaAssemblaggio,
     STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA, 
-    TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE,
+    TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE, TIPO_OPERAZIONE_INNESTO,
 )
 
 class GestioneOggettiService:
@@ -123,6 +123,35 @@ class GestioneOggettiService:
         return True
 
     @staticmethod
+    def installa_innesto(personaggio, innesto, slot):
+        """
+        Monta un Innesto/Mutazione su uno slot corporeo del personaggio.
+        """
+        # 1. Verifica Tipo
+        if innesto.tipo_oggetto not in [TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE]:
+            raise ValidationError("Questo oggetto non può essere innestato nel corpo.")
+            
+        # 2. Verifica Slot Libero
+        # Cerca oggetti già equipaggiati in quello slot
+        occupante = Oggetto.objects.filter(
+            tracciamento_inventario__inventario=personaggio,
+            tracciamento_inventario__data_fine__isnull=True,
+            slot_corpo=slot,
+            is_equipaggiato=True
+        ).first()
+        
+        if occupante:
+            raise ValidationError(f"Lo slot {slot} è già occupato da {occupante.nome}.")
+            
+        # 3. Esegui
+        innesto.slot_corpo = slot
+        innesto.is_equipaggiato = True
+        innesto.save()
+        
+        personaggio.aggiungi_log(f"Installato {innesto.nome} nello slot {slot}.")
+        return True
+
+    @staticmethod
     def elabora_richiesta_assemblaggio(richiesta_id, esecutore):
         """
         Accetta la richiesta e avvia il lavoro SE l'artigiano è libero.
@@ -146,7 +175,25 @@ class GestioneOggettiService:
                 req.artigiano.modifica_crediti(req.offerta_crediti, f"Lavoro da {req.committente.nome}")
 
             # Esecuzione
-            if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
+            if req.tipo_operazione == TIPO_OPERAZIONE_INNESTO:
+                # Recupera la forgiatura
+                if not req.forgiatura_target:
+                    raise ValidationError("Forgiatura di riferimento mancante.")
+                
+                # Completa la forgiatura (crea l'oggetto per il committente)
+                # Nota: Passiamo None come slot_scelto qui perché lo facciamo manualmente dopo
+                # Ma wait, completa_forgiatura crea l'oggetto.
+                # Dobbiamo passare l'artigiano come 'attore' per sbloccare il ritiro.
+                
+                # 1. Crea Oggetto (assegnato al Committente)
+                nuovo_obj = GestioneCraftingService.completa_forgiatura(req.forgiatura_target.id, req.artigiano)
+                
+                # 2. Installa nello slot richiesto
+                GestioneOggettiService.installa_innesto(req.committente, nuovo_obj, req.slot_destinazione)
+                
+                req.artigiano.aggiungi_log(f"Operazione completata: installato {nuovo_obj.nome} su {req.committente.nome}.")
+            
+            elif req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
                 # Avvia timer (include check competenza cooperativa)
                 GestioneCraftingService.avvia_forgiatura(
                     personaggio=req.artigiano, # Chi lavora (Aiutante)
@@ -320,57 +367,49 @@ class GestioneCraftingService:
     
     
     @staticmethod
-    def completa_forgiatura(task_id, attore):
+    def completa_forgiatura(task_id, attore, slot_scelto=None):
         """
-        Termina il processo temporale e crea l'oggetto.
-        Autorizza il ritiro se l'attore è il creatore O il destinatario.
+        Termina il processo.
+        Se slot_scelto è passato, tenta l'installazione immediata (Self-Install).
         """
         try:
-            # 1. Recupera il task solo per ID (senza filtrare subito per personaggio)
             task = ForgiaturaInCorso.objects.get(pk=task_id)
         except ForgiaturaInCorso.DoesNotExist:
             raise ValidationError("Task non trovato.")
-
-        # 2. Controllo Permessi: Chi sta ritirando?
-        # È il creatore (artigiano) o il cliente (destinatario)?
-        is_creator = task.personaggio.id == attore.id
-        is_recipient = task.destinatario_finale and task.destinatario_finale.id == attore.id
-
-        if not is_creator and not is_recipient:
-             raise ValidationError("Non sei autorizzato a ritirare o gestire questo lavoro.")
             
-        if not task.is_pronta: 
-            raise ValidationError("La forgiatura non è ancora completata.")
+        # Verifica proprietà (Creatore o Destinatario)
+        proprietario_finale = task.destinatario_finale if task.destinatario_finale else task.personaggio
+        if attore.id != task.personaggio.id and attore.id != proprietario_finale.id:
+            raise ValidationError("Non autorizzato.")
+            
+        if not task.is_pronta: raise ValidationError("Non ancora completata.")
         
         with transaction.atomic():
-            # 3. Determina il proprietario finale
-            # Se c'è un destinatario (lavoro conto terzi), l'oggetto è suo. 
-            # Altrimenti è di chi ha fatto il lavoro.
-            proprietario = task.destinatario_finale if task.destinatario_finale else task.personaggio
+            # Crea oggetto
+            nuovo_obj = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, proprietario_finale)
             
-            # 4. Crea l'oggetto fisico
-            nuovo_oggetto = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, proprietario)
-            
-            # Equipaggia automaticamente SOLO se forgiato per se stessi (Fai da te)
-            if task.slot_target and proprietario.id == task.personaggio.id:
-                nuovo_oggetto.slot_corpo = task.slot_target
-                nuovo_oggetto.is_equipaggiato = True
-                nuovo_oggetto.save()
-            
-            # 5. Rimuovi dalla coda
+            # Se è richiesto il montaggio immediato (es. Innesto su se stesso)
+            if slot_scelto:
+                # Verifica che lo slot sia valido per questa infusione
+                if task.infusione.slot_corpo_permessi and slot_scelto not in task.infusione.slot_corpo_permessi:
+                    raise ValidationError(f"Slot {slot_scelto} non valido per questo oggetto.")
+                
+                # Installa
+                GestioneOggettiService.installa_innesto(proprietario_finale, nuovo_obj, slot_scelto)
+                
+            # Se c'era uno slot target predefinito nel task (vecchia logica), usalo
+            elif task.slot_target and proprietario_finale == attore:
+                 GestioneOggettiService.installa_innesto(proprietario_finale, nuovo_obj, task.slot_target)
+
             task.delete()
             
-            # 6. Log
+            # Log
             if task.destinatario_finale:
-                # Log Artigiano
-                task.personaggio.aggiungi_log(f"Lavoro completato: {nuovo_oggetto.nome} consegnato a {task.destinatario_finale.nome}.")
-                # Log Cliente (se diverso dall'attore che sta cliccando, anche se qui è ridondante perché vede l'oggetto)
-                if task.destinatario_finale.id != task.personaggio.id:
-                    task.destinatario_finale.aggiungi_log(f"Hai ritirato la forgiatura: {nuovo_oggetto.nome} (Artigiano: {task.personaggio.nome}).")
+                attore.aggiungi_log(f"Consegnato {nuovo_obj.nome} a {task.destinatario_finale.nome}.")
             else:
-                task.personaggio.aggiungi_log(f"Forgiatura completata: {nuovo_oggetto.nome}.")
+                attore.aggiungi_log(f"Ritirato {nuovo_obj.nome}.")
                 
-        return nuovo_oggetto
+        return nuovo_obj
 
     
     @staticmethod
