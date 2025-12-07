@@ -123,16 +123,54 @@ class GestioneOggettiService:
         return True
 
     @staticmethod
+    def verifica_requisiti_supporto_innesto(personaggio, infusione):
+        """
+        Verifica se il personaggio ha i requisiti fisici/aurici per 'indossare' l'innesto/mutazione.
+        Regole:
+        1. Caratteristiche (Componenti) >= Valore Richiesto
+        2. Aura Relativa (quella dell'infusione) >= Livello Totale Oggetto
+        """
+        if not infusione: return True
+        
+        # 1. Check Livello Aura (Tecnologica o Innata)
+        # L'aura richiesta dall'oggetto deve essere posseduta dal ricevente a un livello sufficiente
+        aura_req = infusione.aura_richiesta
+        if aura_req:
+            livello_oggetto = infusione.livello
+            valore_aura_pg = personaggio.get_valore_aura_effettivo(aura_req)
+            if valore_aura_pg < livello_oggetto:
+                return False
+        
+        # 2. Check Caratteristiche (Componenti)
+        punteggi_pg = personaggio.caratteristiche_base
+        for comp in infusione.componenti.select_related('caratteristica').all():
+            nome_stat = comp.caratteristica.nome
+            val_richiesto = comp.valore
+            val_posseduto = punteggi_pg.get(nome_stat, 0)
+            
+            if val_posseduto < val_richiesto:
+                return False
+
+        return True
+
+
+    @staticmethod
     def installa_innesto(personaggio, innesto, slot):
         """
-        Monta un Innesto/Mutazione su uno slot corporeo del personaggio.
+        Monta un Innesto/Mutazione su uno slot corporeo.
+        Include verifica requisiti ricevente.
         """
         # 1. Verifica Tipo
         if innesto.tipo_oggetto not in [TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE]:
             raise ValidationError("Questo oggetto non può essere innestato nel corpo.")
             
-        # 2. Verifica Slot Libero
-        # Cerca oggetti già equipaggiati in quello slot
+        # 2. Verifica Requisiti Ricevente (NUOVO)
+        if innesto.infusione_generatrice:
+            is_compatibile = GestioneOggettiService.verifica_requisiti_supporto_innesto(personaggio, innesto.infusione_generatrice)
+            if not is_compatibile:
+                raise ValidationError(f"{personaggio.nome} non ha i requisiti (Aura/Caratteristiche) per reggere questo innesto.")
+
+        # 3. Verifica Slot Libero
         occupante = Oggetto.objects.filter(
             tracciamento_inventario__inventario=personaggio,
             tracciamento_inventario__data_fine__isnull=True,
@@ -143,14 +181,15 @@ class GestioneOggettiService:
         if occupante:
             raise ValidationError(f"Lo slot {slot} è già occupato da {occupante.nome}.")
             
-        # 3. Esegui
+        # 4. Esegui
         innesto.slot_corpo = slot
         innesto.is_equipaggiato = True
         innesto.save()
         
         personaggio.aggiungi_log(f"Installato {innesto.nome} nello slot {slot}.")
         return True
-
+    
+    
     @staticmethod
     def elabora_richiesta_assemblaggio(richiesta_id, esecutore):
         """

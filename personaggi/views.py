@@ -1006,12 +1006,33 @@ class PersonaggioAutocompleteView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PersonaggioAutocompleteSerializer
     pagination_class = None
+    
     def get_queryset(self):
         query = self.request.query_params.get('q', '')
         current_char_id = self.request.query_params.get('current_char_id')
+        infusione_id = self.request.query_params.get('infusione_id') # <--- NUOVO PARAMETRO
+
         if len(query) < 2: return Personaggio.objects.none()
+        
+        # 1. Filtro base per nome
         qs = Personaggio.objects.filter(nome__icontains=query)
-        if current_char_id: qs = qs.exclude(id=current_char_id)
+        if current_char_id: 
+            qs = qs.exclude(id=current_char_id)
+        
+        # 2. Filtro per compatibilità innesto (se richiesto)
+        if infusione_id:
+            try:
+                inf = Infusione.objects.get(pk=infusione_id)
+                # Nota: Filtrare in Python è meno efficiente ma necessario per logiche complesse (get_valore_aura_effettivo)
+                # Dato che l'autocomplete ritorna pochi risultati, è accettabile.
+                valid_ids = []
+                for pg in qs[:50]: # Limitiamo il pre-fetch per performance
+                    if GestioneOggettiService.verifica_requisiti_supporto_innesto(pg, inf):
+                        valid_ids.append(pg.id)
+                qs = qs.filter(id__in=valid_ids)
+            except Infusione.DoesNotExist:
+                pass
+
         return qs[:10]
 
 class MessaggioPrivateCreateView(generics.CreateAPIView):
@@ -1284,14 +1305,11 @@ class CraftingViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def coda_forgiatura(self, request):
+        # ... (recupero pg come prima) ...
         char_id = request.query_params.get('char_id')
-        if request.user.is_staff: 
-            pg = get_object_or_404(Personaggio, id=char_id)
-        else: 
-            pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
-        
-        # --- CORREZIONE VISIBILITÀ ---
-        # Mostra i task se sei l'artigiano (personaggio) OPPURE il destinatario finale
+        if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
+        else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+
         coda = ForgiaturaInCorso.objects.filter(
             Q(personaggio=pg) | Q(destinatario_finale=pg)
         ).select_related('infusione', 'personaggio', 'destinatario_finale')
@@ -1299,22 +1317,23 @@ class CraftingViewSet(viewsets.ViewSet):
         data = []
         now = timezone.now()
         for task in coda:
-            # Aggiungi info extra per capire chi sta lavorando per chi
+            # ... (calcolo info_extra come prima) ...
             info_extra = ""
-            if task.destinatario_finale and task.destinatario_finale.id != pg.id:
-                 info_extra = f"Stai forgiando per: {task.destinatario_finale.nome}"
-            elif task.personaggio.id != pg.id:
-                 info_extra = f"Artigiano al lavoro: {task.personaggio.nome}"
-                 
+            if task.destinatario_finale and task.destinatario_finale != pg:
+                 info_extra = f"Per: {task.destinatario_finale.nome}"
+            elif task.personaggio != pg:
+                 info_extra = f"Artigiano: {task.personaggio.nome}"
+
             data.append({
                 "id": task.id,
+                "infusione_id": task.infusione.id, # <--- AGGIUNTO QUESTO CAMPO
                 "infusione_nome": task.infusione.nome,
+                "infusione_slot_permessi": task.infusione.slot_corpo_permessi,
                 "data_inizio": task.data_inizio,
                 "data_fine": task.data_fine_prevista,
                 "secondi_rimanenti": max(0, (task.data_fine_prevista - now).total_seconds()),
                 "is_pronta": task.is_pronta,
                 "info_extra": info_extra,
-                # Flag per il frontend: posso ritirarlo io?
                 "can_collect": (task.is_pronta and (
                     (task.destinatario_finale and task.destinatario_finale.id == pg.id) or 
                     (not task.destinatario_finale and task.personaggio.id == pg.id)
