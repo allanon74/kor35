@@ -112,6 +112,7 @@ urlpatterns = [
     path('api/oggetti/equipaggia/', views.equipaggia_item_view, name='api_equipaggia_item'),
     path('api/oggetti/assembla/', views.assembla_item_view, name='api_assembla_item'),
     path('api/oggetti/smonta/', views.smonta_item_view, name='smonta_item'),
+    path('api/oggetti/forgia/', views.forgia_item_view, name='forgia_item'),
     # ### NUOVO: Endpoint Validazione Assemblaggio (Mancava questo!)
     path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'),
     
