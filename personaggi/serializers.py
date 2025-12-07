@@ -68,9 +68,12 @@ class PunteggioSerializer(serializers.ModelSerializer):
     class Meta:
         model = Punteggio
         fields = (
+            'id', # È sempre utile avere l'ID anche nel serializer base
             'nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 
             'icona_cerchio_html', 'icona_cerchio_inverted_html', 
             'colore', 'aure_infusione_consentite', 'ordine',
+            # AGGIUNTI QUESTI:
+            'produce_mod', 'produce_materia', 'produce_innesti', 'produce_mutazioni'
         )
 
 
@@ -129,8 +132,13 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'is_mattone',
             'aura_id', 'caratteristica_associata_nome',
             'aure_infusione_consentite',
+            # --- NUOVI CAMPI FONDAMENTALI PER IL FRONTEND ---
+            'produce_mod', 
+            'produce_materia', 
+            'produce_innesti', 
+            'produce_mutazioni',
         )
-
+        
     def get_base_url(self):
         request = self.context.get('request')
         if request:
