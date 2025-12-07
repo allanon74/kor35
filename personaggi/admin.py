@@ -42,6 +42,7 @@ from .models import (
     ForgiaturaInCorso,
     OggettoBase, OggettoStatisticaBase, OggettoBaseModificatore, OggettoBaseStatisticaBase, 
     RichiestaAssemblaggio, 
+    InfusioneStatistica,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -80,6 +81,7 @@ OggettoStatisticaBaseForm = create_stat_form(OggettoStatisticaBase, 'valore_base
 InfusioneStatisticaBaseForm = create_stat_form(InfusioneStatisticaBase, 'valore_base', 'valore_base_predefinito')
 TessituraStatisticaBaseForm = create_stat_form(TessituraStatisticaBase, 'valore_base', 'valore_base_predefinito')
 AttivataStatisticaBaseForm = create_stat_form(AttivataStatisticaBase, 'valore_base', 'valore_base_predefinito')
+InfusioneStatisticaForm = create_stat_form(InfusioneStatistica, 'valore', 'valore_predefinito')
 
 
 # ----------- CLASSI ASTRATTE ADMIN -------------
@@ -205,6 +207,13 @@ class OggettoStatisticaInline(StatisticaModificatorePivotInline):
 
 class InfusioneStatisticaBaseInline(StatisticaBasePivotInline):
     model = InfusioneStatisticaBase; form = InfusioneStatisticaBaseForm; fk_name = 'infusione'
+
+class InfusioneStatisticaInline(StatisticaModificatorePivotInline):
+    model = InfusioneStatistica
+    form = InfusioneStatisticaForm
+    fk_name = 'infusione'
+    verbose_name = "Modificatore Attivo (es. +1 Forza)"
+    verbose_name_plural = "Modificatori Attivi"
 
 class TessituraStatisticaBaseInline(StatisticaBasePivotInline):
     model = TessituraStatisticaBase; form = TessituraStatisticaBaseForm; fk_name = 'tessitura'
@@ -538,15 +547,27 @@ class InfusioneAdmin(SModelAdmin):
     list_display = ('id', 'nome', 'aura_richiesta', 'livello', 'aura_infusione', 'statistica_cariche')
     search_fields = ['nome', 'testo']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
-    # MODIFICA: Usiamo InfusioneCaratteristicaInline
-    inlines = [InfusioneCaratteristicaInline, InfusioneStatisticaBaseInline]
-    exclude = ('statistiche_base', 'statistiche', 'caratteristiche')
+    
+    # AGGIUNTO InfusioneStatisticaInline ALLA LISTA
+    inlines = [
+        InfusioneCaratteristicaInline,   # Componenti (Livello/Costo)
+        InfusioneStatisticaBaseInline,   # Statistiche Base (Danno, Peso)
+        InfusioneStatisticaInline        # Modificatori (Bonus/Malus)
+    ]
+    
+    # Rimuovi 'statistiche' dagli esclusi per permettere la gestione inline corretta
+    exclude = ('statistiche_base', 'caratteristiche', 'statistiche')
+    
     summernote_fields = ['testo']
     autocomplete_fields = ['aura_richiesta', 'aura_infusione', 'statistica_cariche']
     
     fieldsets = (
         ('Dati Base', {'fields': ('nome', 'testo', 'formula_attacco', 'aura_richiesta', 'aura_infusione', 'proposta_creazione')}),
         ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
+        ('Configurazione Oggetto Generato', {
+            'fields': ('slot_corpo_permessi',), 
+            'description': "Definisci dove può essere installato l'oggetto (solo per Innesti/Mutazioni)."
+        }),
         ('Logica Ricarica & Durata', {'fields': ('statistica_cariche', 'metodo_ricarica', 'costo_ricarica_crediti', 'durata_attivazione'), 'description': "Definisci qui come l'oggetto generato gestisce le cariche."}),
     )
     

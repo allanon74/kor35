@@ -513,12 +513,31 @@ class Tecnica(A_vista):
     class Meta: abstract = True; ordering = ['nome']
     @property
     def livello(self): return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
+    
+class InfusioneStatistica(CondizioneStatisticaMixin):
+    """
+    Collega una Statistica a un'Infusione con un valore specifico.
+    (Es. +2 Forza, +10 HP)
+    """
+    infusione = models.ForeignKey('Infusione', on_delete=models.CASCADE)
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore = models.IntegerField(default=0)
+    tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
+    
+    class Meta: 
+        unique_together = ('infusione', 'statistica')
+        verbose_name = "Statistica Infusione"
+        verbose_name_plural = "Statistiche Infusione"
+        
+    def __str__(self): return f"{self.statistica.nome}: {self.valore}"
 
 class Infusione(Tecnica):
     aura_infusione = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': AURA, 'is_soprannaturale': True}, related_name="infusioni_secondarie")
     caratteristiche = models.ManyToManyField(Punteggio, through='InfusioneCaratteristica', related_name="infusioni_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     formula_attacco = models.CharField("Formula Attacco", max_length=255, blank=True, null=True)
     statistiche_base = models.ManyToManyField(Statistica, through='InfusioneStatisticaBase', blank=True, related_name='infusione_statistiche_base')
+    # Statistiche MODIFICATORI (Es. +1 Forza) - REINTRODOTTO
+    statistiche = models.ManyToManyField(Statistica, through='InfusioneStatistica', blank=True, related_name='infusione_statistiche')
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='infusione_generata', verbose_name="Proposta Originale")
     statistica_cariche = models.ForeignKey(Statistica, on_delete=models.SET_NULL, null=True, blank=True, related_name="infusioni_cariche", verbose_name="Statistica per Cariche Max")    
     metodo_ricarica = models.TextField("Metodo di Ricarica", blank=True, null=True)
