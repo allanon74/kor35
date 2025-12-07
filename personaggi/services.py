@@ -24,29 +24,78 @@ class GestioneOggettiService:
     """
 
     @staticmethod
-    def crea_oggetto_da_infusione(infusione, proprietario, nome_pers=None):
+    def crea_oggetto_da_infusione(infusione, proprietario, nome_personalizzato=None):
+        """
+        Factory method: crea fisicamente l'oggetto nel database.
+        ORA INCLUDE: Calcolo automatico dei modificatori derivanti dai Mattoni.
+        """
+        from .models import Mattone, OggettoStatistica # Assicurati che siano importati
+        
         tipo = TIPO_OGGETTO_FISICO
         if infusione.aura_richiesta:
-             nome_a = infusione.aura_richiesta.nome.lower()
-             if "tecnologic" in nome_a: tipo = TIPO_OGGETTO_MOD
-             elif "mondan" in nome_a: tipo = TIPO_OGGETTO_MATERIA
+            nome_a = infusione.aura_richiesta.nome.lower()
+            if "tecnologic" in nome_a: tipo = TIPO_OGGETTO_MOD
+            elif "mondan" in nome_a: tipo = TIPO_OGGETTO_MATERIA
         
-        # NOTA: Rimosso proprietario=proprietario per evitare TypeError
-        obj = Oggetto.objects.create(
-            nome=nome_pers or infusione.nome, 
-            tipo_oggetto=tipo, 
+        # 1. Creazione Oggetto Base
+        nuovo_oggetto = Oggetto.objects.create(
+            nome=nome_personalizzato or f"Manufatto di {infusione.nome}",
+            tipo_oggetto=tipo,
             infusione_generatrice=infusione,
             is_tecnologico=(tipo in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_INNESTO]),
             cariche_attuali=infusione.statistica_cariche.valore_predefinito if infusione.statistica_cariche else 0
         )
 
-        for s in infusione.infusionestatisticabase_set.all():
-            OggettoStatisticaBase.objects.create(oggetto=obj, statistica=s.statistica, valore_base=s.valore_base)
-        for c in infusione.componenti.all():
-            OggettoCaratteristica.objects.create(oggetto=obj, caratteristica=c.caratteristica, valore=c.valore)
+        # 2. Copia Statistiche Base (Es. Danno fisso, Peso)
+        for stat_inf in infusione.infusionestatisticabase_set.all():
+            OggettoStatisticaBase.objects.create(
+                oggetto=nuovo_oggetto,
+                statistica=stat_inf.statistica,
+                valore_base=stat_inf.valore_base
+            )
+
+        # 3. Copia Componenti & CONVERSIONE IN EFFETTI (Mattoni)
+        # Questa è la parte che mancava: trasformare la "Caratteristica" in "Modificatore"
+        for comp in infusione.componenti.select_related('caratteristica').all():
+            # A. Salva il componente sull'oggetto (come dato grezzo)
+            OggettoCaratteristica.objects.create(
+                oggetto=nuovo_oggetto,
+                caratteristica=comp.caratteristica,
+                valore=comp.valore
+            )
             
-        obj.sposta_in_inventario(proprietario)
-        return obj
+            # B. Cerca se questa caratteristica corrisponde a un Mattone nell'Aura dell'Infusione
+            mattone = Mattone.objects.filter(
+                aura=infusione.aura_richiesta,
+                caratteristica_associata=comp.caratteristica
+            ).first()
+
+            # C. Se esiste un Mattone, applica i suoi effetti (Statistiche) all'oggetto
+            if mattone:
+                for eff in mattone.mattonestatistica_set.all():
+                    # Calcola il valore finale: (Valore Base del Mattone * Livello Componente)
+                    valore_totale = eff.valore * comp.valore
+                    
+                    OggettoStatistica.objects.create(
+                        oggetto=nuovo_oggetto,
+                        statistica=eff.statistica,
+                        valore=valore_totale,
+                        tipo_modificatore=eff.tipo_modificatore,
+                        # Copia le condizioni di attivazione dal Mattone
+                        usa_limitazione_aura=eff.usa_limitazione_aura,
+                        usa_limitazione_elemento=eff.usa_limitazione_elemento,
+                        usa_condizione_text=eff.usa_condizione_text,
+                        condizione_text=eff.condizione_text
+                    )
+                    # Copia anche le relazioni ManyToMany per i limiti (Aure/Elementi consentiti)
+                    stat_obj = OggettoStatistica.objects.last() # Recupera quello appena creato
+                    stat_obj.limit_a_aure.set(eff.limit_a_aure.all())
+                    stat_obj.limit_a_elementi.set(eff.limit_a_elementi.all())
+
+        # 4. Assegna proprietà
+        nuovo_oggetto.sposta_in_inventario(proprietario)
+        
+        return nuovo_oggetto
 
     @staticmethod
     def verifica_competenza_assemblaggio(personaggio, host, componente):
