@@ -1312,7 +1312,7 @@ class CraftingViewSet(viewsets.ViewSet):
 
         coda = ForgiaturaInCorso.objects.filter(
             Q(personaggio=pg) | Q(destinatario_finale=pg)
-        ).select_related('infusione', 'personaggio', 'destinatario_finale')
+        ).select_related('infusione__aura_richiesta', 'personaggio', 'destinatario_finale')
         
         data = []
         now = timezone.now()
