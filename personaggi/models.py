@@ -1114,7 +1114,7 @@ class PropostaTecnicaMattone(models.Model):
 class ForgiaturaInCorso(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='forgiature_attive')
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
-    data_inizio = models.DateTimeField(auto_now_add=True)
+    data_inizio = models.DateTimeField(default=timezone.now)
     data_fine_prevista = models.DateTimeField()
     slot_target = models.CharField(max_length=2, blank=True, null=True) 
     completata = models.BooleanField(default=False)

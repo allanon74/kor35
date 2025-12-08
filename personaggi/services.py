@@ -371,18 +371,19 @@ class GestioneCraftingService:
 
     @staticmethod
     def avvia_forgiatura(personaggio, infusione, slot_target=None, destinatario_finale=None, is_academy=False, aiutante=None):
-        if ForgiaturaInCorso.objects.filter(personaggio=personaggio).exists():
-            raise ValidationError("Hai già una forgiatura in corso.")
+        # RIMOSSO: Il blocco che impediva code multiple
+        # if ForgiaturaInCorso.objects.filter(personaggio=personaggio).exists():
+        #     raise ValidationError("Hai già una forgiatura in corso.")
 
         costo_crediti = 0
         desc = ""
         
+        # ... (Logica calcolo costi esistente rimane uguale) ...
         if is_academy:
             costo_crediti = 200; desc = f"Accademia: {infusione.nome}"
         else:
             forgiatore = destinatario_finale if destinatario_finale else personaggio
             helper = aiutante if aiutante else (None if destinatario_finale else personaggio)
-            # Se faccio da solo, helper = personaggio.
             if not helper: helper = personaggio
             
             can, msg = GestioneCraftingService.verifica_competenza_forgiatura(forgiatore, infusione, aiutante=helper if helper!=forgiatore else None)
@@ -394,14 +395,32 @@ class GestioneCraftingService:
         if personaggio.crediti < costo_crediti:
             raise ValidationError(f"Crediti insufficienti. Richiesti: {costo_crediti}")
 
+        # LOGICA CODA:
+        # Calcoliamo quando inizia questo lavoro.
+        # Se c'è già roba in coda, inizia quando finisce l'ultima. Altrimenti Adesso.
+        now = timezone.now()
+        
+        # Cerchiamo l'ultima forgiatura attiva di questo personaggio
+        ultima_forgiatura = ForgiaturaInCorso.objects.filter(
+            personaggio=personaggio
+        ).order_by('-data_fine_prevista').first()
+
+        data_inizio_lavoro = now
+        if ultima_forgiatura and ultima_forgiatura.data_fine_prevista > now:
+            data_inizio_lavoro = ultima_forgiatura.data_fine_prevista
+
+        # Calcolo durata
         _, durata_secondi = GestioneCraftingService.calcola_costi_forgiatura(personaggio, infusione)
-        fine_prevista = timezone.now() + timedelta(seconds=durata_secondi)
+        
+        # La fine prevista è rispetto all'inizio effettivo del lavoro, non "adesso"
+        fine_prevista = data_inizio_lavoro + timedelta(seconds=durata_secondi)
 
         with transaction.atomic():
             personaggio.modifica_crediti(-costo_crediti, desc)
             forgiatura = ForgiaturaInCorso.objects.create(
                 personaggio=personaggio, 
                 infusione=infusione, 
+                data_inizio=data_inizio_lavoro, # Salviamo quando inizia effettivamente (utile per UI)
                 data_fine_prevista=fine_prevista, 
                 slot_target=slot_target,
                 destinatario_finale=destinatario_finale
