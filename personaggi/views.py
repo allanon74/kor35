@@ -1536,14 +1536,12 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         committente = None
         artigiano = None
 
-        # Check A: Am I the Committente?
         candidate_committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
         
         if candidate_committente:
             committente = candidate_committente
             artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
         else:
-            # Check B: Am I the Artigiano?
             candidate_artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
             if candidate_artigiano:
                 artigiano = candidate_artigiano
@@ -1552,47 +1550,48 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         if not committente or not artigiano:
             return Response({"error": "Partecipanti non validi."}, status=404)
 
-        # --- 2. DETERMINAZIONE DESTINATARIO (UNIVERSALE) ---
-        # Il messaggio va SEMPRE a chi NON è l'utente corrente.
-        if request.user == committente.proprietario:
+        # --- 2. DETERMINAZIONE DESTINATARIO MESSAGGIO ---
+        if request.user.id == committente.proprietario.id:
             destinatario_msg = artigiano
             mittente_pg = committente
-            print("Sono il Committente. Scrivo all'Artigiano.")
         else:
             destinatario_msg = committente
             mittente_pg = artigiano
-            print("Sono l'Artigiano. Scrivo al Committente.")
 
-        # --- 3. TESTO MESSAGGIO ---
+        # --- 3. INIZIALIZZAZIONE VARIABILI (FONDAMENTALE PER EVITARE L'ERRORE) ---
+        host = None
+        comp = None
+        infusione = None
+        forgiatura_obj = None
         messaggio_testo = ""
-        
+
+        # --- 4. LOGICA SPECIFICA PER TIPO ---
         if tipo_op == 'GRAF':
             if not forgia_id or not slot_dest: return Response({"error": "Dati mancanti."}, status=400)
-            forgia = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
+            forgiatura_obj = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
+            if not forgiatura_obj.is_pronta: return Response({"error": "Oggetto non pronto."}, status=400)
             
+            # Linkiamo anche l'infusione per riferimento
+            infusione = forgiatura_obj.infusione
+
             if mittente_pg == artigiano:
-                messaggio_testo = f"Il Dr. {artigiano.nome} propone operazione: {forgia.infusione.nome} su {slot_dest}. Costo: {offerta} CR."
+                messaggio_testo = f"Il Dr. {artigiano.nome} propone operazione: {forgiatura_obj.infusione.nome} su {slot_dest}. Costo: {offerta} CR."
             else:
-                messaggio_testo = f"{committente.nome} richiede operazione: {forgia.infusione.nome}. Offerta: {offerta} CR."
-                
-            # Salvo riferimenti per creazione
-            infusione = forgia.infusione # Link per coerenza
-            forgiatura_obj = forgia
+                messaggio_testo = f"{committente.nome} richiede operazione: {forgiatura_obj.infusione.nome}. Offerta: {offerta} CR."
 
         elif tipo_op == 'FORG':
              infusione = get_object_or_404(Infusione, pk=infusione_id)
              messaggio_testo = f"{mittente_pg.nome} richiede forgiatura: {infusione.nome}. Offerta: {offerta} CR."
-             forgiatura_obj = None
 
-        else: # Standard
+        else: # Standard (INST / RIMO)
+             if not host_id or not comp_id: return Response({"error": "Componenti mancanti."}, status=400)
              host = get_object_or_404(Oggetto, pk=host_id)
              comp = get_object_or_404(Oggetto, pk=comp_id)
              action_verb = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
              messaggio_testo = f"{mittente_pg.nome} chiede di {action_verb} {comp.nome} su {host.nome}. Offerta: {offerta} CR."
-             forgiatura_obj = None
-             infusione = None
 
-        # --- 4. CREAZIONE ---
+        # --- 5. CREAZIONE DB ---
+        # Qui 'host' e 'comp' saranno None se siamo nel caso GRAF o FORG, il che è corretto.
         richiesta = RichiestaAssemblaggio.objects.create(
             committente=committente,
             artigiano=artigiano,
