@@ -1611,17 +1611,26 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
     def accetta(self, request, pk=None):
         richiesta = self.get_object()
         
-        # MODIFICA: Permetti l'azione se sei il proprietario O se sei Admin/Staff
-        is_owner = richiesta.artigiano.proprietario == request.user
-        is_admin = request.user.is_staff or request.user.is_superuser
+        # Rimuoviamo i controlli rigidi qui e lasciamo fare al Service,
+        # oppure facciamo un controllo preliminare corretto.
         
-        if not is_owner and not is_admin:
-            return Response({"error": "Non autorizzato"}, status=403)
+        user = request.user
+        is_owner_artigiano = richiesta.artigiano.proprietario == user
+        is_owner_committente = richiesta.committente.proprietario == user
+        is_admin = user.is_staff or user.is_superuser
+        
+        # Controllo permessi preliminare (coerente col service)
+        if richiesta.tipo_operazione == 'GRAF':
+            if not is_owner_committente and not is_admin:
+                return Response({"error": "Solo il paziente può accettare questa proposta."}, status=403)
+        else:
+            if not is_owner_artigiano and not is_admin:
+                return Response({"error": "Solo l'artigiano può accettare questo lavoro."}, status=403)
             
         try:
-            # Passiamo l'utente che sta eseguendo l'azione (admin o proprietario)
+            # Passiamo l'utente che sta eseguendo l'azione
             GestioneOggettiService.elabora_richiesta_assemblaggio(richiesta.id, request.user)
-            return Response({"status": "success", "message": "Lavoro completato!"})
+            return Response({"status": "success", "message": "Operazione completata con successo!"})
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
 

@@ -280,27 +280,50 @@ class GestioneOggettiService:
     @staticmethod
     def elabora_richiesta_assemblaggio(richiesta_id, esecutore):
         """
-        L'artigiano accetta ed esegue la richiesta.
+        Finalizza la richiesta.
+        - Se TIPO != GRAF: L'Artigiano accetta la richiesta del cliente.
+        - Se TIPO == GRAF: Il Cliente (Paziente) accetta la proposta dell'Artigiano.
         """
-        try: req = RichiestaAssemblaggio.objects.select_related('committente', 'artigiano', 'oggetto_host', 'componente', 'forgiatura_target').get(pk=richiesta_id)
-        except: raise ValidationError("Richiesta non trovata.")
+        try: 
+            req = RichiestaAssemblaggio.objects.select_related(
+                'committente', 'artigiano', 'oggetto_host', 'componente', 'forgiatura_target'
+            ).get(pk=richiesta_id)
+        except RichiestaAssemblaggio.DoesNotExist: 
+            raise ValidationError("Richiesta non trovata.")
 
-        if req.artigiano.proprietario != esecutore and not esecutore.is_staff:
-            raise ValidationError("Non sei l'artigiano designato per questa richiesta.")
+        # --- LOGICA PERMESSI AGGIORNATA ---
+        is_artigiano = req.artigiano.proprietario == esecutore
+        is_committente = req.committente.proprietario == esecutore
+        is_admin = esecutore.is_staff or esecutore.is_superuser
+
+        if req.tipo_operazione == 'GRAF':
+            # Nel caso di INNESTO/GRAFT, è il PAZIENTE (Committente) che deve accettare la proposta del medico
+            if not is_committente and not is_admin:
+                raise ValidationError("Solo il paziente destinatario può accettare questa operazione chirurgica.")
+        else:
+            # Negli altri casi (Assemblaggio, Forgiatura conto terzi), è l'ARTIGIANO che accetta il lavoro
+            if not is_artigiano and not is_admin:
+                raise ValidationError("Non sei l'artigiano designato per accettare questa richiesta.")
+        # ----------------------------------
             
-        if req.stato != STATO_RICHIESTA_PENDENTE: raise ValidationError("Richiesta già processata.")
+        if req.stato != STATO_RICHIESTA_PENDENTE: 
+            raise ValidationError("Richiesta già processata.")
         
+        # Se è forgiatura conto terzi, controlla coda artigiano
         if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
             if ForgiaturaInCorso.objects.filter(personaggio=req.artigiano).exists():
-                raise ValidationError("Sei già occupato in una forgiatura.")
+                raise ValidationError("L'artigiano ha già una forgiatura in corso.")
 
         with transaction.atomic():
+            # PAGAMENTO: Il Committente paga sempre l'Artigiano
             if req.offerta_crediti > 0:
-                if req.committente.crediti < req.offerta_crediti: raise ValidationError("Il committente non ha più i crediti sufficienti.")
+                if req.committente.crediti < req.offerta_crediti: 
+                    raise ValidationError("Il committente non ha crediti sufficienti per pagare.")
+                
                 req.committente.modifica_crediti(-req.offerta_crediti, f"Pagamento a {req.artigiano.nome}")
-                req.artigiano.modifica_crediti(req.offerta_crediti, f"Lavoro da {req.committente.nome}")
+                req.artigiano.modifica_crediti(req.offerta_crediti, f"Compenso da {req.committente.nome}")
             
-            # DISPATCHER
+            # DISPATCHER OPERAZIONI
             if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
                 GestioneCraftingService.avvia_forgiatura(
                     personaggio=req.artigiano, 
@@ -312,10 +335,26 @@ class GestioneOggettiService:
                 req.artigiano.aggiungi_log(f"Iniziata forgiatura {req.infusione.nome} per {req.committente.nome}.")
                 
             elif req.tipo_operazione == TIPO_OPERAZIONE_INNESTO:
-                 if not req.forgiatura_target: raise ValidationError("Forgiatura target mancante.")
-                 nuovo_obj = GestioneCraftingService.completa_forgiatura(req.forgiatura_target.id, req.artigiano)
+                 if not req.forgiatura_target: 
+                     raise ValidationError("Forgiatura target mancante o scaduta.")
+                 
+                 # Recupera l'oggetto dalla forgia dell'Artigiano
+                 # Nota: completa_forgiatura controlla che 'esecutore' sia owner o destinatario.
+                 # Qui passiamo req.artigiano come 'attore' tecnico della forgiatura, o il committente se destinatario finale.
+                 # Poiché la forgiatura è nel nome dell'artigiano, usiamo l'artigiano per sbloccarla, 
+                 # ma l'installazione va sul committente.
+                 
+                 # Recuperiamo l'oggetto fisico (creato e NON ancora installato)
+                 nuovo_obj = GestioneCraftingService.completa_forgiatura(
+                     req.forgiatura_target.id, 
+                     req.artigiano # L'artigiano "completa" tecnicamente il lavoro
+                 )
+                 
+                 # Installazione sul Committente
                  GestioneOggettiService.installa_innesto(req.committente, nuovo_obj, req.slot_destinazione)
-                 req.artigiano.aggiungi_log(f"Operazione completata su {req.committente.nome}.")
+                 
+                 req.artigiano.aggiungi_log(f"Eseguita operazione su {req.committente.nome} ({nuovo_obj.nome}).")
+                 req.committente.aggiungi_log(f"Subita operazione: installato {nuovo_obj.nome} in {req.slot_destinazione}.")
                  
             elif req.tipo_operazione == TIPO_OPERAZIONE_RIMOZIONE:
                 GestioneOggettiService.rimuovi_mod(req.artigiano, req.oggetto_host, req.componente)
@@ -324,6 +363,7 @@ class GestioneOggettiService:
             
             req.stato = STATO_RICHIESTA_COMPLETATA
             req.save()
+            
         return True
 
     @staticmethod
