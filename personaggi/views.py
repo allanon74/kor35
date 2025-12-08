@@ -1508,12 +1508,28 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         forgia_id = request.data.get('forgiatura_id')
         slot_dest = request.data.get('slot_destinazione')
 
-        committente = get_object_or_404(Personaggio, pk=committente_id, proprietario=request.user)
-        # Trova artigiano (escluso se stesso)
-        artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
+        # --- LOGICA PERMESSI AGGIORNATA ---
+        # Verifichiamo chi sta facendo la richiesta: il Committente o l'Artigiano?
+        
+        # Caso A: Chiama il Committente (es. Paziente chiede al Dottore)
+        committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
+        artigiano = None
+        
+        if committente:
+            # Se sono il committente, cerco l'artigiano per nome
+            artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
+        else:
+            # Caso B: Chiama l'Artigiano (es. Dottore offre al Paziente)
+            # Verifichiamo se l'utente possiede l'artigiano specificato
+            artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
+            if artigiano:
+                # Se sono l'artigiano, il committente è il target (id passato)
+                committente = Personaggio.objects.filter(pk=committente_id).exclude(pk=artigiano.id).first()
 
-        if not artigiano:
-            return Response({"error": "Artigiano non trovato."}, status=404)
+        if not committente or not artigiano:
+            return Response({"error": "Partecipanti non validi. Devi possedere il Committente o l'Artigiano."}, status=404)
+
+        # --- FINE LOGICA PERMESSI ---
 
         host = None
         comp = None
@@ -1527,25 +1543,26 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             
             forgiatura_obj = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
             
-            # Verifica che la forgiatura sia pronta e destinata al committente
+            # Verifica che la forgiatura sia pronta
             if not forgiatura_obj.is_pronta:
                 return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
             
-            # (Opzionale) Verifica che l'oggetto sia effettivamente un Innesto/Mutazione
-            # ...
-            
-            messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Offerta: {offerta} CR."
+            # Messaggio differenziato in base a chi ha creato la richiesta
+            if request.user == committente.proprietario:
+                messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Offerta: {offerta} CR."
+                destinatario_msg = artigiano
+            else:
+                messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
+                destinatario_msg = committente
 
         # --- 1. GESTIONE FORGIATURA ---
-        if tipo_op == 'FORG':
+        elif tipo_op == 'FORG':
             if not infusione_id: 
                 return Response({"error": "Infusione mancante per la forgiatura."}, status=400)
             infusione = get_object_or_404(Infusione, pk=infusione_id)
             
-            messaggio_testo = (
-                f"{committente.nome} richiede il tuo intervento per FORGIARE "
-                f"l'oggetto '{infusione.nome}'. Offerta: {offerta} CR."
-            )
+            messaggio_testo = f"{committente.nome} richiede forgiatura di '{infusione.nome}'. Offerta: {offerta} CR."
+            destinatario_msg = artigiano
 
         # --- 2. GESTIONE ASSEMBLAGGIO / SMONTAGGIO ---
         else:
@@ -1555,10 +1572,8 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             comp = get_object_or_404(Oggetto, pk=comp_id)
             
             verbo = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
-            messaggio_testo = (
-                f"{committente.nome} richiede il tuo intervento per {verbo.upper()} "
-                f"'{comp.nome}' su '{host.nome}'. Offerta: {offerta} CR."
-            )
+            messaggio_testo = f"{committente.nome} richiede di {verbo} '{comp.nome}' su '{host.nome}'. Offerta: {offerta} CR."
+            destinatario_msg = artigiano
 
         # Creazione Richiesta DB
         richiesta = RichiestaAssemblaggio.objects.create(
@@ -1567,6 +1582,8 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             oggetto_host=host,
             componente=comp,
             infusione=infusione,
+            forgiatura_target=forgiatura_obj, # IMPORTANTE: Collegare la forgiatura
+            slot_destinazione=slot_dest,      # IMPORTANTE: Salvare lo slot
             offerta_crediti=offerta,
             tipo_operazione=tipo_op
         )
@@ -1575,8 +1592,8 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         Messaggio.objects.create(
             mittente=request.user,
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
-            destinatario_personaggio=artigiano,
-            titolo="Nuova Richiesta di Lavoro",
+            destinatario_personaggio=destinatario_msg,
+            titolo="Proposta di Lavoro / Operazione",
             testo=messaggio_testo
         )
 
