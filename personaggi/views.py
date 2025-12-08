@@ -1518,6 +1518,10 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def crea(self, request):
+        print(f"--- DEBUG CREA RICHIESTA ---")
+        print(f"User: {request.user.username}")
+        print(f"Dati ricevuti: {request.data}")
+
         committente_id = request.data.get('committente_id')
         artigiano_nome = request.data.get('artigiano_nome')
         offerta = int(request.data.get('offerta', 0))
@@ -1530,47 +1534,59 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         forgia_id = request.data.get('forgiatura_id')
         slot_dest = request.data.get('slot_destinazione')
 
-        # --- 1. IDENTIFICAZIONE RUOLI (Chi è chi?) ---
+        # --- 1. RISOLUZIONE PARTECIPANTI ---
         committente = None
         artigiano = None
 
-        # Tentativo A: L'utente loggato è il COMMITTENTE (Es. Chiedo un lavoro)
+        # Tentativo A: L'utente loggato è il COMMITTENTE (Chi paga/chi ha l'oggetto)
         candidate_committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
         
         if candidate_committente:
             committente = candidate_committente
-            # L'artigiano è la controparte
+            # L'artigiano è l'altro
             artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
+            print("Ruolo rilevato: UTENTE = COMMITTENTE (Cliente)")
         else:
-            # Tentativo B: L'utente loggato è l'ARTIGIANO (Es. Offro un innesto)
+            # Tentativo B: L'utente loggato è l'ARTIGIANO (Chi lavora/chi ha la skill)
             candidate_artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
             if candidate_artigiano:
                 artigiano = candidate_artigiano
-                # Il committente è la controparte
+                # Il committente è il target
                 committente = Personaggio.objects.filter(pk=committente_id).exclude(pk=artigiano.id).first()
+                print("Ruolo rilevato: UTENTE = ARTIGIANO (Fornitore)")
 
         if not committente or not artigiano:
+            print("ERRORE: Partecipanti non trovati")
             return Response({"error": "Partecipanti non validi o non trovati."}, status=404)
 
-        # --- 2. DETERMINAZIONE DESTINATARIO MESSAGGIO (Logica Universale) ---
-        # Il messaggio va sempre inviato alla persona che NON ha fatto la richiesta.
-        if request.user == committente.proprietario:
-            # Sono il Cliente -> Scrivo all'Artigiano
+        print(f"Committente: {committente.nome} (Owner: {committente.proprietario.username})")
+        print(f"Artigiano: {artigiano.nome} (Owner: {artigiano.proprietario.username})")
+
+        # --- 2. DETERMINAZIONE DESTINATARIO MESSAGGIO (UNIVERSALE) ---
+        # Regola Aurea: Il messaggio va alla persona che NON ha fatto la richiesta.
+        
+        destinatario_msg = None
+        mittente_pg = None
+
+        if request.user.id == committente.proprietario.id:
+            # L'utente è il proprietario del Committente -> Scrive all'Artigiano
             destinatario_msg = artigiano
             mittente_pg = committente
+            print(f"Direzione Messaggio: Cliente -> Artigiano ({artigiano.nome})")
         else:
-            # Sono l'Artigiano (o Admin) -> Scrivo al Cliente
+            # L'utente NON è il proprietario del Committente (quindi è l'Artigiano) -> Scrive al Committente
             destinatario_msg = committente
             mittente_pg = artigiano
+            print(f"Direzione Messaggio: Artigiano -> Cliente ({committente.nome})")
 
-        # --- 3. PREPARAZIONE DATI SPECIFICI ---
+        # --- 3. PREPARAZIONE DATI ---
         host = None
         comp = None
         infusione = None
         forgiatura_obj = None
         messaggio_testo = ""
 
-        # CASO A: INNESTO / GRAFT
+        # CASO A: INNESTO / GRAFT (Dalla Forgia)
         if tipo_op == 'GRAF':
             if not forgia_id or not slot_dest:
                 return Response({"error": "Dati mancanti per operazione chirurgica."}, status=400)
@@ -1579,7 +1595,7 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             if not forgiatura_obj.is_pronta:
                 return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
             
-            # Testo dinamico in base a chi sta parlando
+            # Testo dinamico
             if mittente_pg == artigiano:
                 messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
             else:
@@ -1590,7 +1606,6 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             if not infusione_id: 
                 return Response({"error": "Infusione mancante."}, status=400)
             infusione = get_object_or_404(Infusione, pk=infusione_id)
-            
             messaggio_testo = f"{mittente_pg.nome} richiede una forgiatura cooperativa per '{infusione.nome}'. Offerta/Costo: {offerta} CR."
 
         # CASO C: INSTALLAZIONE/RIMOZIONE STANDARD (Default)
@@ -1599,7 +1614,6 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
                 return Response({"error": "Host e Componente mancanti."}, status=400)
             host = get_object_or_404(Oggetto, pk=host_id)
             comp = get_object_or_404(Oggetto, pk=comp_id)
-            
             verbo = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
             messaggio_testo = f"{mittente_pg.nome} richiede di {verbo} '{comp.nome}' su '{host.nome}'. Offerta: {offerta} CR."
 
@@ -1616,11 +1630,10 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             tipo_operazione=tipo_op
         )
         
-        # Invio Messaggio
         Messaggio.objects.create(
             mittente=request.user,
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
-            destinatario_personaggio=destinatario_msg, # Sicuro al 100% che sia l'altro
+            destinatario_personaggio=destinatario_msg,
             titolo="Proposta di Lavoro / Operazione",
             testo=messaggio_testo
         )
