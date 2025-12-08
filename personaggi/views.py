@@ -1534,23 +1534,26 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         # Verifichiamo chi sta facendo la richiesta: il Committente o l'Artigiano?
         
         # Caso A: Chiama il Committente (es. Paziente chiede al Dottore)
-        committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
+        committente = None
         artigiano = None
+
+        # 1. Provo a vedere se l'utente è il COMMITTENTE (Paziente che chiede)
+        candidate_committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
         
-        if committente:
-            # Se sono il committente, cerco l'artigiano per nome
+        if candidate_committente:
+            committente = candidate_committente
+            # L'artigiano è un altro (cerco per nome)
             artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
         else:
-            # Caso B: Chiama l'Artigiano (es. Dottore offre al Paziente)
-            # Verifichiamo se l'utente possiede l'artigiano specificato
-            artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
-            if artigiano:
-                # Se sono l'artigiano, il committente è il target (id passato)
+            # 2. Provo a vedere se l'utente è l'ARTIGIANO (Dottore che offre)
+            candidate_artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
+            if candidate_artigiano:
+                artigiano = candidate_artigiano
+                # Il committente è il target (id passato)
                 committente = Personaggio.objects.filter(pk=committente_id).exclude(pk=artigiano.id).first()
 
         if not committente or not artigiano:
-            return Response({"error": "Partecipanti non validi. Devi possedere il Committente o l'Artigiano."}, status=404)
-
+            return Response({"error": "Partecipanti non validi. Verifica di possedere il personaggio chiamante."}, status=404)
         # --- FINE LOGICA PERMESSI ---
 
         host = None
@@ -1569,11 +1572,19 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             if not forgiatura_obj.is_pronta:
                 return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
             
-            # LOGICA MESSAGGI CORRETTA:
-            # Se l'operazione è GRAF (parte dalla coda forgiatura), è SEMPRE l'Artigiano che propone al Paziente.
-            # Indipendentemente da chi possiede i PG, il flusso logico è Artigiano -> Paziente.
-            messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
-            destinatario_msg = committente
+            # --- CORREZIONE LOGICA MESSAGGI ---
+            # In questo flusso (Forger -> Patient), il forgiatore (request.user) è l'Artigiano.
+            # Il destinatario del messaggio DEVE essere il Committente (Paziente).
+            
+            # Verifichiamo se l'utente attuale è l'artigiano (come dovrebbe essere)
+            if request.user == artigiano.proprietario:
+                messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
+                destinatario_msg = committente
+            else:
+                # Fallback per casi strani (es. Admin o richieste future inverse)
+                messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Offerta: {offerta} CR."
+                destinatario_msg = artigiano
+            # -------------------------------
 
         # --- 1. GESTIONE FORGIATURA ---
         elif tipo_op == 'FORG':
