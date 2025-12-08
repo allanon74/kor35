@@ -1520,104 +1520,79 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
     def crea(self, request):
         print(f"--- DEBUG CREA RICHIESTA ---")
         print(f"User: {request.user.username}")
-        print(f"Dati ricevuti: {request.data}")
-
+        
         committente_id = request.data.get('committente_id')
         artigiano_nome = request.data.get('artigiano_nome')
         offerta = int(request.data.get('offerta', 0))
         tipo_op = request.data.get('tipo_operazione', 'INST')
         
-        # Parametri opzionali
         host_id = request.data.get('host_id')
         comp_id = request.data.get('comp_id')
         infusione_id = request.data.get('infusione_id')
         forgia_id = request.data.get('forgiatura_id')
         slot_dest = request.data.get('slot_destinazione')
 
-        # --- 1. RISOLUZIONE PARTECIPANTI ---
+        # --- 1. IDENTIFICAZIONE RUOLI ---
         committente = None
         artigiano = None
 
-        # Tentativo A: L'utente loggato è il COMMITTENTE (Chi paga/chi ha l'oggetto)
+        # Check A: Am I the Committente?
         candidate_committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
         
         if candidate_committente:
             committente = candidate_committente
-            # L'artigiano è l'altro
             artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
-            print("Ruolo rilevato: UTENTE = COMMITTENTE (Cliente)")
         else:
-            # Tentativo B: L'utente loggato è l'ARTIGIANO (Chi lavora/chi ha la skill)
+            # Check B: Am I the Artigiano?
             candidate_artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
             if candidate_artigiano:
                 artigiano = candidate_artigiano
-                # Il committente è il target
                 committente = Personaggio.objects.filter(pk=committente_id).exclude(pk=artigiano.id).first()
-                print("Ruolo rilevato: UTENTE = ARTIGIANO (Fornitore)")
 
         if not committente or not artigiano:
-            print("ERRORE: Partecipanti non trovati")
-            return Response({"error": "Partecipanti non validi o non trovati."}, status=404)
+            return Response({"error": "Partecipanti non validi."}, status=404)
 
-        print(f"Committente: {committente.nome} (Owner: {committente.proprietario.username})")
-        print(f"Artigiano: {artigiano.nome} (Owner: {artigiano.proprietario.username})")
-
-        # --- 2. DETERMINAZIONE DESTINATARIO MESSAGGIO (UNIVERSALE) ---
-        # Regola Aurea: Il messaggio va alla persona che NON ha fatto la richiesta.
-        
-        destinatario_msg = None
-        mittente_pg = None
-
-        if request.user.id == committente.proprietario.id:
-            # L'utente è il proprietario del Committente -> Scrive all'Artigiano
+        # --- 2. DETERMINAZIONE DESTINATARIO (UNIVERSALE) ---
+        # Il messaggio va SEMPRE a chi NON è l'utente corrente.
+        if request.user == committente.proprietario:
             destinatario_msg = artigiano
             mittente_pg = committente
-            print(f"Direzione Messaggio: Cliente -> Artigiano ({artigiano.nome})")
+            print("Sono il Committente. Scrivo all'Artigiano.")
         else:
-            # L'utente NON è il proprietario del Committente (quindi è l'Artigiano) -> Scrive al Committente
             destinatario_msg = committente
             mittente_pg = artigiano
-            print(f"Direzione Messaggio: Artigiano -> Cliente ({committente.nome})")
+            print("Sono l'Artigiano. Scrivo al Committente.")
 
-        # --- 3. PREPARAZIONE DATI ---
-        host = None
-        comp = None
-        infusione = None
-        forgiatura_obj = None
+        # --- 3. TESTO MESSAGGIO ---
         messaggio_testo = ""
-
-        # CASO A: INNESTO / GRAFT (Dalla Forgia)
+        
         if tipo_op == 'GRAF':
-            if not forgia_id or not slot_dest:
-                return Response({"error": "Dati mancanti per operazione chirurgica."}, status=400)
+            if not forgia_id or not slot_dest: return Response({"error": "Dati mancanti."}, status=400)
+            forgia = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
             
-            forgiatura_obj = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
-            if not forgiatura_obj.is_pronta:
-                return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
-            
-            # Testo dinamico
             if mittente_pg == artigiano:
-                messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
+                messaggio_testo = f"Il Dr. {artigiano.nome} propone operazione: {forgia.infusione.nome} su {slot_dest}. Costo: {offerta} CR."
             else:
-                messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome}. Offerta: {offerta} CR."
+                messaggio_testo = f"{committente.nome} richiede operazione: {forgia.infusione.nome}. Offerta: {offerta} CR."
+                
+            # Salvo riferimenti per creazione
+            infusione = forgia.infusione # Link per coerenza
+            forgiatura_obj = forgia
 
-        # CASO B: FORGIATURA CONTO TERZI
         elif tipo_op == 'FORG':
-            if not infusione_id: 
-                return Response({"error": "Infusione mancante."}, status=400)
-            infusione = get_object_or_404(Infusione, pk=infusione_id)
-            messaggio_testo = f"{mittente_pg.nome} richiede una forgiatura cooperativa per '{infusione.nome}'. Offerta/Costo: {offerta} CR."
+             infusione = get_object_or_404(Infusione, pk=infusione_id)
+             messaggio_testo = f"{mittente_pg.nome} richiede forgiatura: {infusione.nome}. Offerta: {offerta} CR."
+             forgiatura_obj = None
 
-        # CASO C: INSTALLAZIONE/RIMOZIONE STANDARD (Default)
-        else:
-            if not host_id or not comp_id:
-                return Response({"error": "Host e Componente mancanti."}, status=400)
-            host = get_object_or_404(Oggetto, pk=host_id)
-            comp = get_object_or_404(Oggetto, pk=comp_id)
-            verbo = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
-            messaggio_testo = f"{mittente_pg.nome} richiede di {verbo} '{comp.nome}' su '{host.nome}'. Offerta: {offerta} CR."
+        else: # Standard
+             host = get_object_or_404(Oggetto, pk=host_id)
+             comp = get_object_or_404(Oggetto, pk=comp_id)
+             action_verb = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
+             messaggio_testo = f"{mittente_pg.nome} chiede di {action_verb} {comp.nome} su {host.nome}. Offerta: {offerta} CR."
+             forgiatura_obj = None
+             infusione = None
 
-        # --- 4. SALVATAGGIO ---
+        # --- 4. CREAZIONE ---
         richiesta = RichiestaAssemblaggio.objects.create(
             committente=committente,
             artigiano=artigiano,
@@ -1634,7 +1609,7 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             mittente=request.user,
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
             destinatario_personaggio=destinatario_msg,
-            titolo="Proposta di Lavoro / Operazione",
+            titolo="Nuova Richiesta Operativa",
             testo=messaggio_testo
         )
 
