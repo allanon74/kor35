@@ -138,7 +138,21 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
 
     mods_attivi = {}
     if personaggio:
+        # 1. Prendi i modificatori GLOBALI (senza condizioni)
         mods_attivi = copy.deepcopy(personaggio.modificatori_calcolati)
+        
+        # 2. Se c'è un contesto (es. stiamo processando una formula Fuoco), 
+        # calcola i modificatori CONDIZIONALI
+        if context:
+            extra_mods = personaggio.get_modificatori_extra_da_contesto(context)
+            
+            # Fondi extra_mods dentro mods_attivi
+            for param, valori in extra_mods.items():
+                if param not in mods_attivi:
+                    mods_attivi[param] = {'add': 0.0, 'mol': 1.0}
+                mods_attivi[param]['add'] += valori['add']
+                mods_attivi[param]['mol'] *= valori['mol']
+
         eval_context.update(personaggio.caratteristiche_base)
         for param, mod_data in mods_attivi.items():
             val_base = eval_context.get(param, 0) 
@@ -801,14 +815,17 @@ class Personaggio(Inventario):
     def aggiungi_log(self, t): PersonaggioLog.objects.create(personaggio=self, testo_log=t)
     def modifica_crediti(self, i, d): CreditoMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
     def modifica_pc(self, i, d): PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+    
     @property
     def crediti(self):
         b = self.tipologia.crediti_iniziali if self.tipologia else 0
         return b + (self.movimenti_credito.aggregate(totale=Sum('importo'))['totale'] or 0)
+    
     @property
     def punti_caratteristica(self):
         b = self.tipologia.caratteristiche_iniziali if self.tipologia else 0
         return b + (self.movimenti_pc.aggregate(totale=Sum('importo'))['totale'] or 0)
+    
     @property
     def punteggi_base(self):
         if hasattr(self, '_punteggi_base_cache'): return self._punteggi_base_cache
@@ -823,9 +840,11 @@ class Personaggio(Inventario):
             p[agen.nome] = max_val
         self._punteggi_base_cache = p
         return p
+    
     @property
     def caratteristiche_base(self):
         return {k:v for k,v in self.punteggi_base.items() if Punteggio.objects.filter(nome=k, tipo=CARATTERISTICA).exists()}
+    
     def get_valore_aura_effettivo(self, aura):
         pb = self.punteggi_base
         if aura.is_generica: return max([v for k,v in pb.items() if Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists()] or [0])
@@ -855,10 +874,49 @@ class Personaggio(Inventario):
                     if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids: return False, f"Manca componente obbligatorio: {m_obb.nome}."
         return True, "OK"
     
+    # @property
+    # def modificatori_calcolati(self):
+    #     if hasattr(self, '_modificatori_calcolati_cache'): return self._modificatori_calcolati_cache
+    #     mods = {}
+    #     def _add(p, t, v):
+    #         if not p: return
+    #         if p not in mods: mods[p] = {'add': 0.0, 'mol': 1.0}
+    #         valore = float(v)
+    #         if t == MODIFICATORE_ADDITIVO: mods[p]['add'] += valore
+    #         elif t == MODIFICATORE_MOLTIPLICATIVO: mods[p]['mol'] *= valore 
+
+    #     for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+    #     oggetti_inventario = self.get_oggetti().prefetch_related('oggettostatistica_set__statistica', 'potenziamenti_installati__oggettostatistica_set__statistica')
+    #     for oggetto in oggetti_inventario:
+    #         is_oggetto_attivo = False
+    #         if oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO and oggetto.is_equipaggiato: is_oggetto_attivo = True
+    #         elif oggetto.tipo_oggetto == TIPO_OGGETTO_MUTAZIONE: is_oggetto_attivo = True
+    #         elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO and oggetto.slot_corpo and oggetto.cariche_attuali > 0: is_oggetto_attivo = True
+            
+    #         if is_oggetto_attivo:
+    #             for stat_link in oggetto.oggettostatistica_set.all(): _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+    #             for potenziamento in oggetto.potenziamenti_installati.all():
+    #                 is_potenziamento_attivo = False
+    #                 if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA: is_potenziamento_attivo = True
+    #                 elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD and potenziamento.cariche_attuali > 0: is_potenziamento_attivo = True
+    #                 if is_potenziamento_attivo:
+    #                     for stat_link_pot in potenziamento.oggettostatistica_set.all(): _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+
+    #     cb = self.caratteristiche_base
+    #     if cb:
+    #         for l in CaratteristicaModificatore.objects.filter(caratteristica__nome__in=cb.keys()).select_related('caratteristica', 'statistica_modificata'):
+    #             pts = cb.get(l.caratteristica.nome, 0)
+    #             if pts > 0 and l.ogni_x_punti > 0:
+    #                 b = (pts // l.ogni_x_punti) * l.modificatore
+    #                 if b > 0: _add(l.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, b)
+    #     self._modificatori_calcolati_cache = mods
+    #     return mods
+
     @property
     def modificatori_calcolati(self):
         if hasattr(self, '_modificatori_calcolati_cache'): return self._modificatori_calcolati_cache
         mods = {}
+        
         def _add(p, t, v):
             if not p: return
             if p not in mods: mods[p] = {'add': 0.0, 'mol': 1.0}
@@ -866,7 +924,20 @@ class Personaggio(Inventario):
             if t == MODIFICATORE_ADDITIVO: mods[p]['add'] += valore
             elif t == MODIFICATORE_MOLTIPLICATIVO: mods[p]['mol'] *= valore 
 
-        for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+        # Funzione helper per verificare se un modificatore è "Globale" (senza condizioni)
+        def _is_global(stat_link):
+            # Se ha una qualsiasi limitazione attiva, NON è globale
+            if stat_link.usa_limitazione_elemento: return False
+            if stat_link.usa_limitazione_aura: return False
+            if stat_link.usa_condizione_text: return False
+            return True
+
+        # 1. Abilità
+        for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): 
+            if _is_global(l):
+                _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+        
+        # 2. Oggetti e Innesti
         oggetti_inventario = self.get_oggetti().prefetch_related('oggettostatistica_set__statistica', 'potenziamenti_installati__oggettostatistica_set__statistica')
         for oggetto in oggetti_inventario:
             is_oggetto_attivo = False
@@ -875,14 +946,23 @@ class Personaggio(Inventario):
             elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO and oggetto.slot_corpo and oggetto.cariche_attuali > 0: is_oggetto_attivo = True
             
             if is_oggetto_attivo:
-                for stat_link in oggetto.oggettostatistica_set.all(): _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                for stat_link in oggetto.oggettostatistica_set.all(): 
+                    # FILTRO: Aggiungi solo se non ha limitazioni
+                    if _is_global(stat_link):
+                        _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                
+                # Potenziamenti (Mod/Materia) dentro gli oggetti
                 for potenziamento in oggetto.potenziamenti_installati.all():
                     is_potenziamento_attivo = False
                     if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA: is_potenziamento_attivo = True
                     elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD and potenziamento.cariche_attuali > 0: is_potenziamento_attivo = True
+                    
                     if is_potenziamento_attivo:
-                        for stat_link_pot in potenziamento.oggettostatistica_set.all(): _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+                        for stat_link_pot in potenziamento.oggettostatistica_set.all(): 
+                            if _is_global(stat_link_pot):
+                                _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
 
+        # 3. Caratteristiche Base (Queste sono sempre globali)
         cb = self.caratteristiche_base
         if cb:
             for l in CaratteristicaModificatore.objects.filter(caratteristica__nome__in=cb.keys()).select_related('caratteristica', 'statistica_modificata'):
@@ -890,8 +970,135 @@ class Personaggio(Inventario):
                 if pts > 0 and l.ogni_x_punti > 0:
                     b = (pts // l.ogni_x_punti) * l.modificatore
                     if b > 0: _add(l.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, b)
+        
         self._modificatori_calcolati_cache = mods
         return mods
+    
+    
+
+    def get_modificatori_extra_da_contesto(self, context=None):
+        """
+        Calcola e restituisce SOLO i modificatori che si attivano specificamente
+        in questo contesto (es. "Solo Elemento Fuoco", "Solo Aura Guerriero").
+        Ignora i modificatori globali (già calcolati in modificatori_calcolati).
+        """
+        mods = {}
+        if not context: return mods
+        
+        # Estrazione dati dal contesto (passati da formatta_testo_generico)
+        elemento_target = context.get('elemento') # Oggetto Punteggio (Elemento)
+        aura_target = context.get('aura')         # Oggetto Punteggio (Aura)
+        
+        # Prepariamo il contesto per eventuali formule di testo (es. "caratt > 5")
+        eval_context = self.caratteristiche_base.copy()
+        eval_context.update(context)
+        if 'caratteristica_associata_valore' in context:
+             eval_context['caratt'] = context['caratteristica_associata_valore']
+
+        # Funzione helper per sommare i valori
+        def _add(p, t, v):
+            if not p: return
+            if p not in mods: mods[p] = {'add': 0.0, 'mol': 1.0}
+            valore = float(v)
+            if t == MODIFICATORE_ADDITIVO: mods[p]['add'] += valore
+            elif t == MODIFICATORE_MOLTIPLICATIVO: mods[p]['mol'] *= valore 
+
+        # Funzione helper CORE: decide se il modificatore si applica
+        def _check_condition(stat_link):
+            # 1. Se NON ha nessuna condizione, lo scartiamo (è globale, 
+            #    quindi è già incluso in self.modificatori_calcolati).
+            has_conditions = (
+                stat_link.usa_limitazione_elemento or 
+                stat_link.usa_limitazione_aura or 
+                stat_link.usa_condizione_text
+            )
+            if not has_conditions:
+                return False
+            
+            # 2. Verifica Elemento (se richiesto)
+            if stat_link.usa_limitazione_elemento:
+                if not elemento_target: return False
+                # Controlla se l'elemento attuale è nella lista di quelli permessi
+                if not stat_link.limit_a_elementi.filter(pk=elemento_target.pk).exists():
+                    return False
+
+            # 3. Verifica Aura (se richiesta)
+            if stat_link.usa_limitazione_aura:
+                if not aura_target: return False
+                # Controlla se l'aura attuale è nella lista di quelle permesse
+                if not stat_link.limit_a_aure.filter(pk=aura_target.pk).exists():
+                    return False
+            
+            # 4. Verifica Condizione Testuale (es. script custom)
+            if stat_link.usa_condizione_text and stat_link.condizione_text:
+                # evaluate_expression è definita globalmente in models.py
+                try:
+                    if not evaluate_expression(stat_link.condizione_text, eval_context):
+                        return False
+                except Exception:
+                    return False # Se la formula è errata, non applicare
+            
+            # Se passa tutti i controlli (o se i controlli non c'erano), è valido
+            return True
+
+        # --- FASE 1: ABILITÀ ---
+        # Recuperiamo i modificatori dalle abilità possedute
+        # (Usiamo select/prefetch per evitare query N+1 sulle condizioni)
+        links_abilita = AbilitaStatistica.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).select_related('statistica').prefetch_related('limit_a_elementi', 'limit_a_aure')
+
+        for link in links_abilita:
+            if _check_condition(link):
+                _add(link.statistica.parametro, link.tipo_modificatore, link.valore)
+
+        # --- FASE 2: OGGETTI & INNESTI ---
+        # Recuperiamo gli oggetti attivi. 
+        # Nota: get_oggetti() filtra già per l'inventario corrente.
+        oggetti = self.get_oggetti().prefetch_related(
+            'oggettostatistica_set__statistica',
+            'oggettostatistica_set__limit_a_elementi',
+            'oggettostatistica_set__limit_a_aure',
+            'potenziamenti_installati__oggettostatistica_set__statistica',
+            'potenziamenti_installati__oggettostatistica_set__limit_a_elementi',
+            'potenziamenti_installati__oggettostatistica_set__limit_a_aure'
+        )
+        
+        for oggetto in oggetti:
+            is_oggetto_attivo = False
+            
+            # Logica identica a 'modificatori_calcolati' per determinare se l'oggetto conta
+            if oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO and oggetto.is_equipaggiato: 
+                is_oggetto_attivo = True
+            elif oggetto.tipo_oggetto == TIPO_OGGETTO_MUTAZIONE: 
+                # Le mutazioni sono sempre attive se possedute
+                is_oggetto_attivo = True
+            elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO and oggetto.slot_corpo and oggetto.cariche_attuali > 0: 
+                # Innesti richiedono slot e carica (se previsto)
+                is_oggetto_attivo = True
+            
+            if is_oggetto_attivo:
+                # 2A. Modificatori diretti dell'oggetto
+                for stat_link in oggetto.oggettostatistica_set.all():
+                    if _check_condition(stat_link):
+                        _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+                
+                # 2B. Modificatori dei Potenziamenti (Mod/Materia) installati sull'oggetto
+                for potenziamento in oggetto.potenziamenti_installati.all():
+                    is_potenziamento_attivo = False
+                    
+                    if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+                        is_potenziamento_attivo = True
+                    elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD and potenziamento.cariche_attuali > 0:
+                        is_potenziamento_attivo = True
+                    
+                    if is_potenziamento_attivo:
+                        for stat_link_pot in potenziamento.oggettostatistica_set.all():
+                            if _check_condition(stat_link_pot):
+                                _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+
+        return mods
+    
 
     def get_testo_formattato_per_item(self, item):
         if not item: return ""
