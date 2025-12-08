@@ -349,7 +349,7 @@ class GestioneOggettiService:
                      req.forgiatura_target.id, 
                      req.artigiano # L'artigiano "completa" tecnicamente il lavoro
                  )
-                 
+                 nuovo_obj.sposta_in_inventario(req.committente)
                  # Installazione sul Committente
                  GestioneOggettiService.installa_innesto(req.committente, nuovo_obj, req.slot_destinazione)
                  
