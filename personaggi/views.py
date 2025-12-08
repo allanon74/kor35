@@ -1530,72 +1530,67 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         forgia_id = request.data.get('forgiatura_id')
         slot_dest = request.data.get('slot_destinazione')
 
-        # --- LOGICA PERMESSI AGGIORNATA ---
-        # Verifichiamo chi sta facendo la richiesta: il Committente o l'Artigiano?
-        
-        # Caso A: Chiama il Committente (es. Paziente chiede al Dottore)
+        # --- 1. RISOLUZIONE PARTECIPANTI ---
         committente = None
         artigiano = None
 
-        # 1. Provo a vedere se l'utente è il COMMITTENTE (Paziente che chiede)
+        # A) L'utente è il COMMITTENTE (es. Paziente chiede)?
         candidate_committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
-        
         if candidate_committente:
             committente = candidate_committente
-            # L'artigiano è un altro (cerco per nome)
+            # L'artigiano è un altro
             artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
         else:
-            # 2. Provo a vedere se l'utente è l'ARTIGIANO (Dottore che offre)
+            # B) L'utente è l'ARTIGIANO (es. Dottore offre)?
             candidate_artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
             if candidate_artigiano:
                 artigiano = candidate_artigiano
-                # Il committente è il target (id passato)
+                # Il committente è il target
                 committente = Personaggio.objects.filter(pk=committente_id).exclude(pk=artigiano.id).first()
 
         if not committente or not artigiano:
-            return Response({"error": "Partecipanti non validi. Verifica di possedere il personaggio chiamante."}, status=404)
-        # --- FINE LOGICA PERMESSI ---
+            return Response({"error": "Partecipanti non validi o non posseduti."}, status=404)
 
+        # Variabili da popolare
         host = None
         comp = None
         infusione = None
-        messaggio_testo = ""
         forgiatura_obj = None
         
-        if tipo_op == 'GRAF': # Innesto (TIPO_OPERAZIONE_INNESTO)
+        messaggio_testo = ""
+        destinatario_msg = None
+
+        # --- 2. LOGICA OPERAZIONI ---
+        
+        # CASO A: INNESTO / GRAFT (Dalla Forgia)
+        if tipo_op == 'GRAF':
             if not forgia_id or not slot_dest:
                 return Response({"error": "Dati mancanti per operazione chirurgica."}, status=400)
             
             forgiatura_obj = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
-            
-            # Verifica che la forgiatura sia pronta
             if not forgiatura_obj.is_pronta:
                 return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
             
-            # --- CORREZIONE LOGICA MESSAGGI ---
-            # In questo flusso (Forger -> Patient), il forgiatore (request.user) è l'Artigiano.
-            # Il destinatario del messaggio DEVE essere il Committente (Paziente).
-            
-            # Verifichiamo se l'utente attuale è l'artigiano (come dovrebbe essere)
+            # MESSAGGIO: Sempre Artigiano -> Paziente
+            # Verifichiamo che l'utente sia effettivamente l'artigiano (proprietario della forgia)
             if request.user == artigiano.proprietario:
                 messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
                 destinatario_msg = committente
             else:
-                # Fallback per casi strani (es. Admin o richieste future inverse)
-                messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Offerta: {offerta} CR."
+                # Caso raro: Il paziente chiede l'innesto? (Non supportato dalla modale attuale, ma gestiamolo)
+                messaggio_testo = f"{committente.nome} richiede l'installazione di {forgiatura_obj.infusione.nome}. Offerta: {offerta} CR."
                 destinatario_msg = artigiano
-            # -------------------------------
 
-        # --- 1. GESTIONE FORGIATURA ---
+        # CASO B: FORGIATURA CONTO TERZI
         elif tipo_op == 'FORG':
             if not infusione_id: 
-                return Response({"error": "Infusione mancante per la forgiatura."}, status=400)
+                return Response({"error": "Infusione mancante."}, status=400)
             infusione = get_object_or_404(Infusione, pk=infusione_id)
             
             messaggio_testo = f"{committente.nome} richiede forgiatura di '{infusione.nome}'. Offerta: {offerta} CR."
             destinatario_msg = artigiano
 
-        # --- 2. GESTIONE ASSEMBLAGGIO / SMONTAGGIO ---
+        # CASO C: INSTALLAZIONE/RIMOZIONE STANDARD (Default)
         else:
             if not host_id or not comp_id:
                 return Response({"error": "Host e Componente mancanti."}, status=400)
@@ -1606,30 +1601,31 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             messaggio_testo = f"{committente.nome} richiede di {verbo} '{comp.nome}' su '{host.nome}'. Offerta: {offerta} CR."
             destinatario_msg = artigiano
 
-        # Creazione Richiesta DB
+        # --- 3. CREAZIONE RICHIESTA ---
         richiesta = RichiestaAssemblaggio.objects.create(
             committente=committente,
             artigiano=artigiano,
             oggetto_host=host,
             componente=comp,
             infusione=infusione,
-            forgiatura_target=forgiatura_obj, # IMPORTANTE: Collegare la forgiatura
-            slot_destinazione=slot_dest,      # IMPORTANTE: Salvare lo slot
+            forgiatura_target=forgiatura_obj,
+            slot_destinazione=slot_dest,
             offerta_crediti=offerta,
             tipo_operazione=tipo_op
         )
         
-        # Creazione Notifica
-        Messaggio.objects.create(
-            mittente=request.user,
-            tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
-            destinatario_personaggio=destinatario_msg,
-            titolo="Proposta di Lavoro / Operazione",
-            testo=messaggio_testo
-        )
+        # --- 4. INVIO MESSAGGIO ---
+        if destinatario_msg:
+            Messaggio.objects.create(
+                mittente=request.user,
+                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+                destinatario_personaggio=destinatario_msg,
+                titolo="Proposta di Lavoro / Operazione",
+                testo=messaggio_testo
+            )
 
         return Response({"status": "created", "id": richiesta.id}, status=201)
-
+    
     @action(detail=True, methods=['post'])
     def accetta(self, request, pk=None):
         richiesta = self.get_object()
