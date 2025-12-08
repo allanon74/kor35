@@ -1008,25 +1008,33 @@ class PersonaggioAutocompleteView(generics.ListAPIView):
     pagination_class = None
     
     def get_queryset(self):
-        query = self.request.query_params.get('q', '')
+        query = self.request.query_params.get('q', '').strip() # Strip per pulire spazi vuoti
         current_char_id = self.request.query_params.get('current_char_id')
-        infusione_id = self.request.query_params.get('infusione_id') # <--- NUOVO PARAMETRO
+        infusione_id = self.request.query_params.get('infusione_id')
 
-        if len(query) < 2: return Personaggio.objects.none()
+        # MODIFICA: Se c'è infusione_id (selezione candidato), permettiamo query vuota
+        # Altrimenti (autocomplete normale), richiediamo almeno 2 caratteri
+        if not infusione_id and len(query) < 2: 
+            return Personaggio.objects.none()
         
-        # 1. Filtro base per nome
-        qs = Personaggio.objects.filter(nome__icontains=query)
+        # 1. Filtro base
+        qs = Personaggio.objects.all()
+        
+        # Se c'è una query di testo, filtriamo per nome
+        if query:
+            qs = qs.filter(nome__icontains=query)
+            
         if current_char_id: 
             qs = qs.exclude(id=current_char_id)
         
-        # 2. Filtro per compatibilità innesto (se richiesto)
+        # 2. Filtro per compatibilità innesto
         if infusione_id:
             try:
                 inf = Infusione.objects.get(pk=infusione_id)
-                # Nota: Filtrare in Python è meno efficiente ma necessario per logiche complesse (get_valore_aura_effettivo)
-                # Dato che l'autocomplete ritorna pochi risultati, è accettabile.
                 valid_ids = []
-                for pg in qs[:50]: # Limitiamo il pre-fetch per performance
+                # Limitiamo il check python a 50 candidati per performance
+                candidates = qs[:50] 
+                for pg in candidates:
                     if GestioneOggettiService.verifica_requisiti_supporto_innesto(pg, inf):
                         valid_ids.append(pg.id)
                 qs = qs.filter(id__in=valid_ids)

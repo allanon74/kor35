@@ -326,6 +326,38 @@ class GestioneOggettiService:
             req.save()
         return True
 
+    @staticmethod
+    def verifica_requisiti_supporto_innesto(personaggio, infusione):
+        """
+        Verifica se il personaggio può sostenere l'innesto/mutazione.
+        Regole:
+        1. Livello Aura PG >= Livello Infusione
+        2. Caratteristiche PG >= Requisiti Componenti Infusione
+        """
+        # 1. Verifica Aura
+        aura_req = infusione.aura_richiesta
+        if aura_req:
+            # Recupera il valore effettivo dell'aura sul personaggio
+            valore_aura_pg = personaggio.get_valore_aura_effettivo(aura_req)
+            # Il livello dell'infusione è la somma dei valori dei componenti
+            livello_infusione = infusione.livello
+            
+            if valore_aura_pg < livello_infusione:
+                return False
+
+        # 2. Verifica Caratteristiche (Componenti)
+        punteggi_pg = personaggio.caratteristiche_base
+        # Cicla su tutti i componenti (caratteristiche richieste) dell'infusione
+        for comp in infusione.componenti.select_related('caratteristica').all():
+            nome_car = comp.caratteristica.nome
+            val_richiesto = comp.valore
+            val_posseduto = punteggi_pg.get(nome_car, 0)
+            
+            if val_posseduto < val_richiesto:
+                return False
+                
+        return True
+
 
 class GestioneCraftingService:
 
