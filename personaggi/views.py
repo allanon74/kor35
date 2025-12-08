@@ -1530,42 +1530,38 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         forgia_id = request.data.get('forgiatura_id')
         slot_dest = request.data.get('slot_destinazione')
 
-        # --- 1. IDENTIFICAZIONE RUOLI ---
+        # --- 1. IDENTIFICAZIONE RUOLI (Chi è chi?) ---
         committente = None
         artigiano = None
 
-        # Tentativo A: L'utente loggato è il COMMITTENTE (Chi paga/chi ha l'oggetto)
-        # Esempio: Io chiedo a un artigiano di montarmi una mod.
+        # Tentativo A: L'utente loggato è il COMMITTENTE (Es. Chiedo un lavoro)
         candidate_committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
         
         if candidate_committente:
             committente = candidate_committente
-            # L'artigiano è l'altro
+            # L'artigiano è la controparte
             artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
         else:
-            # Tentativo B: L'utente loggato è l'ARTIGIANO (Chi lavora/chi ha la skill)
-            # Esempio: Io Dottore offro un innesto a un Paziente.
+            # Tentativo B: L'utente loggato è l'ARTIGIANO (Es. Offro un innesto)
             candidate_artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
             if candidate_artigiano:
                 artigiano = candidate_artigiano
-                # Il committente è il target (l'ID che mi è arrivato dal frontend)
+                # Il committente è la controparte
                 committente = Personaggio.objects.filter(pk=committente_id).exclude(pk=artigiano.id).first()
 
         if not committente or not artigiano:
             return Response({"error": "Partecipanti non validi o non trovati."}, status=404)
 
-        # --- 2. DETERMINAZIONE DESTINATARIO MESSAGGIO (UNIVERSALE) ---
-        # Il messaggio va sempre a "Chi non ha fatto la richiesta"
+        # --- 2. DETERMINAZIONE DESTINATARIO MESSAGGIO (Logica Universale) ---
+        # Il messaggio va sempre inviato alla persona che NON ha fatto la richiesta.
         if request.user == committente.proprietario:
+            # Sono il Cliente -> Scrivo all'Artigiano
             destinatario_msg = artigiano
             mittente_pg = committente
-        elif request.user == artigiano.proprietario:
+        else:
+            # Sono l'Artigiano (o Admin) -> Scrivo al Cliente
             destinatario_msg = committente
             mittente_pg = artigiano
-        else:
-            # Caso limite (es. Admin che opera per conto d'altri)
-            destinatario_msg = artigiano 
-            mittente_pg = committente
 
         # --- 3. PREPARAZIONE DATI SPECIFICI ---
         host = None
@@ -1574,7 +1570,7 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         forgiatura_obj = None
         messaggio_testo = ""
 
-        # CASO A: INNESTO / GRAFT (Dalla Forgia)
+        # CASO A: INNESTO / GRAFT
         if tipo_op == 'GRAF':
             if not forgia_id or not slot_dest:
                 return Response({"error": "Dati mancanti per operazione chirurgica."}, status=400)
@@ -1583,12 +1579,10 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             if not forgiatura_obj.is_pronta:
                 return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
             
-            # Testo specifico
-            if request.user == artigiano.proprietario:
-                # Il Dottore propone al Paziente
+            # Testo dinamico in base a chi sta parlando
+            if mittente_pg == artigiano:
                 messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
             else:
-                # Il Paziente chiede al Dottore (Raro, ma possibile in futuro)
                 messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome}. Offerta: {offerta} CR."
 
         # CASO B: FORGIATURA CONTO TERZI
@@ -1597,7 +1591,7 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
                 return Response({"error": "Infusione mancante."}, status=400)
             infusione = get_object_or_404(Infusione, pk=infusione_id)
             
-            messaggio_testo = f"{mittente_pg.nome} invia una richiesta di forgiatura cooperativa per '{infusione.nome}'. Offerta/Costo: {offerta} CR."
+            messaggio_testo = f"{mittente_pg.nome} richiede una forgiatura cooperativa per '{infusione.nome}'. Offerta/Costo: {offerta} CR."
 
         # CASO C: INSTALLAZIONE/RIMOZIONE STANDARD (Default)
         else:
