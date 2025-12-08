@@ -1518,11 +1518,11 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def crea(self, request):
-        print(f"--- DEBUG CREA RICHIESTA ---")
-        print(f"User: {request.user.username}")
+        # 1. Recupero Parametri Grezzi dal Frontend
+        # Nota: Il frontend invia il target in 'committente_id' e se stesso in 'artigiano_nome'
+        target_id_param = request.data.get('committente_id') 
+        self_name_param = request.data.get('artigiano_nome')
         
-        committente_id = request.data.get('committente_id')
-        artigiano_nome = request.data.get('artigiano_nome')
         offerta = int(request.data.get('offerta', 0))
         tipo_op = request.data.get('tipo_operazione', 'INST')
         
@@ -1532,69 +1532,79 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         forgia_id = request.data.get('forgiatura_id')
         slot_dest = request.data.get('slot_destinazione')
 
-        # --- 1. IDENTIFICAZIONE RUOLI ---
-        committente = None
-        artigiano = None
+        # 2. Risoluzione Oggetti Personaggio
+        # Cerchiamo di capire chi sono i due attori senza assegnare ancora i ruoli DB
+        pg_target = Personaggio.objects.filter(pk=target_id_param).first()
+        pg_self = Personaggio.objects.filter(nome__iexact=self_name_param).first()
 
-        candidate_committente = Personaggio.objects.filter(pk=committente_id, proprietario=request.user).first()
-        
-        if candidate_committente:
-            committente = candidate_committente
-            artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome).exclude(pk=committente.id).first()
-        else:
-            candidate_artigiano = Personaggio.objects.filter(nome__iexact=artigiano_nome, proprietario=request.user).first()
-            if candidate_artigiano:
-                artigiano = candidate_artigiano
-                committente = Personaggio.objects.filter(pk=committente_id).exclude(pk=artigiano.id).first()
+        if not pg_target or not pg_self:
+             return Response({"error": "Personaggi non trovati."}, status=404)
 
-        if not committente or not artigiano:
-            return Response({"error": "Partecipanti non validi."}, status=404)
-
-        # --- 2. DETERMINAZIONE DESTINATARIO MESSAGGIO ---
-        if request.user.id == committente.proprietario.id:
-            destinatario_msg = artigiano
-            mittente_pg = committente
-        else:
-            destinatario_msg = committente
-            mittente_pg = artigiano
-
-        # --- 3. INIZIALIZZAZIONE VARIABILI (FONDAMENTALE PER EVITARE L'ERRORE) ---
-        host = None
-        comp = None
-        infusione = None
-        forgiatura_obj = None
+        # 3. Assegnazione Ruoli DB e Logica Messaggio
+        db_committente = None
+        db_artigiano = None
         messaggio_testo = ""
+        destinatario_msg = None
+        
+        # Variabili Oggetto
+        host = None; comp = None; infusione = None; forgiatura_obj = None
 
-        # --- 4. LOGICA SPECIFICA PER TIPO ---
+        # --- CASO 3: INNESTO / MUTAZIONE (Logica Invertita) ---
         if tipo_op == 'GRAF':
             if not forgia_id or not slot_dest: return Response({"error": "Dati mancanti."}, status=400)
             forgiatura_obj = get_object_or_404(ForgiaturaInCorso, pk=forgia_id)
             if not forgiatura_obj.is_pronta: return Response({"error": "Oggetto non pronto."}, status=400)
             
-            # Linkiamo anche l'infusione per riferimento
+            # SPECIFICA UTENTE: 
+            # COMMITTENTE = Medico (Chi propone/Chi è loggato) -> pg_self
+            # ARTIGIANO = Paziente (Chi riceve/Chi paga) -> pg_target
+            
+            db_committente = pg_self   # Il Dottore (Tu)
+            db_artigiano = pg_target   # Il Paziente (Lui)
+            
+            messaggio_testo = f"Il Dr. {pg_self.nome} propone l'installazione di {forgiatura_obj.infusione.nome} su {slot_dest}. Costo: {offerta} CR."
+            
+            # Il messaggio va al Paziente, che abbiamo mappato su 'artigiano'
+            destinatario_msg = db_artigiano 
+            
+            # Linkiamo infusione
             infusione = forgiatura_obj.infusione
 
-            if mittente_pg == artigiano:
-                messaggio_testo = f"Il Dr. {artigiano.nome} propone operazione: {forgiatura_obj.infusione.nome} su {slot_dest}. Costo: {offerta} CR."
+        # --- CASO 1 & 2: MONTAGGIO / FORGIATURA STANDARD ---
+        else:
+            # SPECIFICA STANDARD:
+            # COMMITTENTE = Chi chiede (Chi è loggato/Cliente) -> pg_self? 
+            # No, il frontend in standard manda: committente_id=Me, artigiano_nome=Lui.
+            # Quindi pg_target è ME (Cliente), pg_self è LUI (Artigiano).
+            # Aspetta, controlliamo cosa manda il frontend in standard.
+            # Se il frontend standard manda committente_id = ID_CLIENTE e artigiano_nome = NOME_ARTIGIANO...
+            
+            # Verifichiamo la proprietà per sicurezza
+            if request.user == pg_target.proprietario:
+                # Caso classico: Io (Target ID) chiedo a Lui (Name)
+                db_committente = pg_target
+                db_artigiano = pg_self
+            elif request.user == pg_self.proprietario:
+                # Caso inverso: Io (Name) chiedo a Lui (Target ID)
+                db_committente = pg_self
+                db_artigiano = pg_target
+            
+            if tipo_op == 'FORG':
+                infusione = get_object_or_404(Infusione, pk=infusione_id)
+                messaggio_testo = f"{db_committente.nome} richiede forgiatura: {infusione.nome}. Offerta: {offerta} CR."
             else:
-                messaggio_testo = f"{committente.nome} richiede operazione: {forgiatura_obj.infusione.nome}. Offerta: {offerta} CR."
+                host = get_object_or_404(Oggetto, pk=host_id)
+                comp = get_object_or_404(Oggetto, pk=comp_id)
+                v = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
+                messaggio_testo = f"{db_committente.nome} chiede di {v} {comp.nome} su {host.nome}. Offerta: {offerta} CR."
 
-        elif tipo_op == 'FORG':
-             infusione = get_object_or_404(Infusione, pk=infusione_id)
-             messaggio_testo = f"{mittente_pg.nome} richiede forgiatura: {infusione.nome}. Offerta: {offerta} CR."
+            # Il messaggio va all'artigiano (chi esegue il lavoro)
+            destinatario_msg = db_artigiano
 
-        else: # Standard (INST / RIMO)
-             if not host_id or not comp_id: return Response({"error": "Componenti mancanti."}, status=400)
-             host = get_object_or_404(Oggetto, pk=host_id)
-             comp = get_object_or_404(Oggetto, pk=comp_id)
-             action_verb = "rimuovere" if tipo_op == 'RIMO' else "assemblare"
-             messaggio_testo = f"{mittente_pg.nome} chiede di {action_verb} {comp.nome} su {host.nome}. Offerta: {offerta} CR."
-
-        # --- 5. CREAZIONE DB ---
-        # Qui 'host' e 'comp' saranno None se siamo nel caso GRAF o FORG, il che è corretto.
+        # 4. Salvataggio
         richiesta = RichiestaAssemblaggio.objects.create(
-            committente=committente,
-            artigiano=artigiano,
+            committente=db_committente,
+            artigiano=db_artigiano,
             oggetto_host=host,
             componente=comp,
             infusione=infusione,
@@ -1604,11 +1614,12 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             tipo_operazione=tipo_op
         )
         
+        # 5. Invio Messaggio
         Messaggio.objects.create(
             mittente=request.user,
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
             destinatario_personaggio=destinatario_msg,
-            titolo="Nuova Richiesta Operativa",
+            titolo="Proposta Operazione" if tipo_op == 'GRAF' else "Richiesta Lavoro",
             testo=messaggio_testo
         )
 

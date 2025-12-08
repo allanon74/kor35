@@ -279,9 +279,6 @@ class GestioneOggettiService:
 
     @staticmethod
     def elabora_richiesta_assemblaggio(richiesta_id, esecutore):
-        """
-        Finalizza la richiesta.
-        """
         try: 
             req = RichiestaAssemblaggio.objects.select_related(
                 'committente', 'artigiano', 'oggetto_host', 'componente', 'forgiatura_target'
@@ -289,79 +286,81 @@ class GestioneOggettiService:
         except RichiestaAssemblaggio.DoesNotExist: 
             raise ValidationError("Richiesta non trovata.")
 
-        # --- LOGICA PERMESSI ---
-        is_artigiano = req.artigiano.proprietario == esecutore
-        is_committente = req.committente.proprietario == esecutore
-        is_admin = esecutore.is_staff or esecutore.is_superuser
-
-        if req.tipo_operazione == 'GRAF':
-            if not is_committente and not is_admin:
-                raise ValidationError("Solo il paziente destinatario può accettare questa operazione chirurgica.")
-        else:
-            if not is_artigiano and not is_admin:
-                raise ValidationError("Non sei l'artigiano designato per accettare questa richiesta.")
-            
         if req.stato != STATO_RICHIESTA_PENDENTE: 
             raise ValidationError("Richiesta già processata.")
-        
-        if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
-            if ForgiaturaInCorso.objects.filter(personaggio=req.artigiano).exists():
-                raise ValidationError("L'artigiano ha già una forgiatura in corso.")
 
-        with transaction.atomic():
-            # PAGAMENTO
-            if req.offerta_crediti > 0:
-                if req.committente.crediti < req.offerta_crediti: 
-                    raise ValidationError("Il committente non ha crediti sufficienti per pagare.")
-                req.committente.modifica_crediti(-req.offerta_crediti, f"Pagamento a {req.artigiano.nome}")
-                req.artigiano.modifica_crediti(req.offerta_crediti, f"Compenso da {req.committente.nome}")
+        # --- LOGICA SPECIFICA PER TIPO ---
+
+        if req.tipo_operazione == 'GRAF':
+            # CASO 3: INNESTO
+            # DB Mapping: COMMITTENTE=Medico, ARTIGIANO=Paziente
+            # Chi accetta? Il Paziente (ARTIGIANO).
             
-            # DISPATCHER
-            if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
-                GestioneCraftingService.avvia_forgiatura(
-                    personaggio=req.artigiano, 
-                    infusione=req.infusione, 
-                    destinatario_finale=req.committente,
-                    is_academy=False,
-                    aiutante=req.artigiano
+            if req.artigiano.proprietario != esecutore and not esecutore.is_staff:
+                raise ValidationError("Solo il paziente (destinatario) può accettare questa operazione.")
+
+            with transaction.atomic():
+                # PAGAMENTO: Paziente (ARTIGIANO) paga Medico (COMMITTENTE)
+                if req.offerta_crediti > 0:
+                    if req.artigiano.crediti < req.offerta_crediti:
+                        raise ValidationError("Il paziente non ha crediti sufficienti.")
+                    req.artigiano.modifica_crediti(-req.offerta_crediti, f"Operazione da Dr. {req.committente.nome}")
+                    req.committente.modifica_crediti(req.offerta_crediti, f"Paziente {req.artigiano.nome}")
+
+                # ESECUZIONE
+                # 1. Recupera oggetto (creato nel nome del forgiatore/medico cioè committente)
+                nuovo_obj = GestioneCraftingService.completa_forgiatura(
+                    req.forgiatura_target.id, 
+                    req.committente # Il medico sblocca la forgia
                 )
-                req.artigiano.aggiungi_log(f"Iniziata forgiatura {req.infusione.nome} per {req.committente.nome}.")
                 
-            elif req.tipo_operazione == TIPO_OPERAZIONE_INNESTO:
-                 if not req.forgiatura_target: 
-                     raise ValidationError("Forgiatura target mancante o scaduta.")
-                 
-                 # 1. Recupera l'oggetto (Viene creato nell'inventario dell'Artigiano)
-                 nuovo_obj = GestioneCraftingService.completa_forgiatura(
-                     req.forgiatura_target.id, 
-                     req.artigiano 
-                 )
-                 
-                 # 2. FIX ROBUSTO: Resetta stato equipaggiamento (se la forgiatura lo avesse auto-equipaggiato all'artigiano)
-                 nuovo_obj.is_equipaggiato = False
-                 nuovo_obj.slot_corpo = None
-                 nuovo_obj.ospitato_su = None
-                 nuovo_obj.save()
+                # 2. Reset e Spostamento al Paziente (ARTIGIANO)
+                nuovo_obj.is_equipaggiato = False
+                nuovo_obj.save()
+                nuovo_obj.sposta_in_inventario(req.artigiano)
 
-                 # 3. TRASFERIMENTO PROPRIETÀ
-                 # Sposta fisicamente l'inventario al Paziente
-                 nuovo_obj.sposta_in_inventario(req.committente) 
-                 
-                 # 4. INSTALLAZIONE SUL PAZIENTE
-                 # Ora che è nell'inventario del paziente, lo installiamo
-                 GestioneOggettiService.installa_innesto(req.committente, nuovo_obj, req.slot_destinazione)
-                 
-                 # Log
-                 req.artigiano.aggiungi_log(f"Eseguita operazione su {req.committente.nome} ({nuovo_obj.nome}).")
-                 req.committente.aggiungi_log(f"Subita operazione: installato {nuovo_obj.nome} in {req.slot_destinazione}.")
-                 
-            elif req.tipo_operazione == TIPO_OPERAZIONE_RIMOZIONE:
-                GestioneOggettiService.rimuovi_mod(req.artigiano, req.oggetto_host, req.componente)
-            else:
-                GestioneOggettiService.assembla_mod(req.artigiano, req.oggetto_host, req.componente)
+                # 3. Installazione sul Paziente (ARTIGIANO)
+                GestioneOggettiService.installa_innesto(req.artigiano, nuovo_obj, req.slot_destinazione)
+
+                req.stato = STATO_RICHIESTA_COMPLETATA
+                req.save()
+
+        else:
+            # CASO 1 & 2: STANDARD
+            # DB Mapping: COMMITTENTE=Cliente, ARTIGIANO=Lavoratore
+            # Chi accetta? Il Lavoratore (ARTIGIANO).
             
-            req.stato = STATO_RICHIESTA_COMPLETATA
-            req.save()
+            if req.artigiano.proprietario != esecutore and not esecutore.is_staff:
+                raise ValidationError("Non sei l'artigiano designato.")
+
+            if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
+                if ForgiaturaInCorso.objects.filter(personaggio=req.artigiano).exists():
+                     raise ValidationError("Hai già una forgiatura in corso.")
+
+            with transaction.atomic():
+                # PAGAMENTO: Cliente (COMMITTENTE) paga Lavoratore (ARTIGIANO)
+                if req.offerta_crediti > 0:
+                    if req.committente.crediti < req.offerta_crediti: 
+                        raise ValidationError("Il committente non ha crediti sufficienti.")
+                    req.committente.modifica_crediti(-req.offerta_crediti, f"Lavoro di {req.artigiano.nome}")
+                    req.artigiano.modifica_crediti(req.offerta_crediti, f"Cliente {req.committente.nome}")
+
+                # ESECUZIONE
+                if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
+                    GestioneCraftingService.avvia_forgiatura(
+                        personaggio=req.artigiano, 
+                        infusione=req.infusione, 
+                        destinatario_finale=req.committente,
+                        is_academy=False,
+                        aiutante=req.artigiano
+                    )
+                elif req.tipo_operazione == TIPO_OPERAZIONE_RIMOZIONE:
+                    GestioneOggettiService.rimuovi_mod(req.artigiano, req.oggetto_host, req.componente)
+                else:
+                    GestioneOggettiService.assembla_mod(req.artigiano, req.oggetto_host, req.componente)
+                
+                req.stato = STATO_RICHIESTA_COMPLETATA
+                req.save()
             
         return True
 
