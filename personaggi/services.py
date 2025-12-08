@@ -279,6 +279,10 @@ class GestioneOggettiService:
 
     @staticmethod
     def elabora_richiesta_assemblaggio(richiesta_id, esecutore):
+        """
+        Finalizza la richiesta.
+        Gestisce pagamenti e operazioni fisiche sugli oggetti.
+        """
         try: 
             req = RichiestaAssemblaggio.objects.select_related(
                 'committente', 'artigiano', 'oggetto_host', 'componente', 'forgiatura_target'
@@ -292,61 +296,87 @@ class GestioneOggettiService:
         # --- LOGICA SPECIFICA PER TIPO ---
 
         if req.tipo_operazione == 'GRAF':
-            # CASO 3: INNESTO
-            # DB Mapping: COMMITTENTE=Medico, ARTIGIANO=Paziente
-            # Chi accetta? Il Paziente (ARTIGIANO).
+            # === CASO 3: INNESTO / MUTAZIONE ===
+            # Mappatura DB Invertita per questo caso:
+            # COMMITTENTE = Medico (Dottore)
+            # ARTIGIANO   = Paziente (Chi riceve)
             
+            # 1. Verifica Permessi: Deve accettare il Paziente (ARTIGIANO)
             if req.artigiano.proprietario != esecutore and not esecutore.is_staff:
                 raise ValidationError("Solo il paziente (destinatario) può accettare questa operazione.")
 
             with transaction.atomic():
-                # PAGAMENTO: Paziente (ARTIGIANO) paga Medico (COMMITTENTE)
+                # 2. Pagamento: Paziente paga Medico
                 if req.offerta_crediti > 0:
                     if req.artigiano.crediti < req.offerta_crediti:
                         raise ValidationError("Il paziente non ha crediti sufficienti.")
                     req.artigiano.modifica_crediti(-req.offerta_crediti, f"Operazione da Dr. {req.committente.nome}")
                     req.committente.modifica_crediti(req.offerta_crediti, f"Paziente {req.artigiano.nome}")
 
-                # ESECUZIONE
-                # 1. Recupera oggetto (creato nel nome del forgiatore/medico cioè committente)
-                nuovo_obj = GestioneCraftingService.completa_forgiatura(
-                    req.forgiatura_target.id, 
-                    req.committente # Il medico sblocca la forgia
-                )
+                # 3. FIX CRITICO INTEGRITY ERROR
+                # Salviamo l'ID della forgiatura perché stiamo per rompere il link
+                if not req.forgiatura_target:
+                    raise ValidationError("Forgiatura target non trovata.")
                 
-                # 2. Reset e Spostamento al Paziente (ARTIGIANO)
-                nuovo_obj.is_equipaggiato = False
-                nuovo_obj.save()
-                nuovo_obj.sposta_in_inventario(req.artigiano)
-
-                # 3. Installazione sul Paziente (ARTIGIANO)
-                GestioneOggettiService.installa_innesto(req.artigiano, nuovo_obj, req.slot_destinazione)
-
-                req.stato = STATO_RICHIESTA_COMPLETATA
+                forg_id = req.forgiatura_target.id
+                
+                # Sganciamo la forgiatura dalla richiesta PRIMA di processarla
+                # Questo evita l'errore: "violates foreign key constraint"
+                req.forgiatura_target = None
                 req.save()
 
+                # 4. Completamento Forgiatura
+                # Il Medico (committente) è il creatore tecnico, quindi sblocca lui la forgiatura
+                nuovo_obj = GestioneCraftingService.completa_forgiatura(
+                    forg_id, 
+                    req.committente 
+                )
+                
+                # 5. Trasferimento al Paziente
+                # Resettiamo eventuali stati di equipaggiamento automatico
+                nuovo_obj.is_equipaggiato = False
+                nuovo_obj.slot_corpo = None
+                nuovo_obj.save()
+                
+                # Spostiamo l'oggetto nell'inventario del Paziente
+                nuovo_obj.sposta_in_inventario(req.artigiano)
+
+                # 6. Installazione sul Paziente
+                GestioneOggettiService.installa_innesto(req.artigiano, nuovo_obj, req.slot_destinazione)
+
+                # 7. Chiusura Richiesta
+                req.stato = STATO_RICHIESTA_COMPLETATA
+                req.save()
+                
+                # Log
+                req.committente.aggiungi_log(f"Operazione completata su {req.artigiano.nome} ({nuovo_obj.nome}).")
+                req.artigiano.aggiungi_log(f"Ricevuto innesto {nuovo_obj.nome} da Dr. {req.committente.nome}.")
+
         else:
-            # CASO 1 & 2: STANDARD
-            # DB Mapping: COMMITTENTE=Cliente, ARTIGIANO=Lavoratore
-            # Chi accetta? Il Lavoratore (ARTIGIANO).
+            # === CASO 1 & 2: MONTAGGIO / FORGIATURA STANDARD ===
+            # Mappatura DB Standard:
+            # COMMITTENTE = Cliente (Chi chiede)
+            # ARTIGIANO   = Lavoratore (Chi esegue)
             
+            # 1. Verifica Permessi: Deve accettare il Lavoratore (ARTIGIANO)
             if req.artigiano.proprietario != esecutore and not esecutore.is_staff:
-                raise ValidationError("Non sei l'artigiano designato.")
+                raise ValidationError("Non sei l'artigiano designato per questo lavoro.")
 
             if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
                 if ForgiaturaInCorso.objects.filter(personaggio=req.artigiano).exists():
                      raise ValidationError("Hai già una forgiatura in corso.")
 
             with transaction.atomic():
-                # PAGAMENTO: Cliente (COMMITTENTE) paga Lavoratore (ARTIGIANO)
+                # 2. Pagamento: Cliente paga Lavoratore
                 if req.offerta_crediti > 0:
                     if req.committente.crediti < req.offerta_crediti: 
                         raise ValidationError("Il committente non ha crediti sufficienti.")
                     req.committente.modifica_crediti(-req.offerta_crediti, f"Lavoro di {req.artigiano.nome}")
                     req.artigiano.modifica_crediti(req.offerta_crediti, f"Cliente {req.committente.nome}")
 
-                # ESECUZIONE
+                # 3. Esecuzione Lavoro
                 if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
+                    # L'Artigiano avvia la forgiatura per conto del Cliente
                     GestioneCraftingService.avvia_forgiatura(
                         personaggio=req.artigiano, 
                         infusione=req.infusione, 
@@ -359,6 +389,7 @@ class GestioneOggettiService:
                 else:
                     GestioneOggettiService.assembla_mod(req.artigiano, req.oggetto_host, req.componente)
                 
+                # 4. Chiusura Richiesta
                 req.stato = STATO_RICHIESTA_COMPLETATA
                 req.save()
             
