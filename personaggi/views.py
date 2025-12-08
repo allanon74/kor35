@@ -1301,12 +1301,26 @@ class CraftingViewSet(viewsets.ViewSet):
     def completa_forgiatura(self, request):
         char_id = request.data.get('char_id')
         forg_id = request.data.get('forgiatura_id')
-        slot_scelto = request.data.get('slot_scelto') # <--- LEGGI LO SLOT
+        slot_scelto = request.data.get('slot_scelto')
+        target_id = request.data.get('target_id') # <--- LEGGI NUOVO PARAMETRO
         
+        # Verifica chi sta chiamando (Il forgiatore)
         personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
         
+        # Verifica destinatario diretto (se presente)
+        destinatario_obj = None
+        if target_id:
+            # SICUREZZA: Per l'installazione diretta, il target DEVE appartenere all'utente loggato.
+            # Se fosse di un altro utente, bisognerebbe passare per il sistema di "Richiesta/Proposta".
+            destinatario_obj = get_object_or_404(Personaggio, pk=target_id, proprietario=request.user)
+
         try:
-            oggetto = GestioneCraftingService.completa_forgiatura(forg_id, personaggio, slot_scelto=slot_scelto)
+            oggetto = GestioneCraftingService.completa_forgiatura(
+                forg_id, 
+                personaggio, 
+                slot_scelto=slot_scelto,
+                destinatario_diretto=destinatario_obj # <--- PASSA AL SERVICE
+            )
             return Response({"status": "completed", "oggetto_id": oggetto.id}, status=200)
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)

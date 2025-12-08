@@ -500,11 +500,10 @@ class GestioneCraftingService:
         return forgiatura
 
     @staticmethod
-    def completa_forgiatura(forgiatura_id, attore, slot_scelto=None):
+    def completa_forgiatura(forgiatura_id, attore, slot_scelto=None, destinatario_diretto=None):
         """
         Completa forgiatura.
-        - Se slot_scelto è presente, tenta installazione immediata (Innesto).
-        - Verifica che 'attore' sia il creatore o il destinatario.
+        - destinatario_diretto: Se specificato, forza il proprietario (es. installazione diretta su alt).
         """
         try:
             task = ForgiaturaInCorso.objects.get(pk=forgiatura_id)
@@ -520,22 +519,35 @@ class GestioneCraftingService:
         if not task.is_pronta: raise ValidationError("Non ancora completata.")
         
         with transaction.atomic():
-            proprietario = task.destinatario_finale if task.destinatario_finale else task.personaggio
+            # DETERMINA PROPRIETARIO:
+            # 1. Destinatario forzato (Installazione diretta su Alt)
+            # 2. Destinatario finale (Forgiatura conto terzi pre-impostata)
+            # 3. Forgiatore (Default)
+            proprietario = destinatario_diretto if destinatario_diretto else (
+                task.destinatario_finale if task.destinatario_finale else task.personaggio
+            )
+            
+            # Crea l'oggetto direttamente nell'inventario del proprietario corretto
             nuovo_oggetto = GestioneOggettiService.crea_oggetto_da_infusione(task.infusione, proprietario)
             
             # Installazione Immediata (Innesto)
             if slot_scelto:
+                # Poiché crea_oggetto_da_infusione ha già assegnato l'oggetto a 'proprietario',
+                # possiamo installarlo direttamente su di lui.
                 GestioneOggettiService.installa_innesto(proprietario, nuovo_oggetto, slot_scelto)
-            # Auto-equipaggiamento (Legacy)
+            
             elif task.slot_target and proprietario.id == task.personaggio.id:
+                # Legacy auto-equip (solo su se stessi)
                 nuovo_oggetto.slot_corpo = task.slot_target
                 nuovo_oggetto.is_equipaggiato = True
                 nuovo_oggetto.save()
             
             task.delete()
             
-            if task.destinatario_finale:
-                attore.aggiungi_log(f"Consegnato {nuovo_oggetto.nome} a {proprietario.nome}")
+            # Log
+            if proprietario.id != attore.id:
+                attore.aggiungi_log(f"Forgiato e installato {nuovo_oggetto.nome} su {proprietario.nome}")
+                proprietario.aggiungi_log(f"Ricevuto innesto {nuovo_oggetto.nome} da {attore.nome}")
             else:
                 attore.aggiungi_log(f"Forgiatura completata: {nuovo_oggetto.nome}")
             
