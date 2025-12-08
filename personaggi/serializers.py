@@ -1013,18 +1013,26 @@ class ModelloAuraRequisitoMattoneSerializer(serializers.ModelSerializer):
 
 class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
     slots_occupati = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField() # <--- NUOVO CAMPO
 
     class Meta:
         model = Personaggio
-        fields = ('id', 'nome', 'slots_occupati')
+        fields = ('id', 'nome', 'slots_occupati', 'is_mine') # <--- AGGIUNTO QUI
 
     def get_slots_occupati(self, obj):
-        # Recupera tutti gli oggetti installati che occupano uno slot
+        # Recupera slot occupati (già discusso precedentemente)
         return list(Oggetto.objects.filter(
             tracciamento_inventario__inventario=obj,
             tracciamento_inventario__data_fine__isnull=True,
             slot_corpo__isnull=False
         ).exclude(slot_corpo='').values_list('slot_corpo', flat=True))
+
+    def get_is_mine(self, obj):
+        # Verifica se il personaggio appartiene all'utente che fa la richiesta
+        request = self.context.get('request')
+        if request and request.user:
+            return obj.proprietario == request.user
+        return False
 
 
 class MessaggioCreateSerializer(serializers.ModelSerializer):

@@ -1555,13 +1555,11 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             if not forgiatura_obj.is_pronta:
                 return Response({"error": "L'oggetto non è ancora pronto."}, status=400)
             
-            # Messaggio differenziato in base a chi ha creato la richiesta
-            if request.user == committente.proprietario:
-                messaggio_testo = f"{committente.nome} richiede un'operazione chirurgica per installare {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Offerta: {offerta} CR."
-                destinatario_msg = artigiano
-            else:
-                messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
-                destinatario_msg = committente
+            # LOGICA MESSAGGI CORRETTA:
+            # Se l'operazione è GRAF (parte dalla coda forgiatura), è SEMPRE l'Artigiano che propone al Paziente.
+            # Indipendentemente da chi possiede i PG, il flusso logico è Artigiano -> Paziente.
+            messaggio_testo = f"Il Dr. {artigiano.nome} propone un'operazione chirurgica: installazione di {forgiatura_obj.infusione.nome} nello slot {slot_dest}. Costo richiesto: {offerta} CR."
+            destinatario_msg = committente
 
         # --- 1. GESTIONE FORGIATURA ---
         elif tipo_op == 'FORG':
