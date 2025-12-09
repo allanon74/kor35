@@ -467,6 +467,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     infusione_nome = serializers.CharField(source='infusione_generatrice.nome', read_only=True)
     tipo_oggetto_display = serializers.CharField(source='get_tipo_oggetto_display', read_only=True)
     is_active = serializers.BooleanField(read_only=True) # 
+    descrizione = serializers.CharField(source='testo', read_only=True)
 
     class Meta:
         model = Oggetto
