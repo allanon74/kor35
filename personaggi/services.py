@@ -72,25 +72,42 @@ class GestioneOggettiService:
         Include copia statistiche manuali e conversione mattoni.
         """
         
-        # 1. Determina Tipo Oggetto dai flag dell'Aura
-        tipo = TIPO_OGGETTO_FISICO
-        aura = infusione.aura_richiesta
-        if aura:
-            if aura.produce_innesti: tipo = TIPO_OGGETTO_INNESTO
-            elif aura.produce_mutazioni: tipo = TIPO_OGGETTO_MUTAZIONE
-            elif aura.produce_mod: tipo = TIPO_OGGETTO_MOD
-            elif aura.produce_materia: tipo = TIPO_OGGETTO_MATERIA
-            # Fallback
-            elif "tecnologic" in aura.nome.lower(): tipo = TIPO_OGGETTO_MOD
-            elif "mondan" in aura.nome.lower(): tipo = TIPO_OGGETTO_MATERIA
+# 1. Determina l'Aura dell'Oggetto
+        # Regola: Se infusione ha aura_infusione (secondaria), l'oggetto prende quella. Altrimenti la primaria.
+        aura_oggetto = infusione.aura_infusione if infusione.aura_infusione else infusione.aura_richiesta
 
-        # 2. Crea l'Oggetto (Senza passare proprietario qui per evitare TypeError)
+        # 2. Determina Tipo e Nome
+        # Usiamo i nuovi campi del modello Punteggio (Aura)
+        tipo_oggetto = TIPO_OGGETTO_FISICO # Fallback
+        prefisso_nome = "Oggetto"
+
+        # Verifica se è un Aumento (Innesto/Mutazione) basandosi sullo slot nell'infusione
+        is_aumento = bool(infusione.slot_corpo_permessi) or aura_oggetto.produce_aumenti
+        
+        if is_aumento:
+            # È un Aumento
+            prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
+            if aura_oggetto.produce_mutazioni: tipo_oggetto = TIPO_OGGETTO_MUTAZIONE
+            else: tipo_oggetto = TIPO_OGGETTO_INNESTO
+        else:
+            # È un Potenziamento
+            prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Mod"
+            if aura_oggetto.produce_materia: tipo_oggetto = TIPO_OGGETTO_MATERIA
+            else: tipo_oggetto = TIPO_OGGETTO_MOD
+        
+        # Costruzione Nome Dinamico: "{Tipo} di {Infusione}"
+        nome_finale = nome_personalizzato or f"{prefisso_nome} di {infusione.nome}"
+
+        # 3. Creazione
         nuovo_oggetto = Oggetto.objects.create(
-            nome=nome_personalizzato or f"Manufatto di {infusione.nome}",
-            tipo_oggetto=tipo,
+            nome=nome_finale,
+            tipo_oggetto=tipo_oggetto,
             infusione_generatrice=infusione,
-            is_tecnologico=(tipo in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_INNESTO]),
-            cariche_attuali=infusione.statistica_cariche.valore_predefinito if infusione.statistica_cariche else 0
+            aura=aura_oggetto, # Assegna l'aura corretta calcolata sopra
+            # Usa il flag dell'aura per decidere se è tecnologico
+            is_tecnologico=(tipo_oggetto in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_INNESTO]),
+            cariche_attuali=infusione.statistica_cariche.valore_predefinito if infusione.statistica_cariche else 0,
+            slot_corpo=infusione.slot_corpo_permessi if is_aumento else None
         )
 
         # 3. Copia le Statistiche Base
@@ -452,76 +469,135 @@ class GestioneCraftingService:
 
     @staticmethod
     def verifica_competenza_forgiatura(forgiatore, infusione, aiutante=None):
-        """Verifica requisiti cooperativi."""
+        """
+        Verifica requisiti:
+        1. INDISPENSABILE: Forgiatore deve avere Aura Primaria >= Livello Infusione.
+        2. DELEGABILE: Aura Secondaria (se esiste) e Somma Caratteristiche.
+        """
         livello = infusione.livello
-        if not infusione.aura_richiesta: return False, "Infusione non valida."
-        
-        # 1. Forgiatore
-        val_f = forgiatore.get_valore_aura_effettivo(infusione.aura_richiesta)
-        if val_f < livello: return False, f"Forgiatore: Aura insufficiente ({val_f}/{livello})."
-        
-        # 2. Aiutante (se presente)
-        if aiutante:
-            val_a = aiutante.get_valore_aura_effettivo(infusione.aura_richiesta)
-            val_sec = 0
-            if infusione.aura_infusione: val_sec = aiutante.get_valore_aura_effettivo(infusione.aura_infusione)
-            if val_a < livello and val_sec < livello:
-                return False, "Aiutante: Requisiti insufficienti."
+        aura_primaria = infusione.aura_richiesta
+        aura_secondaria = infusione.aura_infusione # Può essere None
 
-        return True, "OK"
+        if not aura_primaria: return False, "Infusione non valida (manca aura richiesta)."
+
+        # --- 1. REQUISITO INDISPENSABILE (Forgiatore) ---
+        val_f_primaria = forgiatore.get_valore_aura_effettivo(aura_primaria)
+        if val_f_primaria < livello:
+            return False, f"Requisito Indispensabile mancante: {aura_primaria.nome} insufficiente ({val_f_primaria}/{livello})."
+
+        # --- RACCOLTA REQUISITI DELEGABILI MANCANTI ---
+        mancanze = []
+
+        # Check Aura Secondaria (Delegabile)
+        if aura_secondaria:
+            val_f_secondaria = forgiatore.get_valore_aura_effettivo(aura_secondaria)
+            if val_f_secondaria < livello:
+                mancanze.append({'tipo': 'AURA', 'obj': aura_secondaria, 'val': livello, 'posseduto': val_f_secondaria})
+
+        # Check Caratteristiche (Delegabili)
+        # Recuperiamo i punteggi base del forgiatore
+        stats_forgiatore = forgiatore.caratteristiche_base
+        for comp in infusione.componenti.select_related('caratteristica').all():
+            nome_stat = comp.caratteristica.nome
+            val_richiesto = comp.valore
+            val_posseduto = stats_forgiatore.get(nome_stat, 0)
+            
+            if val_posseduto < val_richiesto:
+                diff = val_richiesto - val_posseduto
+                mancanze.append({'tipo': 'STAT', 'obj': comp.caratteristica, 'val': val_richiesto, 'manca': diff})
+
+        # Se non ci sono mancanze, il forgiatore è autosufficiente
+        if not mancanze:
+            return True, "Autosufficiente"
+
+        # --- SE SERVONO AIUTI ---
+        if not aiutante:
+            return False, "Requisiti delegabili mancanti (Serve Aiuto o Accademia)."
+
+        # Verifica se l'Aiutante può coprire le mancanze
+        # Regola Aiutante: Deve avere Aura Primaria OR Aura Secondaria (se esiste) >= Livello
+        val_a_primaria = aiutante.get_valore_aura_effettivo(aura_primaria)
+        val_a_secondaria = aiutante.get_valore_aura_effettivo(aura_secondaria) if aura_secondaria else 0
+        
+        ha_competenza_base_aiutante = (val_a_primaria >= livello) or (val_a_secondaria >= livello)
+        
+        if not ha_competenza_base_aiutante:
+            return False, f"L'aiutante non ha la competenza d'aura minima richiesta ({aura_primaria.nome} o {aura_secondaria.nome if aura_secondaria else ''})."
+
+        # Verifica se l'Aiutante copre le specifiche mancanze (Stats o Aura Secondaria)
+        stats_aiutante = aiutante.caratteristiche_base
+        
+        for m in mancanze:
+            if m['tipo'] == 'AURA':
+                # Se mancava l'aura secondaria al forgiatore, l'aiutante ce l'ha?
+                if val_a_secondaria < livello:
+                    return False, f"Neanche l'aiutante soddisfa l'Aura Secondaria {m['obj'].nome}."
+            elif m['tipo'] == 'STAT':
+                # Logica Cooperativa: Sommiamo le stats? O l'aiutante deve avere il valore pieno?
+                # Solitamente nella forgiatura cooperativa si usa il valore più alto o si somma.
+                # Qui assumiamo che l'aiutante debba coprire il "buco" o avere il requisito.
+                # Interpretazione: "Unite a quelle del personaggio". Somma dei valori.
+                val_a_stat = stats_aiutante.get(m['obj'].nome, 0)
+                totale = (m['val'] - m['manca']) + val_a_stat # (Quello che ha il forgiatore) + Aiutante
+                if totale < m['val']:
+                     return False, f"Statistica {m['obj'].nome} insufficiente anche combinata ({totale}/{m['val']})."
+
+        return True, "Requisiti soddisfatti con aiuto."
 
     @staticmethod
     def avvia_forgiatura(personaggio, infusione, slot_target=None, destinatario_finale=None, is_academy=False, aiutante=None):
-        # RIMOSSO: Il blocco che impediva code multiple
-        # if ForgiaturaInCorso.objects.filter(personaggio=personaggio).exists():
-        #     raise ValidationError("Hai già una forgiatura in corso.")
-
-        costo_crediti = 0
-        desc = ""
+        # Calcolo costi base (Materiali)
+        costo_materiali, durata_secondi = GestioneCraftingService.calcola_costi_tempi(personaggio, infusione)
         
-        # ... (Logica calcolo costi esistente rimane uguale) ...
+        costo_totale = 0
+        descrizione = ""
+        
+        # --- LOGICA ACCADEMIA ---
         if is_academy:
-            costo_crediti = 200; desc = f"Accademia: {infusione.nome}"
-        else:
-            forgiatore = destinatario_finale if destinatario_finale else personaggio
-            helper = aiutante if aiutante else (None if destinatario_finale else personaggio)
-            if not helper: helper = personaggio
+            # Requisito Indispensabile deve essere comunque rispettato dal PG? 
+            # Solitamente l'Accademia fa tutto, ma se vuoi mantenere la regola "Aura Primaria Indispensabile" anche per Accademia, decommenta le righe sotto.
+            # can, msg = GestioneCraftingService.verifica_competenza_forgiatura(personaggio, infusione) # Check base
+            # if "Indispensabile" in msg and not can: raise ValidationError(msg)
+
+            # Costo Accademia = Costo Materiali + (Livello * Costo Unitario Aura)
+            # Ovvero paga "doppio" il costo dei mattoni (uno per materiali, uno per il servizio)
+            # Nota: calcola_costi_tempi restituisce già (Livello * Costo_Unitario).
+            costo_servizio = costo_materiali 
+            costo_totale = costo_materiali + costo_servizio
+            descrizione = f"Accademia (Materiali + Servizio): {infusione.nome}"
             
-            can, msg = GestioneCraftingService.verifica_competenza_forgiatura(forgiatore, infusione, aiutante=helper if helper!=forgiatore else None)
-            if not can: raise ValidationError(msg)
+        else:
+            # --- LOGICA FAI DA TE / AIUTO ---
+            forgiatore = destinatario_finale if destinatario_finale else personaggio
+            helper = aiutante
+            
+            # Verifica Requisiti Completa
+            can, msg = GestioneCraftingService.verifica_competenza_forgiatura(forgiatore, infusione, aiutante=helper)
+            if not can: 
+                raise ValidationError(msg)
 
-            c, _ = GestioneCraftingService.calcola_costi_forgiatura(personaggio, infusione)
-            costo_crediti = c; desc = f"Materiali: {infusione.nome}"
-        
-        if personaggio.crediti < costo_crediti:
-            raise ValidationError(f"Crediti insufficienti. Richiesti: {costo_crediti}")
+            costo_totale = costo_materiali
+            descrizione = f"Materiali Forgiatura: {infusione.nome}"
 
-        # LOGICA CODA:
-        # Calcoliamo quando inizia questo lavoro.
-        # Se c'è già roba in coda, inizia quando finisce l'ultima. Altrimenti Adesso.
+        # Verifica Crediti
+        if personaggio.crediti < costo_totale:
+            raise ValidationError(f"Crediti insufficienti. Richiesti: {costo_totale}")
+
+        # Gestione Coda (identica a prima)
         now = timezone.now()
-        
-        # Cerchiamo l'ultima forgiatura attiva di questo personaggio
-        ultima_forgiatura = ForgiaturaInCorso.objects.filter(
-            personaggio=personaggio
-        ).order_by('-data_fine_prevista').first()
-
+        ultima_forgiatura = ForgiaturaInCorso.objects.filter(personaggio=personaggio).order_by('-data_fine_prevista').first()
         data_inizio_lavoro = now
         if ultima_forgiatura and ultima_forgiatura.data_fine_prevista > now:
             data_inizio_lavoro = ultima_forgiatura.data_fine_prevista
-
-        # Calcolo durata
-        _, durata_secondi = GestioneCraftingService.calcola_costi_forgiatura(personaggio, infusione)
         
-        # La fine prevista è rispetto all'inizio effettivo del lavoro, non "adesso"
         fine_prevista = data_inizio_lavoro + timedelta(seconds=durata_secondi)
 
         with transaction.atomic():
-            personaggio.modifica_crediti(-costo_crediti, desc)
+            personaggio.modifica_crediti(-costo_totale, descrizione)
             forgiatura = ForgiaturaInCorso.objects.create(
                 personaggio=personaggio, 
                 infusione=infusione, 
-                data_inizio=data_inizio_lavoro, # Salviamo quando inizia effettivamente (utile per UI)
+                data_inizio=data_inizio_lavoro,
                 data_fine_prevista=fine_prevista, 
                 slot_target=slot_target,
                 destinatario_finale=destinatario_finale

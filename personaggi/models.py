@@ -329,11 +329,17 @@ class Punteggio(Tabella):
     is_generica = models.BooleanField(default=False)
     permette_infusioni = models.BooleanField(default=False)
     permette_tessiture = models.BooleanField(default=False)
-    # NUOVI FLAG: Cosa può produrre questa Aura?
-    produce_mod = models.BooleanField(default=False, verbose_name="Produce MOD (Oggetti)")
-    produce_materia = models.BooleanField(default=False, verbose_name="Produce MATERIA (Oggetti)")
-    produce_innesti = models.BooleanField(default=False, verbose_name="Produce INNESTI (Corpo)")
-    produce_mutazioni = models.BooleanField(default=False, verbose_name="Produce MUTAZIONI (Corpo)")
+    # NUOVI FLAG: Cosa può produrre questa Aura? DA RIMUOVERE QUANDO FUNZIONA TUTTO
+    # produce_mod = models.BooleanField(default=False, verbose_name="Produce MOD (Oggetti)")
+    # produce_materia = models.BooleanField(default=False, verbose_name="Produce MATERIA (Oggetti)")
+    # produce_innesti = models.BooleanField(default=False, verbose_name="Produce INNESTI (Corpo)")
+    # produce_mutazioni = models.BooleanField(default=False, verbose_name="Produce MUTAZIONI (Corpo)")
+    # NUOVA LOGICA:
+    produce_aumenti = models.BooleanField(default=False, verbose_name="Produce Aumenti (Innesti/Mutazioni)")
+    produce_potenziamenti = models.BooleanField(default=False, verbose_name="Produce Potenziamenti (Mod/Materia)")
+    # --- NUOVE REGOLE DI FUNZIONAMENTO ---
+    spegne_a_zero_cariche = models.BooleanField(default=False, verbose_name="Si spegne a 0 cariche? (Tecnologico)")
+    potenziamenti_multi_slot = models.BooleanField(default=False, verbose_name="Multi-Slot? (Più copie sullo stesso oggetto)")
     
     # COSTI CREAZIONE / ACQUISTO (Tecnica approvata)
     stat_costo_creazione_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_inf')
@@ -351,7 +357,7 @@ class Punteggio(Tabella):
     
     caratteristica_relativa = models.ForeignKey("Punteggio", on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, null=True, blank=True, related_name="punteggi_caratteristica")
     modifica_statistiche = models.ManyToManyField('Statistica', through='CaratteristicaModificatore', related_name='modificata_da_caratteristiche', blank=True)
-    aure_infusione_consentite = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='puo_essere_infusa_in')    
+    aure_infusione_consentite = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='puo_essere_infusa_in')
     class Meta: verbose_name = "Punteggio"; verbose_name_plural = "Punteggi"; ordering = ['tipo', 'ordine', 'nome']
     @property
     def icona_url(self): return f"{settings.MEDIA_URL}{self.icona}" if self.icona else None
