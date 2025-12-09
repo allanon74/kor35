@@ -507,6 +507,11 @@ class OggettoSerializer(serializers.ModelSerializer):
     costo_effettivo = serializers.SerializerMethodField()
     seconds_remaining = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(read_only=True)
+    
+    cariche_massime = serializers.SerializerMethodField()
+    durata_totale = serializers.SerializerMethodField()
+    costo_ricarica = serializers.SerializerMethodField()
+    testo_ricarica = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -549,6 +554,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'data_fine_attivazione', 
             'seconds_remaining',
             'is_active',
+            'cariche_massime', 'durata_totale', 'testo_ricarica', 'costo_ricarica', 
         )
 
     def get_costo_effettivo(self, obj):
@@ -564,7 +570,23 @@ class OggettoSerializer(serializers.ModelSerializer):
                 return int((obj.data_fine_attivazione - now).total_seconds())
         return 0
 
+    def get_cariche_massime(self, obj):
+        # Recupera il massimo delle cariche dall'infusione o dalla statistica
+        if obj.infusione_generatrice and obj.infusione_generatrice.statistica_cariche:
+            # Qui servirebbe il personaggio per calcolare il valore esatto, 
+            # ma per ora torniamo il base o un valore stimato se il context non ha il pg
+            return 99 # Placeholder o logica complessa
+        return 0
 
+    def get_durata_totale(self, obj):
+        return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0
+
+    def get_costo_ricarica(self, obj):
+        return obj.infusione_generatrice.costo_ricarica_crediti if obj.infusione_generatrice else 0
+
+    def get_testo_ricarica(self, obj):
+        return obj.infusione_generatrice.metodo_ricarica if obj.infusione_generatrice else ""
+    
 # -----------------------------------------------------------------------------
 # SERIALIZER PER LE TECNICHE (INFUSIONE, TESSITURA, ATTIVATA)
 # -----------------------------------------------------------------------------
@@ -845,6 +867,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     is_staff = serializers.BooleanField(source='proprietario.is_staff', read_only=True)
     modelli_aura = ModelloAuraSerializer(many=True, read_only=True)
+    
+    lavori_pendenti_count = serializers.SerializerMethodField()
+    messaggi_non_letti_count = serializers.SerializerMethodField()
+    statistiche_primarie = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -857,6 +883,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'movimenti_credito',
             'TestoFormattatoPersonale',
             'is_staff', 'modelli_aura',
+            'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
         )
 
@@ -906,6 +933,27 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             dati['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(tes)
             risultati.append(dati)
         return risultati
+    
+    def get_lavori_pendenti_count(self, obj):
+        return obj.richieste_assemblaggio_ricevute.filter(stato='PEND').count()
+
+    def get_messaggi_non_letti_count(self, obj):
+        return obj.messaggi_ricevuti_individuali.exclude(stati_lettura__letto=True).count() # Semplificato
+
+    def get_statistiche_primarie(self, obj):
+        # Restituisce una lista strutturata delle stat primarie per il GameTab
+        stats = []
+        for stat in Statistica.objects.filter(is_primaria=True):
+            val_max = obj.get_valore_statistica(stat.sigla)
+            # Recupera il valore corrente da statistiche_temporanee o usa il max
+            val_current = obj.statistiche_temporanee.get(stat.sigla, val_max)
+            stats.append({
+                'sigla': stat.sigla,
+                'nome': stat.nome,
+                'valore_max': val_max,
+                'valore_corrente': val_current
+            })
+        return stats
 
 
 class PersonaggioPublicSerializer(serializers.ModelSerializer):

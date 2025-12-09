@@ -28,7 +28,7 @@ from .models import (
     COSTO_PER_MATTONE_CREAZIONE, 
     COSTO_DEFAULT_INVIO_PROPOSTA,
     RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE,
-    ClasseOggetto, 
+    ClasseOggetto, Statistica, 
 )
 
 import uuid 
@@ -36,6 +36,7 @@ import qrcode
 import io
 import base64
 from django.utils.html import escape
+from datetime import timedelta
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -1820,36 +1821,108 @@ class ClasseOggettoListView(generics.ListAPIView):
     serializer_class = ClasseOggettoSerializer
     permission_classes = [IsAuthenticated]
     
+
 class GameActionsViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['post'])
     def modifica_stat_temp(self, request):
+        """
+        Modifica una statistica temporanea (HP, Mana, ecc.) nel JSON del personaggio.
+        """
         char_id = request.data.get('char_id')
         stat_sigla = request.data.get('stat_sigla')
         mode = request.data.get('mode') # 'consuma' o 'reset'
         
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
         
-        try:
-            curr, max_val = GestioneOggettiService.manipola_statistica_temporanea(pg, stat_sigla, mode)
-            return Response({'current': curr, 'max': max_val})
-        except Exception as e:
-            return Response({'error': str(e)}, status=400)
+        # Recupera il valore massimo calcolato
+        val_max = pg.get_valore_statistica(stat_sigla)
+        
+        # Recupera il valore corrente (default = max)
+        current = pg.statistiche_temporanee.get(stat_sigla, val_max)
+        
+        nuovo_valore = current
+        if mode == 'consuma':
+            nuovo_valore = max(0, current - 1)
+        elif mode == 'reset':
+            nuovo_valore = val_max
+            
+        # Salva nel JSONField
+        pg.statistiche_temporanee[stat_sigla] = nuovo_valore
+        pg.save(update_fields=['statistiche_temporanee'])
+        
+        return Response({'current': nuovo_valore, 'max': val_max})
 
     @action(detail=False, methods=['post'])
     def usa_oggetto(self, request):
+        """
+        Usa una carica di un oggetto. Se ha durata, imposta la scadenza.
+        """
         obj_id = request.data.get('oggetto_id')
+        char_id = request.data.get('char_id') # Opzionale, per verifica owner
         
-        # Verifica proprietà
         obj = get_object_or_404(Oggetto, pk=obj_id)
-        if obj.inventario_corrente and obj.inventario_corrente.id != request.data.get('char_id') and not request.user.is_staff:
-                # Verifica blanda se l'ID non corrisponde, controlla se l'inventario è del pg dell'user
-                # Per semplicità, qui mi fido del service o aggiungi check su obj.inventario_corrente.proprietario
-                pass 
+        
+        # Verifica che l'oggetto appartenga a un PG dell'utente (sicurezza base)
+        if obj.inventario_corrente:
+             # Controllo blando: se l'inventario è un PG, deve essere dell'utente
+             if hasattr(obj.inventario_corrente, 'personaggio_ptr'):
+                 if obj.inventario_corrente.personaggio_ptr.proprietario != request.user:
+                     return Response({'error': 'Oggetto non tuo'}, status=403)
 
-        try:
-            res = GestioneOggettiService.usa_carica_oggetto(obj)
-            return Response(res)
-        except ValidationError as e:
-            return Response({'error': str(e)}, status=400)
+        if obj.cariche_attuali <= 0:
+            return Response({'error': 'Oggetto scarico'}, status=400)
+            
+        # Consuma carica
+        obj.cariche_attuali -= 1
+        
+        # Gestione Timer
+        durata = 0
+        if obj.infusione_generatrice and obj.infusione_generatrice.durata_attivazione > 0:
+            durata = obj.infusione_generatrice.durata_attivazione
+            obj.data_fine_attivazione = timezone.now() + timedelta(seconds=durata)
+        
+        obj.save()
+        
+        # Serializziamo per tornare i dati aggiornati al frontend
+        serializer = OggettoSerializer(obj)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def ricarica_oggetto(self, request):
+        """
+        Ricarica le cariche di un oggetto pagando i crediti.
+        """
+        obj_id = request.data.get('oggetto_id')
+        char_id = request.data.get('char_id')
+        
+        obj = get_object_or_404(Oggetto, pk=obj_id)
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        infusione = obj.infusione_generatrice
+        if not infusione or not infusione.statistica_cariche:
+            return Response({'error': 'Oggetto non ricaricabile'}, status=400)
+            
+        # Calcolo costo
+        max_cariche = infusione.statistica_cariche.valore_base_predefinito
+        mancanti = max_cariche - obj.cariche_attuali
+        
+        if mancanti <= 0:
+            return Response({'message': 'Già carico'}, status=200)
+            
+        costo = mancanti * infusione.costo_ricarica_crediti
+        
+        if pg.crediti < costo:
+             return Response({'error': f'Crediti insufficienti. Servono {costo} CR.'}, status=400)
+             
+        with transaction.atomic():
+            pg.modifica_crediti(-costo, f"Ricarica {obj.nome}")
+            obj.cariche_attuali = max_cariche
+            # Se ricarichi, il timer si resetta? Di solito no, o si spegne.
+            # Per ora lasciamo il timer inalterato o lo spegniamo. Spegniamolo per coerenza (ricarica = reset).
+            obj.data_fine_attivazione = None 
+            obj.save()
+            
+        serializer = OggettoSerializer(obj)
+        return Response(serializer.data)
