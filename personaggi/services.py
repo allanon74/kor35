@@ -86,8 +86,6 @@ class GestioneOggettiService:
         if is_aumento:
             # --- È un Aumento (Innesto/Mutazione) ---
             prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
-            
-            # Distinzione basata sul nome configurato (es. Mutazione vs Innesto)
             if "Mutazione" in prefisso_nome or "mutazione" in prefisso_nome:
                 tipo_oggetto = TIPO_OGGETTO_MUTAZIONE
             else:
@@ -95,24 +93,21 @@ class GestioneOggettiService:
         else:
             # --- È un Potenziamento (Mod/Materia) ---
             prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Mod"
-            
-            # Distinzione basata sul nome configurato (es. Materia vs Mod)
             if "Materia" in prefisso_nome or "materia" in prefisso_nome:
                 tipo_oggetto = TIPO_OGGETTO_MATERIA
             else:
                 tipo_oggetto = TIPO_OGGETTO_MOD
 
         # 3. Costruzione Nome
-        # Esempio: "Innesto di Forza del Toro" o "Materia di Palla di Fuoco"
         nome_finale = nome_personalizzato or f"{prefisso_nome} di {infusione.nome}"
 
         # 4. Crea l'Oggetto
         nuovo_oggetto = Oggetto.objects.create(
             nome=nome_finale,
+            testo=infusione.testo,  # <--- CORREZIONE: Copia il testo/descrizione!
             tipo_oggetto=tipo_oggetto,
             infusione_generatrice=infusione,
-            aura=aura_oggetto, # Assegna l'aura corretta calcolata sopra
-            # Usa il flag dell'aura per decidere se è tecnologico (es. spegne a zero cariche)
+            aura=aura_oggetto, 
             is_tecnologico=aura_oggetto.spegne_a_zero_cariche or (tipo_oggetto in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_INNESTO]),
             cariche_attuali=infusione.statistica_cariche.valore_predefinito if infusione.statistica_cariche else 0,
             slot_corpo=infusione.slot_corpo_permessi if is_aumento else None
@@ -126,7 +121,7 @@ class GestioneOggettiService:
                 valore_base=stat_inf.valore_base
             )
 
-        # 6. Copia Modificatori Manuali (Definiti nell'Infusione)
+        # 6. Copia Modificatori Manuali
         for stat_man in infusione.infusionestatistica_set.all():
             stat_obj = OggettoStatistica.objects.create(
                 oggetto=nuovo_oggetto,
@@ -149,7 +144,7 @@ class GestioneOggettiService:
                 valore=comp.valore
             )
             
-            # Applica effetti del Mattone corrispondente (Retrocompatibilità logica Mattoni)
+            # Applica effetti del Mattone corrispondente
             mattone = Mattone.objects.filter(
                 aura=infusione.aura_richiesta,
                 caratteristica_associata=comp.caratteristica

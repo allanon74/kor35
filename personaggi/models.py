@@ -276,6 +276,64 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         
     return "".join(parts)
 
+def genera_html_cariche(item, personaggio=None):
+    """Genera il blocco HTML per le cariche di Infusioni e Oggetti."""
+    source = None
+    if isinstance(item, Infusione):
+        source = item
+    elif isinstance(item, Oggetto) and item.infusione_generatrice:
+        source = item.infusione_generatrice
+    
+    # Se non c'è una fonte o non è configurata la statistica cariche, non mostrare nulla
+    if not source or not source.statistica_cariche:
+        return ""
+
+    # 1. Calcolo Cariche Totali
+    stat = source.statistica_cariche
+    valore_totale = stat.valore_base_predefinito
+    if personaggio:
+        valore_totale = personaggio.get_valore_statistica(stat.sigla)
+    
+    # 2. Formattazione Durata (da secondi a testo)
+    durata_str = ""
+    if source.durata_attivazione > 0:
+        sec = source.durata_attivazione
+        h = sec // 3600
+        m = (sec % 3600) // 60
+        s = sec % 60
+        parts = []
+        if h: parts.append(f"{h}h")
+        if m: parts.append(f"{m}m")
+        if s: parts.append(f"{s}s")
+        durata_str = " ".join(parts)
+
+    # 3. Costruzione HTML
+    # Stile inline per garantire la visualizzazione ovunque (Admin & Frontend)
+    box_style = "margin-top: 12px; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.2); background-color: rgba(0,0,0,0.2); border-radius: 6px; font-size: 0.9em; line-height: 1.4;"
+    header_style = "color: #ffd700; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 6px; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;"
+    row_style = "margin-bottom: 2px;"
+    label_style = "color: #aaa; margin-right: 5px;"
+
+    html = f"<div style='{box_style}'>"
+    html += f"<div style='{header_style}'><span>⚡ {stat.nome}</span> <span>Tot: {valore_totale}</span></div>"
+    
+    if source.metodo_ricarica:
+        html += f"<div style='{row_style}'><span style='{label_style}'>Ricarica:</span> {source.metodo_ricarica}</div>"
+    
+    details = []
+    if source.costo_ricarica_crediti > 0:
+        details.append(f"<span style='{label_style}'>Costo:</span> {source.costo_ricarica_crediti} CR")
+    
+    if durata_str:
+        details.append(f"<span style='{label_style}'>Durata:</span> {durata_str}")
+        
+    if details:
+        html += f"<div style='{row_style}'>{' &nbsp;|&nbsp; '.join(details)}</div>"
+
+    html += "</div>"
+    return html
+
+
 # --- TIPI ---
 CARATTERISTICA = "CA"; STATISTICA = "ST"; ELEMENTO = "EL"; AURA = "AU"; CONDIZIONE = "CO"; CULTO = "CU"; VIA = "VI"; ARTE = "AR"; ARCHETIPO = "AR"
 punteggi_tipo = [(CARATTERISTICA, 'Caratteristica'), (STATISTICA, 'Statistica'), (ELEMENTO, 'Elemento'), (AURA, 'Aura'), (CONDIZIONE, 'Condizione'), (CULTO, 'Culto'), (VIA, 'Via'), (ARTE, 'Arte'), (ARCHETIPO, 'Archetipo')]
@@ -586,8 +644,15 @@ class Infusione(Tecnica):
         return self.livello * base
         
     @property
-    def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.infusionestatisticabase_set.select_related('statistica').all(), context={'livello': self.livello, 'aura': self.aura_richiesta}, formula=self.formula_attacco)
-
+    def TestoFormattato(self): 
+        base_text = formatta_testo_generico(
+            self.testo, 
+            statistiche_base=self.infusionestatisticabase_set.select_related('statistica').all(), 
+            context={'livello': self.livello, 'aura': self.aura_richiesta}, 
+            formula=self.formula_attacco
+        )
+        return base_text + genera_html_cariche(self, None)
+    
 class Tessitura(Tecnica):
     formula = models.TextField("Formula", blank=True, null=True)
     elemento_principale = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO})
@@ -791,9 +856,16 @@ class Oggetto(A_vista):
     def livello(self):
         # Aggiorna il calcolo del livello basandosi sui nuovi componenti
         return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
-    
+
     @property
-    def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.oggettostatisticabase_set.select_related('statistica').all(), context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': self.oggettostatistica_set.select_related('statistica').all()})
+    def TestoFormattato(self): 
+        base_text = formatta_testo_generico(
+            self.testo, 
+            statistiche_base=self.oggettostatisticabase_set.select_related('statistica').all(), 
+            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': self.oggettostatistica_set.select_related('statistica').all()}
+        )
+        return base_text + genera_html_cariche(self, None)
+    
     @property
     def inventario_corrente(self):
         t = self.tracciamento_inventario.filter(data_fine__isnull=True).first()
@@ -1114,80 +1186,90 @@ class Personaggio(Inventario):
 
     def get_testo_formattato_per_item(self, item):
         if not item: return ""
+        testo_finale=""
+        
         if isinstance(item, Oggetto):
             stats = item.oggettostatisticabase_set.select_related('statistica').all()
             item_mods = item.oggettostatistica_set.select_related('statistica').all()
             ctx = {'livello': item.livello, 'aura': item.aura, 'item_modifiers': item_mods}
-            return formatta_testo_generico(item.testo, formula=getattr(item, 'formula', None), statistiche_base=stats, personaggio=self, context=ctx)
+            testo_finale = formatta_testo_generico(item.testo, formula=getattr(item, 'formula', None), statistiche_base=stats, personaggio=self, context=ctx)
+            
         elif isinstance(item, Infusione):
             stats = item.infusionestatisticabase_set.select_related('statistica').all()
             ctx = {'livello': item.livello, 'aura': item.aura_richiesta}
-            return formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
+            testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
+            
         elif isinstance(item, Attivata):
             stats = item.attivatastatisticabase_set.select_related('statistica').all()
-            return formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self)
+            testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self)
+        
         elif isinstance(item, Tessitura):
             stats = item.tessiturastatisticabase_set.select_related('statistica').all()
             formula_text = item.formula or ""
             if "{elem}" not in formula_text:
                 ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
-                return formatta_testo_generico(item.testo, formula=formula_text, statistiche_base=stats, personaggio=self, context=ctx)
-
-            modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
-            elementi_map = {} 
-            if item.elemento_principale: elementi_map[item.elemento_principale.id] = item.elemento_principale
-            
-            if modello:
-                punteggi_pg = self.punteggi_base 
-                def verifica_requisiti(requisiti_queryset):
-                    for req_link in requisiti_queryset:
-                        if punteggi_pg.get(req_link.requisito.nome, 0) < req_link.valore: return False
-                    return True
-
-                if modello.usa_doppia_formula and modello.elemento_secondario:
-                    attiva_doppia = True
-                    if modello.usa_condizione_doppia: attiva_doppia = verifica_requisiti(modello.req_doppia_rel.select_related('requisito').all())
-                    if attiva_doppia: elementi_map[modello.elemento_secondario.id] = modello.elemento_secondario
-
-                if modello.usa_formula_per_caratteristica:
-                    attiva_caratt = True
-                    if modello.usa_condizione_caratt: attiva_caratt = verifica_requisiti(modello.req_caratt_rel.select_related('requisito').all())
-                    if attiva_caratt:
-                        for el in Punteggio.objects.filter(tipo=ELEMENTO, caratteristica_relativa__nome__in=punteggi_pg.keys()):
-                            if punteggi_pg.get(el.caratteristica_relativa.nome, 0) > 0: elementi_map[el.id] = el
+                testo_finale =  formatta_testo_generico(item.testo, formula=formula_text, statistiche_base=stats, personaggio=self, context=ctx)
+            else:
+                modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
+                elementi_map = {} 
+                if item.elemento_principale: elementi_map[item.elemento_principale.id] = item.elemento_principale
                 
-                # FIX: USO DI COMPONENTI INVECE DI MATTONI
-                if modello.usa_formula_per_mattone:
-                    attiva_mattone = True
-                    if modello.usa_condizione_mattone: attiva_mattone = verifica_requisiti(modello.req_mattone_rel.select_related('requisito').all())
-                    if attiva_mattone:
-                        # Recupera gli ID delle caratteristiche usate nei componenti
-                        caratt_ids = item.componenti.values_list('caratteristica', flat=True)
-                        for el in Punteggio.objects.filter(tipo=ELEMENTO, caratteristica_relativa__id__in=caratt_ids):
-                            elementi_map[el.id] = el
+                if modello:
+                    punteggi_pg = self.punteggi_base 
+                    def verifica_requisiti(requisiti_queryset):
+                        for req_link in requisiti_queryset:
+                            if punteggi_pg.get(req_link.requisito.nome, 0) < req_link.valore: return False
+                        return True
 
-            elementi_da_calcolare = list(elementi_map.values())
-            if not elementi_da_calcolare:
-                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None}
-                return formatta_testo_generico(item.testo, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx)
+                    if modello.usa_doppia_formula and modello.elemento_secondario:
+                        attiva_doppia = True
+                        if modello.usa_condizione_doppia: attiva_doppia = verifica_requisiti(modello.req_doppia_rel.select_related('requisito').all())
+                        if attiva_doppia: elementi_map[modello.elemento_secondario.id] = modello.elemento_secondario
 
-            ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
-            descrizione_html = formatta_testo_generico(item.testo, formula=None, statistiche_base=stats, personaggio=self, context=ctx_base)
-            
-            formule_html = []
-            for elem in elementi_da_calcolare:
-                val_caratt = 0
-                if elem.caratteristica_relativa: val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0)
-                ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt}
-                risultato_formula = formatta_testo_generico(None, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx_loop, solo_formula=True)
-                valore_pura_formula = risultato_formula.replace("<strong>Formula:</strong>", "").strip()
-                if valore_pura_formula:
-                    block = f"<div style='margin-top: 4px; padding: 4px 8px; border-left: 3px solid {elem.colore}; background-color: rgba(255,255,255,0.05); border-radius: 0 4px 4px 0;'><span style='color: {elem.colore}; font-weight: bold; margin-right: 6px;'>{elem.nome}:</span>{valore_pura_formula}</div>"
-                    formule_html.append(block)
+                    if modello.usa_formula_per_caratteristica:
+                        attiva_caratt = True
+                        if modello.usa_condizione_caratt: attiva_caratt = verifica_requisiti(modello.req_caratt_rel.select_related('requisito').all())
+                        if attiva_caratt:
+                            for el in Punteggio.objects.filter(tipo=ELEMENTO, caratteristica_relativa__nome__in=punteggi_pg.keys()):
+                                if punteggi_pg.get(el.caratteristica_relativa.nome, 0) > 0: elementi_map[el.id] = el
+                    
+                    # FIX: USO DI COMPONENTI INVECE DI MATTONI
+                    if modello.usa_formula_per_mattone:
+                        attiva_mattone = True
+                        if modello.usa_condizione_mattone: attiva_mattone = verifica_requisiti(modello.req_mattone_rel.select_related('requisito').all())
+                        if attiva_mattone:
+                            # Recupera gli ID delle caratteristiche usate nei componenti
+                            caratt_ids = item.componenti.values_list('caratteristica', flat=True)
+                            for el in Punteggio.objects.filter(tipo=ELEMENTO, caratteristica_relativa__id__in=caratt_ids):
+                                elementi_map[el.id] = el
 
-            if formule_html: return f"{descrizione_html}<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/><div style='font-size: 0.95em;'><strong>Formule:</strong>{''.join(formule_html)}</div>"
-            return descrizione_html
-        return ""
+                elementi_da_calcolare = list(elementi_map.values())
+                if not elementi_da_calcolare:
+                    ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None}
+                    return formatta_testo_generico(item.testo, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx)
+
+                ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+                descrizione_html = formatta_testo_generico(item.testo, formula=None, statistiche_base=stats, personaggio=self, context=ctx_base)
+                
+                formule_html = []
+                for elem in elementi_da_calcolare:
+                    val_caratt = 0
+                    if elem.caratteristica_relativa: val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0)
+                    ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt}
+                    risultato_formula = formatta_testo_generico(None, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx_loop, solo_formula=True)
+                    valore_pura_formula = risultato_formula.replace("<strong>Formula:</strong>", "").strip()
+                    if valore_pura_formula:
+                        block = f"<div style='margin-top: 4px; padding: 4px 8px; border-left: 3px solid {elem.colore}; background-color: rgba(255,255,255,0.05); border-radius: 0 4px 4px 0;'><span style='color: {elem.colore}; font-weight: bold; margin-right: 6px;'>{elem.nome}:</span>{valore_pura_formula}</div>"
+                        formule_html.append(block)
+
+                if formule_html: return f"{descrizione_html}<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/><div style='font-size: 0.95em;'><strong>Formule:</strong>{''.join(formule_html)}</div>"
+                testo_finale =  descrizione_html
+        
+        if isinstance(item, (Oggetto, Infusione)):
+            testo_finale += genera_html_cariche(item, self)
+
+        return testo_finale
+        
     
     def get_valore_statistica(self, sigla):
         try:
