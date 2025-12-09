@@ -183,7 +183,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         
     def get_produce_mod(self, obj):
         # Logica: È un mod se produce potenziamenti ed è tecnologico (es. nome='Mod' o spegne a zero cariche)
-        return obj.produce_potenziamenti and (obj.nome_tipo_potenziamento == 'Mod' or obj.spegne_a_zero_cariche)
+        return obj.produce_potenziamenti and obj.nome_tipo_potenziamento == 'Mod'
 
     def get_produce_materia(self, obj):
         return obj.produce_potenziamenti and obj.nome_tipo_potenziamento == 'Materia'
