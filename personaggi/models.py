@@ -851,6 +851,7 @@ class Oggetto(A_vista):
     slot_corpo = models.CharField(max_length=3, choices=SLOT_CORPO_CHOICES, blank=True, null=True, help_text="Solo per Innesti e Mutazioni")
     cariche_attuali = models.IntegerField(default=0)
     oggetto_base_generatore = models.ForeignKey(OggettoBase, on_delete=models.SET_NULL, null=True, blank=True, related_name='istanze_generate', help_text="Se creato dal negozio, punta al template originale.")
+    data_fine_attivazione = models.DateTimeField(null=True, blank=True, help_text="Se impostato, l'oggetto è attivo fino a questa data.")
 
     @property
     def livello(self):
@@ -879,8 +880,16 @@ class Oggetto(A_vista):
                 if curr.inventario == nuovo: return
                 curr.data_fine = data; curr.save()
             if nuovo: OggettoInInventario.objects.create(oggetto=self, inventario=nuovo, data_inizio=data)
+    
     def clean(self):
         if self.ospitato_su == self: raise ValidationError("Un oggetto non può essere installato su se stesso.")
+        
+    @property
+    def is_active_timer(self):
+        """Restituisce True se il timer è attivo e non scaduto."""
+        if not self.data_fine_attivazione:
+            return False
+        return timezone.now() < self.data_fine_attivazione
 
 class Personaggio(Inventario):
     proprietario = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
@@ -893,6 +902,7 @@ class Personaggio(Inventario):
     infusioni_possedute = models.ManyToManyField(Infusione, through='PersonaggioInfusione', blank=True)
     tessiture_possedute = models.ManyToManyField(Tessitura, through='PersonaggioTessitura', blank=True)
     modelli_aura = models.ManyToManyField(ModelloAura, through='PersonaggioModelloAura', blank=True, verbose_name="Modelli di Aura")
+    statistiche_temporanee = models.JSONField(default=dict, blank=True, verbose_name="Valori Correnti Statistiche")
     
     class Meta: verbose_name="Personaggio"; verbose_name_plural="Personaggi"
     def __str__(self): return self.nome
@@ -1008,9 +1018,7 @@ class Personaggio(Inventario):
             if t == MODIFICATORE_ADDITIVO: mods[p]['add'] += valore
             elif t == MODIFICATORE_MOLTIPLICATIVO: mods[p]['mol'] *= valore 
 
-        # Funzione helper per verificare se un modificatore è "Globale" (senza condizioni)
         def _is_global(stat_link):
-            # Se ha una qualsiasi limitazione attiva, NON è globale
             if stat_link.usa_limitazione_elemento: return False
             if stat_link.usa_limitazione_aura: return False
             if stat_link.usa_condizione_text: return False
@@ -1021,32 +1029,47 @@ class Personaggio(Inventario):
             if _is_global(l):
                 _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
         
-        # 2. Oggetti e Innesti
-        oggetti_inventario = self.get_oggetti().prefetch_related('oggettostatistica_set__statistica', 'potenziamenti_installati__oggettostatistica_set__statistica')
+        # 2. Oggetti e Innesti (CON CHECK TIMER)
+        oggetti_inventario = self.get_oggetti().select_related('infusione_generatrice').prefetch_related('oggettostatistica_set__statistica', 'potenziamenti_installati__oggettostatistica_set__statistica', 'potenziamenti_installati__infusione_generatrice')
+        
         for oggetto in oggetti_inventario:
             is_oggetto_attivo = False
             if oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO and oggetto.is_equipaggiato: is_oggetto_attivo = True
             elif oggetto.tipo_oggetto == TIPO_OGGETTO_MUTAZIONE: is_oggetto_attivo = True
-            elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO and oggetto.slot_corpo and oggetto.cariche_attuali > 0: is_oggetto_attivo = True
+            elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO and oggetto.slot_corpo: 
+                # Innesti: attivi se montati. Se hanno timer, controllo sotto.
+                is_oggetto_attivo = True
             
+            # --- CHECK TIMER OGGETTO PADRE ---
+            if is_oggetto_attivo and oggetto.infusione_generatrice and oggetto.infusione_generatrice.durata_attivazione > 0:
+                if not oggetto.is_active_timer:
+                    is_oggetto_attivo = False
+            # ---------------------------------
+
             if is_oggetto_attivo:
                 for stat_link in oggetto.oggettostatistica_set.all(): 
-                    # FILTRO: Aggiungi solo se non ha limitazioni
                     if _is_global(stat_link):
                         _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
                 
-                # Potenziamenti (Mod/Materia) dentro gli oggetti
+                # Potenziamenti (Mod/Materia)
                 for potenziamento in oggetto.potenziamenti_installati.all():
                     is_potenziamento_attivo = False
                     if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA: is_potenziamento_attivo = True
-                    elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD and potenziamento.cariche_attuali > 0: is_potenziamento_attivo = True
+                    elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD: is_potenziamento_attivo = True
                     
+                    # --- CHECK TIMER POTENZIAMENTO ---
+                    # I Mod sono attivi se l'host è attivo E se il loro eventuale timer è attivo
+                    if is_potenziamento_attivo and potenziamento.infusione_generatrice and potenziamento.infusione_generatrice.durata_attivazione > 0:
+                        if not potenziamento.is_active_timer:
+                            is_potenziamento_attivo = False
+                    # ---------------------------------
+
                     if is_potenziamento_attivo:
                         for stat_link_pot in potenziamento.oggettostatistica_set.all(): 
                             if _is_global(stat_link_pot):
                                 _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
 
-        # 3. Caratteristiche Base (Queste sono sempre globali)
+        # 3. Caratteristiche Base
         cb = self.caratteristiche_base
         if cb:
             for l in CaratteristicaModificatore.objects.filter(caratteristica__nome__in=cb.keys()).select_related('caratteristica', 'statistica_modificata'):

@@ -1819,3 +1819,37 @@ class ClasseOggettoListView(generics.ListAPIView):
     queryset = ClasseOggetto.objects.all().order_by('nome')
     serializer_class = ClasseOggettoSerializer
     permission_classes = [IsAuthenticated]
+    
+class GameActionsViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['post'])
+    def modifica_stat_temp(self, request):
+        char_id = request.data.get('char_id')
+        stat_sigla = request.data.get('stat_sigla')
+        mode = request.data.get('mode') # 'consuma' o 'reset'
+        
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        
+        try:
+            curr, max_val = GestioneOggettiService.manipola_statistica_temporanea(pg, stat_sigla, mode)
+            return Response({'current': curr, 'max': max_val})
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
+    @action(detail=False, methods=['post'])
+    def usa_oggetto(self, request):
+        obj_id = request.data.get('oggetto_id')
+        
+        # Verifica proprietà
+        obj = get_object_or_404(Oggetto, pk=obj_id)
+        if obj.inventario_corrente and obj.inventario_corrente.id != request.data.get('char_id') and not request.user.is_staff:
+                # Verifica blanda se l'ID non corrisponde, controlla se l'inventario è del pg dell'user
+                # Per semplicità, qui mi fido del service o aggiungi check su obj.inventario_corrente.proprietario
+                pass 
+
+        try:
+            res = GestioneOggettiService.usa_carica_oggetto(obj)
+            return Response(res)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=400)

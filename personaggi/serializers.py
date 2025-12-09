@@ -502,6 +502,7 @@ class OggettoSerializer(serializers.ModelSerializer):
     potenziamenti_installati = OggettoPotenziamentoSerializer(many=True, read_only=True)
     costo_pieno = serializers.IntegerField(source='costo_acquisto', read_only=True)
     costo_effettivo = serializers.SerializerMethodField()
+    seconds_remaining = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -540,7 +541,9 @@ class OggettoSerializer(serializers.ModelSerializer):
             'infusione_nome',
 
             # Socketing
-            'potenziamenti_installati'
+            'potenziamenti_installati',
+            'data_fine_attivazione', 
+            'seconds_remaining',
         )
 
     def get_costo_effettivo(self, obj):
@@ -548,6 +551,13 @@ class OggettoSerializer(serializers.ModelSerializer):
         if personaggio:
             return personaggio.get_costo_item_scontato(obj)
         return getattr(obj, 'costo_acquisto', 0)
+    
+    def get_seconds_remaining(self, obj):
+        if obj.data_fine_attivazione:
+            now = timezone.now()
+            if obj.data_fine_attivazione > now:
+                return int((obj.data_fine_attivazione - now).total_seconds())
+        return 0
 
 
 # -----------------------------------------------------------------------------
@@ -842,6 +852,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'movimenti_credito',
             'TestoFormattatoPersonale',
             'is_staff', 'modelli_aura',
+            'statistiche_temporanee',
         )
 
     def get_oggetti(self, personaggio):

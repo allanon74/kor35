@@ -47,6 +47,8 @@ router.register(r'oggetti', views.OggettoViewSet, basename='oggetti') # Era fuor
 
 router.register(r'richieste-assemblaggio', views.RichiestaAssemblaggioViewSet, basename='richieste-assemblaggio') # <-- AGGIUNTO
 
+router.register(r'game', views.GameActionsViewSet, basename='game')
+
 urlpatterns = [
     
     path('auth/', MyAuthToken.as_view()),

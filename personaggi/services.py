@@ -447,6 +447,57 @@ class GestioneOggettiService:
                 
         return True
 
+    @staticmethod
+    def usa_carica_oggetto(oggetto):
+        """
+        Consuma una carica e avvia il timer se previsto.
+        """
+        if oggetto.cariche_attuali <= 0:
+            raise ValidationError("Oggetto scarico.")
+            
+        with transaction.atomic():
+            oggetto.cariche_attuali -= 1
+            
+            # Gestione Timer
+            infusione = oggetto.infusione_generatrice
+            attiva_timer = False
+            if infusione and infusione.durata_attivazione > 0:
+                durata = infusione.durata_attivazione
+                oggetto.data_fine_attivazione = timezone.now() + timedelta(seconds=durata)
+                attiva_timer = True
+            
+            oggetto.save()
+            
+        return {
+            "cariche": oggetto.cariche_attuali, 
+            "attivo_fino_a": oggetto.data_fine_attivazione,
+            "has_timer": attiva_timer
+        }
+    
+    @staticmethod
+    def manipola_statistica_temporanea(personaggio, stat_sigla, operazione):
+        """
+        Operazione: 'consuma' (-1), 'reset' (torna al max).
+        """
+        # Trova la statistica e il suo valore MASSIMO attuale
+        valore_max = personaggio.get_valore_statistica(stat_sigla)
+        
+        currents = personaggio.statistiche_temporanee or {}
+        # Se non esiste nel JSON, parte dal massimo
+        valore_attuale = currents.get(stat_sigla, valore_max)
+        
+        if operazione == 'consuma':
+            if valore_attuale > 0:
+                valore_attuale -= 1
+        elif operazione == 'reset':
+            valore_attuale = valore_max
+            
+        currents[stat_sigla] = valore_attuale
+        personaggio.statistiche_temporanee = currents
+        personaggio.save()
+        
+        return valore_attuale, valore_max
+    
 
 class GestioneCraftingService:
 
