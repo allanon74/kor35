@@ -65,16 +65,41 @@ class StatisticaSerializer(serializers.ModelSerializer):
 
 
 class PunteggioSerializer(serializers.ModelSerializer):
+    produce_mod = serializers.SerializerMethodField()
+    produce_materia = serializers.SerializerMethodField()
+    produce_innesti = serializers.SerializerMethodField()
+    produce_mutazioni = serializers.SerializerMethodField()
     class Meta:
         model = Punteggio
+        
         fields = (
             'id', # È sempre utile avere l'ID anche nel serializer base
             'nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 
             'icona_cerchio_html', 'icona_cerchio_inverted_html', 
             'colore', 'aure_infusione_consentite', 'ordine',
             # AGGIUNTI QUESTI:
-            'produce_mod', 'produce_materia', 'produce_innesti', 'produce_mutazioni'
+            'produce_mod', 'produce_materia', 'produce_innesti', 'produce_mutazioni',
+            'produce_aumenti', 
+            'produce_potenziamenti',
+            'nome_tipo_aumento',
+            'nome_tipo_potenziamento',
+            'nome_tipo_tessitura',
+            'spegne_a_zero_cariche',
+            'potenziamenti_multi_slot',
         )
+    
+    def get_produce_mod(self, obj):
+        # Logica: È un mod se produce potenziamenti ed è tecnologico (es. nome='Mod' o spegne a zero cariche)
+        return obj.produce_potenziamenti and obj.nome_tipo_potenziamento == 'Mod'
+
+    def get_produce_materia(self, obj):
+        return obj.produce_potenziamenti and obj.nome_tipo_potenziamento == 'Materia'
+
+    def get_produce_innesti(self, obj):
+        return obj.produce_aumenti and obj.nome_tipo_aumento == 'Innesto'
+
+    def get_produce_mutazioni(self, obj):
+        return obj.produce_aumenti and obj.nome_tipo_aumento == 'Mutazione'
 
 
 class PunteggioSmallSerializer(serializers.ModelSerializer):
@@ -121,6 +146,10 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     has_models = serializers.SerializerMethodField()
     aura_id = serializers.SerializerMethodField()
     caratteristica_associata_nome = serializers.SerializerMethodField()
+    produce_mod = serializers.SerializerMethodField()
+    produce_materia = serializers.SerializerMethodField()
+    produce_innesti = serializers.SerializerMethodField()
+    produce_mutazioni = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
@@ -137,7 +166,33 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'produce_materia', 
             'produce_innesti', 
             'produce_mutazioni',
+            'stat_costo_creazione_infusione', 'stat_costo_creazione_tessitura',
+            'stat_costo_acquisto_infusione', 'stat_costo_acquisto_tessitura',
+            'stat_costo_invio_proposta_infusione', 'stat_costo_invio_proposta_tessitura',
+            'stat_costo_forgiatura', 'stat_tempo_forgiatura',
+            
+            # --- CAMPI AGGIORNATI (Nuova struttura) ---
+            'produce_aumenti', 
+            'produce_potenziamenti',
+            'nome_tipo_aumento',
+            'nome_tipo_potenziamento',
+            'nome_tipo_tessitura',
+            'spegne_a_zero_cariche',
+            'potenziamenti_multi_slot'
         )
+        
+    def get_produce_mod(self, obj):
+        # Logica: È un mod se produce potenziamenti ed è tecnologico (es. nome='Mod' o spegne a zero cariche)
+        return obj.produce_potenziamenti and (obj.nome_tipo_potenziamento == 'Mod' or obj.spegne_a_zero_cariche)
+
+    def get_produce_materia(self, obj):
+        return obj.produce_potenziamenti and obj.nome_tipo_potenziamento == 'Materia'
+
+    def get_produce_innesti(self, obj):
+        return obj.produce_aumenti and obj.nome_tipo_aumento == 'Innesto'
+
+    def get_produce_mutazioni(self, obj):
+        return obj.produce_aumenti and obj.nome_tipo_aumento == 'Mutazione'
         
     def get_base_url(self):
         request = self.context.get('request')

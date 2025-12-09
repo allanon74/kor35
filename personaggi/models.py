@@ -337,6 +337,12 @@ class Punteggio(Tabella):
     # NUOVA LOGICA:
     produce_aumenti = models.BooleanField(default=False, verbose_name="Produce Aumenti (Innesti/Mutazioni)")
     produce_potenziamenti = models.BooleanField(default=False, verbose_name="Produce Potenziamenti (Mod/Materia)")
+    # Nomi personalizzati per la generazione oggetti
+    # Es: "Innesto" per Tecnologico, "Mutazione" per Innato
+    nome_tipo_aumento = models.CharField(max_length=50, blank=True, null=True, help_text="Es. Innesto, Mutazione")
+    # Es: "Mod" per Tecnologico, "Materia" per Mondano
+    nome_tipo_potenziamento = models.CharField(max_length=50, blank=True, null=True, help_text="Es. Mod, Materia")
+    nome_tipo_tessitura = models.CharField(max_length=50, blank=True, null=True, help_text="Es. Mod, Materia")
     # --- NUOVE REGOLE DI FUNZIONAMENTO ---
     spegne_a_zero_cariche = models.BooleanField(default=False, verbose_name="Si spegne a 0 cariche? (Tecnologico)")
     potenziamenti_multi_slot = models.BooleanField(default=False, verbose_name="Multi-Slot? (Più copie sullo stesso oggetto)")
