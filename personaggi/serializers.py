@@ -466,6 +466,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     """
     infusione_nome = serializers.CharField(source='infusione_generatrice.nome', read_only=True)
     tipo_oggetto_display = serializers.CharField(source='get_tipo_oggetto_display', read_only=True)
+    is_active = serializers.BooleanField(read_only=True) # 
 
     class Meta:
         model = Oggetto
@@ -475,7 +476,8 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'tipo_oggetto',
             'tipo_oggetto_display',
             'cariche_attuali',
-            'infusione_nome'
+            'infusione_nome', 'descrizione',
+            'is_active', 
         ]
 
 
@@ -503,6 +505,7 @@ class OggettoSerializer(serializers.ModelSerializer):
     costo_pieno = serializers.IntegerField(source='costo_acquisto', read_only=True)
     costo_effettivo = serializers.SerializerMethodField()
     seconds_remaining = serializers.SerializerMethodField()
+    is_active = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Oggetto
@@ -544,6 +547,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'potenziamenti_installati',
             'data_fine_attivazione', 
             'seconds_remaining',
+            'is_active',
         )
 
     def get_costo_effettivo(self, obj):

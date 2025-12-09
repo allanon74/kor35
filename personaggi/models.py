@@ -852,6 +852,41 @@ class Oggetto(A_vista):
     cariche_attuali = models.IntegerField(default=0)
     oggetto_base_generatore = models.ForeignKey(OggettoBase, on_delete=models.SET_NULL, null=True, blank=True, related_name='istanze_generate', help_text="Se creato dal negozio, punta al template originale.")
     data_fine_attivazione = models.DateTimeField(null=True, blank=True, help_text="Se impostato, l'oggetto è attivo fino a questa data.")
+    
+    def is_active(self):
+        """
+        Calcola se l'oggetto è attivo.
+        Regole:
+        1. DEVE essere Equipaggiato OPPURE Ospitato su un oggetto attivo (Gerarchia).
+        2. Se ha un'aura 'spegne_a_zero_cariche', DEVE avere cariche > 0.
+        3. Se ha un timer 'data_fine_attivazione', questo NON deve essere scaduto.
+        """
+        now = timezone.now()
+
+        # 1. CONTROLLO GERARCHICO
+        fisicamente_attivo = False
+        if self.is_equipaggiato:
+            fisicamente_attivo = True
+        elif self.ospitato_su:
+            # Ricorsione: sono attivo se il mio contenitore è attivo
+            if self.ospitato_su.is_active():
+                fisicamente_attivo = True
+        
+        if not fisicamente_attivo:
+            return False
+
+        # 2. CONTROLLO AURA (Cariche)
+        # Verifica se l'oggetto deriva da un'aura tecnologica che si spegne a 0
+        if self.aura and self.aura.spegne_a_zero_cariche:
+            if self.cariche_attuali <= 0:
+                return False
+
+        # 3. CONTROLLO TIMER (Tempo)
+        if self.data_fine_attivazione:
+            if self.data_fine_attivazione <= now:
+                return False
+        
+        return True
 
     @property
     def livello(self):
@@ -905,10 +940,17 @@ class Personaggio(Inventario):
     statistiche_temporanee = models.JSONField(default=dict, blank=True, verbose_name="Valori Correnti Statistiche")
     
     class Meta: verbose_name="Personaggio"; verbose_name_plural="Personaggi"
-    def __str__(self): return self.nome
-    def aggiungi_log(self, t): PersonaggioLog.objects.create(personaggio=self, testo_log=t)
-    def modifica_crediti(self, i, d): CreditoMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
-    def modifica_pc(self, i, d): PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+    def __str__(self): 
+        return self.nome
+    
+    def aggiungi_log(self, t): 
+        PersonaggioLog.objects.create(personaggio=self, testo_log=t)
+    
+    def modifica_crediti(self, i, d): 
+        CreditoMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+    
+    def modifica_pc(self, i, d): 
+        PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
     
     @property
     def crediti(self):
