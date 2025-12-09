@@ -342,7 +342,7 @@ class Punteggio(Tabella):
     nome_tipo_aumento = models.CharField(max_length=50, blank=True, null=True, help_text="Es. Innesto, Mutazione")
     # Es: "Mod" per Tecnologico, "Materia" per Mondano
     nome_tipo_potenziamento = models.CharField(max_length=50, blank=True, null=True, help_text="Es. Mod, Materia")
-    nome_tipo_tessitura = models.CharField(max_length=50, blank=True, null=True, help_text="Es. Mod, Materia")
+    nome_tipo_tessitura = models.CharField(max_length=50, blank=True, null=True, help_text="Es. Incantesimo, Preghiera...")
     # --- NUOVE REGOLE DI FUNZIONAMENTO ---
     spegne_a_zero_cariche = models.BooleanField(default=False, verbose_name="Si spegne a 0 cariche? (Tecnologico)")
     potenziamenti_multi_slot = models.BooleanField(default=False, verbose_name="Multi-Slot? (Più copie sullo stesso oggetto)")
