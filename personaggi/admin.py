@@ -679,8 +679,9 @@ class TracciamentoInventarioInline(admin.TabularInline):
 
 @admin.register(Oggetto)
 class OggettoAdmin(SModelAdmin):
-    list_display = ['nome', 'tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'livello', 'costo_acquisto', 'cariche_attuali', 'get_inventario_attuale']
+    list_display = ['nome', 'attacco_base', 'tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'livello', 'costo_acquisto', 'cariche_attuali', 'get_inventario_attuale', ]
     list_filter = ['tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'in_vendita', 'aura']
+    list_editable =['attacco_base', ]
     search_fields = ['nome', 'testo']
     autocomplete_fields = ['aura', 'infusione_generatrice', 'ospitato_su', 'classe_oggetto']
     readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
