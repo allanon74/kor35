@@ -345,6 +345,23 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         return ""
     
     testo_completo = testo_out + testo_metatalenti
+    # sezione aggiunta come prova
+    if context:
+        if context.get('elemento'):
+            elem_obj = context['elemento']
+            repl = getattr(elem_obj, 'dichiarazione', None) or (elem_obj.mattone.dichiarazione if hasattr(elem_obj, 'mattone') else elem_obj.nome)
+            testo_completo = testo_completo.replace("{elem}", repl)
+            formula_out = formula_out.replace("{elem}", repl)
+        
+        rango_val = base_values.get('rango')
+        if rango_val is None and statistiche_base:
+             r_obj = next((x for x in statistiche_base if getattr(x.statistica, 'nome', '').lower() == "rango"), None)
+             if r_obj: rango_val = r_obj.valore_base
+        if rango_val is not None:
+             r_txt = get_testo_rango(rango_val)
+             testo_completo = testo_completo.replace("{rango}", r_txt)
+             formula_out = formula_out.replace("{rango}", r_txt)
+    # fine sezione aggiunte
     
     # Esegue le sostituzioni
     pattern_if = re.compile(r'\{if\s+(.+?)\}(.*?)\{endif\}', re.DOTALL | re.IGNORECASE)
