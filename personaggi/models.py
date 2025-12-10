@@ -855,38 +855,36 @@ class Oggetto(A_vista):
     
     def is_active(self):
         """
-        Calcola se l'oggetto è attivo.
-        Regole:
-        1. DEVE essere Equipaggiato OPPURE Ospitato su un oggetto attivo (Gerarchia).
-        2. Se ha un'aura 'spegne_a_zero_cariche', DEVE avere cariche > 0.
-        3. Se ha un timer 'data_fine_attivazione', questo NON deve essere scaduto.
+        Determina se l'oggetto è attivo.
+        Ordine di priorità:
+        1. Se ha 'spegne_a_zero_cariche' e cariche <= 0 -> OFF (anche se equipaggiato).
+        2. Se ha un timer scaduto -> OFF.
+        3. Se è equipaggiato -> ON.
+        4. Se è montato su un oggetto attivo -> ON.
         """
         now = timezone.now()
-
-        # 1. CONTROLLO GERARCHICO
-        fisicamente_attivo = False
-        if self.is_equipaggiato:
-            fisicamente_attivo = True
-        elif self.ospitato_su:
-            # Ricorsione: sono attivo se il mio contenitore è attivo
-            if self.ospitato_su.is_active():
-                fisicamente_attivo = True
         
-        if not fisicamente_attivo:
-            return False
-
-        # 2. CONTROLLO AURA (Cariche)
-        # Verifica se l'oggetto deriva da un'aura tecnologica che si spegne a 0
+        # 1. CHECK CARICHE (Priorità assoluta per oggetti tecnologici)
+        # Se l'aura dice che a 0 si spegne, controlliamo subito.
         if self.aura and self.aura.spegne_a_zero_cariche:
             if self.cariche_attuali <= 0:
                 return False
 
-        # 3. CONTROLLO TIMER (Tempo)
+        # 2. CHECK TIMER
         if self.data_fine_attivazione:
             if self.data_fine_attivazione <= now:
                 return False
+
+        # 3. CHECK POSIZIONAMENTO (Gerarchia)
+        if self.is_equipaggiato:
+            return True
+            
+        if self.ospitato_su:
+            # Ricorsione: sono attivo solo se il mio contenitore è attivo
+            return self.ospitato_su.is_active()
         
-        return True
+        # Se è nello zaino e non equipaggiato/montato -> OFF
+        return False
 
     @property
     def livello(self):

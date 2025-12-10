@@ -6,6 +6,7 @@ from django.utils.html import format_html
 from django.contrib.auth.models import User
 from decimal import Decimal
 
+from .models import formatta_testo_generico
 # Importa i modelli e le funzioni helper
 from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
@@ -512,6 +513,8 @@ class OggettoSerializer(serializers.ModelSerializer):
     durata_totale = serializers.SerializerMethodField()
     costo_ricarica = serializers.SerializerMethodField()
     testo_ricarica = serializers.SerializerMethodField()
+    
+    attacco_formattato = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -543,6 +546,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'is_equipaggiato',
             'slot_corpo',
             'attacco_base',
+            'attacco_formattato',
 
             # Gestione Cariche e Origine
             'cariche_attuali',
@@ -556,6 +560,23 @@ class OggettoSerializer(serializers.ModelSerializer):
             'is_active',
             'cariche_massime', 'durata_totale', 'testo_ricarica', 'costo_ricarica', 
         )
+
+    def get_attacco_formattato(self, obj):
+        if not obj.attacco_base:
+            return None
+        
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            # Usiamo la funzione di utility del model per risolvere le graffe {}
+            # Passiamo l'attacco come "formula" e nessun testo descrittivo
+            return formatta_testo_generico(
+                None, 
+                formula=obj.attacco_base, 
+                personaggio=personaggio, 
+                solo_formula=True
+            ).replace("<strong>Formula:</strong>", "").strip()
+        
+        return obj.attacco_base
 
     def get_costo_effettivo(self, obj):
         personaggio = self.context.get('personaggio')

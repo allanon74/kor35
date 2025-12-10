@@ -1827,20 +1827,18 @@ class GameActionsViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def modifica_stat_temp(self, request):
-        """
-        Modifica una statistica temporanea (HP, Mana, ecc.) nel JSON del personaggio.
-        """
         char_id = request.data.get('char_id')
         stat_sigla = request.data.get('stat_sigla')
-        mode = request.data.get('mode') # 'consuma' o 'reset'
+        mode = request.data.get('mode') 
         
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
-        
-        # Recupera il valore massimo calcolato
         val_max = pg.get_valore_statistica(stat_sigla)
         
-        # Recupera il valore corrente (default = max)
-        current = pg.statistiche_temporanee.get(stat_sigla, val_max)
+        # Inizializza se manca (importante!)
+        if stat_sigla not in pg.statistiche_temporanee:
+            pg.statistiche_temporanee[stat_sigla] = val_max
+
+        current = pg.statistiche_temporanee[stat_sigla]
         
         nuovo_valore = current
         if mode == 'consuma':
@@ -1848,9 +1846,10 @@ class GameActionsViewSet(viewsets.ViewSet):
         elif mode == 'reset':
             nuovo_valore = val_max
             
-        # Salva nel JSONField
         pg.statistiche_temporanee[stat_sigla] = nuovo_valore
-        pg.save(update_fields=['statistiche_temporanee'])
+        
+        # FORZA IL SALVATAGGIO DEL CAMPO JSON
+        pg.save(update_fields=['statistiche_temporanee']) 
         
         return Response({'current': nuovo_valore, 'max': val_max})
 
