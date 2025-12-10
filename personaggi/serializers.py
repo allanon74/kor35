@@ -469,6 +469,14 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     tipo_oggetto_display = serializers.CharField(source='get_tipo_oggetto_display', read_only=True)
     is_active = serializers.BooleanField(read_only=True) # 
     descrizione = serializers.CharField(source='testo', read_only=True)
+    cariche_massime = serializers.SerializerMethodField()
+    durata_totale = serializers.SerializerMethodField()
+    costo_ricarica = serializers.SerializerMethodField()
+    testo_ricarica = serializers.SerializerMethodField()
+    seconds_remaining = serializers.SerializerMethodField()
+    TestoFormattato = serializers.CharField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
+    
 
     class Meta:
         model = Oggetto
@@ -480,8 +488,31 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'cariche_attuali',
             'infusione_nome', 'descrizione',
             'is_active', 
+            'TestoFormattato',
+            'cariche_massime', 'durata_totale', 'costo_ricarica', 'testo_ricarica', 'seconds_remaining',
+            'is_active',
         ]
 
+    def get_cariche_massime(self, obj):
+        if obj.infusione_generatrice and obj.infusione_generatrice.statistica_cariche:
+            return obj.infusione_generatrice.statistica_cariche.valore_base_predefinito
+        return 0
+
+    def get_durata_totale(self, obj):
+        return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0
+
+    def get_costo_ricarica(self, obj):
+        return obj.infusione_generatrice.costo_ricarica_crediti if obj.infusione_generatrice else 0
+
+    def get_testo_ricarica(self, obj):
+        return obj.infusione_generatrice.metodo_ricarica if obj.infusione_generatrice else ""
+
+    def get_seconds_remaining(self, obj):
+        if obj.data_fine_attivazione:
+            now = timezone.now()
+            if obj.data_fine_attivazione > now:
+                return int((obj.data_fine_attivazione - now).total_seconds())
+        return 0
 
 # -----------------------------------------------------------------------------
 # SERIALIZER PER OGGETTO (COMPLETO)
