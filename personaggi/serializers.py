@@ -476,6 +476,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     seconds_remaining = serializers.SerializerMethodField()
     TestoFormattato = serializers.CharField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
+    spegne_a_zero_cariche = serializers.SerializerMethodField()
     
 
     class Meta:
@@ -490,8 +491,12 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'is_active', 
             'TestoFormattato',
             'cariche_massime', 'durata_totale', 'costo_ricarica', 'testo_ricarica', 'seconds_remaining',
-            'is_active',
+            'is_active', 'spegne_a_zero_cariche', 
         ]
+    
+    def get_spegne_a_zero_cariche(self, obj):
+        # Recupera il flag dall'aura (Punteggio) associata all'oggetto
+        return obj.aura.spegne_a_zero_cariche if obj.aura else False
 
     def get_cariche_massime(self, obj):
         if obj.infusione_generatrice and obj.infusione_generatrice.statistica_cariche:
@@ -546,6 +551,7 @@ class OggettoSerializer(serializers.ModelSerializer):
     testo_ricarica = serializers.SerializerMethodField()
     
     attacco_formattato = serializers.SerializerMethodField()
+    spegne_a_zero_cariche = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -590,7 +596,12 @@ class OggettoSerializer(serializers.ModelSerializer):
             'seconds_remaining',
             'is_active',
             'cariche_massime', 'durata_totale', 'testo_ricarica', 'costo_ricarica', 
+            'spegne_a_zero_cariche', 
         )
+        
+        def get_spegne_a_zero_cariche(self, obj):
+        # Recupera il flag dall'aura (Punteggio) associata all'oggetto
+            return obj.aura.spegne_a_zero_cariche if obj.aura else False
 
     def get_attacco_formattato(self, obj):
         if not obj.attacco_base:
