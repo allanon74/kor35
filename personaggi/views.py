@@ -1829,29 +1829,55 @@ class GameActionsViewSet(viewsets.ViewSet):
     def modifica_stat_temp(self, request):
         char_id = request.data.get('char_id')
         stat_sigla = request.data.get('stat_sigla')
-        mode = request.data.get('mode') 
+        mode = request.data.get('mode')
+        # Leggiamo il max_value passato dal frontend (fondamentale per le zone del corpo)
+        max_val_param = request.data.get('max_value') 
         
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
-        val_max = pg.get_valore_statistica(stat_sigla)
         
-        # Inizializza se manca (importante!)
+        # 1. Determina il Valore Massimo
+        val_max = 0
+        if max_val_param is not None:
+            # Se il frontend ci dice qual è il massimo (es. PV totali), usiamo quello
+            val_max = int(max_val_param)
+        else:
+            # Altrimenti cerchiamo nel DB. 
+            # Gestiamo il caso di sigle composte (es. PV_TR -> cerca PV)
+            base_sigla = stat_sigla.split('_')[0] 
+            val_max = pg.get_valore_statistica(base_sigla)
+            # Se fallisce anche questo, fallback di sicurezza
+            if val_max == 0 and stat_sigla not in ['PG', 'PA', 'PV']: 
+                val_max = 999 
+        
+        # 2. Inizializza la statistica nel JSON se non esiste
+        # Se è la prima volta che colpiamo "Tronco", lo settiamo al massimo
         if stat_sigla not in pg.statistiche_temporanee:
             pg.statistiche_temporanee[stat_sigla] = val_max
 
-        current = pg.statistiche_temporanee[stat_sigla]
+        current = int(pg.statistiche_temporanee[stat_sigla])
         
+        # 3. Applica la logica
         nuovo_valore = current
+        
         if mode == 'consuma':
             nuovo_valore = max(0, current - 1)
+        elif mode == 'add':  # <--- MANCAVA QUESTO!
+            nuovo_valore = min(val_max, current + 1)
         elif mode == 'reset':
             nuovo_valore = val_max
             
+        # 4. Salva nel DB
         pg.statistiche_temporanee[stat_sigla] = nuovo_valore
-        
-        # FORZA IL SALVATAGGIO DEL CAMPO JSON
         pg.save(update_fields=['statistiche_temporanee']) 
         
-        return Response({'current': nuovo_valore, 'max': val_max})
+        return Response({
+            'status': 'ok',
+            'stat_sigla': stat_sigla,
+            'current': nuovo_valore, 
+            'max': val_max,
+            # Ritorniamo tutto l'oggetto aggiornato per sicurezza
+            'statistiche_temporanee': pg.statistiche_temporanee 
+        })
 
     @action(detail=False, methods=['post'])
     def usa_oggetto(self, request):
