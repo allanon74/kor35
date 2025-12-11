@@ -599,9 +599,9 @@ class OggettoSerializer(serializers.ModelSerializer):
             'spegne_a_zero_cariche', 
         )
         
-        def get_spegne_a_zero_cariche(self, obj):
-        # Recupera il flag dall'aura (Punteggio) associata all'oggetto
-            return obj.aura.spegne_a_zero_cariche if obj.aura else False
+    def get_spegne_a_zero_cariche(self, obj):
+    # Recupera il flag dall'aura (Punteggio) associata all'oggetto
+        return obj.aura.spegne_a_zero_cariche if obj.aura else False
 
     def get_attacco_formattato(self, obj):
         if not obj.attacco_base:
