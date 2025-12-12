@@ -1585,7 +1585,7 @@ class ForgiaturaInCorso(models.Model):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
     data_inizio = models.DateTimeField(default=timezone.now)
     data_fine_prevista = models.DateTimeField()
-    slot_target = models.CharField(max_length=2, blank=True, null=True) 
+    slot_target = models.CharField(max_length=4, blank=True, null=True) 
     completata = models.BooleanField(default=False)
     
     # NUOVO: Se presente, l'oggetto creato andrà a questo personaggio (es. Committente)
