@@ -1372,7 +1372,7 @@ class AssemblyValidationView(APIView):
     def post(self, request):
         """
         Controlla se l'assemblaggio è possibile tra Host e Component.
-        Restituisce info dettagliate: se possibile, se servono skill esterne, etc.
+        Restituisce struttura compatibile con ItemAssemblyModal.jsx.
         """
         char_id = request.data.get('char_id')
         host_id = request.data.get('host_id')
@@ -1382,30 +1382,40 @@ class AssemblyValidationView(APIView):
         host = get_object_or_404(Oggetto, pk=host_id)
         mod = get_object_or_404(Oggetto, pk=mod_id)
 
-        # 1. Verifica Logic/Hardware (senza skill check)
-        try:
-            # Usiamo assembla_mod in dry-run (simuliamo passando check_skills=False ma catchando errori logici)
-            # Nota: assembla_mod modifica il DB, quindi non possiamo chiamarla direttamente.
-            # Dobbiamo replicare parzialmente la logica o refactorizzare il service.
-            # Per brevità, qui replico i check "hard" rapidi o uso un try/catch con rollback atomico (trick).
-            pass
-        except:
-            pass
-            
-        # Verifica Skill PG Corrente
-        can_do_self, msg_self = GestioneOggettiService.verifica_competenza_assemblaggio(pg, host, mod)
-        
-        # Simulazione Check Hardware (Limiti classe, slot, etc.)
-        # Per semplicità, qui assumiamo che il Frontend abbia già filtrato per tipo.
-        # Un check approfondito richiederebbe di duplicare la logica del service.
-        # Per ora ci fidiamo del tentativo reale, ma restituiamo info skill.
+        # 1. Verifica Hardware (Compatibilità Fisica/Regole Classe)
+        # Questo controllo verifica se l'oggetto "entra" fisicamente e rispetta la classe
+        is_hardware_ok, hw_msg = GestioneOggettiService.verifica_compatibilita_hardware(host, mod)
 
-        return Response({
-            "can_assemble_self": can_do_self,
-            "reason_self": msg_self,
+        # 2. Verifica Competenze (Skill Personaggio)
+        # Questo controllo verifica se il personaggio ha le capacità (Aura/Stats)
+        can_do_self, skill_msg = GestioneOggettiService.verifica_competenza_assemblaggio(pg, host, mod)
+
+        # Costruzione Risposta per il Frontend
+        # 'is_valid': True se l'operazione è tecnicamente possibile (Hardware OK)
+        # 'can_do_self': True se l'utente corrente può farla (Skill OK)
+        response_data = {
+            "is_valid": is_hardware_ok,          
+            "error_message": None,               
+            "warning": None,                     
+            
+            "can_do_self": can_do_self,          
+            "requires_skill": not can_do_self,   
+            
+            "can_use_academy": is_hardware_ok,   
+            
             "host_name": host.nome,
-            "mod_name": mod.nome
-        })
+            "mod_name": mod.nome,
+            "required_skill_name": "Aura Tecnologica" if host.is_tecnologico else "Aura Mondana - Assemblatore"
+        }
+
+        if not is_hardware_ok:
+            # Se l'hardware non è compatibile, è un errore bloccante
+            response_data["error_message"] = hw_msg
+        elif not can_do_self:
+            # Se manca solo la skill, è un warning (puoi chiedere a un tecnico)
+            response_data["warning"] = skill_msg
+
+        return Response(response_data)
 
 class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]

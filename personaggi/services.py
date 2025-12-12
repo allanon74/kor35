@@ -1,6 +1,7 @@
 # personaggi/services.py
 
 from django.db import transaction
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.shortcuts import get_list_or_404
@@ -133,47 +134,73 @@ class GestioneOggettiService:
     def verifica_compatibilita_hardware(host: Oggetto, componente: Oggetto):
         """
         Verifica se l'oggetto host può fisicamente ospitare il componente.
-        Regole:
-        1. Host deve essere FISICO (FIS).
-        2. Componente deve essere POTENZIAMENTO (MOD/MAT).
-        3. Le caratteristiche del componente devono essere permesse dalla ClasseOggetto dell'Host.
+        Gestisce FIS, MOD, MAT e POT.
         """
         # 1. Controllo Tipi Base
         if host.tipo_oggetto != TIPO_OGGETTO_FISICO:
             return False, "L'oggetto ospite deve essere un Oggetto Fisico."
         
-        if componente.tipo_oggetto not in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, TIPO_OGGETTO_POTENZIAMENTO]:
-            return False, "Il componente deve essere una Mod o Materia. (compatibility) o Potenziamento (ACTUAL)"
+        # Tipi permessi come componenti
+        allowed_types = [TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, TIPO_OGGETTO_POTENZIAMENTO]
+        if componente.tipo_oggetto not in allowed_types:
+            return False, "Il componente deve essere un Potenziamento (Mod o Materia)."
 
         # 2. Controllo Classe Oggetto (Regole di Compatibilità)
         classe = host.classe_oggetto
         if not classe:
-            # Se l'oggetto non ha classe, assumiamo sia generico e accetti tutto (o nulla, a scelta)
-            return True, "Oggetto generico (compatibilità libera)."
+            # Se l'oggetto non ha classe definita, assumiamo compatibilità di base (oggetto generico)
+            return True, "Oggetto generico."
 
-        # Recuperiamo le caratteristiche del componente (i "mattoni" che lo compongono)
-        # Usiamo i componenti salvati sull'oggetto fisico
+        # Recupera caratteristiche del componente per il confronto con la whitelist
         comps = GestioneOggettiService._get_caratteristiche_componente(componente)
         ids_caratteristiche = [c.caratteristica.id for c in comps]
-        
 
-        # 3. Verifica Whitelist per Tipo
-        if componente.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+        # 3. Determinazione Tipo Logico (Mod vs Materia)
+        # Un oggetto è MATERIA se: è tipo MAT oppure è POT e NON è tecnologico.
+        # Un oggetto è MOD se: è tipo MOD oppure è POT ed È tecnologico.
+        
+        is_logic_materia = (
+            componente.tipo_oggetto == TIPO_OGGETTO_MATERIA or 
+            (componente.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and not componente.is_tecnologico)
+        )
+        
+        is_logic_mod = (
+            componente.tipo_oggetto == TIPO_OGGETTO_MOD or 
+            (componente.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and componente.is_tecnologico)
+        )
+
+        # 4. Verifica Whitelist per Tipo Logico
+        if is_logic_materia:
             # Whitelist Materia
             permessi = list(classe.mattoni_materia_permessi.values_list('id', flat=True))
-            for c_id in ids_caratteristiche:
-                if c_id not in permessi:
-                    return False, f"Questa classe oggetto non supporta Materia con questa caratteristica."
+            # Se la lista permessi non è vuota, deve matchare. Se è vuota, blocca?
+            # Solitamente whitelist vuota = niente permesso.
+            if permessi:
+                for c_id in ids_caratteristiche:
+                    if c_id not in permessi:
+                        return False, f"Questa classe oggetto non supporta Materia con questa caratteristica."
+            # Se permessi è vuoto, e stiamo provando a montare materia -> Errore
+            elif ids_caratteristiche:
+                 return False, f"Questa classe oggetto non supporta alcuna Materia."
 
-        elif componente.tipo_oggetto == TIPO_OGGETTO_MOD:
+        elif is_logic_mod:
             # Whitelist Mod
             permessi = list(classe.limitazioni_mod.values_list('id', flat=True))
-            for c_id in ids_caratteristiche:
-                if c_id not in permessi:
-                    return False, f"Questa classe oggetto non supporta Mod con questa caratteristica."
+            
+            if permessi:
+                for c_id in ids_caratteristiche:
+                    if c_id not in permessi:
+                        return False, f"Questa classe oggetto non supporta Mod con questa caratteristica."
+            elif ids_caratteristiche:
+                 return False, f"Questa classe oggetto non supporta alcuna Mod."
             
             # Controllo Max Mod Totali
-            mods_installate = host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).count()
+            # Conta sia le MOD esplicite che i POT tecnologici già installati
+            mods_installate = host.potenziamenti_installati.filter(
+                Q(tipo_oggetto=TIPO_OGGETTO_MOD) | 
+                (Q(tipo_oggetto=TIPO_OGGETTO_POTENZIAMENTO) & Q(is_tecnologico=True))
+            ).count()
+            
             if mods_installate >= classe.max_mod_totali:
                  return False, f"Slot Mod esauriti per questa classe ({mods_installate}/{classe.max_mod_totali})."
 
