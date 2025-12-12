@@ -26,13 +26,18 @@ class GestioneOggettiService:
     def calcola_cog_utilizzata(pg: Personaggio):
         """Calcola la Capacità Oggetti (COG) occupata."""
         oggetti = pg.get_oggetti().filter()
-        cog_totale = 0
-        for obj in oggetti:
-            if obj.tipo_oggetto in [TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE]:
-                cog_totale += 1
-            elif obj.tipo_oggetto == TIPO_OGGETTO_FISICO and obj.is_equipaggiato:
-                cog_totale += 1
-        return cog_totale
+        return pg.get_oggetti().filter(
+            tipo_oggetto=TIPO_OGGETTO_FISICO, 
+            is_equipaggiato=True
+        ).count()
+    
+    @staticmethod
+    def calcola_ingombranti_utilizzata(pg: Personaggio):
+        """Calcola il numero di oggetti PESANTI equipaggiati (Statistica OGP)."""
+        return pg.get_oggetti().filter(
+            is_equipaggiato=True,
+            is_pesante=True
+        ).count()
 
     @staticmethod
     def verifica_consenso(target: Personaggio, qrcode_id: str):
@@ -76,80 +81,219 @@ class GestioneOggettiService:
         return "Equipaggiato"
     
     @staticmethod
+    def _get_caratteristiche_componente(componente):
+        """Helper per recuperare i requisiti (caratteristiche) di un componente."""
+        # Prova a recuperare le caratteristiche fisiche salvate sull'oggetto
+        caratteristiche = componente.componenti.select_related('caratteristica')
+        
+        # Se vuoto (es. oggetto vecchio o creato senza componenti DB), fallback sull'infusione
+        if not caratteristiche.exists() and componente.infusione_generatrice:
+            return componente.infusione_generatrice.componenti.select_related('caratteristica')
+        
+        return caratteristiche
+    
+    @staticmethod
+    def _verifica_competenza_base(personaggio, livello_oggetto, is_tecnologico, componenti_richiesti):
+        """
+        Verifica Skills e Stats del personaggio.
+        Usato sia per montare che per smontare.
+        """
+        # 1. Verifica AURA (Punteggio ATE o AMS)
+        # "Aura Tecnologica" (ATE) o "Aura Mondana - Assemblatore" (AMS)
+        sigla_aura = 'ATE' if is_tecnologico else 'AMS'
+        
+        # Import locale per evitare cicli se necessario, o assumiamo Punteggio disponibile nel modulo
+        from .models import Punteggio 
+        
+        aura_obj = Punteggio.objects.filter(sigla=sigla_aura).first()
+        if not aura_obj:
+            # Fallback di sicurezza se le aure non sono configurate nel DB
+            return False, f"Errore Configurazione: Aura '{sigla_aura}' non trovata nel sistema."
+            
+        valore_aura = personaggio.get_valore_aura_effettivo(aura_obj)
+        
+        if valore_aura < livello_oggetto:
+            return False, f"Livello Aura insufficiente. Richiesto {aura_obj.nome} >= {livello_oggetto} (Hai {valore_aura})."
+
+        # 2. Verifica PUNTI CARATTERISTICA (Mattoni del componente)
+        punteggi_pg = personaggio.caratteristiche_base
+        
+        for comp in componenti_richiesti:
+            # Gestisce sia OggettoCaratteristica che InfusioneCaratteristica
+            nome_stat = comp.caratteristica.nome
+            val_richiesto = comp.valore
+            val_posseduto = punteggi_pg.get(nome_stat, 0)
+            
+            if val_posseduto < val_richiesto:
+                return False, f"Caratteristica insufficiente: {nome_stat} ({val_posseduto}/{val_richiesto})."
+
+        return True, "Competenza valida."
+    
+    @staticmethod
+    def verifica_compatibilita_hardware(host: Oggetto, componente: Oggetto):
+        """
+        Verifica se l'oggetto host può fisicamente ospitare il componente.
+        Regole:
+        1. Host deve essere FISICO (FIS).
+        2. Componente deve essere POTENZIAMENTO (MOD/MAT).
+        3. Le caratteristiche del componente devono essere permesse dalla ClasseOggetto dell'Host.
+        """
+        # 1. Controllo Tipi Base
+        if host.tipo_oggetto != TIPO_OGGETTO_FISICO:
+            return False, "L'oggetto ospite deve essere un Oggetto Fisico."
+        
+        if componente.tipo_oggetto not in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, TIPO_OGGETTO_POTENZIAMENTO]:
+            return False, "Il componente deve essere una Mod o Materia. (compatibility) o Potenziamento (ACTUAL)"
+
+        # 2. Controllo Classe Oggetto (Regole di Compatibilità)
+        classe = host.classe_oggetto
+        if not classe:
+            # Se l'oggetto non ha classe, assumiamo sia generico e accetti tutto (o nulla, a scelta)
+            return True, "Oggetto generico (compatibilità libera)."
+
+        # Recuperiamo le caratteristiche del componente (i "mattoni" che lo compongono)
+        # Usiamo i componenti salvati sull'oggetto fisico
+        comps = GestioneOggettiService._get_caratteristiche_componente(componente)
+        ids_caratteristiche = [c.caratteristica.id for c in comps]
+        
+
+        # 3. Verifica Whitelist per Tipo
+        if componente.tipo_oggetto == TIPO_OGGETTO_MATERIA:
+            # Whitelist Materia
+            permessi = list(classe.mattoni_materia_permessi.values_list('id', flat=True))
+            for c_id in ids_caratteristiche:
+                if c_id not in permessi:
+                    return False, f"Questa classe oggetto non supporta Materia con questa caratteristica."
+
+        elif componente.tipo_oggetto == TIPO_OGGETTO_MOD:
+            # Whitelist Mod
+            permessi = list(classe.limitazioni_mod.values_list('id', flat=True))
+            for c_id in ids_caratteristiche:
+                if c_id not in permessi:
+                    return False, f"Questa classe oggetto non supporta Mod con questa caratteristica."
+            
+            # Controllo Max Mod Totali
+            mods_installate = host.potenziamenti_installati.filter(tipo_oggetto=TIPO_OGGETTO_MOD).count()
+            if mods_installate >= classe.max_mod_totali:
+                 return False, f"Slot Mod esauriti per questa classe ({mods_installate}/{classe.max_mod_totali})."
+
+        return True, "Compatibile."
+    
+    @staticmethod
+    def verifica_competenza_assemblaggio(personaggio: Personaggio, host: Oggetto, componente: Oggetto):
+        """
+        Verifica completa per l'INSTALLAZIONE: Hardware + Skill.
+        """
+        # 1. Hardware (Entra?)
+        ok_hw, msg_hw = GestioneOggettiService.verifica_compatibilita_hardware(host, componente)
+        if not ok_hw:
+            return False, f"Incompatibilità Hardware: {msg_hw}"
+
+        # 2. Skill (Sai montarlo?)
+        comps = GestioneOggettiService._get_caratteristiche_componente(componente)
+        return GestioneOggettiService._verifica_competenza_base(
+            personaggio, host.livello, host.is_tecnologico, comps
+        )
+    
+    @staticmethod
+    def assembla_mod(assemblatore, oggetto_ospite, potenziamento, check_skills=True):
+        """
+        Esegue l'installazione fisica.
+        """
+        proprietario_items = oggetto_ospite.inventario_corrente
+        
+        # Validazioni di base
+        if not proprietario_items: raise ValidationError("Oggetto host non in inventario.")
+        if not potenziamento.inventario_corrente: raise ValidationError("Componente non in inventario.")
+        if potenziamento.inventario_corrente.id != proprietario_items.id:
+             raise ValidationError("Host e Componente devono essere nello stesso inventario.")
+        if oggetto_ospite.pk == potenziamento.pk: raise ValidationError("Loop rilevato.")
+        if potenziamento.ospitato_su: raise ValidationError("Componente già installato.")
+
+        # Validazione Regole
+        if check_skills:
+            can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(assemblatore, oggetto_ospite, potenziamento)
+            if not can_do: raise ValidationError(msg)
+
+        # Esecuzione
+        with transaction.atomic():
+            potenziamento.sposta_in_inventario(None) # Rimuove da inventario principale
+            potenziamento.ospitato_su = oggetto_ospite
+            potenziamento.save()
+            
+            if hasattr(proprietario_items, 'personaggio'):
+                msg = f"Installato {potenziamento.nome} su {oggetto_ospite.nome}."
+                if assemblatore.id != proprietario_items.personaggio.id:
+                    msg += f" (Eseguito da {assemblatore.nome})"
+                proprietario_items.personaggio.aggiungi_log(msg)
+
+    @staticmethod
+    def rimuovi_mod(assemblatore, host, mod, check_skills=True):
+        """
+        Smonta un potenziamento.
+        Check Skills: richiede competenza (Aura/Stats) ma IGNORA compatibilità hardware.
+        """
+        proprietario_items = host.inventario_corrente
+        if not proprietario_items: raise ValidationError("Oggetto host non in inventario.")
+        if mod not in host.potenziamenti_installati.all(): raise ValidationError("Componente non presente sull'host.")
+
+        if check_skills:
+            # Verifica solo le competenze del personaggio, non la compatibilità dell'oggetto
+            comps = GestioneOggettiService._get_caratteristiche_componente(mod)
+            can_do, msg = GestioneOggettiService._verifica_competenza_base(
+                assemblatore, host.livello, host.is_tecnologico, comps
+            )
+            if not can_do:
+                raise ValidationError(f"Non hai le competenze per smontare questo oggetto: {msg}")
+
+        with transaction.atomic():
+            mod.ospitato_su = None
+            mod.sposta_in_inventario(proprietario_items) # Torna all'inventario del proprietario
+            mod.save()
+            
+            if hasattr(proprietario_items, 'personaggio'):
+                msg = f"Smontato {mod.nome} da {host.nome}."
+                if assemblatore.id != proprietario_items.personaggio.id:
+                    msg += f" (Eseguito da {assemblatore.nome})"
+                proprietario_items.personaggio.aggiungi_log(msg)
+            
+        return True
+    
+    
+    @staticmethod
     def crea_oggetto_da_infusione(infusione, proprietario, nome_personalizzato=None):
         """
         Factory method: crea fisicamente l'oggetto nel database.
         """
-        
-        # 1. Determina l'Aura dell'Oggetto
         aura_oggetto = infusione.aura_infusione if infusione.aura_infusione else infusione.aura_richiesta
-
-        # 2. Determina Categoria (Aumento vs Potenziamento)
-        # Usiamo il campo tipo_risultato salvato nell'infusione (che arriva dalla proposta)
         scelta = getattr(infusione, 'tipo_risultato', 'POT')
         
-        tipo_oggetto = 'POT' # Default tecnico se qualcosa fallisce
+        tipo_oggetto = 'POT'
         prefisso_nome = "Oggetto"
         is_tecnologico = False
         
-        # Resettiamo lo slot finale: L'oggetto viene creato "in inventario", non installato.
-        # L'installazione avverrà tramite installa_innesto successivamente.
-        slot_corpo_finale = None 
-
+        if aura_oggetto.sigla == "ATE": 
+                is_tecnologico == True 
+        
         if scelta == 'AUM':
-            # --- CASO AUMENTO (Innesto / Mutazione) ---
             prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
-            
-            # Logica Sottotipo basata sull'Aura
-            # Se l'aura è soprannaturale -> MUTAZIONE, Altrimenti INNESTO
-            if aura_oggetto.is_soprannaturale:
-                tipo_oggetto = TIPO_OGGETTO_MUTAZIONE
-                is_tecnologico = False
-            else:
-                tipo_oggetto = TIPO_OGGETTO_INNESTO
-                is_tecnologico = True 
-
+            tipo_oggetto = TIPO_OGGETTO_AUMENTO
         else:
-            # --- CASO POTENZIAMENTO (Mod / Materia) ---
             prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Materia"
-            
-            # Logica Sottotipo
-            if aura_oggetto.spegne_a_zero_cariche:
-                tipo_oggetto = TIPO_OGGETTO_MOD
-                is_tecnologico = True
-            else:
-                tipo_oggetto = TIPO_OGGETTO_MATERIA
-                is_tecnologico = False
+            tipo_oggetto = TIPO_OGGETTO_POTENZIAMENTO
                 
-        # Override manuale basato su flag specifici dell'Aura se necessario
-        # (Es. se hai un'aura magica che crea tecnologia)
-        # if aura_oggetto.sigla == "ATE": is_tecnologico = True
-
-        # 3. Costruzione Nome
         nome_finale = nome_personalizzato or f"{prefisso_nome} di {infusione.nome}"
 
-        # 4. Calcolo Cariche Iniziali (Corretto)
         cariche_iniziali = 0
         if infusione.statistica_cariche:
-            # A. Cerca il valore base specifico configurato nell'infusione per questa statistica
-            #    (Es. "Cariche = 5" impostato nell'editor dell'infusione)
             stat_base_link = infusione.infusionestatisticabase_set.filter(
                 statistica=infusione.statistica_cariche
             ).first()
-            
             valore_base = stat_base_link.valore_base if stat_base_link else infusione.statistica_cariche.valore_base_predefinito
-            
-            # B. Calcola i modificatori del proprietario per questa statistica (es. Talenti che aumentano Cariche)
-            # Nota: get_valore_statistica ritorna il totale (Base PG + Mods). Noi vogliamo applicare i Mods alla Base OGGETTO.
             mods = proprietario.modificatori_calcolati.get(infusione.statistica_cariche.parametro, {'add': 0.0, 'mol': 1.0})
-            
-            # C. Formula Finale
             cariche_iniziali = int(round((valore_base + mods['add']) * mods['mol']))
-            
-            # Sicurezza: Mai negativo
             cariche_iniziali = max(0, cariche_iniziali)
 
-        # 5. Crea l'Oggetto
         nuovo_oggetto = Oggetto.objects.create(
             nome=nome_finale,
             testo=infusione.testo,
@@ -157,11 +301,11 @@ class GestioneOggettiService:
             infusione_generatrice=infusione,
             aura=aura_oggetto, 
             is_tecnologico=is_tecnologico,
-            cariche_attuali=cariche_iniziali, # Valore calcolato
-            slot_corpo=None # Inizialmente non installato
+            cariche_attuali=cariche_iniziali, 
+            slot_corpo=None,
+            is_pesante=infusione.is_pesante,
         )
 
-        # 6. Copia le Statistiche Base
         for stat_inf in infusione.infusionestatisticabase_set.all():
             OggettoStatisticaBase.objects.create(
                 oggetto=nuovo_oggetto,
@@ -169,7 +313,6 @@ class GestioneOggettiService:
                 valore_base=stat_inf.valore_base
             )
 
-        # 7. Copia Modificatori Manuali
         for stat_man in infusione.infusionestatistica_set.all():
             stat_obj = OggettoStatistica.objects.create(
                 oggetto=nuovo_oggetto,
@@ -184,14 +327,12 @@ class GestioneOggettiService:
             stat_obj.limit_a_aure.set(stat_man.limit_a_aure.all())
             stat_obj.limit_a_elementi.set(stat_man.limit_a_elementi.all())
 
-        # 8. Copia Componenti & Conversione Mattoni
         for comp in infusione.componenti.select_related('caratteristica').all():
             OggettoCaratteristica.objects.create(
                 oggetto=nuovo_oggetto,
                 caratteristica=comp.caratteristica,
                 valore=comp.valore
             )
-            
             mattone = Mattone.objects.filter(
                 aura=infusione.aura_richiesta,
                 caratteristica_associata=comp.caratteristica
@@ -219,10 +360,9 @@ class GestioneOggettiService:
                         obj_stat.limit_a_aure.set(eff.limit_a_aure.all())
                         obj_stat.limit_a_elementi.set(eff.limit_a_elementi.all())
         
-        # 9. Assegna al Personaggio (nell'inventario, non equipaggiato)
         nuovo_oggetto.sposta_in_inventario(proprietario)
-        
         return nuovo_oggetto
+    
 
     @staticmethod
     def installa_innesto(personaggio, innesto, slot):
@@ -248,99 +388,42 @@ class GestioneOggettiService:
         personaggio.aggiungi_log(f"Operazione riuscita: {innesto.nome} installato in {slot}.")
         return True
 
-    @staticmethod
-    def verifica_competenza_assemblaggio(personaggio: Personaggio, host: Oggetto, componente: Oggetto):
-        """
-        Verifica se il personaggio ha le skill e le statistiche per assemblare.
-        Restituisce (Bool, Messaggio).
-        """
-        livello_oggetto = host.livello
-        punteggi = personaggio.caratteristiche_base
+    # @staticmethod
+    # def verifica_competenza_assemblaggio(personaggio: Personaggio, host: Oggetto, componente: Oggetto):
+    #     """
+    #     Verifica se il personaggio ha le skill e le statistiche per assemblare.
+    #     Restituisce (Bool, Messaggio).
+    #     """
+    #     livello_oggetto = host.livello
+    #     punteggi = personaggio.caratteristiche_base
         
-        infusione = componente.infusione_generatrice
-        if infusione:
-            for comp_req in infusione.componenti.select_related('caratteristica').all():
-                nome_stat = comp_req.caratteristica.nome
-                val_richiesto = comp_req.valore
-                val_posseduto = punteggi.get(nome_stat, 0)
+    #     infusione = componente.infusione_generatrice
+    #     if infusione:
+    #         for comp_req in infusione.componenti.select_related('caratteristica').all():
+    #             nome_stat = comp_req.caratteristica.nome
+    #             val_richiesto = comp_req.valore
+    #             val_posseduto = punteggi.get(nome_stat, 0)
                 
-                if val_posseduto < val_richiesto:
-                    return False, f"Caratteristica insufficiente: {nome_stat} ({val_posseduto}/{val_richiesto})."
+    #             if val_posseduto < val_richiesto:
+    #                 return False, f"Caratteristica insufficiente: {nome_stat} ({val_posseduto}/{val_richiesto})."
 
-        # Verifica Abilità Specifica (Aura Tecnologica o Mondana)
-        if host.is_tecnologico:
-            abilita_necessaria = "Aura Tecnologica" 
-            valore_abilita = personaggio.get_valore_statistica('ATEC')
-            if valore_abilita == 0:
-                 if personaggio.abilita_possedute.filter(nome__icontains=abilita_necessaria).exists():
-                     valore_abilita = livello_oggetto 
-        else:
-            abilita_necessaria = "Aura Mondana - Assemblatore"
-            valore_abilita = 0
-            if personaggio.abilita_possedute.filter(nome__icontains=abilita_necessaria).exists():
-                 valore_abilita = livello_oggetto 
+    #     # Verifica Abilità Specifica (Aura Tecnologica o Mondana)
+    #     if host.is_tecnologico:
+    #         abilita_necessaria = "Aura Tecnologica" 
+    #         valore_abilita = personaggio.get_valore_statistica('ATEC')
+    #         if valore_abilita == 0:
+    #              if personaggio.abilita_possedute.filter(nome__icontains=abilita_necessaria).exists():
+    #                  valore_abilita = livello_oggetto 
+    #     else:
+    #         abilita_necessaria = "Aura Mondana - Assemblatore"
+    #         valore_abilita = 0
+    #         if personaggio.abilita_possedute.filter(nome__icontains=abilita_necessaria).exists():
+    #              valore_abilita = livello_oggetto 
 
-        return True, "Competenza valida."
+    #     return True, "Competenza valida."
 
-    @staticmethod
-    def assembla_mod(assemblatore, oggetto_ospite, potenziamento, check_skills=True):
-        """
-        Gestisce l'installazione di Mod/Materia su un oggetto ospite.
-        """
-        proprietario_items = oggetto_ospite.inventario_corrente
-        
-        if not proprietario_items: raise ValidationError("Oggetto host non in inventario.")
-        
-        if not potenziamento.inventario_corrente: raise ValidationError("Il potenziamento non è in nessun inventario.")
-        if potenziamento.inventario_corrente.id != proprietario_items.id:
-             raise ValidationError("Host e Componente devono trovarsi nello stesso inventario.")
+ 
 
-        if oggetto_ospite.pk == potenziamento.pk: raise ValidationError("Non puoi montare un oggetto su se stesso.")
-        if potenziamento.ospitato_su: raise ValidationError("Il potenziamento è già montato altrove.")
-
-        if check_skills:
-            can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(assemblatore, oggetto_ospite, potenziamento)
-            if not can_do: raise ValidationError(msg)
-
-        with transaction.atomic():
-            potenziamento.sposta_in_inventario(None)
-            potenziamento.ospitato_su = oggetto_ospite
-            potenziamento.save()
-            
-            if hasattr(proprietario_items, 'personaggio'):
-                msg = f"Installato {potenziamento.nome} su {oggetto_ospite.nome}."
-                if assemblatore.id != proprietario_items.personaggio.id:
-                    msg += f" (Eseguito da {assemblatore.nome})"
-                proprietario_items.personaggio.aggiungi_log(msg)
-
-    @staticmethod
-    def rimuovi_mod(assemblatore, host, mod, check_skills=True):
-        """
-        Smonta un potenziamento.
-        """
-        proprietario_items = host.inventario_corrente
-        if not proprietario_items: raise ValidationError("Oggetto host non in inventario.")
-        
-        if mod not in host.potenziamenti_installati.all(): raise ValidationError("Questo modulo non è installato sull'oggetto specificato.")
-
-        if check_skills:
-            can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(assemblatore, host, mod)
-            if not can_do: raise ValidationError(f"Non hai le competenze per smontare questo oggetto: {msg}")
-
-        with transaction.atomic():
-            host.potenziamenti_installati.remove(mod)
-            mod.ospitato_su = None
-            mod.sposta_in_inventario(proprietario_items) 
-            mod.save()
-            host.save()
-            
-            if hasattr(proprietario_items, 'personaggio'):
-                msg = f"Smontato {mod.nome} da {host.nome}."
-                if assemblatore.id != proprietario_items.personaggio.id:
-                    msg += f" (Eseguito da {assemblatore.nome})"
-                proprietario_items.personaggio.aggiungi_log(msg)
-            
-        return True
 
     @staticmethod
     def elabora_richiesta_assemblaggio(richiesta_id, esecutore):

@@ -757,6 +757,11 @@ class Infusione(Tecnica):
         default=SCELTA_RISULTATO_POTENZIAMENTO,
         verbose_name="Tipo Oggetto Finale"
     )
+    is_pesante = models.BooleanField(
+        default=False, 
+        verbose_name="Genera un oggetto Pesante?", 
+        help_text="Se attivo, L'oggetto generato conta per il limite OGP (Oggetti Pesanti)."
+    )
 
     class Meta: verbose_name = "Infusione"; verbose_name_plural = "Infusioni"
     
