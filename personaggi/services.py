@@ -46,7 +46,7 @@ class GestioneOggettiService:
 
     @staticmethod
     def equipaggia_oggetto(personaggio: Personaggio, oggetto: Oggetto):
-        """Gestisce l'azione Equipaggia/Disequipaggia."""
+        """Gestisce l'azione Equipaggia/Disequipaggia con controlli OGP e COG."""
         inv_corrente = oggetto.inventario_corrente
         if not inv_corrente or inv_corrente.id != personaggio.id:
              raise ValidationError(f"Non possiedi l'oggetto '{oggetto.nome}'.")
@@ -56,16 +56,25 @@ class GestioneOggettiService:
             oggetto.save()
             return "Disequipaggiato"
         
+        # 1. Controllo COG (Esistente)
         cog_used = GestioneOggettiService.calcola_cog_utilizzata(personaggio)
         cog_max = personaggio.get_valore_statistica('COG')
         
         if cog_used >= cog_max:
              raise ValidationError(f"Capacità Oggetti raggiunta ({cog_used}/{cog_max}).")
         
+        # 2. Controllo OGP (NUOVO - Oggetti Pesanti)
+        if oggetto.is_pesante:
+            ogp_used = GestioneOggettiService.calcola_ingombranti_utilizzata(personaggio)
+            ogp_max = personaggio.get_valore_statistica('OGP') # Cerca la statistica 'OGP'
+            
+            if ogp_used >= ogp_max:
+                raise ValidationError(f"Limite Carico Pesante raggiunto ({ogp_used}/{ogp_max}). Non puoi equipaggiare altri oggetti pesanti.")
+
         oggetto.is_equipaggiato = True
         oggetto.save()
         return "Equipaggiato"
-
+    
     @staticmethod
     def crea_oggetto_da_infusione(infusione, proprietario, nome_personalizzato=None):
         """
