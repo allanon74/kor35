@@ -89,6 +89,15 @@ SLOT_CORPO_CHOICES = [
     (SLOT_GAMBA_SX, 'Gamba Sx'),
 ]
 
+SCELTA_RISULTATO_POTENZIAMENTO = 'POT'      # Crea un oggetto Potenziamento (Tecnologico) / Materia (Mondano)
+SCELTA_RISULTATO_AUMENTO = 'AUM'  # Crea un Innesto (Tecnologico) / Mutazione (Innata)
+
+SCELTA_RISULTATO_CHOICES = [
+    (SCELTA_RISULTATO_POTENZIAMENTO, 'Potenziamento (Mod/Materia)'),
+    (SCELTA_RISULTATO_AUMENTO, 'Aumento Corporeo (Innesto/Mutazione)'),
+]
+
+
 def get_testo_rango(valore):
     try: valore = int(valore)
     except (ValueError, TypeError): return ""
@@ -736,6 +745,12 @@ class Infusione(Tecnica):
         max_length=50, 
         blank=True, null=True, 
         verbose_name="Slot Corpo Consentiti"
+    )
+    tipo_risultato = models.CharField(
+        max_length=3, 
+        choices=SCELTA_RISULTATO_CHOICES, 
+        default=SCELTA_RISULTATO_POTENZIAMENTO,
+        verbose_name="Tipo Oggetto Finale"
     )
 
     class Meta: verbose_name = "Infusione"; verbose_name_plural = "Infusioni"
@@ -1551,6 +1566,13 @@ class PropostaTecnica(models.Model):
         max_length=50, 
         blank=True, null=True, 
         help_text="Lista slot separati da virgola (es. HD1,TR1)"
+    )
+    
+    tipo_risultato_atteso = models.CharField(
+        max_length=3, 
+        choices=SCELTA_RISULTATO_CHOICES, 
+        default=SCELTA_RISULTATO_POTENZIAMENTO,
+        verbose_name="Tipo Oggetto Finale"
     )
     
     class Meta: 
