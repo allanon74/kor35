@@ -3,6 +3,7 @@
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.shortcuts import get_list_or_404
 from datetime import timedelta
 import sys
 
@@ -776,7 +777,8 @@ class GestioneCraftingService:
                 oggetto_base_generatore=template,
                 in_vendita=False,
                 is_equipaggiato=False,
-                cariche_attuali=0
+                cariche_attuali=0,
+                is_pesante = template.is_pesante,
             )
             for stat_link in template.oggettobasestatisticabase_set.all():
                 OggettoStatisticaBase.objects.create(

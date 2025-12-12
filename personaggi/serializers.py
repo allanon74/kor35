@@ -618,7 +618,8 @@ class OggettoSerializer(serializers.ModelSerializer):
             'seconds_remaining',
             'is_active',
             'cariche_massime', 'durata_totale', 'testo_ricarica', 'costo_ricarica', 
-            'spegne_a_zero_cariche', 
+            'spegne_a_zero_cariche',
+            'is_pesante',  
         )
         
     def get_spegne_a_zero_cariche(self, obj):
@@ -887,7 +888,12 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OggettoBase
-        fields = ('id', 'nome', 'descrizione', 'costo', 'tipo_oggetto', 'classe_oggetto_nome', 'is_tecnologico', 'attacco_base', 'stats_text')
+        fields = (
+            'id', 'nome', 'descrizione', 
+            'costo', 'tipo_oggetto', 'classe_oggetto_nome', 
+            'is_tecnologico', 'attacco_base', 'stats_text',
+            'is_pesante',
+            )
 
     def get_stats_text(self, obj):
         parts = []

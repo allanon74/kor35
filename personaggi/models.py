@@ -936,8 +936,19 @@ class OggettoBase(models.Model):
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoBaseStatisticaBase', blank=True, related_name='template_base')
     statistiche_modificatori = models.ManyToManyField(Statistica, through='OggettoBaseModificatore', blank=True, related_name='template_modificatori')
     in_vendita = models.BooleanField(default=True, verbose_name="Visibile in Negozio")
-    class Meta: verbose_name = "Oggetto Base (Listino)"; verbose_name_plural = "Oggetti Base (Listino)"; ordering = ['tipo_oggetto', 'nome']
-    def __str__(self): return f"{self.nome} ({self.costo} CR)"
+    is_pesante = models.BooleanField(
+        default=False, 
+        verbose_name="È un oggetto Pesante?", 
+        help_text="Se attivo, questo oggetto conta per il limite OGP (Oggetti Pesanti)."
+    )
+    
+    class Meta: 
+        verbose_name = "Oggetto Base (Listino)"
+        verbose_name_plural = "Oggetti Base (Listino)"
+        ordering = ['tipo_oggetto', 'nome']
+    
+    def __str__(self): 
+        return f"{self.nome} ({self.costo} CR)"
 
 class OggettoBaseStatisticaBase(models.Model):
     oggetto_base = models.ForeignKey(OggettoBase, on_delete=models.CASCADE)
@@ -977,6 +988,11 @@ class Oggetto(A_vista):
     cariche_attuali = models.IntegerField(default=0)
     oggetto_base_generatore = models.ForeignKey(OggettoBase, on_delete=models.SET_NULL, null=True, blank=True, related_name='istanze_generate', help_text="Se creato dal negozio, punta al template originale.")
     data_fine_attivazione = models.DateTimeField(null=True, blank=True, help_text="Se impostato, l'oggetto è attivo fino a questa data.")
+    is_pesante = models.BooleanField(
+        default=False, 
+        verbose_name="È un oggetto Pesante?", 
+        help_text="Se attivo, questo oggetto conta per il limite OGP (Oggetti Pesanti)."
+    )
     
     def is_active(self):
         """
