@@ -59,6 +59,9 @@ TIPO_OGGETTO_MATERIA = 'MAT'
 TIPO_OGGETTO_MOD = 'MOD'
 TIPO_OGGETTO_INNESTO = 'INN'
 TIPO_OGGETTO_MUTAZIONE = 'MUT'
+TIPO_OGGETTO_AUMENTO = "AUM"
+TIPO_OGGETTO_POTENZIAMENTO = "POT"
+
 
 TIPO_OGGETTO_CHOICES = [
     (TIPO_OGGETTO_FISICO, 'Oggetto Fisico'),
@@ -66,6 +69,8 @@ TIPO_OGGETTO_CHOICES = [
     (TIPO_OGGETTO_MOD, 'Mod (Tecnologica)'),
     (TIPO_OGGETTO_INNESTO, 'Innesto (Tecnologico)'),
     (TIPO_OGGETTO_MUTAZIONE, 'Mutazione (Innata)'),
+    (TIPO_OGGETTO_AUMENTO, 'Aumento (installazione corporea)'),
+    (TIPO_OGGETTO_POTENZIAMENTO, 'Potenziamento (installazione su oggetti)'),
 ]
 
 # --- COSTANTI SLOT CORPO ---

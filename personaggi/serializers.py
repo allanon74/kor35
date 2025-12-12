@@ -707,6 +707,7 @@ class InfusioneSerializer(serializers.ModelSerializer):
             'componenti', # NEW
             'statistiche_base',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
+            'tipo_risultato',
         )
 
     def get_costo_effettivo(self, obj):
@@ -786,7 +787,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'aura', 'aura_details', 'aura_infusione',
             'componenti', 'componenti_data',
             'livello', 'costo_invio_pagato', 'note_staff', 'data_creazione',
-            'slot_corpo_permessi' # <--- CAMPO MANCANTE AGGIUNTO!
+            'slot_corpo_permessi', 'tipo_risultato_atteso',  # <--- CAMPO MANCANTE AGGIUNTO!
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
 

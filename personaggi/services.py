@@ -15,7 +15,8 @@ from .models import (
     ForgiaturaInCorso, Abilita, 
     OggettoCaratteristica, RichiestaAssemblaggio,
     STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA,
-    TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE, TIPO_OPERAZIONE_INSTALLAZIONE, TIPO_OPERAZIONE_INNESTO
+    TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE, TIPO_OPERAZIONE_INSTALLAZIONE, TIPO_OPERAZIONE_INNESTO,
+    TIPO_OGGETTO_AUMENTO, TIPO_OGGETTO_POTENZIAMENTO,
 )
 
 class GestioneOggettiService:
@@ -78,39 +79,69 @@ class GestioneOggettiService:
         # 2. Determina Categoria (Aumento vs Potenziamento)
         # Regola Utente: Se c'è uno slot corporeo definito nell'infusione, è un Aumento.
         # Altrimenti fallback sui flag dell'aura.
-        is_aumento = bool(infusione.slot_corpo_permessi) or aura_oggetto.produce_aumenti
+        #is_aumento = bool(infusione.slot_corpo_permessi) or aura_oggetto.produce_aumenti
+        scelta = getattr(infusione, 'tipo_risultato', 'POT')
         
         tipo_oggetto = TIPO_OGGETTO_FISICO # Fallback
+        
+        tipo_oggetto = 'POT'
         prefisso_nome = "Oggetto"
+        is_tecnologico = False
+        slot_corpo_finale = None
 
-        if is_aumento:
-            # --- È un Aumento (Innesto/Mutazione) ---
+        if scelta == 'AUM':
+            # # --- CASO AUMENTO (Innesto / Mutazione) ---
+            # # Usa il nome personalizzato dell'Aura (es. "Mutazione", "Impianto", "Tatuaggio")
+            # prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
+            
+            # # Logica Sottotipo:
+            # # Se l'aura è soprannaturale o il nome suggerisce biologia -> MUTAZIONE
+            # if aura_oggetto.is_soprannaturale or "Mutazione" in prefisso_nome:
+            #     tipo_oggetto = 'POT'
+            #     is_tecnologico = False
+            # else:
+            #     tipo_oggetto = 'INN'
+            #     is_tecnologico = True # Gli innesti base sono tecnologici
             prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
-            if "Mutazione" in prefisso_nome or "mutazione" in prefisso_nome:
-                tipo_oggetto = TIPO_OGGETTO_MUTAZIONE
-            else:
-                tipo_oggetto = TIPO_OGGETTO_INNESTO
-        else:
-            # --- È un Potenziamento (Mod/Materia) ---
-            prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Mod"
-            if "Materia" in prefisso_nome or "materia" in prefisso_nome:
-                tipo_oggetto = TIPO_OGGETTO_MATERIA
-            else:
-                tipo_oggetto = TIPO_OGGETTO_MOD
+            tipo_oggetto = TIPO_OGGETTO_AUMENTO
+            # Assegna lo slot solo se è un aumento
+            slot_corpo_finale = infusione.slot_corpo_permessi
 
+        else:
+            # --- CASO POTENZIAMENTO (Mod / Materia) ---
+            prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Materia"
+            tipo_oggetto = TIPO_OGGETTO_POTENZIAMENTO
+            # Logica Sottotipo:
+        #     # Se l'aura spegne a 0 cariche -> È sicuramente tecnologico (MOD)
+        #     if aura_oggetto.spegne_a_zero_cariche or "Mod" in prefisso_nome:
+        #         tipo_oggetto = 'MOD'
+        #         is_tecnologico = True
+        #     else:
+        #         tipo_oggetto = 'MAT' # Materia, Rune, Glifi
+        #         is_tecnologico = False
+
+        # # Override Tecnologico se l'aura lo impone
+        # if aura_oggetto.spegne_a_zero_cariche:
+        #     is_tecnologico = True
+        
+        if aura_oggetto.sigla == "ATE":
+            is_tecnologico = True
+        else:
+            is_tecnologico == False
+            
         # 3. Costruzione Nome
         nome_finale = nome_personalizzato or f"{prefisso_nome} di {infusione.nome}"
 
         # 4. Crea l'Oggetto
         nuovo_oggetto = Oggetto.objects.create(
             nome=nome_finale,
-            testo=infusione.testo,  # <--- CORREZIONE: Copia il testo/descrizione!
+            testo=infusione.testo,
             tipo_oggetto=tipo_oggetto,
             infusione_generatrice=infusione,
             aura=aura_oggetto, 
-            is_tecnologico=aura_oggetto.spegne_a_zero_cariche or (tipo_oggetto in [TIPO_OGGETTO_MOD, TIPO_OGGETTO_INNESTO]),
-            cariche_attuali=infusione.statistica_cariche.valore_predefinito if infusione.statistica_cariche else 0,
-            slot_corpo=infusione.slot_corpo_permessi if is_aumento else None
+            is_tecnologico=is_tecnologico,
+            cariche_attuali=infusione.statistica_cariche.valore_base_predefinito if infusione.statistica_cariche else 0,
+            slot_corpo=slot_corpo_finale
         )
 
         # 5. Copia le Statistiche Base
@@ -136,7 +167,7 @@ class GestioneOggettiService:
             stat_obj.limit_a_aure.set(stat_man.limit_a_aure.all())
             stat_obj.limit_a_elementi.set(stat_man.limit_a_elementi.all())
 
-        # 7. Copia Componenti & Conversione Mattoni
+        # 7. Copia Componenti & Conversione Mattoni (Logica esistente invariata)
         for comp in infusione.componenti.select_related('caratteristica').all():
             OggettoCaratteristica.objects.create(
                 oggetto=nuovo_oggetto,
@@ -144,7 +175,6 @@ class GestioneOggettiService:
                 valore=comp.valore
             )
             
-            # Applica effetti del Mattone corrispondente
             mattone = Mattone.objects.filter(
                 aura=infusione.aura_richiesta,
                 caratteristica_associata=comp.caratteristica
@@ -153,7 +183,6 @@ class GestioneOggettiService:
             if mattone:
                 for eff in mattone.mattonestatistica_set.all():
                     valore_totale = eff.valore * comp.valore
-                    
                     obj_stat, created = OggettoStatistica.objects.get_or_create(
                         oggetto=nuovo_oggetto,
                         statistica=eff.statistica,
@@ -166,7 +195,6 @@ class GestioneOggettiService:
                             'condizione_text': eff.condizione_text
                         }
                     )
-                    
                     if not created and obj_stat.tipo_modificatore == eff.tipo_modificatore:
                          obj_stat.valore += valore_totale
                          obj_stat.save()
