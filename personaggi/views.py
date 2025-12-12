@@ -1479,12 +1479,10 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         richiesta.save()
         return Response({"status": "rejected"})
     
-class AssemblyValidationView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
+def post(self, request):
         """
         Controlla se l'assemblaggio è possibile tra Host e Component.
+        Restituisce struttura compatibile con ItemAssemblyModal.jsx.
         """
         char_id = request.data.get('char_id')
         host_id = request.data.get('host_id')
@@ -1494,18 +1492,37 @@ class AssemblyValidationView(APIView):
         host = get_object_or_404(Oggetto, pk=host_id)
         mod = get_object_or_404(Oggetto, pk=mod_id)
 
-        # Verifica Competenze tramite Service
-        can_do_self, msg_self = GestioneOggettiService.verifica_competenza_assemblaggio(pg, host, mod)
+        # 1. Verifica Hardware (Compatibilità Fisica/Regole Classe)
+        is_hardware_ok, hw_msg = GestioneOggettiService.verifica_compatibilita_hardware(host, mod)
 
-        # Qui potresti aggiungere anche controlli hardware (slot liberi, classi) 
-        # ma per ora ci fidiamo del filtro frontend + check finale
+        # 2. Verifica Competenze (Skill Personaggio)
+        # Nota: questo controllo include anche l'hardware internamente, ma lo separiamo per chiarezza UI
+        can_do_self, skill_msg = GestioneOggettiService.verifica_competenza_assemblaggio(pg, host, mod)
 
-        return Response({
-            "can_assemble_self": can_do_self,
-            "reason_self": msg_self,
+        # Costruzione Risposta per il Frontend
+        response_data = {
+            "is_valid": is_hardware_ok,          # Se False, l'oggetto non entra proprio (blocca tutto)
+            "error_message": None,               # Messaggio di errore bloccante
+            "warning": None,                     # Warning non bloccante
+            
+            "can_do_self": can_do_self,          # Se True, mostra tasto "Fai da te"
+            "requires_skill": not can_do_self,   # Se True, mostra info skill mancante
+            
+            "can_use_academy": is_hardware_ok,   # L'accademia può farlo se l'hardware è compatibile
+            
             "host_name": host.nome,
-            "mod_name": mod.nome
-        })
+            "mod_name": mod.nome,
+            "required_skill_name": "Aura Tecnologica" if host.is_tecnologico else "Aura Mondana - Assemblatore"
+        }
+
+        if not is_hardware_ok:
+            response_data["error_message"] = hw_msg
+        elif not can_do_self:
+            # Se hardware ok ma mancano skill, non è un errore bloccante (puoi chiedere a tecnico)
+            # Ma mettiamo un warning o info skill
+            response_data["warning"] = skill_msg
+
+        return Response(response_data)
 
 class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
