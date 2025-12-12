@@ -199,12 +199,14 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request:
             return f"{request.scheme}://{request.get_host()}"
-        return ""
+        # FALLBACK HARCODED COME RICHIESTO
+        return "https://www.kor35.it"
 
     def get_icona_url_assoluto(self, obj):
         if not obj.icona:
             return None
         base_url = self.get_base_url()
+        
         media_url = settings.MEDIA_URL
         if not media_url: media_url = "/media/"
         if media_url.startswith('/'): media_url = media_url[1:]
@@ -477,6 +479,12 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     TestoFormattato = serializers.CharField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
     spegne_a_zero_cariche = serializers.SerializerMethodField()
+    attacco_base = serializers.CharField(read_only=True)
+    attacco_formattato = serializers.SerializerMethodField()
+    
+    # Usa il serializer completo per le statistiche per avere i dettagli (condizioni, icone, ecc)
+    statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
+    componenti = OggettoComponenteSerializer(many=True, read_only=True) # Assicurati che i componenti siano visibili
     
 
     class Meta:
@@ -492,6 +500,8 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'TestoFormattato',
             'cariche_massime', 'durata_totale', 'costo_ricarica', 'testo_ricarica', 'seconds_remaining',
             'is_active', 'spegne_a_zero_cariche', 
+            'statistiche', 'componenti', 
+            'attacco_base', 'attacco_formattato',
         ]
     
     def get_spegne_a_zero_cariche(self, obj):
@@ -524,6 +534,25 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             return max(0, valore_finale)
         
         return valore_base
+    
+    def get_attacco_formattato(self, obj):
+        if not obj.attacco_base: return None
+        personaggio = self.context.get('personaggio')
+        # Se l'oggetto è montato su un host, il proprietario è quello dell'host
+        if not personaggio and obj.ospitato_su:
+             # Tentativo di recuperare il proprietario risalendo la catena
+             try:
+                 personaggio = obj.ospitato_su.inventario_corrente.personaggio_ptr
+             except: pass
+             
+        if personaggio:
+            return formatta_testo_generico(
+                None, 
+                formula=obj.attacco_base, 
+                personaggio=personaggio, 
+                solo_formula=True
+            ).replace("<strong>Formula:</strong>", "").strip()
+        return obj.attacco_base
 
     def get_durata_totale(self, obj):
         return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0
