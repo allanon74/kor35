@@ -499,9 +499,31 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
         return obj.aura.spegne_a_zero_cariche if obj.aura else False
 
     def get_cariche_massime(self, obj):
-        if obj.infusione_generatrice and obj.infusione_generatrice.statistica_cariche:
-            return obj.infusione_generatrice.statistica_cariche.valore_base_predefinito
-        return 0
+        if not obj.infusione_generatrice or not obj.infusione_generatrice.statistica_cariche:
+            return 0
+        
+        # Logica di calcolo identica a 'crea_oggetto_da_infusione'
+        # Serve il proprietario per i modificatori
+        proprietario = obj.inventario_corrente.personaggio_ptr if hasattr(obj.inventario_corrente, 'personaggio_ptr') else None
+        
+        if not proprietario and obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio_ptr'):
+            proprietario = obj.inventario_corrente.personaggio_ptr
+
+        stat_def = obj.infusione_generatrice.statistica_cariche
+        
+        # 1. Valore Base (dall'infusione o dal default della stat)
+        # Cerchiamo se l'infusione ha un override specifico per questa statistica
+        stat_base_link = obj.infusione_generatrice.infusionestatisticabase_set.filter(statistica=stat_def).first()
+        valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
+
+        # 2. Modificatori Personaggio (se presente)
+        if proprietario:
+            # Nota: modificatori_calcolati è una property cached del model Personaggio
+            mods = proprietario.modificatori_calcolati.get(stat_def.parametro, {'add': 0.0, 'mol': 1.0})
+            valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
+            return max(0, valore_finale)
+        
+        return valore_base
 
     def get_durata_totale(self, obj):
         return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0
@@ -640,11 +662,25 @@ class OggettoSerializer(serializers.ModelSerializer):
         # Logica di calcolo identica a 'crea_oggetto_da_infusione'
         # Serve il proprietario per i modificatori
         proprietario = obj.inventario_corrente.personaggio_ptr if hasattr(obj.inventario_corrente, 'personaggio_ptr') else None
-        if not proprietario: return 0 # Fallback base infusione
         
-        # ... calcolo (base + mods) ...
-        # IMPORTANTE: Questa logica va centralizzata in un metodo del modello Oggetto o Personaggio per non duplicarla
-        return proprietario.get_valore_statistica(obj.infusione_generatrice.statistica_cariche.sigla)
+        if not proprietario and obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio_ptr'):
+            proprietario = obj.inventario_corrente.personaggio_ptr
+
+        stat_def = obj.infusione_generatrice.statistica_cariche
+        
+        # 1. Valore Base (dall'infusione o dal default della stat)
+        # Cerchiamo se l'infusione ha un override specifico per questa statistica
+        stat_base_link = obj.infusione_generatrice.infusionestatisticabase_set.filter(statistica=stat_def).first()
+        valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
+
+        # 2. Modificatori Personaggio (se presente)
+        if proprietario:
+            # Nota: modificatori_calcolati è una property cached del model Personaggio
+            mods = proprietario.modificatori_calcolati.get(stat_def.parametro, {'add': 0.0, 'mol': 1.0})
+            valore_finale = int(round((valore_base + mods['add']) * mods['mol']))
+            return max(0, valore_finale)
+        
+        return valore_base
 
     def get_durata_totale(self, obj):
         return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0

@@ -988,6 +988,8 @@ class Oggetto(A_vista):
         4. Se è montato su un oggetto attivo -> ON.
         """
         now = timezone.now()
+        infusione = self.infusione_generatrice
+        has_duration = infusione and infusione.durata_attivazione > 0
         
         # 1. CHECK CARICHE (Priorità assoluta per oggetti tecnologici)
         # Se l'aura dice che a 0 si spegne, controlliamo subito.
@@ -996,7 +998,11 @@ class Oggetto(A_vista):
                 return False
 
         # 2. CHECK TIMER
-        if self.data_fine_attivazione:
+        if has_duration:
+            # Se ha durata ma non ha una data di fine (mai attivato) -> OFF
+            if not self.data_fine_attivazione:
+                return False
+            # Se il timer è scaduto -> OFF
             if self.data_fine_attivazione <= now:
                 return False
 
