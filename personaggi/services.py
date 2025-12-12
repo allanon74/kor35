@@ -69,70 +69,77 @@ class GestioneOggettiService:
     def crea_oggetto_da_infusione(infusione, proprietario, nome_personalizzato=None):
         """
         Factory method: crea fisicamente l'oggetto nel database.
-        Logica aggiornata per usare i nuovi campi flessibili di Punteggio (Aura).
         """
         
         # 1. Determina l'Aura dell'Oggetto
-        # Regola: Se infusione ha aura_infusione (secondaria), l'oggetto prende quella. Altrimenti la primaria.
         aura_oggetto = infusione.aura_infusione if infusione.aura_infusione else infusione.aura_richiesta
 
         # 2. Determina Categoria (Aumento vs Potenziamento)
-        # Regola Utente: Se c'è uno slot corporeo definito nell'infusione, è un Aumento.
-        # Altrimenti fallback sui flag dell'aura.
-        #is_aumento = bool(infusione.slot_corpo_permessi) or aura_oggetto.produce_aumenti
+        # Usiamo il campo tipo_risultato salvato nell'infusione (che arriva dalla proposta)
         scelta = getattr(infusione, 'tipo_risultato', 'POT')
         
-        tipo_oggetto = TIPO_OGGETTO_FISICO # Fallback
-        
-        tipo_oggetto = 'POT'
+        tipo_oggetto = 'POT' # Default tecnico se qualcosa fallisce
         prefisso_nome = "Oggetto"
         is_tecnologico = False
-        slot_corpo_finale = None
+        
+        # Resettiamo lo slot finale: L'oggetto viene creato "in inventario", non installato.
+        # L'installazione avverrà tramite installa_innesto successivamente.
+        slot_corpo_finale = None 
 
         if scelta == 'AUM':
-            # # --- CASO AUMENTO (Innesto / Mutazione) ---
-            # # Usa il nome personalizzato dell'Aura (es. "Mutazione", "Impianto", "Tatuaggio")
-            # prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
-            
-            # # Logica Sottotipo:
-            # # Se l'aura è soprannaturale o il nome suggerisce biologia -> MUTAZIONE
-            # if aura_oggetto.is_soprannaturale or "Mutazione" in prefisso_nome:
-            #     tipo_oggetto = 'POT'
-            #     is_tecnologico = False
-            # else:
-            #     tipo_oggetto = 'INN'
-            #     is_tecnologico = True # Gli innesti base sono tecnologici
+            # --- CASO AUMENTO (Innesto / Mutazione) ---
             prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
-            tipo_oggetto = TIPO_OGGETTO_AUMENTO
-            # Assegna lo slot solo se è un aumento
-            slot_corpo_finale = infusione.slot_corpo_permessi
+            
+            # Logica Sottotipo basata sull'Aura
+            # Se l'aura è soprannaturale -> MUTAZIONE, Altrimenti INNESTO
+            if aura_oggetto.is_soprannaturale:
+                tipo_oggetto = TIPO_OGGETTO_MUTAZIONE
+                is_tecnologico = False
+            else:
+                tipo_oggetto = TIPO_OGGETTO_INNESTO
+                is_tecnologico = True 
 
         else:
             # --- CASO POTENZIAMENTO (Mod / Materia) ---
             prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Materia"
-            tipo_oggetto = TIPO_OGGETTO_POTENZIAMENTO
-            # Logica Sottotipo:
-        #     # Se l'aura spegne a 0 cariche -> È sicuramente tecnologico (MOD)
-        #     if aura_oggetto.spegne_a_zero_cariche or "Mod" in prefisso_nome:
-        #         tipo_oggetto = 'MOD'
-        #         is_tecnologico = True
-        #     else:
-        #         tipo_oggetto = 'MAT' # Materia, Rune, Glifi
-        #         is_tecnologico = False
-
-        # # Override Tecnologico se l'aura lo impone
-        # if aura_oggetto.spegne_a_zero_cariche:
-        #     is_tecnologico = True
-        
-        if aura_oggetto.sigla == "ATE":
-            is_tecnologico = True
-        else:
-            is_tecnologico == False
             
+            # Logica Sottotipo
+            if aura_oggetto.spegne_a_zero_cariche:
+                tipo_oggetto = TIPO_OGGETTO_MOD
+                is_tecnologico = True
+            else:
+                tipo_oggetto = TIPO_OGGETTO_MATERIA
+                is_tecnologico = False
+                
+        # Override manuale basato su flag specifici dell'Aura se necessario
+        # (Es. se hai un'aura magica che crea tecnologia)
+        # if aura_oggetto.sigla == "ATE": is_tecnologico = True
+
         # 3. Costruzione Nome
         nome_finale = nome_personalizzato or f"{prefisso_nome} di {infusione.nome}"
 
-        # 4. Crea l'Oggetto
+        # 4. Calcolo Cariche Iniziali (Corretto)
+        cariche_iniziali = 0
+        if infusione.statistica_cariche:
+            # A. Cerca il valore base specifico configurato nell'infusione per questa statistica
+            #    (Es. "Cariche = 5" impostato nell'editor dell'infusione)
+            stat_base_link = infusione.infusionestatisticabase_set.filter(
+                statistica=infusione.statistica_cariche
+            ).first()
+            
+            valore_base = stat_base_link.valore_base if stat_base_link else infusione.statistica_cariche.valore_base_predefinito
+            
+            # B. Calcola i modificatori del proprietario per questa statistica (es. Talenti che aumentano Cariche)
+            # Nota: get_valore_statistica ritorna il totale (Base PG + Mods). Noi vogliamo applicare i Mods alla Base OGGETTO.
+            mods = proprietario.modificatori_calcolati.get(infusione.statistica_cariche.parametro, {'add': 0.0, 'mol': 1.0})
+            
+            # C. Formula Finale
+            cariche_iniziali = int(round((valore_base + mods['add']) * mods['mol']))
+            
+            # Sicurezza: Mai negativo
+            cariche_iniziali = max(0, cariche_iniziali)
+
+        # 5. Crea l'Oggetto
         nuovo_oggetto = Oggetto.objects.create(
             nome=nome_finale,
             testo=infusione.testo,
@@ -140,11 +147,11 @@ class GestioneOggettiService:
             infusione_generatrice=infusione,
             aura=aura_oggetto, 
             is_tecnologico=is_tecnologico,
-            cariche_attuali=infusione.statistica_cariche.valore_base_predefinito if infusione.statistica_cariche else 0,
-            slot_corpo=slot_corpo_finale
+            cariche_attuali=cariche_iniziali, # Valore calcolato
+            slot_corpo=None # Inizialmente non installato
         )
 
-        # 5. Copia le Statistiche Base
+        # 6. Copia le Statistiche Base
         for stat_inf in infusione.infusionestatisticabase_set.all():
             OggettoStatisticaBase.objects.create(
                 oggetto=nuovo_oggetto,
@@ -152,7 +159,7 @@ class GestioneOggettiService:
                 valore_base=stat_inf.valore_base
             )
 
-        # 6. Copia Modificatori Manuali
+        # 7. Copia Modificatori Manuali
         for stat_man in infusione.infusionestatistica_set.all():
             stat_obj = OggettoStatistica.objects.create(
                 oggetto=nuovo_oggetto,
@@ -167,7 +174,7 @@ class GestioneOggettiService:
             stat_obj.limit_a_aure.set(stat_man.limit_a_aure.all())
             stat_obj.limit_a_elementi.set(stat_man.limit_a_elementi.all())
 
-        # 7. Copia Componenti & Conversione Mattoni (Logica esistente invariata)
+        # 8. Copia Componenti & Conversione Mattoni
         for comp in infusione.componenti.select_related('caratteristica').all():
             OggettoCaratteristica.objects.create(
                 oggetto=nuovo_oggetto,
@@ -202,7 +209,7 @@ class GestioneOggettiService:
                         obj_stat.limit_a_aure.set(eff.limit_a_aure.all())
                         obj_stat.limit_a_elementi.set(eff.limit_a_elementi.all())
         
-        # 8. Assegna al Personaggio
+        # 9. Assegna al Personaggio (nell'inventario, non equipaggiato)
         nuovo_oggetto.sposta_in_inventario(proprietario)
         
         return nuovo_oggetto

@@ -634,12 +634,17 @@ class OggettoSerializer(serializers.ModelSerializer):
         return 0
 
     def get_cariche_massime(self, obj):
-        # Recupera il massimo delle cariche dall'infusione o dalla statistica
-        if obj.infusione_generatrice and obj.infusione_generatrice.statistica_cariche:
-            # Qui servirebbe il personaggio per calcolare il valore esatto, 
-            # ma per ora torniamo il base o un valore stimato se il context non ha il pg
-            return 99 # Placeholder o logica complessa
-        return 0
+        if not obj.infusione_generatrice or not obj.infusione_generatrice.statistica_cariche:
+            return 0
+        
+        # Logica di calcolo identica a 'crea_oggetto_da_infusione'
+        # Serve il proprietario per i modificatori
+        proprietario = obj.inventario_corrente.personaggio_ptr if hasattr(obj.inventario_corrente, 'personaggio_ptr') else None
+        if not proprietario: return 0 # Fallback base infusione
+        
+        # ... calcolo (base + mods) ...
+        # IMPORTANTE: Questa logica va centralizzata in un metodo del modello Oggetto o Personaggio per non duplicarla
+        return proprietario.get_valore_statistica(obj.infusione_generatrice.statistica_cariche.sigla)
 
     def get_durata_totale(self, obj):
         return obj.infusione_generatrice.durata_attivazione if obj.infusione_generatrice else 0
