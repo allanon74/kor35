@@ -1222,41 +1222,30 @@ class Personaggio(Inventario):
                 _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
         
         # 2. Oggetti e Innesti (CON CHECK TIMER)
-        oggetti_inventario = self.get_oggetti().select_related('infusione_generatrice').prefetch_related('oggettostatistica_set__statistica', 'potenziamenti_installati__oggettostatistica_set__statistica', 'potenziamenti_installati__infusione_generatrice')
+        oggetti_inventario = self.get_oggetti().select_related(
+            'infusione_generatrice',
+            'aura', 
+            'ospitato_su',
+            ).prefetch_related(
+                'oggettostatistica_set__statistica', 
+                'potenziamenti_installati__oggettostatistica_set__statistica', 
+                'potenziamenti_installati__infusione_generatrice', 
+                'potenziamenti_installati__aura',
+                )
         
         for oggetto in oggetti_inventario:
-            is_oggetto_attivo = False
-            if oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO and oggetto.is_equipaggiato: is_oggetto_attivo = True
-            elif oggetto.tipo_oggetto == TIPO_OGGETTO_MUTAZIONE: is_oggetto_attivo = True
-            elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO and oggetto.slot_corpo: 
-                # Innesti: attivi se montati. Se hanno timer, controllo sotto.
-                is_oggetto_attivo = True
-            
-            # --- CHECK TIMER OGGETTO PADRE ---
-            if is_oggetto_attivo and oggetto.infusione_generatrice and oggetto.infusione_generatrice.durata_attivazione > 0:
-                if not oggetto.is_active_timer:
-                    is_oggetto_attivo = False
-            # ---------------------------------
-
-            if is_oggetto_attivo:
+            # USIAMO LA FONTE DI VERITÀ UNICA: is_active()
+            # Questo controlla: Equipaggiamento, Timer, Cariche (spegne_a_zero) e Gerarchia
+            if oggetto.is_active():
                 for stat_link in oggetto.oggettostatistica_set.all(): 
                     if _is_global(stat_link):
                         _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
                 
                 # Potenziamenti (Mod/Materia)
                 for potenziamento in oggetto.potenziamenti_installati.all():
-                    is_potenziamento_attivo = False
-                    if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA: is_potenziamento_attivo = True
-                    elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD: is_potenziamento_attivo = True
-                    
-                    # --- CHECK TIMER POTENZIAMENTO ---
-                    # I Mod sono attivi se l'host è attivo E se il loro eventuale timer è attivo
-                    if is_potenziamento_attivo and potenziamento.infusione_generatrice and potenziamento.infusione_generatrice.durata_attivazione > 0:
-                        if not potenziamento.is_active_timer:
-                            is_potenziamento_attivo = False
-                    # ---------------------------------
-
-                    if is_potenziamento_attivo:
+                    # Anche qui usiamo is_active() del potenziamento
+                    # Nota: is_active() del potenziamento controlla già ricorsivamente se l'host (oggetto) è attivo
+                    if potenziamento.is_active():
                         for stat_link_pot in potenziamento.oggettostatistica_set.all(): 
                             if _is_global(stat_link_pot):
                                 _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
@@ -1364,34 +1353,16 @@ class Personaggio(Inventario):
         )
         
         for oggetto in oggetti:
-            is_oggetto_attivo = False
-            
-            # Logica identica a 'modificatori_calcolati' per determinare se l'oggetto conta
-            if oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO and oggetto.is_equipaggiato: 
-                is_oggetto_attivo = True
-            elif oggetto.tipo_oggetto == TIPO_OGGETTO_MUTAZIONE: 
-                # Le mutazioni sono sempre attive se possedute
-                is_oggetto_attivo = True
-            elif oggetto.tipo_oggetto == TIPO_OGGETTO_INNESTO and oggetto.slot_corpo and oggetto.cariche_attuali > 0: 
-                # Innesti richiedono slot e carica (se previsto)
-                is_oggetto_attivo = True
-            
-            if is_oggetto_attivo:
-                # 2A. Modificatori diretti dell'oggetto
+            if oggetto.is_active():
+            # 2A. Modificatori diretti dell'oggetto
                 for stat_link in oggetto.oggettostatistica_set.all():
                     if _check_condition(stat_link):
                         _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
-                
-                # 2B. Modificatori dei Potenziamenti (Mod/Materia) installati sull'oggetto
+            
+                # 2B. Modificatori dei Potenziamenti
                 for potenziamento in oggetto.potenziamenti_installati.all():
-                    is_potenziamento_attivo = False
-                    
-                    if potenziamento.tipo_oggetto == TIPO_OGGETTO_MATERIA:
-                        is_potenziamento_attivo = True
-                    elif potenziamento.tipo_oggetto == TIPO_OGGETTO_MOD and potenziamento.cariche_attuali > 0:
-                        is_potenziamento_attivo = True
-                    
-                    if is_potenziamento_attivo:
+                    # is_active() gestisce timer, cariche e stato dell'host
+                    if potenziamento.is_active():
                         for stat_link_pot in potenziamento.oggettostatistica_set.all():
                             if _check_condition(stat_link_pot):
                                 _add(stat_link_pot.statistica.parametro, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
