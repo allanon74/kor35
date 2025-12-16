@@ -679,16 +679,16 @@ class TracciamentoInventarioInline(admin.TabularInline):
 
 @admin.register(Oggetto)
 class OggettoAdmin(SModelAdmin):
-    list_display = ['nome', 'attacco_base', 'tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'livello', 'costo_acquisto', 'cariche_attuali', 'get_inventario_attuale', ]
+    list_display = ['nome', 'attacco_base', 'is_active_display', 'tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'livello', 'costo_acquisto', 'cariche_attuali', 'get_inventario_attuale', ]
     list_filter = ['tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'in_vendita', 'aura']
     list_editable =['attacco_base', ]
     search_fields = ['nome', 'testo']
     autocomplete_fields = ['aura', 'infusione_generatrice', 'ospitato_su', 'classe_oggetto']
-    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione')
+    readonly_fields = ('livello', 'mostra_testo_formattato', 'id', 'data_creazione', 'is_active_display')
     summernote_fields = ['testo']
     
     fieldsets = (
-        ('Dati Generali', {'fields': ('nome', 'testo', 'aura', 'costo_acquisto', 'in_vendita')}),
+        ('Dati Generali', {'fields': ('nome', 'testo', 'aura', 'costo_acquisto', 'in_vendita', 'is_active_display',)}),
         ('Classificazione & Logica', {'fields': ('tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'slot_corpo', 'attacco_base')}),
         ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
         ('Stato & Origine', {'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su')}),
@@ -714,6 +714,11 @@ class OggettoAdmin(SModelAdmin):
     
     def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo Formattato'
+    
+    def is_active_display(self, obj):
+        return obj.is_active()
+    is_active_display.boolean = True
+    is_active_display.short_description = "Is Active? (Calcolato)"
 
 @admin.register(ForgiaturaInCorso)
 class ForgiaturaInCorsoAdmin(admin.ModelAdmin):
