@@ -70,6 +70,8 @@ class PunteggioSerializer(serializers.ModelSerializer):
     produce_materia = serializers.SerializerMethodField()
     produce_innesti = serializers.SerializerMethodField()
     produce_mutazioni = serializers.SerializerMethodField()
+    tratti_disponibili = serializers.SerializerMethodField()
+    
     class Meta:
         model = Punteggio
         
@@ -87,6 +89,7 @@ class PunteggioSerializer(serializers.ModelSerializer):
             'nome_tipo_tessitura',
             'spegne_a_zero_cariche',
             'potenziamenti_multi_slot',
+            'tratti_disponibili',
         )
     
     def get_produce_mod(self, obj):
@@ -101,6 +104,15 @@ class PunteggioSerializer(serializers.ModelSerializer):
 
     def get_produce_mutazioni(self, obj):
         return obj.produce_aumenti and obj.nome_tipo_aumento == 'Mutazione'
+    
+    def get_tratti_disponibili(self, obj):
+        # Usa i dati precaricati dalla View se ci sono (ottimizzazione)
+        if hasattr(obj, 'tratti_aura_prefetched'):
+            return AbilitaSmallSerializer(obj.tratti_aura_prefetched, many=True).data
+        
+        # Altrimenti fai la query
+        tratti = Abilita.objects.filter(is_tratto_aura=True, aura_riferimento=obj)
+        return AbilitaSmallSerializer(tratti, many=True).data
 
 
 class PunteggioSmallSerializer(serializers.ModelSerializer):
@@ -286,10 +298,34 @@ class AbilSerializer(serializers.ModelSerializer):
 
 class AbilitaSmallSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(many=False)
+    # statistica_modificata = serializers.SerializerMethodField()
+    # valore_modifica = serializers.SerializerMethodField()
 
     class Meta:
         model = Abilita
-        fields = ("id", "nome", "caratteristica", "descrizione")
+        fields = (
+            'id', 
+            'nome', 
+            'descrizione_breve', 
+            'livello_riferimento',  # <--- CRUCIALE PER IL FILTRO
+            'is_tratto_aura',
+            # 'statistica_modificata',
+            # 'valore_modifica'
+        )
+        
+    # def get_statistica_modificata(self, obj):
+    #     # Prende la prima statistica modificata (se esiste) per display
+    #     # Assumiamo che 'statistiche' sia il related_name dei Modificatori
+    #     stat = obj.statistiche.first() 
+    #     if stat and stat.statistica:
+    #         return stat.statistica.nome
+    #     return None
+
+    # def get_valore_modifica(self, obj):
+    #     stat = obj.statistiche.first()
+    #     if stat:
+    #         return stat.valore
+    #     return None
 
 
 class AbilitaTierSerializer(serializers.ModelSerializer):
