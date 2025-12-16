@@ -421,9 +421,10 @@ class AbilitaAdmin(A_Admin):
     
 @admin.register(ConfigurazioneLivelloAura)
 class ConfigurazioneLivelloAuraAdmin(admin.ModelAdmin):
-    list_display = ('aura', 'livello', 'costo_crediti', 'tempo_forgiatura')
+    list_display = ('aura', 'livello', 'nome_step', 'is_obbligatorio',)
     list_filter = ('aura',)
-    search_fields = ('aura__nome',)
+    search_fields = ('aura__nome', 'nome_step')
+    ordering = ('aura', 'livello')
 
 @admin.register(Punteggio)
 class PunteggioAdmin(IconaAdminMixin, A_Admin):
