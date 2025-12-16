@@ -688,10 +688,10 @@ class OggettoAdmin(SModelAdmin):
     summernote_fields = ['testo']
     
     fieldsets = (
-        ('Dati Generali', {'fields': ('nome', 'testo', 'aura', 'costo_acquisto', 'in_vendita', 'is_active_display',)}),
+        ('Dati Generali', {'fields': ('nome', 'testo', 'aura', 'costo_acquisto', 'in_vendita', 'is_pesante', 'is_active_display',)}),
         ('Classificazione & Logica', {'fields': ('tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'slot_corpo', 'attacco_base')}),
         ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
-        ('Stato & Origine', {'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su', 'is_equipaggiato', )}),
+        ('Stato & Origine', {'fields': ('cariche_attuali', 'infusione_generatrice', 'ospitato_su', 'is_equipaggiato', 'data_fine_attivazione', )}),
     )
     inlines = [
         OggettoCaratteristicaInline, 
