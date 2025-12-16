@@ -298,35 +298,40 @@ class AbilSerializer(serializers.ModelSerializer):
 
 class AbilitaSmallSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(many=False)
-    # statistica_modificata = serializers.SerializerMethodField()
-    # valore_modifica = serializers.SerializerMethodField()
+    statistica_modificata = serializers.SerializerMethodField()
+    
 
     class Meta:
         model = Abilita
         fields = (
             'id', 
             'nome', 
-            'descrizione_breve', 
+            'descrizione', 
             'livello_riferimento',  # <--- CRUCIALE PER IL FILTRO
             'is_tratto_aura',
             'caratteristica',
-            # 'statistica_modificata',
-            # 'valore_modifica'
+            'statistica_modificata',
         )
         
-    # def get_statistica_modificata(self, obj):
-    #     # Prende la prima statistica modificata (se esiste) per display
-    #     # Assumiamo che 'statistiche' sia il related_name dei Modificatori
-    #     stat = obj.statistiche.first() 
-    #     if stat and stat.statistica:
-    #         return stat.statistica.nome
-    #     return None
-
-    # def get_valore_modifica(self, obj):
-    #     stat = obj.statistiche.first()
-    #     if stat:
-    #         return stat.valore
-    #     return None
+    def get_statistica_modificata(self, obj):
+        """
+        Restituisce una stringa riassuntiva di tutti i bonus.
+        Esempio: "Forza +1, Agilità -1"
+        """
+        # Verifica se l'abilità ha statistiche associate
+        # Usa .all() che sfrutta il prefetch della View
+        mods = obj.statistiche.all()
+        
+        if not mods:
+            return None
+            
+        testi = []
+        for mod in mods:
+            if mod.statistica:
+                segno = "+" if mod.valore > 0 else ""
+                testi.append(f"{mod.statistica.nome} {segno}{mod.valore}")
+        
+        return ", ".join(testi)
 
 
 class AbilitaTierSerializer(serializers.ModelSerializer):

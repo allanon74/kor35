@@ -140,7 +140,9 @@ class PunteggioViewSet(viewsets.ModelViewSet):
         #    e li mettiamo nell'attributo 'tratti_aura_prefetched' che il Serializer cerca.
         prefetch_tratti = Prefetch(
             'tratti_collegati',  # Questo deve essere il related_name in Abilita.aura_riferimento
-            queryset=Abilita.objects.filter(is_tratto_aura=True).select_related('caratteristica'),
+            queryset=Abilita.objects.filter(is_tratto_aura=True)
+            .select_related('caratteristica')
+            .prefetch_related('statistiche__statistica'),
             to_attr='tratti_aura_prefetched'
         )
 
