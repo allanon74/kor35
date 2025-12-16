@@ -314,7 +314,7 @@ class AbilitaSmallSerializer(serializers.ModelSerializer):
         )
         
     def get_statistica_modificata(self, obj):
-        # CORREZIONE: Uso il related_name di default 'abilitastatistica_set'
+        # Usa il related_name corretto (abilitastatistica_set)
         mods = obj.abilitastatistica_set.all()
         
         if not mods:
@@ -322,11 +322,13 @@ class AbilitaSmallSerializer(serializers.ModelSerializer):
             
         testi = []
         for mod in mods:
-            if mod.statistica:
+            # CORREZIONE: Aggiunto controllo 'and mod.valore != 0'
+            if mod.statistica and mod.valore != 0:
                 segno = "+" if mod.valore > 0 else ""
                 testi.append(f"{mod.statistica.nome} {segno}{mod.valore}")
         
-        return ", ".join(testi)
+        # Se dopo il filtro la lista è vuota, restituisci None per non mostrare il badge vuoto
+        return ", ".join(testi) if testi else None
 
 
 class AbilitaTierSerializer(serializers.ModelSerializer):
