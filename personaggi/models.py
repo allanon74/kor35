@@ -1001,41 +1001,70 @@ class Oggetto(A_vista):
     
     def is_active(self):
         """
-        Determina se l'oggetto è attivo.
-        Ordine di priorità:
-        1. Se ha 'spegne_a_zero_cariche' e cariche <= 0 -> OFF (anche se equipaggiato).
-        2. Se ha un timer scaduto -> OFF.
-        3. Se è equipaggiato -> ON.
-        4. Se è montato su un oggetto attivo -> ON.
+        Determina se l'oggetto è attivo basandosi sulle regole rigorose del sistema.
         """
         now = timezone.now()
         infusione = self.infusione_generatrice
+        
+        # --- DEFINIZIONE VARIABILI DI STATO ---
+        # Ha una durata prevista?
         has_duration = infusione and infusione.durata_attivazione > 0
         
-        # 1. CHECK CARICHE (Priorità assoluta per oggetti tecnologici)
-        # Se l'aura dice che a 0 si spegne, controlliamo subito.
+        # Il timer è attualmente in corso (nel futuro)?
+        is_timer_running = False
+        if has_duration and self.data_fine_attivazione and self.data_fine_attivazione >= now:
+            is_timer_running = True
+
+        # =====================================================================
+        # REGOLA 1: COERENZA TEMPORALE (Timer e Durata)
+        # =====================================================================
+        # "o durata=0 oppure durata>0 e data_fine >= adesso"
+        # Se ha una durata MA il timer non sta girando (scaduto o mai partito), è OFF.
+        if has_duration and not is_timer_running:
+            return False
+
+        # =====================================================================
+        # REGOLA 2: SPEGNIMENTO TECNOLOGICO (Batteria)
+        # =====================================================================
+        # "Un oggetto ... spegne_a_zero_cariche è disattivo quando cariche < 1..."
+        # ECCEZIONE: Se ha durata > 0 e il timer gira, rimane acceso (l'ultima carica si sta consumando).
         if self.aura and self.aura.spegne_a_zero_cariche:
-            if self.cariche_attuali <= 0:
+            if self.cariche_attuali <= 0 and not is_timer_running:
                 return False
 
-        # 2. CHECK TIMER
-        if has_duration:
-            # Se ha durata ma non ha una data di fine (mai attivato) -> OFF
-            if not self.data_fine_attivazione:
-                return False
-            # Se il timer è scaduto -> OFF
-            if self.data_fine_attivazione <= now:
+        # Se siamo arrivati qui, l'oggetto è "Acceso" dal punto di vista energetico/temporale.
+        # Ora verifichiamo se è nella posizione giusta per funzionare.
+
+        # =====================================================================
+        # REGOLA 3: POTENZIAMENTI (MOD, MAT, POT)
+        # =====================================================================
+        # "Attivo solo se montato in oggetto fisico ed esso è equipaggiato"
+        if self.ospitato_su:
+            # Verifica se l'host è equipaggiato
+            if self.ospitato_su.is_equipaggiato:
+                return True
+            # Supporto per catene (es. Mod su Mod): se l'host è attivo, sono attivo
+            elif self.ospitato_su.is_active(): 
+                return True
+            else:
                 return False
 
-        # 3. CHECK POSIZIONAMENTO (Gerarchia)
+        # =====================================================================
+        # REGOLA 4: AUMENTI (INN, MUT, AUM)
+        # =====================================================================
+        # "Attivo se durata=0 o timer valido". (Già verificato sopra).
+        # Un aumento esiste solo se ha uno slot corpo o è di tipo Innesto/Mutazione.
+        if self.tipo_oggetto in ['INN', 'MUT', 'AUM'] or self.slot_corpo:
+            return True
+
+        # =====================================================================
+        # REGOLA 5: OGGETTI FISICI (FIS)
+        # =====================================================================
+        # "Un oggetto fisico è attivo se è equipaggiato, disattivo se non lo è."
         if self.is_equipaggiato:
             return True
-            
-        if self.ospitato_su:
-            # Ricorsione: sono attivo solo se il mio contenitore è attivo
-            return self.ospitato_su.is_active()
-        
-        # Se è nello zaino e non equipaggiato/montato -> OFF
+
+        # Fallback: Se è nello zaino (non equipaggiato, non montato, non innestato) -> OFF
         return False
 
     @property
