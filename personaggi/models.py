@@ -652,7 +652,7 @@ class AbilitaStatistica(CondizioneStatisticaMixin):
     
 class ConfigurazioneLivelloAura(models.Model):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': 'AU'}, related_name="configurazione_livelli")
-    livello = models.IntegerField(default=1, help_text="A che valore di aura si sblocca questa scelta?")
+    livello = models.IntegerField(default=1, help_text="A che valore di aura si sblocca questa scelta?" null=True, blank=True)
     nome_step = models.CharField(max_length=50, help_text="Es. Archetipo, Sottotipo, Dono Divino")
     descrizione_fluff = models.TextField(blank=True, null=True, help_text="Testo descrittivo per l'interfaccia")
     is_obbligatorio = models.BooleanField(default=True, help_text="Il giocatore DEVE fare una scelta per questo livello?")
