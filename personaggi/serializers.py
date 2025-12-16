@@ -314,17 +314,14 @@ class AbilitaSmallSerializer(serializers.ModelSerializer):
         )
         
     def get_statistica_modificata(self, obj):
-        # 1. ERRORE PRECEDENTE: obj.statistiche.all() restituiva i Punteggi (senza valore)
-        # 2. SOLUZIONE: Usiamo la relazione inversa definita in AbilitaStatistica.abilita
-        #    che nel tuo models.py ha related_name='abilita_statistiche'
-        mods = obj.abilita_statistiche.all()
+        # CORREZIONE: Uso il related_name di default 'abilitastatistica_set'
+        mods = obj.abilitastatistica_set.all()
         
         if not mods:
             return None
             
         testi = []
         for mod in mods:
-            # mod qui è un'istanza di AbilitaStatistica
             if mod.statistica:
                 segno = "+" if mod.valore > 0 else ""
                 testi.append(f"{mod.statistica.nome} {segno}{mod.valore}")

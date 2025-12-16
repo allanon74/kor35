@@ -142,7 +142,7 @@ class PunteggioViewSet(viewsets.ModelViewSet):
             'tratti_collegati',  # Questo deve essere il related_name in Abilita.aura_riferimento
             queryset=Abilita.objects.filter(is_tratto_aura=True)
             .select_related('caratteristica')
-            .prefetch_related('statistiche__statistica'),
+            .prefetch_related('abilitastatistica_set__statistica'),
             to_attr='tratti_aura_prefetched'
         )
 
