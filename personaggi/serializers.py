@@ -309,6 +309,7 @@ class AbilitaSmallSerializer(serializers.ModelSerializer):
             'descrizione_breve', 
             'livello_riferimento',  # <--- CRUCIALE PER IL FILTRO
             'is_tratto_aura',
+            'caratteristica',
             # 'statistica_modificata',
             # 'valore_modifica'
         )
