@@ -43,6 +43,7 @@ from .models import (
     OggettoBase, OggettoStatisticaBase, OggettoBaseModificatore, OggettoBaseStatisticaBase, 
     RichiestaAssemblaggio, 
     InfusioneStatistica,
+    ConfigurazioneLivelloAura,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -417,6 +418,12 @@ class AbilitaAdmin(A_Admin):
     search_fields = ['nome', 'descrizione']
     inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline)
     save_as = True; exclude = ('statistiche',)
+    
+@admin.register(ConfigurazioneLivelloAura)
+class ConfigurazioneLivelloAuraAdmin(admin.ModelAdmin):
+    list_display = ('aura', 'livello', 'costo_crediti', 'tempo_forgiatura')
+    list_filter = ('aura',)
+    search_fields = ('aura__nome',)
 
 @admin.register(Punteggio)
 class PunteggioAdmin(IconaAdminMixin, A_Admin):
