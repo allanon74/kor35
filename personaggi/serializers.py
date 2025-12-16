@@ -499,6 +499,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'is_active', 
             'TestoFormattato',
             'cariche_massime', 'durata_totale', 'costo_ricarica', 'testo_ricarica', 'seconds_remaining',
+            'data_fine_attivazione',
             'is_active', 'spegne_a_zero_cariche', 
             'statistiche', 'componenti', 
             'attacco_base', 'attacco_formattato',
