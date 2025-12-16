@@ -6,7 +6,7 @@ from django.utils.html import format_html
 from django.contrib.auth.models import User
 from decimal import Decimal
 
-from .models import formatta_testo_generico
+from .models import ConfigurazioneLivelloAura, formatta_testo_generico
 # Importa i modelli e le funzioni helper
 from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
@@ -138,6 +138,10 @@ class ModelloAuraSerializer(serializers.ModelSerializer):
         model = ModelloAura
         fields = ('id', 'nome', 'aura', 'mattoni_proibiti')
 
+class ConfigurazioneLivelloAuraSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConfigurazioneLivelloAura
+        fields = ('id', 'livello', 'nome_step', 'descrizione_fluff', 'is_obbligatorio')
 
 class PunteggioDetailSerializer(serializers.ModelSerializer):
     icona_url = serializers.SerializerMethodField()
@@ -151,6 +155,8 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     produce_materia = serializers.SerializerMethodField()
     produce_innesti = serializers.SerializerMethodField()
     produce_mutazioni = serializers.SerializerMethodField()
+    configurazione_livelli = ConfigurazioneLivelloAuraSerializer(many=True, read_only=True)
+    tratti_disponibili = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
@@ -179,7 +185,8 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'nome_tipo_potenziamento',
             'nome_tipo_tessitura',
             'spegne_a_zero_cariche',
-            'potenziamenti_multi_slot'
+            'potenziamenti_multi_slot',
+            'configurazione_livelli', 'tratti_disponibili',
         )
         
     def get_produce_mod(self, obj):
@@ -246,6 +253,21 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             pass
         return None
 
+    def get_tratti_disponibili(self, obj):
+        # STEP 1: Controllo Cache (Ottimizzazione per Liste)
+        # Se la View ha usato prefetch_related con to_attr, usiamo la lista in memoria.
+        if hasattr(obj, 'tratti_aura_prefetched'):
+            return AbilitaSmallSerializer(obj.tratti_aura_prefetched, many=True).data
+
+        # STEP 2: Query Ottimizzata (Fallback per Dettaglio Singolo)
+        # Se non c'è cache, facciamo la query ma con select_related('caratteristica')
+        # Questo serve perché AbilitaSmallSerializer deve leggere .caratteristica.nome/icona
+        tratti = Abilita.objects.filter(
+            is_tratto_aura=True, 
+            aura_riferimento=obj
+        ).select_related('caratteristica')
+        
+        return AbilitaSmallSerializer(tratti, many=True).data
 
 # -----------------------------------------------------------------------------
 # SERIALIZER PER LE VIEWSET DI ABILITÀ

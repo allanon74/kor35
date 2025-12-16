@@ -649,6 +649,22 @@ class AbilitaStatistica(CondizioneStatisticaMixin):
     valore = models.IntegerField(default=0)
     class Meta: unique_together = ('abilita', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore}"
+    
+class ConfigurazioneLivelloAura(models.Model):
+    aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': 'AU'}, related_name="configurazione_livelli")
+    livello = models.IntegerField(default=1, help_text="A che valore di aura si sblocca questa scelta?")
+    nome_step = models.CharField(max_length=50, help_text="Es. Archetipo, Sottotipo, Dono Divino")
+    descrizione_fluff = models.TextField(blank=True, null=True, help_text="Testo descrittivo per l'interfaccia")
+    is_obbligatorio = models.BooleanField(default=True, help_text="Il giocatore DEVE fare una scelta per questo livello?")
+    
+    class Meta:
+        ordering = ['aura', 'livello']
+        unique_together = ('aura', 'livello')
+        verbose_name = "Configurazione Livello Aura"
+        verbose_name_plural = "Configurazioni Livelli Aura"
+
+    def __str__(self):
+        return f"{self.aura.nome} Lv.{self.livello}: {self.nome_step}"
 
 class Abilita(A_modello):
     nome = models.CharField(max_length=90)
@@ -661,8 +677,17 @@ class Abilita(A_modello):
     tabelle_sbloccate = models.ManyToManyField(Tabella, related_name="abilita_sbloccante", through="abilita_sbloccata")
     punteggio_acquisito = models.ManyToManyField(Punteggio, related_name="abilita_acquisizione", through="abilita_punteggio")
     statistiche = models.ManyToManyField(Statistica, through='AbilitaStatistica', blank=True, related_name="abilita_statistiche")
-    class Meta: verbose_name = "Abilità"; verbose_name_plural = "Abilità"
-    def __str__(self): return self.nome
+    # NUOVI CAMPI PER GESTIRE I TRATTI D'AURA
+    is_tratto_aura = models.BooleanField(default=False, verbose_name="È un Tratto d'Aura?")
+    aura_riferimento = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': 'AU'}, related_name="tratti_collegati")
+    livello_riferimento = models.IntegerField(default=0, help_text="A quale livello di questa aura appartiene questo tratto?")
+    
+    class Meta: 
+        verbose_name = "Abilità" 
+        verbose_name_plural = "Abilità"
+    
+    def __str__(self): 
+        return self.nome
 
 class abilita_tier(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
@@ -1187,6 +1212,28 @@ class Personaggio(Inventario):
             if mattoni_obbligatori.exists():
                 for m_obb in mattoni_obbligatori:
                     if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids: return False, f"Manca componente obbligatorio: {m_obb.nome}."
+        return True, "OK"
+    
+    def valida_acquisizione_abilita(self, abilita):
+        # ... controlli standard (costi, requisiti) ...
+
+        # Controllo Esclusività Tratto Aura
+        if abilita.is_tratto_aura and abilita.aura_riferimento:
+            # Cerca se il personaggio ha già un'abilità per questa Aura e questo Livello
+            tratti_esistenti = self.abilita_possedute.filter(
+                is_tratto_aura=True,
+                aura_riferimento=abilita.aura_riferimento,
+                livello_riferimento=abilita.livello_riferimento
+            ).exclude(pk=abilita.pk) # Escludi se stessa se stiamo aggiornando
+            
+            if tratti_esistenti.exists():
+                return False, f"Hai già selezionato un {tratti_esistenti.first().nome} per il livello {abilita.livello_riferimento} di {abilita.aura_riferimento.nome}."
+
+            # Controllo: Ho il punteggio di Aura necessario?
+            valore_aura = self.get_valore_aura_effettivo(abilita.aura_riferimento)
+            if valore_aura < abilita.livello_riferimento:
+                return False, f"La tua Aura {abilita.aura_riferimento.nome} è troppo bassa ({valore_aura}/{abilita.livello_riferimento})."
+
         return True, "OK"
     
     # @property

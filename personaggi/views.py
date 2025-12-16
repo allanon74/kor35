@@ -29,6 +29,7 @@ from .models import (
     COSTO_DEFAULT_INVIO_PROPOSTA,
     RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE,
     ClasseOggetto, Statistica, 
+    ConfigurazioneLivelloAura,
 )
 
 import uuid 
@@ -124,9 +125,37 @@ class TierViewSet(viewsets.ModelViewSet):
     authentication_classes = (TokenAuthentication,)
 
 class PunteggioViewSet(viewsets.ModelViewSet):
-    queryset = Punteggio.objects.all()
+    # queryset = Punteggio.objects.all()
     serializer_class = PunteggioSerializer
     authentication_classes = (TokenAuthentication,)
+    
+    def get_queryset(self):
+        """
+        Questa query è ottimizzata per scaricare in 2 sole query SQL:
+        1. Tutte le Aure e le loro Configurazioni Livelli.
+        2. Tutte le Abilità 'Tratto' collegate, inclusa la loro caratteristica.
+        """
+        
+        # 1. Prepariamo la regola per scaricare i TRATTI (le opzioni selezionabili)
+        #    e li mettiamo nell'attributo 'tratti_aura_prefetched' che il Serializer cerca.
+        prefetch_tratti = Prefetch(
+            'tratti_collegati',  # Questo deve essere il related_name in Abilita.aura_riferimento
+            queryset=Abilita.objects.filter(is_tratto_aura=True).select_related('caratteristica'),
+            to_attr='tratti_aura_prefetched'
+        )
+
+        # 2. Prepariamo la regola per scaricare la CONFIGURAZIONE (Archetipo, Sottotipo...)
+        #    ordinata per livello
+        prefetch_config = Prefetch(
+            'configurazione_livelli', # related_name in ConfigurazioneLivelloAura.aura
+            queryset=ConfigurazioneLivelloAura.objects.order_by('livello')
+        )
+
+        # 3. Eseguiamo la query principale unendo i pezzi
+        return Punteggio.objects.all().prefetch_related(
+            prefetch_config,
+            prefetch_tratti
+        ).order_by('tipo', 'ordine', 'nome')
 
 class TabellaViewSet(viewsets.ModelViewSet):
     queryset = Tabella.objects.all()
