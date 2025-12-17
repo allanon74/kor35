@@ -430,7 +430,7 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
             'costo_pc', 'costo_crediti',
             'caratteristica', 'requisiti', 'prerequisiti',
             'punteggi_assegnati', 'statistiche_modificate',
-            'costo_pieno', 'costo_effettivo',
+            'costo_pieno', 'costo_effettivo', 'is_tratto_aura',
         )
 
     def get_costo_effettivo(self, obj):
