@@ -18,6 +18,7 @@ from icon_widget.fields import CustomIconField
 # --- COSTANTI DI SISTEMA (FALLBACK) ---
 COSTO_PER_MATTONE_INFUSIONE = 100
 COSTO_PER_MATTONE_TESSITURA = 100
+COSTO_PER_MATTONE_CERIMONIALE = 100
 COSTO_PER_MATTONE_OGGETTO = 100
 COSTO_PER_MATTONE_CREAZIONE = 10 # Costo invio proposta
 COSTO_DEFAULT_PER_MATTONE = 100
@@ -48,10 +49,12 @@ STATO_PROPOSTA_CHOICES = [
 
 TIPO_PROPOSTA_INFUSIONE = 'INF'
 TIPO_PROPOSTA_TESSITURA = 'TES'
+TIPO_PROPOSTA_CERIMONIALE = 'CER'
 
 TIPO_PROPOSTA_CHOICES = [
     (TIPO_PROPOSTA_INFUSIONE, 'Infusione'),
     (TIPO_PROPOSTA_TESSITURA, 'Tessitura'),
+    (TIPO_PROPOSTA_CERIMONIALE, 'Cerimoniale'),
 ]
 
 TIPO_OGGETTO_FISICO = 'FIS'
@@ -455,7 +458,18 @@ def genera_html_cariche(item, personaggio=None):
 
 # --- TIPI ---
 CARATTERISTICA = "CA"; STATISTICA = "ST"; ELEMENTO = "EL"; AURA = "AU"; CONDIZIONE = "CO"; CULTO = "CU"; VIA = "VI"; ARTE = "AR"; ARCHETIPO = "AR"
-punteggi_tipo = [(CARATTERISTICA, 'Caratteristica'), (STATISTICA, 'Statistica'), (ELEMENTO, 'Elemento'), (AURA, 'Aura'), (CONDIZIONE, 'Condizione'), (CULTO, 'Culto'), (VIA, 'Via'), (ARTE, 'Arte'), (ARCHETIPO, 'Archetipo')]
+
+punteggi_tipo = [
+    (CARATTERISTICA, 'Caratteristica'), 
+    (STATISTICA, 'Statistica'), 
+    (ELEMENTO, 'Elemento'), (AURA, 'Aura'), 
+    (CONDIZIONE, 'Condizione'), 
+    (CULTO, 'Culto'), 
+    (VIA, 'Via'), 
+    (ARTE, 'Arte'), 
+    (ARCHETIPO, 'Archetipo')
+]
+    
 TIER_1 = "T1"; TIER_2 = "T2"; TIER_3 = "T3"; TIER_4 = "T4"
 tabelle_tipo = [(TIER_1, 'Tier 1'), (TIER_2, 'Tier 2'), (TIER_3, 'Tier 3'), (TIER_4, 'Tier 4')]
 MODIFICATORE_ADDITIVO = 'ADD'; MODIFICATORE_MOLTIPLICATIVO = 'MOL'
@@ -541,7 +555,17 @@ class Punteggio(Tabella):
     caratteristica_relativa = models.ForeignKey("Punteggio", on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, null=True, blank=True, related_name="punteggi_caratteristica")
     modifica_statistiche = models.ManyToManyField('Statistica', through='CaratteristicaModificatore', related_name='modificata_da_caratteristiche', blank=True)
     aure_infusione_consentite = models.ManyToManyField('self', blank=True, symmetrical=False, related_name='puo_essere_infusa_in')
-    class Meta: verbose_name = "Punteggio"; verbose_name_plural = "Punteggi"; ordering = ['tipo', 'ordine', 'nome']
+    
+    # --- NUOVI CAMPI CERIMONIALI ---
+    permette_cerimoniali = models.BooleanField(default=False, verbose_name="Permette Cerimoniali")
+    stat_costo_acquisto_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_cer', verbose_name="Stat. Costo Acquisto Cerimoniale")
+    stat_costo_creazione_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_cer', verbose_name="Stat. Costo Creazione Cerimoniale")
+    # -------------------------------
+    
+    class Meta: 
+        verbose_name = "Punteggio"
+        verbose_name_plural = "Punteggi"
+        ordering = ['tipo', 'ordine', 'nome']
     @property
     def icona_url(self): return f"{settings.MEDIA_URL}{self.icona}" if self.icona else None
     @property
@@ -825,7 +849,47 @@ class Tessitura(Tecnica):
         return self.livello * base
         
     @property
-    def TestoFormattato(self): return formatta_testo_generico(self.testo, formula=self.formula, statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').all(), context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta})
+    def TestoFormattato(self): 
+        return formatta_testo_generico(self.testo, formula=self.formula, statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').all(), context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta})
+    
+class Cerimoniale(Tecnica):
+    """
+    Nuova tecnica collaborativa basata su descrizioni narrative.
+    Richiede Aura e Coralità (CCO).
+    """
+    prerequisiti = models.TextField("Prerequisiti", blank=True, null=True)
+    svolgimento = models.TextField("Svolgimento", blank=True, null=True)
+    effetto = models.TextField("Effetto", blank=True, null=True)
+    
+    caratteristiche = models.ManyToManyField(Punteggio, through='CerimonialeCaratteristica', related_name="cerimoniali_utilizzatori", limit_choices_to={'tipo': CARATTERISTICA})
+    proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='cerimoniale_generato', verbose_name="Proposta Originale")
+    
+    class Meta: 
+        verbose_name = "Cerimoniale"
+        verbose_name_plural = "Cerimoniali"
+    
+    @property
+    def costo_crediti(self): 
+        base = COSTO_PER_MATTONE_CERIMONIALE
+        if self.aura_richiesta and self.aura_richiesta.stat_costo_acquisto_cerimoniale:
+            val = self.aura_richiesta.stat_costo_acquisto_cerimoniale.valore_base_predefinito
+            if val > 0: base = val
+        return self.livello * base
+        
+    @property
+    def TestoFormattato(self):
+        # I cerimoniali sono puramente descrittivi, uniamo i campi
+        parts = []
+        if self.prerequisiti: parts.append(f"<strong>Prerequisiti:</strong> {self.prerequisiti}")
+        if self.svolgimento: parts.append(f"<strong>Svolgimento:</strong> {self.svolgimento}")
+        if self.effetto: parts.append(f"<strong>Effetto:</strong> {self.effetto}")
+        return "<br><br>".join(parts)
+
+class CerimonialeCaratteristica(models.Model):
+    cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE, related_name='componenti')
+    caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
+    valore = models.IntegerField(default=1)
+    class Meta: unique_together = ('cerimoniale', 'caratteristica')
 
 class InfusioneCaratteristica(models.Model):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE, related_name='componenti')
@@ -1143,7 +1207,14 @@ class Personaggio(Inventario):
     modelli_aura = models.ManyToManyField(ModelloAura, through='PersonaggioModelloAura', blank=True, verbose_name="Modelli di Aura")
     statistiche_temporanee = models.JSONField(default=dict, blank=True, verbose_name="Valori Correnti Statistiche")
     
-    class Meta: verbose_name="Personaggio"; verbose_name_plural="Personaggi"
+    # --- NUOVO CAMPO ---
+    cerimoniali_posseduti = models.ManyToManyField(Cerimoniale, through='PersonaggioCerimoniale', blank=True)
+    # -------------------
+    
+    class Meta: 
+        verbose_name="Personaggio"
+        verbose_name_plural="Personaggi"
+        
     def __str__(self): 
         return self.nome
     
@@ -1192,15 +1263,28 @@ class Personaggio(Inventario):
     
     def valida_acquisto_tecnica(self, t):
         if not t.aura_richiesta: return False, "Aura mancante."
-        if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): return False, "Livello tecnica superiore al valore Aura."
         
+        # 1. Controllo Livello Aura
+        if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): 
+            return False, "Livello tecnica superiore al valore Aura."
+        
+        # 2. Controllo Specifico Cerimoniali (Coralità)
+        if isinstance(t, Cerimoniale):
+            # Recupera il valore della statistica 'CCO' (Coralità)
+            valore_cco = self.get_valore_statistica('CCO')
+            if valore_cco < t.livello:
+                return False, f"Coralità insufficiente per questo cerimoniale (Serve {t.livello}, hai {valore_cco})."
+        
+        # 3. Controllo Componenti (Mattoni)
         base = self.caratteristiche_base
         for comp in t.componenti.select_related('caratteristica').all():
             nome_car = comp.caratteristica.nome
             val_richiesto = comp.valore
             val_posseduto = base.get(nome_car, 0)
-            if val_richiesto > val_posseduto: return False, f"Requisito {nome_car} non soddisfatto (Serve {val_richiesto}, hai {val_posseduto})."
+            if val_richiesto > val_posseduto: 
+                return False, f"Requisito {nome_car} non soddisfatto (Serve {val_richiesto}, hai {val_posseduto})."
 
+        # 4. Controllo Modelli Aura (esistente)
         modello = self.modelli_aura.filter(aura=t.aura_richiesta).first()
         if modello:
             caratteristiche_usate_ids = set(t.componenti.values_list('caratteristica_id', flat=True))
@@ -1212,6 +1296,7 @@ class Personaggio(Inventario):
             if mattoni_obbligatori.exists():
                 for m_obb in mattoni_obbligatori:
                     if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids: return False, f"Manca componente obbligatorio: {m_obb.nome}."
+        
         return True, "OK"
     
     def valida_acquisizione_abilita(self, abilita):
@@ -1563,6 +1648,12 @@ class PersonaggioInfusione(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
 class PersonaggioTessitura(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
+
+class PersonaggioCerimoniale(models.Model):
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
 class PersonaggioModelloAura(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); modello_aura = models.ForeignKey(ModelloAura, on_delete=models.CASCADE)
     class Meta: verbose_name_plural="Personaggio - Modelli Aura"
@@ -1628,6 +1719,10 @@ class TierPluginModel(CMSPlugin):
     tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='cms_kor_tier_plugin')
     def __str__(self): return self.tier.nome
     
+class CerimonialePluginModel(CMSPlugin):
+    cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE)
+    def __str__(self): return self.cerimoniale.nome
+    
 class PropostaTecnica(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='proposte_tecniche')
     tipo = models.CharField(max_length=3, choices=TIPO_PROPOSTA_CHOICES)
@@ -1653,6 +1748,12 @@ class PropostaTecnica(models.Model):
         default=SCELTA_RISULTATO_POTENZIAMENTO,
         verbose_name="Tipo Oggetto Finale"
     )
+    
+    # --- NUOVI CAMPI PER CERIMONIALI ---
+    prerequisiti = models.TextField("Prerequisiti (Cerimoniale)", blank=True, null=True)
+    svolgimento = models.TextField("Svolgimento (Cerimoniale)", blank=True, null=True)
+    effetto = models.TextField("Effetto (Cerimoniale)", blank=True, null=True)
+    # -----------------------------------
     
     class Meta: 
         ordering = ['-data_creazione']
