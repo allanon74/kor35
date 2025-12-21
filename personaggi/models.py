@@ -763,8 +763,10 @@ class AttivataStatisticaBase(models.Model):
 class Tecnica(A_vista):
     aura_richiesta = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="%(class)s_associate")
     class Meta: abstract = True; ordering = ['nome']
+    
     @property
-    def livello(self): return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
+    def livello(self): 
+        return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
     
 class InfusioneStatistica(CondizioneStatisticaMixin):
     """
@@ -864,9 +866,17 @@ class Cerimoniale(Tecnica):
     caratteristiche = models.ManyToManyField(Punteggio, through='CerimonialeCaratteristica', related_name="cerimoniali_utilizzatori", limit_choices_to={'tipo': CARATTERISTICA})
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='cerimoniale_generato', verbose_name="Proposta Originale")
     
+    liv = models.IntegerField(default=1, verbose_name="Livello")
+    
     class Meta: 
         verbose_name = "Cerimoniale"
         verbose_name_plural = "Cerimoniali"
+    
+    @property
+    def livello(self):
+        # Invece di calcolare la somma dei mattoni (come fa Tecnica),
+        # restituiamo il valore salvato nel DB.
+        return self.liv
     
     @property
     def costo_crediti(self): 
