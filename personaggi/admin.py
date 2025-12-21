@@ -660,7 +660,7 @@ class PersonaggioAdmin(A_Admin):
         PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, 
         CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline
     ]
-    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'testo', ('data_nascita', 'data_morte'))}),
+    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'testo', 'impostazioni_ui', ('data_nascita', 'data_morte'))}),
                  ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))}))
 
 @admin.register(Gruppo)
