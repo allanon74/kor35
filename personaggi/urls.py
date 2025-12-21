@@ -99,6 +99,10 @@ urlpatterns = [
     path('api/personaggio/me/tessiture_acquistabili/', views.TessitureAcquistabiliView.as_view(), name='tessiture_acquistabili'),
     path('api/personaggio/me/acquisisci_tessitura/', views.AcquisisciTessituraView.as_view(), name='acquisisci_tessitura'),
     
+    # Endpoint per Cerimoniali
+    path('api/personaggio/me/cerimoniali_acquistabili/', views.CerimonialiAcquistabiliView.as_view(), name='api_cerimoniali_acquistabili'),
+    path('api/personaggio/me/acquisisci_cerimoniale/', views.AcquisisciCerimonialeView.as_view(), name='api_acquisisci_cerimoniale'),
+    
     # Endpoint per Modelli Aura
     path('api/punteggio/<int:aura_id>/modelli/', views.ModelliAuraListView.as_view(), name='lista_modelli_aura'),
     path('api/personaggio/me/seleziona_modello_aura/', views.SelezionaModelloAuraView.as_view(), name='seleziona_modello_aura'),

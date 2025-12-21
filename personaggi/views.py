@@ -29,7 +29,7 @@ from .models import (
     COSTO_DEFAULT_INVIO_PROPOSTA,
     RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE,
     ClasseOggetto, Statistica, 
-    ConfigurazioneLivelloAura,
+    ConfigurazioneLivelloAura, Cerimoniale,
 )
 
 import uuid 
@@ -82,7 +82,7 @@ from .serializers import (
     AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
-    ClasseOggettoSerializer, 
+    ClasseOggettoSerializer, CerimonialeSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -475,6 +475,88 @@ class AcquisisciTessituraView(APIView):
                 if royalty > 0:
                     creatore.modifica_crediti(royalty, f"Royalty per l'acquisto di '{tessitura.nome}' da parte di {personaggio.nome}")
                     creatore.aggiungi_log(f"Ha ricevuto {royalty} CR di royalty per la tecnica '{tessitura.nome}'.")
+
+        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+class CerimonialiAcquistabiliView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = CerimonialeSerializer
+
+    def get(self, request, format=None):
+        character_id = request.query_params.get('char_id')
+        if not character_id: 
+            return Response({"error": "L'ID del personaggio è richiesto."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.select_related('tipologia').get(id=character_id)
+        except Personaggio.DoesNotExist: 
+            return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        
+        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+            return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Escludi quelli già posseduti
+        possedute_ids = personaggio.cerimoniali_posseduti.values_list('id', flat=True)
+        
+        tutti_cerimoniali = Cerimoniale.objects.exclude(id__in=possedute_ids).select_related(
+            'aura_richiesta'
+        ).prefetch_related(
+            'componenti__caratteristica'
+        ).order_by('livello', 'nome')
+
+        acquistabili = []
+        for cer in tutti_cerimoniali:
+            # Usa il metodo di validazione che abbiamo aggiornato nel modello Personaggio
+            is_valid, _ = personaggio.valida_acquisto_tecnica(cer)
+            if is_valid:
+                acquistabili.append(cer)
+
+        serializer = CerimonialeSerializer(acquistabili, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class AcquisisciCerimonialeView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    @transaction.atomic 
+    def post(self, request, format=None):
+        personaggio_id = request.data.get('personaggio_id')
+        cerimoniale_id = request.data.get('cerimoniale_id')
+        
+        if not personaggio_id or not cerimoniale_id: 
+            return Response({"error": "Dati mancanti."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            cerimoniale = Cerimoniale.objects.prefetch_related('componenti').get(id=cerimoniale_id)
+        except (Personaggio.DoesNotExist, Cerimoniale.DoesNotExist): 
+            return Response({"error": "Oggetto non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Verifica requisiti
+        is_valid, error_msg = personaggio.valida_acquisto_tecnica(cerimoniale)
+        if not is_valid: 
+            return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        if personaggio.cerimoniali_posseduti.filter(id=cerimoniale.id).exists(): 
+            return Response({"error": "Cerimoniale già conosciuto."}, status=status.HTTP_400_BAD_REQUEST)
+
+        costo = cerimoniale.costo_crediti
+        if personaggio.crediti < costo: 
+            return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Esegui transazione
+        personaggio.modifica_crediti(-costo, f"Appreso cerimoniale: {cerimoniale.nome}")
+        personaggio.cerimoniali_posseduti.add(cerimoniale)
+        personaggio.aggiungi_log(f"Ha appreso il cerimoniale '{cerimoniale.nome}' (Liv. {cerimoniale.livello}).")
+        
+        # Gestione Royalty (Opzionale, come per le altre tecniche)
+        if hasattr(cerimoniale, 'proposta_creazione') and cerimoniale.proposta_creazione:
+            creatore = cerimoniale.proposta_creazione.personaggio
+            if creatore and creatore.id != personaggio.id:
+                royalty = int(round(costo * 0.10))
+                if royalty > 0:
+                    creatore.modifica_crediti(royalty, f"Royalty per '{cerimoniale.nome}' da {personaggio.nome}")
 
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)

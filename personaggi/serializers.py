@@ -29,6 +29,7 @@ from .models import (
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, 
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
+    Cerimoniale, 
 )
 
 # -----------------------------------------------------------------------------
@@ -883,6 +884,21 @@ class TessituraSerializer(serializers.ModelSerializer):
         if personaggio:
             return personaggio.get_costo_item_scontato(obj)
         return obj.costo_crediti
+
+class CerimonialeSerializer(serializers.ModelSerializer):
+    # Serializer per lista/dettaglio cerimoniali
+    aura_richiesta = PunteggioSmallSerializer(read_only=True)
+    componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
+    TestoFormattato = serializers.CharField(read_only=True)
+    costo_crediti = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Cerimoniale
+        fields = (
+            'id', 'nome', 'livello', 'aura_richiesta',
+            'prerequisiti', 'svolgimento', 'effetto',
+            'TestoFormattato', 'costo_crediti', 'componenti'
+        )
 
 
 # -----------------------------------------------------------------------------
