@@ -503,7 +503,7 @@ class CerimonialiAcquistabiliView(generics.GenericAPIView):
             'aura_richiesta'
         ).prefetch_related(
             'componenti__caratteristica'
-        ).order_by('livello', 'nome')
+        ).order_by('liv', 'nome')
 
         acquistabili = []
         for cer in tutti_cerimoniali:
