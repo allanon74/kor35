@@ -1073,6 +1073,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     lavori_pendenti_count = serializers.SerializerMethodField()
     messaggi_non_letti_count = serializers.SerializerMethodField()
     statistiche_primarie = serializers.SerializerMethodField()
+    
+    impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
 
     class Meta:
         model = Personaggio
@@ -1087,6 +1089,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'is_staff', 'modelli_aura',
             'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
+            'impostazioni_ui',
         )
 
     def get_oggetti(self, personaggio):
