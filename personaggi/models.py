@@ -1209,6 +1209,7 @@ class Personaggio(Inventario):
     
     # --- NUOVO CAMPO ---
     cerimoniali_posseduti = models.ManyToManyField(Cerimoniale, through='PersonaggioCerimoniale', blank=True)
+    impostazioni_ui = models.JSONField(default=dict, blank=True, verbose_name="Impostazioni UI")
     # -------------------
     
     class Meta: 
