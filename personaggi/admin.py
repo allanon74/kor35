@@ -9,7 +9,7 @@ from django.utils import timezone
 
 # Import aggiornati dai models
 from .models import (
-    CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, 
+    CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioCerimoniale, 
     PersonaggioLog, QrCode, Oggetto, OggettoCaratteristica, 
     Manifesto, OggettoStatistica, 
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
@@ -44,6 +44,7 @@ from .models import (
     RichiestaAssemblaggio, 
     InfusioneStatistica,
     ConfigurazioneLivelloAura,
+    Cerimoniale, CerimonialeCaratteristica,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -302,15 +303,35 @@ class TessituraCreationInline(admin.StackedInline):
     verbose_name = "Crea Tessitura da questa proposta"
     show_change_link = True
 
+class CerimonialeCaratteristicaInline(admin.TabularInline):
+    model = CerimonialeCaratteristica
+    extra = 1
+
+# Inline "inverso" per creare il Cerimoniale direttamente dalla pagina della Proposta
+class CerimonialeCreationInline(admin.StackedInline):
+    model = Cerimoniale
+    can_delete = False
+    verbose_name_plural = "Crea Cerimoniale (Compila per Approvare)"
+    # Nascondi i campi che verranno popolati automaticamente o non servono in creazione rapida
+    fields = ('nome', 'liv', 'aura_richiesta', 'prerequisiti', 'svolgimento', 'effetto') 
+    
+    def get_max_num(self, request, obj=None, **kwargs):
+        # Permetti solo 1 cerimoniale per proposta
+        return 1 if obj and not getattr(obj, 'cerimoniale_generato', None) else 0
+
+
 @admin.register(PropostaTecnica)
 class PropostaTecnicaAdmin(admin.ModelAdmin):
     list_display = ('nome', 'tipo', 'personaggio', 'stato', 'data_creazione',)
     list_filter = ('stato', 'tipo')
-    inlines = [PropostaCaratteristicaInline, InfusioneCreationInline, TessituraCreationInline]
+    
+    # AGGIUNTO: CerimonialeCreationInline se vuoi permettere la creazione contestuale (opzionale ma consigliato)
+    # Dovrai definire CerimonialeCreationInline prima di questa classe, vedi sotto.
+    inlines = [PropostaCaratteristicaInline, InfusioneCreationInline, TessituraCreationInline, CerimonialeCreationInline]
+    
     readonly_fields = ('personaggio', 'componenti_text', 'costo_invio_pagato', 'data_invio')
     
     def componenti_text(self, obj):
-        # CORREZIONE: Usa 'componenti' (related_name)
         return ", ".join([f"{c.caratteristica.nome} ({c.valore})" for c in obj.componenti.all()])
     componenti_text.short_description = "Componenti Richiesti"
 
@@ -319,8 +340,18 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         if not obj: return instances
         filtered_instances = []
         for inline in instances:
+            # Filtri esistenti
             if isinstance(inline, InfusioneCreationInline) and obj.tipo == TIPO_PROPOSTA_TESSITURA: continue
             if isinstance(inline, TessituraCreationInline) and obj.tipo == TIPO_PROPOSTA_INFUSIONE: continue
+            
+            # --- FILTRI AGGIUNTI PER CERIMONIALI ---
+            # Nascondi creazione Cerimoniale se non è tipo CER
+            if isinstance(inline, CerimonialeCreationInline) and obj.tipo != 'CER': continue
+            
+            # Nascondi creazione Infusione/Tessitura se è tipo CER
+            if (isinstance(inline, InfusioneCreationInline) or isinstance(inline, TessituraCreationInline)) and obj.tipo == 'CER': continue
+            # ---------------------------------------
+            
             filtered_instances.append(inline)
         return filtered_instances
     
@@ -344,47 +375,44 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
         tecnica_creata = None
         tipo_tecnica = None
         
-        # Rimosso il try-except silenzioso per vedere eventuali errori
+        # --- LOGICA DI RILEVAMENTO TECNICA CREATA ---
         if hasattr(obj, 'infusione_generata') and obj.infusione_generata:
             tecnica_creata = obj.infusione_generata; tipo_tecnica = 'infusione'
         elif hasattr(obj, 'tessitura_generata') and obj.tessitura_generata:
             tecnica_creata = obj.tessitura_generata; tipo_tecnica = 'tessitura'
+        # NUOVO: CERIMONIALE
+        elif hasattr(obj, 'cerimoniale_generato') and obj.cerimoniale_generato:
+            tecnica_creata = obj.cerimoniale_generato; tipo_tecnica = 'cerimoniale'
+        # ---------------------------------------------
 
         if tecnica_creata and obj.stato != STATO_PROPOSTA_APPROVATA:
-            has_componenti = False
-            # CORREZIONE: Usa 'componenti' (related_name), valido per entrambi
-            has_componenti = tecnica_creata.componenti.exists()
+            has_componenti = tecnica_creata.componenti.exists() # Valido per tutti (related_name='componenti')
 
             if not has_componenti:
-                # CORREZIONE: Usa 'componenti' anche per la proposta
                 componenti_proposta = obj.componenti.all()
                 for cp in componenti_proposta:
                     if tipo_tecnica == 'infusione':
-                        InfusioneCaratteristica.objects.create(
-                            infusione=tecnica_creata, 
-                            caratteristica=cp.caratteristica, 
-                            valore=cp.valore
-                        )
+                        InfusioneCaratteristica.objects.create(infusione=tecnica_creata, caratteristica=cp.caratteristica, valore=cp.valore)
                     elif tipo_tecnica == 'tessitura':
-                        TessituraCaratteristica.objects.create(
-                            tessitura=tecnica_creata, 
-                            caratteristica=cp.caratteristica, 
-                            valore=cp.valore
-                        )
+                        TessituraCaratteristica.objects.create(tessitura=tecnica_creata, caratteristica=cp.caratteristica, valore=cp.valore)
+                    # --- NUOVO: COPIA COMPONENTI CERIMONIALE ---
+                    elif tipo_tecnica == 'cerimoniale':
+                        CerimonialeCaratteristica.objects.create(cerimoniale=tecnica_creata, caratteristica=cp.caratteristica, valore=cp.valore)
+                    # -------------------------------------------
+                
                 obj.note_staff = (obj.note_staff or "") + f"\n[System] Componenti copiati automaticamente su {tecnica_creata.nome}."
 
             obj.stato = STATO_PROPOSTA_APPROVATA
             if not obj.note_staff: obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
             obj.save()
             
-            # --- LOGICA PAGAMENTO ATTIVATA ---
-            # Scala i crediti per la creazione (costo acquisto tecnica personale)
+            # --- LOGICA PAGAMENTO ---
             costo = tecnica_creata.costo_crediti
             if costo > 0:
                 obj.personaggio.modifica_crediti(-costo, f"Approvazione e creazione tecnica: {tecnica_creata.nome}")
                 obj.personaggio.aggiungi_log(f"Ha speso {costo} CR per la creazione della tecnica '{tecnica_creata.nome}'.")
-            # --------------------------------
-
+            
+            # --- ASSEGNAZIONE AL PERSONAGGIO ---
             pg = obj.personaggio
             if tipo_tecnica == 'infusione':
                 if not pg.infusioni_possedute.filter(id=tecnica_creata.id).exists():
@@ -394,6 +422,12 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
                 if not pg.tessiture_possedute.filter(id=tecnica_creata.id).exists():
                     PersonaggioTessitura.objects.create(personaggio=pg, tessitura=tecnica_creata, data_acquisizione=timezone.now())
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto la tessitura '{tecnica_creata.nome}'.")
+            # --- NUOVO: CERIMONIALE ---
+            elif tipo_tecnica == 'cerimoniale':
+                if not pg.cerimoniali_posseduti.filter(id=tecnica_creata.id).exists():
+                    PersonaggioCerimoniale.objects.create(personaggio=pg, cerimoniale=tecnica_creata, data_acquisizione=timezone.now())
+                    pg.aggiungi_log(f"Proposta accettata! Ha ottenuto il cerimoniale '{tecnica_creata.nome}'.")
+            # --------------------------
 
             Messaggio.objects.create(
                 mittente=request.user,
@@ -605,6 +639,17 @@ class TessituraAdmin(SModelAdmin):
     
     def mostra_testo_formattato(self, obj): return format_html("{}", mark_safe(obj.TestoFormattato))
     mostra_testo_formattato.short_description = 'Anteprima Testo'
+    
+@admin.register(Cerimoniale)
+class CerimonialeAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'liv', 'aura_richiesta', 'costo_crediti_display')
+    list_filter = ('aura_richiesta', 'liv')
+    search_fields = ('nome', 'effetto', 'svolgimento')
+    inlines = [CerimonialeCaratteristicaInline]
+    
+    def costo_crediti_display(self, obj):
+        return f"{obj.costo_crediti} CR"
+    costo_crediti_display.short_description = "Costo"
 
 @admin.register(Personaggio)
 class PersonaggioAdmin(A_Admin):
