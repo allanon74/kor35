@@ -45,6 +45,7 @@ from .models import (
     InfusioneStatistica,
     ConfigurazioneLivelloAura,
     Cerimoniale, CerimonialeCaratteristica,
+    TipologiaTimer, TimerQrCode, StatoTimerAttivo,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -566,10 +567,50 @@ admin.site.register(abilita_prerequisito)
 class ManifestoAdmin(SModelAdmin):
     list_display = ('id', 'data_creazione', 'nome'); readonly_fields = ('id', 'data_creazione'); summernote_fields = ['testo']
 
+# --- NUOVA SEZIONE TIMER ---
+
+class TimerQrCodeInline(admin.StackedInline):
+    """Permette di configurare i dati del timer direttamente dal QR-Code"""
+    model = TimerQrCode
+    can_delete = False
+    verbose_name = "Configurazione Countdown"
+    verbose_name_plural = "Configurazione Countdown"
+    fk_name = 'qr_code'
+
+@admin.register(TipologiaTimer)
+class TipologiaTimerAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'alert_suono', 'notifica_push', 'messaggio_in_app')
+    list_editable = ('alert_suono', 'notifica_push', 'messaggio_in_app')
+    search_fields = ('nome',)
+
+@admin.register(StatoTimerAttivo)
+class StatoTimerAttivoAdmin(admin.ModelAdmin):
+    list_display = ('tipologia', 'data_fine', 'secondi_rimanenti_display')
+    readonly_fields = ('data_fine', 'secondi_rimanenti_display')
+    
+    def secondi_rimanenti_display(self, obj):
+        return f"{obj.secondi_rimanenti} secondi"
+    secondi_rimanenti_display.short_description = "Tempo Rimasto"
+
+
 @admin.register(QrCode)
 class QrCodeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'data_creazione'); readonly_fields = ('id', 'data_creazione'); summernote_fields = ['testo']
+    list_display = ('id', 'data_creazione', 'get_timer_info')
+    readonly_fields = ('id', 'data_creazione')
+    summernote_fields = ['testo']
+    inlines = [TimerQrCodeInline] # <--- Aggiunge la configurazione timer al QR
 
+    def get_timer_info(self, obj):
+        if hasattr(obj, 'timer_config'):
+            return format_html(
+                '<span style="color: #ff9800; font-weight: bold;">Timer: {} ({}s)</span>',
+                obj.timer_config.tipologia.nome,
+                obj.timer_config.durata_secondi
+            )
+        return "-"
+    get_timer_info.short_description = "Tipo Timer"
+    
+    
 # @admin.register(Attivata)
 class AttivataAdmin(SModelAdmin):
     # LEGACY
