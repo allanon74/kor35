@@ -49,6 +49,8 @@ router.register(r'richieste-assemblaggio', views.RichiestaAssemblaggioViewSet, b
 
 router.register(r'game', views.GameActionsViewSet, basename='game')
 
+router.register(r'timers/active', views.ActiveTimersViewSet, basename='active-timers')
+
 urlpatterns = [
     
     path('auth/', MyAuthToken.as_view()),

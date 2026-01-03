@@ -86,7 +86,7 @@ from .serializers import (
     AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
-    ClasseOggettoSerializer, CerimonialeSerializer,
+    ClasseOggettoSerializer, CerimonialeSerializer, StatoTimerSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -2145,3 +2145,11 @@ class GameActionsViewSet(viewsets.ViewSet):
             
         serializer = OggettoSerializer(obj)
         return Response(serializer.data)
+    
+class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
+    """API per recuperare i timer attualmente attivi al caricamento dell'app"""
+    serializer_class = StatoTimerSerializer
+
+    def get_queryset(self):
+        # Restituisce solo i timer la cui data di fine è nel futuro
+        return StatoTimerAttivo.objects.filter(data_fine__gt=timezone.now())

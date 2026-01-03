@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.utils.html import format_html
 from django.contrib.auth.models import User
+from django.db import models
 from decimal import Decimal
 
 from .models import ConfigurazioneLivelloAura, formatta_testo_generico
@@ -29,7 +30,7 @@ from .models import (
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, 
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
-    Cerimoniale, 
+    Cerimoniale, StatoTimerAttivo,
 )
 
 # -----------------------------------------------------------------------------
@@ -1436,3 +1437,17 @@ class ClasseOggettoSerializer(serializers.ModelSerializer):
     def get_materia_allowed_ids(self, obj):
         # Recupera gli ID delle caratteristiche dalla relazione 'mattoni_materia_permessi'
         return list(obj.mattoni_materia_permessi.values_list('id', flat=True))
+    
+    
+# personaggi/serializers.py (Aggiungi in fondo)
+
+class StatoTimerSerializer(serializers.ModelSerializer):
+    """Serializza lo stato attivo includendo i dati della tipologia"""
+    nome = serializers.CharField(source='tipologia.nome', read_only=True)
+    alert_suono = serializers.BooleanField(source='tipologia.alert_suono', read_only=True)
+    notifica_push = serializers.BooleanField(source='tipologia.notifica_push', read_only=True)
+    messaggio_in_app = serializers.BooleanField(source='tipologia.messaggio_in_app', read_only=True)
+
+    class Meta:
+        model = StatoTimerAttivo
+        fields = ['id', 'nome', 'data_fine', 'alert_suono', 'notifica_push', 'messaggio_in_app']
