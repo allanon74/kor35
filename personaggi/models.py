@@ -1014,6 +1014,90 @@ class QrCode(models.Model):
                 try: super().save(*args, **kwargs); break
                 except IntegrityError: self.id = generate_short_id()
         else: super().save(*args, **kwargs)
+        
+# --- NUOVI MODELLI PER GESTIONE TIMER (PUNTO A) ---
+
+class TipologiaTimer(models.Model):
+    """
+    Definisce le categorie di timer (es. Protezione, Riposo) e il loro comportamento.
+    """
+    nome = models.CharField(max_length=50, unique=True)
+    alert_suono = models.BooleanField(
+        default=False, 
+        verbose_name="Alert Sonoro", 
+        help_text="Riproduce un suono alla scadenza su tutti i client"
+    )
+    notifica_push = models.BooleanField(
+        default=False, 
+        verbose_name="Notifica App", 
+        help_text="Invia una notifica di sistema al termine del countdown"
+    )
+    messaggio_in_app = models.BooleanField(
+        default=True, 
+        verbose_name="Messaggio Scadenza", 
+        help_text="Mostra un messaggio in-app quando il timer scade"
+    )
+
+    class Meta:
+        verbose_name = "Tipologia Timer"
+        verbose_name_plural = "Tipologie Timer"
+
+    def __str__(self):
+        return self.nome
+
+
+class TimerQrCode(models.Model):
+    """
+    Estensione del modello QrCode per gestire i timer.
+    Collega un codice fisico a una durata e una tipologia.
+    """
+    qr_code = models.OneToOneField(
+        'QrCode', 
+        on_delete=models.CASCADE, 
+        related_name='configurazione_timer'
+    )
+    tipologia = models.ForeignKey(
+        TipologiaTimer, 
+        on_delete=models.CASCADE, 
+        related_name='qr_collegati'
+    )
+    durata_secondi = models.PositiveIntegerField(
+        default=60, 
+        verbose_name="Durata Countdown (secondi)"
+    )
+
+    class Meta:
+        verbose_name = "Configurazione Timer QR"
+        verbose_name_plural = "Configurazioni Timer QR"
+
+    def __str__(self):
+        return f"Timer {self.tipologia.nome} ({self.durata_secondi}s) - QR: {self.qr_code.id}"
+
+
+class StatoTimerAttivo(models.Model):
+    """
+    Modello di runtime per sincronizzare i timer attivi tra tutte le istanze della app.
+    Esiste un solo record per TipologiaTimer se il timer è attivo.
+    """
+    tipologia = models.OneToOneField(
+        TipologiaTimer, 
+        on_delete=models.CASCADE, 
+        related_name='stato_corrente'
+    )
+    data_fine = models.DateTimeField(verbose_name="Data e Ora Scadenza")
+
+    class Meta:
+        verbose_name = "Stato Timer Attivo"
+        verbose_name_plural = "Stati Timer Attivi"
+
+    @property
+    def secondi_rimanenti(self):
+        """Calcola i secondi mancanti rispetto ad ora."""
+        delta = self.data_fine - timezone.now()
+        return max(0, int(delta.total_seconds()))
+
+    def __str__(self):
+        return f"{self.tipologia.nome} - Fine: {self.data_fine}"
             
 class ClasseOggetto(models.Model):
     nome = models.CharField(max_length=50, unique=True)

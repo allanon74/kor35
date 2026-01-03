@@ -10,6 +10,9 @@ from django.utils import timezone
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
 # --- IMPORT MODELLI AGGIORNATI ---
 from .models import (
     OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, 
@@ -30,6 +33,7 @@ from .models import (
     RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE,
     ClasseOggetto, Statistica, 
     ConfigurazioneLivelloAura, Cerimoniale,
+    StatoTimerAttivo,
 )
 
 import uuid 
@@ -612,8 +616,14 @@ class QrCodeDetailView(APIView):
     def get(self, request, qrcode_id, format=None):
         try:
             qr_code = QrCode.objects.select_related('vista').get(id=qrcode_id)
-        except QrCode.DoesNotExist: return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        except QrCode.DoesNotExist:
+            return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
         
+        # --- LOGICA NUOVA: Controllo se è un Timer ---
+        timer_config = getattr(qr_code, 'timer_config', None)
+        if timer_config:
+            return self.gestisci_scansione_timer(timer_config)
+
         vista_obj = qr_code.vista
         if vista_obj is None: return Response({"tipo_modello": "qrcode_scollegato", "messaggio": "Questo QrCode è valido ma non è collegato a nessun oggetto.", "qrcode_id": qr_code.id, "testo_qrcode": qr_code.testo}, status=status.HTTP_200_OK)
         
@@ -656,6 +666,50 @@ class QrCodeDetailView(APIView):
 
         response_payload = {"tipo_modello": model_type, "dati": data}
         return Response(response_payload, status=status.HTTP_200_OK) 
+    
+    def gestisci_scansione_timer(self, config):
+        ora_attuale = timezone.now()
+        
+        # Logica di Stacking (Somma del tempo)
+        stato, created = StatoTimerAttivo.objects.get_or_create(
+            tipologia=config.tipologia,
+            defaults={'data_fine': ora_attuale}
+        )
+        
+        if not created and stato.data_fine > ora_attuale:
+            # Aggiungo la durata del QR al tempo rimanente del primo
+            stato.data_fine += timedelta(seconds=config.durata_secondi)
+        else:
+            # Il timer era scaduto o nuovo, parte da ora + durata
+            stato.data_fine = ora_attuale + timedelta(seconds=config.durata_secondi)
+        
+        stato.save()
+
+        # BROADCAST via WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            'kor35_notifications', # Il gruppo che usi nel tuo NotificationConsumer
+            {
+                'type': 'send_notification',
+                'message': {
+                    'action': 'TIMER_SYNC',
+                    'payload': {
+                        'id': stato.id,
+                        'nome': config.tipologia.nome,
+                        'data_fine': stato.data_fine.isoformat(),
+                        'alert_suono': config.tipologia.alert_suono,
+                        'notifica_push': config.tipologia.notifica_push,
+                        'messaggio_in_app': config.tipologia.messaggio_in_app,
+                    }
+                }
+            }
+        )
+
+        return Response({
+            "tipo_modello": "timer_attivato",
+            "messaggio": f"Timer {config.tipologia.nome} avviato/esteso!",
+            "dati": { "nome": config.tipologia.nome, "scadenza": stato.data_fine }
+        })
     
 class PersonaggioMeView(APIView):
     permission_classes = [IsAuthenticated]
