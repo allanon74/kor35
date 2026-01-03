@@ -620,9 +620,9 @@ class QrCodeDetailView(APIView):
             return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
         
         # --- LOGICA NUOVA: Controllo se è un Timer ---
-        timer_config = getattr(qr_code, 'timer_config', None)
-        if timer_config:
-            return self.gestisci_scansione_timer(timer_config)
+        configurazione_timer = getattr(qr_code, 'configurazione_timer', None)
+        if configurazione_timer:
+            return self.gestisci_scansione_timer(configurazione_timer)
 
         vista_obj = qr_code.vista
         if vista_obj is None: return Response({"tipo_modello": "qrcode_scollegato", "messaggio": "Questo QrCode è valido ma non è collegato a nessun oggetto.", "qrcode_id": qr_code.id, "testo_qrcode": qr_code.testo}, status=status.HTTP_200_OK)
