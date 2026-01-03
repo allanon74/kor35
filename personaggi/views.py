@@ -669,19 +669,32 @@ class QrCodeDetailView(APIView):
     
     def gestisci_scansione_timer(self, config):
         ora_attuale = timezone.now()
+        oggi = ora_attuale.date()
         
         # Logica di Stacking (Somma del tempo)
         stato, created = StatoTimerAttivo.objects.get_or_create(
             tipologia=config.tipologia,
             defaults={'data_fine': ora_attuale}
         )
-        
+        if config.ultima_attivazione == oggi:
+            return Response({
+                "error": "carica_esaurita",
+                "message": "Carica esaurita per oggi! Questo componente può essere attivato solo una volta al giorno."
+            }, status=status.HTTP_403_FORBIDDEN)
+            
         if not created and stato.data_fine > ora_attuale:
             # Aggiungo la durata del QR al tempo rimanente del primo
             stato.data_fine += timedelta(seconds=config.durata_secondi)
         else:
             # Il timer era scaduto o nuovo, parte da ora + durata
             stato.data_fine = ora_attuale + timedelta(seconds=config.durata_secondi)
+        
+        # 3. SALVATAGGIO STATI
+        with transaction.atomic():
+            stato.save()
+            # Registriamo l'attivazione per questo QR specifico
+            config.ultima_attivazione = oggi
+            config.save()
         
         stato.save()
 

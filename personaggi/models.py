@@ -1065,6 +1065,11 @@ class TimerQrCode(models.Model):
         default=60, 
         verbose_name="Durata Countdown (secondi)"
     )
+    ultima_attivazione = models.DateField(
+        null=True, 
+        blank=True, 
+        verbose_name="Data Ultima Attivazione"
+    )
 
     class Meta:
         verbose_name = "Configurazione Timer QR"
