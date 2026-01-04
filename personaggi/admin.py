@@ -569,7 +569,10 @@ admin.site.register(abilita_prerequisito)
 
 @admin.register(Manifesto)
 class ManifestoAdmin(SModelAdmin):
-    list_display = ('id', 'data_creazione', 'nome'); readonly_fields = ('id', 'data_creazione'); summernote_fields = ['testo']
+    list_display = ('id', 'data_creazione', 'nome')
+    readonly_fields = ('id', 'data_creazione')
+    summernote_fields = ['testo']
+    search_fields = ('nome', 'testo')
 
 # --- NUOVA SEZIONE TIMER ---
 
@@ -601,6 +604,7 @@ class StatoTimerAttivoAdmin(admin.ModelAdmin):
 class QrCodeAdmin(admin.ModelAdmin):
     list_display = ('id', 'data_creazione', 'get_timer_info')
     readonly_fields = ('id', 'data_creazione')
+    search_fields = ('id',)
     summernote_fields = ['testo']
     inlines = [TimerQrCodeInline] # <--- Aggiunge la configurazione timer al QR
 
@@ -771,6 +775,7 @@ class PotenziamentiInstallatiInline(admin.TabularInline):
 class InventarioAdmin(admin.ModelAdmin):
     list_display = ['nome', 'id']; search_fields = ['nome']
     def get_queryset(self, request): return super().get_queryset(request).select_related()
+    search_fields = ('nome',)
 
 class TracciamentoInventarioInline(admin.TabularInline):
     model = OggettoInInventario; extra = 0; readonly_fields = ['data_inizio', 'data_fine']; raw_id_fields = ['inventario']; ordering = ['-data_inizio']
