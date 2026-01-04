@@ -937,10 +937,13 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'id', 'tipo', 'stato', 'nome', 'descrizione',
             'aura', 'aura_details', 'aura_infusione',
             'componenti', 'componenti_data',
-            'livello', 'costo_invio_pagato', 'note_staff', 'data_creazione',
+            'livello', 'livello_proposto', 'costo_invio_pagato', 'note_staff', 'data_creazione',
             'slot_corpo_permessi', 'tipo_risultato_atteso',  # <--- CAMPO MANCANTE AGGIUNTO!
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
+        extra_kwargs = {
+            'tipo_risultato_atteso': {'required': False, 'allow_null': True}
+        }
 
     def create(self, validated_data):
         comp_data = validated_data.pop('componenti_data', [])

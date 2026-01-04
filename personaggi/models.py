@@ -560,6 +560,7 @@ class Punteggio(Tabella):
     permette_cerimoniali = models.BooleanField(default=False, verbose_name="Permette Cerimoniali")
     stat_costo_acquisto_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_cer', verbose_name="Stat. Costo Acquisto Cerimoniale")
     stat_costo_creazione_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_cer', verbose_name="Stat. Costo Creazione Cerimoniale")
+    stat_costo_invio_proposta_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_invio_prop_cer', verbose_name="Stat. Costo Invio Proposta (Cer)")
     # -------------------------------
     
     class Meta: 
@@ -1846,13 +1847,15 @@ class PropostaTecnica(models.Model):
         max_length=3, 
         choices=SCELTA_RISULTATO_CHOICES, 
         default=SCELTA_RISULTATO_POTENZIAMENTO,
-        verbose_name="Tipo Oggetto Finale"
+        verbose_name="Tipo Oggetto Finale",
+        null=True, blank=True,
     )
     
     # --- NUOVI CAMPI PER CERIMONIALI ---
     prerequisiti = models.TextField("Prerequisiti (Cerimoniale)", blank=True, null=True)
     svolgimento = models.TextField("Svolgimento (Cerimoniale)", blank=True, null=True)
     effetto = models.TextField("Effetto (Cerimoniale)", blank=True, null=True)
+    livello_proposto = models.IntegerField(default=1, verbose_name="Livello Scelto")
     # -----------------------------------
     
     class Meta: 
