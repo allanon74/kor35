@@ -938,7 +938,8 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'aura', 'aura_details', 'aura_infusione',
             'componenti', 'componenti_data',
             'livello', 'livello_proposto', 'costo_invio_pagato', 'note_staff', 'data_creazione',
-            'slot_corpo_permessi', 'tipo_risultato_atteso',  # <--- CAMPO MANCANTE AGGIUNTO!
+            'slot_corpo_permessi', 'tipo_risultato_atteso', 
+            'prerequisiti', 'svolgimento', 'effetto',
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
         extra_kwargs = {

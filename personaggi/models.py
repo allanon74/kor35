@@ -1868,6 +1868,8 @@ class PropostaTecnica(models.Model):
     
     @property
     def livello(self): 
+        if self.tipo == 'CER':
+            return self.livello_proposto
         return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
 
 class PropostaTecnicaCaratteristica(models.Model):

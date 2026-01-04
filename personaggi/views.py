@@ -1123,11 +1123,17 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
              if proposta.aura.stat_costo_invio_proposta_infusione:
                  val = proposta.aura.stat_costo_invio_proposta_infusione.valore_base_predefinito
                  if val > 0: costo_base = val
-        else: # TES
+        elif proposta.tipo == 'TES':
              # Cerca la statistica specifica per l'invio proposta TES
              if proposta.aura.stat_costo_invio_proposta_tessitura:
                  val = proposta.aura.stat_costo_invio_proposta_tessitura.valore_base_predefinito
                  if val > 0: costo_base = val
+        elif proposta.tipo == 'CER':
+             # Cerca la statistica specifica per l'invio proposta CER
+             if proposta.aura.stat_costo_invio_proposta_cerimoniale:
+                 val = proposta.aura.stat_costo_invio_proposta_cerimoniale.valore_base_predefinito
+                 if val > 0: costo_base = val
+        
                  
         costo_invio = livello * costo_base
 
@@ -1137,6 +1143,11 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
         val_aura = personaggio.get_valore_aura_effettivo(proposta.aura)
         if val_aura < 1: return Response({"error": "Non possiedi l'aura selezionata."}, status=status.HTTP_400_BAD_REQUEST)
         if livello > val_aura: return Response({"error": f"Troppi componenti ({livello}) per il valore della tua aura ({val_aura})."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if proposta.tipo == 'CER':
+            valore_cco = personaggio.get_valore_statistica('CCO')
+            if valore_cco < livello:
+                return Response({"error": f"Coralità (CCO) insufficiente (Serve {livello}, hai {valore_cco})."}, status=400)
 
         # CHECK CARATTERISTICHE
         componenti = proposta.componenti.select_related('caratteristica').all()
