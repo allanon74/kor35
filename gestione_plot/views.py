@@ -5,9 +5,7 @@ from .models import Evento, Quest, QuestMostro, QuestVista
 from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer
 from personaggi.models import QrCode
 
-class IsStaffOrMaster(permissions.BasePermission):
-    def has_permission(self, request, view):
-        return request.user and request.user.is_staff
+from .permissions import IsStaffOrMaster
 
 class EventoViewSet(viewsets.ReadOnlyModelViewSet):
     """

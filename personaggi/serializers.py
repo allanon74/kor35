@@ -1189,7 +1189,12 @@ class PersonaggioPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Personaggio
         fields = ('id', 'nome', 'testo', 'oggetti')
-
+        
+class PersonaggioSerializer(serializers.ModelSerializer):
+    """ Serializer base mancante richiesto dalla gestione plot """
+    class Meta:
+        model = Personaggio
+        fields = ('id', 'nome')
 
 class CreditoMovimentoCreateSerializer(serializers.Serializer):
     importo = serializers.DecimalField(max_digits=10, decimal_places=2)

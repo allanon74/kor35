@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from .models import QrCode, PropostaTecnica, Tessitura, Infusione, Cerimoniale
-from gestione_plot.views import IsStaffOrMaster
+from gestione_plot.permissions import IsStaffOrMaster
 
 class QrInspectorView(APIView):
     """
