@@ -953,7 +953,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
         proposta = PropostaTecnica.objects.create(personaggio=personaggio, **validated_data)
 
         for item in comp_data:
-            c_id = item.get('id')
+            c_id = item.get('caratteristica_id')
             val = item.get('valore', 1)
             if c_id:
                 PropostaTecnicaCaratteristica.objects.create(
@@ -977,7 +977,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             # Ricrea i componenti
             instance.componenti.all().delete()
             for item in comp_data:
-                c_id = item.get('id')
+                c_id = item.get('caratteristica_id')
                 val = item.get('valore', 1)
                 if c_id:
                     PropostaTecnicaCaratteristica.objects.create(
