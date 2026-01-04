@@ -876,6 +876,7 @@ class PersonaggioListView(APIView):
     
 class PersonaggioDetailView(APIView):
     permission_classes = [IsAuthenticated]
+    
     def get(self, request, pk, format=None):
         personaggio = get_object_or_404(Personaggio, pk=pk)
         user = request.user
@@ -883,6 +884,20 @@ class PersonaggioDetailView(APIView):
             return Response({"error": "Non hai il permesso di visualizzare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
         serializer = PersonaggioDetailSerializer(personaggio)
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def patch(self, request, pk, format=None):
+        personaggio = get_object_or_404(Personaggio, pk=pk)
+        
+        # Controllo permessi (solo il proprietario o admin)
+        if not (request.user.is_staff or request.user.is_superuser) and personaggio.proprietario != request.user:
+            return Response({"error": "Non hai il permesso di modificare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Usiamo il serializer esistente con partial=True per l'update parziale
+        serializer = PersonaggioDetailSerializer(personaggio, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 class RubaView(APIView):
     permission_classes = [IsAuthenticated]
