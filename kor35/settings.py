@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 	'personaggi.apps.PersonaggiConfig', #personaggi
 	# 'oggetti.apps.OggettiConfig', #oggetti
+    'gestione_plot.apps.GestionePlotConfig', #gestione plot
 	'django.contrib.sites',
 	'cms', #cms
 	'menus', #cms
