@@ -188,9 +188,9 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'produce_materia', 
             'produce_innesti', 
             'produce_mutazioni',
-            'stat_costo_creazione_infusione', 'stat_costo_creazione_tessitura',
-            'stat_costo_acquisto_infusione', 'stat_costo_acquisto_tessitura',
-            'stat_costo_invio_proposta_infusione', 'stat_costo_invio_proposta_tessitura',
+            'stat_costo_creazione_infusione', 'stat_costo_creazione_tessitura', 'stat_costo_creazione_cerimoniale',
+            'stat_costo_acquisto_infusione', 'stat_costo_acquisto_tessitura', 'stat_costo_acquisto_cerimoniale',
+            'stat_costo_invio_proposta_infusione', 'stat_costo_invio_proposta_tessitura', 'stat_costo_invio_proposta_cerimoniale',
             'stat_costo_forgiatura', 'stat_tempo_forgiatura',
             
             # --- CAMPI AGGIORNATI (Nuova struttura) ---
