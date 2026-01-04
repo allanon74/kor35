@@ -34,6 +34,7 @@ urlpatterns = [
     path('icon-widget-api/', include('icon_widget.urls')), # <-- LA NOSTRA APP
     # --- FINE DELLA PATCH URL ---
     path('personaggi/', include('personaggi.urls')),
+    path('plot/', include('gestione_plot.urls')),
     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),
     # path('auth/', obtain_auth_token),
     path ('auth/', personaggi_views.MyAuthToken.as_view()),

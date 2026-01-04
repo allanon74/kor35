@@ -8,6 +8,7 @@ from rest_framework.routers import DefaultRouter
 
 
 from .views import AbilitaViewSet, PersonaggioTransazioniListView, UserViewSet
+from .views_staff import QrInspectorView, ApprovaPropostaView
 
 
 from .views import (AbilViewSet,
@@ -129,6 +130,9 @@ urlpatterns = [
     
     path('api/forging/validate/', views.ForgingValidationView.as_view(), name='validate_forging'),
     path('api/classi_oggetto/', views.ClasseOggettoListView.as_view(), name='lista_classi_oggetto'),
+    
+    path('api/staff/qr-inspect/<str:qr_id>/', QrInspectorView.as_view(), name='staff-qr-inspect'),
+    path('api/staff/approva-proposta/<int:proposta_id>/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     
     path('api/', include(router.urls)),
     
