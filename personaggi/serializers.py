@@ -92,6 +92,7 @@ class PunteggioSerializer(serializers.ModelSerializer):
             'spegne_a_zero_cariche',
             'potenziamenti_multi_slot',
             'tratti_disponibili',
+            'permette_cerimoniali', 
         )
     
     def get_produce_mod(self, obj):
@@ -178,7 +179,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'id', 'nome', 'sigla', 'tipo', 'colore',
             'icona_url',
             'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
-            'permette_infusioni', 'permette_tessiture',
+            'permette_infusioni', 'permette_tessiture', 'permette_cerimoniali',
             'is_mattone',
             'aura_id', 'caratteristica_associata_nome',
             'aure_infusione_consentite',
