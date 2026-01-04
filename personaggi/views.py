@@ -162,6 +162,28 @@ class PunteggioViewSet(viewsets.ModelViewSet):
             prefetch_config,
             prefetch_tratti
         ).order_by('tipo', 'ordine', 'nome')
+        
+    @action(detail=True, methods=['get'])
+    def mattoni(self, request, pk=None):
+        """Restituisce solo i mattoni legati a questa specifica Aura."""
+        aura = self.get_object()
+        # Filtriamo i mattoni dell'aura e carichiamo la caratteristica associata
+        mattoni = Mattone.objects.filter(aura=aura).select_related('caratteristica_associata')
+        
+        # Costruiamo una risposta semplice con i dati necessari al frontend
+        data = []
+        for m in mattoni:
+            data.append({
+                'id': m.id,
+                'nome': m.nome,
+                'sigla': m.sigla, # Sigla del mattone (es. DRD)
+                'caratteristica_associata': {
+                    'id': m.caratteristica_associata.id,
+                    'nome': m.caratteristica_associata.nome,
+                    'sigla': m.caratteristica_associata.sigla, # Sigla caratteristica (es. MIR)
+                }
+            })
+        return Response(data)
 
 class TabellaViewSet(viewsets.ModelViewSet):
     queryset = Tabella.objects.all()

@@ -200,7 +200,11 @@ class MattoneStatisticaInline(StatisticaModificatorePivotInline):
     model = MattoneStatistica; form = MattoneStatisticaForm; fk_name = 'mattone'
 
 class MattoneInlineForAura(admin.TabularInline):
-    model = Mattone; fk_name = 'aura'; extra = 1; fields = ('nome', 'caratteristica_associata', 'funzionamento_metatalento'); show_change_link = True
+    model = Mattone 
+    fk_name = 'aura'
+    extra = 1
+    fields = ('nome', 'caratteristica_associata', 'funzionamento_metatalento')
+    show_change_link = True
 
 class OggettoStatisticaBaseInline(StatisticaBasePivotInline):
     model = OggettoStatisticaBase; form = OggettoStatisticaBaseForm; fk_name = 'oggetto'
