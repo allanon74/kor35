@@ -14,6 +14,7 @@ class MostroTemplate(models.Model):
     armatura_base = models.IntegerField(default=0)
     guscio_base = models.IntegerField(default=0)
     note_generali = models.TextField(blank=True, help_text="Descrizione fisica o comportamento standard")
+    costume = models.TextField(blank=True, help_text="Tratti distintivi, maschere o indumenti necessari")
 
     class Meta:
         verbose_name = "Template Mostro"
