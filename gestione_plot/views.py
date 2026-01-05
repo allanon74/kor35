@@ -3,8 +3,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioListSerializer, PersonaggioAutocompleteSerializer
-from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PnGAssegnato
-from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, GiornoEventoSerializer, QuestSerializer, PnGAssegnatoSerializer, MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer
+from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato
+from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer
 from personaggi.models import Inventario, Manifesto, Personaggio, QrCode
 
 from django.contrib.auth.models import User
@@ -114,6 +114,6 @@ class MostroTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsStaffOrMaster]
 
 class PngAssegnatoViewSet(viewsets.ModelViewSet):
-    queryset = PnGAssegnato.objects.all()
-    serializer_class = PnGAssegnatoSerializer
+    queryset = PngAssegnato.objects.all()
+    serializer_class = PngAssegnatoSerializer
     permission_classes = [IsMasterOrReadOnly]
