@@ -34,6 +34,11 @@ class QuestMostroSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestMostro
         fields = '__all__'
+        extra_kwargs = {
+            'punti_vita': {'required': False},
+            'armatura': {'required': False},
+            'guscio': {'required': False},
+        }
 
 # --- PNG E VISTE ---
 class PngAssegnatoSerializer(serializers.ModelSerializer):
