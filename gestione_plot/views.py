@@ -1,9 +1,11 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento
-from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, GiornoEventoSerializer, QuestSerializer
-from personaggi.models import QrCode
+
+from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioSerializer
+from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PnGAssegnato
+from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, GiornoEventoSerializer, QuestSerializer, PnGAssegnatoSerializer, MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer
+from personaggi.models import Inventario, Manifesto, Personaggio, QrCode
 
 from .permissions import IsStaffOrMaster
 
@@ -27,6 +29,16 @@ class EventoViewSet(viewsets.ModelViewSet):
         if user.is_superuser:
             return Evento.objects.all().prefetch_related('giorni__quests')
         return Evento.objects.filter(staff_assegnato=user).prefetch_related('giorni__quests')
+    
+    @action(detail=False, methods=['get'])
+    def risorse_editor(self, request):
+        return Response({
+            'png': PersonaggioSerializer(Personaggio.objects.filter(tipologia__giocante=False), many=True).data,
+            'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
+            'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
+            'inventari': InventarioSerializer(Inventario.objects.all(), many=True).data,
+            'staff': UserShortSerializer(User.objects.filter(is_staff=True), many=True).data,
+        })
 
 class GiornoEventoViewSet(viewsets.ModelViewSet):
     queryset = GiornoEvento.objects.all()
@@ -86,3 +98,13 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
             return Response({'status': 'success', 'content': str(target_vista)})
         except QrCode.DoesNotExist:
             return Response({'error': 'QR Code non trovato'}, status=404)
+        
+class MostroTemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = MostroTemplate.objects.all()
+    serializer_class = MostroTemplateSerializer
+    permission_classes = [IsStaffOrMaster]
+
+class PngAssegnatoViewSet(viewsets.ModelViewSet):
+    queryset = PnGAssegnato.objects.all()
+    serializer_class = PnGAssegnatoSerializer
+    permission_classes = [IsMasterOrReadOnly]
