@@ -42,27 +42,11 @@ class EventoViewSet(viewsets.ModelViewSet):
         Esclude inventari di Personaggi/PnG e carica solo i dati minimi.
         """
         return Response({
-            'png': PersonaggioSerializer(
-                Personaggio.objects.filter(tipologia__giocante=False).only('id', 'nome', 'proprietario'), 
-                many=True
-            ).data,
-            'templates': MostroTemplateSerializer(
-                MostroTemplate.objects.all(), 
-                many=True
-            ).data,
-            'manifesti': ManifestoSerializer(
-                Manifesto.objects.all().only('id', 'nome'), 
-                many=True
-            ).data,
-            'inventari': InventarioSerializer(
-                # FILTRO CRUCIALE: Esclude inventari che hanno un Personaggio collegato
-                Inventario.objects.filter(personaggio__isnull=True).only('id', 'nome'), 
-                many=True
-            ).data, 
-            'staff': UserShortSerializer(
-                User.objects.filter(is_staff=True).only('id', 'username'), 
-                many=True
-            ).data,
+        'png': PersonaggioSerializer(Personaggio.objects.all(), many=True).data,
+        'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
+        'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
+        'inventari': InventarioSerializer(Inventario.objects.all(), many=True).data,
+        'staff': UserShortSerializer(User.objects.filter(is_staff=True), many=True).data,
         })
 
 class GiornoEventoViewSet(viewsets.ModelViewSet):

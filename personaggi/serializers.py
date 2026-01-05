@@ -1192,6 +1192,8 @@ class PersonaggioPublicSerializer(serializers.ModelSerializer):
         
 class PersonaggioSerializer(serializers.ModelSerializer):
     """ Serializer base mancante richiesto dalla gestione plot """
+    giocante = serializers.BooleanField(source='tipologia.giocante', read_only=True)
+    tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
     class Meta:
         model = Personaggio
         fields = '__all__' 
