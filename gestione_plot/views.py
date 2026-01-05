@@ -12,15 +12,11 @@ from django.contrib.auth.models import User
 from .permissions import IsStaffOrMaster
 
 class IsMasterOrReadOnly(permissions.BasePermission):
-    """
-    Gli Staffer leggono, i Superuser (Master) scrivono.
-    """
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_staff):
-            return False
         if request.method in permissions.SAFE_METHODS:
             return True
-        return request.user.is_superuser
+        # Permette l'inserimento/modifica se admin o staff
+        return request.user and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)
 
 class EventoViewSet(viewsets.ModelViewSet):
     serializer_class = EventoSerializer
