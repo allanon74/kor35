@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views
+from . import views, views_staff
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -51,6 +51,11 @@ router.register(r'richieste-assemblaggio', views.RichiestaAssemblaggioViewSet, b
 router.register(r'game', views.GameActionsViewSet, basename='game')
 
 router.register(r'timers/active', views.ActiveTimersViewSet, basename='active-timers')
+
+router.register(r'statistiche', views.StatisticaViewSet, basename='statistiche')
+router.register(r'staff/infusioni', views_staff.InfusioneMasterViewSet, basename='master-infusioni')
+router.register(r'staff/tessiture', views_staff.TessituraMasterViewSet, basename='master-tessiture')
+router.register(r'staff/cerimoniali', views_staff.CerimonialeMasterViewSet, basename='master-cerimoniali')
 
 urlpatterns = [
     

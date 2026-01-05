@@ -87,6 +87,7 @@ from .serializers import (
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
     ClasseOggettoSerializer, CerimonialeSerializer, StatoTimerSerializer,
+    StatisticaSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -2219,3 +2220,10 @@ class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         # Restituisce solo i timer la cui data di fine è nel futuro
         return StatoTimerAttivo.objects.filter(data_fine__gt=timezone.now())
+    
+class StatisticaViewSet(viewsets.ReadOnlyModelViewSet):
+    """Visualizza l'elenco delle statistiche tecniche disponibili"""
+    queryset = Statistica.objects.all()
+    serializer_class = StatisticaSerializer
+    # Le statistiche sono pubbliche in lettura per gli utenti autenticati
+    permission_classes = [IsAuthenticated]
