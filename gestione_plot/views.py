@@ -2,10 +2,12 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioSerializer
+from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioListSerializer, PersonaggioAutocompleteSerializer
 from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PnGAssegnato
 from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, GiornoEventoSerializer, QuestSerializer, PnGAssegnatoSerializer, MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer
 from personaggi.models import Inventario, Manifesto, Personaggio, QrCode
+
+from django.contrib.auth.models import User
 
 from .permissions import IsStaffOrMaster
 
@@ -32,11 +34,18 @@ class EventoViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def risorse_editor(self, request):
+        # OTTIMIZZAZIONE: Usa .only() o serializer leggeri per evitare il timeout
+        # Non caricare l'intera storia di ogni personaggio qui!
         return Response({
-            'png': PersonaggioSerializer(Personaggio.objects.filter(tipologia__giocante=False), many=True).data,
+            'png': PersonaggioAutocompleteSerializer(
+                Personaggio.objects.filter(tipologia__giocante=False), 
+                many=True
+            ).data,
             'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
             'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
-            'inventari': InventarioSerializer(Inventario.objects.all(), many=True).data,
+            # ATTENZIONE: Caricare TUTTI gli inventari può uccidere il server. 
+            # Meglio filtrare o paginare se sono molti.
+            'inventari': InventarioSerializer(Inventario.objects.all()[:50], many=True).data, 
             'staff': UserShortSerializer(User.objects.filter(is_staff=True), many=True).data,
         })
 
