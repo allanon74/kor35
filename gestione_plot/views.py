@@ -12,11 +12,18 @@ from django.contrib.auth.models import User
 from .permissions import IsStaffOrMaster
 
 class IsMasterOrReadOnly(permissions.BasePermission):
+    """
+    Gli Staffer leggono e scrivono, gli utenti non staff non vedono nulla.
+    """
     def has_permission(self, request, view):
+        # Deve essere almeno staff per accedere
+        if not (request.user and request.user.is_authenticated and request.user.is_staff):
+            return False
+        # Permetti GET/HEAD/OPTIONS a tutto lo staff
         if request.method in permissions.SAFE_METHODS:
             return True
-        # Permette l'inserimento/modifica se admin o staff
-        return request.user and request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)
+        # CORREZIONE: Permetti POST/PUT/DELETE sia a Superuser che a Staff
+        return request.user.is_staff or request.user.is_superuser
 
 class EventoViewSet(viewsets.ModelViewSet):
     serializer_class = EventoSerializer
