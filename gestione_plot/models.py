@@ -68,6 +68,8 @@ class Evento(models.Model):
 
 class GiornoEvento(models.Model):
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='giorni')
+    titolo = models.CharField(max_length=200, blank=True, help_text="Titolo identificativo del giorno")
+    descrizione_completa = models.TextField(blank=True, help_text="Dettagli completi del plot per questo giorno")
     data_ora_inizio = models.DateTimeField()
     data_ora_fine = models.DateTimeField()
     sinossi_breve = models.TextField()
@@ -76,6 +78,10 @@ class GiornoEvento(models.Model):
         verbose_name = "Giorno Evento"
         verbose_name_plural = "2. Giorni Evento"
         ordering = ['data_ora_inizio']
+        
+    def __str__(self):
+        # Migliorato per mostrare il titolo se presente
+        return self.titolo if self.titolo else f"Giorno del {self.data_ora_inizio.strftime('%d/%m/%Y')}"
 
 class Quest(models.Model):
     giorno = models.ForeignKey(GiornoEvento, on_delete=models.CASCADE, related_name='quests')
