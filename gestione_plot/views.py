@@ -1,25 +1,42 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Evento, Quest, QuestMostro, QuestVista
-from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer
+from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento
+from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, GiornoEventoSerializer, QuestSerializer
 from personaggi.models import QrCode
 
 from .permissions import IsStaffOrMaster
 
-class EventoViewSet(viewsets.ReadOnlyModelViewSet):
+class IsMasterOrReadOnly(permissions.BasePermission):
     """
-    Lettura degli eventi. 
-    Gli Admin vedono tutto, gli Staffer solo dove sono assegnati.
+    Gli Staffer leggono, i Superuser (Master) scrivono.
     """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_staff):
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user.is_superuser
+
+class EventoViewSet(viewsets.ModelViewSet):
     serializer_class = EventoSerializer
-    permission_classes = [IsStaffOrMaster]
+    permission_classes = [IsMasterOrReadOnly]
 
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser:
             return Evento.objects.all().prefetch_related('giorni__quests')
         return Evento.objects.filter(staff_assegnato=user).prefetch_related('giorni__quests')
+
+class GiornoEventoViewSet(viewsets.ModelViewSet):
+    queryset = GiornoEvento.objects.all()
+    serializer_class = GiornoEventoSerializer
+    permission_classes = [IsMasterOrReadOnly]
+
+class QuestViewSet(viewsets.ModelViewSet):
+    queryset = Quest.objects.all()
+    serializer_class = QuestSerializer
+    permission_classes = [IsMasterOrReadOnly]
 
 class QuestMostroViewSet(viewsets.ModelViewSet):
     """
