@@ -1,8 +1,15 @@
+from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
 from .models import QrCode, PropostaTecnica, Tessitura, Infusione, Cerimoniale
 from gestione_plot.permissions import IsStaffOrMaster
+
+from .serializers import (
+    InfusioneFullEditorSerializer, 
+    TessituraFullEditorSerializer, 
+    CerimonialeFullEditorSerializer
+)
 
 class QrInspectorView(APIView):
     """
@@ -24,27 +31,78 @@ class QrInspectorView(APIView):
             return Response({'error': 'Non trovato'}, status=404)
 
 class ApprovaPropostaView(APIView):
-    """
-    Strumento MASTER: Trasforma una proposta in un elemento di gioco reale.
-    """
-    permission_classes = [IsAdminUser] # Solo Master
+    permission_classes = [IsAdminUser]
 
     def post(self, request, proposta_id):
-        proposta = PropostaTecnica.objects.get(pk=proposta_id)
+        try:
+            proposta = PropostaTecnica.objects.get(pk=proposta_id)
+            if proposta.stato == 'APPROVATA':
+                return Response({'error': 'Proposta già approvata'}, status=400)
+
+            nuova_istanza = None
+            
+            # Logica differenziata per tipo
+            if proposta.tipo == 'TES':
+                nuova_istanza = Tessitura.objects.create(
+                    nome=proposta.nome, testo=proposta.descrizione,
+                    aura_richiesta=proposta.aura, elemento_principale=proposta.aura_infusione,
+                    proposta_creazione=proposta
+                )
+            elif proposta.tipo == 'INF':
+                nuova_istanza = Infusione.objects.create(
+                    nome=proposta.nome, testo=proposta.descrizione,
+                    aura_richiesta=proposta.aura, aura_infusione=proposta.aura_infusione,
+                    proposta_creazione=proposta, 
+                    tipo_risultato=proposta.tipo_risultato_atteso or 'POT'
+                )
+            elif proposta.tipo == 'CER':
+                nuova_istanza = Cerimoniale.objects.create(
+                    nome=proposta.nome, prerequisiti=proposta.prerequisiti,
+                    svolgimento=proposta.svolgimento, effetto=proposta.effetto,
+                    aura_richiesta=proposta.aura, liv=proposta.livello_proposto,
+                    proposta_creazione=proposta
+                )
+
+            if nuova_istanza:
+                # Copia automatica dei componenti (mattoni/caratteristiche)
+                for comp in proposta.componenti.all():
+                    nuova_istanza.componenti.create(
+                        caratteristica=comp.caratteristica, 
+                        valore=comp.valore
+                    )
+                
+                proposta.stato = 'APPROVATA'
+                proposta.save()
+                return Response({
+                    'status': 'approvata', 
+                    'tipo': proposta.tipo, 
+                    'id_generato': nuova_istanza.id
+                })
+
+        except PropostaTecnica.DoesNotExist:
+            return Response({'error': 'Proposta non trovata'}, status=404)
         
-        # Logica di "promozione":
-        if proposta.tipo == 'TES':
-            # Creazione automatica Tessitura dai dati della proposta
-            nuova = Tessitura.objects.create(
-                nome=proposta.nome,
-                testo=proposta.descrizione,
-                aura_richiesta=proposta.aura,
-                proposta_creazione=proposta
-            )
-            # Copiamo i componenti (mattoni)
-            for comp in proposta.componenti.all():
-                nuova.componenti.create(caratteristica=comp.caratteristica, valore=comp.valore)
-        
-        proposta.stato = 'APPROVATA'
-        proposta.save()
-        return Response({'status': 'promossa', 'id': nuova.id})
+class InfusioneMasterViewSet(viewsets.ModelViewSet):
+    """
+    CRUD completo per le Infusioni, usato dai Master.
+    Gestisce salvataggi atomici di componenti e statistiche.
+    """
+    queryset = Infusione.objects.all()
+    serializer_class = InfusioneFullEditorSerializer
+    permission_classes = [IsAdminUser]
+
+class TessituraMasterViewSet(viewsets.ModelViewSet):
+    """
+    CRUD completo per le Tessiture, usato dai Master.
+    """
+    queryset = Tessitura.objects.all()
+    serializer_class = TessituraFullEditorSerializer
+    permission_classes = [IsAdminUser]
+
+class CerimonialeMasterViewSet(viewsets.ModelViewSet):
+    """
+    CRUD completo per i Cerimoniali, usato dai Master.
+    """
+    queryset = Cerimoniale.objects.all()
+    serializer_class = CerimonialeFullEditorSerializer
+    permission_classes = [IsAdminUser]

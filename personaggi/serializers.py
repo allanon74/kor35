@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.utils.html import format_html
 from django.contrib.auth.models import User
-from django.db import models
+from django.db import models, transaction
 from decimal import Decimal
 
 from .models import ConfigurazioneLivelloAura, formatta_testo_generico
@@ -18,7 +18,8 @@ from .models import (
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
     InfusioneCaratteristica, TessituraCaratteristica, PropostaTecnicaCaratteristica,
-    InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura,
+    InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura, InfusioneStatistica,
+    CerimonialeCaratteristica,
     OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, 
     ForgiaturaInCorso, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
@@ -463,6 +464,15 @@ class ComponenteTecnicaSerializer(serializers.Serializer):
     caratteristica = PunteggioSmallSerializer(read_only=True)
     valore = serializers.IntegerField()
 
+class InfusioneCaratteristicaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InfusioneCaratteristica
+        fields = ['caratteristica', 'valore']
+        
+class InfusioneStatisticaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InfusioneStatistica
+        fields = ['statistica', 'valore', 'tipo_modificatore']
 
 class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
     statistica = StatisticaSerializer(read_only=True)
@@ -471,6 +481,28 @@ class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
         model = InfusioneStatisticaBase
         fields = ('statistica', 'valore_base')
 
+class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
+    statistica = StatisticaSerializer(read_only=True)
+
+    class Meta:
+        model = TessituraStatisticaBase
+        fields = ('statistica', 'valore_base')
+
+class TessituraCaratteristicaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TessituraCaratteristica
+        fields = ['caratteristica', 'valore']
+
+class CerimonialeCaratteristicaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CerimonialeCaratteristica
+        fields = ['caratteristica', 'valore']
+
+# Nota: Assicurati di definire CerimonialeCaratteristicaSerializer se non presente
+class CerimonialeCaratteristicaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CerimonialeCaratteristica
+        fields = ['caratteristica', 'valore']
 
 class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
     statistica = StatisticaSerializer(read_only=True)
@@ -787,7 +819,7 @@ class OggettoSerializer(serializers.ModelSerializer):
         return obj.infusione_generatrice.metodo_ricarica if obj.infusione_generatrice else ""
     
 # -----------------------------------------------------------------------------
-# SERIALIZER PER LE TECNICHE (INFUSIONE, TESSITURA, ATTIVATA)
+# SERIALIZER PER LE TECNICHE (INFUSIONE, TESSITURA, CERIMONIALE)
 # -----------------------------------------------------------------------------
 
 # Legacy
@@ -902,6 +934,79 @@ class CerimonialeSerializer(serializers.ModelSerializer):
             'TestoFormattato', 'costo_crediti', 'componenti'
         )
 
+class TecnicaBaseMasterMixin:
+    """Mixin per gestire la logica comune di salvataggio dati annidati delle tecniche"""
+    def handle_nested_data(self, instance, components_data, stats_base_data, modifiers_data=None):
+        # 1. Gestione Componenti (Caratteristiche)
+        if components_data is not None:
+            instance.componenti.all().delete()
+            for comp in components_data:
+                # Determina il modello intermedio corretto in base alla classe dell'istanza
+                instance.componenti.create(**comp)
+
+        # 2. Gestione Statistiche Base (Valori fissi come Danno, Peso, etc.)
+        if stats_base_data is not None:
+            related_set_name = f"{instance._meta.model_name}statisticabase_set"
+            if hasattr(instance, related_set_name):
+                getattr(instance, related_set_name).all().delete()
+                for stat in stats_base_data:
+                    getattr(instance, related_set_name).create(**stat)
+
+        # 3. Gestione Modificatori (Solo per Infusioni: Bonus/Malus attivi)
+        if modifiers_data is not None and hasattr(instance, 'infusionestatistica_set'):
+            instance.infusionestatistica_set.all().delete()
+            for mod in modifiers_data:
+                instance.infusionestatistica_set.create(**mod)
+
+# --- SERIALIZZATORI COMPLETI PER MASTER ---
+
+class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
+    componenti = InfusioneCaratteristicaSerializer(many=True, required=False)
+    statistiche_base = InfusioneStatisticaBaseSerializer(many=True, required=False, source='infusionestatisticabase_set')
+    modificatori = InfusioneStatisticaSerializer(many=True, required=False, source='infusionestatistica_set')
+
+    class Meta:
+        model = Infusione
+        fields = '__all__'
+
+    @transaction.atomic
+    def create(self, validated_data):
+        comp = validated_data.pop('componenti', [])
+        s_base = validated_data.pop('infusionestatisticabase_set', [])
+        mods = validated_data.pop('infusionestatistica_set', [])
+        instance = Infusione.objects.create(**validated_data)
+        self.handle_nested_data(instance, comp, s_base, mods)
+        return instance
+
+class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
+    componenti = TessituraCaratteristicaSerializer(many=True, required=False)
+    statistiche_base = TessituraStatisticaBaseSerializer(many=True, required=False, source='tessiturastatisticabase_set')
+
+    class Meta:
+        model = Tessitura
+        fields = '__all__'
+
+    @transaction.atomic
+    def create(self, validated_data):
+        comp = validated_data.pop('componenti', [])
+        s_base = validated_data.pop('tessiturastatisticabase_set', [])
+        instance = Tessitura.objects.create(**validated_data)
+        self.handle_nested_data(instance, comp, s_base)
+        return instance
+
+class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
+    componenti = CerimonialeCaratteristicaSerializer(many=True, required=False)
+
+    class Meta:
+        model = Cerimoniale
+        fields = '__all__'
+
+    @transaction.atomic
+    def create(self, validated_data):
+        comp = validated_data.pop('componenti', [])
+        instance = Cerimoniale.objects.create(**validated_data)
+        self.handle_nested_data(instance, comp, None)
+        return instance
 
 # -----------------------------------------------------------------------------
 # SERIALIZER PER PROPOSTA TECNICA (CREAZIONE/MODIFICA)
