@@ -48,7 +48,7 @@ class EventoViewSet(viewsets.ModelViewSet):
                 many=True
             ).data,
             'manifesti': ManifestoSerializer(
-                Manifesto.objects.all().only('id', 'titolo', 'nome'), 
+                Manifesto.objects.all().only('id', 'nome'), 
                 many=True
             ).data,
             'inventari': InventarioSerializer(
