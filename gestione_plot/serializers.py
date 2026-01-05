@@ -16,6 +16,7 @@ class UserShortSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'first_name', 'last_name']
 
 # --- MOSTRI ---
+
 class AttaccoTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttaccoTemplate
@@ -34,13 +35,16 @@ class QuestMostroSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestMostro
         fields = '__all__'
+        # CORREZIONE: Rende i campi opzionali per la creazione via POST
+        # I valori verranno popolati dal metodo save() del modello usando il template
         extra_kwargs = {
-            'punti_vita': {'required': False},
-            'armatura': {'required': False},
-            'guscio': {'required': False},
+            'punti_vita': {'required': False, 'allow_null': True},
+            'armatura': {'required': False, 'allow_null': True},
+            'guscio': {'required': False, 'allow_null': True},
         }
 
 # --- PNG E VISTE ---
+
 class PngAssegnatoSerializer(serializers.ModelSerializer):
     personaggio_details = PersonaggioSerializer(source='personaggio', read_only=True)
     staffer_details = UserShortSerializer(source='staffer', read_only=True)
@@ -50,12 +54,22 @@ class PngAssegnatoSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class QuestVistaSerializer(serializers.ModelSerializer):
-    # Dettagli opzionali per Manifesto/Inventario/QR
+    """
+    Spostato sopra QuestSerializer per permettere l'inclusione corretta dei dettagli.
+    Risolve il problema del nome 'Manifesto' mancante.
+    """
+    manifesto_details = ManifestoSerializer(source='manifesto', read_only=True)
+    inventario_details = InventarioSerializer(source='inventario', read_only=True)
+    
     class Meta:
         model = QuestVista
-        fields = '__all__'
+        fields = [
+            'id', 'quest', 'tipo', 'manifesto', 'inventario', 
+            'qr_code', 'manifesto_details', 'inventario_details'
+        ]
 
 # --- QUEST E EVENTI ---
+
 class QuestSerializer(serializers.ModelSerializer):
     mostri_presenti = QuestMostroSerializer(many=True, read_only=True)
     png_richiesti = PngAssegnatoSerializer(many=True, read_only=True)
@@ -76,15 +90,3 @@ class EventoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Evento
         fields = '__all__'
-        
-class QuestVistaSerializer(serializers.ModelSerializer):
-    # Includiamo i dettagli per l'anteprima nel setup
-    manifesto_details = ManifestoSerializer(source='manifesto', read_only=True)
-    inventario_details = InventarioSerializer(source='inventario', read_only=True)
-    
-    class Meta:
-        model = QuestVista
-        fields = [
-            'id', 'quest', 'tipo', 'manifesto', 'inventario', 
-            'qr_code', 'manifesto_details', 'inventario_details'
-        ]
