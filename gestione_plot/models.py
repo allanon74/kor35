@@ -69,7 +69,7 @@ class GiornoEvento(models.Model):
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='giorni')
     data_ora_inizio = models.DateTimeField()
     data_ora_fine = models.DateTimeField()
-    sinossi_breve = models.TextField(max_length=1000)
+    sinossi_breve = models.TextField()
 
     class Meta:
         verbose_name = "Giorno Evento"
@@ -81,6 +81,7 @@ class Quest(models.Model):
     titolo = models.CharField(max_length=200)
     orario_indicativo = models.TimeField()
     descrizione_ampia = models.TextField()
+    props = models.TextField("Oggetti di scena / Props", blank=True, null=True)
 
     class Meta:
         verbose_name = "Quest"
