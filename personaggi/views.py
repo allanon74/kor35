@@ -106,7 +106,8 @@ class MyAuthToken(ObtainAuthToken):
             'token': token.key,
             'user_id': user.pk,
             'username': user.username,
-            'is_staff': user.is_staff or user.is_superuser 
+            'is_staff': user.is_staff,
+            'is_superuser': user.is_superuser,
         })
 
 # --- VIEWSETS ORIGINALI ---
