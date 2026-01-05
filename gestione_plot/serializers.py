@@ -35,8 +35,6 @@ class QuestMostroSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuestMostro
         fields = '__all__'
-        # CORREZIONE: Rende i campi opzionali per la creazione via POST
-        # I valori verranno popolati dal metodo save() del modello usando il template
         extra_kwargs = {
             'punti_vita': {'required': False, 'allow_null': True},
             'armatura': {'required': False, 'allow_null': True},
@@ -87,6 +85,15 @@ class GiornoEventoSerializer(serializers.ModelSerializer):
 
 class EventoSerializer(serializers.ModelSerializer):
     giorni = GiornoEventoSerializer(many=True, read_only=True)
+    
+    # Questi campi permettono al frontend di vedere i nomi (UserCheck e Users icone)
+    staff_details = UserShortSerializer(source='staff_assegnato', many=True, read_only=True)
+    partecipanti_details = PersonaggioSerializer(source='partecipanti', many=True, read_only=True)
+
     class Meta:
         model = Evento
-        fields = '__all__'
+        fields = [
+            'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 
+            'luogo', 'pc_guadagnati', 'staff_assegnato', 'partecipanti',
+            'giorni', 'staff_details', 'partecipanti_details'
+        ]
