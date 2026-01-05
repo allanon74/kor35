@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioListSerializer, PersonaggioAutocompleteSerializer
+from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioListSerializer, PersonaggioAutocompleteSerializer, PersonaggioSerializer
 from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato
 from .serializers import EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer
 from personaggi.models import Inventario, Manifesto, Personaggio, QrCode
@@ -42,8 +42,8 @@ class EventoViewSet(viewsets.ModelViewSet):
         Esclude inventari di Personaggi/PnG e carica solo i dati minimi.
         """
         return Response({
-            'png': PersonaggioAutocompleteSerializer(
-                Personaggio.objects.filter(tipologia__giocante=False).only('id', 'nome'), 
+            'png': PersonaggioSerializer(
+                Personaggio.objects.filter(tipologia__giocante=False).only('id', 'nome', 'proprietario'), 
                 many=True
             ).data,
             'templates': MostroTemplateSerializer(
