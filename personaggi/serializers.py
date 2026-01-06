@@ -941,7 +941,7 @@ class CerimonialeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cerimoniale
         fields = (
-            'id', 'nome', 'livello', 'aura_richiesta',
+            'id', 'nome', 'liv', 'livello', 'aura_richiesta',
             'prerequisiti', 'svolgimento', 'effetto',
             'TestoFormattato', 'costo_crediti', 'componenti'
         )
@@ -1031,13 +1031,12 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         # Estraiamo i dati annidati per gestirli manualmente via Mixin
         comp = validated_data.pop('componenti', None)
         s_base = validated_data.pop('tessiturastatisticabase_set', None)
-        mods = validated_data.pop('tessiturastatistica_set', None)
 
         # Aggiorniamo i campi base della tessitura
         instance = super().update(instance, validated_data)
         
         # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
-        self.handle_nested_data(instance, comp, s_base, mods)
+        self.handle_nested_data(instance, comp, s_base)
         return instance
 
 class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
@@ -1058,14 +1057,12 @@ class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMa
     def update(self, instance, validated_data):
         # Estraiamo i dati annidati per gestirli manualmente via Mixin
         comp = validated_data.pop('componenti', None)
-        s_base = validated_data.pop('CerimonialeStatisticaBase_set', None)
-        mods = validated_data.pop('CerimonialeStatistica_set', None)
 
         # Aggiorniamo i campi base della cerimoniale
         instance = super().update(instance, validated_data)
         
         # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
-        self.handle_nested_data(instance, comp, s_base, mods)
+        self.handle_nested_data(instance, comp, None)
         return instance
 
 # -----------------------------------------------------------------------------
