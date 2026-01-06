@@ -178,6 +178,7 @@ class StatisticaModificatorePivotInline(admin.StackedInline):
     value_field = 'valore'
     default_source_field = 'valore_predefinito'
     filter_horizontal = ('limit_a_aure', 'limit_a_elementi') 
+    extra=0
     fieldsets = (
         (None, {'fields': (('statistica', 'valore', 'tipo_modificatore'),)}),
         ('Condizioni di Applicazione', {
