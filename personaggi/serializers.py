@@ -936,13 +936,19 @@ class CerimonialeSerializer(serializers.ModelSerializer):
 
 class TecnicaBaseMasterMixin:
     """Mixin per gestire la logica comune di salvataggio dati annidati delle tecniche"""
+    
+    # 1. Gestione Caratteristiche (Componenti della Tecnica)
     def handle_nested_data(self, instance, components_data, stats_base_data, modifiers_data=None):
-        # 1. Gestione Componenti (Caratteristiche)
-        if components_data is not None:
-            instance.componenti.all().delete()
-            for comp in components_data:
-                # Determina il modello intermedio corretto in base alla classe dell'istanza
-                instance.componenti.create(**comp)
+    # ... (caratteristiche e statistiche base ok) ...
+        if modifiers_data is not None and hasattr(instance, 'infusionestatistica_set'):
+            instance.infusionestatistica_set.all().delete()
+            for mod in modifiers_data:
+                # Estraiamo i campi M2M prima del create
+                aure = mod.pop('limit_a_aure', [])
+                elementi = mod.pop('limit_a_elementi', [])
+                new_mod = instance.infusionestatistica_set.create(**mod)
+                if aure: new_mod.limit_a_aure.set(aure)
+                if elementi: new_mod.limit_a_elementi.set(elementi)
 
         # 2. Gestione Statistiche Base (Valori fissi come Danno, Peso, etc.)
         if stats_base_data is not None:
