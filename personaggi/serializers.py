@@ -472,7 +472,7 @@ class InfusioneCaratteristicaSerializer(serializers.ModelSerializer):
 class InfusioneStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = InfusioneStatistica
-        fields = ['statistica', 'valore', 'tipo_modificatore']
+        fields = '__all__'
 
 class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
     statistica = StatisticaSerializer(read_only=True)
@@ -484,7 +484,7 @@ class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
 class MattoneStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = MattoneStatistica
-        fields = ['statistica', 'valore_base']
+        fields =  '__all__'
 
 class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
     statistica = StatisticaSerializer(read_only=True)
@@ -522,7 +522,7 @@ class OggettoStatisticaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OggettoStatistica
-        fields = ('statistica', 'valore')
+        fields =   '__all__'
 
 
 class OggettoStatisticaBaseSerializer(serializers.ModelSerializer):
