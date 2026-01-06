@@ -468,20 +468,31 @@ class InfusioneCaratteristicaSerializer(serializers.ModelSerializer):
     class Meta:
         model = InfusioneCaratteristica
         fields = ['caratteristica', 'valore']
-        
+        validators = [] # Disabilita validazione automatica unicità per update annidato
+
 class InfusioneStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = InfusioneStatistica
+        # Include tutti i campi del mixin per le condizioni (aure, elementi, etc)
         fields = '__all__'
-        validators = []
+        validators = [] 
+    
+    def to_representation(self, instance):
+        # Permette al frontend di vedere l'oggetto statistica completo ma accettare l'ID in input
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
 
 class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
-    statistica = StatisticaSerializer(read_only=True)
-
     class Meta:
         model = InfusioneStatisticaBase
         fields = ('statistica', 'valore_base')
         validators = []
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
         
 class MattoneStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -494,6 +505,12 @@ class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = TessituraStatisticaBase
         fields = ('statistica', 'valore_base')
+        validators = []
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
 
 class TessituraCaratteristicaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -505,18 +522,6 @@ class CerimonialeCaratteristicaSerializer(serializers.ModelSerializer):
         model = CerimonialeCaratteristica
         fields = ['caratteristica', 'valore']
 
-# Nota: Assicurati di definire CerimonialeCaratteristicaSerializer se non presente
-class CerimonialeCaratteristicaSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CerimonialeCaratteristica
-        fields = ['caratteristica', 'valore']
-
-class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
-    statistica = StatisticaSerializer(read_only=True)
-
-    class Meta:
-        model = TessituraStatisticaBase
-        fields = ('statistica', 'valore_base')
 
 
 class OggettoStatisticaSerializer(serializers.ModelSerializer):
