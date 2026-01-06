@@ -65,7 +65,7 @@ class TabellaSerializer(serializers.ModelSerializer):
 class StatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Statistica
-        fields = ('nome', 'sigla', 'parametro')
+        fields = ('id', 'nome', 'sigla', 'parametro')
 
 
 class PunteggioSerializer(serializers.ModelSerializer):
