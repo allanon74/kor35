@@ -653,7 +653,7 @@ class InfusioneAdmin(SModelAdmin):
     autocomplete_fields = ['aura_richiesta', 'aura_infusione', 'statistica_cariche']
     
     fieldsets = (
-        ('Dati Base', {'fields': ('nome', 'testo', 'formula_attacco', 'aura_richiesta', 'aura_infusione', 'proposta_creazione')}),
+        ('Dati Base', {'fields': ('nome', 'testo', 'formula_attacco', 'aura_richiesta', 'aura_infusione', 'proposta_creazione', 'tipo_risultato', )}),
         ('Anteprima', {'classes': ('wide',), 'fields': ('mostra_testo_formattato',)}),
         ('Configurazione Oggetto Generato', {
             'fields': ('slot_corpo_permessi',), 
