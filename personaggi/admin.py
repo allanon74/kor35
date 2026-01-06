@@ -179,7 +179,7 @@ class StatisticaModificatorePivotInline(admin.StackedInline):
     default_source_field = 'valore_predefinito'
     filter_horizontal = ('limit_a_aure', 'limit_a_elementi') 
     fieldsets = (
-        (None, {'fields': (('statistica_label', 'valore', 'tipo_modificatore'),)}),
+        (None, {'fields': (('statistica', 'valore', 'tipo_modificatore'),)}),
         ('Condizioni di Applicazione', {
             'classes': ('collapse',),
             'fields': (
@@ -187,7 +187,7 @@ class StatisticaModificatorePivotInline(admin.StackedInline):
                 ('usa_limitazione_elemento', 'limit_a_elementi'),
                 ('usa_condizione_text', 'condizione_text')
             ),
-            'description': "Se i flag sono attivi, il modificatore si applicherà SOLO se la condizione è soddisfatta."
+            'description': "Il modificatore si applicherà SOLO se la condizione è soddisfatta."
         }),
     )
 
