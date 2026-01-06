@@ -172,7 +172,7 @@ class StatisticaBasePivotInline(StatisticaPivotMixin, admin.TabularInline):
     def get_fields(self, request, obj=None): return ('statistica_label', self.value_field)
 
 # 2. PIVOT MODIFICATORE (Stacked, Condizionale)
-class StatisticaModificatorePivotInline(StatisticaPivotMixin, admin.StackedInline):
+class StatisticaModificatorePivotInline(admin.StackedInline):
     verbose_name = "Statistica (Modificatore)"
     verbose_name_plural = "Statistiche (Modificatori)"
     value_field = 'valore'
