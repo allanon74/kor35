@@ -31,7 +31,7 @@ from .models import (
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, 
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
-    Cerimoniale, StatoTimerAttivo,
+    Cerimoniale, StatoTimerAttivo, MattoneStatistica,
 )
 
 # -----------------------------------------------------------------------------
@@ -480,6 +480,11 @@ class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = InfusioneStatisticaBase
         fields = ('statistica', 'valore_base')
+        
+class MattoneStatisticaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MattoneStatistica
+        fields = ['statistica', 'valore_base']
 
 class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
     statistica = StatisticaSerializer(read_only=True)
