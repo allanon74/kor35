@@ -65,7 +65,7 @@ class TabellaSerializer(serializers.ModelSerializer):
 class StatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Statistica
-        fields = ('id', 'nome', 'sigla', 'parametro')
+        fields = ('id', 'nome', 'sigla', 'parametro', 'valore_base_predefinito', )
 
 
 class PunteggioSerializer(serializers.ModelSerializer):
@@ -473,6 +473,7 @@ class InfusioneStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = InfusioneStatistica
         fields = '__all__'
+        validators = []
 
 class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
     statistica = StatisticaSerializer(read_only=True)
@@ -480,6 +481,7 @@ class InfusioneStatisticaBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = InfusioneStatisticaBase
         fields = ('statistica', 'valore_base')
+        validators = []
         
 class MattoneStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
