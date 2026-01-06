@@ -947,34 +947,34 @@ class CerimonialeSerializer(serializers.ModelSerializer):
         )
 
 class TecnicaBaseMasterMixin:
-    """Mixin per gestire la logica comune di salvataggio dati annidati delle tecniche"""
-    
-    # 1. Gestione Caratteristiche (Componenti della Tecnica)
+    """Mixin aggiornato per gestire M2M e update annidati"""
     def handle_nested_data(self, instance, components_data, stats_base_data, modifiers_data=None):
-    # ... (caratteristiche e statistiche base ok) ...
-        if modifiers_data is not None and hasattr(instance, 'infusionestatistica_set'):
-            instance.infusionestatistica_set.all().delete()
-            for mod in modifiers_data:
-                # Estraiamo i campi M2M prima del create
-                aure = mod.pop('limit_a_aure', [])
-                elementi = mod.pop('limit_a_elementi', [])
-                new_mod = instance.infusionestatistica_set.create(**mod)
-                if aure: new_mod.limit_a_aure.set(aure)
-                if elementi: new_mod.limit_a_elementi.set(elementi)
+        # 1. Componenti
+        if components_data is not None:
+            instance.componenti.all().delete()
+            for comp in components_data:
+                instance.componenti.create(**comp)
 
-        # 2. Gestione Statistiche Base (Valori fissi come Danno, Peso, etc.)
+        # 2. Statistiche Base (Pivot)
         if stats_base_data is not None:
-            related_set_name = f"{instance._meta.model_name}statisticabase_set"
-            if hasattr(instance, related_set_name):
-                getattr(instance, related_set_name).all().delete()
+            related_base_name = f"{instance._meta.model_name}statisticabase_set"
+            if hasattr(instance, related_base_name):
+                getattr(instance, related_base_name).all().delete()
                 for stat in stats_base_data:
-                    getattr(instance, related_set_name).create(**stat)
+                    getattr(instance, related_base_name).create(**stat)
 
-        # 3. Gestione Modificatori (Solo per Infusioni: Bonus/Malus attivi)
-        if modifiers_data is not None and hasattr(instance, 'infusionestatistica_set'):
-            instance.infusionestatistica_set.all().delete()
-            for mod in modifiers_data:
-                instance.infusionestatistica_set.create(**mod)
+        # 3. Modificatori (Solo Infusioni) con gestione Many-to-Many
+        if modifiers_data is not None:
+            if hasattr(instance, 'infusionestatistica_set'):
+                instance.infusionestatistica_set.all().delete()
+                for mod in modifiers_data:
+                    # Estraiamo i campi M2M prima di creare l'oggetto
+                    aure = mod.pop('limit_a_aure', [])
+                    elementi = mod.pop('limit_a_elementi', [])
+                    new_mod = instance.infusionestatistica_set.create(**mod)
+                    # Impostiamo le relazioni M2M
+                    if aure: new_mod.limit_a_aure.set(aure)
+                    if elementi: new_mod.limit_a_elementi.set(elementi)
 
 # --- SERIALIZZATORI COMPLETI PER MASTER ---
 
@@ -995,6 +995,20 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         instance = Infusione.objects.create(**validated_data)
         self.handle_nested_data(instance, comp, s_base, mods)
         return instance
+    
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        # Estraiamo i dati annidati per gestirli manualmente via Mixin
+        comp = validated_data.pop('componenti', None)
+        s_base = validated_data.pop('infusionestatisticabase_set', None)
+        mods = validated_data.pop('infusionestatistica_set', None)
+        
+        # Aggiorniamo i campi base dell'infusione
+        instance = super().update(instance, validated_data)
+        
+        # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
+        self.handle_nested_data(instance, comp, s_base, mods)
+        return instance
 
 class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
     componenti = TessituraCaratteristicaSerializer(many=True, required=False)
@@ -1011,6 +1025,20 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         instance = Tessitura.objects.create(**validated_data)
         self.handle_nested_data(instance, comp, s_base)
         return instance
+    
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        # Estraiamo i dati annidati per gestirli manualmente via Mixin
+        comp = validated_data.pop('componenti', None)
+        s_base = validated_data.pop('tessiturastatisticabase_set', None)
+        mods = validated_data.pop('tessiturastatistica_set', None)
+
+        # Aggiorniamo i campi base della tessitura
+        instance = super().update(instance, validated_data)
+        
+        # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
+        self.handle_nested_data(instance, comp, s_base, mods)
+        return instance
 
 class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
     componenti = CerimonialeCaratteristicaSerializer(many=True, required=False)
@@ -1024,6 +1052,20 @@ class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMa
         comp = validated_data.pop('componenti', [])
         instance = Cerimoniale.objects.create(**validated_data)
         self.handle_nested_data(instance, comp, None)
+        return instance
+    
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        # Estraiamo i dati annidati per gestirli manualmente via Mixin
+        comp = validated_data.pop('componenti', None)
+        s_base = validated_data.pop('CerimonialeStatisticaBase_set', None)
+        mods = validated_data.pop('CerimonialeStatistica_set', None)
+
+        # Aggiorniamo i campi base della cerimoniale
+        instance = super().update(instance, validated_data)
+        
+        # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
+        self.handle_nested_data(instance, comp, s_base, mods)
         return instance
 
 # -----------------------------------------------------------------------------
