@@ -500,8 +500,7 @@ class MattoneStatisticaSerializer(serializers.ModelSerializer):
         fields =  '__all__'
 
 class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
-    statistica = StatisticaSerializer(read_only=True)
-
+    
     class Meta:
         model = TessituraStatisticaBase
         fields = ('statistica', 'valore_base')
@@ -525,19 +524,27 @@ class CerimonialeCaratteristicaSerializer(serializers.ModelSerializer):
 
 
 class OggettoStatisticaSerializer(serializers.ModelSerializer):
-    statistica = StatisticaSerializer(read_only=True)
 
     class Meta:
         model = OggettoStatistica
         fields =   '__all__'
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
 
 
 class OggettoStatisticaBaseSerializer(serializers.ModelSerializer):
-    statistica = StatisticaSerializer(read_only=True)
 
     class Meta:
         model = OggettoStatisticaBase
         fields = ('statistica', 'valore_base')
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
 
 
 class AttivataStatisticaBaseSerializer(serializers.ModelSerializer):
@@ -1013,10 +1020,18 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
 class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
     componenti = TessituraCaratteristicaSerializer(many=True, required=False)
     statistiche_base = TessituraStatisticaBaseSerializer(many=True, required=False, source='tessiturastatisticabase_set')
+    livello = serializers.IntegerField(read_only=True) # Campo calcolato per la lista
 
     class Meta:
         model = Tessitura
         fields = '__all__'
+    
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # Per la lista nel frontend servono gli oggetti completi, non solo gli ID
+        rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data if instance.aura_richiesta else None
+        rep['elemento_principale'] = PunteggioSmallSerializer(instance.elemento_principale).data if instance.elemento_principale else None
+        return rep
 
     @transaction.atomic
     def create(self, validated_data):
@@ -1045,6 +1060,11 @@ class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMa
     class Meta:
         model = Cerimoniale
         fields = '__all__'
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data if instance.aura_richiesta else None
+        return rep
 
     @transaction.atomic
     def create(self, validated_data):
