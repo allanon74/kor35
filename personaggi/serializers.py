@@ -545,6 +545,17 @@ class OggettoStatisticaBaseSerializer(serializers.ModelSerializer):
         rep = super().to_representation(instance)
         rep['statistica'] = StatisticaSerializer(instance.statistica).data
         return rep
+    
+class OggettoBaseStatisticaBaseSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = OggettoBaseStatisticaBase
+        fields = ('id', 'statistica', 'valore_base')
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
 
 
 class AttivataStatisticaBaseSerializer(serializers.ModelSerializer):
@@ -1001,6 +1012,15 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     class Meta:
         model = Infusione
         fields = '__all__'
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        # Espande l'aura per permettere al frontend di vedere l'icona
+        if instance.aura_richiesta:
+            rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data
+        if instance.aura_infusione:
+            rep['aura_infusione'] = PunteggioSmallSerializer(instance.aura_infusione).data
+        return rep
 
     @transaction.atomic
     def create(self, validated_data):
@@ -1186,9 +1206,12 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
     """
     Serializer per il listino del negozio (oggetti 'template' non ancora istanziati)
     """
-    statistiche_base = OggettoStatisticaBaseSerializer(many=True, read_only=True)
+   
     classe_oggetto_nome = serializers.CharField(source='classe_oggetto.nome', read_only=True, default="")
     stats_text = serializers.SerializerMethodField()
+    statistiche_base = OggettoBaseStatisticaBaseSerializer(
+        many=True, read_only=True, source='oggettobasestatisticabase_set'
+    )
 
     class Meta:
         model = OggettoBase

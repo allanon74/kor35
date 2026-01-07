@@ -6,7 +6,9 @@ from .models import QrCode, PropostaTecnica, Tessitura, Infusione, Cerimoniale, 
 from gestione_plot.permissions import IsStaffOrMaster
 
 from .serializers import (
-    InfusioneFullEditorSerializer, 
+    InfusioneFullEditorSerializer,
+    OggettoBaseFullEditorSerializer,
+    OggettoFullEditorSerializer, 
     TessituraFullEditorSerializer, 
     CerimonialeFullEditorSerializer,
     OggettoSerializer,
@@ -112,12 +114,12 @@ class CerimonialeMasterViewSet(viewsets.ModelViewSet):
     
 class OggettoStaffViewSet(viewsets.ModelViewSet):
     queryset = Oggetto.objects.all().select_related('aura', 'classe_oggetto')
-    serializer_class = OggettoSerializer
+    serializer_class = OggettoFullEditorSerializer
     permission_classes = [IsStaffOrMaster]
 
 class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
     queryset = OggettoBase.objects.all().select_related('classe_oggetto')
-    serializer_class = OggettoBaseSerializer
+    serializer_class = OggettoBaseFullEditorSerializer
     permission_classes = [IsStaffOrMaster]
 
 class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
