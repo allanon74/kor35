@@ -1648,3 +1648,119 @@ class StatoTimerSerializer(serializers.ModelSerializer):
     class Meta:
         model = StatoTimerAttivo
         fields = ['id', 'nome', 'data_fine', 'alert_suono', 'notifica_push', 'messaggio_in_app']
+
+
+class OggettoBaseStatisticaBaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OggettoBaseStatisticaBase
+        fields = ['statistica', 'valore_base']
+        validators = []
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
+
+class OggettoBaseModificatoreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OggettoBaseModificatore
+        fields = ['statistica', 'valore', 'tipo_modificatore']
+        validators = []
+        
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
+
+        
+class MasterOggettoMixin:
+    """Mixin per gestire i dati nidificati di Oggetti e Oggetti Base"""
+    
+    def handle_nested_data(self, instance, components=None, stats_base=None, stats_mod=None):
+        # 1. Gestione Componenti (Caratteristiche) - solo per Oggetto istanza
+        if components is not None:
+            instance.componenti.all().delete()
+            for comp in components:
+                instance.componenti.create(**comp)
+
+        # 2. Gestione Statistiche Base
+        if stats_base is not None:
+            # Determina il set corretto in base al modello (Oggetto o OggettoBase)
+            related_name = 'oggettostatisticabase_set' if hasattr(instance, 'oggettostatisticabase_set') else 'oggettobasestatisticabase_set'
+            getattr(instance, related_name).all().delete()
+            for s in stats_base:
+                getattr(instance, related_name).create(**s)
+
+        # 3. Gestione Modificatori/Statistiche
+        if stats_mod is not None:
+            related_name = 'oggettostatistica_set' if hasattr(instance, 'oggettostatistica_set') else 'oggettobasemodificatore_set'
+            getattr(instance, related_name).all().delete()
+            for m in stats_mod:
+                # Estraiamo i campi M2M se presenti (solo su Oggetto istanza)
+                aure = m.pop('limit_a_aure', [])
+                elementi = m.pop('limit_a_elementi', [])
+                
+                new_mod = getattr(instance, related_name).create(**m)
+                
+                # Applica relazioni Many-to-Many se l'oggetto le supporta
+                if hasattr(new_mod, 'limit_a_aure') and aure:
+                    new_mod.limit_a_aure.set(aure)
+                if hasattr(new_mod, 'limit_a_elementi') and elementi:
+                    new_mod.limit_a_elementi.set(elementi)
+
+# SERIALIZZATORE COMPLETO PER EDIT OGGETTO (ISTANZA)
+class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixin):
+    componenti = OggettoComponenteSerializer(many=True, required=False)
+    statistiche_base = OggettoStatisticaBaseSerializer(many=True, required=False, source='oggettostatisticabase_set')
+    statistiche = OggettoStatisticaSerializer(many=True, required=False, source='oggettostatistica_set')
+
+    class Meta:
+        model = Oggetto
+        fields = '__all__'
+
+    @transaction.atomic
+    def create(self, validated_data):
+        comp = validated_data.pop('componenti', [])
+        s_base = validated_data.pop('oggettostatisticabase_set', [])
+        s_mod = validated_data.pop('oggettostatistica_set', [])
+        
+        instance = Oggetto.objects.create(**validated_data)
+        self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        comp = validated_data.pop('componenti', None)
+        s_base = validated_data.pop('oggettostatisticabase_set', None)
+        s_mod = validated_data.pop('oggettostatistica_set', None)
+        
+        instance = super().update(instance, validated_data)
+        self.handle_nested_data(instance, components=comp, stats_base=s_base, stats_mod=s_mod)
+        return instance
+
+# SERIALIZZATORE COMPLETO PER EDIT OGGETTO BASE (TEMPLATE)
+class OggettoBaseFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixin):
+    statistiche_base = OggettoBaseStatisticaBaseSerializer(many=True, required=False, source='oggettobasestatisticabase_set')
+    statistiche_modificatori = OggettoBaseModificatoreSerializer(many=True, required=False, source='oggettobasemodificatore_set')
+
+    class Meta:
+        model = OggettoBase
+        fields = '__all__'
+
+    @transaction.atomic
+    def create(self, validated_data):
+        s_base = validated_data.pop('oggettobasestatisticabase_set', [])
+        s_mod = validated_data.pop('oggettobasemodificatore_set', [])
+        
+        instance = OggettoBase.objects.create(**validated_data)
+        self.handle_nested_data(instance, stats_base=s_base, stats_mod=s_mod)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        s_base = validated_data.pop('oggettobasestatisticabase_set', None)
+        s_mod = validated_data.pop('oggettobasemodificatore_set', None)
+        
+        instance = super().update(instance, validated_data)
+        self.handle_nested_data(instance, stats_base=s_base, stats_mod=s_mod)
+        return instance
