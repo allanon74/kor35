@@ -1733,8 +1733,14 @@ class MasterOggettoMixin:
                     new_mod.limit_a_elementi.set(elementi)
 
 # SERIALIZZATORE COMPLETO PER EDIT OGGETTO (ISTANZA)
+
+class OggettoComponenteEditorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OggettoCaratteristica
+        fields = ['caratteristica', 'valore']
+
 class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixin):
-    componenti = OggettoComponenteSerializer(many=True, required=False)
+    componenti = OggettoComponenteEditorSerializer(many=True, required=False)
     statistiche_base = OggettoStatisticaBaseSerializer(many=True, required=False, source='oggettostatisticabase_set')
     statistiche = OggettoStatisticaSerializer(many=True, required=False, source='oggettostatistica_set')
 
