@@ -163,6 +163,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     icona_url = serializers.SerializerMethodField()
     is_primaria = serializers.SerializerMethodField()
     valore_predefinito = serializers.SerializerMethodField()
+    valore_base_predefinito = serializers.SerializerMethodField()
     parametro = serializers.SerializerMethodField()
     has_models = serializers.SerializerMethodField()
     aura_id = serializers.SerializerMethodField()
@@ -179,7 +180,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'nome', 'sigla', 'tipo', 'colore',
             'icona_url',
-            'is_primaria', 'valore_predefinito', 'parametro', 'ordine', 'has_models',
+            'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'parametro', 'ordine', 'has_models',
             'permette_infusioni', 'permette_tessiture', 'permette_cerimoniali',
             'is_mattone',
             'aura_id', 'caratteristica_associata_nome',
@@ -245,6 +246,9 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False
 
     def get_valore_predefinito(self, obj):
+        return obj.statistica.valore_predefinito if hasattr(obj, 'statistica') else 0
+    
+    def get_valore_base_predefinito(self, obj):
         return obj.statistica.valore_base_predefinito if hasattr(obj, 'statistica') else 0
 
     def get_parametro(self, obj):
