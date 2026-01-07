@@ -996,6 +996,7 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     componenti = InfusioneCaratteristicaSerializer(many=True, required=False)
     statistiche_base = InfusioneStatisticaBaseSerializer(many=True, required=False, source='infusionestatisticabase_set')
     modificatori = InfusioneStatisticaSerializer(many=True, required=False, source='infusionestatistica_set')
+    livello = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Infusione
