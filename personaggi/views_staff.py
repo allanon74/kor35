@@ -2,13 +2,16 @@ from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
-from .models import QrCode, PropostaTecnica, Tessitura, Infusione, Cerimoniale
+from .models import QrCode, PropostaTecnica, Tessitura, Infusione, Cerimoniale, Oggetto, OggettoBase, ClasseOggetto
 from gestione_plot.permissions import IsStaffOrMaster
 
 from .serializers import (
     InfusioneFullEditorSerializer, 
     TessituraFullEditorSerializer, 
-    CerimonialeFullEditorSerializer
+    CerimonialeFullEditorSerializer,
+    OggettoSerializer,
+    OggettoBaseSerializer,
+    ClasseOggettoSerializer,
 )
 
 class QrInspectorView(APIView):
@@ -106,3 +109,18 @@ class CerimonialeMasterViewSet(viewsets.ModelViewSet):
     queryset = Cerimoniale.objects.all()
     serializer_class = CerimonialeFullEditorSerializer
     permission_classes = [IsAdminUser]
+    
+class OggettoStaffViewSet(viewsets.ModelViewSet):
+    queryset = Oggetto.objects.all().select_related('aura', 'classe_oggetto')
+    serializer_class = OggettoSerializer
+    permission_classes = [IsStaffOrMaster]
+
+class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
+    queryset = OggettoBase.objects.all().select_related('classe_oggetto')
+    serializer_class = OggettoBaseSerializer
+    permission_classes = [IsStaffOrMaster]
+
+class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = ClasseOggetto.objects.all()
+    serializer_class = ClasseOggettoSerializer
+    permission_classes = [IsStaffOrMaster]

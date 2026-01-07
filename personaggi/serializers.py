@@ -539,7 +539,7 @@ class OggettoStatisticaBaseSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OggettoStatisticaBase
-        fields = ('statistica', 'valore_base')
+        fields = ('id', 'statistica', 'valore_base')
         
     def to_representation(self, instance):
         rep = super().to_representation(instance)
@@ -719,6 +719,7 @@ class OggettoSerializer(serializers.ModelSerializer):
     
     attacco_formattato = serializers.SerializerMethodField()
     spegne_a_zero_cariche = serializers.SerializerMethodField()
+    aura_dettagli = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -764,8 +765,14 @@ class OggettoSerializer(serializers.ModelSerializer):
             'is_active',
             'cariche_massime', 'durata_totale', 'testo_ricarica', 'costo_ricarica', 
             'spegne_a_zero_cariche',
-            'is_pesante',  
+            'is_pesante',
+            'aura_dettagli',  
         )
+    
+    def get_aura_dettagli(self, obj):
+        if obj.aura:
+            return {"nome": obj.aura.nome, "colore": obj.aura.colore, "icona": obj.aura.icona_url}
+        return None
         
     def get_spegne_a_zero_cariche(self, obj):
     # Recupera il flag dall'aura (Punteggio) associata all'oggetto
@@ -1178,17 +1185,13 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
     """
     Serializer per il listino del negozio (oggetti 'template' non ancora istanziati)
     """
+    statistiche_base = OggettoStatisticaBaseSerializer(many=True, read_only=True)
     classe_oggetto_nome = serializers.CharField(source='classe_oggetto.nome', read_only=True, default="")
     stats_text = serializers.SerializerMethodField()
 
     class Meta:
         model = OggettoBase
-        fields = (
-            'id', 'nome', 'descrizione', 
-            'costo', 'tipo_oggetto', 'classe_oggetto_nome', 
-            'is_tecnologico', 'attacco_base', 'stats_text',
-            'is_pesante',
-            )
+        fields = '__all__'  # Tutti i campi del modello OggettoBase)
 
     def get_stats_text(self, obj):
         parts = []
@@ -1622,7 +1625,7 @@ class ClasseOggettoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClasseOggetto
-        fields = ['id', 'nome', 'mod_allowed_ids', 'materia_allowed_ids']
+        fields = ['id', 'nome', 'max_mod_totali', 'limitazioni_mod', 'mattoni_materia_permessi', 'mod_allowed_ids', 'materia_allowed_ids']
 
     def get_mod_allowed_ids(self, obj):
         # Recupera gli ID delle caratteristiche dalla relazione ManyToMany 'limitazioni_mod'

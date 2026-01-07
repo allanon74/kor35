@@ -56,6 +56,9 @@ router.register(r'statistiche', views.StatisticaViewSet, basename='statistiche')
 router.register(r'staff/infusioni', views_staff.InfusioneMasterViewSet, basename='master-infusioni')
 router.register(r'staff/tessiture', views_staff.TessituraMasterViewSet, basename='master-tessiture')
 router.register(r'staff/cerimoniali', views_staff.CerimonialeMasterViewSet, basename='master-cerimoniali')
+router.register(r'staff/oggetti', views_staff.OggettoStaffViewSet, basename='staff-oggetti')
+router.register(r'staff/oggetti-base', views_staff.OggettoBaseStaffViewSet, basename='staff-oggetti-base')
+router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basename='staff-classi-oggetto')
 
 urlpatterns = [
     
