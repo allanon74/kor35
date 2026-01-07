@@ -528,6 +528,7 @@ class OggettoStatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = OggettoStatistica
         fields =   '__all__'
+        validators = []
         
     def to_representation(self, instance):
         rep = super().to_representation(instance)
