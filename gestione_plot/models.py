@@ -56,7 +56,8 @@ class Evento(models.Model):
     )
     staff_assegnato = models.ManyToManyField(
         settings.AUTH_USER_MODEL, 
-        related_name='eventi_gestiti'
+        related_name='eventi_gestiti',
+        blank=True,
     )
 
     class Meta:
