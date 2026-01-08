@@ -2240,35 +2240,27 @@ class TipologiaPersonaggioViewSet(viewsets.ReadOnlyModelViewSet):
 
 class PersonaggioManageViewSet(viewsets.ModelViewSet):
     """
-    Endpoint per la gestione CRUD dei personaggi e operazioni Staff.
-    Risolve il problema del Method Not Allowed (405) fornendo create/update.
+    ViewSet per la gestione CRUD dei personaggi.
+    Paginazione disabilitata per compatibilità con il frontend attuale.
     """
     serializer_class = PersonaggioManageSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # <--- AGGIUNGI QUESTA RIGA: Disabilita la paginazione
 
     def get_queryset(self):
         user = self.request.user
-        # Lo staff vede tutti, i player solo i propri
         if user.is_staff or user.is_superuser:
             return Personaggio.objects.all().select_related('tipologia', 'proprietario').order_by('nome')
         return Personaggio.objects.filter(proprietario=user).select_related('tipologia').order_by('nome')
 
     def perform_create(self, serializer):
-        # Assegna il proprietario corrente se non specificato (lo staff potrebbe voler creare per altri, ma per ora default a se stessi)
-        # Se vuoi permettere allo staff di creare per altri, servirebbe un campo 'proprietario_id' nel payload.
-        # Qui assegniamo al request.user per semplicità.
         serializer.save(proprietario=self.request.user)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def add_resources(self, request, pk=None):
-        """
-        Azione Staff: Aggiunge/Rimuove Crediti o Punti Caratteristica.
-        Payload: { "tipo": "crediti"|"pc", "amount": 100, "reason": "Bonus Quest" }
-        """
         personaggio = self.get_object()
         tipo = request.data.get('tipo')
         reason = request.data.get('reason', 'Intervento Staff')
-        
         try:
             amount = int(request.data.get('amount', 0))
         except (ValueError, TypeError):
@@ -2279,17 +2271,11 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
 
         if tipo == 'crediti':
             personaggio.modifica_crediti(amount, reason)
-            return Response({
-                "status": "success", 
-                "new_val": personaggio.crediti, 
-                "msg": f"{amount} Crediti {'aggiunti' if amount > 0 else 'rimossi'}"
-            })
+            val = personaggio.crediti
         elif tipo == 'pc':
             personaggio.modifica_pc(amount, reason)
-            return Response({
-                "status": "success", 
-                "new_val": personaggio.punti_caratteristica, 
-                "msg": f"{amount} PC {'aggiunti' if amount > 0 else 'rimossi'}"
-            })
+            val = personaggio.punti_caratteristica
         else:
-            return Response({"error": "Tipo risorsa non valido. Usa 'crediti' o 'pc'."}, status=400)
+            return Response({"error": "Tipo risorsa non valido"}, status=400)
+            
+        return Response({"status": "success", "new_val": val, "msg": "Risorse aggiornate"})
