@@ -191,11 +191,9 @@ class ApprovaPropostaView(APIView):
             
         costo_unitario = 0
         if stat_costo:
-            try:
-                punteggio = Punteggio.objects.get(personaggio=personaggio, statistica=stat_costo)
-                costo_unitario = punteggio.valore_totale
-            except Punteggio.DoesNotExist:
-                costo_unitario = stat_costo.valore_base_predefinito
+        # CORREZIONE: Usiamo il metodo del modello Personaggio per calcolare il valore della statistica
+        # invece di cercare una relazione inesistente sul modello Punteggio/Statistica.
+            costo_unitario = personaggio.get_valore_statistica(stat_costo.sigla)
 
         livello_finale = data.get('livello', proposta.livello)
         if tipo == TIPO_PROPOSTA_CERIMONIALE:
