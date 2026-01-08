@@ -61,6 +61,7 @@ router.register(r'staff/oggetti-base', views_staff.OggettoBaseStaffViewSet, base
 router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basename='staff-classi-oggetto')
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
+router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')
 
 urlpatterns = [
     

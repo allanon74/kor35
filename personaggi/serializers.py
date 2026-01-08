@@ -1408,9 +1408,21 @@ class PersonaggioSerializer(serializers.ModelSerializer):
     """ Serializer base mancante richiesto dalla gestione plot """
     giocante = serializers.BooleanField(source='tipologia.giocante', read_only=True)
     tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
+    tipologia = serializers.PrimaryKeyRelatedField(
+        queryset=TipologiaPersonaggio.objects.all(),
+        required=False
+    )
+    proprietario = serializers.StringRelatedField(read_only=True)
+    
     class Meta:
         model = Personaggio
-        fields = '__all__' 
+        fields = (
+            'id', 'nome', 'testo', 'costume', 
+            'tipologia', 'tipologia_nome', 
+            'proprietario', 'data_nascita', 'data_morte',
+            'crediti', 'punti_caratteristica' # Utile per la lista
+        )
+        read_only_fields = ('crediti', 'punti_caratteristica') 
 
 class CreditoMovimentoCreateSerializer(serializers.Serializer):
     importo = serializers.DecimalField(max_digits=10, decimal_places=2)

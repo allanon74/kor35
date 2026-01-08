@@ -88,7 +88,8 @@ from .serializers import (
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
     ClasseOggettoSerializer, CerimonialeSerializer, StatoTimerSerializer,
-    StatisticaSerializer, TipologiaPersonaggioSerializer,
+    StatisticaSerializer, TipologiaPersonaggioSerializer, 
+    PersonaggioSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -2234,3 +2235,57 @@ class TipologiaPersonaggioViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TipologiaPersonaggio.objects.all()
     serializer_class = TipologiaPersonaggioSerializer
     permission_classes = [IsAuthenticated]
+    
+class PersonaggioManageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet leggero per creazione, modifica e lista personaggi.
+    Gestisce anche l'assegnazione risorse da parte dello staff.
+    """
+    serializer_class = PersonaggioSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        # Lo staff vede tutti, gli utenti solo i propri
+        if user.is_staff or user.is_superuser:
+            return Personaggio.objects.all().select_related('tipologia', 'proprietario').order_by('nome')
+        return Personaggio.objects.filter(proprietario=user).select_related('tipologia').order_by('nome')
+
+    def perform_create(self, serializer):
+        # Assegna automaticamente il proprietario alla creazione
+        serializer.save(proprietario=self.request.user)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    def add_resources(self, request, pk=None):
+        """
+        Endpoint Staff per aggiungere/rimuovere Crediti o PC.
+        Payload: { "tipo": "crediti"|"pc", "amount": 100, "reason": "Premio Quest" }
+        """
+        personaggio = self.get_object()
+        tipo = request.data.get('tipo')
+        try:
+            amount = int(request.data.get('amount', 0))
+        except (ValueError, TypeError):
+            return Response({"error": "Importo non valido"}, status=400)
+            
+        reason = request.data.get('reason', 'Intervento Staff')
+
+        if amount == 0:
+            return Response({"error": "L'importo non può essere zero"}, status=400)
+
+        if tipo == 'crediti':
+            personaggio.modifica_crediti(amount, reason)
+            return Response({
+                "status": "success", 
+                "new_val": personaggio.crediti,
+                "msg": f"Crediti {'aggiunti' if amount > 0 else 'rimossi'}"
+            })
+        elif tipo == 'pc':
+            personaggio.modifica_pc(amount, reason)
+            return Response({
+                "status": "success", 
+                "new_val": personaggio.punti_caratteristica,
+                "msg": f"PC {'aggiunti' if amount > 0 else 'rimossi'}"
+            })
+        else:
+            return Response({"error": "Tipo risorsa non valido (usa 'crediti' o 'pc')"}, status=400)
