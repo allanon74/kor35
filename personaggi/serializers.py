@@ -1423,6 +1423,31 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'crediti', 'punti_caratteristica' # Utile per la lista
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
+        
+# Aggiungi in personaggi/serializers.py
+
+class PersonaggioManageSerializer(serializers.ModelSerializer):
+    """
+    Serializer leggero per la creazione e modifica anagrafica dei personaggi.
+    Gestisce correttamente la scrittura della Tipologia tramite ID.
+    """
+    tipologia = serializers.PrimaryKeyRelatedField(
+        queryset=TipologiaPersonaggio.objects.all(),
+        required=False
+    )
+    # Per la visualizzazione (se serve)
+    tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
+    proprietario = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Personaggio
+        fields = (
+            'id', 'nome', 'testo', 'costume', 
+            'tipologia', 'tipologia_nome', 
+            'proprietario', 'data_nascita', 'data_morte',
+            'crediti', 'punti_caratteristica' # Read-only di default qui sotto
+        )
+        read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
 
 class CreditoMovimentoCreateSerializer(serializers.Serializer):
     importo = serializers.DecimalField(max_digits=10, decimal_places=2)

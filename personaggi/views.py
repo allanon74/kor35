@@ -89,7 +89,7 @@ from .serializers import (
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
     ClasseOggettoSerializer, CerimonialeSerializer, StatoTimerSerializer,
     StatisticaSerializer, TipologiaPersonaggioSerializer, 
-    PersonaggioSerializer,
+    PersonaggioManageSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -2236,39 +2236,43 @@ class TipologiaPersonaggioViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TipologiaPersonaggioSerializer
     permission_classes = [IsAuthenticated]
     
+# Aggiungi in personaggi/views.py
+
 class PersonaggioManageViewSet(viewsets.ModelViewSet):
     """
-    ViewSet leggero per creazione, modifica e lista personaggi.
-    Gestisce anche l'assegnazione risorse da parte dello staff.
+    Endpoint per la gestione CRUD dei personaggi e operazioni Staff.
+    Risolve il problema del Method Not Allowed (405) fornendo create/update.
     """
-    serializer_class = PersonaggioSerializer
+    serializer_class = PersonaggioManageSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        # Lo staff vede tutti, gli utenti solo i propri
+        # Lo staff vede tutti, i player solo i propri
         if user.is_staff or user.is_superuser:
             return Personaggio.objects.all().select_related('tipologia', 'proprietario').order_by('nome')
         return Personaggio.objects.filter(proprietario=user).select_related('tipologia').order_by('nome')
 
     def perform_create(self, serializer):
-        # Assegna automaticamente il proprietario alla creazione
+        # Assegna il proprietario corrente se non specificato (lo staff potrebbe voler creare per altri, ma per ora default a se stessi)
+        # Se vuoi permettere allo staff di creare per altri, servirebbe un campo 'proprietario_id' nel payload.
+        # Qui assegniamo al request.user per semplicità.
         serializer.save(proprietario=self.request.user)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def add_resources(self, request, pk=None):
         """
-        Endpoint Staff per aggiungere/rimuovere Crediti o PC.
-        Payload: { "tipo": "crediti"|"pc", "amount": 100, "reason": "Premio Quest" }
+        Azione Staff: Aggiunge/Rimuove Crediti o Punti Caratteristica.
+        Payload: { "tipo": "crediti"|"pc", "amount": 100, "reason": "Bonus Quest" }
         """
         personaggio = self.get_object()
         tipo = request.data.get('tipo')
+        reason = request.data.get('reason', 'Intervento Staff')
+        
         try:
             amount = int(request.data.get('amount', 0))
         except (ValueError, TypeError):
             return Response({"error": "Importo non valido"}, status=400)
-            
-        reason = request.data.get('reason', 'Intervento Staff')
 
         if amount == 0:
             return Response({"error": "L'importo non può essere zero"}, status=400)
@@ -2277,15 +2281,15 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             personaggio.modifica_crediti(amount, reason)
             return Response({
                 "status": "success", 
-                "new_val": personaggio.crediti,
-                "msg": f"Crediti {'aggiunti' if amount > 0 else 'rimossi'}"
+                "new_val": personaggio.crediti, 
+                "msg": f"{amount} Crediti {'aggiunti' if amount > 0 else 'rimossi'}"
             })
         elif tipo == 'pc':
             personaggio.modifica_pc(amount, reason)
             return Response({
                 "status": "success", 
-                "new_val": personaggio.punti_caratteristica,
-                "msg": f"PC {'aggiunti' if amount > 0 else 'rimossi'}"
+                "new_val": personaggio.punti_caratteristica, 
+                "msg": f"{amount} PC {'aggiunti' if amount > 0 else 'rimossi'}"
             })
         else:
-            return Response({"error": "Tipo risorsa non valido (usa 'crediti' o 'pc')"}, status=400)
+            return Response({"error": "Tipo risorsa non valido. Usa 'crediti' o 'pc'."}, status=400)
