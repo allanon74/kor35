@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 
 
 from .views import AbilitaViewSet, PersonaggioTransazioniListView, UserViewSet
-from .views_staff import QrInspectorView, ApprovaPropostaView
+from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView
 
 
 from .views import (AbilViewSet,
@@ -144,6 +144,9 @@ urlpatterns = [
     
     path('api/staff/qr-inspect/<str:qr_id>/', QrInspectorView.as_view(), name='staff-qr-inspect'),
     path('api/staff/approva-proposta/<int:proposta_id>/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
+    
+    path('api/staff/proposta/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta'),
+    path('api/staff/proposta/<int:proposta_id>/approva/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     
     path('api/', include(router.urls)),
     
