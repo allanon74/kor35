@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (
-    PropostaTecnica, Personaggio, Messaggio, 
+    PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
@@ -173,17 +173,15 @@ class ProposteValutazioneList(generics.ListAPIView):
 class ApprovaPropostaView(APIView):
     permission_classes = [permissions.IsAdminUser]
 
-    def post(self, request, proposta_id):
-        proposta = get_object_or_404(PropostaTecnica, pk=proposta_id)
-        data = request.data # Dati del form finale (Infusione/Tessitura/ecc)
+    def post(self, request, pk):
+        proposta = get_object_or_404(PropostaTecnica, pk=pk)
+        data = request.data
         personaggio = proposta.personaggio
         tipo = proposta.tipo
-        
-        # Determina il costo basato sull'Aura
         aura = proposta.aura
-        costo_base = 0
-        stat_costo = None
         
+        # --- 1. Calcolo Costi ---
+        stat_costo = None
         if tipo == TIPO_PROPOSTA_INFUSIONE:
             stat_costo = aura.stat_costo_creazione_infusione
         elif tipo == TIPO_PROPOSTA_TESSITURA:
@@ -191,35 +189,36 @@ class ApprovaPropostaView(APIView):
         elif tipo == TIPO_PROPOSTA_CERIMONIALE:
             stat_costo = aura.stat_costo_creazione_cerimoniale
             
+        costo_unitario = 0
         if stat_costo:
-            # Recupera il valore della statistica costo dal personaggio (se variabile) o dal default
-            # Nota: Solitamente il costo è un valore fisso nella Statistica o nel parametro
-            # Qui assumiamo di usare il valore_base_predefinito della statistica linkata all'aura
-            costo_base = stat_costo.valore_base_predefinito
+            try:
+                punteggio = Punteggio.objects.get(personaggio=personaggio, statistica=stat_costo)
+                costo_unitario = punteggio.valore_totale
+            except Punteggio.DoesNotExist:
+                costo_unitario = stat_costo.valore_base_predefinito
 
-        # Calcolo livello tecnica (o dai dati in arrivo o dalla proposta)
-        # Nota: I cerimoniali usano 'liv' nel modello, Infusioni/Tessiture calcolano dai componenti
-        # Per semplicità, usiamo il livello calcolato dalla proposta che dovrebbe matchare quello finale
-        livello = proposta.livello 
-        costo_totale = costo_base * livello
+        livello_finale = data.get('livello', proposta.livello)
+        if tipo == TIPO_PROPOSTA_CERIMONIALE:
+             livello_finale = data.get('liv', proposta.livello_proposto) or 1
 
+        costo_totale = int(costo_unitario) * int(livello_finale)
+
+        # Verifica Crediti
         if personaggio.crediti < costo_totale:
             return Response(
-                {'error': f"Il personaggio non ha abbastanza crediti. Richiesti: {costo_totale}, Posseduti: {personaggio.crediti}"}, 
+                {'error': f"Crediti insufficienti. Richiesti: {costo_totale}, Posseduti: {personaggio.crediti}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # --- 2. Esecuzione Atomica ---
         try:
             with transaction.atomic():
-                # 1. Crea la Tecnica specifica
-                serializer = None
-                nuova_tecnica = None
-                
-                # Assicuriamo che la proposta sia linkata
+                # A. Prepara dati tecnica
                 data['proposta_creazione'] = proposta.id
-                # Assicuriamo che l'aura sia corretta
-                data['aura_richiesta'] = proposta.aura.id
-
+                data['aura_richiesta'] = aura.id
+                
+                # Serializer Selection
+                serializer = None
                 if tipo == TIPO_PROPOSTA_INFUSIONE:
                     serializer = InfusioneSerializer(data=data)
                 elif tipo == TIPO_PROPOSTA_TESSITURA:
@@ -227,37 +226,46 @@ class ApprovaPropostaView(APIView):
                 elif tipo == TIPO_PROPOSTA_CERIMONIALE:
                     serializer = CerimonialeSerializer(data=data)
                 
-                if serializer and serializer.is_valid():
-                    nuova_tecnica = serializer.save()
-                    
-                    # Assegna al personaggio
-                    if tipo == TIPO_PROPOSTA_INFUSIONE:
-                        personaggio.infusioni_possedute.add(nuova_tecnica)
-                    elif tipo == TIPO_PROPOSTA_TESSITURA:
-                        personaggio.tessiture_possedute.add(nuova_tecnica)
-                    elif tipo == TIPO_PROPOSTA_CERIMONIALE:
-                        personaggio.cerimoniali_posseduti.add(nuova_tecnica)
-                else:
+                if not serializer.is_valid():
+                    # Se il form non è valido, interrompiamo tutto subito
                     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+                # B. Salva la Tecnica
+                nuova_tecnica = serializer.save()
+                
+                # C. Assegna al Personaggio (Many2Many)
+                if tipo == TIPO_PROPOSTA_INFUSIONE:
+                    personaggio.infusioni_possedute.add(nuova_tecnica)
+                elif tipo == TIPO_PROPOSTA_TESSITURA:
+                    personaggio.tessiture_possedute.add(nuova_tecnica)
+                elif tipo == TIPO_PROPOSTA_CERIMONIALE:
+                    personaggio.cerimoniali_posseduti.add(nuova_tecnica)
 
-                # 2. Aggiorna Proposta
+                # D. Paga i crediti
+                if costo_totale > 0:
+                    # modifica_crediti di solito salva anche il personaggio
+                    personaggio.modifica_crediti(-costo_totale, f"Creazione {proposta.get_tipo_display()}: {nuova_tecnica.nome}")
+
+                # E. Aggiorna Proposta
                 proposta.stato = STATO_PROPOSTA_APPROVATA
-                proposta.note_staff = data.get('note_staff', proposta.note_staff) # Aggiorna note se modificate
+                proposta.note_staff = data.get('note_staff', proposta.note_staff)
                 proposta.save()
 
-                # 3. Paga Costo
-                if costo_totale > 0:
-                    personaggio.modifica_crediti(-costo_totale, f"Creazione tecnica: {nuova_tecnica.nome}")
-
-                # 4. Invia Messaggio
+                # F. Invia Messaggio (Verifica se modifica_crediti ne manda già uno, qui ne mandiamo uno specifico)
                 Messaggio.objects.create(
                     mittente=request.user,
                     destinatario_personaggio=personaggio,
-                    titolo=f"Tecnica Approvata: {nuova_tecnica.nome}",
-                    testo=f"La tua tecnica '{nuova_tecnica.nome}' è stata approvata e creata.\nCosto sostenuto: {costo_totale} crediti."
+                    titolo=f"Approvazione: {nuova_tecnica.nome}",
+                    testo=(
+                        f"La tua tecnica '{nuova_tecnica.nome}' è stata approvata e creata.\n"
+                        f"Costo sostenuto: {costo_totale} crediti.\n\n"
+                        f"NOTE STAFF:\n{proposta.note_staff}"
+                    )
                 )
 
+            # Ritorna successo solo se tutto il blocco atomic è finito senza errori
             return Response({'status': 'success', 'id': nuova_tecnica.id}, status=status.HTTP_201_CREATED)
 
         except Exception as e:
+            # Se c'è un errore qualsiasi, transaction.atomic fa rollback di tutto
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
