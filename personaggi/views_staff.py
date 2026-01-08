@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
@@ -11,7 +11,7 @@ from .models import (
     PropostaTecnica, Personaggio, Messaggio, 
     Infusione, Tessitura, Cerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto,
-    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA,
+    STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE
 )
 
@@ -27,6 +27,7 @@ from .serializers import (
     InfusioneSerializer,
     TessituraSerializer,
     CerimonialeSerializer,
+    PropostaTecnicaSerializer,
 )
 
 class QrInspectorView(APIView):
@@ -161,6 +162,13 @@ class RifiutaPropostaView(APIView):
             )
             
         return Response({'status': 'success', 'message': 'Proposta rifiutata'}, status=status.HTTP_200_OK)
+    
+class ProposteValutazioneList(generics.ListAPIView):
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = PropostaTecnicaSerializer
+
+    def get_queryset(self):
+        return PropostaTecnica.objects.filter(stato=STATO_PROPOSTA_IN_VALUTAZIONE).order_by('data_invio')
 
 class ApprovaPropostaView(APIView):
     permission_classes = [permissions.IsAdminUser]
