@@ -1299,6 +1299,7 @@ class Personaggio(Inventario):
     tipologia = models.ForeignKey(TipologiaPersonaggio, on_delete=models.PROTECT, related_name="personaggi", default=get_default_tipologia)
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
+    costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
     
     abilita_possedute = models.ManyToManyField(Abilita, through='PersonaggioAbilita', blank=True)
     attivate_possedute = models.ManyToManyField(Attivata, through='PersonaggioAttivata', blank=True)

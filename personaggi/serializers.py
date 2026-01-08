@@ -1315,7 +1315,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Personaggio
         fields = (
-            'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte',
+            'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte', 'costume',
             'tipologia', 'crediti', 'punti_caratteristica',
             'punteggi_base', 'modificatori_calcolati',
             'abilita_possedute', 'oggetti',
@@ -1402,7 +1402,7 @@ class PersonaggioPublicSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Personaggio
-        fields = ('id', 'nome', 'testo', 'oggetti')
+        fields = ('id', 'nome', 'testo', 'oggetti', 'costume', )
         
 class PersonaggioSerializer(serializers.ModelSerializer):
     """ Serializer base mancante richiesto dalla gestione plot """
