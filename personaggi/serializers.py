@@ -1420,7 +1420,8 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'id', 'nome', 'testo', 'costume', 
             'tipologia', 'tipologia_nome', 
             'proprietario', 'data_nascita', 'data_morte',
-            'crediti', 'punti_caratteristica' # Utile per la lista
+            'crediti', 'punti_caratteristica',
+            'giocante', # Utile per la lista
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
         
