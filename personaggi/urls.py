@@ -148,7 +148,7 @@ urlpatterns = [
     path('api/staff/proposte/valutazione/', ProposteValutazioneList.as_view(), name='staff-proposte-valutazione'),
     
     path('api/staff/proposta/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta'),
-    path('api/staff/proposta/<int:proposta_id>/approva/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
+    path('api/staff/proposta/<int:pk>/approva/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     
     path('api/', include(router.urls)),
     
