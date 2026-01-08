@@ -1494,7 +1494,12 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Personaggio
-        fields = ('id', 'nome', 'proprietario', 'tipologia', 'proprietario_nome', 'data_nascita', 'data_morte')
+        fields = (
+            'id', 'nome', 'proprietario', 'tipologia', 
+            'proprietario_nome', 'data_nascita', 'data_morte',
+            'testo', 'costume', 'crediti', 'punti_caratteristica',
+            )
+        read_only_fields = ('crediti', 'punti_caratteristica') 
 
     def get_proprietario_nome(self, obj):
         user = obj.proprietario
