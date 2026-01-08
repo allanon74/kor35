@@ -175,7 +175,10 @@ class ApprovaPropostaView(APIView):
 
     def post(self, request, pk):
         proposta = get_object_or_404(PropostaTecnica, pk=pk)
-        data = request.data
+        
+        # Facciamo una copia mutabile dei dati ricevuti dal frontend
+        data = request.data.copy()
+        
         personaggio = proposta.personaggio
         tipo = proposta.tipo
         aura = proposta.aura
@@ -191,8 +194,7 @@ class ApprovaPropostaView(APIView):
             
         costo_unitario = 0
         if stat_costo:
-        # CORREZIONE: Usiamo il metodo del modello Personaggio per calcolare il valore della statistica
-        # invece di cercare una relazione inesistente sul modello Punteggio/Statistica.
+            # Calcola il costo usando il metodo del personaggio (Correzione precedente)
             costo_unitario = personaggio.get_valore_statistica(stat_costo.sigla)
 
         livello_finale = data.get('livello', proposta.livello)
@@ -211,24 +213,36 @@ class ApprovaPropostaView(APIView):
         # --- 2. Esecuzione Atomica ---
         try:
             with transaction.atomic():
-                # A. Prepara dati tecnica
+                # A. Prepara i dati obbligatori per il salvataggio
+                # Iniettiamo gli ID nei dati che passeremo al serializer
                 data['proposta_creazione'] = proposta.id
                 data['aura_richiesta'] = aura.id
                 
-                # Serializer Selection
+                # Serializer Selection (Usiamo i FullEditor per abilitare la scrittura)
                 serializer = None
+                
                 if tipo == TIPO_PROPOSTA_INFUSIONE:
-                    serializer = InfusioneSerializer(data=data)
+                    if proposta.aura_infusione:
+                        data['aura_infusione'] = proposta.aura_infusione.id
+                    serializer = InfusioneFullEditorSerializer(data=data)
+                    
                 elif tipo == TIPO_PROPOSTA_TESSITURA:
-                    serializer = TessituraSerializer(data=data)
+                    if proposta.aura_infusione:
+                        # Le tessiture usano 'elemento_principale'
+                        data['elemento_principale'] = proposta.aura_infusione.id
+                    serializer = TessituraFullEditorSerializer(data=data)
+                    
                 elif tipo == TIPO_PROPOSTA_CERIMONIALE:
-                    serializer = CerimonialeSerializer(data=data)
+                    # Assicuriamoci che il livello sia settato
+                    if 'liv' not in data:
+                        data['liv'] = livello_finale
+                    serializer = CerimonialeFullEditorSerializer(data=data)
                 
                 if not serializer.is_valid():
-                    # Se il form non è valido, interrompiamo tutto subito
                     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 
                 # B. Salva la Tecnica
+                # I FullEditorSerializer gestiscono automaticamente anche il salvataggio dei componenti
                 nuova_tecnica = serializer.save()
                 
                 # C. Assegna al Personaggio (Many2Many)
@@ -241,7 +255,6 @@ class ApprovaPropostaView(APIView):
 
                 # D. Paga i crediti
                 if costo_totale > 0:
-                    # modifica_crediti di solito salva anche il personaggio
                     personaggio.modifica_crediti(-costo_totale, f"Creazione {proposta.get_tipo_display()}: {nuova_tecnica.nome}")
 
                 # E. Aggiorna Proposta
@@ -249,7 +262,7 @@ class ApprovaPropostaView(APIView):
                 proposta.note_staff = data.get('note_staff', proposta.note_staff)
                 proposta.save()
 
-                # F. Invia Messaggio (Verifica se modifica_crediti ne manda già uno, qui ne mandiamo uno specifico)
+                # F. Invia Messaggio
                 Messaggio.objects.create(
                     mittente=request.user,
                     destinatario_personaggio=personaggio,
@@ -261,9 +274,7 @@ class ApprovaPropostaView(APIView):
                     )
                 )
 
-            # Ritorna successo solo se tutto il blocco atomic è finito senza errori
             return Response({'status': 'success', 'id': nuova_tecnica.id}, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            # Se c'è un errore qualsiasi, transaction.atomic fa rollback di tutto
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
