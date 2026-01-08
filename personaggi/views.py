@@ -34,6 +34,7 @@ from .models import (
     ClasseOggetto, Statistica, 
     ConfigurazioneLivelloAura, Cerimoniale,
     StatoTimerAttivo,
+    TipologiaPersonaggio,
 )
 
 import uuid 
@@ -87,7 +88,7 @@ from .serializers import (
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
     ClasseOggettoSerializer, CerimonialeSerializer, StatoTimerSerializer,
-    StatisticaSerializer,
+    StatisticaSerializer, TipologiaPersonaggioSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -2226,4 +2227,10 @@ class StatisticaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Statistica.objects.all()
     serializer_class = StatisticaSerializer
     # Le statistiche sono pubbliche in lettura per gli utenti autenticati
+    permission_classes = [IsAuthenticated]
+    
+class TipologiaPersonaggioViewSet(viewsets.ReadOnlyModelViewSet):
+    """Visualizza l'elenco delle tipologie di personaggi disponibili"""
+    queryset = TipologiaPersonaggio.objects.all()
+    serializer_class = TipologiaPersonaggioSerializer
     permission_classes = [IsAuthenticated]

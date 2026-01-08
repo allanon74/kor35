@@ -1283,7 +1283,7 @@ class TransazioneSospesaSerializer(serializers.ModelSerializer):
 class TipologiaPersonaggioSerializer(serializers.ModelSerializer):
     class Meta:
         model = TipologiaPersonaggio
-        fields = ('nome', 'crediti_iniziali', 'caratteristiche_iniziali', 'giocante')
+        fields = ('id', 'nome', 'crediti_iniziali', 'caratteristiche_iniziali', 'giocante')
 
 
 class PersonaggioDetailSerializer(serializers.ModelSerializer):

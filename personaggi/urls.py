@@ -60,6 +60,8 @@ router.register(r'staff/oggetti', views_staff.OggettoStaffViewSet, basename='sta
 router.register(r'staff/oggetti-base', views_staff.OggettoBaseStaffViewSet, basename='staff-oggetti-base')
 router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basename='staff-classi-oggetto')
 
+router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
+
 urlpatterns = [
     
     path('auth/', MyAuthToken.as_view()),
