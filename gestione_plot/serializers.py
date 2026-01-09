@@ -21,7 +21,7 @@ class AttaccoTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttaccoTemplate
         fields = '__all__'
-        exclude = ['template']
+        # exclude = ['template']
 
 class MostroTemplateSerializer(serializers.ModelSerializer):
     attacchi = AttaccoTemplateSerializer(many=True, required=False)
