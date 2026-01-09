@@ -59,6 +59,7 @@ router.register(r'staff/cerimoniali', views_staff.CerimonialeMasterViewSet, base
 router.register(r'staff/oggetti', views_staff.OggettoStaffViewSet, basename='staff-oggetti')
 router.register(r'staff/oggetti-base', views_staff.OggettoBaseStaffViewSet, basename='staff-oggetti-base')
 router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basename='staff-classi-oggetto')
+router.register(r'staff/abilita', views_staff.AbilitaStaffViewSet, basename='staff-abilita')
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')

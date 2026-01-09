@@ -10,7 +10,7 @@ from django.utils import timezone
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale,
-    QrCode, Oggetto, OggettoBase, ClasseOggetto,
+    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE
 )
@@ -28,6 +28,7 @@ from .serializers import (
     TessituraSerializer,
     CerimonialeSerializer,
     PropostaTecnicaSerializer,
+    AbilitaFullEditorSerializer,
 )
 
 class QrInspectorView(APIView):
@@ -278,3 +279,11 @@ class ApprovaPropostaView(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+class AbilitaStaffViewSet(viewsets.ModelViewSet):
+    """
+    CRUD completo per le Abilità (Staff).
+    """
+    queryset = Abilita.objects.all().select_related('caratteristica', 'aura_riferimento')
+    serializer_class = AbilitaFullEditorSerializer
+    permission_classes = [IsAdminUser]
