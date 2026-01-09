@@ -27,6 +27,33 @@ class MostroTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = MostroTemplate
         fields = '__all__'
+    
+    def create(self, validated_data):
+        attacchi_data = validated_data.pop('attacchi', [])
+        mostro = MostroTemplate.objects.create(**validated_data)
+        
+        for attacco in attacchi_data:
+            AttaccoTemplate.objects.create(template=mostro, **attacco)
+            
+        return mostro
+    
+    def update(self, instance, validated_data):
+        attacchi_data = validated_data.pop('attacchi', None)
+        
+        # Aggiorna i campi standard del mostro
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Gestione Attacchi: Se forniti, sostituiamo la lista esistente
+        if attacchi_data is not None:
+            # Elimina i vecchi
+            instance.attacchi.all().delete()
+            # Crea i nuovi
+            for attacco in attacchi_data:
+                AttaccoTemplate.objects.create(template=instance, **attacco)
+
+        return instance
 
 class QuestMostroSerializer(serializers.ModelSerializer):
     template_details = MostroTemplateSerializer(source='template', read_only=True)

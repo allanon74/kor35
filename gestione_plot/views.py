@@ -108,8 +108,8 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
         except QrCode.DoesNotExist:
             return Response({'error': 'QR Code non trovato'}, status=404)
         
-class MostroTemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = MostroTemplate.objects.all()
+class MostroTemplateViewSet(viewsets.ModelViewSet): # Cambiato da ReadOnlyModelViewSet a ModelViewSet
+    queryset = MostroTemplate.objects.all().prefetch_related('attacchi')
     serializer_class = MostroTemplateSerializer
     permission_classes = [IsStaffOrMaster]
 
