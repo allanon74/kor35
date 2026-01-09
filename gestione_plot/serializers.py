@@ -21,9 +21,10 @@ class AttaccoTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttaccoTemplate
         fields = '__all__'
+        exclude = ['template']
 
 class MostroTemplateSerializer(serializers.ModelSerializer):
-    attacchi = AttaccoTemplateSerializer(many=True, read_only=True)
+    attacchi = AttaccoTemplateSerializer(many=True, required=False)
     class Meta:
         model = MostroTemplate
         fields = '__all__'
@@ -33,6 +34,7 @@ class MostroTemplateSerializer(serializers.ModelSerializer):
         mostro = MostroTemplate.objects.create(**validated_data)
         
         for attacco in attacchi_data:
+            if 'id' in attacco: del attacco['id']
             AttaccoTemplate.objects.create(template=mostro, **attacco)
             
         return mostro
@@ -51,6 +53,7 @@ class MostroTemplateSerializer(serializers.ModelSerializer):
             instance.attacchi.all().delete()
             # Crea i nuovi
             for attacco in attacchi_data:
+                if 'id' in attacco: del attacco['id']
                 AttaccoTemplate.objects.create(template=instance, **attacco)
 
         return instance
