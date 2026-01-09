@@ -20,8 +20,8 @@ class UserShortSerializer(serializers.ModelSerializer):
 class AttaccoTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttaccoTemplate
-        fields = '__all__'
-        # exclude = ['template']
+        # fields = '__all__'
+        exclude = ['template']
 
 class MostroTemplateSerializer(serializers.ModelSerializer):
     attacchi = AttaccoTemplateSerializer(many=True, required=False)
