@@ -1848,7 +1848,7 @@ class OggettoBaseFullEditorSerializer(serializers.ModelSerializer, MasterOggetto
 class AbilitaTierEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_tier
-        fields = ['tabella', 'costo', 'ordine'] 
+        fields = ['tabella', 'ordine'] 
         # 'tabella' è un FK a Tier
 
 class AbilitaRequisitoEditorSerializer(serializers.ModelSerializer):
