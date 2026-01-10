@@ -725,7 +725,7 @@ class abilita_prerequisito(A_modello):
 
 class abilita_requisito(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
-    requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo__in': (CARATTERISTICA, CONDIZIONE, STATISTICA)})
+    requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo__in': (CARATTERISTICA, CONDIZIONE, STATISTICA, AURA)})
     valore = models.IntegerField(default=1)
 
 class abilita_sbloccata(A_modello):
