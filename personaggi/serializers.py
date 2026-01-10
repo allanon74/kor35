@@ -1849,29 +1849,32 @@ class AbilitaTierEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_tier
         fields = ['tabella', 'ordine'] 
-        # 'tabella' è un FK a Tier
+        read_only_fields = ['abilita'] # Fondamentale per la creazione
 
 class AbilitaRequisitoEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_requisito
-        fields = ['requisito', 'valore'] # requisito è un Punteggio
+        fields = ['requisito', 'valore']
+        read_only_fields = ['abilita'] # Fondamentale
 
 class AbilitaPunteggioEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_punteggio
         fields = ['punteggio', 'valore']
+        read_only_fields = ['abilita'] # Fondamentale
 
 class AbilitaPrerequisitoEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_prerequisito
-        fields = ['prerequisito'] # prerequisito è un'altra Abilita
+        fields = ['prerequisito']
+        read_only_fields = ['abilita'] # Fondamentale
 
 class AbilitaStatisticaEditorSerializer(serializers.ModelSerializer):
-    # Usa tutti i campi per gestire condizioni e modificatori
     class Meta:
         model = AbilitaStatistica
         fields = '__all__'
-        validators = [] # Disabilita validatori unicità standard per gestione manuale
+        read_only_fields = ['abilita'] # FIX ERRORE "Campo obbligatorio"
+        validators = [] 
 
 class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     """
@@ -1908,42 +1911,42 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
         pre_data = validated_data.pop('abilita_prerequisiti', None)
         stat_data = validated_data.pop('abilitastatistica_set', None)
 
-        # Aggiorna campi base
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Aggiorna inlines solo se presenti nel payload
         self._save_inlines(instance, tiers_data, req_data, punt_data, pre_data, stat_data)
         return instance
 
     def _save_inlines(self, instance, tiers, reqs, punts, pres, stats):
-        # Helper per ricreare le liste (Delete All + Create strategy)
-        
+        # 1. Tiers
         if tiers is not None:
             instance.abilita_tier_set.all().delete()
             for item in tiers:
                 abilita_tier.objects.create(abilita=instance, **item)
 
+        # 2. Requisiti
         if reqs is not None:
             instance.abilita_requisito_set.all().delete()
             for item in reqs:
                 abilita_requisito.objects.create(abilita=instance, **item)
 
+        # 3. Punteggi Assegnati
         if punts is not None:
             instance.abilita_punteggio_set.all().delete()
             for item in punts:
                 abilita_punteggio.objects.create(abilita=instance, **item)
 
+        # 4. Prerequisiti
         if pres is not None:
             instance.abilita_prerequisiti.all().delete()
             for item in pres:
                 abilita_prerequisito.objects.create(abilita=instance, **item)
 
+        # 5. Statistiche
         if stats is not None:
             instance.abilitastatistica_set.all().delete()
             for item in stats:
-                # Gestione ManyToMany condizionali se presenti nel mixin
                 aure = item.pop('limit_a_aure', [])
                 elementi = item.pop('limit_a_elementi', [])
                 new_stat = AbilitaStatistica.objects.create(abilita=instance, **item)
