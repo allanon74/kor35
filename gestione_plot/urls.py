@@ -25,7 +25,7 @@ router.register(r'staff/mostri-templates', MostroTemplateViewSet, basename='most
 router.register(r'staff/infusioni', InfusioneMasterViewSet, basename='master-infusioni')
 router.register(r'staff/tessiture',    TessituraMasterViewSet, basename='master-tessiture')
 router.register(r'staff/cerimoniali', CerimonialeMasterViewSet, basename='master-cerimoniali')
-router.register(r'staff-offgame', StaffOffGameViewSet)
+router.register(r'staff/staff-offgame', StaffOffGameViewSet)
 
 urlpatterns = [
     path('api/', include(router.urls)),
