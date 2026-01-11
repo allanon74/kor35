@@ -5,7 +5,7 @@ from rest_framework.routers import DefaultRouter
 from .views import(
     EventoViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
-    MostroTemplateViewSet
+    MostroTemplateViewSet, StaffOffGameViewSet,
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -25,6 +25,7 @@ router.register(r'staff/mostri-templates', MostroTemplateViewSet, basename='most
 router.register(r'staff/infusioni', InfusioneMasterViewSet, basename='master-infusioni')
 router.register(r'staff/tessiture',    TessituraMasterViewSet, basename='master-tessiture')
 router.register(r'staff/cerimoniali', CerimonialeMasterViewSet, basename='master-cerimoniali')
+router.register(r'staff-offgame', StaffOffGameViewSet)
 
 urlpatterns = [
     path('api/', include(router.urls)),
