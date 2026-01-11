@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     Evento, GiornoEvento, Quest, 
     MostroTemplate, AttaccoTemplate, 
-    QuestMostro, PngAssegnato, QuestVista
+    QuestMostro, PngAssegnato, QuestVista, StaffOffGame
 )
 from personaggi.models import Manifesto, Inventario, QrCode
 from personaggi.serializers import ManifestoSerializer, InventarioSerializer, PersonaggioSerializer
@@ -98,10 +98,18 @@ class QuestVistaSerializer(serializers.ModelSerializer):
 
 # --- QUEST E EVENTI ---
 
+class StaffOffGameSerializer(serializers.ModelSerializer):
+    staffer_details = UserShortSerializer(source='staffer', read_only=True)
+
+    class Meta:
+        model = StaffOffGame
+        fields = '__all__'
+
 class QuestSerializer(serializers.ModelSerializer):
     mostri_presenti = QuestMostroSerializer(many=True, read_only=True)
     png_richiesti = PngAssegnatoSerializer(many=True, read_only=True)
     viste_previste = QuestVistaSerializer(many=True, read_only=True)
+    staff_offgame = StaffOffGameSerializer(many=True, read_only=True)
 
     class Meta:
         model = Quest

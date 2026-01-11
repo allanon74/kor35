@@ -161,3 +161,19 @@ class QuestVista(models.Model):
     class Meta:
         verbose_name = "Oggetto Vista Quest"
         verbose_name_plural = "6. Oggetti Vista"
+        
+class StaffOffGame(models.Model):
+    """
+    Staffer assegnati a compiti di arbitraggio o gestione Off-Game per una specifica Quest.
+    """
+    quest = models.ForeignKey(Quest, on_delete=models.CASCADE, related_name='staff_offgame')
+    staffer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    compito = models.TextField(help_text="Es: Arbitro, Gestione Audio, Allestimento Zone...")
+
+    class Meta:
+        verbose_name = "Staff Off-Game"
+        verbose_name_plural = "7. Staff Off-Game"
+        unique_together = ('quest', 'staffer') # Evita duplicati dello stesso staffer nella stessa quest
+
+    def __str__(self):
+        return f"{self.staffer.username} - {self.compito} ({self.quest.titolo})"
