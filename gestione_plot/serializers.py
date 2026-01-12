@@ -106,11 +106,29 @@ class StaffOffGameSerializer(serializers.ModelSerializer):
         model = StaffOffGame
         fields = '__all__'
 
+class QuestTaskSerializer(serializers.ModelSerializer):
+    staffer_details = UserShortSerializer(source='staffer', read_only=True)
+    personaggio_details = PersonaggioSerializer(source='personaggio', read_only=True)
+    mostro_details = MostroTemplateSerializer(source='mostro_template', read_only=True)
+
+    class Meta:
+        model = QuestTask
+        fields = '__all__'
+
+class QuestFaseSerializer(serializers.ModelSerializer):
+    tasks = QuestTaskSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = QuestFase
+        fields = '__all__'
+
 class QuestSerializer(serializers.ModelSerializer):
     mostri_presenti = QuestMostroSerializer(many=True, read_only=True)
     png_richiesti = PngAssegnatoSerializer(many=True, read_only=True)
     viste_previste = QuestVistaSerializer(many=True, read_only=True)
     staff_offgame = StaffOffGameSerializer(many=True, read_only=True)
+    # Aggiungi qui il campo fasi
+    fasi = QuestFaseSerializer(many=True, read_only=True)
 
     class Meta:
         model = Quest
@@ -137,29 +155,3 @@ class EventoSerializer(serializers.ModelSerializer):
             'giorni', 'staff_details', 'partecipanti_details'
         ]
         
-# gestione_plot/serializers.py
-
-class QuestTaskSerializer(serializers.ModelSerializer):
-    staffer_details = UserShortSerializer(source='staffer', read_only=True)
-    personaggio_details = PersonaggioSerializer(source='personaggio', read_only=True)
-    mostro_details = MostroTemplateSerializer(source='mostro_template', read_only=True)
-
-    class Meta:
-        model = QuestTask
-        fields = '__all__'
-
-class QuestFaseSerializer(serializers.ModelSerializer):
-    tasks = QuestTaskSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = QuestFase
-        fields = '__all__'
-
-# Aggiornare QuestSerializer per includere le fasi
-class QuestSerializer(serializers.ModelSerializer):
-    fasi = QuestFaseSerializer(many=True, read_only=True)
-    viste_previste = QuestVistaSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Quest
-        fields = '__all__'
