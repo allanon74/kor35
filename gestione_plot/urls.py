@@ -5,7 +5,7 @@ from rest_framework.routers import DefaultRouter
 from .views import(
     EventoViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
-    MostroTemplateViewSet, StaffOffGameViewSet,
+    MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -20,6 +20,8 @@ router.register(r'quests', QuestViewSet, basename='quests')
 router.register(r'mostri-istanza', QuestMostroViewSet)
 router.register(r'viste-setup', QuestVistaViewSet)
 router.register(r'png-assegnati', PngAssegnatoViewSet)
+router.register(r'fasi', QuestFaseViewSet)
+router.register(r'tasks', QuestTaskViewSet)
 
 router.register(r'staff/mostri-templates', MostroTemplateViewSet, basename='mostri-templates') # <--- NUOVA ROUTE
 router.register(r'staff/infusioni', InfusioneMasterViewSet, basename='master-infusioni')

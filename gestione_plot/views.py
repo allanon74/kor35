@@ -3,12 +3,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioListSerializer, PersonaggioAutocompleteSerializer, PersonaggioSerializer
-from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame
+from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask
 from .serializers import (
     EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer,
-    StaffOffGameSerializer,
+    StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer,
                           )
 from personaggi.models import Inventario, Manifesto, Personaggio, QrCode
 
@@ -126,3 +126,17 @@ class PngAssegnatoViewSet(viewsets.ModelViewSet):
 class StaffOffGameViewSet(viewsets.ModelViewSet):
     queryset = StaffOffGame.objects.all()
     serializer_class = StaffOffGameSerializer
+    
+class QuestFaseViewSet(viewsets.ModelViewSet):
+    queryset = QuestFase.objects.all()
+    serializer_class = QuestFaseSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class QuestTaskViewSet(viewsets.ModelViewSet):
+    queryset = QuestTask.objects.all()
+    serializer_class = QuestTaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        # Logica automatica per mostri: le stats vengono già gestite nel model.save()
+        serializer.save()

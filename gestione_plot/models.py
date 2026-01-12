@@ -177,3 +177,65 @@ class StaffOffGame(models.Model):
 
     def __str__(self):
         return f"{self.staffer.username} - {self.compito} ({self.quest.titolo})"
+    
+class QuestFase(models.Model):
+    """
+    Rappresenta un momento specifico della Quest (es. Fase 1: Infiltrazione, Fase 2: Scontro).
+    """
+    quest = models.ForeignKey(Quest, on_delete=models.CASCADE, related_name='fasi')
+    ordine = models.PositiveIntegerField(default=1)
+    titolo = models.CharField(max_length=100, help_text="Es: Scena del crimine, Assalto...")
+    descrizione = models.TextField(blank=True, help_text="Cosa succede in questa fase")
+
+    class Meta:
+        ordering = ['ordine']
+        verbose_name = "Fase Quest"
+        verbose_name_plural = "3b. Fasi Quest"
+
+    def __str__(self):
+        return f"Fase {self.ordine}: {self.titolo} ({self.quest.titolo})"
+
+class QuestTask(models.Model):
+    """
+    Un compito specifico assegnato a un membro dello staff durante una fase.
+    """
+    RUOLO_CHOICES = [
+        ('PNG', 'PnG'),
+        ('MOSTRO', 'Mostro'),
+        ('OFF', 'Staff Off-Game'),
+    ]
+
+    COMPITO_OFF_CHOICES = [
+        ('REG', 'Regole'),
+        ('AIU', 'Aiuto'),
+        ('ALL', 'Allestimento'),
+    ]
+
+    fase = models.ForeignKey(QuestFase, on_delete=models.CASCADE, related_name='tasks')
+    staffer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='tasks_assegnati')
+    
+    ruolo = models.CharField(max_length=10, choices=RUOLO_CHOICES)
+    
+    # Campi condizionali
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.SET_NULL, null=True, blank=True, help_text="Se PnG")
+    mostro_template = models.ForeignKey(MostroTemplate, on_delete=models.SET_NULL, null=True, blank=True, help_text="Se Mostro")
+    compito_offgame = models.CharField(max_length=10, choices=COMPITO_OFF_CHOICES, null=True, blank=True, help_text="Se Staff Off-Game")
+    
+    # Statistiche runtime (solo se Mostro)
+    punti_vita = models.IntegerField(default=1)
+    armatura = models.IntegerField(default=0)
+    guscio = models.IntegerField(default=0)
+    
+    istruzioni = models.TextField(blank=True, help_text="Istruzioni specifiche per lo staffer")
+
+    class Meta:
+        verbose_name = "Task Staff"
+        verbose_name_plural = "3c. Task Staff"
+
+    def save(self, *args, **kwargs):
+        # Pre-popola statistiche se è un mostro e non sono impostate
+        if self.ruolo == 'MOSTRO' and self.mostro_template and not self.pk:
+            self.punti_vita = self.mostro_template.punti_vita_base
+            self.armatura = self.mostro_template.armatura_base
+            self.guscio = self.mostro_template.guscio_base
+        super().save(*args, **kwargs)

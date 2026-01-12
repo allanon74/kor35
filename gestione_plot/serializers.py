@@ -3,7 +3,8 @@ from django.contrib.auth import get_user_model
 from .models import (
     Evento, GiornoEvento, Quest, 
     MostroTemplate, AttaccoTemplate, 
-    QuestMostro, PngAssegnato, QuestVista, StaffOffGame
+    QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
+    QuestFase, QuestTask,
 )
 from personaggi.models import Manifesto, Inventario, QrCode
 from personaggi.serializers import ManifestoSerializer, InventarioSerializer, PersonaggioSerializer
@@ -135,3 +136,30 @@ class EventoSerializer(serializers.ModelSerializer):
             'luogo', 'pc_guadagnati', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details'
         ]
+        
+# gestione_plot/serializers.py
+
+class QuestTaskSerializer(serializers.ModelSerializer):
+    staffer_details = UserShortSerializer(source='staffer', read_only=True)
+    personaggio_details = PersonaggioSerializer(source='personaggio', read_only=True)
+    mostro_details = MostroTemplateSerializer(source='mostro_template', read_only=True)
+
+    class Meta:
+        model = QuestTask
+        fields = '__all__'
+
+class QuestFaseSerializer(serializers.ModelSerializer):
+    tasks = QuestTaskSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = QuestFase
+        fields = '__all__'
+
+# Aggiornare QuestSerializer per includere le fasi
+class QuestSerializer(serializers.ModelSerializer):
+    fasi = QuestFaseSerializer(many=True, read_only=True)
+    viste_previste = QuestVistaSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Quest
+        fields = '__all__'
