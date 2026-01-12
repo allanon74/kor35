@@ -1145,6 +1145,8 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
     aura_details = PunteggioSmallSerializer(source='aura', read_only=True)
     aura = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.filter(tipo='AU'))
     aura_infusione = serializers.PrimaryKeyRelatedField(queryset=Punteggio.objects.filter(tipo='AU'), required=False, allow_null=True)
+    personaggio_nome = serializers.CharField(source='personaggio.nome', read_only=True)
+    autore_nome = serializers.CharField(source='staff_creatore.username', read_only=True)
 
     class Meta:
         model = PropostaTecnica
@@ -1154,7 +1156,7 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'componenti', 'componenti_data',
             'livello', 'livello_proposto', 'costo_invio_pagato', 'note_staff', 'data_creazione',
             'slot_corpo_permessi', 'tipo_risultato_atteso', 
-            'prerequisiti', 'svolgimento', 'effetto',
+            'prerequisiti', 'svolgimento', 'effetto', 'personaggio_nome', 'autore_nome',
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
         extra_kwargs = {

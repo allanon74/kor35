@@ -143,7 +143,7 @@ class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsStaffOrMaster]
     
 class RifiutaPropostaView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsStaffOrMaster]
 
     def post(self, request, pk):
         proposta = get_object_or_404(PropostaTecnica, pk=pk)
@@ -165,7 +165,7 @@ class RifiutaPropostaView(APIView):
         return Response({'status': 'success', 'message': 'Proposta rifiutata'}, status=status.HTTP_200_OK)
     
 class ProposteValutazioneList(generics.ListAPIView):
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsStaffOrMaster]
     serializer_class = PropostaTecnicaSerializer
 
     def get_queryset(self):
