@@ -1413,6 +1413,7 @@ class PersonaggioSerializer(serializers.ModelSerializer):
         required=False
     )
     proprietario = serializers.StringRelatedField(read_only=True)
+    proprietario_id = serializers.PrimaryKeyRelatedField(source='proprietario', read_only=True)
     
     class Meta:
         model = Personaggio
@@ -1421,7 +1422,7 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'tipologia', 'tipologia_nome', 
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
-            'giocante', # Utile per la lista
+            'giocante', 'proprietario_id',
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
         
