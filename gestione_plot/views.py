@@ -151,8 +151,6 @@ class PaginaRegolamentoSmallViewSet(viewsets.ModelViewSet):
     serializer_class = PaginaRegolamentoSmallSerializer
     permission_classes = [permissions.IsAuthenticated]
     
-from rest_framework import viewsets, permissions
-# ... altri import ...
 
 # ViewSet per il Menu (solo titoli e struttura) - PUBBLICO
 class PublicPaginaRegolamentoMenu(viewsets.ReadOnlyModelViewSet):

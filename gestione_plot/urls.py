@@ -8,6 +8,8 @@ from .views import(
     EventoViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
+    PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
+    PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -31,13 +33,13 @@ router.register(r'staff/tessiture',    TessituraMasterViewSet, basename='master-
 router.register(r'staff/cerimoniali', CerimonialeMasterViewSet, basename='master-cerimoniali')
 router.register(r'staff/staff-offgame', StaffOffGameViewSet)
 router.register(r'staff/pagine-regolamento', 
-                views.PaginaRegolamentoViewSet, 
+                PaginaRegolamentoViewSet, 
                 basename='pagine-regolamento')
 router.register(r'staff/pagine-regolamento-small', 
-                views.PaginaRegolamentoSmallViewSet, 
+                PaginaRegolamentoSmallViewSet, 
                 basename='pagine-regolamento-small')
-router.register(r'public/wiki-menu', views.PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
-router.register(r'public/wiki-page', views.PublicPaginaRegolamentoDetail, basename='public-wiki-page')    
+router.register(r'public/wiki-menu', PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
+router.register(r'public/wiki-page', PublicPaginaRegolamentoDetail, basename='public-wiki-page')    
 
 urlpatterns = [
     path('api/', include(router.urls)),
