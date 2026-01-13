@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    Evento, GiornoEvento, Quest, 
+    Evento, GiornoEvento, PaginaRegolamento, Quest, 
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask,
@@ -154,4 +154,17 @@ class EventoSerializer(serializers.ModelSerializer):
             'luogo', 'pc_guadagnati', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details'
         ]
+        
+class PaginaRegolamentoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaginaRegolamento
+        fields = '__all__'
+        
+class PaginaRegolamentoSmallSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaginaRegolamento
+        fields = [
+            'id', 'titolo', 'slug', 
+            'parent', 'ordine'
+            ]
         

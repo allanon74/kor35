@@ -3,9 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioListSerializer, PersonaggioAutocompleteSerializer, PersonaggioSerializer
-from .models import Evento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask
 from .serializers import (
-    EventoSerializer, QuestMostroSerializer, QuestVistaSerializer, 
+    EventoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer,
     StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer,
@@ -140,3 +140,13 @@ class QuestTaskViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # Logica automatica per mostri: le stats vengono già gestite nel model.save()
         serializer.save()
+
+class PaginaRegolamentoViewSet(viewsets.ModelViewSet):
+    queryset = PaginaRegolamento.objects.all()
+    serializer_class = PaginaRegolamentoSerializer
+    permission_classes = [IsMasterOrReadOnly]
+    
+class PaginaRegolamentoSmallViewSet(viewsets.ModelViewSet):
+    queryset = PaginaRegolamento.objects.all()
+    serializer_class = PaginaRegolamentoSmallSerializer
+    permission_classes = [permissions.IsAuthenticated]  

@@ -1,6 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
+from icon_widget import views
+
 # from personaggi import views_staff
 from .views import(
     EventoViewSet, QuestMostroViewSet, 
@@ -28,6 +30,12 @@ router.register(r'staff/infusioni', InfusioneMasterViewSet, basename='master-inf
 router.register(r'staff/tessiture',    TessituraMasterViewSet, basename='master-tessiture')
 router.register(r'staff/cerimoniali', CerimonialeMasterViewSet, basename='master-cerimoniali')
 router.register(r'staff/staff-offgame', StaffOffGameViewSet)
+router.register(r'staff/pagine-regolamento', 
+                views.PaginaRegolamentoViewSet, 
+                basename='pagine-regolamento')
+router.register(r'staff/pagine-regolamento-small', 
+                views.PaginaRegolamentoSmallViewSet, 
+                basename='pagine-regolamento-small')    
 
 urlpatterns = [
     path('api/', include(router.urls)),

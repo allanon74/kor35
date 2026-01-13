@@ -239,3 +239,27 @@ class QuestTask(models.Model):
             self.armatura = self.mostro_template.armatura_base
             self.guscio = self.mostro_template.guscio_base
         super().save(*args, **kwargs)
+        
+# Sezione PAGINE WEB (CMS) del regolamento ed ambientazione
+
+class PaginaRegolamento(models.Model):
+    titolo = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True) # Es: 'combattimento'
+    
+    # Per la nidificazione (Menu ad albero)
+    parent = models.ForeignKey('self', null=True, blank=True, related_name='sottopagine', on_delete=models.SET_NULL)
+    ordine = models.PositiveIntegerField(default=0) # Per ordinare le voci nel menu
+    
+    # Contenuto
+    contenuto = models.TextField(blank=True) # HTML salvato dall'editor
+    
+    # Immagine di copertina opzionale
+    immagine = models.ImageField(upload_to='wiki_images/', null=True, blank=True)
+    
+    public = models.BooleanField(default=True) # Se false, è una bozza
+
+    class Meta:
+        ordering = ['ordine', 'titolo']
+
+    def __str__(self):
+        return f"{self.titolo} ({self.parent.titolo if self.parent else 'Root'})"
