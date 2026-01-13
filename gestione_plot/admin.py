@@ -5,6 +5,7 @@ from .models import (
     StaffOffGame, QuestFase, QuestTask,
     PaginaRegolamento
 )
+from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
 # --- INLINES (Per gestire sottocategorie dentro le pagine principali) ---
 
@@ -35,7 +36,7 @@ class QuestMostroInline(admin.TabularInline):
 # --- ADMIN CLASSES ---
 
 @admin.register(PaginaRegolamento)
-class PaginaRegolamentoAdmin(admin.ModelAdmin):
+class PaginaRegolamentoAdmin(SModelAdmin):
     list_display = ('titolo', 'slug', 'parent', 'ordine', 'public')
     list_editable = ('ordine', 'public') # Permette modifica rapida dalla lista
     list_filter = ('public', 'parent')
@@ -53,13 +54,13 @@ class PaginaRegolamentoAdmin(admin.ModelAdmin):
     )
 
 @admin.register(MostroTemplate)
-class MostroTemplateAdmin(admin.ModelAdmin):
+class MostroTemplateAdmin(SModelAdmin):
     list_display = ('nome', 'punti_vita_base', 'armatura_base', 'guscio_base')
     search_fields = ('nome', 'note_generali')
     inlines = [AttaccoTemplateInline]
 
 @admin.register(Evento)
-class EventoAdmin(admin.ModelAdmin):
+class EventoAdmin(SModelAdmin):
     list_display = ('titolo', 'data_inizio', 'data_fine', 'luogo')
     list_filter = ('data_inizio',)
     search_fields = ('titolo',)
@@ -67,12 +68,12 @@ class EventoAdmin(admin.ModelAdmin):
     filter_horizontal = ('staff_assegnato', 'partecipanti') # Widget migliore per i ManyToMany
 
 @admin.register(GiornoEvento)
-class GiornoEventoAdmin(admin.ModelAdmin):
+class GiornoEventoAdmin(SModelAdmin):
     list_display = ('evento', 'data_giorno', 'sinossi_breve')
     list_filter = ('evento',)
 
 @admin.register(Quest)
-class QuestAdmin(admin.ModelAdmin):
+class QuestAdmin(SModelAdmin):
     list_display = ('titolo', 'giorno', 'stato', 'staff_responsabile')
     list_filter = ('stato', 'giorno__evento')
     search_fields = ('titolo', 'descrizione')
@@ -80,7 +81,7 @@ class QuestAdmin(admin.ModelAdmin):
     autocomplete_fields = ['staff_responsabile']
 
 @admin.register(QuestFase)
-class QuestFaseAdmin(admin.ModelAdmin):
+class QuestFaseAdmin(SModelAdmin):
     list_display = ('titolo', 'quest', 'ordine')
     list_filter = ('quest',)
     inlines = [QuestTaskInline]

@@ -2,7 +2,16 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from personaggi.serializers import InventarioSerializer, ManifestoSerializer, PersonaggioListSerializer, PersonaggioAutocompleteSerializer, PersonaggioSerializer
+from personaggi.models import (
+    Inventario, Manifesto, Personaggio, QrCode, 
+    Tabella, ModelloAura,
+    )
+
+from personaggi.serializers import (
+    InventarioSerializer, ManifestoSerializer, 
+    PersonaggioListSerializer, PersonaggioAutocompleteSerializer, PersonaggioSerializer,
+    TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
+                                    )
 from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask
 from .serializers import (
     EventoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
@@ -10,7 +19,7 @@ from .serializers import (
     MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer,
     StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer,
                           )
-from personaggi.models import Inventario, Manifesto, Personaggio, QrCode
+
 
 from django.contrib.auth.models import User
 
@@ -165,3 +174,19 @@ class PublicPaginaRegolamentoDetail(viewsets.ReadOnlyModelViewSet):
     serializer_class = PaginaRegolamentoSerializer
     permission_classes = [permissions.AllowAny]
     lookup_field = 'slug' # Importante: cerchiamo per slug, non per ID
+    
+class PublicTabellaViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone le Tabelle (es. Liste Abilità) per il regolamento pubblico.
+    """
+    queryset = Tabella.objects.all()
+    serializer_class = TabellaSerializer
+    permission_classes = [permissions.AllowAny] # <--- FONDAMENTALE: Accesso pubblico!
+
+class PublicAuraViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone le Aure per il regolamento pubblico.
+    """
+    queryset = ModelloAura.objects.all()
+    serializer_class = ModelloAuraSerializer
+    permission_classes = [permissions.AllowAny]

@@ -7,7 +7,10 @@ from .models import (
     QuestFase, QuestTask,
 )
 from personaggi.models import Manifesto, Inventario, QrCode
-from personaggi.serializers import ManifestoSerializer, InventarioSerializer, PersonaggioSerializer
+from personaggi.serializers import (
+    ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
+    AbilitaSerializer, TabellaSerializer, ModelloAuraSerializer,
+    )
 
 User = get_user_model()
 
@@ -167,4 +170,11 @@ class PaginaRegolamentoSmallSerializer(serializers.ModelSerializer):
             'id', 'titolo', 'slug', 
             'parent', 'ordine'
             ]
+
+class WikiTabellaSerializer(TabellaSerializer):
+    # Eredita tutto da TabellaSerializer
+    pass
+
+class WikiAuraSerializer(ModelloAuraSerializer):
+    pass
         
