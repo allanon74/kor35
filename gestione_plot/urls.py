@@ -35,7 +35,9 @@ router.register(r'staff/pagine-regolamento',
                 basename='pagine-regolamento')
 router.register(r'staff/pagine-regolamento-small', 
                 views.PaginaRegolamentoSmallViewSet, 
-                basename='pagine-regolamento-small')    
+                basename='pagine-regolamento-small')
+router.register(r'public/wiki-menu', views.PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
+router.register(r'public/wiki-page', views.PublicPaginaRegolamentoDetail, basename='public-wiki-page')    
 
 urlpatterns = [
     path('api/', include(router.urls)),

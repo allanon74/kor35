@@ -149,4 +149,21 @@ class PaginaRegolamentoViewSet(viewsets.ModelViewSet):
 class PaginaRegolamentoSmallViewSet(viewsets.ModelViewSet):
     queryset = PaginaRegolamento.objects.all()
     serializer_class = PaginaRegolamentoSmallSerializer
-    permission_classes = [permissions.IsAuthenticated]  
+    permission_classes = [permissions.IsAuthenticated]
+    
+from rest_framework import viewsets, permissions
+# ... altri import ...
+
+# ViewSet per il Menu (solo titoli e struttura) - PUBBLICO
+class PublicPaginaRegolamentoMenu(viewsets.ReadOnlyModelViewSet):
+    queryset = PaginaRegolamento.objects.filter(public=True).order_by('ordine', 'titolo')
+    serializer_class = PaginaRegolamentoSmallSerializer
+    permission_classes = [permissions.AllowAny] # Aperto a tutti
+    pagination_class = None # Il menu lo vogliamo tutto in una volta
+
+# ViewSet per il Contenuto Pagina - PUBBLICO
+class PublicPaginaRegolamentoDetail(viewsets.ReadOnlyModelViewSet):
+    queryset = PaginaRegolamento.objects.filter(public=True)
+    serializer_class = PaginaRegolamentoSerializer
+    permission_classes = [permissions.AllowAny]
+    lookup_field = 'slug' # Importante: cerchiamo per slug, non per ID
