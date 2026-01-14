@@ -193,7 +193,7 @@ class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
     class Meta:
         model = Abilita
-        fields = ['id', 'nome', 'descrizione', 'costo', 'tier', 'caratteristica'] 
+        fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica'] 
         
     def get_costo(self, obj):
         if obj.costo_PC:
