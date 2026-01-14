@@ -5,7 +5,7 @@ from icon_widget import views
 
 # from personaggi import views_staff
 from .views import(
-    EventoViewSet, QuestMostroViewSet, 
+    EventoViewSet, PublicAuraViewSet, PublicTabellaViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
@@ -40,8 +40,8 @@ router.register(r'staff/pagine-regolamento-small',
                 basename='pagine-regolamento-small')
 router.register(r'public/wiki-menu', PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
 router.register(r'public/wiki-page', PublicPaginaRegolamentoDetail, basename='public-wiki-page')
-router.register(r'public/wiki-tabelle', views.PublicTabellaViewSet, basename='public-wiki-tabelle')
-router.register(r'public/wiki-aure', views.PublicAuraViewSet, basename='public-wiki-aure')
+router.register(r'public/wiki-tabelle', PublicTabellaViewSet, basename='public-wiki-tabelle')
+router.register(r'public/wiki-aure', PublicAuraViewSet, basename='public-wiki-aure')
 
 urlpatterns = [
     path('api/', include(router.urls)),
