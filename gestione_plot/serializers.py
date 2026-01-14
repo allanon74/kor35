@@ -190,9 +190,15 @@ class WikiAuraSerializer(ModelloAuraSerializer):
     pass
         
 class AbilitaTierSerializer(serializers.ModelSerializer):
+    costo = serializers.SerializerMethodField()
     class Meta:
         model = Abilita
-        fields = ['id', 'nome', 'descrizione', 'costo', 'tier'] 
+        fields = ['id', 'nome', 'descrizione', 'costo', 'tier', 'caratteristica'] 
+        
+    def get_costo(self, obj):
+        if obj.costo_PC:
+            return f"{obj.costo_PC} PC"
+        return f"{obj.costo_crediti} Cr"
 
 class WikiTierSerializer(serializers.ModelSerializer):
     # FONDAMENTALE: Recuperiamo le abilità figlie di questo Tier
@@ -202,4 +208,4 @@ class WikiTierSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Tier
-        fields = ['id', 'nome', 'descrizione', 'costo', 'abilita']
+        fields = ['id', 'nome', 'descrizione', 'tipo', 'abilita']
