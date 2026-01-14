@@ -6,7 +6,7 @@ from .models import (
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask,
 )
-from personaggi.models import Manifesto, Inventario, QrCode
+from personaggi.models import Abilita, Manifesto, Inventario, QrCode, Tabella
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
     AbilitaSerializer, TabellaSerializer, ModelloAuraSerializer,
@@ -171,9 +171,20 @@ class PaginaRegolamentoSmallSerializer(serializers.ModelSerializer):
             'parent', 'ordine'
             ]
 
-class WikiTabellaSerializer(TabellaSerializer):
-    # Eredita tutto da TabellaSerializer
-    pass
+class AbilitaWikiSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Abilita
+        fields = ['id', 'nome', 'descrizione', 'costo', 'tier'] # Aggiungi i campi che servono
+
+class WikiTabellaSerializer(serializers.ModelSerializer):
+    # FONDAMENTALE: Sovrascriviamo il campo per usare il serializer invece degli ID
+    # Verifica il nome del campo nel model Tabella: è 'abilita' o 'abilita_selezionate'?
+    # Se nel model è: abilita = ManyToManyField(...)
+    abilita = AbilitaWikiSerializer(many=True, read_only=True) 
+
+    class Meta:
+        model = Tabella
+        fields = ['id', 'titolo', 'descrizione', 'abilita']
 
 class WikiAuraSerializer(ModelloAuraSerializer):
     pass
