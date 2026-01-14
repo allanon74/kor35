@@ -4,7 +4,7 @@ from rest_framework.response import Response
 
 from personaggi.models import (
     Inventario, Manifesto, Personaggio, QrCode, 
-    Tabella, ModelloAura,
+    Tabella, ModelloAura, Tier,
     )
 
 from personaggi.serializers import (
@@ -17,7 +17,7 @@ from .serializers import (
     EventoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer,
-    StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer,
+    StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiTierSerializer,
                           )
 
 
@@ -190,3 +190,11 @@ class PublicAuraViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ModelloAura.objects.all()
     serializer_class = ModelloAuraSerializer
     permission_classes = [permissions.AllowAny]
+    
+class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone i Tier (es. Livello 1, Livello 2...) con le relative abilità.
+    """
+    queryset = Tier.objects.all().prefetch_related('abilita_set') # Ottimizza la query
+    serializer_class = WikiTierSerializer
+    permission_classes = [permissions.AllowAny] # Accesso pubblic

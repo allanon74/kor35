@@ -6,7 +6,7 @@ from .models import (
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask,
 )
-from personaggi.models import Abilita, Manifesto, Inventario, QrCode, Tabella
+from personaggi.models import Abilita, Manifesto, Inventario, QrCode, Tabella, Tier
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
     AbilitaSerializer, TabellaSerializer, ModelloAuraSerializer,
@@ -189,3 +189,17 @@ class WikiTabellaSerializer(serializers.ModelSerializer):
 class WikiAuraSerializer(ModelloAuraSerializer):
     pass
         
+class AbilitaTierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Abilita
+        fields = ['id', 'nome', 'descrizione', 'costo', 'tier'] 
+
+class WikiTierSerializer(serializers.ModelSerializer):
+    # FONDAMENTALE: Recuperiamo le abilità figlie di questo Tier
+    # Se nel model Abilita c'è: tier = ForeignKey(Tier, related_name='abilita_set')
+    # Verifica se il related_name è 'abilita_set', 'abilities' o altro.
+    abilita = AbilitaTierSerializer(source='abilita_set', many=True, read_only=True)
+
+    class Meta:
+        model = Tier
+        fields = ['id', 'nome', 'descrizione', 'costo', 'abilita']
