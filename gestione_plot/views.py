@@ -195,6 +195,6 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Espone i Tier (es. Livello 1, Livello 2...) con le relative abilità.
     """
-    queryset = Tier.objects.all().prefetch_related('abilita_set') # Ottimizza la query
+    queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
     serializer_class = WikiTierSerializer
     permission_classes = [permissions.AllowAny] # Accesso pubblic
