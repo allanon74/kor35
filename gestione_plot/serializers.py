@@ -198,7 +198,7 @@ class WikiTierSerializer(serializers.ModelSerializer):
     # FONDAMENTALE: Recuperiamo le abilità figlie di questo Tier
     # Se nel model Abilita c'è: tier = ForeignKey(Tier, related_name='abilita_set')
     # Verifica se il related_name è 'abilita_set', 'abilities' o altro.
-    abilita = AbilitaTierSerializer(source='abilita_set', many=True, read_only=True)
+    abilita = AbilitaTierSerializer(source='abilita', many=True, read_only=True)
 
     class Meta:
         model = Tier
