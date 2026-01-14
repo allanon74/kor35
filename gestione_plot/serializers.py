@@ -196,8 +196,8 @@ class AbilitaTierSerializer(serializers.ModelSerializer):
         fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica'] 
         
     def get_costo(self, obj):
-        if obj.costo_PC:
-            return f"{obj.costo_PC} PC"
+        if obj.costo_pc is not None and obj.costo_pc > 0:
+            return f"{obj.costo_pc} PC"
         return f"{obj.costo_crediti} Cr"
 
 class WikiTierSerializer(serializers.ModelSerializer):
