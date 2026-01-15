@@ -9,7 +9,7 @@ from .models import (
 from personaggi.models import Abilita, Manifesto, Inventario, QrCode, Tabella, Tier
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
-    AbilitaSerializer, TabellaSerializer, ModelloAuraSerializer,
+    AbilitaSerializer, PunteggioSerializer, TabellaSerializer, ModelloAuraSerializer,
     )
 
 User = get_user_model()
@@ -191,6 +191,7 @@ class WikiAuraSerializer(ModelloAuraSerializer):
         
 class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
+    caratteristica = PunteggioSerializer(read_only=True)
     class Meta:
         model = Abilita
         fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica'] 
