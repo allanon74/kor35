@@ -192,8 +192,8 @@ class WikiAuraSerializer(ModelloAuraSerializer):
 class PunteggioWikiSerializer(serializers.ModelSerializer):
     class Meta:
         model = Punteggio  # Il tuo modello delle Statistiche
-        fields = ['id', 'nome', 'sigla', 'colore', 'icona', 'tipo']
-
+        fields = ['id', 'nome', 'sigla', 'colore', 'icona_url', 'ordine',]
+        
 class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
     caratteristica = PunteggioWikiSerializer(read_only=True)
