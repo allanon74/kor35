@@ -6,7 +6,7 @@ from .models import (
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask,
 )
-from personaggi.models import Abilita, Manifesto, Inventario, QrCode, Tabella, Tier
+from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
     AbilitaSerializer, PunteggioSerializer, TabellaSerializer, ModelloAuraSerializer,
@@ -189,9 +189,14 @@ class WikiTabellaSerializer(serializers.ModelSerializer):
 class WikiAuraSerializer(ModelloAuraSerializer):
     pass
         
+class PunteggioWikiSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Punteggio  # Il tuo modello delle Statistiche
+        fields = ['id', 'nome', 'sigla', 'colore', 'icona', 'tipo']
+
 class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
-    caratteristica = PunteggioSerializer(read_only=True)
+    caratteristica = PunteggioWikiSerializer(read_only=True)
     class Meta:
         model = Abilita
         fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica'] 
