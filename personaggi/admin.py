@@ -553,8 +553,10 @@ class MattoneAdmin(A_Admin):
 
 @admin.register(Tier)
 class TierAdmin(A_Admin):
-    list_display = ['nome', 'descrizione'] 
-    search_fields = ['nome', 'descrizione']
+    list_display = ['nome', 'tipo',] 
+    search_fields = ['nome', 'descrizione',]
+    list_filter = ['tipo',]
+    ordering = ['tipo', 'nome',]
     summernote_fields = ["descrizione"] 
     inlines = [abilita_tier_inline]
     save_as = True
