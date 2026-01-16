@@ -178,7 +178,9 @@ CORS_ALLOWED_ORIGINS = [
     "https://app.kor35.it",
     "http://kor35.it",
     "http://www.kor35.it",
-    "http://app.kor35.it",       
+    "http://app.kor35.it",
+    "https://social.kor35.it",
+    "https://social.k-o-r-35.it",       
 ]
 
 CORS_URLS_REGEX = r'^/(personaggi/api|auth|webpush|punteggi|plot)/.*$'
