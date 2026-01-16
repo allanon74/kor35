@@ -375,4 +375,6 @@ CSRF_TRUSTED_ORIGINS = [
     "https://app.k-o-r-35.it",
     "https://app.kor35.it",
     "https://www.kor35.it",
+    "https://social.k-o-r-35.it",
+    "https://social.kor35.it",
 ]
