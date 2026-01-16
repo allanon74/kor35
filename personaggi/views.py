@@ -89,7 +89,7 @@ from .serializers import (
     OggettoBaseSerializer, RichiestaAssemblaggioSerializer,
     ClasseOggettoSerializer, CerimonialeSerializer, StatoTimerSerializer,
     StatisticaSerializer, TipologiaPersonaggioSerializer, 
-    PersonaggioManageSerializer,
+    PersonaggioManageSerializer, SSOUserSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -2279,3 +2279,13 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             return Response({"error": "Tipo risorsa non valido"}, status=400)
             
         return Response({"status": "success", "new_val": val, "msg": "Risorse aggiornate"})
+    
+    # OAUTH2 SSO per OSSN
+    
+class UserMeView(APIView):
+# Questa classe garantisce che solo chi ha un token valido possa accedere
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        serializer = SSOUserSerializer(request.user)
+        return Response(serializer.data)

@@ -1955,3 +1955,10 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
                 new_stat = AbilitaStatistica.objects.create(abilita=instance, **item)
                 if aure: new_stat.limit_a_aure.set(aure)
                 if elementi: new_stat.limit_a_elementi.set(elementi)
+                
+# SSO per OSSN 
+
+class SSOUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'first_name', 'last_name')

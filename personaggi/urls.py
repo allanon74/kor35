@@ -151,6 +151,8 @@ urlpatterns = [
     path('api/staff/proposta/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta'),
     path('api/staff/proposta/<int:pk>/approva/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     
+    path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
+    
     path('api/', include(router.urls)),
     
 ]
