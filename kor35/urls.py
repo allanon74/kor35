@@ -42,6 +42,7 @@ urlpatterns = [
     re_path(r'^', include('cms.urls')),
     path("icons/", include("dj_iconify.urls")),
     path('webpush/', include('webpush.urls')), # Endpoint per il frontend
+    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
     
 ]
 if settings.DEBUG:
