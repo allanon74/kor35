@@ -39,10 +39,12 @@ urlpatterns = [
     # path('auth/', obtain_auth_token),
     path ('auth/', personaggi_views.MyAuthToken.as_view()),
     path('api/api-token-auth/', obtain_auth_token, name='api_token_auth'),
-    re_path(r'^', include('cms.urls')),
+    
     path("icons/", include("dj_iconify.urls")),
-    path('webpush/', include('webpush.urls')), # Endpoint per il frontend
     path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
+    path('webpush/', include('webpush.urls')), # Endpoint per il frontend
+    re_path(r'^', include('cms.urls')),
+
     
 ]
 if settings.DEBUG:
