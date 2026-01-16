@@ -116,7 +116,10 @@ class CaratteristicaModificatoreInline(admin.TabularInline):
         if db_field.name == "statistica_modificata": kwargs["queryset"] = Statistica.objects.all()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-class abilita_tier_inline(A_Multi_Inline): model = abilita_tier
+class abilita_tier_inline(A_Multi_Inline): 
+    model = abilita_tier
+    autocomplete_fields = ['abilita', 'tier']
+    
 class abilita_punteggio_inline(A_Multi_Inline):
     model = abilita_punteggio; extra = 1; verbose_name_plural = "Punteggi Assegnati"
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
@@ -550,7 +553,13 @@ class MattoneAdmin(A_Admin):
 
 @admin.register(Tier)
 class TierAdmin(A_Admin):
-    list_display = ['nome', 'descrizione']; summernote_fields = ["descrizione"]; inlines = [abilita_tier_inline]; save_as = True
+    list_display = ['nome', 'tipo',] 
+    search_fields = ['nome', 'descrizione',]
+    list_filter = ['tipo',]
+    ordering = ['tipo', 'nome',]
+    summernote_fields = ["descrizione"] 
+    inlines = [abilita_tier_inline]
+    save_as = True
 
 @admin.register(Statistica)
 class StatisticaAdmin(A_Admin):
