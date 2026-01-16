@@ -7,7 +7,7 @@ from .models import (
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
-# --- INLINES (Per gestire sottocategorie dentro le pagine principali) ---
+# --- INLINES ---
 
 class AttaccoTemplateInline(admin.TabularInline):
     model = AttaccoTemplate
@@ -21,7 +21,9 @@ class GiornoEventoInline(admin.StackedInline):
 class QuestTaskInline(admin.TabularInline):
     model = QuestTask
     extra = 1
-    fields = ('nome', 'descrizione', 'is_opzionale', 'xp_reward')
+    # CAMPI CORRETTI: 'nome', 'descrizione', 'is_opzionale' non esistono nel model QuestTask.
+    # Usiamo i campi esistenti: ruolo, staffer, istruzioni.
+    fields = ('ruolo', 'staffer', 'istruzioni')
 
 class QuestFaseInline(admin.StackedInline):
     model = QuestFase
@@ -31,17 +33,18 @@ class QuestFaseInline(admin.StackedInline):
 class QuestMostroInline(admin.TabularInline):
     model = QuestMostro
     extra = 1
-    autocomplete_fields = ['mostro_template']
+    # CORREZIONE: Nel model il campo si chiama 'template', non 'mostro_template'
+    autocomplete_fields = ['template']
 
 # --- ADMIN CLASSES ---
 
 @admin.register(PaginaRegolamento)
 class PaginaRegolamentoAdmin(SModelAdmin):
     list_display = ('titolo', 'slug', 'parent', 'ordine', 'public')
-    list_editable = ('ordine', 'public') # Permette modifica rapida dalla lista
+    list_editable = ('ordine', 'public')
     list_filter = ('public', 'parent')
     search_fields = ('titolo', 'contenuto')
-    prepopulated_fields = {'slug': ('titolo',)} # Compila lo slug mentre scrivi il titolo
+    prepopulated_fields = {'slug': ('titolo',)}
     ordering = ('parent', 'ordine', 'titolo')
     fieldsets = (
         ('Intestazione', {
@@ -65,20 +68,23 @@ class EventoAdmin(SModelAdmin):
     list_filter = ('data_inizio',)
     search_fields = ('titolo',)
     inlines = [GiornoEventoInline]
-    filter_horizontal = ('staff_assegnato', 'partecipanti') # Widget migliore per i ManyToMany
+    filter_horizontal = ('staff_assegnato', 'partecipanti')
 
 @admin.register(GiornoEvento)
 class GiornoEventoAdmin(SModelAdmin):
-    list_display = ('evento', 'data_giorno', 'sinossi_breve')
+    # CORREZIONE: 'data_giorno' non esiste. Uso 'data_ora_inizio'.
+    list_display = ('evento', 'data_ora_inizio', 'sinossi_breve')
     list_filter = ('evento',)
 
 @admin.register(Quest)
 class QuestAdmin(SModelAdmin):
-    list_display = ('titolo', 'giorno', 'stato', 'staff_responsabile')
-    list_filter = ('stato', 'giorno__evento')
-    search_fields = ('titolo', 'descrizione')
+    # CORREZIONE: Rimosso 'stato' e 'staff_responsabile' (non esistono nel model).
+    list_display = ('titolo', 'giorno', 'orario_indicativo')
+    # Rimosso 'stato' dai filtri.
+    list_filter = ('giorno__evento',)
+    search_fields = ('titolo', 'descrizione_ampia')
     inlines = [QuestFaseInline, QuestMostroInline]
-    autocomplete_fields = ['staff_responsabile']
+    # Rimosso autocomplete_fields perché 'staff_responsabile' non c'è.
 
 @admin.register(QuestFase)
 class QuestFaseAdmin(SModelAdmin):
@@ -88,21 +94,25 @@ class QuestFaseAdmin(SModelAdmin):
 
 @admin.register(PngAssegnato)
 class PngAssegnatoAdmin(admin.ModelAdmin):
-    list_display = ('nome_png', 'giocatore', 'quest', 'ruolo')
-    search_fields = ('nome_png', 'giocatore__username')
-    list_filter = ('ruolo',)
+    # CORREZIONE: 'nome_png', 'giocatore', 'ruolo' non esistono in PngAssegnato.
+    # Uso 'personaggio' e 'staffer' che sono i campi reali.
+    list_display = ('personaggio', 'staffer', 'quest', 'ordine_uscita')
+    search_fields = ('personaggio__nome', 'staffer__username')
+    # Rimosso list_filter su 'ruolo' che non c'è.
 
 @admin.register(StaffOffGame)
 class StaffOffGameAdmin(admin.ModelAdmin):
-    list_display = ('staffer', 'ruolo', 'quest')
-    list_filter = ('ruolo',)
+    # CORREZIONE: 'ruolo' non esiste, esiste 'compito'.
+    list_display = ('staffer', 'compito', 'quest')
+    list_filter = ('compito',) # Attenzione: compito è un TextField, filtrare potrebbe essere scomodo se i testi sono lunghi/diversi.
 
 @admin.register(QuestVista)
 class QuestVistaAdmin(admin.ModelAdmin):
-    list_display = ('nome_vista', 'data_creazione')
+    # CORREZIONE: 'nome_vista' e 'data_creazione' non esistono.
+    list_display = ('quest', 'tipo', 'manifesto', 'inventario')
 
-# QuestTask è gestito inline dentro QuestFase, ma se vuoi vederli tutti:
 @admin.register(QuestTask)
 class QuestTaskAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'fase', 'is_opzionale', 'is_completato')
-    list_filter = ('is_completato', 'fase__quest')
+    # CORREZIONE: 'nome', 'is_opzionale', 'is_completato' non esistono.
+    list_display = ('ruolo', 'fase', 'staffer')
+    list_filter = ('ruolo', 'fase__quest')

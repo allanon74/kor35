@@ -91,6 +91,7 @@ INSTALLED_APPS = [
 	'icon_widget', # icon widget
     'channels',
     'webpush',
+    'oauth2_provider',
 	
 ]
 
@@ -146,6 +147,7 @@ MIDDLEWARE = [
    'django.middleware.common.CommonMiddleware',
    'django.middleware.csrf.CsrfViewMiddleware',
    'django.contrib.auth.middleware.AuthenticationMiddleware',
+   'oauth2_provider.middleware.OAuth2TokenMiddleware',
    'django.contrib.messages.middleware.MessageMiddleware',
    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 	'django.middleware.locale.LocaleMiddleware', #cms
@@ -158,6 +160,11 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'kor35.urls'
+
+# OAUTH2 conf section
+OAUTH2_PROVIDER = {
+    'ACCESS_TOKEN_EXPIRE_SECONDS': 3600,
+}
 
 # CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins for CORS
 CORS_ALLOWED_ORIGINS = [
