@@ -118,7 +118,7 @@ class CaratteristicaModificatoreInline(admin.TabularInline):
 
 class abilita_tier_inline(A_Multi_Inline): 
     model = abilita_tier
-    autocomplete_fields = ['abilita', 'tier']
+    autocomplete_fields = ['abilita', 'tabella']
     
 class abilita_punteggio_inline(A_Multi_Inline):
     model = abilita_punteggio; extra = 1; verbose_name_plural = "Punteggi Assegnati"
