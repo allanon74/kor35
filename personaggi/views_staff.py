@@ -293,17 +293,18 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
     serializer_class = AbilitaFullEditorSerializer
     permission_classes = [IsAdminUser]
     
+
+
 class TierStaffViewSet(viewsets.ModelViewSet):
     """
     Gestione completa dei Tier per lo staff.
-    Ordina per Tipo e poi per Nome.
     """
     serializer_class = TierStaffSerializer
     
     def get_queryset(self):
-        # Annotiamo il conteggio delle abilità per la lista
+        # CORRETTO: Usa 'abilita' (il related_name definito nel model Abilita)
         return Tier.objects.annotate(
-            abilita_count=Count('abilitatier') # Usa il related_name corretto se diverso
+            abilita_count=Count('abilita') 
         ).order_by('tipo', 'nome')
 
     @action(detail=False, methods=['get'])
@@ -316,29 +317,29 @@ class TierStaffViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def update_abilita_list(self, request, pk=None):
         """
-        Riceve una lista di oggetti {abilita_id, ordine} e sovrascrive
-        le associazioni per questo Tier.
+        Aggiorna la lista delle abilità collegate al Tier.
         """
         tier = self.get_object()
         data = request.data.get('abilita_list', [])
         
         # 1. Cancelliamo le vecchie associazioni
-        AbilitaTier.objects.filter(tier=tier).delete()
+        # CORRETTO: Usa il campo 'tabella' (come definito in models.py)
+        abilita_tier.objects.filter(tabella=tier).delete()
         
         # 2. Creiamo le nuove
         new_links = []
         for item in data:
             try:
-                abilita = Abilita.objects.get(pk=item['abilita_id'])
-                new_links.append(AbilitaTier(
-                    tier=tier,
-                    abilita=abilita,
+                abilita_obj = Abilita.objects.get(pk=item['abilita_id'])
+                new_links.append(abilita_tier(
+                    tabella=tier,       # CORRETTO: campo 'tabella'
+                    abilita=abilita_obj,
                     ordine=item.get('ordine', 0)
                 ))
             except Abilita.DoesNotExist:
                 continue
         
-        AbilitaTier.objects.bulk_create(new_links)
+        abilita_tier.objects.bulk_create(new_links)
         
         # Ritorna il tier aggiornato
         serializer = self.get_serializer(tier)
