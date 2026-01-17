@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 
 
 from .views import AbilitaViewSet, PersonaggioTransazioniListView, UserViewSet
-from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList
+from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList, TierStaffViewSet
 
 
 from .views import (AbilViewSet,
@@ -60,6 +60,7 @@ router.register(r'staff/oggetti', views_staff.OggettoStaffViewSet, basename='sta
 router.register(r'staff/oggetti-base', views_staff.OggettoBaseStaffViewSet, basename='staff-oggetti-base')
 router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basename='staff-classi-oggetto')
 router.register(r'staff/abilita', views_staff.AbilitaStaffViewSet, basename='staff-abilita')
+router.register(r'staff/tiers', TierStaffViewSet, basename='staff-tiers')
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')

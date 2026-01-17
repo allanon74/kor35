@@ -6,13 +6,16 @@ from gestione_plot.permissions import IsStaffOrMaster
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
+from django.db.models import Count
+from rest_framework.decorators import action
 
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
-    TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE
+    TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
+    abilita_tier as AbilitaTier
 )
 
 from .serializers import (
@@ -29,6 +32,8 @@ from .serializers import (
     CerimonialeSerializer,
     PropostaTecnicaSerializer,
     AbilitaFullEditorSerializer,
+    TierStaffSerializer,
+    AbilitaSimpleSerializer,
 )
 
 class QrInspectorView(APIView):
@@ -287,3 +292,54 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
     queryset = Abilita.objects.all().select_related('caratteristica', 'aura_riferimento')
     serializer_class = AbilitaFullEditorSerializer
     permission_classes = [IsAdminUser]
+    
+class TierStaffViewSet(viewsets.ModelViewSet):
+    """
+    Gestione completa dei Tier per lo staff.
+    Ordina per Tipo e poi per Nome.
+    """
+    serializer_class = TierStaffSerializer
+    
+    def get_queryset(self):
+        # Annotiamo il conteggio delle abilità per la lista
+        return Tier.objects.annotate(
+            abilita_count=Count('abilitatier') # Usa il related_name corretto se diverso
+        ).order_by('tipo', 'nome')
+
+    @action(detail=False, methods=['get'])
+    def all_abilita(self, request):
+        """Restituisce lista semplice di tutte le abilità per la combobox"""
+        abilita = Abilita.objects.all().order_by('nome')
+        serializer = AbilitaSimpleSerializer(abilita, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def update_abilita_list(self, request, pk=None):
+        """
+        Riceve una lista di oggetti {abilita_id, ordine} e sovrascrive
+        le associazioni per questo Tier.
+        """
+        tier = self.get_object()
+        data = request.data.get('abilita_list', [])
+        
+        # 1. Cancelliamo le vecchie associazioni
+        AbilitaTier.objects.filter(tier=tier).delete()
+        
+        # 2. Creiamo le nuove
+        new_links = []
+        for item in data:
+            try:
+                abilita = Abilita.objects.get(pk=item['abilita_id'])
+                new_links.append(AbilitaTier(
+                    tier=tier,
+                    abilita=abilita,
+                    ordine=item.get('ordine', 0)
+                ))
+            except Abilita.DoesNotExist:
+                continue
+        
+        AbilitaTier.objects.bulk_create(new_links)
+        
+        # Ritorna il tier aggiornato
+        serializer = self.get_serializer(tier)
+        return Response(serializer.data)
