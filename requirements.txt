@@ -46,7 +46,6 @@ django-oauth-toolkit==3.2.0
 django-parler==2.3
 django-polymorphic==3.1.0
 django-renderpdf==4.0.0
-django-rest-framework==0.1.0
 django-rosetta @ git+https://github.com/mbi/django-rosetta.git@1756764a864b776bfbc258c2efcd124fc74c15b6
 django-sekizai==4.1.0
 django-simple-history==3.7.0
