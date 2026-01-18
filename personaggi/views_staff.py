@@ -15,7 +15,7 @@ from .models import (
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
-    abilita_tier as AbilitaTier
+    abilita_tier, 
 )
 
 from .serializers import (
