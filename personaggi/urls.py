@@ -7,7 +7,7 @@ from rest_framework import routers
 from rest_framework.routers import DefaultRouter
 
 
-from .views import AbilitaViewSet, PersonaggioTransazioniListView, UserViewSet
+from .views import AbilitaViewSet, ActivateUserView, ChangePasswordView, PersonaggioTransazioniListView, RegisterView, UserViewSet
 from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList, TierStaffViewSet
 
 
@@ -127,6 +127,10 @@ urlpatterns = [
     # NUOVI URL (Lazy Loading)
     path('api/personaggio/me/logs/', views.PersonaggioLogsListView.as_view(), name='personaggio-logs'),
     path('api/personaggio/me/transazioni/', views.PersonaggioTransazioniListView.as_view(), name='personaggio-transazioni'),
+    
+    path('api/user/register/', RegisterView.as_view(), name='register'),
+    path('api/user/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    path('api/staff/activate-user/<int:user_id>/', ActivateUserView.as_view(), name='activate-user'),
     
     path('api/personaggi/search/', views.PersonaggioAutocompleteView.as_view(), name='personaggio-search'),
     path('api/messaggi/send/', views.MessaggioPrivateCreateView.as_view(), name='messaggio-send'),

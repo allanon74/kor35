@@ -888,3 +888,4 @@ class DichiarazioneAdmin(admin.ModelAdmin):
     search_fields = ('dichiarazione', 'descrizione')       # Barra di ricerca
     ordering = ('tipo', 'nome')
     radio_fields = {"tipo": admin.VERTICAL}
+    

@@ -1993,12 +1993,28 @@ class TierStaffSerializer(serializers.ModelSerializer):
         qs = abilita_tier.objects.filter(tabella=obj).order_by('ordine')
         return AbilitaTierSerializer(qs, many=True).data
 
-    # def create(self, validated_data):
-    #     # Gestione custom per salvare le relazioni se passate, 
-    #     # ma spesso è più facile gestire le relazioni in un secondo step o con logica separata.
-    #     # Qui salvo solo il tier base, le abilità le gestiremo separatamente o nel frontend
-    #     # inviando una lista. Per semplicità, qui creo il Tier.
-    #     return super().create(validated_data)
+    def create(self, validated_data):
+        # Gestione custom per salvare le relazioni se passate, 
+        # ma spesso è più facile gestire le relazioni in un secondo step o con logica separata.
+        # Qui salvo solo il tier base, le abilità le gestiremo separatamente o nel frontend
+        # inviando una lista. Per semplicità, qui creo il Tier.
+        return super().create(validated_data)
 
-    # def update(self, instance, validated_data):
-    #     return super().update(instance, validated_data)
+    def update(self, instance, validated_data):
+        return super().update(instance, validated_data)
+    
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("La vecchia password non è corretta.")
+        return value
+
+    def validate_new_password(self, value):
+        # Qui puoi aggiungere validatori di complessità se vuoi
+        if len(value) < 8:
+            raise serializers.ValidationError("La password deve essere di almeno 8 caratteri.")
+        return value

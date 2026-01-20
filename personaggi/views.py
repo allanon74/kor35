@@ -9,6 +9,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.contrib.auth.models import Group
 
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -73,7 +74,7 @@ from .services import (
 
 # --- IMPORT SERIALIZERS ---
 from .serializers import (
-    OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
+    ChangePasswordSerializer, OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
     ManifestoSerializer, A_vistaSerializer, InventarioSerializer,
     PersonaggioDetailSerializer, CreditoMovimentoCreateSerializer, PersonaggioListSerializer, 
     PuntiCaratteristicaMovimentoCreateSerializer, TransazioneCreateSerializer, 
@@ -2289,3 +2290,76 @@ class UserMeView(APIView):
     def get(self, request):
         serializer = SSOUserSerializer(request.user)
         return Response(serializer.data)
+    
+    
+class RegisterView(APIView):
+    permission_classes = [permissions.AllowAny] # Aperta a tutti
+
+    def post(self, request):
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save() # Crea l'utente (is_active=False da serializer)
+            
+            # --- NOTIFICA STAFF ---
+            try:
+                staff_group = Group.objects.get(name='Staff')
+                staff_users = staff_group.user_set.all()
+                
+                if staff_users.exists():
+                    messaggi = []
+                    testo_msg = (
+                        f"Nuovo utente registrato: {user.username} ({user.email}). "
+                        f"Nome: {user.first_name} {user.last_name}.\n"
+                        f"Per attivarlo, clicca qui sotto:\n"
+                        f"[ACTIVATE_USER:{user.id}]"  # <-- TAG SPECIALE
+                    )
+                    
+                    # Invia messaggio a ogni membro dello staff
+                    # Nota: il messaggio deve essere collegato a un Personaggio destinatario.
+                    # Se il tuo sistema di messaggi è tra Utenti, usa user. Se è tra Personaggi,
+                    # devi trovare il "Personaggio principale" dello staffer.
+                    # Assumiamo qui che Messaggio richieda un destinatario_personaggio.
+                    
+                    for staffer in staff_users:
+                        # Trova il primo personaggio dello staffer per recapitargli il messaggio
+                        pg_staff = Personaggio.objects.filter(proprietario=staffer).first()
+                        if pg_staff:
+                            messaggi.append(Messaggio(
+                                mittente=None, # Messaggio di sistema
+                                destinatario_personaggio=pg_staff,
+                                titolo="Nuova Registrazione Utente",
+                                testo=testo_msg,
+                                tipo_messaggio='IND' # O la tua costante per Individuale
+                            ))
+                    
+                    if messaggi:
+                        Messaggio.objects.bulk_create(messaggi)
+            except Group.DoesNotExist:
+                print("Gruppo Staff non trovato: impossibile inviare notifiche.")
+
+            return Response({"message": "Registrazione completata. Attendi l'attivazione da parte dello staff."}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ActivateUserView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] # Solo Staff
+
+    def post(self, request, user_id):
+        try:
+            user_to_activate = User.objects.get(pk=user_id)
+            user_to_activate.is_active = True
+            user_to_activate.save()
+            return Response({"message": f"Utente {user_to_activate.username} attivato con successo."})
+        except User.DoesNotExist:
+            return Response({"error": "Utente non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+class ChangePasswordView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            user = request.user
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            return Response({"message": "Password aggiornata con successo."})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
