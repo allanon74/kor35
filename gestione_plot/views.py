@@ -1,6 +1,14 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
+from django.shortcuts import get_object_or_404
+import os
+from django.conf import settings
+from django.http import HttpResponse, FileResponse, Http404
+from PIL import Image
 
 from personaggi.models import (
     Inventario, Manifesto, Personaggio, QrCode, 
@@ -198,3 +206,89 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
     serializer_class = WikiTierSerializer
     permission_classes = [permissions.AllowAny] # Accesso pubblic
+    
+    
+def is_staff_user(user):
+    return user.is_authenticated and (user.is_staff or user.is_superuser)
+
+@api_view(['GET'])
+@permission_classes([AllowAny]) # Aperto a tutti, filtriamo dentro
+def get_wiki_menu(request):
+    # Base: prendi tutto
+    queryset = PaginaRegolamento.objects.all().order_by('parent', 'ordine', 'titolo')
+    
+    # Se NON è staff, nascondi bozze e pagine riservate
+    if not is_staff_user(request.user):
+        queryset = queryset.filter(public=True, visibile_solo_staff=False)
+    
+    serializer = PaginaRegolamentoSmallSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_page(request, slug):
+    queryset = PaginaRegolamento.objects.all()
+    
+    # Stesso filtro: se non sei staff, non puoi vedere cose private anche se indovini lo slug
+    if not is_staff_user(request.user):
+        queryset = queryset.filter(public=True, visibile_solo_staff=False)
+        
+    page = get_object_or_404(queryset, slug=slug)
+    serializer = PaginaRegolamentoSerializer(page)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def serve_wiki_image(request, slug):
+    """
+    Restituisce l'immagine della pagina wiki ridimensionata.
+    Query params:
+    - w: larghezza desiderata (es. 1024)
+    - q: qualità (default 80)
+    """
+    page = get_object_or_404(PaginaRegolamento, slug=slug)
+    
+    if not page.immagine:
+        raise Http404("Nessuna immagine associata")
+
+    # Parametri richiesti
+    try:
+        width = int(request.GET.get('w', 0))
+    except ValueError:
+        width = 0
+        
+    original_path = page.immagine.path
+    
+    # Se non è richiesta una larghezza specifica o è troppo grande, ritorna l'originale
+    if width <= 0 or width > 2500:
+        return FileResponse(open(original_path, 'rb'), content_type='image/jpeg')
+
+    # Logica di Caching: nomefile_W.ext
+    base, ext = os.path.splitext(original_path)
+    cache_filename = f"{base}_{width}{ext}"
+    
+    # 1. Se esiste il file cachato, restituiscilo
+    if os.path.exists(cache_filename):
+        return FileResponse(open(cache_filename, 'rb'), content_type='image/jpeg')
+
+    # 2. Se non esiste, generalo
+    try:
+        img = Image.open(original_path)
+        
+        # Calcola altezza mantenendo aspect ratio
+        aspect_ratio = img.height / img.width
+        new_height = int(width * aspect_ratio)
+        
+        # Ridimensiona
+        img = img.resize((width, new_height), Image.Resampling.LANCZOS)
+        
+        # Salva copia ottimizzata
+        img.save(cache_filename, quality=85, optimize=True)
+        
+        # Riapri per servire il file (per evitare lock)
+        return FileResponse(open(cache_filename, 'rb'), content_type='image/jpeg')
+        
+    except Exception as e:
+        print(f"Errore resize immagine: {e}")
+        # Fallback sull'originale in caso di errore
+        return FileResponse(open(original_path, 'rb'), content_type='image/jpeg')

@@ -48,7 +48,7 @@ class PaginaRegolamentoAdmin(SModelAdmin):
     ordering = ('parent', 'ordine', 'titolo')
     fieldsets = (
         ('Intestazione', {
-            'fields': ('titolo', 'slug', 'parent', 'ordine', 'public', 'immagine')
+            'fields': ('titolo', 'slug', 'parent', 'ordine', 'public', 'immagine', 'visibile_solo_staff'),
         }),
         ('Contenuto', {
             'fields': ('contenuto',),

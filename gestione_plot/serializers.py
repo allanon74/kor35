@@ -168,7 +168,7 @@ class PaginaRegolamentoSmallSerializer(serializers.ModelSerializer):
         model = PaginaRegolamento
         fields = [
             'id', 'titolo', 'slug', 
-            'parent', 'ordine'
+            'parent', 'ordine', 'public', 'visibile_solo_staff',
             ]
 
 class AbilitaWikiSerializer(serializers.ModelSerializer):
