@@ -255,6 +255,7 @@ class PaginaRegolamento(models.Model):
     
     # Immagine di copertina opzionale
     immagine = models.ImageField(upload_to='wiki_images/', null=True, blank=True)
+    banner_y = models.IntegerField(default=50, verbose_name="Posizione Verticale Banner (%)")
     
     public = models.BooleanField(default=True) # Se false, è una bozza
     visibile_solo_staff = models.BooleanField(
