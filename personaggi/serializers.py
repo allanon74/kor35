@@ -1416,6 +1416,7 @@ class PersonaggioSerializer(serializers.ModelSerializer):
     )
     proprietario = serializers.StringRelatedField(read_only=True)
     proprietario_id = serializers.PrimaryKeyRelatedField(source='proprietario', read_only=True)
+    is_staff = serializers.SerializerMethodField()
     
     class Meta:
         model = Personaggio
@@ -1424,9 +1425,13 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'tipologia', 'tipologia_nome', 
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
-            'giocante', 'proprietario_id',
+            'giocante', 'proprietario_id', 'is_staff',
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
+    
+    def get_is_staff(self, obj):
+        # Ritorna True se l'utente proprietario è staff o superuser
+        return obj.user.is_staff or obj.user.is_superuser
         
 # Aggiungi in personaggi/serializers.py
 
