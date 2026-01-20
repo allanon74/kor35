@@ -1784,6 +1784,7 @@ class TransazioneSospesa(models.Model):
 class Gruppo(models.Model):
     nome = models.CharField(max_length=100, unique=True); membri = models.ManyToManyField('Personaggio', related_name="gruppi_appartenenza", blank=True)
     def __str__(self): return self.nome
+    
 class Messaggio(models.Model):
     TIPO_BROADCAST='BROAD'; TIPO_GRUPPO='GROUP'; TIPO_INDIVIDUALE='INDV'
     TIPO_CHOICES=[(TIPO_BROADCAST,'Broadcast'),(TIPO_GRUPPO,'Gruppo'),(TIPO_INDIVIDUALE,'Individuale')]
@@ -1792,7 +1793,10 @@ class Messaggio(models.Model):
     destinatario_personaggio = models.ForeignKey('Personaggio', on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_individuali")
     destinatario_gruppo = models.ForeignKey(Gruppo, on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_gruppo")
     titolo = models.CharField(max_length=150); testo = models.TextField(); data_invio = models.DateTimeField(default=timezone.now); salva_in_cronologia = models.BooleanField(default=True)
-    class Meta: ordering=['-data_invio']
+    is_staff_message = models.BooleanField(default=False)
+    
+    class Meta: 
+        ordering=['-data_invio']
     
 class LetturaMessaggio(models.Model):
     messaggio = models.ForeignKey(Messaggio, on_delete=models.CASCADE, related_name="stati_lettura")

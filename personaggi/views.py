@@ -2329,7 +2329,8 @@ class RegisterView(APIView):
                                 destinatario_personaggio=pg_staff,
                                 titolo="Nuova Registrazione Utente",
                                 testo=testo_msg,
-                                tipo_messaggio='IND' # O la tua costante per Individuale
+                                tipo_messaggio='GROUP', # O la tua costante per Individuale
+                                is_staff_message=True # IMPORTANTE se usi la Tab Staff Inbox
                             ))
                     
                     if messaggi:
@@ -2363,3 +2364,11 @@ class ChangePasswordView(APIView):
             user.save()
             return Response({"message": "Password aggiornata con successo."})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+class StaffMessageListView(generics.ListAPIView):
+    serializer_class = MessaggioSerializer
+    permission_classes = [permissions.IsAdminUser] # Solo Staff/Admin
+
+    def get_queryset(self):
+        # Restituisce messaggi senza destinatario specifico (quindi per lo staff)
+        return Messaggio.objects.filter(is_staff_message=True).order_by('-data_creazione')
