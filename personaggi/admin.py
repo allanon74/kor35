@@ -887,3 +887,4 @@ class DichiarazioneAdmin(admin.ModelAdmin):
     list_filter = ('tipo',)          # Filtro laterale per tipo
     search_fields = ('dichiarazione', 'descrizione')       # Barra di ricerca
     ordering = ('tipo', 'nome')
+    radio_fields = {"tipo": admin.VERTICAL}
