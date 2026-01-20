@@ -883,7 +883,7 @@ class RichiestaAssemblaggioAdmin(admin.ModelAdmin):
     
 @admin.register(Dichiarazione)
 class DichiarazioneAdmin(admin.ModelAdmin):
-    list_display = ('testo', 'tipo') # Colonne visibili in lista
+    list_display = ('nome', 'tipo', 'dichiarazione') # Colonne visibili in lista
     list_filter = ('tipo',)          # Filtro laterale per tipo
-    search_fields = ('testo',)       # Barra di ricerca
-    ordering = ('tipo', 'testo')
+    search_fields = ('dichiarazione', 'descrizione')       # Barra di ricerca
+    ordering = ('tipo', 'nome')

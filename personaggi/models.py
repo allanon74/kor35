@@ -2012,7 +2012,7 @@ class Dichiarazione(models.Model):
         ('PRE_FRM', 'Prefisso - Forma'),
         ('EFF_SPC', 'Effetto - Speciale'),
     ]
-
+    nome = models.CharField(max_length=100, unique=True, verbose_name="Nome Dichiarazione")
     # Campi del modello
     tipo = models.CharField(
         max_length=7, 
@@ -2021,16 +2021,20 @@ class Dichiarazione(models.Model):
         verbose_name="Tipologia Dichiarazione"
     )
     
-    testo = models.CharField(
-        max_length=255, 
-        unique=True, # Evita duplicati dello stesso testo
-        verbose_name="Valore / Testo"
+    dichiarazione = models.CharField(
+        max_length=100, 
+        verbose_name="Dichiarazione / Termine", 
+        unique=True # Evita duplicati dello stesso termine
+    )
+
+    descrizione = models.TextField(
+        verbose_name="Descrizione della dichiarazione"
     )
 
     class Meta:
         verbose_name = "Dichiarazione / Glossario"
         verbose_name_plural = "Dichiarazioni e Glossario"
-        ordering = ['tipo', 'testo']
+        ordering = ['tipo', 'nome']
 
     def __str__(self):
-        return f"[{self.get_tipo_display()}] {self.testo}"
+        return f"[{self.get_tipo_display()}] {self.nome}"
