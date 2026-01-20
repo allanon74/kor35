@@ -9,7 +9,7 @@ from django.utils import timezone
 
 # Import aggiornati dai models
 from .models import (
-    CARATTERISTICA, CreditoMovimento, OggettoStatisticaBase, Personaggio, PersonaggioCerimoniale, 
+    CARATTERISTICA, CreditoMovimento, Dichiarazione, OggettoStatisticaBase, Personaggio, PersonaggioCerimoniale, 
     PersonaggioLog, QrCode, Oggetto, OggettoCaratteristica, 
     Manifesto, OggettoStatistica, 
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
@@ -879,3 +879,11 @@ class RichiestaAssemblaggioAdmin(admin.ModelAdmin):
     list_filter = ('stato', 'data_creazione')
     search_fields = ('committente__nome', 'artigiano__nome', 'oggetto_host__nome')
     autocomplete_fields = ['committente', 'artigiano', 'oggetto_host', 'componente']
+    
+    
+@admin.register(Dichiarazione)
+class DichiarazioneAdmin(admin.ModelAdmin):
+    list_display = ('testo', 'tipo') # Colonne visibili in lista
+    list_filter = ('tipo',)          # Filtro laterale per tipo
+    search_fields = ('testo',)       # Barra di ricerca
+    ordering = ('tipo', 'testo')

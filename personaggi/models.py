@@ -1989,3 +1989,48 @@ class RichiestaAssemblaggio(models.Model):
     
     def __str__(self):
         return f"{self.get_tipo_operazione_display()} - {self.committente} -> {self.artigiano}"
+    
+    
+from django.db import models
+
+class Dichiarazione(models.Model):
+    # Definizione delle scelte per il tipo
+    TIPO_CHOICES = [
+        ('DAN_NRM', 'Danno - Normale'),
+        ('DAN_ELM', 'Danno - Elementale'),
+        ('DAN_SUF', 'Danno - Suffissi'),
+        ('EFF_DUR', 'Effetto - Durata'),
+        ('EFF_IST', 'Effetto - Istantaneo'),
+        ('SUF_RNG', 'Suffisso - Rango'),
+        ('AFF_EFF', 'Affisso - Efficacia'),
+        ('SUF_TRG', 'Suffisso - Bersaglio'),
+        ('PRE_MOL', 'Prefisso - Moltiplicativo'),
+        ('PRM_CAP', 'Premessa - Capacità'),
+        ('PRM_SRC', 'Premessa - Sorgente'),
+        ('PRM_LVL', 'Premessa - Livello'),
+        ('PRM_TIP', 'Premessa - Tipologia'),
+        ('PRE_FRM', 'Prefisso - Forma'),
+        ('EFF_SPC', 'Effetto - Speciale'),
+    ]
+
+    # Campi del modello
+    tipo = models.CharField(
+        max_length=7, 
+        choices=TIPO_CHOICES, 
+        db_index=True, # Indicizzato per velocizzare il filtro per tipo
+        verbose_name="Tipologia Dichiarazione"
+    )
+    
+    testo = models.CharField(
+        max_length=255, 
+        unique=True, # Evita duplicati dello stesso testo
+        verbose_name="Valore / Testo"
+    )
+
+    class Meta:
+        verbose_name = "Dichiarazione / Glossario"
+        verbose_name_plural = "Dichiarazioni e Glossario"
+        ordering = ['tipo', 'testo']
+
+    def __str__(self):
+        return f"[{self.get_tipo_display()}] {self.testo}"
