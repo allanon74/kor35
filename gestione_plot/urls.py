@@ -9,7 +9,7 @@ from .views import(
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
-    PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
+    PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, get_wiki_menu, get_wiki_page 
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -45,7 +45,7 @@ router.register(r'public/wiki-aure', PublicAuraViewSet, basename='public-wiki-au
 router.register(r'public/wiki-tiers', PublicTierViewSet, basename='public-wiki-tiers')
 
 urlpatterns = [
-    path('api/wiki/menu/', views.get_wiki_menu, name='wiki_menu'),
-    path('api/wiki/pagina/<slug:slug>/', views.get_wiki_page, name='wiki_page'),
+    path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),
+    path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
     path('api/', include(router.urls)),
 ]   

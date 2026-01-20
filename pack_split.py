@@ -6,7 +6,7 @@ import platform
 WINDOWS_DESTINATION = r"C:\AI_CONTEXT" 
 
 # Dimensione massima per ogni file (400KB circa)
-CHUNK_SIZE = 400000 
+CHUNK_SIZE = 50000 
 
 # Cartelle da IGNORARE
 IGNORE_DIRS = {
