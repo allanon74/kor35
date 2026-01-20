@@ -2293,52 +2293,39 @@ class UserMeView(APIView):
     
     
 class RegisterView(APIView):
-    permission_classes = [permissions.AllowAny] # Aperta a tutti
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.save() # Crea l'utente (is_active=False da serializer)
+            # 1. FORZA is_active=False
+            user = serializer.save(is_active=False)
             
-            # --- NOTIFICA STAFF ---
-            try:
-                staff_group = Group.objects.get(name='Staff')
-                staff_users = staff_group.user_set.all()
-                
-                if staff_users.exists():
-                    messaggi = []
-                    testo_msg = (
-                        f"Nuovo utente registrato: {user.username} ({user.email}). "
-                        f"Nome: {user.first_name} {user.last_name}.\n"
-                        f"Per attivarlo, clicca qui sotto:\n"
-                        f"[ACTIVATE_USER:{user.id}]"  # <-- TAG SPECIALE
-                    )
-                    
-                    # Invia messaggio a ogni membro dello staff
-                    # Nota: il messaggio deve essere collegato a un Personaggio destinatario.
-                    # Se il tuo sistema di messaggi è tra Utenti, usa user. Se è tra Personaggi,
-                    # devi trovare il "Personaggio principale" dello staffer.
-                    # Assumiamo qui che Messaggio richieda un destinatario_personaggio.
-                    
-                    for staffer in staff_users:
-                        # Trova il primo personaggio dello staffer per recapitargli il messaggio
-                        pg_staff = Personaggio.objects.filter(proprietario=staffer).first()
-                        if pg_staff:
-                            messaggi.append(Messaggio(
-                                mittente=None, # Messaggio di sistema
-                                destinatario_personaggio=pg_staff,
-                                titolo="Nuova Registrazione Utente",
-                                testo=testo_msg,
-                                tipo_messaggio='GROUP', # O la tua costante per Individuale
-                                is_staff_message=True # IMPORTANTE se usi la Tab Staff Inbox
-                            ))
-                    
-                    if messaggi:
-                        Messaggio.objects.bulk_create(messaggi)
-            except Group.DoesNotExist:
-                print("Gruppo Staff non trovato: impossibile inviare notifiche.")
+            # 2. CREA MESSAGGIO PER LO STAFF
+            # Testo con il tag speciale per il bottone di attivazione
+            testo_msg = (
+                f"Nuova registrazione:<br>"
+                f"Utente: <b>{user.username}</b><br>"
+                f"Email: {user.email}<br>"
+                f"Nome: {user.first_name} {user.last_name}<br><br>"
+                f"Clicca per attivare:<br>"
+                f"[ACTIVATE_USER:{user.id}]" 
+            )
 
-            return Response({"message": "Registrazione completata. Attendi l'attivazione da parte dello staff."}, status=status.HTTP_201_CREATED)
+            # Crea il messaggio nel DB
+            Messaggio.objects.create(
+                mittente_personaggio=None, # Messaggio di sistema
+                destinatario_personaggio=None, # Nessun destinatario specifico
+                titolo=f"Nuovo Utente: {user.username}",
+                testo=testo_msg,
+                tipo_messaggio='STAFF',
+                is_staff_message=True # <--- Questo lo rende visibile nella Tab Staff
+            )
+
+            return Response(
+                {"message": "Registrazione completata. In attesa di attivazione."}, 
+                status=status.HTTP_201_CREATED
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ActivateUserView(APIView):
