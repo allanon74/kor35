@@ -1,6 +1,10 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+
+from django.shortcuts import get_object_or_404
 
 from personaggi.models import (
     Inventario, Manifesto, Personaggio, QrCode, 
@@ -198,3 +202,33 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
     serializer_class = WikiTierSerializer
     permission_classes = [permissions.AllowAny] # Accesso pubblic
+    
+    
+def is_staff_user(user):
+    return user.is_authenticated and (user.is_staff or user.is_superuser)
+
+@api_view(['GET'])
+@permission_classes([AllowAny]) # Aperto a tutti, filtriamo dentro
+def get_wiki_menu(request):
+    # Base: prendi tutto
+    queryset = PaginaRegolamento.objects.all().order_by('parent', 'ordine', 'titolo')
+    
+    # Se NON è staff, nascondi bozze e pagine riservate
+    if not is_staff_user(request.user):
+        queryset = queryset.filter(public=True, visibile_solo_staff=False)
+    
+    serializer = PaginaRegolamentoSmallSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_page(request, slug):
+    queryset = PaginaRegolamento.objects.all()
+    
+    # Stesso filtro: se non sei staff, non puoi vedere cose private anche se indovini lo slug
+    if not is_staff_user(request.user):
+        queryset = queryset.filter(public=True, visibile_solo_staff=False)
+        
+    page = get_object_or_404(queryset, slug=slug)
+    serializer = PaginaRegolamentoSerializer(page)
+    return Response(serializer.data)

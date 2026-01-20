@@ -45,5 +45,7 @@ router.register(r'public/wiki-aure', PublicAuraViewSet, basename='public-wiki-au
 router.register(r'public/wiki-tiers', PublicTierViewSet, basename='public-wiki-tiers')
 
 urlpatterns = [
+    path('api/wiki/menu/', views.get_wiki_menu, name='wiki_menu'),
+    path('api/wiki/pagina/<slug:slug>/', views.get_wiki_page, name='wiki_page'),
     path('api/', include(router.urls)),
 ]   
