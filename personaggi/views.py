@@ -2314,7 +2314,7 @@ class RegisterView(APIView):
 
             # Crea il messaggio nel DB
             Messaggio.objects.create(
-                mittente_personaggio=None, # Messaggio di sistema
+                mittente=None, # Messaggio di sistema
                 destinatario_personaggio=None, # Nessun destinatario specifico
                 titolo=f"Nuovo Utente: {user.username}",
                 testo=testo_msg,
