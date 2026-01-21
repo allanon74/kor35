@@ -2358,4 +2358,4 @@ class StaffMessageListView(generics.ListAPIView):
 
     def get_queryset(self):
         # Restituisce messaggi senza destinatario specifico (quindi per lo staff)
-        return Messaggio.objects.filter(is_staff_message=True).order_by('-data_creazione')
+        return Messaggio.objects.filter(is_staff_message=True).order_by('-data_invio')
