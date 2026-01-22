@@ -801,7 +801,7 @@ class PersonaggioLogsListView(generics.ListAPIView):
     def get_queryset(self):
         return PersonaggioLog.objects.filter(
             personaggio__proprietario=self.request.user
-        ).order_by('-data')
+        ).select_related('personaggio').order_by('-data')
 
 class PersonaggioTransazioniListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
@@ -824,9 +824,13 @@ class PersonaggioTransazioniListView(generics.ListAPIView):
         inventari_ids = list(qs_pg.values_list('inventario_ptr_id', flat=True))
 
         if tipo == 'uscita':
-            return TransazioneSospesa.objects.filter(mittente__id__in=inventari_ids).order_by('-data_richiesta')
+            return TransazioneSospesa.objects.filter(mittente__id__in=inventari_ids).select_related(
+                'mittente', 'richiedente', 'oggetto'
+            ).order_by('-data_richiesta')
         else:
-            return TransazioneSospesa.objects.filter(richiedente__id__in=pg_ids).order_by('-data_richiesta')
+            return TransazioneSospesa.objects.filter(richiedente__id__in=pg_ids).select_related(
+                'mittente', 'richiedente', 'oggetto'
+            ).order_by('-data_richiesta')
 
 class CreditoMovimentoCreateView(APIView):
     permission_classes = [IsAuthenticated]
