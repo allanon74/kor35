@@ -24,10 +24,16 @@ Questo creerà automaticamente i record `PersonaggioStatisticaBase` per tutti i 
 **Opzioni disponibili:**
 - `--force`: Sovrascrive anche i valori già esistenti con i valori predefiniti (usa con cautela!)
 
-## 3. Riavviare il server
+## 3. Riavviare il server (e controllare eventuali errori)
 
 ```bash
 sudo systemctl restart gunicorn
+sudo systemctl status gunicorn  # Verifica che sia tutto ok
+```
+
+**NOTA**: Se usi altri server (es. Daphne per WebSocket), ricorda di riavviarli:
+```bash
+sudo systemctl restart daphne  # Se applicabile
 ```
 
 ## 3. Cosa è stato modificato

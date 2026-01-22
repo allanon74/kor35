@@ -1334,6 +1334,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     punti_caratteristica = serializers.IntegerField(read_only=True)
     punteggi_base = serializers.JSONField(read_only=True)
+    statistiche_base_dict = serializers.JSONField(read_only=True)
     modificatori_calcolati = serializers.JSONField(read_only=True)
     TestoFormattatoPersonale = serializers.JSONField(read_only=True, required=False)
     tipologia = TipologiaPersonaggioSerializer(read_only=True)
@@ -1360,7 +1361,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte', 'costume',
             'tipologia', 'crediti', 'punti_caratteristica',
-            'punteggi_base', 'modificatori_calcolati',
+            'punteggi_base', 'statistiche_base_dict', 'modificatori_calcolati',
             'abilita_possedute', 'oggetti',
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
             'movimenti_credito',
