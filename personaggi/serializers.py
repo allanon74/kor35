@@ -799,17 +799,31 @@ class OggettoSerializer(serializers.ModelSerializer):
             return None
         
         personaggio = self.context.get('personaggio')
+        # Passa le statistiche_base dell'oggetto per includere i valori base
+        statistiche_base = obj.oggettostatisticabase_set.select_related('statistica').all()
+        item_mods = obj.oggettostatistica_set.select_related('statistica').all()
+        context = {'livello': obj.livello, 'aura': obj.aura, 'item_modifiers': item_mods}
+        
         if personaggio:
             # Usiamo la funzione di utility del model per risolvere le graffe {}
-            # Passiamo l'attacco come "formula" e nessun testo descrittivo
+            # Passiamo l'attacco come "formula" con statistiche_base e modificatori del personaggio
             return formatta_testo_generico(
                 None, 
                 formula=obj.attacco_base, 
-                personaggio=personaggio, 
+                statistiche_base=statistiche_base,
+                personaggio=personaggio,
+                context=context,
                 solo_formula=True
             ).replace("<strong>Formula:</strong>", "").strip()
         
-        return obj.attacco_base
+        # Senza personaggio, formatta comunque con le statistiche_base
+        return formatta_testo_generico(
+            None, 
+            formula=obj.attacco_base, 
+            statistiche_base=statistiche_base,
+            context=context,
+            solo_formula=True
+        ).replace("<strong>Formula:</strong>", "").strip()
 
     def get_costo_effettivo(self, obj):
         personaggio = self.context.get('personaggio')
@@ -1216,6 +1230,7 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
    
     classe_oggetto_nome = serializers.CharField(source='classe_oggetto.nome', read_only=True, default="")
     stats_text = serializers.SerializerMethodField()
+    attacco_formattato = serializers.SerializerMethodField()
     statistiche_base = OggettoBaseStatisticaBaseSerializer(
         many=True, read_only=True, source='oggettobasestatisticabase_set'
     )
@@ -1223,6 +1238,32 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = OggettoBase
         fields = '__all__'  # Tutti i campi del modello OggettoBase)
+
+    def get_attacco_formattato(self, obj):
+        """Formatta l'attacco_base usando le statistiche_base dell'OggettoBase"""
+        if not obj.attacco_base:
+            return None
+        
+        personaggio = self.context.get('personaggio')
+        # Passa le statistiche_base dell'OggettoBase per includere i valori
+        statistiche_base = obj.oggettobasestatisticabase_set.select_related('statistica').all()
+        
+        if personaggio:
+            return formatta_testo_generico(
+                None, 
+                formula=obj.attacco_base, 
+                statistiche_base=statistiche_base,
+                personaggio=personaggio, 
+                solo_formula=True
+            ).replace("<strong>Formula:</strong>", "").strip()
+        
+        # Senza personaggio, formatta comunque con le statistiche_base
+        return formatta_testo_generico(
+            None, 
+            formula=obj.attacco_base, 
+            statistiche_base=statistiche_base,
+            solo_formula=True
+        ).replace("<strong>Formula:</strong>", "").strip()
 
     def get_stats_text(self, obj):
         parts = []

@@ -267,8 +267,12 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     if statistiche_base:
         for item in statistiche_base:
             param = getattr(item.statistica, 'parametro', None) if hasattr(item, 'statistica') else None
-            val = getattr(item, 'valore_base', 0)
             if param:
+                # Usa valore_base se presente e diverso da 0, altrimenti usa valore_base_predefinito della statistica
+                val = getattr(item, 'valore_base', 0)
+                if val == 0 and hasattr(item, 'statistica') and item.statistica:
+                    # Fallback al valore_base_predefinito della statistica
+                    val = getattr(item.statistica, 'valore_base_predefinito', 0)
                 base_values[param] = val
                 eval_context[param] = val
 
