@@ -62,13 +62,22 @@ class EventoViewSet(viewsets.ModelViewSet):
         """
         Versione ottimizzata e filtrata.
         Esclude inventari di Personaggi/PnG e carica solo i dati minimi.
+        Ottimizzato con select_related e only() per ridurre le query.
         """
+        # Ottimizzazione: select_related per evitare N+1 queries
+        png_queryset = Personaggio.objects.select_related(
+            'tipologia', 'proprietario'
+        ).only(
+            'id', 'nome', 'testo', 'costume', 'data_nascita', 'data_morte',
+            'crediti', 'punti_caratteristica', 'tipologia', 'proprietario'
+        )
+        
         return Response({
-        'png': PersonaggioSerializer(Personaggio.objects.all(), many=True).data,
-        'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
-        'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
-        'inventari': InventarioSerializer(Inventario.objects.all(), many=True).data,
-        'staff': UserShortSerializer(User.objects.filter(is_staff=True), many=True).data,
+            'png': PersonaggioSerializer(png_queryset, many=True).data,
+            'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
+            'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
+            'inventari': InventarioSerializer(Inventario.objects.all(), many=True).data,
+            'staff': UserShortSerializer(User.objects.filter(is_staff=True).only('id', 'username', 'first_name', 'last_name'), many=True).data,
         })
 
 class GiornoEventoViewSet(viewsets.ModelViewSet):
