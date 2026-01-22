@@ -929,6 +929,42 @@ class PersonaggioDetailView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PersonaggioModificatoriDettagliatiView(APIView):
+    """
+    Restituisce i dettagli dei modificatori di un personaggio con la fonte di provenienza.
+    Endpoint: GET /api/personaggi/<pk>/modificatori-dettagliati/
+    Opzionale: ?parametro=<nome_parametro> per filtrare una singola statistica
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk, format=None):
+        personaggio = get_object_or_404(Personaggio, pk=pk)
+        user = request.user
+        
+        # Controllo permessi
+        if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
+            return Response(
+                {"error": "Non hai il permesso di visualizzare questo personaggio."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Ottieni i dettagli
+        dettagli = personaggio.get_modificatori_dettagliati()
+        
+        # Filtro opzionale per una singola statistica
+        parametro_filter = request.query_params.get('parametro', None)
+        if parametro_filter:
+            if parametro_filter in dettagli:
+                return Response({parametro_filter: dettagli[parametro_filter]}, status=status.HTTP_200_OK)
+            else:
+                return Response(
+                    {"error": f"Parametro '{parametro_filter}' non trovato."}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        return Response(dettagli, status=status.HTTP_200_OK)
     
 class RubaView(APIView):
     permission_classes = [IsAuthenticated]

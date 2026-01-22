@@ -1617,7 +1617,116 @@ class Personaggio(Inventario):
         self._modificatori_calcolati_cache = mods
         return mods
     
-    
+    def get_modificatori_dettagliati(self):
+        """
+        Restituisce un dizionario dettagliato con la provenienza dei modificatori.
+        Struttura: {
+            'parametro': {
+                'valore_base': float,
+                'modificatori': [
+                    {'fonte': str, 'tipo': 'add'|'mol', 'valore': float},
+                    ...
+                ],
+                'valore_finale': float
+            }
+        }
+        """
+        from django.db.models import Q
+        
+        dettagli = {}
+        
+        def _add_mod(parametro, fonte, tipo_mod, valore):
+            """Aggiunge un modificatore con la sua fonte al dizionario dettagliato"""
+            if not parametro:
+                return
+            
+            if parametro not in dettagli:
+                # Recupera il valore base da statistiche_base_dict o usa 0
+                valore_base = self.statistiche_base_dict.get(parametro, 0)
+                dettagli[parametro] = {
+                    'valore_base': valore_base,
+                    'modificatori': [],
+                    'add_totale': 0.0,
+                    'mol_totale': 1.0
+                }
+            
+            tipo_str = 'add' if tipo_mod == MODIFICATORE_ADDITIVO else 'mol'
+            valore_float = float(valore)
+            
+            dettagli[parametro]['modificatori'].append({
+                'fonte': fonte,
+                'tipo': tipo_str,
+                'valore': valore_float
+            })
+            
+            # Aggiorna i totali
+            if tipo_mod == MODIFICATORE_ADDITIVO:
+                dettagli[parametro]['add_totale'] += valore_float
+            elif tipo_mod == MODIFICATORE_MOLTIPLICATIVO:
+                dettagli[parametro]['mol_totale'] *= valore_float
+        
+        def _is_global(stat_link):
+            """Controlla se il modificatore è globale (non condizionale)"""
+            if stat_link.usa_limitazione_elemento: return False
+            if stat_link.usa_limitazione_aura: return False
+            if stat_link.usa_condizione_text: return False
+            return True
+        
+        # 1. Abilità
+        for link in AbilitaStatistica.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).select_related('statistica', 'abilita'):
+            if _is_global(link):
+                fonte = f"Abilità: {link.abilita.nome}"
+                _add_mod(link.statistica.parametro, fonte, link.tipo_modificatore, link.valore)
+        
+        # 2. Oggetti e Innesti
+        oggetti_inventario = self.get_oggetti().select_related(
+            'infusione_generatrice',
+            'aura',
+            'ospitato_su',
+        ).prefetch_related(
+            'oggettostatistica_set__statistica',
+            'potenziamenti_installati__oggettostatistica_set__statistica',
+            'potenziamenti_installati__infusione_generatrice',
+            'potenziamenti_installati__aura',
+        )
+        
+        for oggetto in oggetti_inventario:
+            if oggetto.is_active():
+                # Modificatori dell'oggetto stesso
+                for stat_link in oggetto.oggettostatistica_set.all():
+                    if _is_global(stat_link):
+                        fonte = f"Oggetto: {oggetto.nome}"
+                        _add_mod(stat_link.statistica.parametro, fonte, stat_link.tipo_modificatore, stat_link.valore)
+                
+                # Potenziamenti (Mod/Materia)
+                for potenziamento in oggetto.potenziamenti_installati.all():
+                    if potenziamento.is_active():
+                        for stat_link_pot in potenziamento.oggettostatistica_set.all():
+                            if _is_global(stat_link_pot):
+                                fonte = f"Potenziamento: {potenziamento.nome} (su {oggetto.nome})"
+                                _add_mod(stat_link_pot.statistica.parametro, fonte, stat_link_pot.tipo_modificatore, stat_link_pot.valore)
+        
+        # 3. Caratteristiche Base (da abilità)
+        cb = self.caratteristiche_base
+        if cb:
+            for link in CaratteristicaModificatore.objects.filter(
+                caratteristica__nome__in=cb.keys()
+            ).select_related('caratteristica', 'statistica_modificata'):
+                pts = cb.get(link.caratteristica.nome, 0)
+                if pts > 0 and link.ogni_x_punti > 0:
+                    bonus = (pts // link.ogni_x_punti) * link.modificatore
+                    if bonus > 0:
+                        fonte = f"Caratteristica: {link.caratteristica.nome} ({pts} punti)"
+                        _add_mod(link.statistica_modificata.parametro, fonte, MODIFICATORE_ADDITIVO, bonus)
+        
+        # Calcola il valore finale per ogni parametro
+        for parametro, dati in dettagli.items():
+            valore_finale = (dati['valore_base'] + dati['add_totale']) * dati['mol_totale']
+            dati['valore_finale'] = round(valore_finale, 2)
+        
+        return dettagli
 
     def get_modificatori_extra_da_contesto(self, context=None):
         """
