@@ -3,7 +3,7 @@ from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
     MostroTemplate, AttaccoTemplate, PngAssegnato, 
     StaffOffGame, QuestFase, QuestTask,
-    PaginaRegolamento
+    PaginaRegolamento, WikiImmagine
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
@@ -116,3 +116,39 @@ class QuestTaskAdmin(admin.ModelAdmin):
     # CORREZIONE: 'nome', 'is_opzionale', 'is_completato' non esistono.
     list_display = ('ruolo', 'fase', 'staffer')
     list_filter = ('ruolo', 'fase__quest')
+
+@admin.register(WikiImmagine)
+class WikiImmagineAdmin(admin.ModelAdmin):
+    list_display = ('titolo', 'immagine_preview', 'allineamento', 'larghezza_max', 'creatore', 'data_creazione')
+    list_filter = ('allineamento', 'data_creazione', 'creatore')
+    search_fields = ('titolo', 'descrizione')
+    readonly_fields = ('data_creazione', 'data_modifica', 'immagine_preview')
+    ordering = ('-data_creazione',)
+    
+    fieldsets = (
+        ('Informazioni Generali', {
+            'fields': ('titolo', 'descrizione', 'creatore')
+        }),
+        ('Immagine', {
+            'fields': ('immagine', 'immagine_preview')
+        }),
+        ('Impostazioni Visualizzazione', {
+            'fields': ('larghezza_max', 'allineamento')
+        }),
+        ('Metadati', {
+            'fields': ('data_creazione', 'data_modifica'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def immagine_preview(self, obj):
+        if obj.immagine:
+            return f'<img src="{obj.immagine.url}" style="max-width: 200px; max-height: 150px;" />'
+        return "Nessuna immagine"
+    immagine_preview.short_description = 'Anteprima'
+    immagine_preview.allow_tags = True
+    
+    def save_model(self, request, obj, form, change):
+        if not change:  # Solo quando viene creato
+            obj.creatore = request.user
+        super().save_model(request, obj, form, change)
