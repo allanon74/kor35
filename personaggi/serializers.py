@@ -1431,7 +1431,9 @@ class PersonaggioSerializer(serializers.ModelSerializer):
     
     def get_is_staff(self, obj):
         # Ritorna True se l'utente proprietario è staff o superuser
-        return obj.user.is_staff or obj.user.is_superuser
+        if not obj.proprietario:
+            return False
+        return obj.proprietario.is_staff or obj.proprietario.is_superuser
         
 # Aggiungi in personaggi/serializers.py
 
