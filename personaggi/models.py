@@ -5,6 +5,8 @@ import string
 import copy
 from django.db import models, IntegrityError, transaction
 from django.db.models import Q
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.safestring import mark_safe
@@ -2131,3 +2133,33 @@ class Dichiarazione(models.Model):
 
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.nome}"
+
+
+# ============================================================================
+# SIGNALS - Inizializzazione automatica
+# ============================================================================
+
+@receiver(post_save, sender=Personaggio)
+def inizializza_statistiche_base_personaggio(sender, instance, created, **kwargs):
+    """
+    Quando viene creato un nuovo Personaggio, inizializza tutte le sue statistiche_base
+    con i valori predefiniti (valore_base_predefinito) di ogni Statistica.
+    """
+    if created:
+        # Recupera tutte le statistiche
+        tutte_statistiche = Statistica.objects.all()
+        
+        # Crea i record PersonaggioStatisticaBase per ogni statistica
+        records_da_creare = []
+        for stat in tutte_statistiche:
+            records_da_creare.append(
+                PersonaggioStatisticaBase(
+                    personaggio=instance,
+                    statistica=stat,
+                    valore_base=stat.valore_base_predefinito
+                )
+            )
+        
+        # Bulk create per performance
+        if records_da_creare:
+            PersonaggioStatisticaBase.objects.bulk_create(records_da_creare, ignore_conflicts=True)
