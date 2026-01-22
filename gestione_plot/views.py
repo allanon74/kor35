@@ -20,12 +20,12 @@ from personaggi.serializers import (
     PersonaggioListSerializer, PersonaggioAutocompleteSerializer, PersonaggioSerializer,
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
                                     )
-from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine
 from .serializers import (
     EventoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer,
-    StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiTierSerializer,
+    StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiTierSerializer, WikiImmagineSerializer,
                           )
 
 
@@ -206,6 +206,40 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
     serializer_class = WikiTierSerializer
     permission_classes = [permissions.AllowAny] # Accesso pubblic
+
+class PublicWikiImmagineViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone le immagini wiki per l'uso nei widget.
+    Accesso pubblico in lettura.
+    """
+    queryset = WikiImmagine.objects.all()
+    serializer_class = WikiImmagineSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    def get_serializer_context(self):
+        """Aggiunge il request al contesto per generare URL assoluti"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+class StaffWikiImmagineViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet per la gestione CRUD delle immagini wiki (solo staff).
+    Permette di creare, modificare ed eliminare immagini.
+    """
+    queryset = WikiImmagine.objects.all()
+    serializer_class = WikiImmagineSerializer
+    permission_classes = [IsMasterOrReadOnly]
+    
+    def get_serializer_context(self):
+        """Aggiunge il request al contesto per generare URL assoluti"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+    
+    def perform_create(self, serializer):
+        """Imposta automaticamente il creatore quando viene creata un'immagine"""
+        serializer.save(creatore=self.request.user)
     
     
 def is_staff_user(user):

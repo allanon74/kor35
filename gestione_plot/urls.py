@@ -10,7 +10,7 @@ from .views import(
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
-    get_wiki_menu, get_wiki_page, serve_wiki_image,
+    get_wiki_menu, get_wiki_page, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -39,11 +39,15 @@ router.register(r'staff/pagine-regolamento',
 router.register(r'staff/pagine-regolamento-small', 
                 PaginaRegolamentoSmallViewSet, 
                 basename='pagine-regolamento-small')
+router.register(r'staff/wiki-immagini', 
+                StaffWikiImmagineViewSet, 
+                basename='staff-wiki-immagini')
 router.register(r'public/wiki-menu', PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
 router.register(r'public/wiki-page', PublicPaginaRegolamentoDetail, basename='public-wiki-page')
 router.register(r'public/wiki-tabelle', PublicTabellaViewSet, basename='public-wiki-tabelle')
 router.register(r'public/wiki-aure', PublicAuraViewSet, basename='public-wiki-aure')
 router.register(r'public/wiki-tiers', PublicTierViewSet, basename='public-wiki-tiers')
+router.register(r'public/wiki-immagini', PublicWikiImmagineViewSet, basename='public-wiki-immagini')
 
 urlpatterns = [
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),

@@ -269,3 +269,49 @@ class PaginaRegolamento(models.Model):
 
     def __str__(self):
         return f"{self.titolo} ({self.parent.titolo if self.parent else 'Root'})"
+
+
+class WikiImmagine(models.Model):
+    """
+    Modello per gestire immagini caricate nella wiki.
+    Le immagini possono essere inserite come widget nel contenuto delle pagine.
+    """
+    titolo = models.CharField(max_length=200, help_text="Titolo descrittivo dell'immagine")
+    descrizione = models.TextField(blank=True, help_text="Descrizione opzionale dell'immagine")
+    immagine = models.ImageField(upload_to='wiki_images/widgets/', help_text="Immagine da caricare")
+    
+    # Metadati
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_modifica = models.DateTimeField(auto_now=True)
+    creatore = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='immagini_wiki_create'
+    )
+    
+    # Opzioni di visualizzazione
+    larghezza_max = models.PositiveIntegerField(
+        default=800,
+        help_text="Larghezza massima in pixel (0 = dimensione originale)"
+    )
+    allineamento = models.CharField(
+        max_length=10,
+        choices=[
+            ('left', 'Sinistra'),
+            ('center', 'Centro'),
+            ('right', 'Destra'),
+            ('full', 'Larghezza piena'),
+        ],
+        default='center',
+        help_text="Allineamento dell'immagine nel contenuto"
+    )
+    
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Immagine Wiki"
+        verbose_name_plural = "Immagini Wiki"
+
+    def __str__(self):
+        return f"{self.titolo} ({self.immagine.name if self.immagine else 'Nessuna immagine'})"

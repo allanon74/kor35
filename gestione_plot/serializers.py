@@ -4,7 +4,7 @@ from .models import (
     Evento, GiornoEvento, PaginaRegolamento, Quest, 
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
-    QuestFase, QuestTask,
+    QuestFase, QuestTask, WikiImmagine,
 )
 from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier
 from personaggi.serializers import (
@@ -215,3 +215,29 @@ class WikiTierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tier
         fields = ['id', 'nome', 'descrizione', 'tipo', 'abilita']
+
+class WikiImmagineSerializer(serializers.ModelSerializer):
+    """
+    Serializer per le immagini wiki.
+    Include l'URL dell'immagine per il frontend.
+    """
+    immagine_url = serializers.SerializerMethodField()
+    creatore_nome = serializers.CharField(source='creatore.username', read_only=True)
+    
+    class Meta:
+        model = WikiImmagine
+        fields = [
+            'id', 'titolo', 'descrizione', 'immagine', 'immagine_url',
+            'data_creazione', 'data_modifica', 'creatore', 'creatore_nome',
+            'larghezza_max', 'allineamento'
+        ]
+        read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
+    
+    def get_immagine_url(self, obj):
+        """Restituisce l'URL completo dell'immagine"""
+        if obj.immagine:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.immagine.url)
+            return obj.immagine.url
+        return None
