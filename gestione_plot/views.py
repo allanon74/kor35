@@ -65,11 +65,12 @@ class EventoViewSet(viewsets.ModelViewSet):
         Ottimizzato con select_related e only() per ridurre le query.
         """
         # Ottimizzazione: select_related per evitare N+1 queries
+        # NOTA: 'crediti' e 'punti_caratteristica' sono @property, non vanno in only()
         png_queryset = Personaggio.objects.select_related(
             'tipologia', 'proprietario'
         ).only(
             'id', 'nome', 'testo', 'costume', 'data_nascita', 'data_morte',
-            'crediti', 'punti_caratteristica', 'tipologia', 'proprietario'
+            'tipologia', 'proprietario'
         )
         
         return Response({
