@@ -290,30 +290,25 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 mods_attivi[param]['add'] += valori['add']
                 mods_attivi[param]['mol'] *= valori['mol']
 
-        # IMPORTANTE: Prima aggiungi le caratteristiche_base del personaggio
-        # ma NON sovrascrivere i valori già impostati dalle statistiche_base
-        for param, val in personaggio.caratteristiche_base.items():
-            if param not in eval_context:  # Solo se non è già stato impostato dalle statistiche_base
+        # IMPORTANTE: Aggiungi i valori base intrinseci del personaggio (statistiche_base_dict)
+        # Questi rappresentano i valori "naturali" del personaggio prima delle abilità
+        statistiche_base_pg = personaggio.statistiche_base_dict
+        for param, val in statistiche_base_pg.items():
+            if param not in eval_context:  # Solo se non è già stato impostato dalle statistiche_base dell'oggetto
                 eval_context[param] = val
         
-        # Applica i modificatori ai valori base
-        # I valori dalle statistiche_base hanno priorità e vengono modificati dai modificatori
+        # Aggiungi anche le caratteristiche dalle abilità (per compatibilità)
+        caratteristiche_personaggio = personaggio.caratteristiche_base
+        for param, val in caratteristiche_personaggio.items():
+            if param not in eval_context:
+                eval_context[param] = val
+        
+        # Applica i modificatori ai valori
+        # I modificatori vengono applicati a TUTTI i parametri che hanno modificatori attivi
         for param, mod_data in mods_attivi.items():
-            val_base = eval_context.get(param, 0)  # Prende il valore base (da statistiche_base o caratteristiche_base)
+            val_base = eval_context.get(param, 0)
             val_finale = (val_base + mod_data['add']) * mod_data['mol']
             eval_context[param] = val_finale
-        
-        # IMPORTANTE: Assicurati che i valori dalle statistiche_base siano sempre presenti
-        # anche se non hanno modificatori del personaggio (es. rango, molt con valore_base_predefinito)
-        if statistiche_base:
-            for item in statistiche_base:
-                param = getattr(item.statistica, 'parametro', None) if hasattr(item, 'statistica') else None
-                if param:
-                    # Se il parametro non ha modificatori del personaggio, mantieni il valore base già impostato
-                    # Questo è importante per parametri come rango e molt che potrebbero non avere modificatori
-                    if param not in mods_attivi and param in base_values:
-                        # Il valore è già stato impostato sopra, ma assicuriamoci che sia presente
-                        eval_context[param] = base_values[param]
 
     # 3. Preparazione Contesto Oggetti (per |NAME)
     object_context = {}
@@ -1030,6 +1025,24 @@ class OggettoStatisticaBase(models.Model):
     class Meta: unique_together = ('oggetto', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore_base}"
 
+class PersonaggioStatisticaBase(models.Model):
+    """
+    Valori base delle statistiche per il personaggio.
+    Questi sono valori intrinseci del personaggio, separati dalle abilità.
+    Vengono inizializzati automaticamente con valore_base_predefinito quando mancanti.
+    """
+    personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='personaggiostatisticabase_set')
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE, related_name="personaggi_che_hanno_base")
+    valore_base = models.IntegerField(default=0)
+    
+    class Meta: 
+        verbose_name = "Statistica Base Personaggio"
+        verbose_name_plural = "Statistiche Base Personaggio"
+        unique_together = ('personaggio', 'statistica')
+    
+    def __str__(self): 
+        return f"{self.personaggio.nome} - {self.statistica.nome}: {self.valore_base}"
+
 class QrCode(models.Model):
     id = models.CharField(primary_key=True, max_length=14, default=generate_short_id, editable=False)
     data_creazione = models.DateTimeField(auto_now_add=True)
@@ -1334,7 +1347,10 @@ class Personaggio(Inventario):
     modelli_aura = models.ManyToManyField(ModelloAura, through='PersonaggioModelloAura', blank=True, verbose_name="Modelli di Aura")
     statistiche_temporanee = models.JSONField(default=dict, blank=True, verbose_name="Valori Correnti Statistiche")
     
-    # --- NUOVO CAMPO ---
+    # Statistiche base del personaggio (valori intrinseci, separati dalle abilità)
+    statistiche_base = models.ManyToManyField(Statistica, through='PersonaggioStatisticaBase', blank=True, related_name='personaggi_base')
+    
+    # --- CAMPO CERIMONIALI ---
     cerimoniali_posseduti = models.ManyToManyField(Cerimoniale, through='PersonaggioCerimoniale', blank=True)
     impostazioni_ui = models.JSONField(default=dict, blank=True, verbose_name="Impostazioni UI")
     # -------------------
@@ -1380,8 +1396,56 @@ class Personaggio(Inventario):
         self._punteggi_base_cache = p
         return p
     
+    def get_valore_statistica_base(self, statistica):
+        """
+        Recupera il valore base di una statistica per questo personaggio.
+        Se non esiste il record, lo crea usando valore_base_predefinito.
+        """
+        # Cerca il record esistente
+        link = PersonaggioStatisticaBase.objects.filter(
+            personaggio=self,
+            statistica=statistica
+        ).first()
+        
+        if link:
+            return link.valore_base
+        
+        # Se non esiste, crea il record con il valore predefinito
+        valore_predefinito = statistica.valore_base_predefinito
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self,
+            statistica=statistica,
+            valore_base=valore_predefinito
+        )
+        return valore_predefinito
+    
+    @property
+    def statistiche_base_dict(self):
+        """
+        Restituisce un dizionario {parametro: valore} per tutte le statistiche base.
+        Inizializza automaticamente i valori mancanti.
+        """
+        # Cache per evitare query multiple
+        if hasattr(self, '_statistiche_base_cache'):
+            return self._statistiche_base_cache
+        
+        # Recupera tutte le statistiche
+        tutte_statistiche = Statistica.objects.all()
+        risultato = {}
+        
+        for stat in tutte_statistiche:
+            if stat.parametro:
+                risultato[stat.parametro] = self.get_valore_statistica_base(stat)
+        
+        self._statistiche_base_cache = risultato
+        return risultato
+    
     @property
     def caratteristiche_base(self):
+        """
+        Mantiene la compatibilità: restituisce caratteristiche dai punteggi (abilità).
+        Per i valori base intrinseci del personaggio, usa statistiche_base_dict.
+        """
         return {k:v for k,v in self.punteggi_base.items() if Punteggio.objects.filter(nome=k, tipo=CARATTERISTICA).exists()}
     
     def get_valore_aura_effettivo(self, aura):

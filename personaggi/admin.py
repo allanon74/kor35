@@ -10,7 +10,7 @@ from django.utils import timezone
 # Import aggiornati dai models
 from .models import (
     CARATTERISTICA, CreditoMovimento, Dichiarazione, OggettoStatisticaBase, Personaggio, PersonaggioCerimoniale, 
-    PersonaggioLog, QrCode, Oggetto, OggettoCaratteristica, 
+    PersonaggioLog, PersonaggioStatisticaBase, QrCode, Oggetto, OggettoCaratteristica, 
     Manifesto, OggettoStatistica, 
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
     Infusione, Tessitura, 
@@ -710,12 +710,19 @@ class CerimonialeAdmin(admin.ModelAdmin):
         return f"{obj.costo_crediti} CR"
     costo_crediti_display.short_description = "Costo"
 
+class PersonaggioStatisticaBaseInline(admin.TabularInline):
+    model = PersonaggioStatisticaBase
+    extra = 0
+    fields = ('statistica', 'valore_base')
+    autocomplete_fields = ['statistica']
+
 @admin.register(Personaggio)
 class PersonaggioAdmin(A_Admin):
     list_display = ('nome', 'proprietario', 'tipologia', 'crediti', 'punti_caratteristica')
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
     list_filter = ('tipologia',); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
     inlines = [
+        PersonaggioStatisticaBaseInline,
         PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, 
         CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline
     ]
