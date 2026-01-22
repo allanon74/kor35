@@ -290,12 +290,30 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 mods_attivi[param]['add'] += valori['add']
                 mods_attivi[param]['mol'] *= valori['mol']
 
+        # IMPORTANTE: Prima aggiungi le caratteristiche_base del personaggio
+        # ma NON sovrascrivere i valori già impostati dalle statistiche_base
+        for param, val in personaggio.caratteristiche_base.items():
+            if param not in eval_context:  # Solo se non è già stato impostato dalle statistiche_base
+                eval_context[param] = val
+        
         # Applica i modificatori ai valori base
-        eval_context.update(personaggio.caratteristiche_base)
+        # I valori dalle statistiche_base hanno priorità e vengono modificati dai modificatori
         for param, mod_data in mods_attivi.items():
-            val_base = eval_context.get(param, 0)
+            val_base = eval_context.get(param, 0)  # Prende il valore base (da statistiche_base o caratteristiche_base)
             val_finale = (val_base + mod_data['add']) * mod_data['mol']
             eval_context[param] = val_finale
+        
+        # IMPORTANTE: Assicurati che i valori dalle statistiche_base siano sempre presenti
+        # anche se non hanno modificatori del personaggio (es. rango, molt con valore_base_predefinito)
+        if statistiche_base:
+            for item in statistiche_base:
+                param = getattr(item.statistica, 'parametro', None) if hasattr(item, 'statistica') else None
+                if param:
+                    # Se il parametro non ha modificatori del personaggio, mantieni il valore base già impostato
+                    # Questo è importante per parametri come rango e molt che potrebbero non avere modificatori
+                    if param not in mods_attivi and param in base_values:
+                        # Il valore è già stato impostato sopra, ma assicuriamoci che sia presente
+                        eval_context[param] = base_values[param]
 
     # 3. Preparazione Contesto Oggetti (per |NAME)
     object_context = {}
