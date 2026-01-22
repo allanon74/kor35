@@ -1726,6 +1726,18 @@ class Personaggio(Inventario):
             valore_finale = (dati['valore_base'] + dati['add_totale']) * dati['mol_totale']
             dati['valore_finale'] = round(valore_finale, 2)
         
+        # IMPORTANTE: Aggiungi anche le statistiche senza modificatori
+        # (quelle che hanno solo valore base da statistiche_base_dict)
+        for param, val_base in self.statistiche_base_dict.items():
+            if param not in dettagli:
+                dettagli[param] = {
+                    'valore_base': val_base,
+                    'modificatori': [],
+                    'add_totale': 0.0,
+                    'mol_totale': 1.0,
+                    'valore_finale': float(val_base)
+                }
+        
         return dettagli
 
     def get_modificatori_extra_da_contesto(self, context=None):
