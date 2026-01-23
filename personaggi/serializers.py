@@ -24,11 +24,12 @@ from .models import (
     ForgiaturaInCorso, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
     AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
-    CreditoMovimento, PersonaggioLog, TransazioneSospesa,
+    CreditoMovimento, PersonaggioLog, TransazioneSospesa, PropostaTransazione,
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
     PropostaTecnica, 
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, 
+    STATO_TRANSAZIONE_IN_ATTESA,
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
     Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
@@ -1313,14 +1314,44 @@ class CreditoMovimentoSerializer(serializers.ModelSerializer):
         fields = ('importo', 'descrizione', 'data')
 
 
+class PropostaTransazioneSerializer(serializers.ModelSerializer):
+    autore_nome = serializers.CharField(source='autore.nome', read_only=True)
+    oggetti_da_dare = serializers.SerializerMethodField()
+    oggetti_da_ricevere = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PropostaTransazione
+        fields = (
+            'id', 'autore', 'autore_nome', 'crediti_da_dare', 'crediti_da_ricevere',
+            'oggetti_da_dare', 'oggetti_da_ricevere', 'messaggio', 
+            'data_creazione', 'is_attiva'
+        )
+        read_only_fields = ('id', 'data_creazione', 'is_attiva', 'oggetti_da_dare', 'oggetti_da_ricevere')
+    
+    def get_oggetti_da_dare(self, obj):
+        return [oggetto.id for oggetto in obj.oggetti_da_dare.all()]
+    
+    def get_oggetti_da_ricevere(self, obj):
+        return [oggetto.id for oggetto in obj.oggetti_da_ricevere.all()]
+
 class TransazioneSospesaSerializer(serializers.ModelSerializer):
     oggetto = serializers.StringRelatedField(read_only=True)
     mittente = serializers.StringRelatedField(read_only=True)
     richiedente = serializers.StringRelatedField(read_only=True)
+    iniziatore_nome = serializers.CharField(source='iniziatore.nome', read_only=True)
+    destinatario_nome = serializers.CharField(source='destinatario.nome', read_only=True)
+    ultima_proposta_iniziatore = PropostaTransazioneSerializer(read_only=True)
+    ultima_proposta_destinatario = PropostaTransazioneSerializer(read_only=True)
+    proposte = PropostaTransazioneSerializer(many=True, read_only=True)
 
     class Meta:
         model = TransazioneSospesa
-        fields = ('id', 'oggetto', 'mittente', 'richiedente', 'data_richiesta', 'stato')
+        fields = (
+            'id', 'oggetto', 'mittente', 'richiedente', 
+            'iniziatore', 'iniziatore_nome', 'destinatario', 'destinatario_nome',
+            'data_richiesta', 'data_creazione', 'data_ultima_modifica', 'data_chiusura',
+            'stato', 'ultima_proposta_iniziatore', 'ultima_proposta_destinatario', 'proposte'
+        )
 
 
 class TipologiaPersonaggioSerializer(serializers.ModelSerializer):
@@ -1538,6 +1569,83 @@ class TransazioneConfermaSerializer(serializers.Serializer):
         elif azione == 'rifiuta':
             transazione.rifiuta()
         return transazione
+
+class TransazioneAvanzataCreateSerializer(serializers.Serializer):
+    """Serializer per creare una nuova transazione avanzata con proposta iniziale"""
+    destinatario_id = serializers.PrimaryKeyRelatedField(queryset=Personaggio.objects.all())
+    proposta = serializers.DictField()
+    
+    def validate_proposta(self, value):
+        required_fields = ['crediti_da_dare', 'crediti_da_ricevere']
+        for field in required_fields:
+            if field not in value:
+                raise serializers.ValidationError(f"Campo '{field}' mancante nella proposta")
+        return value
+    
+    def create(self, validated_data):
+        iniziatore = self.context['iniziatore']
+        destinatario = validated_data['destinatario_id']
+        proposta_data = validated_data['proposta']
+        
+        from django.db import transaction as db_transaction
+        
+        with db_transaction.atomic():
+            # Crea transazione
+            transazione = TransazioneSospesa.objects.create(
+                iniziatore=iniziatore,
+                destinatario=destinatario,
+                stato=STATO_TRANSAZIONE_IN_ATTESA
+            )
+            
+            # Crea proposta iniziale
+            proposta = PropostaTransazione.objects.create(
+                transazione=transazione,
+                autore=iniziatore,
+                crediti_da_dare=proposta_data.get('crediti_da_dare', 0),
+                crediti_da_ricevere=proposta_data.get('crediti_da_ricevere', 0),
+                messaggio=proposta_data.get('messaggio', ''),
+                is_attiva=True
+            )
+            
+            # Aggiungi oggetti se presenti
+            if proposta_data.get('oggetti_da_dare'):
+                proposta.oggetti_da_dare.set(proposta_data['oggetti_da_dare'])
+            if proposta_data.get('oggetti_da_ricevere'):
+                proposta.oggetti_da_ricevere.set(proposta_data['oggetti_da_ricevere'])
+            
+            transazione.ultima_proposta_iniziatore = proposta
+            transazione.save()
+            
+            return transazione
+
+class PropostaTransazioneCreateSerializer(serializers.Serializer):
+    """Serializer per creare una nuova proposta (controproposta o rilancio)"""
+    crediti_da_dare = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
+    crediti_da_ricevere = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
+    oggetti_da_dare = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
+    oggetti_da_ricevere = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
+    messaggio = serializers.CharField(required=False, allow_blank=True)
+    
+    def create(self, validated_data):
+        transazione = self.context['transazione']
+        autore = self.context['autore']
+        
+        oggetti_da_dare = validated_data.pop('oggetti_da_dare', [])
+        oggetti_da_ricevere = validated_data.pop('oggetti_da_ricevere', [])
+        
+        proposta = PropostaTransazione.objects.create(
+            transazione=transazione,
+            autore=autore,
+            is_attiva=True,
+            **validated_data
+        )
+        
+        if oggetti_da_dare:
+            proposta.oggetti_da_dare.set(oggetti_da_dare)
+        if oggetti_da_ricevere:
+            proposta.oggetti_da_ricevere.set(oggetti_da_ricevere)
+        
+        return proposta
 
 
 class PersonaggioListSerializer(serializers.ModelSerializer):

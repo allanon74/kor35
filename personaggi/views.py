@@ -24,6 +24,7 @@ from .models import (
     PropostaTecnicaCaratteristica, InfusioneCaratteristica, TessituraCaratteristica,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, LetturaMessaggio, PersonaggioLog,
     STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES,
+    PropostaTransazione,
     Gruppo, Messaggio, Tabella, Mattone, 
     OggettoBase, ForgiaturaInCorso, 
     abilita_tier, abilita_requisito, abilita_sbloccata, 
@@ -76,9 +77,11 @@ from .services import (
 from .serializers import (
     ChangePasswordSerializer, OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
     ManifestoSerializer, A_vistaSerializer, InventarioSerializer,
-    PersonaggioDetailSerializer, CreditoMovimentoCreateSerializer, PersonaggioListSerializer, 
+    PersonaggioDetailSerializer, CreditoMovimentoCreateSerializer, PersonaggioListSerializer,
+    TransazioneSospesaSerializer, PropostaTransazioneSerializer, 
     PuntiCaratteristicaMovimentoCreateSerializer, TransazioneCreateSerializer, 
-    TransazioneSospesaSerializer, TransazioneConfermaSerializer, RubaSerializer, 
+    TransazioneSospesaSerializer, TransazioneConfermaSerializer, PropostaTransazioneSerializer,
+    RubaSerializer, 
     AcquisisciSerializer, PunteggioDetailSerializer, ModelloAuraSerializer,
     PropostaTecnicaSerializer, PersonaggioLogSerializer, PersonaggioAutocompleteSerializer,
     MessaggioCreateSerializer, MessaggioSerializer, MessaggioBroadcastCreateSerializer,
@@ -886,7 +889,16 @@ class TransazioneConfermaView(APIView):
             personaggio_mittente = Personaggio.objects.get(proprietario=request.user)
         except Personaggio.DoesNotExist: return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
         try:
-            transazione = TransazioneSospesa.objects.get(pk=pk, mittente=personaggio_mittente.inventario_ptr, stato=STATO_TRANSAZIONE_IN_ATTESA)
+            # Supporta sia sistema legacy che nuovo
+            transazione = TransazioneSospesa.objects.filter(
+                pk=pk, stato=STATO_TRANSAZIONE_IN_ATTESA
+            ).filter(
+                Q(mittente=personaggio_mittente.inventario_ptr) | 
+                Q(destinatario=personaggio_mittente) |
+                Q(iniziatore=personaggio_mittente)
+            ).first()
+            if not transazione:
+                return Response({"error": "Transazione non trovata, già processata o non autorizzata."}, status=status.HTTP_404_NOT_FOUND)
         except TransazioneSospesa.DoesNotExist: return Response({"error": "Transazione non trovata, già processata o non autorizzata."}, status=status.HTTP_404_NOT_FOUND)
         serializer = TransazioneConfermaSerializer(data=request.data, context={'transazione': transazione})
         if serializer.is_valid():
@@ -895,6 +907,92 @@ class TransazioneConfermaView(APIView):
                 return Response({"success": f"Transazione {serializer.validated_data['azione']}ta."}, status=status.HTTP_200_OK)
             except Exception as e: return Response({"error": f"Errore durante l'azione: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class TransazioneAvanzataCreateView(APIView):
+    """Crea una nuova transazione avanzata con proposta iniziale"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        try:
+            iniziatore = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
+        
+        from .serializers import TransazioneAvanzataCreateSerializer
+        serializer = TransazioneAvanzataCreateSerializer(data=request.data, context={'iniziatore': iniziatore})
+        if serializer.is_valid():
+            try:
+                transazione = serializer.save()
+                response_serializer = TransazioneSospesaSerializer(transazione)
+                return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            except Exception as e:
+                return Response({"error": f"Errore durante la creazione: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class TransazioneDetailView(APIView):
+    """Dettaglio di una transazione con tutte le proposte"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk, format=None):
+        try:
+            personaggio = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Nessun personaggio trovato."}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            transazione = TransazioneSospesa.objects.filter(
+                pk=pk
+            ).filter(
+                Q(mittente=personaggio.inventario_ptr) | 
+                Q(richiedente=personaggio) |
+                Q(destinatario=personaggio) |
+                Q(iniziatore=personaggio)
+            ).prefetch_related('proposte__oggetti_da_dare', 'proposte__oggetti_da_ricevere', 'proposte__autore').first()
+            
+            if not transazione:
+                return Response({"error": "Transazione non trovata o non autorizzata."}, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = TransazioneSospesaSerializer(transazione)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except TransazioneSospesa.DoesNotExist:
+            return Response({"error": "Transazione non trovata."}, status=status.HTTP_404_NOT_FOUND)
+
+class PropostaTransazioneCreateView(APIView):
+    """Aggiunge una proposta (controproposta o rilancio) a una transazione"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, pk, format=None):
+        try:
+            autore = Personaggio.objects.get(proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            transazione = TransazioneSospesa.objects.filter(
+                pk=pk, stato=STATO_TRANSAZIONE_IN_ATTESA
+            ).filter(
+                Q(destinatario=autore) | Q(iniziatore=autore)
+            ).first()
+            
+            if not transazione:
+                return Response({"error": "Transazione non trovata o non autorizzata."}, status=status.HTTP_404_NOT_FOUND)
+            
+            # Verifica che l'autore sia parte della transazione
+            if transazione.iniziatore != autore and transazione.destinatario != autore:
+                return Response({"error": "Non sei autorizzato a proporre per questa transazione."}, status=status.HTTP_403_FORBIDDEN)
+            
+            from .serializers import PropostaTransazioneCreateSerializer
+            serializer = PropostaTransazioneCreateSerializer(
+                data=request.data, 
+                context={'transazione': transazione, 'autore': autore}
+            )
+            if serializer.is_valid():
+                proposta = serializer.save()
+                response_serializer = PropostaTransazioneSerializer(proposta)
+                return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except TransazioneSospesa.DoesNotExist:
+            return Response({"error": "Transazione non trovata."}, status=status.HTTP_404_NOT_FOUND)
     
 class PersonaggioListView(APIView):
     permission_classes = [IsAuthenticated]

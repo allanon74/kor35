@@ -96,6 +96,10 @@ urlpatterns = [
     path('api/transazioni/<int:pk>/conferma/', views.TransazioneConfermaView.as_view(), name='api_transazioni_conferma'),
     path('api/transazioni/ruba/', views.RubaView.as_view(), name='api_ruba'),
     path('api/transazioni/acquisisci/', views.AcquisisciView.as_view(), name='api_acquisisci'),
+    # --- Viste API Transazioni Avanzate ---
+    path('api/transazioni/avanzata/', views.TransazioneAvanzataCreateView.as_view(), name='api_transazioni_avanzata_create'),
+    path('api/transazioni/<int:pk>/', views.TransazioneDetailView.as_view(), name='api_transazioni_detail'),
+    path('api/transazioni/<int:pk>/proposta/', views.PropostaTransazioneCreateView.as_view(), name='api_transazioni_proposta'),
     path('api/abilita/master_list/', views.AbilitaMasterListView.as_view(), name='abilita_master_list'),
     path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
     path('api/personaggio/me/abilita_acquistabili/', views.AbilitaAcquistabiliView.as_view(), name='abilita-acquistabili'),

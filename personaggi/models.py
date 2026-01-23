@@ -30,11 +30,13 @@ COSTO_DEFAULT_INVIO_PROPOSTA = 10
 STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
 STATO_TRANSAZIONE_ACCETTATA = 'ACCETTATA'
 STATO_TRANSAZIONE_RIFIUTATA = 'RIFIUTATA'
+STATO_TRANSAZIONE_CHIUSA = 'CHIUSA'
 
 STATO_TRANSAZIONE_CHOICES = [
     (STATO_TRANSAZIONE_IN_ATTESA, 'In Attesa'),
     (STATO_TRANSAZIONE_ACCETTATA, 'Accettata'),
     (STATO_TRANSAZIONE_RIFIUTATA, 'Rifiutata'),
+    (STATO_TRANSAZIONE_CHIUSA, 'Chiusa'),
 ]
 
 STATO_PROPOSTA_BOZZA = 'BOZZA'
@@ -1977,18 +1979,153 @@ class PersonaggioModelloAura(models.Model):
     def save(self, *args, **kwargs): self.clean(); super().save(*args, **kwargs)
 
 class TransazioneSospesa(models.Model):
-    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
-    mittente = models.ForeignKey(Inventario, on_delete=models.CASCADE, related_name="transazioni_in_uscita_sospese")
-    richiedente = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="transazioni_in_entrata_sospese")
+    # Campi legacy (mantenuti per retrocompatibilità)
+    oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE, null=True, blank=True)
+    mittente = models.ForeignKey(Inventario, on_delete=models.CASCADE, related_name="transazioni_in_uscita_sospese", null=True, blank=True)
+    richiedente = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="transazioni_in_entrata_sospese", null=True, blank=True)
     data_richiesta = models.DateTimeField(default=timezone.now)
-    stato = models.CharField(max_length=10, choices=STATO_TRANSAZIONE_CHOICES, default=STATO_TRANSAZIONE_IN_ATTESA)
-    class Meta: ordering=['-data_richiesta']
+    
+    # Nuovi campi per sistema avanzato
+    iniziatore = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="transazioni_iniziate", null=True, blank=True)
+    destinatario = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="transazioni_ricevute", null=True, blank=True)
+    
+    stato = models.CharField(max_length=20, choices=STATO_TRANSAZIONE_CHOICES, default=STATO_TRANSAZIONE_IN_ATTESA)
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_ultima_modifica = models.DateTimeField(auto_now=True)
+    data_chiusura = models.DateTimeField(null=True, blank=True)
+    
+    # Riferimenti alle ultime proposte attive (per performance)
+    ultima_proposta_iniziatore = models.ForeignKey('PropostaTransazione', 
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='transazione_iniziatore_attiva')
+    ultima_proposta_destinatario = models.ForeignKey('PropostaTransazione',
+        on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='transazione_destinatario_attiva')
+    
+    class Meta: 
+        ordering=['-data_ultima_modifica']
+        verbose_name = "Transazione Sospesa"
+        verbose_name_plural = "Transazioni Sospese"
+    
+    def __str__(self):
+        if self.iniziatore and self.destinatario:
+            return f"Transazione {self.iniziatore.nome} → {self.destinatario.nome} ({self.stato})"
+        elif self.richiedente and self.mittente:
+            return f"Transazione {self.richiedente.nome} → {self.mittente.nome} ({self.stato})"
+        return f"Transazione #{self.id} ({self.stato})"
+    
     def accetta(self):
-        if self.stato != STATO_TRANSAZIONE_IN_ATTESA: raise Exception("Processata")
-        self.oggetto.sposta_in_inventario(self.richiedente); self.stato = STATO_TRANSAZIONE_ACCETTATA; self.save()
+        """Accetta la transazione ed esegue gli scambi"""
+        if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
+            raise Exception("Transazione già processata")
+        
+        # Sistema legacy: solo oggetto
+        if self.oggetto and not self.iniziatore:
+            self.oggetto.sposta_in_inventario(self.richiedente)
+            self.stato = STATO_TRANSAZIONE_ACCETTATA
+            self.save()
+            return
+        
+        # Sistema nuovo: proposte bidirezionali
+        if not self.ultima_proposta_iniziatore or not self.ultima_proposta_destinatario:
+            raise Exception("Entrambe le parti devono avere una proposta attiva")
+        
+        from django.db import transaction as db_transaction
+        
+        with db_transaction.atomic():
+            # Esegui scambi crediti
+            if self.ultima_proposta_iniziatore.crediti_da_dare > 0:
+                self.destinatario.crediti += float(self.ultima_proposta_iniziatore.crediti_da_dare)
+                self.destinatario.save()
+                CreditoMovimento.objects.create(
+                    personaggio=self.destinatario,
+                    importo=self.ultima_proposta_iniziatore.crediti_da_dare,
+                    descrizione=f"Ricevuto da transazione #{self.id}"
+                )
+            
+            if self.ultima_proposta_destinatario.crediti_da_dare > 0:
+                self.iniziatore.crediti += float(self.ultima_proposta_destinatario.crediti_da_dare)
+                self.iniziatore.save()
+                CreditoMovimento.objects.create(
+                    personaggio=self.iniziatore,
+                    importo=self.ultima_proposta_destinatario.crediti_da_dare,
+                    descrizione=f"Ricevuto da transazione #{self.id}"
+                )
+            
+            # Esegui scambi oggetti
+            for oggetto in self.ultima_proposta_iniziatore.oggetti_da_dare.all():
+                oggetto.sposta_in_inventario(self.destinatario)
+            
+            for oggetto in self.ultima_proposta_destinatario.oggetti_da_dare.all():
+                oggetto.sposta_in_inventario(self.iniziatore)
+            
+            self.stato = STATO_TRANSAZIONE_ACCETTATA
+            self.data_chiusura = timezone.now()
+            self.save()
+    
     def rifiuta(self):
-        if self.stato != STATO_TRANSAZIONE_IN_ATTESA: raise Exception("Processata")
-        self.stato = STATO_TRANSAZIONE_RIFIUTATA; self.save()
+        """Rifiuta la transazione"""
+        if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
+            raise Exception("Transazione già processata")
+        self.stato = STATO_TRANSAZIONE_RIFIUTATA
+        self.data_chiusura = timezone.now()
+        self.save()
+    
+    def chiudi(self):
+        """Chiude la transazione senza accordo"""
+        if self.stato != STATO_TRANSAZIONE_IN_ATTESA:
+            raise Exception("Transazione già processata")
+        self.stato = STATO_TRANSAZIONE_CHIUSA
+        self.data_chiusura = timezone.now()
+        self.save()
+
+class PropostaTransazione(models.Model):
+    """Proposta all'interno di una transazione"""
+    transazione = models.ForeignKey(TransazioneSospesa, on_delete=models.CASCADE, related_name='proposte')
+    autore = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='proposte_transazioni')
+    
+    # Cosa l'autore DÀ
+    crediti_da_dare = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    oggetti_da_dare = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_dati', blank=True)
+    
+    # Cosa l'autore RICEVE
+    crediti_da_ricevere = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    oggetti_da_ricevere = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_ricevuti', blank=True)
+    
+    # Messaggio
+    messaggio = models.TextField(blank=True)
+    
+    # Timestamp
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    is_attiva = models.BooleanField(default=True)  # Solo l'ultima proposta per autore è attiva
+    
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Proposta Transazione"
+        verbose_name_plural = "Proposte Transazioni"
+        indexes = [
+            models.Index(fields=['transazione', 'autore', 'is_attiva']),
+        ]
+    
+    def __str__(self):
+        return f"Proposta di {self.autore.nome} per transazione #{self.transazione.id}"
+    
+    def save(self, *args, **kwargs):
+        """Disattiva le altre proposte dello stesso autore per la stessa transazione"""
+        super().save(*args, **kwargs)
+        if self.is_attiva:
+            PropostaTransazione.objects.filter(
+                transazione=self.transazione,
+                autore=self.autore,
+                is_attiva=True
+            ).exclude(id=self.id).update(is_attiva=False)
+            
+            # Aggiorna riferimento nella transazione
+            if self.autore == self.transazione.iniziatore:
+                self.transazione.ultima_proposta_iniziatore = self
+            elif self.autore == self.transazione.destinatario:
+                self.transazione.ultima_proposta_destinatario = self
+            self.transazione.save()
 
 class Gruppo(models.Model):
     nome = models.CharField(max_length=100, unique=True); membri = models.ManyToManyField('Personaggio', related_name="gruppi_appartenenza", blank=True)
