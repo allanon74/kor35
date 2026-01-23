@@ -1,0 +1,2784 @@
+{
+  "punteggi": [
+    {
+      "id": 94,
+      "nome": "Recitazione",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 1,
+      "colore": "#ffffff",
+      "icona_url": "/media/icone/punteggio/icon-e9598e9e-6662-4c13-b98f-e69c2f513d8d.svg"
+    },
+    {
+      "id": 95,
+      "nome": "Architettura",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 2,
+      "colore": "#b6cdd9",
+      "icona_url": "/media/icone/punteggio/icon-ae6e437d-cf70-4b3e-adb7-c9aa374c0521.svg"
+    },
+    {
+      "id": 96,
+      "nome": "Pittura",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 3,
+      "colore": "#fa0000",
+      "icona_url": "/media/icone/punteggio/icon-a3dfdfeb-9270-4a9d-a76b-08c7afbd9aec.svg"
+    },
+    {
+      "id": 97,
+      "nome": "Poesia",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 4,
+      "colore": "#000000",
+      "icona_url": "/media/icone/punteggio/icon-c83eebfc-5e87-4e90-847a-7d6b47f5ce84.svg"
+    },
+    {
+      "id": 98,
+      "nome": "Danza",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 5,
+      "colore": "#c79e0b",
+      "icona_url": "/media/icone/punteggio/icon-065121a2-9d85-4b3b-a9d1-606f9a42c252.svg"
+    },
+    {
+      "id": 99,
+      "nome": "Disegno",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 6,
+      "colore": "#135cd1",
+      "icona_url": "/media/icone/punteggio/icon-f28a9a84-3b14-4c50-9cee-9871b3f7303d.svg"
+    },
+    {
+      "id": 100,
+      "nome": "Musica",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 7,
+      "colore": "#faf610",
+      "icona_url": "/media/icone/punteggio/icon-6fe87486-62a4-4a77-a6fc-e192fa931dc4.svg"
+    },
+    {
+      "id": 101,
+      "nome": "Filosofia",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 8,
+      "colore": "#efaaff",
+      "icona_url": "/media/icone/punteggio/icon-52e2e3d6-3cf4-4300-8ad2-a208b5b79389.svg"
+    },
+    {
+      "id": 102,
+      "nome": "Canto",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 9,
+      "colore": "#92fa88",
+      "icona_url": "/media/icone/punteggio/icon-2645bb52-c681-4d50-9955-e1b2f1cb1275.svg"
+    },
+    {
+      "id": 103,
+      "nome": "Scultura",
+      "tipo": "AR",
+      "is_primaria": null,
+      "ordine": 10,
+      "colore": "#860050",
+      "icona_url": "/media/icone/punteggio/icon-9612a94a-b9f5-44fc-ac4d-21f36fb977e6.svg"
+    },
+    {
+      "id": 81,
+      "nome": "Aura Generica",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#d9a9b0",
+      "icona_url": "/media/icone/punteggio/icon-1eb9c9c1-a7ab-46c8-b2d8-daa28df7c60f.svg"
+    },
+    {
+      "id": 4,
+      "nome": "Aura Magica",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 1,
+      "colore": "#000000",
+      "icona_url": "/media/icone/punteggio/icon-4ce5745c-b084-4ebf-a758-d66ca9ede84e.svg"
+    },
+    {
+      "id": 15,
+      "nome": "Aura Sacra",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 2,
+      "colore": "#ffffff",
+      "icona_url": "/media/icone/punteggio/icon-75cfd3f9-848e-4e82-8437-31296a5ba945.svg"
+    },
+    {
+      "id": 17,
+      "nome": "Aura Psionica",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 3,
+      "colore": "#efaaff",
+      "icona_url": "/media/icone/punteggio/icon-7a1a90cd-ffc0-47e1-91e4-c5e1886fad7b.svg"
+    },
+    {
+      "id": 16,
+      "nome": "Aura Arcana",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 4,
+      "colore": "#92fa88",
+      "icona_url": "/media/icone/punteggio/icon-2bb1ae06-f740-4cde-9eb8-cb772f37a66c.svg"
+    },
+    {
+      "id": 29,
+      "nome": "Aura Innata",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 5,
+      "colore": "#c79e0b",
+      "icona_url": "/media/icone/punteggio/icon-d3938dad-95b8-4605-960f-87b27d540074.svg"
+    },
+    {
+      "id": 28,
+      "nome": "Aura Marziale - Armi in Mischia",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 6,
+      "colore": "#4c36f5",
+      "icona_url": "/media/icone/punteggio/icon-d9f762bb-f8a3-421e-8867-e5ba2008466b.svg"
+    },
+    {
+      "id": 62,
+      "nome": "Aura Marziale: Armi a Distanza",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 7,
+      "colore": "#b6cdd9",
+      "icona_url": "/media/icone/punteggio/icon-af2df42d-20f1-43f9-a8b2-0af6a268fa48.svg"
+    },
+    {
+      "id": 30,
+      "nome": "Aura Tecnologica",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 8,
+      "colore": "#faf610",
+      "icona_url": "/media/icone/punteggio/icon-d37574b6-d506-40ad-a875-636aa82924e7.svg"
+    },
+    {
+      "id": 132,
+      "nome": "Aura Mondana - Alchimia",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 9,
+      "colore": "#000000",
+      "icona_url": "/media/icone/punteggio/icon-44a222a5-121b-4940-9cc6-180ddf437a02.svg"
+    },
+    {
+      "id": 18,
+      "nome": "Aura mondana - Trasmutatore",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 9,
+      "colore": "#860050",
+      "icona_url": "/media/icone/punteggio/icon-54e12b8f-100f-4a9b-b638-2e9fbc0fa2f5.svg"
+    },
+    {
+      "id": 70,
+      "nome": "Aura Mondana - Assemblatore",
+      "tipo": "AU",
+      "is_primaria": null,
+      "ordine": 10,
+      "colore": "#fa0000",
+      "icona_url": "/media/icone/punteggio/icon-bcd027b7-4f17-43f7-a04a-6aec54603e5c.svg"
+    },
+    {
+      "id": 2,
+      "nome": "Forza",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 1,
+      "colore": "#860050",
+      "icona_url": "/media/icone/punteggio/icon-89b64905-fa6c-41fb-8ff3-6b97b67ff39d.svg"
+    },
+    {
+      "id": 7,
+      "nome": "Destrezza",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 2,
+      "colore": "#fa0000",
+      "icona_url": "/media/icone/punteggio/icon-64c0bdc7-60c7-4845-b502-eec371021168.svg"
+    },
+    {
+      "id": 6,
+      "nome": "Robustezza",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 3,
+      "colore": "#c79e0b",
+      "icona_url": "/media/icone/punteggio/icon-699de54d-e835-41f7-8fcc-44c78336b4a4.svg"
+    },
+    {
+      "id": 8,
+      "nome": "Precisione",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 4,
+      "colore": "#b6cdd9",
+      "icona_url": "/media/icone/punteggio/icon-be340632-32e4-475a-b480-a513a36fdeb7.svg"
+    },
+    {
+      "id": 9,
+      "nome": "Disciplina",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 5,
+      "colore": "#135cd1",
+      "icona_url": "/media/icone/punteggio/icon-6e56c9b8-800f-4782-b360-3a0607b73e8d.svg"
+    },
+    {
+      "id": 10,
+      "nome": "Istinto",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 6,
+      "colore": "#ffffff",
+      "icona_url": "/media/icone/punteggio/icon-0beb5334-9ff6-4267-9524-f6cf42bd9cfc.svg"
+    },
+    {
+      "id": 12,
+      "nome": "Volontà",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 7,
+      "colore": "#efaaff",
+      "icona_url": "/media/icone/punteggio/icon-7e2fc0c8-40bf-4b1f-95dc-d06827ffdf1c.svg"
+    },
+    {
+      "id": 13,
+      "nome": "Empatia",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 8,
+      "colore": "#92fa88",
+      "icona_url": "/media/icone/punteggio/icon-45b44318-7644-4f92-8e44-b5b1463361c0.svg"
+    },
+    {
+      "id": 11,
+      "nome": "Deduzione",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 9,
+      "colore": "#000000",
+      "icona_url": "/media/icone/punteggio/icon-785e65fa-99e8-487b-9dd1-28068c5f83c2.svg"
+    },
+    {
+      "id": 14,
+      "nome": "Comprensione",
+      "tipo": "CA",
+      "is_primaria": null,
+      "ordine": 10,
+      "colore": "#faf610",
+      "icona_url": "/media/icone/punteggio/icon-bc1dd6a4-44cd-44ab-ae1e-25ff2d946c8c.svg"
+    },
+    {
+      "id": 93,
+      "nome": "Elementalista",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 57,
+      "nome": "Tier 2",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 1,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 134,
+      "nome": "Tier 2 - Forza",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 10,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 114,
+      "nome": "Tier 2 - Destrezza",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 20,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 113,
+      "nome": "Tier 2 - Robustezza",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 30,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 115,
+      "nome": "Tier 2 - Precisione",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 40,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 116,
+      "nome": "Tier 2 - Disciplina",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 50,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 117,
+      "nome": "Tier 2 - Istinto",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 60,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 118,
+      "nome": "Tier 2 - Volontà",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 70,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 119,
+      "nome": "Tier 2 - Empatia",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 80,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 120,
+      "nome": "Tier 2 - Deduzione",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 90,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 121,
+      "nome": "Tier 2 - Comprensione",
+      "tipo": "CO",
+      "is_primaria": null,
+      "ordine": 100,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 71,
+      "nome": "Conoscenza",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 1,
+      "colore": "#ffffff",
+      "icona_url": "/media/icone/punteggio/icon-a643a6c6-650c-4cc7-9331-fa99cd026a75.svg"
+    },
+    {
+      "id": 72,
+      "nome": "Gerarchia",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 2,
+      "colore": "#b6cdd9",
+      "icona_url": "/media/icone/punteggio/icon-722893c1-54e3-4e98-ac88-2dfc840a0854.svg"
+    },
+    {
+      "id": 73,
+      "nome": "Guerra",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 3,
+      "colore": "#fa0000",
+      "icona_url": "/media/icone/punteggio/icon-ee792ae9-c8a1-4944-ab9a-f9df0dbca4e3.svg"
+    },
+    {
+      "id": 74,
+      "nome": "Mistero",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 4,
+      "colore": "#000000",
+      "icona_url": "/media/icone/punteggio/icon-d244fd36-e046-4fbb-bcef-a9edd5c7d461.svg"
+    },
+    {
+      "id": 75,
+      "nome": "Libertá",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 5,
+      "colore": "#c79e0b",
+      "icona_url": "/media/icone/punteggio/icon-8236ef99-6977-48d6-a913-b4dd7ee0f8e0.svg"
+    },
+    {
+      "id": 76,
+      "nome": "Pace",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 6,
+      "colore": "#135cd1",
+      "icona_url": "/media/icone/punteggio/icon-dc41c94f-2d4c-44dc-8710-1e61003b6fef.svg"
+    },
+    {
+      "id": 77,
+      "nome": "Tempo",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 7,
+      "colore": "#faf610",
+      "icona_url": "/media/icone/punteggio/icon-e2732a82-df5a-4afc-855c-16a53152df3d.svg"
+    },
+    {
+      "id": 78,
+      "nome": "Immaginazione",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 8,
+      "colore": "#efaaff",
+      "icona_url": "/media/icone/punteggio/icon-a0b85646-111b-4113-b20e-946cccb8f390.svg"
+    },
+    {
+      "id": 79,
+      "nome": "Creazione",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 9,
+      "colore": "#92fa88",
+      "icona_url": "/media/icone/punteggio/icon-c62b2e47-9b8e-4726-9022-b81ffc18426f.svg"
+    },
+    {
+      "id": 80,
+      "nome": "Distruzione",
+      "tipo": "CU",
+      "is_primaria": null,
+      "ordine": 10,
+      "colore": "#860050",
+      "icona_url": "/media/icone/punteggio/icon-60412f21-6668-430f-ab51-d84bb28db8df.svg"
+    },
+    {
+      "id": 23,
+      "nome": "Luce",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 1,
+      "colore": "#FFFFFF",
+      "icona_url": "/media/icone/punteggio/icon-269530af-ca16-4f9c-b9ea-483de75610df.svg"
+    },
+    {
+      "id": 21,
+      "nome": "Cristallo",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 2,
+      "colore": "#b6cdd9",
+      "icona_url": "/media/icone/punteggio/icon-285cf715-e869-4221-8ae0-8fd449598543.svg"
+    },
+    {
+      "id": 1,
+      "nome": "Fuoco",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 3,
+      "colore": "#fa0000",
+      "icona_url": "/media/icone/punteggio/icon-1159a007-14c2-4051-8efe-0db88f2c2c6b.svg"
+    },
+    {
+      "id": 26,
+      "nome": "Ombra",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 4,
+      "colore": "#000000",
+      "icona_url": "/media/icone/punteggio/icon-a7de7539-fff5-4fc6-97e5-3b4eb672f08c.svg"
+    },
+    {
+      "id": 20,
+      "nome": "Sabbia",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 5,
+      "colore": "#c79e0b",
+      "icona_url": "/media/icone/punteggio/icon-3df9dbbf-e196-442f-ac1e-461d5a30ef52.svg"
+    },
+    {
+      "id": 22,
+      "nome": "Acqua",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 6,
+      "colore": "#135cd1",
+      "icona_url": "/media/icone/punteggio/icon-6d6a8829-5e8a-4a70-a991-b3cebb9654e8.svg"
+    },
+    {
+      "id": 27,
+      "nome": "Fulmine",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 7,
+      "colore": "#faf610",
+      "icona_url": "/media/icone/punteggio/icon-55c57055-c37d-4146-85c2-64c4c2eda667.svg"
+    },
+    {
+      "id": 24,
+      "nome": "Vento",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 8,
+      "colore": "#efaaff",
+      "icona_url": "/media/icone/punteggio/icon-b97df411-e89f-4e0d-803a-62b654841ac1.svg"
+    },
+    {
+      "id": 25,
+      "nome": "Cosmo",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 9,
+      "colore": "#92fa88",
+      "icona_url": "/media/icone/punteggio/icon-50ea1fef-7768-45a9-b1dc-a370836edc13.svg"
+    },
+    {
+      "id": 19,
+      "nome": "Vuoto",
+      "tipo": "EL",
+      "is_primaria": null,
+      "ordine": 10,
+      "colore": "#860050",
+      "icona_url": "/media/icone/punteggio/icon-03312028-42d5-450d-ab35-288c5f062a37.svg"
+    },
+    {
+      "id": 65,
+      "nome": "Bersagli totali",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 109,
+      "nome": "Cariche tecnologiche",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 106,
+      "nome": "Cerimoniale: Coralità",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": "/media/icone/punteggio/icon-e9b4e161-cf8e-4cf3-b195-6fbca9a7e0af.svg"
+    },
+    {
+      "id": 105,
+      "nome": "Cerimoniale: Ritualistica",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#7aa0bf",
+      "icona_url": "/media/icone/punteggio/icon-c991aa58-51ce-4bfd-b176-8c653c9ca4ba.svg"
+    },
+    {
+      "id": 112,
+      "nome": "Cerimoniali: costo generico",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 107,
+      "nome": "Costo generico",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 48,
+      "nome": "Danni Armi a due mani",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 47,
+      "nome": "Danni Generali",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 44,
+      "nome": "Danni Mischia",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 45,
+      "nome": "Danni a Distanza",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 66,
+      "nome": "Deduzione universale",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 53,
+      "nome": "Dimensione Area",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 50,
+      "nome": "Dimensione cono",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 49,
+      "nome": "Durata effetti",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 64,
+      "nome": "Fortuna",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 52,
+      "nome": "Gittata attacchi a distanza",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 110,
+      "nome": "Moltiplicatore",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 85,
+      "nome": "Parole di risposta",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 54,
+      "nome": "Punti Ferita curati",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 3,
+      "nome": "Punti Vita",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 51,
+      "nome": "Rango",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 55,
+      "nome": "Riduzione  effetti subiti",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 68,
+      "nome": "Riduzione Costi Tecniche",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 67,
+      "nome": "Riduzione costi abilità",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 69,
+      "nome": "Riduzione costi oggetti",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 63,
+      "nome": "Tempi di cast",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 108,
+      "nome": "Tempo Generico",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 0,
+      "colore": "#1976D2",
+      "icona_url": null
+    },
+    {
+      "id": 111,
+      "nome": "Oggetti Pesanti",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 5,
+      "colore": "#19d1ce",
+      "icona_url": "/media/icone/punteggio/icon-db8edca6-0885-4574-bb28-64d45d8bdc95.svg"
+    },
+    {
+      "id": 41,
+      "nome": "Punti vita",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 11,
+      "colore": "#427785",
+      "icona_url": "/media/icone/punteggio/icon-eb25bb88-beab-42c3-8780-2516c73ac9db.svg"
+    },
+    {
+      "id": 42,
+      "nome": "Punti armatura",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 12,
+      "colore": "#427785",
+      "icona_url": "/media/icone/punteggio/icon-c3e24743-8bd2-416a-996c-11c66218da26.svg"
+    },
+    {
+      "id": 43,
+      "nome": "Punti Guscio",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 13,
+      "colore": "#427785",
+      "icona_url": "/media/icone/punteggio/icon-af564f27-94be-4bb0-8c4a-46342a4e1d37.svg"
+    },
+    {
+      "id": 46,
+      "nome": "Chakra",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 14,
+      "colore": "#427785",
+      "icona_url": "/media/icone/punteggio/icon-f9f6f7fb-60e4-4b2f-81d2-ee89bc070b1c.svg"
+    },
+    {
+      "id": 104,
+      "nome": "Capacità Oggetti",
+      "tipo": "ST",
+      "is_primaria": null,
+      "ordine": 15,
+      "colore": "#427785",
+      "icona_url": "/media/icone/punteggio/icon-421787ba-112f-4528-b1c8-0eca07531034.svg"
+    },
+    {
+      "id": 82,
+      "nome": "Chiaroscienza",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 1,
+      "colore": "#ffffff",
+      "icona_url": "/media/icone/punteggio/icon-3638d28e-6449-46ce-b818-bfd1d06188d3.svg"
+    },
+    {
+      "id": 83,
+      "nome": "Telepatia",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 2,
+      "colore": "#b6cdd9",
+      "icona_url": "/media/icone/punteggio/icon-57ba3b74-21c6-44ac-9138-7ec01f10e3dc.svg"
+    },
+    {
+      "id": 84,
+      "nome": "Psicocinesi",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 3,
+      "colore": "#fa0000",
+      "icona_url": "/media/icone/punteggio/icon-4b116078-bec6-4892-b6db-f64a2e2de164.svg"
+    },
+    {
+      "id": 86,
+      "nome": "Deimoronimia",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 4,
+      "colore": "#000000",
+      "icona_url": "/media/icone/punteggio/icon-8ec33f8f-8272-4cbe-a90b-08fd1d6f1bf1.svg"
+    },
+    {
+      "id": 87,
+      "nome": "Psicometabolismo",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 5,
+      "colore": "#c79e0b",
+      "icona_url": "/media/icone/punteggio/icon-86d0469a-fdf4-4b0a-a2d3-a2379b22cf82.svg"
+    },
+    {
+      "id": 88,
+      "nome": "Aurocinesi",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 6,
+      "colore": "#135cd1",
+      "icona_url": "/media/icone/punteggio/icon-d172dd99-4d16-4a07-a5d5-ffefadb3b0d4.svg"
+    },
+    {
+      "id": 89,
+      "nome": "Tecnoempatia",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 7,
+      "colore": "#faf610",
+      "icona_url": "/media/icone/punteggio/icon-a186fb45-32d1-4ea1-a607-c1958a35f3f8.svg"
+    },
+    {
+      "id": 90,
+      "nome": "Psicotrasporto",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 8,
+      "colore": "#efaaff",
+      "icona_url": "/media/icone/punteggio/icon-3fbb1fd0-d252-4748-948e-01e0ede4ec17.svg"
+    },
+    {
+      "id": 91,
+      "nome": "Metacreazione",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 9,
+      "colore": "#92fa88",
+      "icona_url": "/media/icone/punteggio/icon-5b4588ce-26e3-4839-a4d2-8362718078e2.svg"
+    },
+    {
+      "id": 92,
+      "nome": "Catacinesi",
+      "tipo": "VI",
+      "is_primaria": null,
+      "ordine": 10,
+      "colore": "#860050",
+      "icona_url": "/media/icone/punteggio/icon-f7fcba4f-98e5-43e0-8267-1298dec5241f.svg"
+    }
+  ],
+  "statistiche": [
+    {
+      "id": 65,
+      "nome": "Bersagli totali",
+      "parametro": "berstot",
+      "ordine": 0,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 109,
+      "nome": "Cariche tecnologiche",
+      "parametro": "cariche",
+      "ordine": 0,
+      "valore_base_predefinito": 3
+    },
+    {
+      "id": 106,
+      "nome": "Cerimoniale: Coralità",
+      "parametro": "cer_cor",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 105,
+      "nome": "Cerimoniale: Ritualistica",
+      "parametro": "cer_rit",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 112,
+      "nome": "Cerimoniali: costo generico",
+      "parametro": "cer_costo",
+      "ordine": 0,
+      "valore_base_predefinito": 10
+    },
+    {
+      "id": 107,
+      "nome": "Costo generico",
+      "parametro": "costo_gen",
+      "ordine": 0,
+      "valore_base_predefinito": 100
+    },
+    {
+      "id": 48,
+      "nome": "Danni Armi a due mani",
+      "parametro": "danni2m",
+      "ordine": 0,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 47,
+      "nome": "Danni Generali",
+      "parametro": "dannigen",
+      "ordine": 0,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 44,
+      "nome": "Danni Mischia",
+      "parametro": "dannimis",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 45,
+      "nome": "Danni a Distanza",
+      "parametro": "dannidis",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 66,
+      "nome": "Deduzione universale",
+      "parametro": "deduniv",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 53,
+      "nome": "Dimensione Area",
+      "parametro": "area",
+      "ordine": 0,
+      "valore_base_predefinito": 5
+    },
+    {
+      "id": 50,
+      "nome": "Dimensione cono",
+      "parametro": "dcono",
+      "ordine": 0,
+      "valore_base_predefinito": 10
+    },
+    {
+      "id": 49,
+      "nome": "Durata effetti",
+      "parametro": "durata",
+      "ordine": 0,
+      "valore_base_predefinito": 10
+    },
+    {
+      "id": 64,
+      "nome": "Fortuna",
+      "parametro": "fortuna",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 52,
+      "nome": "Gittata attacchi a distanza",
+      "parametro": "gittata",
+      "ordine": 0,
+      "valore_base_predefinito": 15
+    },
+    {
+      "id": 110,
+      "nome": "Moltiplicatore",
+      "parametro": "molt",
+      "ordine": 0,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 85,
+      "nome": "Parole di risposta",
+      "parametro": "parole",
+      "ordine": 0,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 54,
+      "nome": "Punti Ferita curati",
+      "parametro": "pfcura",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 51,
+      "nome": "Rango",
+      "parametro": "rango",
+      "ordine": 0,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 55,
+      "nome": "Riduzione  effetti subiti",
+      "parametro": "rideffsub",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 68,
+      "nome": "Riduzione Costi Tecniche",
+      "parametro": "rid_cos_te",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 67,
+      "nome": "Riduzione costi abilità",
+      "parametro": "rid_cos_ab",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 69,
+      "nome": "Riduzione costi oggetti",
+      "parametro": "rid_cos_og",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 63,
+      "nome": "Tempi di cast",
+      "parametro": "tempocast",
+      "ordine": 0,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 108,
+      "nome": "Tempo Generico",
+      "parametro": "tempo_gen",
+      "ordine": 0,
+      "valore_base_predefinito": 10
+    },
+    {
+      "id": 111,
+      "nome": "Oggetti Pesanti",
+      "parametro": "pesanti",
+      "ordine": 5,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 41,
+      "nome": "Punti vita",
+      "parametro": "vita",
+      "ordine": 11,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 42,
+      "nome": "Punti armatura",
+      "parametro": "armat",
+      "ordine": 12,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 43,
+      "nome": "Punti Guscio",
+      "parametro": "guscio",
+      "ordine": 13,
+      "valore_base_predefinito": 0
+    },
+    {
+      "id": 46,
+      "nome": "Chakra",
+      "parametro": "chakra",
+      "ordine": 14,
+      "valore_base_predefinito": 1
+    },
+    {
+      "id": 104,
+      "nome": "Capacità Oggetti",
+      "parametro": "cap_ogg",
+      "ordine": 15,
+      "valore_base_predefinito": 3
+    }
+  ],
+  "classi_oggetto": [
+    {
+      "id": 6,
+      "nome": "Anello",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 14,
+      "nome": "Arco",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 19,
+      "nome": "Arma da Lancio",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 11,
+      "nome": "Arma in Asta",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 17,
+      "nome": "Balestra",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 9,
+      "nome": "Bastone",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 5,
+      "nome": "Cintura",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 7,
+      "nome": "Collana",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 2,
+      "nome": "Corazza",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 1,
+      "nome": "Elmo",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 18,
+      "nome": "Fionda",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 16,
+      "nome": "Fucile",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 20,
+      "nome": "Icona",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 3,
+      "nome": "Mantello",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 10,
+      "nome": "Martello",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 15,
+      "nome": "Pistola",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 13,
+      "nome": "Pugnale",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 12,
+      "nome": "Scudo",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 8,
+      "nome": "Spada",
+      "descrizione": null,
+      "tipo_oggetto": null
+    },
+    {
+      "id": 4,
+      "nome": "Veste",
+      "descrizione": null,
+      "tipo_oggetto": null
+    }
+  ],
+  "tipologie_personaggio": [
+    {
+      "id": 2,
+      "nome": "PnG base",
+      "descrizione": null
+    },
+    {
+      "id": 1,
+      "nome": "Standard",
+      "descrizione": null
+    }
+  ],
+  "personaggi": [
+    {
+      "id": 105,
+      "nome": "Thalira",
+      "tipologia": "Standard",
+      "crediti": "500.00",
+      "punti_caratteristica": 8,
+      "statistiche_base_dict": {
+        "berstot": 1,
+        "cariche": 3,
+        "cer_cor": 0,
+        "cer_rit": 0,
+        "cer_costo": 10,
+        "costo_gen": 100,
+        "danni2m": 1,
+        "dannigen": 1,
+        "dannimis": 0,
+        "dannidis": 0,
+        "deduniv": 0,
+        "area": 5,
+        "dcono": 10,
+        "durata": 10,
+        "fortuna": 0,
+        "gittata": 15,
+        "molt": 1,
+        "parole": 1,
+        "pfcura": 0,
+        "rango": 1,
+        "rideffsub": 0,
+        "rid_cos_te": 0,
+        "rid_cos_ab": 0,
+        "rid_cos_og": 0,
+        "tempocast": 0,
+        "tempo_gen": 10,
+        "pesanti": 1,
+        "vita": 1,
+        "armat": 0,
+        "guscio": 0,
+        "chakra": 1,
+        "cap_ogg": 3
+      },
+      "punteggi_base": {
+        "Aura Generica": 0
+      },
+      "abilita_count": 0,
+      "infusioni_count": 0,
+      "tessiture_count": 0,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniali: costo generico",
+          "valore_base": 10
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "nome": "Eryndor",
+      "tipologia": "Standard",
+      "crediti": "400.00",
+      "punti_caratteristica": 0,
+      "statistiche_base_dict": {
+        "berstot": 1,
+        "cariche": 3,
+        "cer_cor": 0,
+        "cer_rit": 0,
+        "cer_costo": 10,
+        "costo_gen": 100,
+        "danni2m": 1,
+        "dannigen": 1,
+        "dannimis": 0,
+        "dannidis": 0,
+        "deduniv": 0,
+        "area": 5,
+        "dcono": 10,
+        "durata": 10,
+        "fortuna": 0,
+        "gittata": 15,
+        "molt": 1,
+        "parole": 1,
+        "pfcura": 0,
+        "rango": 1,
+        "rideffsub": 0,
+        "rid_cos_te": 0,
+        "rid_cos_ab": 0,
+        "rid_cos_og": 0,
+        "tempocast": 0,
+        "tempo_gen": 10,
+        "pesanti": 1,
+        "vita": 1,
+        "armat": 0,
+        "guscio": 0,
+        "chakra": 1,
+        "cap_ogg": 3
+      },
+      "punteggi_base": {
+        "Aura Magica": 1,
+        "Aura Sacra": 2,
+        "Deduzione": 3,
+        "Disciplina": 2,
+        "Empatia": 1,
+        "Istinto": 2,
+        "Aura Generica": 2
+      },
+      "abilita_count": 8,
+      "infusioni_count": 0,
+      "tessiture_count": 1,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniali: costo generico",
+          "valore_base": 10
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "nome": "Fromis",
+      "tipologia": "Standard",
+      "crediti": "75.00",
+      "punti_caratteristica": 0,
+      "statistiche_base_dict": {
+        "berstot": 1,
+        "cariche": 3,
+        "cer_cor": 0,
+        "cer_rit": 0,
+        "cer_costo": 10,
+        "costo_gen": 100,
+        "danni2m": 1,
+        "dannigen": 1,
+        "dannimis": 0,
+        "dannidis": 0,
+        "deduniv": 0,
+        "area": 5,
+        "dcono": 10,
+        "durata": 10,
+        "fortuna": 0,
+        "gittata": 15,
+        "molt": 1,
+        "parole": 1,
+        "pfcura": 0,
+        "rango": 1,
+        "rideffsub": 0,
+        "rid_cos_te": 0,
+        "rid_cos_ab": 0,
+        "rid_cos_og": 0,
+        "tempocast": 0,
+        "tempo_gen": 10,
+        "pesanti": 1,
+        "vita": 1,
+        "armat": 0,
+        "guscio": 0,
+        "chakra": 1,
+        "cap_ogg": 3
+      },
+      "punteggi_base": {
+        "Aura Psionica": 2,
+        "Deduzione": 1,
+        "Disciplina": 3,
+        "Istinto": 3,
+        "Volontà": 2,
+        "Aura Generica": 2
+      },
+      "abilita_count": 10,
+      "infusioni_count": 0,
+      "tessiture_count": 0,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniali: costo generico",
+          "valore_base": 10
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "nome": "CEO Apex Industries",
+      "tipologia": "PnG base",
+      "crediti": "985.00",
+      "punti_caratteristica": 14,
+      "statistiche_base_dict": {
+        "berstot": 1,
+        "cariche": 3,
+        "cer_cor": 0,
+        "cer_rit": 0,
+        "cer_costo": 10,
+        "costo_gen": 100,
+        "danni2m": 1,
+        "dannigen": 1,
+        "dannimis": 0,
+        "dannidis": 0,
+        "deduniv": 0,
+        "area": 5,
+        "dcono": 10,
+        "durata": 10,
+        "fortuna": 0,
+        "gittata": 15,
+        "molt": 1,
+        "parole": 1,
+        "pfcura": 0,
+        "rango": 1,
+        "rideffsub": 0,
+        "rid_cos_te": 0,
+        "rid_cos_ab": 0,
+        "rid_cos_og": 0,
+        "tempocast": 0,
+        "tempo_gen": 10,
+        "pesanti": 1,
+        "vita": 1,
+        "armat": 0,
+        "guscio": 0,
+        "chakra": 1,
+        "cap_ogg": 3
+      },
+      "punteggi_base": {
+        "Robustezza": 1,
+        "Aura Generica": 0
+      },
+      "abilita_count": 1,
+      "infusioni_count": 0,
+      "tessiture_count": 0,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniali: costo generico",
+          "valore_base": 10
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 100,
+      "nome": "Marius",
+      "tipologia": "Standard",
+      "crediti": "500.00",
+      "punti_caratteristica": 8,
+      "statistiche_base_dict": {
+        "berstot": 1,
+        "cariche": 3,
+        "cer_cor": 0,
+        "cer_rit": 0,
+        "cer_costo": 10,
+        "costo_gen": 100,
+        "danni2m": 1,
+        "dannigen": 1,
+        "dannimis": 0,
+        "dannidis": 0,
+        "deduniv": 0,
+        "area": 5,
+        "dcono": 10,
+        "durata": 10,
+        "fortuna": 0,
+        "gittata": 15,
+        "molt": 1,
+        "parole": 1,
+        "pfcura": 0,
+        "rango": 1,
+        "rideffsub": 0,
+        "rid_cos_te": 0,
+        "rid_cos_ab": 0,
+        "rid_cos_og": 0,
+        "tempocast": 0,
+        "tempo_gen": 10,
+        "pesanti": 1,
+        "vita": 1,
+        "armat": 0,
+        "guscio": 0,
+        "chakra": 1,
+        "cap_ogg": 3
+      },
+      "punteggi_base": {
+        "Aura Generica": 0
+      },
+      "abilita_count": 0,
+      "infusioni_count": 0,
+      "tessiture_count": 0,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniali: costo generico",
+          "valore_base": 10
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        }
+      ]
+    }
+  ],
+  "oggetti": [
+    {
+      "id": 102,
+      "nome": "Spada Semplice",
+      "tipo_oggetto": "FIS",
+      "slot_corpo": null,
+      "cariche_attuali": 0,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": null,
+      "aura_nome": null,
+      "is_equipaggiato": true,
+      "classe_oggetto": "Spada",
+      "oggetto_base_generatore": "Spada Semplice",
+      "statistiche_base": [
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 79,
+      "nome": "Materia di Protezione della regina",
+      "tipo_oggetto": "POT",
+      "slot_corpo": null,
+      "cariche_attuali": 3,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": "#ffffff",
+      "aura_nome": "Aura Sacra",
+      "is_equipaggiato": false,
+      "classe_oggetto": null,
+      "oggetto_base_generatore": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 78,
+      "nome": "Materia di Protezione della regina",
+      "tipo_oggetto": "POT",
+      "slot_corpo": null,
+      "cariche_attuali": 1,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": "#ffffff",
+      "aura_nome": "Aura Sacra",
+      "is_equipaggiato": false,
+      "classe_oggetto": null,
+      "oggetto_base_generatore": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 77,
+      "nome": "Pistola Semplice",
+      "tipo_oggetto": "FIS",
+      "slot_corpo": null,
+      "cariche_attuali": 0,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": null,
+      "aura_nome": null,
+      "is_equipaggiato": true,
+      "classe_oggetto": "Pistola",
+      "oggetto_base_generatore": "Pistola Semplice",
+      "statistiche_base": [
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 73,
+      "nome": "Mod di Danni Aggiuntivo",
+      "tipo_oggetto": "MOD",
+      "slot_corpo": null,
+      "cariche_attuali": 2,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": "#faf610",
+      "aura_nome": "Aura Tecnologica",
+      "is_equipaggiato": false,
+      "classe_oggetto": null,
+      "oggetto_base_generatore": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        }
+      ]
+    },
+    {
+      "id": 71,
+      "nome": "Mod di Protezione della regina 2",
+      "tipo_oggetto": "MOD",
+      "slot_corpo": null,
+      "cariche_attuali": 2,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": "#ffffff",
+      "aura_nome": "Aura Sacra",
+      "is_equipaggiato": false,
+      "classe_oggetto": null,
+      "oggetto_base_generatore": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 70,
+      "nome": "Armatura in Kevlar",
+      "tipo_oggetto": "FIS",
+      "slot_corpo": null,
+      "cariche_attuali": 0,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": null,
+      "aura_nome": null,
+      "is_equipaggiato": true,
+      "classe_oggetto": "Corazza",
+      "oggetto_base_generatore": "Armatura in Kevlar",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        }
+      ]
+    },
+    {
+      "id": 69,
+      "nome": "Mod di Protezione della regina",
+      "tipo_oggetto": "MAT",
+      "slot_corpo": null,
+      "cariche_attuali": 2,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": "#ffffff",
+      "aura_nome": "Aura Sacra",
+      "is_equipaggiato": false,
+      "classe_oggetto": null,
+      "oggetto_base_generatore": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 64,
+      "nome": "Manufatto di Mutazione del Fuoco Infernale",
+      "tipo_oggetto": "AUM",
+      "slot_corpo": "HD1",
+      "cariche_attuali": 0,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": "#c79e0b",
+      "aura_nome": "Aura Innata",
+      "is_equipaggiato": true,
+      "classe_oggetto": null,
+      "oggetto_base_generatore": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "nome": "Armatura in Kevlar",
+      "tipo_oggetto": "FIS",
+      "slot_corpo": null,
+      "cariche_attuali": 0,
+      "cariche_massime": null,
+      "personaggio_id": null,
+      "aura_colore": null,
+      "aura_nome": null,
+      "is_equipaggiato": true,
+      "classe_oggetto": "Corazza",
+      "oggetto_base_generatore": "Armatura di Piastre",
+      "statistiche_base": []
+    }
+  ],
+  "abilita": [
+    {
+      "id": 147,
+      "nome": "Chakra IV",
+      "descrizione": "<p><span data-sheets-root=\"1\" style=\"\">Riduce il tempo di ricarica dei chakra di 1 minuto (anche rigenerazione)</span></p>",
+      "costo_pc": 0,
+      "costo_crediti": 300,
+      "is_tratto_aura": false,
+      "caratteristica": "Deduzione",
+      "tiers": [
+        "Deduzione - Addestramenti"
+      ],
+      "punteggi_acquisiti": [],
+      "statistiche": []
+    },
+    {
+      "id": 120,
+      "nome": "Aura Sacra IV",
+      "descrizione": "<p>Permette di creare o utilizzare preghiere di livello 4 di aura sacra.</p>",
+      "costo_pc": 0,
+      "costo_crediti": 300,
+      "is_tratto_aura": false,
+      "caratteristica": "Istinto",
+      "tiers": [
+        "Istinto - Addestramenti"
+      ],
+      "punteggi_acquisiti": [
+        "Aura Sacra"
+      ],
+      "statistiche": []
+    },
+    {
+      "id": 1,
+      "nome": "maestria: fuoco",
+      "descrizione": "sei bravo con il fuoco 2",
+      "costo_pc": 0,
+      "costo_crediti": 1500,
+      "is_tratto_aura": false,
+      "caratteristica": "Forza",
+      "tiers": [],
+      "punteggi_acquisiti": [
+        "Fuoco"
+      ],
+      "statistiche": [
+        {
+          "statistica": "Dimensione cono",
+          "tipo_modificatore": "ADD",
+          "valore": 1
+        }
+      ]
+    },
+    {
+      "id": 81,
+      "nome": "Uso Armatura IV",
+      "descrizione": "<p>Una volta per combattimento (con armatura indossata e riparata) dichiara NO al primo attacco subito.</p>",
+      "costo_pc": 0,
+      "costo_crediti": 300,
+      "is_tratto_aura": false,
+      "caratteristica": "Forza",
+      "tiers": [
+        "Forza - Addestramenti"
+      ],
+      "punteggi_acquisiti": [],
+      "statistiche": []
+    },
+    {
+      "id": 124,
+      "nome": "Primo Soccorso Extra",
+      "descrizione": "<p><span data-sheets-root=\"1\" style=\"\">La Stabilizzazione inizia nel momento in cui entra in contatto col bersaglio. (può mantenere stabilizzato solo 1 bersaglio alla volta).</span></p>",
+      "costo_pc": 0,
+      "costo_crediti": 150,
+      "is_tratto_aura": false,
+      "caratteristica": "Istinto",
+      "tiers": [
+        "Istinto - Addestramenti"
+      ],
+      "punteggi_acquisiti": [],
+      "statistiche": []
+    },
+    {
+      "id": 41,
+      "nome": "Premonizione II",
+      "descrizione": "Il pg può porre una domanda inerente alle info con risposta \"SI\" o \"NO\"",
+      "costo_pc": 1,
+      "costo_crediti": 0,
+      "is_tratto_aura": false,
+      "caratteristica": "Istinto",
+      "tiers": [
+        "Istinto - Talenti",
+        "Talenti Base"
+      ],
+      "punteggi_acquisiti": [
+        "Istinto"
+      ],
+      "statistiche": []
+    },
+    {
+      "id": 82,
+      "nome": "Uso Armatura Extra",
+      "descrizione": "<p>Per ogni fonte che aggiunge 1 PA aggiungine 1 aggiuntivo.</p>",
+      "costo_pc": 0,
+      "costo_crediti": 150,
+      "is_tratto_aura": false,
+      "caratteristica": "Forza",
+      "tiers": [
+        "Forza - Addestramenti"
+      ],
+      "punteggi_acquisiti": [],
+      "statistiche": []
+    },
+    {
+      "id": 126,
+      "nome": "Premonizione IV",
+      "descrizione": "<p><span data-sheets-root=\"1\" style=\"\">La domanda che pone il pg avrà una risposta più esaustiva.</span></p>",
+      "costo_pc": 0,
+      "costo_crediti": 300,
+      "is_tratto_aura": false,
+      "caratteristica": "Istinto",
+      "tiers": [
+        "Istinto - Addestramenti"
+      ],
+      "punteggi_acquisiti": [],
+      "statistiche": []
+    },
+    {
+      "id": 132,
+      "nome": "Guscio Fantasma IV",
+      "descrizione": "<p><span data-sheets-root=\"1\" style=\"\">Gli strati del guscio ora scalano col numero di chakra carichi del personaggio.</span></p>",
+      "costo_pc": 0,
+      "costo_crediti": 300,
+      "is_tratto_aura": false,
+      "caratteristica": "Volontà",
+      "tiers": [
+        "Volontà - Addestramenti"
+      ],
+      "punteggi_acquisiti": [],
+      "statistiche": []
+    },
+    {
+      "id": 104,
+      "nome": "Aura Mondana: Trasmutatore III",
+      "descrizione": "<p>Permette di creare materia di livello 3 seguendo la tabella \"Creazione Oggetti\".</p>",
+      "costo_pc": 0,
+      "costo_crediti": 225,
+      "is_tratto_aura": false,
+      "caratteristica": "Forza",
+      "tiers": [
+        "Forza - Addestramenti"
+      ],
+      "punteggi_acquisiti": [
+        "Aura mondana - Trasmutatore"
+      ],
+      "statistiche": []
+    }
+  ],
+  "infusioni": [
+    {
+      "id": 24,
+      "nome": "Arma infuocata",
+      "testo": "Dichiari \"fuoco Doppio!\" a 15 metri",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "nome": "Protezione Cosmica",
+      "testo": "<p>Blöa Bla {armat} PA bla bla</p>",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "nome": "Arma sacra",
+      "testo": "Potenziamento semplice.",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 72,
+      "nome": "Danni Aggiuntivi",
+      "testo": "La mod migliora i danni inflitti con armi da fuoco di 5 punti danno.",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        }
+      ]
+    },
+    {
+      "id": 65,
+      "nome": "Protezione della regina",
+      "testo": "<p>Protegge con {guscio} punti guscio.</p><p>Infligge 12 danni aggiuntivi con attacchi di&nbsp; aura sacra.</p>",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "nome": "Protezione della Terra",
+      "testo": "Aumenta di 2 punti gusci ed armature.",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cariche tecnologiche",
+          "valore_base": 3
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniali: costo generico",
+          "valore_base": 10
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "nome": "Mutazione del Fuoco Infernale",
+      "testo": "+10 danni da fuoco",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        }
+      ]
+    }
+  ],
+  "tessiture": [
+    {
+      "id": 15,
+      "nome": "Psicoraggio",
+      "testo": "<p>Il Raggio infligge l'elemento Fuoco ad un bersaglio entro {gittata} metri.</p>",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Psionica",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Deduzione universale",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "nome": "Riparazione",
+      "testo": "<p>Il personaggio ripara un oggetto toccato per 5 secondi.</p>",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Magica",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Chakra",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "nome": "Fiamma del Deserto",
+      "testo": "<p>Il sacerdote emette una fiamma dirompente {area} metri attorno a se.</p>",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Sacra",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Chakra",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "nome": "Spruzzo di Terra",
+      "testo": "<p>Il personaggio lancia un piccolo dardo di Terra a {gittata} metri.</p>",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Magica",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Chakra",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "nome": "Spruzzo di Fuoco",
+      "testo": "<p>Il personaggio lancia un piccolo dardo di fuoco a {gittata} metri.</p>",
+      "livello": 1,
+      "costo_crediti": 100,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Generica",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Chakra",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "nome": "Brezza Ardente",
+      "testo": "Il mago richiama attraverso l'energia del vento le correnti calde del deserto e le fa imperversare sui nemici attorno a lui.",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Magica",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Danni Mischia",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Danni a Distanza",
+          "valore_base": 0
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "nome": "Pallottola d'acqua",
+      "testo": "Infligge {dannigen+dannidis} danni fino a {berstot} bersaglio/i entro {gittata} metri.",
+      "livello": 1,
+      "costo_crediti": 100,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Magica",
+      "statistiche_base": [
+        {
+          "statistica": "Bersagli totali",
+          "valore_base": 1
+        },
+        {
+          "statistica": "Cerimoniale: Ritualistica",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Cerimoniale: Coralità",
+          "valore_base": 0
+        },
+        {
+          "statistica": "Costo generico",
+          "valore_base": 100
+        },
+        {
+          "statistica": "Danni Armi a due mani",
+          "valore_base": 1
+        }
+      ]
+    },
+    {
+      "id": 90,
+      "nome": "Test Di Tessitura",
+      "testo": "fa questo",
+      "livello": 2,
+      "costo_crediti": 200,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Psionica",
+      "statistiche_base": [
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 5
+        }
+      ]
+    },
+    {
+      "id": 92,
+      "nome": "Scirocco sferzante",
+      "testo": "<p>Infligge&nbsp;{dannigen+dannimis}&nbsp;diretti&nbsp;ai&nbsp;punti&nbsp;vita.&nbsp;</p>",
+      "livello": 3,
+      "costo_crediti": 300,
+      "costo_effettivo": null,
+      "aura_richiesta": "Aura Marziale - Armi in Mischia",
+      "statistiche_base": [
+        {
+          "statistica": "Danni Generali",
+          "valore_base": 3
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "data_esportazione": "2026-01-23 10:32:52.301945+00:00",
+    "limite_record": 5,
+    "riepilogo": {
+      "punteggi_totali": 107,
+      "statistiche_totali": 32,
+      "classi_oggetto_totali": 20,
+      "personaggi_totali": 24,
+      "oggetti_totali": 34,
+      "abilita_totali": 203,
+      "infusioni_totali": 7,
+      "tessiture_totali": 9
+    },
+    "tipi_oggetto_utilizzati": [
+      "FIS",
+      "POT",
+      "POT",
+      "FIS",
+      "MOD",
+      "MOD",
+      "FIS",
+      "MAT",
+      "AUM",
+      "FIS",
+      "FIS",
+      "MUT",
+      "MUT",
+      "MUT",
+      "MUT",
+      "FIS",
+      "MAT",
+      "MAT",
+      "MAT",
+      "MAT",
+      "FIS",
+      "FIS",
+      "MAT",
+      "FIS",
+      "MAT",
+      "MAT",
+      "FIS",
+      "FIS",
+      "MAT",
+      "FIS",
+      "FIS",
+      "FIS",
+      "FIS",
+      "FIS"
+    ],
+    "slot_corpo_utilizzati": [
+      "HD1",
+      "HD1",
+      "HD1",
+      "HD2",
+      "HD2"
+    ]
+  }
+}
