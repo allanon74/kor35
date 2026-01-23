@@ -56,9 +56,24 @@ class EventoViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        
+        base_queryset = Evento.objects.all().prefetch_related(
+            'giorni__quests__mostri_presenti',
+            'giorni__quests__png_richiesti',
+            'giorni__quests__viste_previste__manifesto',
+            'giorni__quests__viste_previste__inventario',
+            'giorni__quests__viste_previste__personaggio',
+            'giorni__quests__viste_previste__oggetto',
+            'giorni__quests__viste_previste__tessitura',
+            'giorni__quests__viste_previste__infusione',
+            'giorni__quests__viste_previste__cerimoniale',
+            'giorni__quests__staff_offgame',
+            'giorni__quests__fasi__tasks'
+        )
+        
         if user.is_superuser:
-            return Evento.objects.all().prefetch_related('giorni__quests')
-        return Evento.objects.filter(staff_assegnato=user).prefetch_related('giorni__quests')
+            return base_queryset
+        return base_queryset.filter(staff_assegnato=user)
     
     @action(detail=False, methods=['get'])
     def risorse_editor(self, request):
@@ -76,15 +91,23 @@ class EventoViewSet(viewsets.ModelViewSet):
             'tipologia', 'proprietario'
         )
         
+        # Filtra inventari per escludere personaggi (che ereditano da Inventario)
+        inventari_non_personaggi = Inventario.objects.filter(
+            personaggio__isnull=True
+        ).only('id', 'nome')
+        
+        # Oggetti: serializza solo id e nome per performance
+        oggetti_data = [{'id': o.id, 'nome': o.nome} for o in Oggetto.objects.only('id', 'nome')]
+        
         return Response({
             'png': PersonaggioSerializer(png_queryset, many=True).data,
             'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
             'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
-            'inventari': InventarioSerializer(Inventario.objects.all(), many=True).data,
+            'inventari': InventarioSerializer(inventari_non_personaggi, many=True).data,
             'tessiture': TessituraSerializer(Tessitura.objects.all().select_related('aura_richiesta', 'elemento_principale'), many=True).data,
             'infusioni': InfusioneSerializer(Infusione.objects.all().select_related('aura_richiesta', 'aura_infusione'), many=True).data,
             'cerimoniali': CerimonialeSerializer(Cerimoniale.objects.all(), many=True).data,
-            'oggetti': OggettoSerializer(Oggetto.objects.all().select_related('aura', 'classe_oggetto'), many=True).data,
+            'oggetti': oggetti_data,
             'staff': UserShortSerializer(User.objects.filter(is_staff=True).only('id', 'username', 'first_name', 'last_name'), many=True).data,
         })
 
@@ -94,9 +117,23 @@ class GiornoEventoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsMasterOrReadOnly]
 
 class QuestViewSet(viewsets.ModelViewSet):
-    queryset = Quest.objects.all()
     serializer_class = QuestSerializer
     permission_classes = [IsMasterOrReadOnly]
+    
+    def get_queryset(self):
+        return Quest.objects.all().prefetch_related(
+            'mostri_presenti',
+            'png_richiesti',
+            'viste_previste__manifesto',
+            'viste_previste__inventario',
+            'viste_previste__personaggio',
+            'viste_previste__oggetto',
+            'viste_previste__tessitura',
+            'viste_previste__infusione',
+            'viste_previste__cerimoniale',
+            'staff_offgame',
+            'fasi__tasks'
+        )
 
 class QuestMostroViewSet(viewsets.ModelViewSet):
     """
