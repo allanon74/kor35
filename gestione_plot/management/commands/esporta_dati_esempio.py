@@ -236,7 +236,8 @@ class Command(BaseCommand):
             a_data['statistiche'] = [
                 {
                     'statistica': s.statistica.nome,
-                    'modificatore': s.modificatore
+                    'tipo_modificatore': s.tipo_modificatore,
+                    'valore': s.valore
                 }
                 for s in stats_abilita[:5]
             ]
