@@ -406,6 +406,21 @@ class OggettiSenzaPosizioneView(APIView):
     permission_classes = [IsStaffOrMaster]
     
     def get(self, request):
-        oggetti = Oggetto.objects.filter(inventario_corrente__isnull=True)
+        # Oggetti senza tracciamento attivo (non sono in nessun inventario)
+        # Gli oggetti hanno tracciamento quando esiste un OggettoInInventario con data_fine=null
+        from django.db.models import Q, Exists, OuterRef
+        from .models import OggettoInInventario
+        
+        # Subquery per trovare se esiste un tracciamento attivo
+        tracciamento_attivo = OggettoInInventario.objects.filter(
+            oggetto=OuterRef('pk'),
+            data_fine__isnull=True
+        )
+        
+        # Oggetti senza tracciamento attivo
+        oggetti = Oggetto.objects.annotate(
+            ha_inventario=Exists(tracciamento_attivo)
+        ).filter(ha_inventario=False)
+        
         serializer = OggettoSerializer(oggetti, many=True)
         return Response(serializer.data)
