@@ -258,7 +258,7 @@ class Command(BaseCommand):
             i_data = {
                 'id': i.id,
                 'nome': i.nome,
-                'descrizione': i.descrizione[:200] if i.descrizione else None,
+                'testo': i.testo[:200] if i.testo else None,
                 'livello': getattr(i, 'livello', None),
                 'costo_crediti': getattr(i, 'costo_crediti', None),
                 'costo_effettivo': getattr(i, 'costo_effettivo', None),
@@ -290,7 +290,7 @@ class Command(BaseCommand):
             t_data = {
                 'id': t.id,
                 'nome': t.nome,
-                'descrizione': t.descrizione[:200] if t.descrizione else None,
+                'testo': t.testo[:200] if t.testo else None,
                 'livello': getattr(t, 'livello', None),
                 'costo_crediti': getattr(t, 'costo_crediti', None),
                 'costo_effettivo': getattr(t, 'costo_effettivo', None),
