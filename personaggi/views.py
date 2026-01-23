@@ -1088,6 +1088,132 @@ class MessaggioActionView(APIView):
             return Response({"status": "Messaggio cancellato"})
         return Response({"error": "Azione non valida"}, status=status.HTTP_400_BAD_REQUEST)
 
+class ConversazioniView(APIView):
+    """View per ottenere messaggi organizzati per conversazione"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        personaggio_id = request.query_params.get('personaggio_id')
+        if not personaggio_id:
+            return Response({"error": "personaggio_id mancante"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Recupera tutti i messaggi del personaggio (broadcast esclusi per le conversazioni)
+        q_individuale_ricevuti = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=personaggio)
+        q_individuale_inviati = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(mittente_personaggio=personaggio)
+        
+        messaggi = Messaggio.objects.filter(q_individuale_ricevuti | q_individuale_inviati).select_related(
+            'mittente', 'mittente_personaggio', 'destinatario_personaggio', 'in_risposta_a'
+        )
+        
+        # Filtra messaggi cancellati
+        ids_cancellati = LetturaMessaggio.objects.filter(
+            personaggio=personaggio, 
+            cancellato=True
+        ).values_list('messaggio_id', flat=True)
+        
+        messaggi = messaggi.exclude(id__in=ids_cancellati)
+        
+        # Raggruppa per conversazione (thread)
+        conversazioni = {}
+        
+        for msg in messaggi:
+            # Trova il messaggio radice (se è una risposta, risale al primo messaggio)
+            thread_id = msg.id
+            current_msg = msg
+            while current_msg.in_risposta_a:
+                thread_id = current_msg.in_risposta_a.id
+                current_msg = current_msg.in_risposta_a
+            
+            if thread_id not in conversazioni:
+                conversazioni[thread_id] = {
+                    'conversazione_id': thread_id,
+                    'messaggi': [],
+                    'partecipanti': set(),
+                    'ultimo_messaggio': msg.data_invio,
+                    'non_letti': 0
+                }
+            
+            conversazioni[thread_id]['messaggi'].append(msg)
+            
+            # Aggiungi partecipanti
+            if msg.mittente:
+                conversazioni[thread_id]['partecipanti'].add(('user', msg.mittente.id, msg.mittente.username))
+            if msg.mittente_personaggio:
+                conversazioni[thread_id]['partecipanti'].add(('pg', msg.mittente_personaggio.id, msg.mittente_personaggio.nome))
+            if msg.destinatario_personaggio:
+                conversazioni[thread_id]['partecipanti'].add(('pg', msg.destinatario_personaggio.id, msg.destinatario_personaggio.nome))
+            
+            # Aggiorna timestamp ultimo messaggio
+            if msg.data_invio > conversazioni[thread_id]['ultimo_messaggio']:
+                conversazioni[thread_id]['ultimo_messaggio'] = msg.data_invio
+            
+            # Conta non letti
+            lettura = LetturaMessaggio.objects.filter(messaggio=msg, personaggio=personaggio, letto=True).first()
+            if not lettura:
+                conversazioni[thread_id]['non_letti'] += 1
+        
+        # Converti conversazioni in lista e ordina
+        risultato = []
+        for conv_id, conv_data in conversazioni.items():
+            # Ordina messaggi per data
+            conv_data['messaggi'].sort(key=lambda x: x.data_invio)
+            
+            # Converti partecipanti da set a lista di dict
+            conv_data['partecipanti'] = [
+                {'tipo': p[0], 'id': p[1], 'nome': p[2]} 
+                for p in conv_data['partecipanti']
+            ]
+            
+            # Serializza messaggi
+            messaggi_serializer = MessaggioSerializer(conv_data['messaggi'], many=True, context={'request': request})
+            conv_data['messaggi'] = messaggi_serializer.data
+            
+            risultato.append(conv_data)
+        
+        # Ordina conversazioni per ultimo messaggio (più recente primo)
+        risultato.sort(key=lambda x: x['ultimo_messaggio'], reverse=True)
+        
+        return Response(risultato)
+
+class RispondiMessaggioView(APIView):
+    """View per rispondere a un messaggio creando un thread"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, messaggio_id):
+        personaggio_id = request.data.get('personaggio_id')
+        testo = request.data.get('testo')
+        titolo = request.data.get('titolo', '')
+        
+        if not personaggio_id or not testo:
+            return Response(
+                {"error": "personaggio_id e testo sono obbligatori"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            messaggio_originale = Messaggio.objects.get(pk=messaggio_id)
+        except (Personaggio.DoesNotExist, Messaggio.DoesNotExist):
+            return Response({"error": "Dati non validi"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Crea la risposta
+        risposta = Messaggio.objects.create(
+            mittente_personaggio=personaggio,
+            tipo_messaggio=Messaggio.TIPO_STAFF,  # Risposta a staff
+            titolo=titolo or f"Re: {messaggio_originale.titolo}",
+            testo=testo,
+            in_risposta_a=messaggio_originale,
+            is_staff_message=False  # È una risposta del giocatore
+        )
+        
+        serializer = MessaggioSerializer(risposta, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
 class MessaggioAdminSentListView(generics.ListAPIView):
     serializer_class = MessaggioSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]

@@ -1631,17 +1631,25 @@ class GruppoSerializer(serializers.ModelSerializer):
 class MessaggioSerializer(serializers.ModelSerializer):
     mittente = serializers.StringRelatedField(read_only=True)
     mittente_nome = serializers.SerializerMethodField()
+    mittente_personaggio_id = serializers.IntegerField(source='mittente_personaggio.id', read_only=True, allow_null=True)
+    mittente_personaggio_nome = serializers.CharField(source='mittente_personaggio.nome', read_only=True, allow_null=True)
     destinatario_personaggio = serializers.StringRelatedField(read_only=True)
+    destinatario_personaggio_id = serializers.IntegerField(source='destinatario_personaggio.id', read_only=True, allow_null=True)
     destinatario_gruppo = GruppoSerializer(read_only=True)
     letto = serializers.SerializerMethodField()
+    mittente_is_staff = serializers.SerializerMethodField()
     data_creazione = serializers.DateTimeField(source='data_invio', read_only=True)
+    in_risposta_a = serializers.IntegerField(allow_null=True, required=False)
+    risposte_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Messaggio
         fields = (
-            'id', 'mittente', 'mittente_nome', 'tipo_messaggio', 'titolo', 'testo', 
-            'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_gruppo', 
-            'salva_in_cronologia', 'letto', 'is_staff_message'
+            'id', 'mittente', 'mittente_nome', 'mittente_personaggio_id', 'mittente_personaggio_nome',
+            'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
+            'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
+            'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
+            'in_risposta_a', 'risposte_count'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
     
@@ -1656,6 +1664,23 @@ class MessaggioSerializer(serializers.ModelSerializer):
         if obj.mittente:
             return obj.mittente.username
         return None
+    
+    def get_mittente_is_staff(self, obj):
+        if obj.mittente:
+            return obj.mittente.is_staff
+        return False
+    
+    def get_risposte_count(self, obj):
+        return obj.risposte.count()
+
+
+class ConversazioneSerializer(serializers.Serializer):
+    """Serializer per raggruppare messaggi in conversazioni thread-style"""
+    conversazione_id = serializers.IntegerField()
+    partecipanti = serializers.ListField(child=serializers.DictField())
+    ultimo_messaggio = serializers.DateTimeField()
+    messaggi = MessaggioSerializer(many=True)
+    non_letti = serializers.IntegerField()
 
 
 class MessaggioBroadcastCreateSerializer(serializers.ModelSerializer):

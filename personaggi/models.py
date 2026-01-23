@@ -2001,6 +2001,7 @@ class Messaggio(models.Model):
     TIPO_STAFF='STAFF'
     TIPO_CHOICES=[(TIPO_BROADCAST,'Broadcast'),(TIPO_GRUPPO,'Gruppo'),(TIPO_INDIVIDUALE,'Individuale'),(TIPO_STAFF,'Staff')]
     mittente = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="messaggi_inviati")
+    mittente_personaggio = models.ForeignKey('Personaggio', on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_inviati_pg")
     tipo_messaggio = models.CharField(max_length=5, choices=TIPO_CHOICES, default=TIPO_BROADCAST)
     destinatario_personaggio = models.ForeignKey('Personaggio', on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_individuali")
     destinatario_gruppo = models.ForeignKey(Gruppo, on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_gruppo")
@@ -2008,6 +2009,7 @@ class Messaggio(models.Model):
     is_staff_message = models.BooleanField(default=False)
     letto_staff = models.BooleanField(default=False)  # Per messaggi staff
     cancellato_staff = models.BooleanField(default=False)  # Per messaggi staff
+    in_risposta_a = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='risposte')  # Thread conversazione
     
     class Meta: 
         ordering=['-data_invio']
