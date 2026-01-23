@@ -121,7 +121,7 @@ class Command(BaseCommand):
 
         # 4. PERSONAGGI DI ESEMPIO (con dati completi)
         self.stdout.write('\n👥 Esportazione Personaggi di Esempio...')
-        personaggi = Personaggio.objects.select_related('utente', 'tipologia').prefetch_related(
+        personaggi = Personaggio.objects.select_related('proprietario', 'tipologia').prefetch_related(
             'abilita_possedute', 'infusioni_possedute', 'tessiture_possedute'
         )[:limit]
         
@@ -157,22 +157,35 @@ class Command(BaseCommand):
 
         # 5. OGGETTI DI ESEMPIO
         self.stdout.write('\n🎒 Esportazione Oggetti di Esempio...')
-        oggetti = Oggetto.objects.select_related('oggetto_base', 'personaggio').prefetch_related(
+        oggetti = Oggetto.objects.select_related('oggetto_base', 'aura').prefetch_related(
             'statistiche_base', 'caratteristiche'
         )[:limit * 2]  # Più oggetti per vedere varietà
         
         oggetti_data = []
         for o in oggetti:
+            # Ottieni l'inventario corrente (può essere un Personaggio o altro)
+            try:
+                inventario_corrente = o.inventario_corrente
+                personaggio_id = None
+                if inventario_corrente:
+                    # Se l'inventario è un Personaggio, prendi l'ID
+                    if isinstance(inventario_corrente, Personaggio):
+                        personaggio_id = inventario_corrente.id
+            except Exception as e:
+                # Se c'è un errore nell'accesso all'inventario, ignora
+                personaggio_id = None
+            
             o_data = {
                 'id': o.id,
                 'nome': o.nome,
                 'tipo_oggetto': o.tipo_oggetto,
                 'slot_corpo': o.slot_corpo,
                 'cariche_attuali': o.cariche_attuali,
-                'cariche_massime': o.cariche_massime if hasattr(o, 'cariche_massime') else None,
-                'personaggio_id': o.personaggio.id if o.personaggio else None,
-                'aura_colore': o.aura.colore if hasattr(o, 'aura') and o.aura else None,
-                'aura_nome': o.aura.nome if hasattr(o, 'aura') and o.aura else None,
+                'cariche_massime': getattr(o, 'cariche_massime', None),
+                'personaggio_id': personaggio_id,
+                'aura_colore': o.aura.colore if o.aura else None,
+                'aura_nome': o.aura.nome if o.aura else None,
+                'is_equipaggiato': o.is_equipaggiato,
             }
             
             # Statistiche base dell'oggetto
@@ -193,7 +206,7 @@ class Command(BaseCommand):
         # 6. ABILITÀ DI ESEMPIO
         self.stdout.write('\n⚡ Esportazione Abilità di Esempio...')
         abilita = Abilita.objects.prefetch_related(
-            'punteggi', 'statistiche', 'prerequisiti', 'tier'
+            'punteggio_acquisito', 'statistiche', 'tiers', 'caratteristica'
         )[:limit * 2]
         
         abilita_data = []
@@ -205,12 +218,16 @@ class Command(BaseCommand):
                 'costo_pc': getattr(a, 'costo_pc', None),
                 'costo_crediti': getattr(a, 'costo_crediti', None),
                 'is_tratto_aura': getattr(a, 'is_tratto_aura', False),
-                'tier': a.tier.nome if hasattr(a, 'tier') and a.tier else None,
+                'caratteristica': a.caratteristica.nome if a.caratteristica else None,
             }
             
-            # Punteggi associati
-            punteggi_abilita = a.punteggi.all() if hasattr(a, 'punteggi') else []
-            a_data['punteggi'] = [p.nome for p in punteggi_abilita[:5]]
+            # Tiers associati
+            tiers_abilita = a.tiers.all() if hasattr(a, 'tiers') else []
+            a_data['tiers'] = [t.nome for t in tiers_abilita[:3]]
+            
+            # Punteggi acquisiti
+            punteggi_abilita = a.punteggio_acquisito.all() if hasattr(a, 'punteggio_acquisito') else []
+            a_data['punteggi_acquisiti'] = [p.nome for p in punteggi_abilita[:5]]
             
             # Statistiche modificate
             stats_abilita = a.statistiche.all() if hasattr(a, 'statistiche') else []
