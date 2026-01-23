@@ -14,12 +14,14 @@ from PIL import Image
 from personaggi.models import (
     Inventario, Manifesto, Personaggio, QrCode, 
     Tabella, ModelloAura, Tier,
+    Tessitura, Infusione, Cerimoniale, Oggetto,
     )
 
 from personaggi.serializers import (
     InventarioSerializer, ManifestoSerializer, 
     PersonaggioListSerializer, PersonaggioAutocompleteSerializer, PersonaggioSerializer,
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
+    TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
 from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine
 from .serializers import (
@@ -79,6 +81,10 @@ class EventoViewSet(viewsets.ModelViewSet):
             'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
             'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
             'inventari': InventarioSerializer(Inventario.objects.all(), many=True).data,
+            'tessiture': TessituraSerializer(Tessitura.objects.all().select_related('aura_richiesta', 'elemento_principale'), many=True).data,
+            'infusioni': InfusioneSerializer(Infusione.objects.all().select_related('aura_richiesta', 'aura_infusione'), many=True).data,
+            'cerimoniali': CerimonialeSerializer(Cerimoniale.objects.all(), many=True).data,
+            'oggetti': OggettoSerializer(Oggetto.objects.all().select_related('aura', 'classe_oggetto'), many=True).data,
             'staff': UserShortSerializer(User.objects.filter(is_staff=True).only('id', 'username', 'first_name', 'last_name'), many=True).data,
         })
 
@@ -139,8 +145,11 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
                     'message': f'Questo QR è già associato a: {qr.vista.nome} ({qr.vista.__class__.__name__}). Confermare per disassociarlo?'
                 }, status=409)  # 409 Conflict
             
-            # Colleghiamo il QR alla "Vista" (Manifesto o Inventario) definita
-            target_vista = vista_quest.manifesto or vista_quest.inventario
+            # Colleghiamo il QR alla "Vista" appropriata in base al tipo
+            target_vista = (vista_quest.manifesto or vista_quest.inventario or 
+                          vista_quest.personaggio or vista_quest.oggetto or
+                          vista_quest.tessitura or vista_quest.infusione or 
+                          vista_quest.cerimoniale)
             
             if not target_vista:
                 return Response({'error': 'Nessun contenuto definito per questa vista'}, status=400)

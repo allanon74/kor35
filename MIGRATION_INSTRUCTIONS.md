@@ -1,14 +1,20 @@
 # Istruzioni per applicare le modifiche
 
-## 1. Creare la migration
+## 1. Creare le migration
 
 Connettiti al server remoto ed esegui:
 
 ```bash
 cd /home/django/progetti/kor35
 source venv/bin/activate  # o il path al tuo virtualenv
+
+# Migration per personaggi (PersonaggioStatisticaBase)
 python manage.py makemigrations personaggi
 python manage.py migrate personaggi
+
+# Migration per gestione_plot (QuestVista con nuovi campi)
+python manage.py makemigrations gestione_plot
+python manage.py migrate gestione_plot
 ```
 
 ## 2. Inizializzare le statistiche base per i personaggi esistenti (PREGRESSO)

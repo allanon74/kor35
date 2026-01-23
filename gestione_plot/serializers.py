@@ -87,18 +87,53 @@ class PngAssegnatoSerializer(serializers.ModelSerializer):
 
 class QuestVistaSerializer(serializers.ModelSerializer):
     """
-    Spostato sopra QuestSerializer per permettere l'inclusione corretta dei dettagli.
-    Risolve il problema del nome 'Manifesto' mancante.
+    Serializer per QuestVista con supporto completo per tutti i tipi a_vista.
     """
     manifesto_details = ManifestoSerializer(source='manifesto', read_only=True)
     inventario_details = InventarioSerializer(source='inventario', read_only=True)
+    personaggio_details = serializers.SerializerMethodField()
+    oggetto_details = serializers.SerializerMethodField()
+    tessitura_details = serializers.SerializerMethodField()
+    infusione_details = serializers.SerializerMethodField()
+    cerimoniale_details = serializers.SerializerMethodField()
     
     class Meta:
         model = QuestVista
         fields = [
-            'id', 'quest', 'tipo', 'manifesto', 'inventario', 
-            'qr_code', 'manifesto_details', 'inventario_details'
+            'id', 'quest', 'tipo', 
+            'manifesto', 'inventario', 'personaggio', 'oggetto', 
+            'tessitura', 'infusione', 'cerimoniale',
+            'qr_code', 
+            'manifesto_details', 'inventario_details', 'personaggio_details',
+            'oggetto_details', 'tessitura_details', 'infusione_details', 'cerimoniale_details'
         ]
+    
+    def get_personaggio_details(self, obj):
+        if obj.personaggio:
+            from personaggi.serializers import PersonaggioListSerializer
+            return PersonaggioListSerializer(obj.personaggio).data
+        return None
+    
+    def get_oggetto_details(self, obj):
+        if obj.oggetto:
+            # Import minimo per evitare cicli
+            return {'id': obj.oggetto.id, 'nome': obj.oggetto.nome}
+        return None
+    
+    def get_tessitura_details(self, obj):
+        if obj.tessitura:
+            return {'id': obj.tessitura.id, 'nome': obj.tessitura.nome}
+        return None
+    
+    def get_infusione_details(self, obj):
+        if obj.infusione:
+            return {'id': obj.infusione.id, 'nome': obj.infusione.nome}
+        return None
+    
+    def get_cerimoniale_details(self, obj):
+        if obj.cerimoniale:
+            return {'id': obj.cerimoniale.id, 'nome': obj.cerimoniale.nome}
+        return None
 
 # --- QUEST E EVENTI ---
 

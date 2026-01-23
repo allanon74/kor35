@@ -153,9 +153,26 @@ class PngAssegnato(models.Model):
 
 class QuestVista(models.Model):
     quest = models.ForeignKey(Quest, on_delete=models.CASCADE, related_name='viste_previste')
-    tipo = models.CharField(max_length=3, choices=[('INV', 'Inventario'), ('MAN', 'Manifesto')])
+    tipo = models.CharField(max_length=3, choices=[
+        ('PG', 'Personaggio'),
+        ('PNG', 'Personaggio Non Giocante'),
+        ('INV', 'Inventario'),
+        ('OGG', 'Oggetto'),
+        ('TES', 'Tessitura'),
+        ('INF', 'Infusione'),
+        ('CER', 'Cerimoniale'),
+        ('MAN', 'Manifesto')
+    ])
+    
+    # Riferimenti a tutti i possibili tipi di a_vista
     manifesto = models.ForeignKey(Manifesto, on_delete=models.SET_NULL, null=True, blank=True)
     inventario = models.ForeignKey(Inventario, on_delete=models.SET_NULL, null=True, blank=True)
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.SET_NULL, null=True, blank=True)
+    oggetto = models.ForeignKey('personaggi.Oggetto', on_delete=models.SET_NULL, null=True, blank=True)
+    tessitura = models.ForeignKey('personaggi.Tessitura', on_delete=models.SET_NULL, null=True, blank=True)
+    infusione = models.ForeignKey('personaggi.Infusione', on_delete=models.SET_NULL, null=True, blank=True)
+    cerimoniale = models.ForeignKey('personaggi.Cerimoniale', on_delete=models.SET_NULL, null=True, blank=True)
+    
     qr_code = models.OneToOneField(QrCode, on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
