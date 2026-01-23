@@ -157,7 +157,7 @@ class Command(BaseCommand):
 
         # 5. OGGETTI DI ESEMPIO
         self.stdout.write('\n🎒 Esportazione Oggetti di Esempio...')
-        oggetti = Oggetto.objects.select_related('oggetto_base', 'aura').prefetch_related(
+        oggetti = Oggetto.objects.select_related('oggetto_base_generatore', 'aura', 'classe_oggetto').prefetch_related(
             'statistiche_base', 'caratteristiche'
         )[:limit * 2]  # Più oggetti per vedere varietà
         
@@ -186,6 +186,8 @@ class Command(BaseCommand):
                 'aura_colore': o.aura.colore if o.aura else None,
                 'aura_nome': o.aura.nome if o.aura else None,
                 'is_equipaggiato': o.is_equipaggiato,
+                'classe_oggetto': o.classe_oggetto.nome if o.classe_oggetto else None,
+                'oggetto_base_generatore': o.oggetto_base_generatore.nome if o.oggetto_base_generatore else None,
             }
             
             # Statistiche base dell'oggetto
