@@ -2342,14 +2342,14 @@ class RegisterView(APIView):
             user = serializer.save(is_active=False)
             
             # 2. CREA MESSAGGIO PER LO STAFF
-            # Testo con il tag speciale per il bottone di attivazione
+            # Testo con i tag speciali per i bottoni di attivazione ed eliminazione
             testo_msg = (
                 f"Nuova registrazione:<br>"
                 f"Utente: <b>{user.username}</b><br>"
                 f"Email: {user.email}<br>"
                 f"Nome: {user.first_name} {user.last_name}<br><br>"
-                f"Clicca per attivare:<br>"
-                f"[ACTIVATE_USER:{user.id}]" 
+                f"Azioni disponibili:<br>"
+                f"[ACTIVATE_USER:{user.id}] [DELETE_USER:{user.id}]" 
             )
 
             # Crea il messaggio nel DB
@@ -2380,6 +2380,18 @@ class ActivateUserView(APIView):
         except User.DoesNotExist:
             return Response({"error": "Utente non trovato."}, status=status.HTTP_404_NOT_FOUND)
 
+class DeleteUserView(APIView):
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] # Solo Staff
+
+    def delete(self, request, user_id):
+        try:
+            user_to_delete = User.objects.get(pk=user_id)
+            username = user_to_delete.username
+            user_to_delete.delete()
+            return Response({"message": f"Utente {username} eliminato con successo."})
+        except User.DoesNotExist:
+            return Response({"error": "Utente non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
 class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -2397,5 +2409,32 @@ class StaffMessageListView(generics.ListAPIView):
     permission_classes = [permissions.IsAdminUser] # Solo Staff/Admin
 
     def get_queryset(self):
-        # Restituisce messaggi senza destinatario specifico (quindi per lo staff)
-        return Messaggio.objects.filter(is_staff_message=True).order_by('-data_invio')
+        # Restituisce messaggi per lo staff, escludendo quelli cancellati
+        return Messaggio.objects.filter(
+            is_staff_message=True, 
+            cancellato_staff=False
+        ).order_by('-data_invio')
+
+class StaffMessageMarkReadView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+    
+    def post(self, request, message_id):
+        try:
+            messaggio = Messaggio.objects.get(pk=message_id, is_staff_message=True)
+            messaggio.letto_staff = True
+            messaggio.save()
+            return Response({"message": "Messaggio marcato come letto"})
+        except Messaggio.DoesNotExist:
+            return Response({"error": "Messaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)
+
+class StaffMessageDeleteView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+    
+    def post(self, request, message_id):
+        try:
+            messaggio = Messaggio.objects.get(pk=message_id, is_staff_message=True)
+            messaggio.cancellato_staff = True
+            messaggio.save()
+            return Response({"message": "Messaggio eliminato"})
+        except Messaggio.DoesNotExist:
+            return Response({"error": "Messaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)

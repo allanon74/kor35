@@ -2006,6 +2006,8 @@ class Messaggio(models.Model):
     destinatario_gruppo = models.ForeignKey(Gruppo, on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_gruppo")
     titolo = models.CharField(max_length=150); testo = models.TextField(); data_invio = models.DateTimeField(default=timezone.now); salva_in_cronologia = models.BooleanField(default=True)
     is_staff_message = models.BooleanField(default=False)
+    letto_staff = models.BooleanField(default=False)  # Per messaggi staff
+    cancellato_staff = models.BooleanField(default=False)  # Per messaggi staff
     
     class Meta: 
         ordering=['-data_invio']

@@ -7,7 +7,7 @@ from rest_framework import routers
 from rest_framework.routers import DefaultRouter
 
 
-from .views import AbilitaViewSet, ActivateUserView, ChangePasswordView, PersonaggioTransazioniListView, RegisterView, StaffMessageListView, UserViewSet
+from .views import AbilitaViewSet, ActivateUserView, DeleteUserView, ChangePasswordView, PersonaggioTransazioniListView, RegisterView, StaffMessageListView, UserViewSet
 from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList, TierStaffViewSet
 
 
@@ -132,6 +132,9 @@ urlpatterns = [
     path('api/user/register/', RegisterView.as_view(), name='register'),
     path('api/user/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/staff/activate-user/<int:user_id>/', ActivateUserView.as_view(), name='activate-user'),
+    path('api/staff/delete-user/<int:user_id>/', DeleteUserView.as_view(), name='delete-user'),
+    path('api/staff/messages/<int:message_id>/leggi/', views.StaffMessageMarkReadView.as_view(), name='staff-message-read'),
+    path('api/staff/messages/<int:message_id>/cancella/', views.StaffMessageDeleteView.as_view(), name='staff-message-delete'),
     
     path('api/personaggi/search/', views.PersonaggioAutocompleteView.as_view(), name='personaggio-search'),
     path('api/messaggi/send/', views.MessaggioPrivateCreateView.as_view(), name='messaggio-send'),

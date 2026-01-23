@@ -1630,17 +1630,32 @@ class GruppoSerializer(serializers.ModelSerializer):
 
 class MessaggioSerializer(serializers.ModelSerializer):
     mittente = serializers.StringRelatedField(read_only=True)
+    mittente_nome = serializers.SerializerMethodField()
     destinatario_personaggio = serializers.StringRelatedField(read_only=True)
     destinatario_gruppo = GruppoSerializer(read_only=True)
-    is_letto = serializers.BooleanField(source='is_letto_db', read_only=True)
+    letto = serializers.SerializerMethodField()
+    data_creazione = serializers.DateTimeField(source='data_invio', read_only=True)
 
     class Meta:
         model = Messaggio
         fields = (
-            'id', 'mittente', 'tipo_messaggio', 'titolo', 'testo', 'data_invio',
-            'destinatario_personaggio', 'destinatario_gruppo', 'salva_in_cronologia', 'is_letto'
+            'id', 'mittente', 'mittente_nome', 'tipo_messaggio', 'titolo', 'testo', 
+            'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_gruppo', 
+            'salva_in_cronologia', 'letto', 'is_staff_message'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
+    
+    def get_letto(self, obj):
+        # Per messaggi staff, usa il campo letto_staff
+        if obj.is_staff_message:
+            return obj.letto_staff
+        # Per altri messaggi, usa is_letto_db se disponibile
+        return getattr(obj, 'is_letto_db', False)
+    
+    def get_mittente_nome(self, obj):
+        if obj.mittente:
+            return obj.mittente.username
+        return None
 
 
 class MessaggioBroadcastCreateSerializer(serializers.ModelSerializer):
