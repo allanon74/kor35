@@ -20,7 +20,8 @@ import os
 from personaggi.models import (
     Personaggio, Oggetto, Abilita, Infusione, Tessitura,
     Punteggio, Statistica, ClasseOggetto, TipologiaPersonaggio,
-    PersonaggioStatisticaBase, OggettoStatisticaBase
+    PersonaggioStatisticaBase, OggettoStatisticaBase,
+    InfusioneStatisticaBase, TessituraStatisticaBase
 )
 
 
@@ -250,7 +251,7 @@ class Command(BaseCommand):
         # 7. INFUSIONI DI ESEMPIO
         self.stdout.write('\n🧪 Esportazione Infusioni di Esempio...')
         infusioni = Infusione.objects.prefetch_related(
-            'statistiche_base', 'caratteristiche'
+            'infusionestatisticabase_set__statistica', 'caratteristiche'
         )[:limit * 2]
         
         infusioni_data = []
@@ -264,8 +265,8 @@ class Command(BaseCommand):
                 'costo_effettivo': getattr(i, 'costo_effettivo', None),
             }
             
-            # Statistiche base
-            stats_base = i.statistiche_base.all() if hasattr(i, 'statistiche_base') else []
+            # Statistiche base (usando gli oggetti intermedi InfusioneStatisticaBase)
+            stats_base = i.infusionestatisticabase_set.all() if hasattr(i, 'infusionestatisticabase_set') else []
             i_data['statistiche_base'] = [
                 {
                     'statistica': s.statistica.nome,
@@ -282,7 +283,7 @@ class Command(BaseCommand):
         # 8. TESSITURE DI ESEMPIO
         self.stdout.write('\n🧬 Esportazione Tessiture di Esempio...')
         tessiture = Tessitura.objects.prefetch_related(
-            'statistiche_base', 'caratteristiche', 'aura_richiesta'
+            'tessiturastatisticabase_set__statistica', 'caratteristiche', 'aura_richiesta'
         )[:limit * 2]
         
         tessiture_data = []
@@ -297,8 +298,8 @@ class Command(BaseCommand):
                 'aura_richiesta': t.aura_richiesta.nome if hasattr(t, 'aura_richiesta') and t.aura_richiesta else None,
             }
             
-            # Statistiche base
-            stats_base = t.statistiche_base.all() if hasattr(t, 'statistiche_base') else []
+            # Statistiche base (usando gli oggetti intermedi TessituraStatisticaBase)
+            stats_base = t.tessiturastatisticabase_set.all() if hasattr(t, 'tessiturastatisticabase_set') else []
             t_data['statistiche_base'] = [
                 {
                     'statistica': s.statistica.nome,
