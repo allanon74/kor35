@@ -1639,7 +1639,7 @@ class MessaggioSerializer(serializers.ModelSerializer):
     letto = serializers.SerializerMethodField()
     mittente_is_staff = serializers.SerializerMethodField()
     data_creazione = serializers.DateTimeField(source='data_invio', read_only=True)
-    in_risposta_a = serializers.IntegerField(allow_null=True, required=False)
+    in_risposta_a_id = serializers.IntegerField(source='in_risposta_a.id', read_only=True, allow_null=True)
     risposte_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -1649,7 +1649,7 @@ class MessaggioSerializer(serializers.ModelSerializer):
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
             'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
-            'in_risposta_a', 'risposte_count'
+            'in_risposta_a_id', 'risposte_count'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
     
