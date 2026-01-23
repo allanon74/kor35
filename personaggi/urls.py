@@ -171,6 +171,9 @@ urlpatterns = [
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     
+    # Endpoint per associare QR a elementi A_vista
+    path('api/a-vista/<int:a_vista_id>/associa-qr/', views.AssociaQrAVistaView.as_view(), name='associa-qr-a-vista'),
+    
     path('api/', include(router.urls)),
     
 ]

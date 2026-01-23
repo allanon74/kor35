@@ -117,12 +117,28 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
     def associa_qr(self, request, pk=None):
         """
         FUNZIONE CRUCIALE: Associa un QR fisico scansionato a questa vista prevista.
+        Se force=true, disassocia il QR dall'elemento precedente.
         """
         vista_quest = self.get_object()
         qr_id = request.data.get('qr_id')
+        force = request.data.get('force', False)
         
         try:
             qr = QrCode.objects.get(id=qr_id)
+            
+            # CONTROLLO: Se il QR è già associato ad un'altra vista, avvisa l'utente
+            if qr.vista and not force:
+                return Response({
+                    'error': 'QR già associato',
+                    'already_associated': True,
+                    'current_vista': {
+                        'id': qr.vista.id,
+                        'nome': qr.vista.nome,
+                        'tipo': qr.vista.__class__.__name__
+                    },
+                    'message': f'Questo QR è già associato a: {qr.vista.nome} ({qr.vista.__class__.__name__}). Confermare per disassociarlo?'
+                }, status=409)  # 409 Conflict
+            
             # Colleghiamo il QR alla "Vista" (Manifesto o Inventario) definita
             target_vista = vista_quest.manifesto or vista_quest.inventario
             

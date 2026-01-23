@@ -2662,3 +2662,77 @@ class StaffMessageDeleteView(APIView):
             return Response({"message": "Messaggio eliminato"})
         except Messaggio.DoesNotExist:
             return Response({"error": "Messaggio non trovato"}, status=status.HTTP_404_NOT_FOUND)
+
+class AssociaQrAVistaView(APIView):
+    """
+    Associa un QR code a un elemento derivato da A_vista 
+    (Tessitura, Infusione, Cerimoniale, Oggetto, OggettoBase, Inventario, Manifesto)
+    """
+    permission_classes = [permissions.IsAdminUser]  # Solo Staff
+    
+    def post(self, request, a_vista_id):
+        qr_id = request.data.get('qr_id')
+        force = request.data.get('force', False)
+        
+        if not qr_id:
+            return Response({'error': 'qr_id è richiesto'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Verifica che l'elemento A_vista esista
+            a_vista = A_vista.objects.get(pk=a_vista_id)
+        except A_vista.DoesNotExist:
+            return Response({'error': 'Elemento non trovato'}, status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            qr = QrCode.objects.get(id=qr_id)
+            
+            # Se il QR è già associato e force=False, restituisci errore con dettagli
+            if qr.vista and qr.vista != a_vista and not force:
+                # Determina il tipo di elemento associato
+                elemento_associato = None
+                tipo_elemento = "Elemento"
+                
+                # Cerca in tutti i modelli che ereditano da A_vista
+                if hasattr(qr.vista, 'tessitura'):
+                    elemento_associato = qr.vista.tessitura
+                    tipo_elemento = "Tessitura"
+                elif hasattr(qr.vista, 'infusione'):
+                    elemento_associato = qr.vista.infusione
+                    tipo_elemento = "Infusione"
+                elif hasattr(qr.vista, 'cerimoniale'):
+                    elemento_associato = qr.vista.cerimoniale
+                    tipo_elemento = "Cerimoniale"
+                elif hasattr(qr.vista, 'oggetto'):
+                    elemento_associato = qr.vista.oggetto
+                    tipo_elemento = "Oggetto"
+                elif hasattr(qr.vista, 'oggettobase'):
+                    elemento_associato = qr.vista.oggettobase
+                    tipo_elemento = "Oggetto Base"
+                elif hasattr(qr.vista, 'inventario'):
+                    elemento_associato = qr.vista.inventario
+                    tipo_elemento = "Inventario"
+                elif hasattr(qr.vista, 'manifesto'):
+                    elemento_associato = qr.vista.manifesto
+                    tipo_elemento = "Manifesto"
+                
+                nome_associato = elemento_associato.nome if elemento_associato else "Sconosciuto"
+                
+                return Response({
+                    'error': 'QR già associato',
+                    'already_associated': True,
+                    'message': f'Questo QR è già associato a: {nome_associato} ({tipo_elemento}). Confermare per disassociarlo?'
+                }, status=status.HTTP_409_CONFLICT)
+            
+            # Associa il QR all'elemento A_vista
+            qr.vista = a_vista
+            qr.save()
+            
+            return Response({
+                'status': 'success',
+                'message': 'QR associato con successo',
+                'qr_id': qr.id,
+                'a_vista_id': a_vista.id
+            })
+            
+        except QrCode.DoesNotExist:
+            return Response({'error': 'QR Code non trovato'}, status=status.HTTP_404_NOT_FOUND)
