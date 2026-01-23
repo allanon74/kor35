@@ -12,7 +12,7 @@ from rest_framework.decorators import action
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale,
-    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita,
+    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier, 
@@ -34,6 +34,7 @@ from .serializers import (
     AbilitaFullEditorSerializer,
     TierStaffSerializer,
     AbilitaSimpleSerializer,
+    InventarioStaffSerializer,
 )
 
 class QrInspectorView(APIView):
@@ -343,4 +344,68 @@ class TierStaffViewSet(viewsets.ModelViewSet):
         
         # Ritorna il tier aggiornato
         serializer = self.get_serializer(tier)
+        return Response(serializer.data)
+
+class InventarioStaffViewSet(viewsets.ModelViewSet):
+    """ViewSet per gestione inventari (solo inventari NON personaggio)"""
+    serializer_class = InventarioStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    
+    def get_queryset(self):
+        # Esclude i personaggi (inventari che hanno proprietario)
+        return Inventario.objects.exclude(
+            id__in=Personaggio.objects.values_list('inventario_ptr_id', flat=True)
+        ).order_by('-id')
+    
+    @action(detail=True, methods=['get'])
+    def oggetti(self, request, pk=None):
+        """Lista oggetti in questo inventario"""
+        inventario = self.get_object()
+        oggetti = inventario.get_oggetti()
+        serializer = OggettoSerializer(oggetti, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def aggiungi_oggetto(self, request, pk=None):
+        """Aggiunge un oggetto a questo inventario"""
+        inventario = self.get_object()
+        oggetto_id = request.data.get('oggetto_id')
+        
+        if not oggetto_id:
+            return Response({"error": "oggetto_id richiesto"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            oggetto = Oggetto.objects.get(id=oggetto_id)
+            oggetto.sposta_in_inventario(inventario)
+            return Response({"success": f"Oggetto {oggetto.nome} aggiunto all'inventario {inventario.nome}"}, status=status.HTTP_200_OK)
+        except Oggetto.DoesNotExist:
+            return Response({"error": "Oggetto non trovato"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def rimuovi_oggetto(self, request, pk=None):
+        """Rimuove un oggetto da questo inventario (lo mette senza posizione)"""
+        inventario = self.get_object()
+        oggetto_id = request.data.get('oggetto_id')
+        
+        if not oggetto_id:
+            return Response({"error": "oggetto_id richiesto"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            oggetto = Oggetto.objects.get(id=oggetto_id, inventario_corrente=inventario)
+            oggetto.sposta_in_inventario(None)  # None = senza posizione
+            return Response({"success": f"Oggetto {oggetto.nome} rimosso dall'inventario"}, status=status.HTTP_200_OK)
+        except Oggetto.DoesNotExist:
+            return Response({"error": "Oggetto non trovato in questo inventario"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class OggettiSenzaPosizioneView(APIView):
+    """Lista oggetti senza inventario (senza posizione)"""
+    permission_classes = [IsStaffOrMaster]
+    
+    def get(self, request):
+        oggetti = Oggetto.objects.filter(inventario_corrente__isnull=True)
+        serializer = OggettoSerializer(oggetti, many=True)
         return Response(serializer.data)

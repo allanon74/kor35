@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 
 
 from .views import AbilitaViewSet, ActivateUserView, DeleteUserView, ChangePasswordView, PersonaggioTransazioniListView, RegisterView, StaffMessageListView, UserViewSet
-from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList, TierStaffViewSet
+from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList, TierStaffViewSet, InventarioStaffViewSet, OggettiSenzaPosizioneView
 
 
 from .views import (AbilViewSet,
@@ -61,6 +61,7 @@ router.register(r'staff/oggetti-base', views_staff.OggettoBaseStaffViewSet, base
 router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basename='staff-classi-oggetto')
 router.register(r'staff/abilita', views_staff.AbilitaStaffViewSet, basename='staff-abilita')
 router.register(r'staff/tiers', TierStaffViewSet, basename='staff-tiers')
+router.register(r'staff/inventari', views_staff.InventarioStaffViewSet, basename='staff-inventari')
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')
@@ -166,6 +167,7 @@ urlpatterns = [
     path('api/staff/proposta/<int:pk>/rifiuta/', RifiutaPropostaView.as_view(), name='staff-rifiuta-proposta'),
     path('api/staff/proposta/<int:pk>/approva/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     path('api/staff/messages/', StaffMessageListView.as_view(), name='staff-messages'),
+    path('api/staff/oggetti-senza-posizione/', views_staff.OggettiSenzaPosizioneView.as_view(), name='staff-oggetti-senza-posizione'),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     

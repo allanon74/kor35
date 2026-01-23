@@ -1296,10 +1296,46 @@ class A_vistaSerializer(serializers.ModelSerializer):
 
 class InventarioSerializer(serializers.ModelSerializer):
     oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
+    personaggio_id = serializers.SerializerMethodField()
+    is_personaggio = serializers.SerializerMethodField()
+    oggetti_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Inventario
-        fields = ('id', 'nome', 'testo', 'oggetti')
+        fields = ('id', 'nome', 'testo', 'oggetti', 'oggetti_count', 'personaggio_id', 'is_personaggio')
+    
+    def get_personaggio_id(self, obj):
+        # Se l'inventario è un Personaggio, restituisci il suo ID
+        if hasattr(obj, 'proprietario'):
+            return obj.id
+        # Altrimenti, cerca se c'è un personaggio con questo inventario
+        try:
+            from .models import Personaggio
+            personaggio = Personaggio.objects.filter(inventario_ptr_id=obj.id).first()
+            return personaggio.id if personaggio else None
+        except:
+            return None
+    
+    def get_is_personaggio(self, obj):
+        return hasattr(obj, 'proprietario')
+    
+    def get_oggetti_count(self, obj):
+        return obj.get_oggetti().count()
+
+class InventarioStaffSerializer(serializers.ModelSerializer):
+    """Serializer per gestione inventari nello staff (CRUD completo)"""
+    oggetti_count = serializers.SerializerMethodField()
+    is_personaggio = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Inventario
+        fields = ('id', 'nome', 'testo', 'oggetti_count', 'is_personaggio')
+    
+    def get_oggetti_count(self, obj):
+        return obj.get_oggetti().count()
+    
+    def get_is_personaggio(self, obj):
+        return hasattr(obj, 'proprietario')
 
 
 class PersonaggioLogSerializer(serializers.ModelSerializer):
