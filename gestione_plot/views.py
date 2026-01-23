@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from django.shortcuts import get_object_or_404
 import os
@@ -240,6 +241,7 @@ class StaffWikiImmagineViewSet(viewsets.ModelViewSet):
     queryset = WikiImmagine.objects.all()
     serializer_class = WikiImmagineSerializer
     permission_classes = [IsMasterOrReadOnly]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]  # Supporta upload file con FormData
     
     def get_serializer_context(self):
         """Aggiunge il request al contesto per generare URL assoluti"""
