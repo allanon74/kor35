@@ -208,7 +208,7 @@ class Command(BaseCommand):
         # 6. ABILITÀ DI ESEMPIO
         self.stdout.write('\n⚡ Esportazione Abilità di Esempio...')
         abilita = Abilita.objects.prefetch_related(
-            'punteggio_acquisito', 'statistiche', 'tiers', 'caratteristica'
+            'punteggio_acquisito', 'tiers', 'caratteristica', 'abilitastatistica_set__statistica'
         )[:limit * 2]
         
         abilita_data = []
@@ -231,8 +231,8 @@ class Command(BaseCommand):
             punteggi_abilita = a.punteggio_acquisito.all() if hasattr(a, 'punteggio_acquisito') else []
             a_data['punteggi_acquisiti'] = [p.nome for p in punteggi_abilita[:5]]
             
-            # Statistiche modificate
-            stats_abilita = a.statistiche.all() if hasattr(a, 'statistiche') else []
+            # Statistiche modificate (usando gli oggetti intermedi AbilitaStatistica)
+            stats_abilita = a.abilitastatistica_set.all() if hasattr(a, 'abilitastatistica_set') else []
             a_data['statistiche'] = [
                 {
                     'statistica': s.statistica.nome,
