@@ -164,14 +164,14 @@ class QuestVista(models.Model):
         ('MAN', 'Manifesto')
     ])
     
-    # Riferimenti a tutti i possibili tipi di a_vista
-    manifesto = models.ForeignKey(Manifesto, on_delete=models.SET_NULL, null=True, blank=True)
-    inventario = models.ForeignKey(Inventario, on_delete=models.SET_NULL, null=True, blank=True)
-    personaggio = models.ForeignKey(Personaggio, on_delete=models.SET_NULL, null=True, blank=True)
-    oggetto = models.ForeignKey('personaggi.Oggetto', on_delete=models.SET_NULL, null=True, blank=True)
-    tessitura = models.ForeignKey('personaggi.Tessitura', on_delete=models.SET_NULL, null=True, blank=True)
-    infusione = models.ForeignKey('personaggi.Infusione', on_delete=models.SET_NULL, null=True, blank=True)
-    cerimoniale = models.ForeignKey('personaggi.Cerimoniale', on_delete=models.SET_NULL, null=True, blank=True)
+    # Riferimenti a tutti i possibili tipi di a_vista (con related_name univoci)
+    manifesto = models.ForeignKey(Manifesto, on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_manifesto')
+    inventario = models.ForeignKey(Inventario, on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_inventario')
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_personaggio')
+    oggetto = models.ForeignKey('personaggi.Oggetto', on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_oggetto')
+    tessitura = models.ForeignKey('personaggi.Tessitura', on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_tessitura')
+    infusione = models.ForeignKey('personaggi.Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_infusione')
+    cerimoniale = models.ForeignKey('personaggi.Cerimoniale', on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_cerimoniale')
     
     qr_code = models.OneToOneField(QrCode, on_delete=models.SET_NULL, null=True, blank=True)
 
