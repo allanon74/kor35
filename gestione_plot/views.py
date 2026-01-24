@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.exceptions import ValidationError
 
 from django.shortcuts import get_object_or_404
 import os
@@ -74,6 +75,94 @@ class EventoViewSet(viewsets.ModelViewSet):
         if user.is_superuser:
             return base_queryset
         return base_queryset.filter(staff_assegnato=user)
+    
+    @action(detail=False, methods=['get'])
+    def a_vista_disponibili(self, request):
+        """
+        Restituisce TUTTI gli oggetti A_vista con tipo calcolato.
+        """
+        from personaggi.models import (
+            A_vista, Personaggio, Inventario, Manifesto, 
+            Oggetto, Tessitura, Infusione, Cerimoniale
+        )
+        
+        risultati = []
+        tipo_mapping = {
+            'PG': 'Personaggio (PG)',
+            'PNG': 'Personaggio Non Giocante (PNG)',
+            'INV': 'Inventario',
+            'OGG': 'Oggetto',
+            'TES': 'Tessitura',
+            'INF': 'Infusione',
+            'CER': 'Cerimoniale',
+            'MAN': 'Manifesto'
+        }
+        
+        # Carica Personaggi con tipologia
+        for p in Personaggio.objects.select_related('tipologia').all():
+            tipo = 'PG' if (p.tipologia and p.tipologia.giocante) else 'PNG'
+            risultati.append({
+                'id': p.id,
+                'nome': p.nome,
+                'tipo': tipo,
+                'tipo_display': tipo_mapping[tipo]
+            })
+        
+        # Inventari NON personaggi (filtra usando personaggio__isnull=True)
+        for inv in Inventario.objects.filter(personaggio__isnull=True):
+            risultati.append({
+                'id': inv.id,
+                'nome': inv.nome,
+                'tipo': 'INV',
+                'tipo_display': tipo_mapping['INV']
+            })
+        
+        # Manifesti
+        for m in Manifesto.objects.all():
+            risultati.append({
+                'id': m.id,
+                'nome': m.nome,
+                'tipo': 'MAN',
+                'tipo_display': tipo_mapping['MAN']
+            })
+        
+        # Oggetti
+        for o in Oggetto.objects.all():
+            risultati.append({
+                'id': o.id,
+                'nome': o.nome,
+                'tipo': 'OGG',
+                'tipo_display': tipo_mapping['OGG']
+            })
+        
+        # Tessiture
+        for t in Tessitura.objects.all():
+            risultati.append({
+                'id': t.id,
+                'nome': t.nome,
+                'tipo': 'TES',
+                'tipo_display': tipo_mapping['TES']
+            })
+        
+        # Infusioni
+        for i in Infusione.objects.all():
+            risultati.append({
+                'id': i.id,
+                'nome': i.nome,
+                'tipo': 'INF',
+                'tipo_display': tipo_mapping['INF']
+            })
+        
+        # Cerimoniali
+        for c in Cerimoniale.objects.all():
+            risultati.append({
+                'id': c.id,
+                'nome': c.nome,
+                'tipo': 'CER',
+                'tipo_display': tipo_mapping['CER']
+            })
+        
+        return Response({'a_vista': risultati})
     
     @action(detail=False, methods=['get'])
     def risorse_editor(self, request):
@@ -155,6 +244,43 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
     queryset = QuestVista.objects.all()
     serializer_class = QuestVistaSerializer
     permission_classes = [IsStaffOrMaster]
+    
+    def perform_create(self, serializer):
+        """
+        Gestisce la creazione intelligente: riceve a_vista_id e tipo,
+        e assegna al campo FK corretto.
+        """
+        from personaggi.models import A_vista
+        
+        a_vista_id = self.request.data.get('a_vista_id') or self.request.data.get('contentId')
+        tipo = self.request.data.get('tipo')
+        
+        if not a_vista_id:
+            raise ValidationError({'error': 'a_vista_id o contentId richiesto'})
+        
+        try:
+            vista_obj = A_vista.objects.get(id=a_vista_id)
+        except A_vista.DoesNotExist:
+            raise ValidationError({'error': 'A_vista non trovato'})
+        
+        # Mappa il tipo al campo FK corretto
+        field_mapping = {
+            'PG': 'personaggio',
+            'PNG': 'personaggio',
+            'INV': 'inventario',
+            'OGG': 'oggetto',
+            'TES': 'tessitura',
+            'INF': 'infusione',
+            'CER': 'cerimoniale',
+            'MAN': 'manifesto'
+        }
+        
+        field_name = field_mapping.get(tipo)
+        if not field_name:
+            raise ValidationError({'error': f'Tipo non valido: {tipo}'})
+        
+        # Salva con il campo FK appropriato
+        serializer.save(**{field_name: vista_obj})
 
     @action(detail=True, methods=['post'])
     def associa_qr(self, request, pk=None):
