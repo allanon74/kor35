@@ -13,7 +13,7 @@
 
 3. **`gestione_plot/views.py`**
    - **NUOVO** `EventoViewSet.a_vista_disponibili()`: Restituisce tutti gli A_vista con tipo calcolato
-   - `QuestVistaViewSet.perform_create()`: Gestione intelligente creazione con a_vista_id
+   - `QuestVistaViewSet.perform_create()`: Gestione intelligente creazione con a_vista_id e tipo specifico per modello
    - `EventoViewSet.get_queryset()`: Prefetch ottimizzato per tutti i campi vista
    - `QuestViewSet.get_queryset()`: Prefetch ottimizzato
    - `risorse_editor`: Inventari filtrati (esclude personaggi), oggetti leggeri
@@ -22,10 +22,12 @@
 
 1. **`src/api.js`**
    - Aggiunto `getAVistaDisponibili()`
+   - **FIX** `addVistaToQuest()`: Usa `a_vista_id` invece di `manifesto`/`inventario`
 
 2. **`src/components/PlotTab.jsx`**
    - Carica `a_vista` in parallelo con risorse
    - Aggiunge `a_vista: []` agli stati
+   - **FIX** `onAddSub` per vista: Passa `{tipo, a_vista_id}` invece di vecchia logica
 
 3. **`src/components/QuestItem.jsx`**
    - Semplificato drasticamente: usa solo `risorse.a_vista`
