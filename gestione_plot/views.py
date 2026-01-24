@@ -248,9 +248,12 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """
         Gestisce la creazione intelligente: riceve a_vista_id e tipo,
-        e assegna al campo FK corretto.
+        e assegna al campo FK corretto cercando nel modello specifico.
         """
-        from personaggi.models import A_vista
+        from personaggi.models import (
+            Personaggio, Inventario, Manifesto, 
+            Oggetto, Tessitura, Infusione, Cerimoniale
+        )
         
         a_vista_id = self.request.data.get('a_vista_id') or self.request.data.get('contentId')
         tipo = self.request.data.get('tipo')
@@ -258,26 +261,27 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
         if not a_vista_id:
             raise ValidationError({'error': 'a_vista_id o contentId richiesto'})
         
-        try:
-            vista_obj = A_vista.objects.get(id=a_vista_id)
-        except A_vista.DoesNotExist:
-            raise ValidationError({'error': 'A_vista non trovato'})
-        
-        # Mappa il tipo al campo FK corretto
-        field_mapping = {
-            'PG': 'personaggio',
-            'PNG': 'personaggio',
-            'INV': 'inventario',
-            'OGG': 'oggetto',
-            'TES': 'tessitura',
-            'INF': 'infusione',
-            'CER': 'cerimoniale',
-            'MAN': 'manifesto'
+        # Mappa tipo -> (modello, campo FK)
+        type_mapping = {
+            'PG': (Personaggio, 'personaggio'),
+            'PNG': (Personaggio, 'personaggio'),
+            'INV': (Inventario, 'inventario'),
+            'OGG': (Oggetto, 'oggetto'),
+            'TES': (Tessitura, 'tessitura'),
+            'INF': (Infusione, 'infusione'),
+            'CER': (Cerimoniale, 'cerimoniale'),
+            'MAN': (Manifesto, 'manifesto')
         }
         
-        field_name = field_mapping.get(tipo)
-        if not field_name:
+        if tipo not in type_mapping:
             raise ValidationError({'error': f'Tipo non valido: {tipo}'})
+        
+        model_class, field_name = type_mapping[tipo]
+        
+        try:
+            vista_obj = model_class.objects.get(id=a_vista_id)
+        except model_class.DoesNotExist:
+            raise ValidationError({'error': f'{tipo} con id {a_vista_id} non trovato'})
         
         # Salva con il campo FK appropriato
         serializer.save(**{field_name: vista_obj})
