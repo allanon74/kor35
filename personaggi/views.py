@@ -1180,6 +1180,12 @@ class MessaggioActionView(APIView):
             if not stato.data_lettura: stato.data_lettura = timezone.now()
             stato.save()
             return Response({"status": "Messaggio segnato come letto"})
+        elif action_type == 'toggle_letto':
+            stato.letto = not stato.letto
+            if stato.letto and not stato.data_lettura:
+                stato.data_lettura = timezone.now()
+            stato.save()
+            return Response({"status": "Stato lettura cambiato", "letto": stato.letto})
         elif action_type == 'cancella':
             stato.cancellato = True
             stato.save()
