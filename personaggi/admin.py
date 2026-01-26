@@ -24,7 +24,7 @@ from .models import (
     PuntiCaratteristicaMovimento, STATISTICA,
     Tabella, Tier, Abilita, Mattone, 
     Caratteristica, Aura, ModelloAura, MattoneStatistica, 
-    Messaggio, Gruppo,
+    Messaggio, LetturaMessaggio, Gruppo,
     abilita_tier, abilita_punteggio, abilita_requisito, abilita_sbloccata, 
     abilita_prerequisito, AbilitaStatistica, CaratteristicaModificatore,
     TransazioneSospesa, STATO_TRANSAZIONE_CHOICES, STATO_TRANSAZIONE_IN_ATTESA, 
@@ -734,11 +734,29 @@ class GruppoAdmin(admin.ModelAdmin):
     list_display = ('nome', 'conteggio_membri'); search_fields = ('nome',); filter_horizontal = ('membri',)
     def conteggio_membri(self, obj): return obj.membri.count()
 
+class LetturaMessaggioInline(admin.TabularInline):
+    model = LetturaMessaggio
+    extra = 0
+    fields = ('personaggio', 'letto', 'data_lettura', 'cancellato')
+    readonly_fields = ('data_lettura',)
+    autocomplete_fields = ['personaggio']
+    verbose_name = "Stato Lettura"
+    verbose_name_plural = "Stati Lettura (per Personaggio)"
+
 @admin.register(Messaggio)
 class MessaggioAdmin(SModelAdmin):
     list_display = ('titolo', 'tipo_messaggio', 'mittente', 'get_destinatario', 'data_invio')
-    list_filter = ('tipo_messaggio', 'salva_in_cronologia', 'data_invio'); search_fields = ('titolo', 'testo', 'mittente__username'); date_hierarchy = 'data_invio'; summernote_fields = ('testo',); autocomplete_fields = ['destinatario_personaggio', 'destinatario_gruppo']
-    fieldsets = (('Dettagli', {'fields': ('titolo', 'mittente', 'data_invio', 'salva_in_cronologia')}), ('Contenuto', {'fields': ('testo',)}), ('Destinazione', {'fields': ('tipo_messaggio', 'destinatario_personaggio', 'destinatario_gruppo')}))
+    list_filter = ('tipo_messaggio', 'salva_in_cronologia', 'data_invio')
+    search_fields = ('titolo', 'testo', 'mittente__username')
+    date_hierarchy = 'data_invio'
+    summernote_fields = ('testo',)
+    autocomplete_fields = ['destinatario_personaggio', 'destinatario_gruppo']
+    inlines = [LetturaMessaggioInline]
+    fieldsets = (
+        ('Dettagli', {'fields': ('titolo', 'mittente', 'data_invio', 'salva_in_cronologia')}),
+        ('Contenuto', {'fields': ('testo',)}),
+        ('Destinazione', {'fields': ('tipo_messaggio', 'destinatario_personaggio', 'destinatario_gruppo')})
+    )
     def get_destinatario(self, obj):
         if obj.tipo_messaggio == 'BROAD': return format_html("<b>TUTTI</b>")
         elif obj.tipo_messaggio == 'GROUP': return format_html(f"Gruppo: {obj.destinatario_gruppo}")

@@ -2,7 +2,8 @@ import string
 from collections import Counter
 from decimal import Decimal
 from django.shortcuts import render
-from django.db.models import Count, Sum, Prefetch, OuterRef, Exists
+from django.db.models import Count, Sum, Prefetch, OuterRef, Exists, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse, HttpRequest
 from rest_framework import serializers
@@ -1154,12 +1155,16 @@ class MessaggioListView(generics.ListAPIView):
             cancellato=True
         ).values_list('messaggio_id', flat=True)
 
-        lettura_esistente = LetturaMessaggio.objects.filter(
+        # CORRETTO: Usa Subquery per ottenere il VALORE del campo 'letto'
+        # Coalesce gestisce il caso None (quando non esiste il record) -> False
+        lettura_stato = LetturaMessaggio.objects.filter(
             messaggio=OuterRef('pk'),
-            personaggio=target_pg,
-            letto=True
+            personaggio=target_pg
+        ).values('letto')[:1]
+        
+        return messaggi.exclude(id__in=ids_cancellati).annotate(
+            is_letto_db=Coalesce(Subquery(lettura_stato), Value(False))
         )
-        return messaggi.exclude(id__in=ids_cancellati).annotate(is_letto_db=Exists(lettura_esistente))
     
 class MessaggioActionView(APIView):
     permission_classes = [IsAuthenticated]
