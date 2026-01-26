@@ -1883,16 +1883,23 @@ class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
 
 class MessaggioCreateSerializer(serializers.ModelSerializer):
     destinatario_id = serializers.PrimaryKeyRelatedField(
-        queryset=Personaggio.objects.all(), source='destinatario_personaggio', write_only=True
+        queryset=Personaggio.objects.all(), source='destinatario_personaggio', write_only=True, required=False, allow_null=True
     )
+    is_staff_message = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Messaggio
-        fields = ('destinatario_id', 'titolo', 'testo')
+        fields = ('destinatario_id', 'titolo', 'testo', 'is_staff_message')
 
     def create(self, validated_data):
         validated_data['mittente'] = self.context['request'].user
-        validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
+        
+        # Se è un messaggio staff, imposta tipo_messaggio a STAFF
+        if validated_data.get('is_staff_message'):
+            validated_data['tipo_messaggio'] = Messaggio.TIPO_STAFF
+        else:
+            validated_data['tipo_messaggio'] = Messaggio.TIPO_INDIVIDUALE
+            
         return super().create(validated_data)
     
 class RichiestaAssemblaggioSerializer(serializers.ModelSerializer):

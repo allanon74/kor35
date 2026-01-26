@@ -1559,7 +1559,26 @@ class PersonaggioAutocompleteView(generics.ListAPIView):
 class MessaggioPrivateCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = MessaggioCreateSerializer
-    def perform_create(self, serializer): serializer.save(mittente=self.request.user)
+    
+    def perform_create(self, serializer):
+        # Recupera il personaggio mittente
+        personaggio_mittente = Personaggio.objects.filter(proprietario=self.request.user).first()
+        
+        # Se is_staff_message è True, crea un messaggio allo staff
+        if self.request.data.get('is_staff_message'):
+            serializer.save(
+                mittente=self.request.user,
+                mittente_personaggio=personaggio_mittente,
+                tipo_messaggio=Messaggio.TIPO_STAFF,
+                is_staff_message=True,
+                destinatario_personaggio=None  # Non c'è destinatario specifico per lo staff
+            )
+        else:
+            # Messaggio normale a un altro personaggio
+            serializer.save(
+                mittente=self.request.user,
+                mittente_personaggio=personaggio_mittente
+            )
         
         
 class OggettoViewSet(viewsets.ModelViewSet):
