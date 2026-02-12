@@ -3,7 +3,8 @@ from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
     MostroTemplate, AttaccoTemplate, PngAssegnato, 
     StaffOffGame, QuestFase, QuestTask,
-    PaginaRegolamento, WikiImmagine
+    PaginaRegolamento, WikiImmagine,
+    ConfigurazioneSito, LinkSocial
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
@@ -152,3 +153,57 @@ class WikiImmagineAdmin(admin.ModelAdmin):
         if not change:  # Solo quando viene creato
             obj.creatore = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(ConfigurazioneSito)
+class ConfigurazioneSitoAdmin(admin.ModelAdmin):
+    """
+    Admin per la configurazione del sito (Singleton).
+    """
+    list_display = ('nome_associazione', 'email', 'citta', 'anno_fondazione', 'ultima_modifica')
+    readonly_fields = ('ultima_modifica',)
+    
+    fieldsets = (
+        ('Informazioni Associazione', {
+            'fields': ('nome_associazione', 'descrizione_breve', 'anno_fondazione')
+        }),
+        ('Sede', {
+            'fields': ('indirizzo', 'cap', 'citta', 'provincia', 'nazione')
+        }),
+        ('Contatti', {
+            'fields': ('email', 'pec', 'telefono')
+        }),
+        ('Metadata', {
+            'fields': ('ultima_modifica',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # Impedisce la creazione di più di un record (Singleton)
+        return not ConfigurazioneSito.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        # Impedisce la cancellazione della configurazione
+        return False
+
+
+@admin.register(LinkSocial)
+class LinkSocialAdmin(admin.ModelAdmin):
+    """
+    Admin per i link social.
+    """
+    list_display = ('tipo', 'nome_visualizzato', 'url', 'ordine', 'attivo')
+    list_filter = ('tipo', 'attivo')
+    search_fields = ('nome_visualizzato', 'url', 'descrizione')
+    list_editable = ('ordine', 'attivo')
+    ordering = ('ordine', 'tipo')
+    
+    fieldsets = (
+        ('Informazioni Link', {
+            'fields': ('tipo', 'nome_visualizzato', 'url', 'descrizione')
+        }),
+        ('Visualizzazione', {
+            'fields': ('ordine', 'attivo')
+        }),
+    )

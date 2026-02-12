@@ -5,6 +5,7 @@ from .models import (
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask, WikiImmagine,
+    ConfigurazioneSito, LinkSocial,
 )
 from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier
 from personaggi.serializers import (
@@ -192,6 +193,15 @@ class EventoSerializer(serializers.ModelSerializer):
             'luogo', 'pc_guadagnati', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details'
         ]
+
+class EventoPubblicoSerializer(serializers.ModelSerializer):
+    """
+    Serializer semplificato per gli eventi pubblici (homepage).
+    Mostra solo le informazioni essenziali senza dati sensibili.
+    """
+    class Meta:
+        model = Evento
+        fields = ['id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 'luogo']
         
 class PaginaRegolamentoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -276,3 +286,29 @@ class WikiImmagineSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.immagine.url)
             return obj.immagine.url
         return None
+
+
+class ConfigurazioneSitoSerializer(serializers.ModelSerializer):
+    """
+    Serializer per la configurazione del sito
+    """
+    class Meta:
+        model = ConfigurazioneSito
+        fields = [
+            'id', 'nome_associazione', 'descrizione_breve', 'anno_fondazione',
+            'indirizzo', 'citta', 'cap', 'provincia', 'nazione',
+            'email', 'pec', 'telefono', 'ultima_modifica'
+        ]
+        read_only_fields = ['id', 'ultima_modifica']
+
+
+class LinkSocialSerializer(serializers.ModelSerializer):
+    """
+    Serializer per i link social
+    """
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    
+    class Meta:
+        model = LinkSocial
+        fields = ['id', 'tipo', 'tipo_display', 'nome_visualizzato', 'url', 'descrizione', 'ordine', 'attivo']
+        read_only_fields = ['id']

@@ -24,12 +24,13 @@ from personaggi.serializers import (
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
     TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
-from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, ConfigurazioneSito, LinkSocial
 from .serializers import (
-    EventoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
+    EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer,
     StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiTierSerializer, WikiImmagineSerializer,
+    ConfigurazioneSitoSerializer, LinkSocialSerializer,
                           )
 
 
@@ -409,6 +410,55 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
     serializer_class = WikiTierSerializer
     permission_classes = [permissions.AllowAny] # Accesso pubblic
+
+class PublicEventiViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone gli eventi pubblici per la homepage.
+    Mostra solo gli eventi futuri o recenti (ultimi 30 giorni).
+    """
+    serializer_class = EventoPubblicoSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    def get_queryset(self):
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Data di oggi e data limite per eventi passati (30 giorni fa)
+        oggi = timezone.now()
+        trenta_giorni_fa = oggi - timedelta(days=30)
+        
+        # Restituisce eventi che:
+        # - Sono nel futuro (data_inizio >= oggi), O
+        # - Sono finiti da meno di 30 giorni (data_fine >= 30 giorni fa)
+        return Evento.objects.filter(
+            data_fine__gte=trenta_giorni_fa
+        ).order_by('data_inizio')
+
+class PublicConfigurazioneSitoViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone la configurazione del sito (info associazione per widget Chi Siamo).
+    Singleton - restituisce sempre il record con pk=1.
+    """
+    serializer_class = ConfigurazioneSitoSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    def get_queryset(self):
+        # Assicura che il record esista
+        ConfigurazioneSito.get_config()
+        return ConfigurazioneSito.objects.all()
+
+
+class PublicLinkSocialViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone i link social attivi per il widget Social.
+    """
+    serializer_class = LinkSocialSerializer
+    permission_classes = [permissions.AllowAny]
+    
+    def get_queryset(self):
+        # Restituisce solo i link attivi, ordinati per 'ordine'
+        return LinkSocial.objects.filter(attivo=True).order_by('ordine', 'tipo')
+
 
 class PublicWikiImmagineViewSet(viewsets.ReadOnlyModelViewSet):
     """

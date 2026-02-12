@@ -5,12 +5,13 @@ from icon_widget import views
 
 # from personaggi import views_staff
 from .views import(
-    EventoViewSet, PublicAuraViewSet, PublicTabellaViewSet, PublicTierViewSet, QuestMostroViewSet, 
+    EventoViewSet, PublicAuraViewSet, PublicTabellaViewSet, PublicTierViewSet, PublicEventiViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
     get_wiki_menu, get_wiki_page, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
+    PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet,
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -48,6 +49,9 @@ router.register(r'public/wiki-tabelle', PublicTabellaViewSet, basename='public-w
 router.register(r'public/wiki-aure', PublicAuraViewSet, basename='public-wiki-aure')
 router.register(r'public/wiki-tiers', PublicTierViewSet, basename='public-wiki-tiers')
 router.register(r'public/wiki-immagini', PublicWikiImmagineViewSet, basename='public-wiki-immagini')
+router.register(r'public/eventi', PublicEventiViewSet, basename='public-eventi')
+router.register(r'public/configurazione-sito', PublicConfigurazioneSitoViewSet, basename='public-configurazione-sito')
+router.register(r'public/link-social', PublicLinkSocialViewSet, basename='public-link-social')
 
 urlpatterns = [
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),

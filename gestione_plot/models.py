@@ -332,3 +332,84 @@ class WikiImmagine(models.Model):
 
     def __str__(self):
         return f"{self.titolo} ({self.immagine.name if self.immagine else 'Nessuna immagine'})"
+
+
+# --- CONFIGURAZIONE SITO E SOCIAL ---
+
+class ConfigurazioneSito(models.Model):
+    """
+    Configurazione generale del sito e informazioni sull'associazione.
+    Singleton - dovrebbe esistere un solo record.
+    """
+    # Chi Siamo
+    nome_associazione = models.CharField(max_length=200, default="KOR35", help_text="Nome dell'associazione")
+    descrizione_breve = models.TextField(
+        default="Un'associazione ludico-culturale che organizza eventi di gioco di ruolo dal vivo (GRV/LARP).",
+        help_text="Breve descrizione dell'associazione (2-3 righe)"
+    )
+    anno_fondazione = models.PositiveIntegerField(default=2020, help_text="Anno di fondazione")
+    
+    # Sede
+    indirizzo = models.CharField(max_length=255, default="Via Esempio 123", help_text="Indirizzo della sede")
+    citta = models.CharField(max_length=100, default="Bolzano", help_text="Città")
+    cap = models.CharField(max_length=10, default="39100", help_text="CAP")
+    provincia = models.CharField(max_length=2, default="BZ", help_text="Sigla provincia")
+    nazione = models.CharField(max_length=50, default="Italia")
+    
+    # Contatti
+    email = models.EmailField(default="info@kor35.it", help_text="Email principale")
+    pec = models.EmailField(blank=True, help_text="Email PEC (opzionale)")
+    telefono = models.CharField(max_length=50, blank=True, help_text="Telefono (opzionale)")
+    
+    # Metadata
+    ultima_modifica = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Configurazione Sito"
+        verbose_name_plural = "Configurazione Sito"
+    
+    def __str__(self):
+        return f"Configurazione {self.nome_associazione}"
+    
+    def save(self, *args, **kwargs):
+        # Assicura che esista un solo record (Singleton pattern)
+        self.pk = 1
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_config(cls):
+        """Metodo helper per recuperare la configurazione"""
+        config, created = cls.objects.get_or_create(pk=1)
+        return config
+
+
+class LinkSocial(models.Model):
+    """
+    Link ai social media e canali di comunicazione dell'associazione
+    """
+    TIPO_CHOICES = [
+        ('whatsapp', 'WhatsApp'),
+        ('instagram', 'Instagram'),
+        ('facebook', 'Facebook'),
+        ('youtube', 'YouTube'),
+        ('twitter', 'Twitter'),
+        ('discord', 'Discord'),
+        ('telegram', 'Telegram'),
+        ('email', 'Email'),
+        ('altro', 'Altro'),
+    ]
+    
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, help_text="Tipo di social/canale")
+    nome_visualizzato = models.CharField(max_length=100, help_text="Nome da mostrare (es: @kor35official)")
+    url = models.CharField(max_length=500, help_text="URL o link (es: https://instagram.com/kor35)")
+    descrizione = models.CharField(max_length=200, blank=True, help_text="Descrizione opzionale")
+    ordine = models.PositiveIntegerField(default=0, help_text="Ordine di visualizzazione (numero più basso = primo)")
+    attivo = models.BooleanField(default=True, help_text="Mostra questo link")
+    
+    class Meta:
+        verbose_name = "Link Social"
+        verbose_name_plural = "Link Social"
+        ordering = ['ordine', 'tipo']
+    
+    def __str__(self):
+        return f"{self.get_tipo_display()} - {self.nome_visualizzato}"
