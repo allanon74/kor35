@@ -300,7 +300,7 @@ class GestioneOggettiService:
         is_tecnologico = False
         
         if aura_oggetto.sigla == "ATE": 
-                is_tecnologico == True 
+                is_tecnologico = True 
         
         if scelta == 'AUM':
             prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
@@ -557,7 +557,7 @@ class GestioneOggettiService:
                         infusione=req.infusione, 
                         destinatario_finale=req.committente,
                         is_academy=False,
-                        aiutante=req.artigiano
+                        aiutante=None
                     )
                 elif req.tipo_operazione == TIPO_OPERAZIONE_RIMOZIONE:
                     GestioneOggettiService.rimuovi_mod(req.artigiano, req.oggetto_host, req.componente)
@@ -667,10 +667,41 @@ class GestioneCraftingService:
         return max(1, valore) if valore > 0 else statistica_ref.valore_base_predefinito
 
     @staticmethod
+    def determina_campo_costo_creazione(infusione):
+        """
+        Determina quale campo stat_costo_creazione_* usare in base al tipo di oggetto.
+        Ritorna il nome del campo da cercare nell'aura.
+        """
+        aura_oggetto = infusione.aura_infusione if infusione.aura_infusione else infusione.aura_richiesta
+        tipo_risultato = getattr(infusione, 'tipo_risultato', 'POT')
+        is_tecnologico = aura_oggetto.sigla == "ATE" if aura_oggetto else False
+        
+        if tipo_risultato == 'AUM':  # Aumento corporeo
+            if is_tecnologico:
+                return 'stat_costo_creazione_innesto'  # Innesto
+            else:
+                return 'stat_costo_creazione_mutazione'  # Mutazione
+        else:  # POT - Potenziamento
+            if is_tecnologico:
+                return 'stat_costo_creazione_mod'  # Mod
+            else:
+                return 'stat_costo_creazione_oggetto'  # Materia
+    
+    @staticmethod
     def calcola_costi_forgiatura(personaggio, infusione):
         aura = infusione.aura_richiesta
         if not aura: return 0, 0
-        costo_per_mattone = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, 'stat_costo_forgiatura')
+        
+        # Determina quale campo stat_costo_creazione_* usare
+        campo_costo = GestioneCraftingService.determina_campo_costo_creazione(infusione)
+        
+        # Prova prima con il campo specifico per tipo di oggetto
+        statistica_costo = getattr(aura, campo_costo, None)
+        if not statistica_costo:
+            # Fallback a stat_costo_forgiatura se il campo specifico non è configurato
+            campo_costo = 'stat_costo_forgiatura'
+        
+        costo_per_mattone = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, campo_costo)
         tempo_per_mattone = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, 'stat_tempo_forgiatura')
         livello = infusione.livello
         if livello == 0: livello = 1
@@ -802,7 +833,10 @@ class GestioneCraftingService:
         fine_prevista = data_inizio_lavoro + timedelta(seconds=durata_secondi)
 
         with transaction.atomic():
-            personaggio.modifica_crediti(-costo_totale, descrizione)
+            # Per forgiatura collaborativa, paga il committente (destinatario_finale)
+            # altrimenti paga il personaggio stesso
+            pagatore = destinatario_finale if destinatario_finale else personaggio
+            pagatore.modifica_crediti(-costo_totale, descrizione)
             forgiatura = ForgiaturaInCorso.objects.create(
                 personaggio=personaggio, 
                 infusione=infusione, 

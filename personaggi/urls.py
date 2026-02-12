@@ -152,8 +152,6 @@ urlpatterns = [
     path('api/oggetti/forgia/', views.forgia_item_view, name='forgia_item'),
     # ### NUOVO: Endpoint Validazione Assemblaggio (Mancava questo!)
     path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'),
-    
-    path('api/assembly/validate/', views.AssemblyValidationView.as_view(), name='api_assembly_validate'), # <-- AGGIUNTO
     path('api/assembly/artisans/', views.CapableArtisansView.as_view(), name='capable-artisans'),
     
     path('api/forging/validate/', views.ForgingValidationView.as_view(), name='validate_forging'),

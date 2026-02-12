@@ -18,13 +18,18 @@ from django.utils.html import format_html
 from icon_widget.fields import CustomIconField
 
 # --- COSTANTI DI SISTEMA (FALLBACK) ---
-COSTO_PER_MATTONE_INFUSIONE = 100
-COSTO_PER_MATTONE_TESSITURA = 100
-COSTO_PER_MATTONE_CERIMONIALE = 100
-COSTO_PER_MATTONE_OGGETTO = 100
-COSTO_PER_MATTONE_CREAZIONE = 10 # Costo invio proposta
-COSTO_DEFAULT_PER_MATTONE = 100
-COSTO_DEFAULT_INVIO_PROPOSTA = 10
+# COSTANTI DI FALLBACK (usate quando stat_costo_* non è configurato sull'aura)
+COSTO_PER_MATTONE_INFUSIONE = 100  # Fallback per stat_costo_creazione_infusione
+COSTO_PER_MATTONE_TESSITURA = 100  # Fallback per stat_costo_creazione_tessitura
+COSTO_PER_MATTONE_CERIMONIALE = 100  # Fallback per stat_costo_creazione_cerimoniale
+COSTO_PER_MATTONE_OGGETTO = 100  # Fallback generico (deprecato, usare le costanti specifiche sotto)
+COSTO_CREAZIONE_OGGETTO_PER_MATTONE = 100  # Fallback per stat_costo_creazione_oggetto (Materia)
+COSTO_CREAZIONE_MOD_PER_MATTONE = 100  # Fallback per stat_costo_creazione_mod
+COSTO_CREAZIONE_INNESTO_PER_MATTONE = 100  # Fallback per stat_costo_creazione_innesto
+COSTO_CREAZIONE_MUTAZIONE_PER_MATTONE = 100  # Fallback per stat_costo_creazione_mutazione
+COSTO_PER_MATTONE_CREAZIONE = 10  # Costo invio proposta (fallback)
+COSTO_DEFAULT_PER_MATTONE = 100  # Fallback generico
+COSTO_DEFAULT_INVIO_PROPOSTA = 10  # Fallback invio proposta
 
 # --- COSTANTI TRANSAZIONI ---
 STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
@@ -576,6 +581,12 @@ class Punteggio(Tabella):
     # COSTI CRAFTING (Forgiatura)
     stat_costo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_forgia')
     stat_tempo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_tempo_forgia')
+    
+    # COSTI CREAZIONE OGGETTI (Creazione diretta senza forgiatura)
+    stat_costo_creazione_oggetto = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_ogg', verbose_name="Stat. Costo Creazione Oggetto (Materia)")
+    stat_costo_creazione_mod = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_mod', verbose_name="Stat. Costo Creazione Mod")
+    stat_costo_creazione_innesto = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_inn', verbose_name="Stat. Costo Creazione Innesto")
+    stat_costo_creazione_mutazione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_mut', verbose_name="Stat. Costo Creazione Mutazione")
     
     caratteristica_relativa = models.ForeignKey("Punteggio", on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, null=True, blank=True, related_name="punteggi_caratteristica")
     modifica_statistiche = models.ManyToManyField('Statistica', through='CaratteristicaModificatore', related_name='modificata_da_caratteristiche', blank=True)
@@ -2341,7 +2352,7 @@ class RichiestaAssemblaggio(models.Model):
         if self.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA and not self.infusione:
             raise ValidationError("Per la forgiatura è obbligatorio specificare l'infusione.")
             
-        if self.tipo_operazione != TIPO_OPERAZIONE_FORGIATURA and (not self.oggetto_host or not self.componente):
+        if self.tipo_operazione not in (TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_INNESTO) and (not self.oggetto_host or not self.componente):
              raise ValidationError("Installazione e Rimozione richiedono Host e Componente.")
     
     def __str__(self):
