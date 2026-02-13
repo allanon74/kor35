@@ -513,6 +513,37 @@ class AcquisisciTessituraView(APIView):
 
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class ToggleTessituraFavoriteView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        personaggio_id = request.data.get('personaggio_id')
+        tessitura_id = request.data.get('tessitura_id')
+        
+        if not personaggio_id or not tessitura_id:
+            return Response({"error": "Dati mancanti."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            tessitura = Tessitura.objects.get(id=tessitura_id)
+        except (Personaggio.DoesNotExist, Tessitura.DoesNotExist):
+            return Response({"error": "Oggetto non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verifica che il personaggio possieda la tessitura
+        pivot = PersonaggioTessitura.objects.filter(personaggio=personaggio, tessitura=tessitura).first()
+        if not pivot:
+            return Response({"error": "Tessitura non posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Toggle del favorito
+        pivot.is_favorite = not pivot.is_favorite
+        pivot.save()
+        
+        return Response({
+            'success': True,
+            'is_favorite': pivot.is_favorite,
+            'tessitura_id': tessitura_id
+        }, status=status.HTTP_200_OK)
     
 class CerimonialiAcquistabiliView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]

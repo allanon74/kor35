@@ -122,6 +122,7 @@ urlpatterns = [
     # Endpoint per Tessiture
     path('api/personaggio/me/tessiture_acquistabili/', views.TessitureAcquistabiliView.as_view(), name='tessiture_acquistabili'),
     path('api/personaggio/me/acquisisci_tessitura/', views.AcquisisciTessituraView.as_view(), name='acquisisci_tessitura'),
+    path('api/personaggio/me/toggle_tessitura_favorite/', views.ToggleTessituraFavoriteView.as_view(), name='toggle_tessitura_favorite'),
     
     # Endpoint per Cerimoniali
     path('api/personaggio/me/cerimoniali_acquistabili/', views.CerimonialiAcquistabiliView.as_view(), name='api_cerimoniali_acquistabili'),

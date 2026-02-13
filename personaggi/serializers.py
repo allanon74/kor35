@@ -1477,12 +1477,16 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_tessiture_possedute(self, personaggio):
+        from .models import PersonaggioTessitura
         tessiture = personaggio.tessiture_possedute.all()
         risultati = []
         context_con_pg = {**self.context, 'personaggio': personaggio}
         for tes in tessiture:
             dati = TessituraSerializer(tes, context=context_con_pg).data
             dati['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(tes)
+            # Aggiungi informazione se è favorita
+            pivot = PersonaggioTessitura.objects.filter(personaggio=personaggio, tessitura=tes).first()
+            dati['is_favorite'] = pivot.is_favorite if pivot else False
             risultati.append(dati)
         return risultati
     

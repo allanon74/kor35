@@ -1975,7 +1975,15 @@ class PersonaggioAttivata(models.Model):
 class PersonaggioInfusione(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
 class PersonaggioTessitura(models.Model):
-    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+    is_favorite = models.BooleanField(default=False, verbose_name="Preferita")
+    
+    class Meta:
+        verbose_name = "Personaggio - Tessitura"
+        verbose_name_plural = "Personaggio - Tessiture"
+        unique_together = [['personaggio', 'tessitura']]
 
 class PersonaggioCerimoniale(models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
