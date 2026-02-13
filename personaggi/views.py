@@ -23,6 +23,7 @@ from .models import (
     PersonaggioModelloAura, ModelloAura, PropostaTecnica, 
     # NUOVI MODELLI INTERMEDI
     PropostaTecnicaCaratteristica, InfusioneCaratteristica, TessituraCaratteristica,
+    PersonaggioTessitura,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, LetturaMessaggio, PersonaggioLog,
     STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES,
     PropostaTransazione,
