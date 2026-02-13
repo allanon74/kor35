@@ -4,7 +4,7 @@ from .models import (
     Evento, GiornoEvento, PaginaRegolamento, Quest, 
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
-    QuestFase, QuestTask, WikiImmagine,
+    QuestFase, QuestTask, WikiImmagine, WikiButtonWidget, WikiButton,
     ConfigurazioneSito, LinkSocial,
 )
 from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier
@@ -286,6 +286,64 @@ class WikiImmagineSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.immagine.url)
             return obj.immagine.url
         return None
+
+
+class WikiButtonSerializer(serializers.ModelSerializer):
+    """
+    Serializer per i singoli pulsanti del widget
+    """
+    class Meta:
+        model = WikiButton
+        fields = [
+            'id', 'title', 'description', 'subtext', 'icon',
+            'style', 'size', 'color_preset',
+            'link_type', 'wiki_slug', 'app_route', 'ordine'
+        ]
+
+
+class WikiButtonWidgetSerializer(serializers.ModelSerializer):
+    """
+    Serializer per i widget pulsanti.
+    Include la lista dei pulsanti annidati.
+    """
+    buttons = WikiButtonSerializer(many=True)
+    creatore_nome = serializers.CharField(source='creatore.username', read_only=True)
+    
+    class Meta:
+        model = WikiButtonWidget
+        fields = [
+            'id', 'title', 'buttons',
+            'data_creazione', 'data_modifica', 'creatore', 'creatore_nome'
+        ]
+        read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
+    
+    def create(self, validated_data):
+        """Crea widget e pulsanti annidati"""
+        buttons_data = validated_data.pop('buttons', [])
+        widget = WikiButtonWidget.objects.create(**validated_data)
+        
+        for button_data in buttons_data:
+            WikiButton.objects.create(widget=widget, **button_data)
+        
+        return widget
+    
+    def update(self, instance, validated_data):
+        """Aggiorna widget e pulsanti annidati"""
+        buttons_data = validated_data.pop('buttons', None)
+        
+        # Aggiorna campi del widget
+        instance.title = validated_data.get('title', instance.title)
+        instance.save()
+        
+        # Se ci sono pulsanti da aggiornare
+        if buttons_data is not None:
+            # Elimina i pulsanti esistenti e ricreali
+            instance.buttons.all().delete()
+            
+            for button_data in buttons_data:
+                WikiButton.objects.create(widget=instance, **button_data)
+        
+        return instance
 
 
 class ConfigurazioneSitoSerializer(serializers.ModelSerializer):

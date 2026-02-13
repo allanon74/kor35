@@ -11,6 +11,7 @@ from .views import(
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
     get_wiki_menu, get_wiki_page, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
+    PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
     PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet,
                    )
 from personaggi.views_staff import(
@@ -43,12 +44,16 @@ router.register(r'staff/pagine-regolamento-small',
 router.register(r'staff/wiki-immagini', 
                 StaffWikiImmagineViewSet, 
                 basename='staff-wiki-immagini')
+router.register(r'staff/wiki-buttons', 
+                StaffWikiButtonWidgetViewSet, 
+                basename='staff-wiki-buttons')
 router.register(r'public/wiki-menu', PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
 router.register(r'public/wiki-page', PublicPaginaRegolamentoDetail, basename='public-wiki-page')
 router.register(r'public/wiki-tabelle', PublicTabellaViewSet, basename='public-wiki-tabelle')
 router.register(r'public/wiki-aure', PublicAuraViewSet, basename='public-wiki-aure')
 router.register(r'public/wiki-tiers', PublicTierViewSet, basename='public-wiki-tiers')
 router.register(r'public/wiki-immagini', PublicWikiImmagineViewSet, basename='public-wiki-immagini')
+router.register(r'public/wiki-buttons', PublicWikiButtonWidgetViewSet, basename='public-wiki-buttons')
 router.register(r'public/eventi', PublicEventiViewSet, basename='public-eventi')
 router.register(r'public/configurazione-sito', PublicConfigurazioneSitoViewSet, basename='public-configurazione-sito')
 router.register(r'public/link-social', PublicLinkSocialViewSet, basename='public-link-social')

@@ -3,7 +3,7 @@ from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
     MostroTemplate, AttaccoTemplate, PngAssegnato, 
     StaffOffGame, QuestFase, QuestTask,
-    PaginaRegolamento, WikiImmagine,
+    PaginaRegolamento, WikiImmagine, WikiButtonWidget, WikiButton,
     ConfigurazioneSito, LinkSocial
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
@@ -153,6 +153,68 @@ class WikiImmagineAdmin(admin.ModelAdmin):
         if not change:  # Solo quando viene creato
             obj.creatore = request.user
         super().save_model(request, obj, form, change)
+
+
+# --- WIDGET BUTTONS ---
+
+class WikiButtonInline(admin.TabularInline):
+    model = WikiButton
+    extra = 1
+    fields = ('ordine', 'title', 'style', 'size', 'color_preset', 'link_type', 'wiki_slug', 'app_route', 'icon')
+    ordering = ('ordine',)
+
+
+@admin.register(WikiButtonWidget)
+class WikiButtonWidgetAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'count_buttons', 'creatore', 'data_creazione')
+    list_filter = ('data_creazione', 'creatore')
+    search_fields = ('title',)
+    readonly_fields = ('data_creazione', 'data_modifica')
+    inlines = [WikiButtonInline]
+    ordering = ('-data_creazione',)
+    
+    fieldsets = (
+        ('Informazioni Widget', {
+            'fields': ('title', 'creatore')
+        }),
+        ('Metadati', {
+            'fields': ('data_creazione', 'data_modifica'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def count_buttons(self, obj):
+        return obj.buttons.count()
+    count_buttons.short_description = 'N° Pulsanti'
+    
+    def save_model(self, request, obj, form, change):
+        if not change:  # Solo quando viene creato
+            obj.creatore = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(WikiButton)
+class WikiButtonAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'widget', 'style', 'size', 'color_preset', 'link_type', 'ordine')
+    list_filter = ('style', 'size', 'color_preset', 'link_type', 'widget')
+    search_fields = ('title', 'description')
+    list_editable = ('ordine',)
+    ordering = ('widget', 'ordine')
+    
+    fieldsets = (
+        ('Pulsante', {
+            'fields': ('widget', 'title', 'description', 'subtext', 'icon')
+        }),
+        ('Stile', {
+            'fields': ('style', 'size', 'color_preset')
+        }),
+        ('Destinazione', {
+            'fields': ('link_type', 'wiki_slug', 'app_route')
+        }),
+        ('Ordinamento', {
+            'fields': ('ordine',)
+        }),
+    )
 
 
 @admin.register(ConfigurazioneSito)

@@ -24,14 +24,13 @@ from personaggi.serializers import (
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
     TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
-from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, ConfigurazioneSito, LinkSocial
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiButtonWidget, WikiButton, ConfigurazioneSito, LinkSocial
 from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
-    MostroTemplateSerializer, User, UserShortSerializer, UserShortSerializer,
-    StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiTierSerializer, WikiImmagineSerializer,
-    ConfigurazioneSitoSerializer, LinkSocialSerializer,
-                          )
+    MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiButtonWidgetSerializer,
+    ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer
+)
 
 
 from django.contrib.auth.models import User
@@ -494,6 +493,35 @@ class StaffWikiImmagineViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Imposta automaticamente il creatore quando viene creata un'immagine"""
         serializer.save(creatore=self.request.user)
+    
+
+class PublicWikiButtonWidgetViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Espone i widget pulsanti per l'uso nelle pagine wiki.
+    Accesso pubblico in lettura.
+    """
+    queryset = WikiButtonWidget.objects.all().prefetch_related('buttons')
+    serializer_class = WikiButtonWidgetSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class StaffWikiButtonWidgetViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet per la gestione CRUD dei widget pulsanti (solo staff).
+    Permette di creare, modificare ed eliminare widget pulsanti.
+    """
+    queryset = WikiButtonWidget.objects.all().prefetch_related('buttons')
+    serializer_class = WikiButtonWidgetSerializer
+    permission_classes = [IsMasterOrReadOnly]
+    
+    def perform_create(self, serializer):
+        """Imposta il creatore al momento della creazione"""
+        serializer.save(creatore=self.request.user)
+    
+    def perform_update(self, serializer):
+        """Mantiene il creatore originale durante l'aggiornamento"""
+        # Il creatore non viene modificato, viene mantenuto quello originale
+        serializer.save()
     
     
 def is_staff_user(user):

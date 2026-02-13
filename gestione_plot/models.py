@@ -334,6 +334,163 @@ class WikiImmagine(models.Model):
         return f"{self.titolo} ({self.immagine.name if self.immagine else 'Nessuna immagine'})"
 
 
+class WikiButtonWidget(models.Model):
+    """
+    Modello per gestire widget di pulsanti configurabili nella wiki.
+    Ogni widget contiene una lista di pulsanti con link a pagine wiki o sezioni app.
+    """
+    title = models.CharField(
+        max_length=200, 
+        blank=True,
+        help_text="Titolo opzionale del widget (per identificazione interna)"
+    )
+    
+    # Metadati
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_modifica = models.DateTimeField(auto_now=True)
+    creatore = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='button_widgets_creati'
+    )
+    
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Widget Pulsanti"
+        verbose_name_plural = "Widget Pulsanti"
+
+    def __str__(self):
+        btn_count = self.buttons.count()
+        return f"Widget Pulsanti #{self.id} ({btn_count} pulsanti)"
+
+
+class WikiButton(models.Model):
+    """
+    Singolo pulsante all'interno di un WikiButtonWidget.
+    """
+    # Stili disponibili
+    STYLE_GRADIENT = 'gradient'
+    STYLE_LIGHT = 'light'
+    STYLE_CHOICES = [
+        (STYLE_GRADIENT, 'Gradiente (grande)'),
+        (STYLE_LIGHT, 'Chiaro (compatto)'),
+    ]
+    
+    # Dimensioni disponibili
+    SIZE_SMALL = 'small'
+    SIZE_MEDIUM = 'medium'
+    SIZE_LARGE = 'large'
+    SIZE_CHOICES = [
+        (SIZE_SMALL, 'Piccolo'),
+        (SIZE_MEDIUM, 'Medio'),
+        (SIZE_LARGE, 'Grande'),
+    ]
+    
+    # Schemi colori disponibili
+    COLOR_INDIGO_PURPLE = 'indigo_purple'
+    COLOR_RED_ORANGE = 'red_orange'
+    COLOR_EMERALD_TEAL = 'emerald_teal'
+    COLOR_BLUE_INDIGO = 'blue_indigo'
+    COLOR_PINK_ROSE = 'pink_rose'
+    COLOR_AMBER_ORANGE = 'amber_orange'
+    COLOR_CYAN_BLUE = 'cyan_blue'
+    COLOR_VIOLET_PURPLE = 'violet_purple'
+    COLOR_SLATE_GRAY = 'slate_gray'
+    COLOR_LIME_GREEN = 'lime_green'
+    
+    COLOR_CHOICES = [
+        (COLOR_INDIGO_PURPLE, 'Indaco-Viola'),
+        (COLOR_RED_ORANGE, 'Rosso-Arancio'),
+        (COLOR_EMERALD_TEAL, 'Smeraldo-Verde Acqua'),
+        (COLOR_BLUE_INDIGO, 'Blu-Indaco'),
+        (COLOR_PINK_ROSE, 'Rosa'),
+        (COLOR_AMBER_ORANGE, 'Ambra-Arancio'),
+        (COLOR_CYAN_BLUE, 'Ciano-Blu'),
+        (COLOR_VIOLET_PURPLE, 'Viola-Porpora'),
+        (COLOR_SLATE_GRAY, 'Ardesia-Grigio'),
+        (COLOR_LIME_GREEN, 'Lime-Verde'),
+    ]
+    
+    # Tipi di link
+    LINK_TYPE_WIKI = 'wiki'
+    LINK_TYPE_APP = 'app'
+    LINK_TYPE_CHOICES = [
+        (LINK_TYPE_WIKI, 'Pagina Wiki'),
+        (LINK_TYPE_APP, 'Sezione App'),
+    ]
+    
+    widget = models.ForeignKey(
+        WikiButtonWidget,
+        on_delete=models.CASCADE,
+        related_name='buttons'
+    )
+    
+    # Contenuto pulsante
+    title = models.CharField(max_length=100, help_text="Titolo del pulsante")
+    description = models.CharField(
+        max_length=200, 
+        blank=True, 
+        help_text="Descrizione (opzionale)"
+    )
+    subtext = models.CharField(
+        max_length=100, 
+        blank=True, 
+        help_text="Testo secondario (solo per stile gradiente)"
+    )
+    icon = models.CharField(
+        max_length=50, 
+        blank=True, 
+        help_text="Nome icona Lucide (es: Sparkles, BookOpen)"
+    )
+    
+    # Stile
+    style = models.CharField(
+        max_length=20, 
+        choices=STYLE_CHOICES, 
+        default=STYLE_GRADIENT
+    )
+    size = models.CharField(
+        max_length=20, 
+        choices=SIZE_CHOICES, 
+        default=SIZE_MEDIUM
+    )
+    color_preset = models.CharField(
+        max_length=30, 
+        choices=COLOR_CHOICES, 
+        default=COLOR_INDIGO_PURPLE
+    )
+    
+    # Link
+    link_type = models.CharField(
+        max_length=10, 
+        choices=LINK_TYPE_CHOICES, 
+        default=LINK_TYPE_WIKI
+    )
+    wiki_slug = models.CharField(
+        max_length=200, 
+        blank=True, 
+        help_text="Slug della pagina wiki di destinazione"
+    )
+    app_route = models.CharField(
+        max_length=200, 
+        blank=True, 
+        help_text="Percorso della sezione app (es: /app)"
+    )
+    
+    # Ordinamento
+    ordine = models.PositiveIntegerField(default=0, help_text="Ordine di visualizzazione")
+    
+    class Meta:
+        ordering = ['ordine', 'id']
+        verbose_name = "Pulsante"
+        verbose_name_plural = "Pulsanti"
+
+    def __str__(self):
+        return f"{self.title} ({self.get_style_display()})"
+
+
 # --- CONFIGURAZIONE SITO E SOCIAL ---
 
 class ConfigurazioneSito(models.Model):
