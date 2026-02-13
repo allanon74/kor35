@@ -16,6 +16,7 @@ from .models import (
     OggettoBase, OggettoStatisticaBase, 
     ForgiaturaInCorso, Abilita, 
     OggettoCaratteristica, RichiestaAssemblaggio,
+    ClasseOggettoLimiteMod,
     STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA,
     TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE, TIPO_OPERAZIONE_INSTALLAZIONE, TIPO_OPERAZIONE_INNESTO,
     TIPO_OGGETTO_AUMENTO, TIPO_OGGETTO_POTENZIAMENTO,
@@ -182,6 +183,15 @@ class GestioneOggettiService:
             # Se permessi è vuoto, e stiamo provando a montare materia -> Errore
             elif ids_caratteristiche:
                  return False, f"Questa classe oggetto non supporta alcuna Materia."
+            
+            # REGOLA: Una ed una sola materia può essere montata su un oggetto mondano
+            materie_installate = host.potenziamenti_installati.filter(
+                Q(tipo_oggetto=TIPO_OGGETTO_MATERIA) | 
+                (Q(tipo_oggetto=TIPO_OGGETTO_POTENZIAMENTO) & Q(is_tecnologico=False))
+            ).count()
+            
+            if materie_installate >= 1:
+                return False, "È già presente una Materia su questo oggetto. Rimuovere prima quella esistente."
 
         elif is_logic_mod:
             # Whitelist Mod
@@ -203,6 +213,36 @@ class GestioneOggettiService:
             
             if mods_installate >= classe.max_mod_totali:
                  return False, f"Slot Mod esauriti per questa classe ({mods_installate}/{classe.max_mod_totali})."
+            
+            # Controllo Limite Mod per Caratteristica Specifica
+            for comp in comps:
+                caratteristica_id = comp.caratteristica.id
+                
+                # Recupera il limite per questa caratteristica dalla tabella ClasseOggettoLimiteMod
+                limite_obj = ClasseOggettoLimiteMod.objects.filter(
+                    classe_oggetto=classe,
+                    caratteristica_id=caratteristica_id
+                ).first()
+                
+                if limite_obj:
+                    max_per_tipo = limite_obj.max_installabili
+                    
+                    # Conta quante mod con questa caratteristica sono già installate
+                    count_tipo = 0
+                    mods_esistenti = host.potenziamenti_installati.filter(
+                        Q(tipo_oggetto=TIPO_OGGETTO_MOD) | 
+                        (Q(tipo_oggetto=TIPO_OGGETTO_POTENZIAMENTO) & Q(is_tecnologico=True))
+                    )
+                    
+                    for mod_inst in mods_esistenti:
+                        mod_comps = GestioneOggettiService._get_caratteristiche_componente(mod_inst)
+                        # Verifica se questa mod ha la caratteristica che stiamo controllando
+                        if any(mc.caratteristica.id == caratteristica_id for mc in mod_comps):
+                            count_tipo += 1
+                    
+                    if count_tipo >= max_per_tipo:
+                        nome_caratt = comp.caratteristica.nome
+                        return False, f"Limite Mod per tipo '{nome_caratt}' raggiunto ({count_tipo}/{max_per_tipo})."
 
         return True, "Compatibile."
     
