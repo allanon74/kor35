@@ -106,6 +106,7 @@ def get_csrf_token(request):
 
 class MyAuthToken(ObtainAuthToken):
     permission_classes = (AllowAny,)
+    authentication_classes = ()  # Nessuna auth (evita CSRF di SessionAuthentication su POST cross-origin)
     def post(self, request, *args, **kwargs):
         serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
