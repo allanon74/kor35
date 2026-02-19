@@ -183,7 +183,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://social.k-o-r-35.it",       
 ]
 
-CORS_URLS_REGEX = r'^/(personaggi/api|auth|webpush|punteggi|plot)/.*$'
+# CORS: applicato a tutte le API (sotto /api/) e a webpush (root)
+CORS_URLS_REGEX = r'^/(api/|webpush)/.*$'
 
 
 CORS_ALLOW_HEADERS = [
@@ -335,11 +336,12 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CMS_CONFIRM_VERSION4 = True
 
+# Google OAuth: imposta GOOGLE_OAUTH_CLIENT_ID e GOOGLE_OAUTH_CLIENT_SECRET nel file .env
 SOCIALACCOUNT_PROVIDERS = {
 	'google': {
 		'APP': {
-			'client_id': '1622391279-0r9u401q4j302dqo4uv73lgfofgouo14.apps.googleusercontent.com',
-			'secret': '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',
+			'client_id': env('GOOGLE_OAUTH_CLIENT_ID', default=''),
+			'secret': env('GOOGLE_OAUTH_CLIENT_SECRET', default=''),
 			'key': ''
 		},
 		'SCOPE': [
