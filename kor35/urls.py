@@ -62,7 +62,7 @@ urlpatterns = [
     path('api/', include([
         path('personaggi/', include('personaggi.urls')),
         path('plot/', include('gestione_plot.urls')),
-        path('auth/', personaggi_views.MyAuthToken.as_view()),
+        path('auth/', csrf_exempt(personaggi_views.MyAuthToken.as_view())),
         path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
         path('icon-widget-api/', include('icon_widget.urls')),
     ])),
