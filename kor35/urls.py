@@ -24,28 +24,53 @@ from personaggi import views as personaggi_views
 from django.views.decorators.csrf import csrf_exempt
 from django_icon_picker import views as icon_picker_views
 
-urlpatterns = [
-    path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
-    path('admin/doc/', include('django.contrib.admindocs.urls')),
-    re_path(r'^admin/', admin.site.urls),
-    # path('icon_picker/', include('django_icon_picker.urls')),
-    # path('icon_picker/download-svg/', csrf_exempt(icon_picker_views.download_and_save_svg), name='download_svg_patch'),
-    path('icon_picker/download-svg/', personaggi_views.download_icon_patch, name='download_svg_patch'),
-    path('icon-widget-api/', include('icon_widget.urls')), # <-- LA NOSTRA APP
-    # --- FINE DELLA PATCH URL ---
-    path('personaggi/', include('personaggi.urls')),
-    path('plot/', include('gestione_plot.urls')),
-    # path('oggetti/', include('oggetti.urls', namespace='oggetti')),
-    # path('auth/', obtain_auth_token),
-    path ('auth/', personaggi_views.MyAuthToken.as_view()),
-    path('api/api-token-auth/', obtain_auth_token, name='api_token_auth'),
+# urlpatterns = [
+#     path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
+#     path('admin/doc/', include('django.contrib.admindocs.urls')),
+#     re_path(r'^admin/', admin.site.urls),
+#     # path('icon_picker/', include('django_icon_picker.urls')),
+#     # path('icon_picker/download-svg/', csrf_exempt(icon_picker_views.download_and_save_svg), name='download_svg_patch'),
+#     path('icon_picker/download-svg/', personaggi_views.download_icon_patch, name='download_svg_patch'),
+#     path('icon-widget-api/', include('icon_widget.urls')), # <-- LA NOSTRA APP
+#     # --- FINE DELLA PATCH URL ---
+#     path('personaggi/', include('personaggi.urls')),
+#     path('plot/', include('gestione_plot.urls')),
+#     # path('oggetti/', include('oggetti.urls', namespace='oggetti')),
+#     # path('auth/', obtain_auth_token),
+#     path ('auth/', personaggi_views.MyAuthToken.as_view()),
+#     path('api/api-token-auth/', obtain_auth_token, name='api_token_auth'),
     
-    path("icons/", include("dj_iconify.urls")),
-    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
-    path('webpush/', include('webpush.urls')), # Endpoint per il frontend
-    re_path(r'^', include('cms.urls')),
+#     path("icons/", include("dj_iconify.urls")),
+#     path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
+#     path('webpush/', include('webpush.urls')), # Endpoint per il frontend
+#     re_path(r'^', include('cms.urls')),
 
     
+# ]
+
+urlpatterns = [
+    # --- UTILITIES & ADMIN ---
+    path('admin/doc/', include('django.contrib.admindocs.urls')),
+    re_path(r'^admin/', admin.site.urls),
+    path('summernote/', include('django_summernote.urls')),
+    path('webpush/', include('webpush.urls')),
+    path('icon_picker/download-svg/', personaggi_views.download_icon_patch, name='download_svg_patch'),
+    path("icons/", include("dj_iconify.urls")),
+    path('o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
+    
+    # --- API REST BACKEND (Tutte sotto /app/) ---
+    path('api/', include([
+        path('personaggi/', include('personaggi.urls')),
+        path('plot/', include('gestione_plot.urls')),
+        path('auth/', personaggi_views.MyAuthToken.as_view()),
+        path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
+        path('icon-widget-api/', include('icon_widget.urls')),
+    ])),
+
+    # DISABILITATO o DA SPOSTARE, per lasciare la root a React
+    re_path(r'^cms/', include('cms.urls')), 
 ]
+
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
