@@ -183,8 +183,11 @@ CORS_ALLOWED_ORIGINS = [
     "https://social.k-o-r-35.it",       
 ]
 
-# CORS: applicato a tutte le API (sotto /api/) e a webpush (root)
-CORS_URLS_REGEX = r'^/(api/|webpush)/.*$'
+# CORS: senza regex così gli header vengono inviati per tutte le risposte.
+# Gli origin consentiti sono comunque solo CORS_ALLOWED_ORIGINS.
+# Se in produzione il preflight OPTIONS non arriva a Django (es. nginx), aggiungere
+# in nginx: add_header 'Access-Control-Allow-Origin' $http_origin always; (e gestione OPTIONS).
+# CORS_URLS_REGEX = r'^/(api/|webpush)/.*$'
 
 
 CORS_ALLOW_HEADERS = [
