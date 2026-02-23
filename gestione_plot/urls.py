@@ -10,7 +10,7 @@ from .views import(
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
-    get_wiki_menu, get_wiki_page, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
+    get_wiki_menu, get_wiki_page, get_wiki_tier_display, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
     PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
     PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet,
                    )
@@ -62,5 +62,6 @@ urlpatterns = [
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),
     path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
     path('api/wiki/image/<slug:slug>/', serve_wiki_image, name='wiki_image'),
+    path('api/wiki/tier-display/<int:pk>/', get_wiki_tier_display, name='wiki_tier_display'),
     path('api/', include(router.urls)),
 ]   

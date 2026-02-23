@@ -14,7 +14,7 @@ from PIL import Image
 
 from personaggi.models import (
     Inventario, Manifesto, Personaggio, QrCode, 
-    Tabella, ModelloAura, Tier,
+    Tabella, ModelloAura, Tier, TierPluginModel,
     Tessitura, Infusione, Cerimoniale, Oggetto,
     )
 
@@ -526,6 +526,26 @@ class StaffWikiButtonWidgetViewSet(viewsets.ModelViewSet):
     
 def is_staff_user(user):
     return user.is_authenticated and (user.is_staff or user.is_superuser)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_tier_display(request, pk):
+    """
+    Restituisce i dati di un Tier per {{WIDGET_TIER:id}}.
+    Accetta sia l'id del Tier (pk) sia l'id di un TierPluginModel (plugin CMS),
+    così le pagine migrate dal CMS continuano a funzionare.
+    """
+    tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
+    if not tier:
+        plugin = TierPluginModel.objects.filter(pk=pk).select_related('tier').first()
+        if plugin:
+            tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+    if not tier:
+        raise Http404("No Tier matches the given query.")
+    data = WikiTierSerializer(tier).data
+    data.setdefault('color_style', 'default')
+    return Response(data)
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny]) # Aperto a tutti, filtriamo dentro
