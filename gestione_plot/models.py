@@ -334,6 +334,66 @@ class WikiImmagine(models.Model):
         return f"{self.titolo} ({self.immagine.name if self.immagine else 'Nessuna immagine'})"
 
 
+class WikiTierWidget(models.Model):
+    """
+    Configurazione di visualizzazione per un Tier nella wiki.
+    Permette di personalizzare collapsible, descrizione e stile cromatico.
+    """
+    tier = models.ForeignKey(
+        'personaggi.Tier',
+        on_delete=models.CASCADE,
+        related_name='wiki_widget_configs'
+    )
+    abilities_collapsible = models.BooleanField(
+        default=True,
+        verbose_name="Abilità in sezione collassabile"
+    )
+    abilities_collapsed_by_default = models.BooleanField(
+        default=False,
+        verbose_name="Sezione abilità chiusa di default",
+        help_text="Se False, la sezione parte aperta"
+    )
+    show_description = models.BooleanField(
+        default=True,
+        verbose_name="Mostra descrizione tier"
+    )
+    COLOR_STYLE_CHOICES = [
+        ('default', 'Default (attuale)'),
+        ('white', 'Bianco'),
+        ('gray', 'Grigio'),
+        ('red', 'Rosso'),
+        ('black', 'Nero'),
+        ('ochre', 'Ocra'),
+        ('blue', 'Blu'),
+        ('yellow', 'Giallo'),
+        ('purple', 'Viola'),
+        ('green', 'Verde'),
+        ('porpora', 'Porpora'),
+    ]
+    color_style = models.CharField(
+        max_length=20,
+        choices=COLOR_STYLE_CHOICES,
+        default='default'
+    )
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_modifica = models.DateTimeField(auto_now=True)
+    creatore = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tier_widgets_creati'
+    )
+
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Widget Tier"
+        verbose_name_plural = "Widget Tier"
+
+    def __str__(self):
+        return f"Widget Tier #{self.id} ({self.tier.nome})"
+
+
 class WikiButtonWidget(models.Model):
     """
     Modello per gestire widget di pulsanti configurabili nella wiki.
@@ -388,7 +448,7 @@ class WikiButton(models.Model):
         (SIZE_LARGE, 'Grande'),
     ]
     
-    # Schemi colori disponibili
+    # Schemi colori disponibili (include stili cromatici condivisi con Tier)
     COLOR_INDIGO_PURPLE = 'indigo_purple'
     COLOR_RED_ORANGE = 'red_orange'
     COLOR_EMERALD_TEAL = 'emerald_teal'
@@ -399,6 +459,17 @@ class WikiButton(models.Model):
     COLOR_VIOLET_PURPLE = 'violet_purple'
     COLOR_SLATE_GRAY = 'slate_gray'
     COLOR_LIME_GREEN = 'lime_green'
+    # Stili cromatici (identici a WikiTierWidget)
+    COLOR_WHITE = 'white'
+    COLOR_GRAY = 'gray'
+    COLOR_RED = 'red'
+    COLOR_BLACK = 'black'
+    COLOR_OCHRE = 'ochre'
+    COLOR_BLUE = 'blue'
+    COLOR_YELLOW = 'yellow'
+    COLOR_PURPLE = 'purple'
+    COLOR_GREEN = 'green'
+    COLOR_PORPORA = 'porpora'
     
     COLOR_CHOICES = [
         (COLOR_INDIGO_PURPLE, 'Indaco-Viola'),
@@ -411,6 +482,16 @@ class WikiButton(models.Model):
         (COLOR_VIOLET_PURPLE, 'Viola-Porpora'),
         (COLOR_SLATE_GRAY, 'Ardesia-Grigio'),
         (COLOR_LIME_GREEN, 'Lime-Verde'),
+        (COLOR_WHITE, 'Bianco'),
+        (COLOR_GRAY, 'Grigio'),
+        (COLOR_RED, 'Rosso'),
+        (COLOR_BLACK, 'Nero'),
+        (COLOR_OCHRE, 'Ocra'),
+        (COLOR_BLUE, 'Blu'),
+        (COLOR_YELLOW, 'Giallo'),
+        (COLOR_PURPLE, 'Viola'),
+        (COLOR_GREEN, 'Verde'),
+        (COLOR_PORPORA, 'Porpora'),
     ]
     
     # Tipi di link

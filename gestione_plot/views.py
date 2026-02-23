@@ -7,6 +7,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import ValidationError
 
 from django.shortcuts import get_object_or_404
+from django.http import Http404
 import os
 from django.conf import settings
 from django.http import HttpResponse, FileResponse, Http404
@@ -24,12 +25,12 @@ from personaggi.serializers import (
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
     TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
-from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiButtonWidget, WikiButton, ConfigurazioneSito, LinkSocial
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton, ConfigurazioneSito, LinkSocial
 from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiButtonWidgetSerializer,
-    ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer
+    ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer, WikiTierWidgetSerializer
 )
 
 
@@ -406,9 +407,27 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Espone i Tier (es. Livello 1, Livello 2...) con le relative abilità.
     """
-    queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
+    queryset = Tier.objects.all().prefetch_related('abilita')
     serializer_class = WikiTierSerializer
-    permission_classes = [permissions.AllowAny] # Accesso pubblic
+    permission_classes = [permissions.AllowAny]
+
+
+class PublicWikiTierWidgetViewSet(viewsets.ReadOnlyModelViewSet):
+    """Espone i widget tier configurati (solo lettura)."""
+    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related('tier__abilita')
+    serializer_class = WikiTierWidgetSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class StaffWikiTierWidgetViewSet(viewsets.ModelViewSet):
+    """CRUD widget tier (solo staff)."""
+    queryset = WikiTierWidget.objects.all().select_related('tier')
+    serializer_class = WikiTierWidgetSerializer
+    permission_classes = [IsMasterOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(creatore=self.request.user)
+
 
 class PublicEventiViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -526,6 +545,40 @@ class StaffWikiButtonWidgetViewSet(viewsets.ModelViewSet):
     
 def is_staff_user(user):
     return user.is_authenticated and (user.is_staff or user.is_superuser)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_tier_display(request, pk):
+    """
+    Restituisce dati Tier + config display per {{WIDGET_TIER:id}}.
+    Prova prima WikiTierWidget (config custom), poi Tier (default config).
+    """
+    from .serializers import WikiTierSerializer
+    # 1. Prova WikiTierWidget
+    widget = WikiTierWidget.objects.filter(pk=pk).select_related('tier').prefetch_related('tier__abilita').first()
+    if widget:
+        tier_data = WikiTierSerializer(widget.tier).data
+        tier_data.update({
+            'abilities_collapsible': widget.abilities_collapsible,
+            'abilities_collapsed_by_default': widget.abilities_collapsed_by_default,
+            'show_description': widget.show_description,
+            'color_style': widget.color_style,
+        })
+        return Response(tier_data)
+    # 2. Fallback: Tier (retrocompatibilità)
+    tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
+    if tier:
+        tier_data = WikiTierSerializer(tier).data
+        tier_data.update({
+            'abilities_collapsible': True,
+            'abilities_collapsed_by_default': False,
+            'show_description': True,
+            'color_style': 'default',
+        })
+        return Response(tier_data)
+    raise Http404
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny]) # Aperto a tutti, filtriamo dentro
