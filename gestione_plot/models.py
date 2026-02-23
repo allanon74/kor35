@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from personaggi.models import Personaggio, Manifesto, Inventario, QrCode
+from personaggi.models import Personaggio, Manifesto, Inventario, QrCode, Tier
 
 # --- 1. SEZIONE TEMPLATE (L'ANAGRAFICA GENERALE) ---
 
@@ -332,6 +332,35 @@ class WikiImmagine(models.Model):
 
     def __str__(self):
         return f"{self.titolo} ({self.immagine.name if self.immagine else 'Nessuna immagine'})"
+
+
+class WikiTierWidget(models.Model):
+    """
+    Widget Tier configurabile per la wiki: associa un Tier con opzioni di visualizzazione
+    (stile, collapsible, ecc.). Usato in {{WIDGET_TIER:id}} dove id è questo widget.
+    """
+    tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='wiki_tier_widgets')
+    abilities_collapsible = models.BooleanField(default=True)
+    abilities_collapsed_by_default = models.BooleanField(default=False)
+    show_description = models.BooleanField(default=True)
+    color_style = models.CharField(max_length=20, default='default')
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_modifica = models.DateTimeField(auto_now=True)
+    creatore = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='wiki_tier_widgets_creati'
+    )
+
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Widget Tier"
+        verbose_name_plural = "Widget Tier"
+
+    def __str__(self):
+        return f"Widget Tier #{self.id} ({self.tier.nome})"
 
 
 class WikiButtonWidget(models.Model):

@@ -24,11 +24,11 @@ from personaggi.serializers import (
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
     TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
-from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiButtonWidget, WikiButton, ConfigurazioneSito, LinkSocial
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton, ConfigurazioneSito, LinkSocial
 from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
-    MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiButtonWidgetSerializer,
+    MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiButtonWidgetSerializer,
     ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer
 )
 
@@ -495,6 +495,23 @@ class StaffWikiImmagineViewSet(viewsets.ModelViewSet):
         serializer.save(creatore=self.request.user)
     
 
+class PublicWikiTierWidgetViewSet(viewsets.ReadOnlyModelViewSet):
+    """Espone i widget Tier per l'uso nelle pagine wiki (lettura)."""
+    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related('tier__abilita')
+    serializer_class = WikiTierWidgetSerializer
+    permission_classes = [permissions.AllowAny]
+
+
+class StaffWikiTierWidgetViewSet(viewsets.ModelViewSet):
+    """CRUD widget Tier (solo staff)."""
+    queryset = WikiTierWidget.objects.all().select_related('tier')
+    serializer_class = WikiTierWidgetSerializer
+    permission_classes = [IsMasterOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(creatore=self.request.user)
+
+
 class PublicWikiButtonWidgetViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Espone i widget pulsanti per l'uso nelle pagine wiki.
@@ -532,16 +549,31 @@ def is_staff_user(user):
 def get_wiki_tier_display(request, pk):
     """
     Restituisce i dati di un Tier per {{WIDGET_TIER:id}}.
-    Accetta: id Tier, oppure id plugin Tier da personaggi (TierPluginModel),
-    oppure id plugin Tier da cms_kor (TierPluginModel). Così le pagine migrate
-    dal CMS continuano a funzionare indipendentemente dall'app usata.
+    Ordine: 1) WikiTierWidget (id widget), 2) Tier (id tier), 3) plugin CMS.
     """
-    tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
+    tier = None
+    extra = {}
+    # 1) WikiTierWidget (widget configurabile)
+    widget = WikiTierWidget.objects.filter(pk=pk).select_related('tier').prefetch_related('tier__abilita').first()
+    if widget:
+        tier = widget.tier
+        extra = {
+            'abilities_collapsible': widget.abilities_collapsible,
+            'abilities_collapsed_by_default': widget.abilities_collapsed_by_default,
+            'show_description': widget.show_description,
+            'color_style': widget.color_style or 'default',
+        }
+    if not tier:
+        tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
+        if tier:
+            extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
     if not tier:
         # Plugin in personaggi
         plugin = TierPluginModel.objects.filter(pk=pk).select_related('tier').first()
         if plugin:
             tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+            if tier:
+                extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
     if not tier:
         # Plugin in cms_kor (stesso nome modello, altra app)
         try:
@@ -549,6 +581,8 @@ def get_wiki_tier_display(request, pk):
             plugin = CmsKorTierPluginModel.objects.filter(pk=pk).select_related('tier').first()
             if plugin:
                 tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+                if tier:
+                    extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
         except Exception:
             pass
     if not tier:
@@ -562,12 +596,14 @@ def get_wiki_tier_display(request, pk):
                     tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related('abilita').first()
                 elif instance and getattr(instance, 'tier', None):
                     tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related('abilita').first()
+                if tier:
+                    extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
         except Exception:
             pass
     if not tier:
         raise Http404("No Tier matches the given query.")
     data = WikiTierSerializer(tier).data
-    data.setdefault('color_style', 'default')
+    data.update(extra)
     return Response(data)
 
 
