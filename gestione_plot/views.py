@@ -532,14 +532,38 @@ def is_staff_user(user):
 def get_wiki_tier_display(request, pk):
     """
     Restituisce i dati di un Tier per {{WIDGET_TIER:id}}.
-    Accetta sia l'id del Tier (pk) sia l'id di un TierPluginModel (plugin CMS),
-    così le pagine migrate dal CMS continuano a funzionare.
+    Accetta: id Tier, oppure id plugin Tier da personaggi (TierPluginModel),
+    oppure id plugin Tier da cms_kor (TierPluginModel). Così le pagine migrate
+    dal CMS continuano a funzionare indipendentemente dall'app usata.
     """
     tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
     if not tier:
+        # Plugin in personaggi
         plugin = TierPluginModel.objects.filter(pk=pk).select_related('tier').first()
         if plugin:
             tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+    if not tier:
+        # Plugin in cms_kor (stesso nome modello, altra app)
+        try:
+            from cms_kor.models import TierPluginModel as CmsKorTierPluginModel
+            plugin = CmsKorTierPluginModel.objects.filter(pk=pk).select_related('tier').first()
+            if plugin:
+                tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+        except Exception:
+            pass
+    if not tier:
+        # Fallback: qualsiasi CMSPlugin con questo pk che abbia un FK tier (get_plugin_instance)
+        try:
+            from cms.models.pluginmodel import CMSPlugin
+            cms_plugin = CMSPlugin.objects.filter(pk=pk).first()
+            if cms_plugin:
+                instance, _ = cms_plugin.get_plugin_instance()
+                if instance and getattr(instance, 'tier_id', None):
+                    tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related('abilita').first()
+                elif instance and getattr(instance, 'tier', None):
+                    tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related('abilita').first()
+        except Exception:
+            pass
     if not tier:
         raise Http404("No Tier matches the given query.")
     data = WikiTierSerializer(tier).data
