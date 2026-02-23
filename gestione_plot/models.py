@@ -337,13 +337,15 @@ class WikiImmagine(models.Model):
 class WikiTierWidget(models.Model):
     """
     Widget Tier configurabile per la wiki: associa un Tier con opzioni di visualizzazione
-    (stile, collapsible, ecc.). Usato in {{WIDGET_TIER:id}} dove id è questo widget.
+    (stile, collapsible, gradiente colori, ecc.). Usato in {{WIDGET_TIER:id}} dove id è questo widget.
     """
     tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='wiki_tier_widgets')
     abilities_collapsible = models.BooleanField(default=True)
     abilities_collapsed_by_default = models.BooleanField(default=False)
     show_description = models.BooleanField(default=True)
     color_style = models.CharField(max_length=20, default='default')
+    # Lista colori hex per gradiente (es. ["#1976D2", "#7B1FA2"]). Se vuota si usa color_style.
+    gradient_colors = models.JSONField(default=list, blank=True)
     data_creazione = models.DateTimeField(auto_now_add=True)
     data_modifica = models.DateTimeField(auto_now=True)
     creatore = models.ForeignKey(

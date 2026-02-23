@@ -562,6 +562,7 @@ def get_wiki_tier_display(request, pk):
             'abilities_collapsed_by_default': widget.abilities_collapsed_by_default,
             'show_description': widget.show_description,
             'color_style': widget.color_style or 'default',
+            'gradient_colors': getattr(widget, 'gradient_colors', []) or [],
         }
     if not tier:
         tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
