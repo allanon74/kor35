@@ -4,7 +4,7 @@ from .models import (
     Evento, GiornoEvento, PaginaRegolamento, Quest, 
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
-    QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton,
+    QuestFase, QuestTask, WikiImmagine, WikiButtonWidget, WikiButton,
     ConfigurazioneSito, LinkSocial,
 )
 from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier
@@ -252,25 +252,14 @@ class AbilitaTierSerializer(serializers.ModelSerializer):
         return f"{obj.costo_crediti} Cr"
 
 class WikiTierSerializer(serializers.ModelSerializer):
+    # FONDAMENTALE: Recuperiamo le abilità figlie di questo Tier
+    # Se nel model Abilita c'è: tier = ForeignKey(Tier, related_name='abilita_set')
+    # Verifica se il related_name è 'abilita_set', 'abilities' o altro.
     abilita = AbilitaTierSerializer(many=True, read_only=True)
 
     class Meta:
         model = Tier
         fields = ['id', 'nome', 'descrizione', 'tipo', 'abilita']
-
-
-class WikiTierWidgetSerializer(serializers.ModelSerializer):
-    """Serializer per creare/modificare WikiTierWidget."""
-    tier_nome = serializers.CharField(source='tier.nome', read_only=True)
-    class Meta:
-        model = WikiTierWidget
-        fields = [
-            'id', 'tier', 'tier_nome', 'abilities_collapsible', 'abilities_collapsed_by_default',
-            'show_description', 'color_style',
-            'data_creazione', 'data_modifica', 'creatore'
-        ]
-        read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
-
 
 class WikiImmagineSerializer(serializers.ModelSerializer):
     """

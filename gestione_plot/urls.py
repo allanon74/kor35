@@ -10,10 +10,8 @@ from .views import(
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
-    get_wiki_menu, get_wiki_page, serve_wiki_image, get_wiki_tier_display,
-    PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
+    get_wiki_menu, get_wiki_page, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
     PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
-    PublicWikiTierWidgetViewSet, StaffWikiTierWidgetViewSet,
     PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet,
                    )
 from personaggi.views_staff import(
@@ -49,12 +47,6 @@ router.register(r'staff/wiki-immagini',
 router.register(r'staff/wiki-buttons', 
                 StaffWikiButtonWidgetViewSet, 
                 basename='staff-wiki-buttons')
-router.register(r'staff/wiki-tier-widgets', 
-                StaffWikiTierWidgetViewSet, 
-                basename='staff-wiki-tier-widgets')
-router.register(r'public/wiki-tier-widgets', 
-                PublicWikiTierWidgetViewSet, 
-                basename='public-wiki-tier-widgets')
 router.register(r'public/wiki-menu', PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
 router.register(r'public/wiki-page', PublicPaginaRegolamentoDetail, basename='public-wiki-page')
 router.register(r'public/wiki-tabelle', PublicTabellaViewSet, basename='public-wiki-tabelle')
@@ -70,6 +62,5 @@ urlpatterns = [
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),
     path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
     path('api/wiki/image/<slug:slug>/', serve_wiki_image, name='wiki_image'),
-    path('api/wiki/tier-display/<int:pk>/', get_wiki_tier_display, name='wiki_tier_display'),
     path('api/', include(router.urls)),
 ]   

@@ -3,7 +3,7 @@ from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
     MostroTemplate, AttaccoTemplate, PngAssegnato, 
     StaffOffGame, QuestFase, QuestTask,
-    PaginaRegolamento, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton,
+    PaginaRegolamento, WikiImmagine, WikiButtonWidget, WikiButton,
     ConfigurazioneSito, LinkSocial
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
@@ -153,18 +153,6 @@ class WikiImmagineAdmin(admin.ModelAdmin):
         if not change:  # Solo quando viene creato
             obj.creatore = request.user
         super().save_model(request, obj, form, change)
-
-
-# --- WIDGET TIER ---
-
-@admin.register(WikiTierWidget)
-class WikiTierWidgetAdmin(admin.ModelAdmin):
-    list_display = ('id', 'tier', 'color_style', 'abilities_collapsible', 'show_description', 'creatore', 'data_creazione')
-    list_filter = ('color_style', 'abilities_collapsible', 'show_description', 'creatore')
-    search_fields = ('tier__nome',)
-    readonly_fields = ('data_creazione', 'data_modifica')
-    ordering = ('-data_creazione',)
-    autocomplete_fields = ['tier']
 
 
 # --- WIDGET BUTTONS ---
