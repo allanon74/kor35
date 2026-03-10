@@ -12,6 +12,7 @@ from .views_staff import (
     QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList,
     TierStaffViewSet, InventarioStaffViewSet, OggettiSenzaPosizioneView,
     TipologiaEffettoViewSet, EffettoCasualeViewSet, SelezionaEffettoCasualeView,
+    MattoniMagiciListView,
 )
 
 
@@ -177,6 +178,7 @@ urlpatterns = [
     path('api/staff/messages/', StaffMessageListView.as_view(), name='staff-messages'),
     path('api/staff/oggetti-senza-posizione/', views_staff.OggettiSenzaPosizioneView.as_view(), name='staff-oggetti-senza-posizione'),
     path('api/staff/seleziona-effetto-casuale/', SelezionaEffettoCasualeView.as_view(), name='staff-seleziona-effetto-casuale'),
+    path('api/staff/mattoni-magici/', MattoniMagiciListView.as_view(), name='staff-mattoni-magici'),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     

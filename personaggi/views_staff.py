@@ -6,12 +6,12 @@ from gestione_plot.permissions import IsStaffOrMaster
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework.decorators import action
 
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
-    Infusione, Tessitura, Cerimoniale,
+    Infusione, Tessitura, Cerimoniale, Mattone,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
@@ -441,6 +441,17 @@ class EffettoCasualeViewSet(viewsets.ModelViewSet):
     serializer_class = EffettoCasualeStaffSerializer
     permission_classes = [IsStaffOrMaster]
     filterset_fields = ['tipologia']
+
+
+class MattoniMagiciListView(APIView):
+    """Lista mattoni con aura magica (per dropdown elemento principale negli effetti casuali)."""
+    permission_classes = [IsStaffOrMaster]
+
+    def get(self, request):
+        mattoni = Mattone.objects.filter(
+            Q(aura__nome__icontains='magica') | Q(aura__sigla__iexact='mag')
+        ).select_related('aura').order_by('aura__ordine', 'nome').values('id', 'nome', 'aura_id')
+        return Response(list(mattoni))
 
 
 class SelezionaEffettoCasualeView(APIView):
