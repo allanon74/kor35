@@ -1410,7 +1410,11 @@ class EffettoCasualeStaffSerializer(serializers.ModelSerializer):
 
 
 class ConsumabilePersonaggioSerializer(serializers.ModelSerializer):
-    """Serializer per consumabili del personaggio con descrizione e formula formattate."""
+    """
+    Serializer per consumabili del personaggio con descrizione e formula formattate.
+    Usa get_testo_formattato_consumabile (formatta_testo_generico con statistiche_base, contesto,
+    bonus del personaggio, get_testo_rango, formatta_valore_avanzato) come per le tessiture.
+    """
     descrizione_formattata = serializers.SerializerMethodField()
     formula_formattata = serializers.SerializerMethodField()
 
@@ -1419,25 +1423,20 @@ class ConsumabilePersonaggioSerializer(serializers.ModelSerializer):
         fields = ('id', 'nome', 'descrizione', 'formula', 'descrizione_formattata', 'formula_formattata',
                   'utilizzi_rimanenti', 'data_scadenza', 'data_creazione')
 
+    def _get_formattato_cache(self, obj):
+        if getattr(obj, '_consumabile_formattato_cache', None) is None:
+            personaggio = self.context.get('personaggio')
+            if not personaggio:
+                obj._consumabile_formattato_cache = (obj.descrizione or '', obj.formula or '')
+            else:
+                obj._consumabile_formattato_cache = personaggio.get_testo_formattato_consumabile(obj)
+        return obj._consumabile_formattato_cache
+
     def get_descrizione_formattata(self, obj):
-        personaggio = self.context.get('personaggio')
-        if not personaggio:
-            return obj.descrizione
-        from .models import formatta_testo_generico
-        ctx = {}
-        if obj.effetto_casuale:
-            ctx = {'aura': obj.effetto_casuale.tipologia.aura_collegata, 'elemento': obj.effetto_casuale.elemento_principale}
-        return formatta_testo_generico(obj.descrizione, personaggio=personaggio, context=ctx)
+        return self._get_formattato_cache(obj)[0]
 
     def get_formula_formattata(self, obj):
-        personaggio = self.context.get('personaggio')
-        if not personaggio or not obj.formula:
-            return obj.formula or ''
-        from .models import formatta_testo_generico
-        ctx = {}
-        if obj.effetto_casuale:
-            ctx = {'aura': obj.effetto_casuale.tipologia.aura_collegata, 'elemento': obj.effetto_casuale.elemento_principale}
-        return formatta_testo_generico(None, formula=obj.formula, personaggio=personaggio, context=ctx, solo_formula=True)
+        return self._get_formattato_cache(obj)[1]
 
 
 class PersonaggioDetailSerializer(serializers.ModelSerializer):
@@ -1576,10 +1575,17 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
     def get_consumabili(self, personaggio):
         from django.utils import timezone
+        from django.db.models import Prefetch
         oggi = timezone.now().date()
         consumabili = personaggio.consumabili.filter(
             utilizzi_rimanenti__gt=0,
             data_scadenza__gte=oggi
+        ).select_related(
+            'tessitura', 'tessitura__aura_richiesta', 'tessitura__elemento_principale',
+            'effetto_casuale', 'effetto_casuale__tipologia', 'effetto_casuale__elemento_principale'
+        ).prefetch_related(
+            Prefetch('tessitura__tessiturastatisticabase_set', queryset=TessituraStatisticaBase.objects.select_related('statistica')),
+            'tessitura__componenti__caratteristica',
         ).order_by('-data_creazione')
         context_con_pg = {**self.context, 'personaggio': personaggio}
         return ConsumabilePersonaggioSerializer(consumabili, many=True, context=context_con_pg).data

@@ -1955,6 +1955,85 @@ class Personaggio(Inventario):
             testo_finale += genera_html_cariche(item, self)
 
         return testo_finale
+
+    def get_testo_formattato_consumabile(self, consumabile):
+        """
+        Restituisce (descrizione_formattata, formula_formattata) per un consumabile,
+        applicando la stessa logica di formatta_testo_generico con statistiche e bonus del personaggio
+        (come per le tessiture). Se il consumabile è legato a una tessitura, usa statistiche_base e contesto
+        della tessitura; se da effetto casuale usa contesto aura/elemento; altrimenti testo grezzo.
+        """
+        if not consumabile:
+            return '', ''
+        stats = None
+        ctx = {}
+        if getattr(consumabile, 'tessitura', None):
+            item = consumabile.tessitura
+            stats = item.tessiturastatisticabase_set.select_related('statistica').all()
+            formula_text = consumabile.formula or ""
+            if "{elem}" not in formula_text:
+                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+                desc = formatta_testo_generico(consumabile.descrizione, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx)
+                formula_out = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx, solo_formula=True)
+                formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
+                return desc, formula_out
+            modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
+            elementi_map = {}
+            if item.elemento_principale:
+                elementi_map[item.elemento_principale.id] = item.elemento_principale
+            if modello:
+                punteggi_pg = self.punteggi_base
+                def verifica_requisiti(requisiti_queryset):
+                    for req_link in requisiti_queryset:
+                        if punteggi_pg.get(req_link.requisito.nome, 0) < req_link.valore:
+                            return False
+                    return True
+                if modello.usa_doppia_formula and modello.elemento_secondario:
+                    attiva_doppia = verifica_requisiti(modello.req_doppia_rel.select_related('requisito').all()) if modello.usa_condizione_doppia else True
+                    if attiva_doppia:
+                        elementi_map[modello.elemento_secondario.id] = modello.elemento_secondario
+                if modello.usa_formula_per_caratteristica:
+                    attiva_caratt = verifica_requisiti(modello.req_caratt_rel.select_related('requisito').all()) if modello.usa_condizione_caratt else True
+                    if attiva_caratt:
+                        for el in Punteggio.objects.filter(tipo=ELEMENTO, caratteristica_relativa__nome__in=punteggi_pg.keys()):
+                            if punteggi_pg.get(el.caratteristica_relativa.nome, 0) > 0:
+                                elementi_map[el.id] = el
+                if modello.usa_formula_per_mattone:
+                    attiva_mattone = verifica_requisiti(modello.req_mattone_rel.select_related('requisito').all()) if modello.usa_condizione_mattone else True
+                    if attiva_mattone:
+                        caratt_ids = item.componenti.values_list('caratteristica', flat=True)
+                        for el in Punteggio.objects.filter(tipo=ELEMENTO, caratteristica_relativa__id__in=caratt_ids):
+                            elementi_map[el.id] = el
+            elementi_da_calcolare = list(elementi_map.values())
+            if not elementi_da_calcolare:
+                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None}
+                desc = formatta_testo_generico(consumabile.descrizione, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx)
+                formula_out = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx, solo_formula=True)
+                formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
+                return desc, formula_out
+            ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+            descrizione_html = formatta_testo_generico(consumabile.descrizione, formula=None, statistiche_base=stats, personaggio=self, context=ctx_base)
+            formule_html = []
+            for elem in elementi_da_calcolare:
+                val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0) if elem.caratteristica_relativa else 0
+                ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt}
+                risultato = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx_loop, solo_formula=True)
+                valore_pura = risultato.replace("<strong>Formula:</strong>", "").strip() if risultato else ""
+                if valore_pura:
+                    block = f"<div style='margin-top: 4px; padding: 4px 8px; border-left: 3px solid {elem.colore}; background-color: rgba(255,255,255,0.05); border-radius: 0 4px 4px 0;'><span style='color: {elem.colore}; font-weight: bold; margin-right: 6px;'>{elem.nome}:</span>{valore_pura}</div>"
+                    formule_html.append(block)
+            formula_html = f"<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/><div style='font-size: 0.95em;'><strong>Formule:</strong>{''.join(formule_html)}</div>" if formule_html else ""
+            return descrizione_html, formula_html
+        if getattr(consumabile, 'effetto_casuale', None):
+            ec = consumabile.effetto_casuale
+            ctx = {'aura': ec.tipologia.aura_collegata, 'elemento': ec.elemento_principale}
+            desc = formatta_testo_generico(consumabile.descrizione, personaggio=self, context=ctx)
+            formula_out = ""
+            if consumabile.formula:
+                formula_out = formatta_testo_generico(None, formula=consumabile.formula, personaggio=self, context=ctx, solo_formula=True)
+                formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
+            return desc, formula_out
+        return consumabile.descrizione or "", (consumabile.formula or "").strip()
         
     
     def get_valore_statistica(self, sigla):
@@ -2495,11 +2574,17 @@ class ConsumabilePersonaggio(models.Model):
     """
     Consumabile assegnato a un personaggio (es. da effetto casuale tessitura).
     Ha utilizzi residui e data di scadenza. Occupa 1 slot COG se il personaggio ha almeno un consumabile.
+    Se creato da tessitura (Alchimia), tessitura è valorizzato per formattazione come la tessitura (statistiche, bonus).
     """
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='consumabili')
     effetto_casuale = models.ForeignKey(
         EffettoCasuale, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='consumabili_personaggio'
+    )
+    tessitura = models.ForeignKey(
+        Tessitura, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='consumabili_da_tessitura',
+        help_text="Se il consumabile è stato creato da una tessitura (Alchimia), per formattazione corretta con statistiche."
     )
     nome = models.CharField(max_length=200)
     descrizione = models.TextField()

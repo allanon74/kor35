@@ -1127,6 +1127,7 @@ class CreazioneConsumabileService:
             ConsumabilePersonaggio.objects.create(
                 personaggio=personaggio,
                 effetto_casuale=None,
+                tessitura=tessitura,
                 nome=tessitura.nome,
                 descrizione=tessitura.testo or "",
                 formula=tessitura.formula or "",
