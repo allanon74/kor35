@@ -1058,7 +1058,11 @@ class CreazioneConsumabileService:
             personaggio, aura_tessitura, 'stat_costo_consumabili', FALLBACK_STAT_COSTO_CONSUMABILI
         )
         costo_totale = costo_unit * livello
-        crediti_attuali = getattr(personaggio, 'crediti_correnti', 0) or 0
+        crediti_attuali = personaggio.crediti
+        if crediti_attuali is None:
+            crediti_attuali = 0
+        else:
+            crediti_attuali = int(crediti_attuali)
         if crediti_attuali < costo_totale:
             return False, f"Crediti insufficienti (serve {costo_totale}, hai {crediti_attuali})."
 
