@@ -8,7 +8,11 @@ from rest_framework.routers import DefaultRouter
 
 
 from .views import AbilitaViewSet, ActivateUserView, DeleteUserView, ChangePasswordView, PersonaggioTransazioniListView, RegisterView, StaffMessageListView, UserViewSet
-from .views_staff import QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList, TierStaffViewSet, InventarioStaffViewSet, OggettiSenzaPosizioneView
+from .views_staff import (
+    QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList,
+    TierStaffViewSet, InventarioStaffViewSet, OggettiSenzaPosizioneView,
+    TipologiaEffettoViewSet, EffettoCasualeViewSet, SelezionaEffettoCasualeView,
+)
 
 
 from .views import (AbilViewSet,
@@ -62,6 +66,8 @@ router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basen
 router.register(r'staff/abilita', views_staff.AbilitaStaffViewSet, basename='staff-abilita')
 router.register(r'staff/tiers', TierStaffViewSet, basename='staff-tiers')
 router.register(r'staff/inventari', views_staff.InventarioStaffViewSet, basename='staff-inventari')
+router.register(r'staff/tipologie-effetto', views_staff.TipologiaEffettoViewSet, basename='staff-tipologie-effetto')
+router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, basename='staff-effetti-casuali')
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')
@@ -123,6 +129,9 @@ urlpatterns = [
     path('api/personaggio/me/tessiture_acquistabili/', views.TessitureAcquistabiliView.as_view(), name='tessiture_acquistabili'),
     path('api/personaggio/me/acquisisci_tessitura/', views.AcquisisciTessituraView.as_view(), name='acquisisci_tessitura'),
     path('api/personaggio/me/toggle_tessitura_favorite/', views.ToggleTessituraFavoriteView.as_view(), name='toggle_tessitura_favorite'),
+    path('api/personaggio/me/consuma_consumabile/', views.ConsumaConsumabileView.as_view(), name='consuma_consumabile'),
+    path('api/personaggio/me/avvia_creazione_consumabile/', views.AvviaCreazioneConsumabileView.as_view(), name='avvia_creazione_consumabile'),
+    path('api/personaggio/me/completa_creazione_consumabile/', views.CompletaCreazioneConsumabileView.as_view(), name='completa_creazione_consumabile'),
     
     # Endpoint per Cerimoniali
     path('api/personaggio/me/cerimoniali_acquistabili/', views.CerimonialiAcquistabiliView.as_view(), name='api_cerimoniali_acquistabili'),
@@ -167,6 +176,7 @@ urlpatterns = [
     path('api/staff/proposta/<int:pk>/approva/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     path('api/staff/messages/', StaffMessageListView.as_view(), name='staff-messages'),
     path('api/staff/oggetti-senza-posizione/', views_staff.OggettiSenzaPosizioneView.as_view(), name='staff-oggetti-senza-posizione'),
+    path('api/staff/seleziona-effetto-casuale/', SelezionaEffettoCasualeView.as_view(), name='staff-seleziona-effetto-casuale'),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     

@@ -31,6 +31,12 @@ COSTO_PER_MATTONE_CREAZIONE = 10  # Costo invio proposta (fallback)
 COSTO_DEFAULT_PER_MATTONE = 100  # Fallback generico
 COSTO_DEFAULT_INVIO_PROPOSTA = 10  # Fallback invio proposta
 
+# Fallback consumabili (se non impostati sull'aura)
+FALLBACK_STAT_COSTO_CONSUMABILI = 30
+FALLBACK_STAT_NUMERO_CONSUMABILI = 1
+FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI = 300   # secondi
+FALLBACK_STAT_DURATA_CONSUMABILI = 720            # giorni
+
 # --- COSTANTI TRANSAZIONI ---
 STATO_TRANSAZIONE_IN_ATTESA = 'IN_ATTESA'
 STATO_TRANSAZIONE_ACCETTATA = 'ACCETTATA'
@@ -597,6 +603,11 @@ class Punteggio(Tabella):
     stat_costo_acquisto_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_cer', verbose_name="Stat. Costo Acquisto Cerimoniale")
     stat_costo_creazione_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_cer', verbose_name="Stat. Costo Creazione Cerimoniale")
     stat_costo_invio_proposta_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_invio_prop_cer', verbose_name="Stat. Costo Invio Proposta (Cer)")
+    # --- CONSUMABILI (creazione da tessitura) ---
+    stat_costo_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_costo_consumabili', verbose_name="Stat. Costo Creazione Consumabili")
+    stat_numero_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_numero_consumabili', verbose_name="Stat. Numero Consumabili")
+    stat_tempo_creazione_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_tempo_creazione_consumabili', verbose_name="Stat. Tempo Creazione Consumabili (sec)")
+    stat_durata_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_durata_consumabili', verbose_name="Stat. Durata Consumabili (giorni)")
     # -------------------------------
     
     class Meta: 
@@ -2414,6 +2425,115 @@ class Dichiarazione(models.Model):
 
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.nome}"
+
+
+# ============================================================================
+# EFFETTI CASUALI E CONSUMABILI
+# ============================================================================
+
+TIPO_EFFETTO_OGGETTO = 'OGG'
+TIPO_EFFETTO_TESSITURA = 'TES'
+TIPO_EFFETTO_CHOICES = [
+    (TIPO_EFFETTO_OGGETTO, 'Oggetto'),
+    (TIPO_EFFETTO_TESSITURA, 'Tessitura'),
+]
+
+
+class TipologiaEffetto(models.Model):
+    """
+    Tipologia di effetto casuale: può generare un oggetto (da inserire in inventario)
+    o una tessitura (da inserire come consumabile).
+    """
+    nome = models.CharField(max_length=100)
+    tipo = models.CharField(max_length=3, choices=TIPO_EFFETTO_CHOICES)
+    aura_collegata = models.ForeignKey(
+        Punteggio, on_delete=models.SET_NULL, null=True, blank=True,
+        limit_choices_to={'tipo': AURA}, related_name='tipologie_effetto_aura',
+        verbose_name="Aura collegata (solo per tipo Oggetto)"
+    )
+
+    class Meta:
+        verbose_name = "Tipologia Effetto Casuale"
+        verbose_name_plural = "Tipologie Effetto Casuale"
+        ordering = ['nome']
+
+    def __str__(self):
+        return f"{self.nome} ({self.get_tipo_display()})"
+
+
+class EffettoCasuale(models.Model):
+    """
+    Singolo effetto casuale con nome, descrizione, formula.
+    Se la tipologia è tessitura, la formula è obbligatoria.
+    """
+    tipologia = models.ForeignKey(TipologiaEffetto, on_delete=models.CASCADE, related_name='effetti')
+    elemento_principale = models.ForeignKey(
+        Mattone, on_delete=models.SET_NULL, null=True, blank=True,
+        limit_choices_to=Q(aura__nome__icontains='magica') | Q(aura__sigla__iexact='mag'),
+        related_name='effetti_casuali_elemento',
+        verbose_name="Elemento principale (Mattoni con aura Magica)"
+    )
+    nome = models.CharField(max_length=200)
+    descrizione = models.TextField(help_text="Usa {parametro} per le statistiche. Inclusi: {aura} (aura tipo), {elemento} (elemento)")
+    formula = models.TextField(blank=True, null=True, help_text="Stesso formato della descrizione. Obbligatorio se tipologia=Tessitura.")
+
+    class Meta:
+        verbose_name = "Effetto Casuale"
+        verbose_name_plural = "Effetti Casuali"
+        ordering = ['tipologia', 'nome']
+
+    def __str__(self):
+        return f"{self.nome} ({self.tipologia})"
+
+    def clean(self):
+        if self.tipologia and self.tipologia.tipo == TIPO_EFFETTO_TESSITURA:
+            if not self.formula or not self.formula.strip():
+                raise ValidationError({'formula': 'La formula è obbligatoria per effetti di tipologia Tessitura.'})
+
+
+class ConsumabilePersonaggio(models.Model):
+    """
+    Consumabile assegnato a un personaggio (es. da effetto casuale tessitura).
+    Ha utilizzi residui e data di scadenza. Occupa 1 slot COG se il personaggio ha almeno un consumabile.
+    """
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='consumabili')
+    effetto_casuale = models.ForeignKey(
+        EffettoCasuale, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='consumabili_personaggio'
+    )
+    nome = models.CharField(max_length=200)
+    descrizione = models.TextField()
+    formula = models.TextField(blank=True, null=True)
+    utilizzi_rimanenti = models.PositiveIntegerField(default=1)
+    data_scadenza = models.DateField()
+    data_creazione = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Consumabile Personaggio"
+        verbose_name_plural = "Consumabili Personaggio"
+        ordering = ['-data_creazione']
+
+    def __str__(self):
+        return f"{self.nome} x{self.utilizzi_rimanenti} ({self.personaggio.nome})"
+
+
+class CreazioneConsumabileInCorso(models.Model):
+    """
+    Timer di creazione consumabile da tessitura: al termine di data_fine_creazione
+    il personaggio può completare e ottenere il consumabile in tab Consumabili.
+    """
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='creazioni_consumabili_in_corso')
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE, related_name='creazioni_consumabili_in_corso')
+    data_fine_creazione = models.DateTimeField()
+    completata = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Creazione Consumabile In Corso"
+        verbose_name_plural = "Creazioni Consumabili In Corso"
+        ordering = ['data_fine_creazione']
+
+    def __str__(self):
+        return f"{self.tessitura.nome} → {self.personaggio.nome} (fine {self.data_fine_creazione})"
 
 
 # ============================================================================

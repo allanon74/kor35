@@ -19,6 +19,7 @@ from asgiref.sync import async_to_sync
 from .models import (
     OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, 
     A_vista, Inventario, Infusione, Tessitura, Personaggio, TransazioneSospesa, 
+    ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     CreditoMovimento, PuntiCaratteristicaMovimento, Punteggio, CARATTERISTICA, 
     PersonaggioModelloAura, ModelloAura, PropostaTecnica, 
     # NUOVI MODELLI INTERMEDI
@@ -72,7 +73,7 @@ import json
 # --- IMPORT SERVICES ---
 from .services import (
     # monta_potenziamento, crea_oggetto_da_infusione, 
-    GestioneOggettiService, GestioneCraftingService 
+    GestioneOggettiService, GestioneCraftingService, CreazioneConsumabileService,
 )
 
 # --- IMPORT SERIALIZERS ---
@@ -96,6 +97,7 @@ from .serializers import (
     ClasseOggettoSerializer, CerimonialeSerializer, StatoTimerSerializer,
     StatisticaSerializer, TipologiaPersonaggioSerializer, 
     PersonaggioManageSerializer, SSOUserSerializer,
+    ConsumabilePersonaggioSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -546,7 +548,77 @@ class ToggleTessituraFavoriteView(APIView):
             'is_favorite': pivot.is_favorite,
             'tessitura_id': tessitura_id
         }, status=status.HTTP_200_OK)
-    
+
+
+class ConsumaConsumabileView(APIView):
+    """Consuma un utilizzo di un consumabile. Se arriva a 0, il record viene eliminato."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        consumabile_id = request.data.get('consumabile_id')
+        personaggio_id = request.data.get('personaggio_id')
+        if not consumabile_id or not personaggio_id:
+            return Response({"error": "Dati mancanti."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            consumabile = ConsumabilePersonaggio.objects.get(id=consumabile_id, personaggio=personaggio)
+        except (Personaggio.DoesNotExist, ConsumabilePersonaggio.DoesNotExist):
+            return Response({"error": "Non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if consumabile.utilizzi_rimanenti <= 0:
+            return Response({"error": "Nessun utilizzo rimanente."}, status=status.HTTP_400_BAD_REQUEST)
+        if consumabile.data_scadenza < timezone.now().date():
+            consumabile.delete()
+            return Response({"error": "Consumabile scaduto.", "eliminato": True}, status=status.HTTP_400_BAD_REQUEST)
+        consumabile.utilizzi_rimanenti -= 1
+        if consumabile.utilizzi_rimanenti <= 0:
+            consumabile.delete()
+            return Response({"success": True, "eliminato": True, "utilizzi_rimanenti": 0}, status=status.HTTP_200_OK)
+        consumabile.save()
+        dati = ConsumabilePersonaggioSerializer(consumabile, context={'personaggio': personaggio}).data
+        return Response({"success": True, "eliminato": False, "consumabile": dati, "utilizzi_rimanenti": consumabile.utilizzi_rimanenti}, status=status.HTTP_200_OK)
+
+
+class AvviaCreazioneConsumabileView(APIView):
+    """Avvia la creazione di un consumabile da tessitura (Alchimia). Requisito: livello tessitura <= ALC."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        personaggio_id = request.data.get('personaggio_id')
+        tessitura_id = request.data.get('tessitura_id')
+        if not personaggio_id or not tessitura_id:
+            return Response({"error": "Dati mancanti (personaggio_id, tessitura_id)."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+            tessitura = Tessitura.objects.get(id=tessitura_id)
+        except (Personaggio.DoesNotExist, Tessitura.DoesNotExist):
+            return Response({"error": "Non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if not personaggio.tessiture_possedute.filter(id=tessitura_id).exists():
+            return Response({"error": "Non possiedi questa tessitura."}, status=status.HTTP_400_BAD_REQUEST)
+        ok, result = CreazioneConsumabileService.avvia_creazione(personaggio, tessitura)
+        if not ok:
+            return Response({"error": result}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"success": True, **result}, status=status.HTTP_200_OK)
+
+
+class CompletaCreazioneConsumabileView(APIView):
+    """Completa una creazione consumabile scaduta e aggiunge il consumabile all'inventario."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        personaggio_id = request.data.get('personaggio_id')
+        creazione_id = request.data.get('creazione_id')  # opzionale
+        if not personaggio_id:
+            return Response({"error": "personaggio_id richiesto."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            personaggio = Personaggio.objects.get(id=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        ok, result = CreazioneConsumabileService.completa_creazione(personaggio, creazione_id=creazione_id)
+        if not ok:
+            return Response({"error": result}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"success": True, **result}, status=status.HTTP_200_OK)
+
+
 class CerimonialiAcquistabiliView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = CerimonialeSerializer

@@ -13,25 +13,36 @@ from .models import (
     TIPO_OGGETTO_FISICO, TIPO_OGGETTO_MOD, TIPO_OGGETTO_MATERIA, 
     TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE,
     COSTO_PER_MATTONE_OGGETTO, QrCode, OggettoStatistica, Inventario,
-    OggettoBase, OggettoStatisticaBase, 
+    OggettoBase, OggettoStatisticaBase, ConsumabilePersonaggio,
     ForgiaturaInCorso, Abilita, 
     OggettoCaratteristica, RichiestaAssemblaggio,
     ClasseOggettoLimiteMod,
     STATO_RICHIESTA_PENDENTE, STATO_RICHIESTA_COMPLETATA, STATO_RICHIESTA_RIFIUTATA,
     TIPO_OPERAZIONE_FORGIATURA, TIPO_OPERAZIONE_RIMOZIONE, TIPO_OPERAZIONE_INSTALLAZIONE, TIPO_OPERAZIONE_INNESTO,
     TIPO_OGGETTO_AUMENTO, TIPO_OGGETTO_POTENZIAMENTO,
+    Tessitura, CreazioneConsumabileInCorso, Punteggio, AURA,
+    FALLBACK_STAT_COSTO_CONSUMABILI, FALLBACK_STAT_NUMERO_CONSUMABILI,
+    FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI, FALLBACK_STAT_DURATA_CONSUMABILI,
 )
 
 class GestioneOggettiService:
     
     @staticmethod
     def calcola_cog_utilizzata(pg: Personaggio):
-        """Calcola la Capacità Oggetti (COG) occupata."""
-        oggetti = pg.get_oggetti().filter()
-        return pg.get_oggetti().filter(
+        """Calcola la Capacità Oggetti (COG) occupata.
+        Include: oggetti fisici equipaggiati + 1 slot se il personaggio ha almeno un consumabile valido.
+        """
+        cog_oggetti = pg.get_oggetti().filter(
             tipo_oggetto=TIPO_OGGETTO_FISICO, 
             is_equipaggiato=True
         ).count()
+        oggi = timezone.now().date()
+        has_consumabili = ConsumabilePersonaggio.objects.filter(
+            personaggio=pg,
+            utilizzi_rimanenti__gt=0,
+            data_scadenza__gte=oggi
+        ).exists()
+        return cog_oggetti + (1 if has_consumabili else 0)
     
     @staticmethod
     def calcola_ingombranti_utilizzata(pg: Personaggio):
@@ -1002,5 +1013,124 @@ class GestioneCraftingService:
         
         lvl = max(1, infusione.livello)
         return lvl * c_unit, lvl * t_unit
+
+
+class CreazioneConsumabileService:
+    """Servizio per avviare e completare la creazione di consumabili da tessitura (Alchimia)."""
+
+    SIGLA_AURA_ALCHIMIA = 'ALC'
+
+    @staticmethod
+    def _get_valore_consumabili(personaggio, aura, campo, fallback):
+        """Valore della stat dell'aura per il personaggio, o fallback se non configurata."""
+        stat = getattr(aura, campo, None)
+        if not stat:
+            return fallback
+        val = personaggio.get_valore_statistica(stat.sigla)
+        return max(fallback, val) if val is not None else fallback
+
+    @classmethod
+    def avvia_creazione(cls, personaggio, tessitura):
+        """
+        Avvia la creazione di un consumabile da tessitura.
+        Requisiti: livello tessitura <= valore Aura Mondana Alchimia (ALC); nessuna creazione già in corso.
+        Ritorna (success, data_dict|error_message).
+        """
+        from django.db import transaction as db_transaction
+
+        aura_alc = Punteggio.objects.filter(tipo=AURA, sigla=cls.SIGLA_AURA_ALCHIMIA).first()
+        if not aura_alc:
+            return False, "Aura Alchimia (ALC) non configurata."
+        valore_alc = personaggio.get_valore_aura_effettivo(aura_alc)
+        livello = max(1, tessitura.livello)
+        if livello > valore_alc:
+            return False, f"Livello tessitura ({livello}) superiore al valore Aura Alchimia ({valore_alc})."
+
+        if CreazioneConsumabileInCorso.objects.filter(
+            personaggio=personaggio, tessitura=tessitura, completata=False
+        ).exists():
+            return False, "Creazione già in corso per questa tessitura."
+
+        aura_tessitura = tessitura.aura_richiesta
+        if not aura_tessitura:
+            return False, "Tessitura senza aura configurata."
+        costo_unit = cls._get_valore_consumabili(
+            personaggio, aura_tessitura, 'stat_costo_consumabili', FALLBACK_STAT_COSTO_CONSUMABILI
+        )
+        costo_totale = costo_unit * livello
+        crediti_attuali = getattr(personaggio, 'crediti_correnti', 0) or 0
+        if crediti_attuali < costo_totale:
+            return False, f"Crediti insufficienti (serve {costo_totale}, hai {crediti_attuali})."
+
+        tempo_sec = cls._get_valore_consumabili(
+            personaggio, aura_tessitura, 'stat_tempo_creazione_consumabili', FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI
+        )
+        tempo_sec = max(1, int(tempo_sec))
+
+        with db_transaction.atomic():
+            personaggio.modifica_crediti(-costo_totale, f"Creazione consumabile da tessitura: {tessitura.nome}")
+            data_fine = timezone.now() + timedelta(seconds=tempo_sec)
+            cc = CreazioneConsumabileInCorso.objects.create(
+                personaggio=personaggio,
+                tessitura=tessitura,
+                data_fine_creazione=data_fine,
+                completata=False,
+            )
+        return True, {
+            "creazione_id": cc.id,
+            "data_fine_creazione": data_fine.isoformat(),
+            "secondi_rimanenti": tempo_sec,
+        }
+
+    @classmethod
+    def completa_creazione(cls, personaggio, creazione_id=None):
+        """
+        Completa una creazione consumabile scaduta (data_fine_creazione <= now).
+        Se creazione_id è None, completa la prima disponibile per il personaggio.
+        Ritorna (success, data_dict|error_message).
+        """
+        from django.db import transaction as db_transaction
+
+        now = timezone.now()
+        if creazione_id:
+            qs = CreazioneConsumabileInCorso.objects.filter(
+                id=creazione_id, personaggio=personaggio, completata=False, data_fine_creazione__lte=now
+            )
+        else:
+            qs = CreazioneConsumabileInCorso.objects.filter(
+                personaggio=personaggio, completata=False, data_fine_creazione__lte=now
+            ).order_by('data_fine_creazione')[:1]
+        creazione = qs.first()
+        if not creazione:
+            return False, "Nessuna creazione consumabile pronta da completare."
+
+        tessitura = creazione.tessitura
+        aura_tessitura = tessitura.aura_richiesta
+        aura_alc = Punteggio.objects.filter(tipo=AURA, sigla=cls.SIGLA_AURA_ALCHIMIA).first()
+        valore_alc = personaggio.get_valore_aura_effettivo(aura_alc) if aura_alc else 0
+        livello = max(1, tessitura.livello)
+        numero_base = cls._get_valore_consumabili(
+            personaggio, aura_tessitura, 'stat_numero_consumabili', FALLBACK_STAT_NUMERO_CONSUMABILI
+        )
+        utilizzi = max(1, int(numero_base) + 2 * max(0, valore_alc - livello))
+        giorni_durata = cls._get_valore_consumabili(
+            personaggio, aura_tessitura, 'stat_durata_consumabili', FALLBACK_STAT_DURATA_CONSUMABILI
+        )
+        giorni_durata = max(1, int(giorni_durata))
+        data_scadenza = timezone.now().date() + timedelta(days=giorni_durata)
+
+        with db_transaction.atomic():
+            ConsumabilePersonaggio.objects.create(
+                personaggio=personaggio,
+                effetto_casuale=None,
+                nome=tessitura.nome,
+                descrizione=tessitura.testo or "",
+                formula=tessitura.formula or "",
+                utilizzi_rimanenti=utilizzi,
+                data_scadenza=data_scadenza,
+            )
+            creazione.completata = True
+            creazione.save()
+        return True, {"consumabile_creato": True, "utilizzi": utilizzi, "data_scadenza": data_scadenza.isoformat()}
 
     

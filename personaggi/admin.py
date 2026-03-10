@@ -46,6 +46,8 @@ from .models import (
     ConfigurazioneLivelloAura,
     Cerimoniale, CerimonialeCaratteristica,
     TipologiaTimer, TimerQrCode, StatoTimerAttivo,
+    TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
+    TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -913,4 +915,57 @@ class DichiarazioneAdmin(admin.ModelAdmin):
     search_fields = ('dichiarazione', 'descrizione')       # Barra di ricerca
     ordering = ('tipo', 'nome')
     radio_fields = {"tipo": admin.VERTICAL}
-    
+
+
+# --- EFFETTI CASUALI ---
+
+class EffettoCasualeInline(admin.TabularInline):
+    model = EffettoCasuale
+    extra = 1
+    autocomplete_fields = ['elemento_principale']
+    fields = ('nome', 'elemento_principale', 'descrizione', 'formula')
+
+
+@admin.register(TipologiaEffetto)
+class TipologiaEffettoAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'tipo', 'aura_collegata')
+    list_filter = ('tipo',)
+    search_fields = ('nome',)
+    inlines = [EffettoCasualeInline]
+    autocomplete_fields = ['aura_collegata']
+
+
+@admin.register(EffettoCasuale)
+class EffettoCasualeAdmin(SModelAdmin):
+    list_display = ('nome', 'tipologia', 'elemento_principale')
+    list_filter = ('tipologia',)
+    search_fields = ('nome', 'descrizione')
+    summernote_fields = ('descrizione', 'formula')
+    autocomplete_fields = ['tipologia', 'elemento_principale']
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        extras = [('{aura}', 'Aura della tipologia'), ('{elemento}', 'Elemento Principale')]
+        help_txt = Statistica.get_help_text_parametri(extras)
+        if 'descrizione' in form.base_fields:
+            form.base_fields['descrizione'].help_text = help_txt
+        if 'formula' in form.base_fields:
+            form.base_fields['formula'].help_text = help_txt
+        return form
+
+
+@admin.register(ConsumabilePersonaggio)
+class ConsumabilePersonaggioAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'personaggio', 'utilizzi_rimanenti', 'data_scadenza', 'data_creazione')
+    list_filter = ('data_scadenza',)
+    search_fields = ('nome', 'personaggio__nome')
+    autocomplete_fields = ['personaggio', 'effetto_casuale']
+
+
+@admin.register(CreazioneConsumabileInCorso)
+class CreazioneConsumabileInCorsoAdmin(admin.ModelAdmin):
+    list_display = ('personaggio', 'tessitura', 'data_fine_creazione', 'completata')
+    list_filter = ('completata',)
+    search_fields = ('personaggio__nome', 'tessitura__nome')
+    autocomplete_fields = ['personaggio', 'tessitura']
+

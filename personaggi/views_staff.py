@@ -15,7 +15,8 @@ from .models import (
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
-    abilita_tier, 
+    abilita_tier,
+    TipologiaEffetto, EffettoCasuale,
 )
 
 from .serializers import (
@@ -35,6 +36,7 @@ from .serializers import (
     TierStaffSerializer,
     AbilitaSimpleSerializer,
     InventarioStaffSerializer,
+    TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
 )
 
 class QrInspectorView(APIView):
@@ -424,3 +426,49 @@ class OggettiSenzaPosizioneView(APIView):
         
         serializer = OggettoSerializer(oggetti, many=True)
         return Response(serializer.data)
+
+
+class TipologiaEffettoViewSet(viewsets.ModelViewSet):
+    """CRUD per Tipologie Effetto Casuale (Staff)."""
+    queryset = TipologiaEffetto.objects.all().select_related('aura_collegata')
+    serializer_class = TipologiaEffettoStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+
+class EffettoCasualeViewSet(viewsets.ModelViewSet):
+    """CRUD per Effetti Casuali (Staff)."""
+    queryset = EffettoCasuale.objects.all().select_related('tipologia', 'elemento_principale')
+    serializer_class = EffettoCasualeStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    filterset_fields = ['tipologia']
+
+
+class SelezionaEffettoCasualeView(APIView):
+    """Seleziona un effetto casuale dalla tipologia e opzionalmente lo applica al personaggio."""
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request):
+        from .effetti_casuali import seleziona_effetto_casuale
+        tipologia_id = request.data.get('tipologia_id')
+        personaggio_id = request.data.get('personaggio_id')
+        if not tipologia_id:
+            return Response({"error": "tipologia_id richiesto"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            tipologia = TipologiaEffetto.objects.get(pk=tipologia_id)
+        except TipologiaEffetto.DoesNotExist:
+            return Response({"error": "Tipologia non trovata"}, status=status.HTTP_404_NOT_FOUND)
+        personaggio = None
+        if personaggio_id:
+            try:
+                personaggio = Personaggio.objects.get(pk=personaggio_id)
+            except Personaggio.DoesNotExist:
+                pass
+        risultato = seleziona_effetto_casuale(tipologia, personaggio)
+        if 'errore' in risultato:
+            return Response(risultato, status=status.HTTP_400_BAD_REQUEST)
+        out = {'nome': risultato['nome'], 'descrizione': risultato['descrizione'], 'formula': risultato.get('formula', '')}
+        if 'oggetto_creato' in risultato:
+            out['oggetto_creato_id'] = risultato['oggetto_creato'].id
+        if 'consumabile_creato' in risultato:
+            out['consumabile_creato_id'] = risultato['consumabile_creato'].id
+        return Response(out, status=status.HTTP_200_OK)

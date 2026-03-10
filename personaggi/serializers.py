@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.db import models, transaction
 from decimal import Decimal
 
-from .models import ConfigurazioneLivelloAura, formatta_testo_generico
+from .models import ConfigurazioneLivelloAura, formatta_testo_generico, ConsumabilePersonaggio
 # Importa i modelli e le funzioni helper
 from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
@@ -33,6 +33,7 @@ from .models import (
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
     Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
+    TipologiaEffetto, EffettoCasuale,
 )
 
 # -----------------------------------------------------------------------------
@@ -1396,6 +1397,49 @@ class TipologiaPersonaggioSerializer(serializers.ModelSerializer):
         fields = ('id', 'nome', 'crediti_iniziali', 'caratteristiche_iniziali', 'giocante')
 
 
+class TipologiaEffettoStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipologiaEffetto
+        fields = '__all__'
+
+
+class EffettoCasualeStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EffettoCasuale
+        fields = '__all__'
+
+
+class ConsumabilePersonaggioSerializer(serializers.ModelSerializer):
+    """Serializer per consumabili del personaggio con descrizione e formula formattate."""
+    descrizione_formattata = serializers.SerializerMethodField()
+    formula_formattata = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConsumabilePersonaggio
+        fields = ('id', 'nome', 'descrizione', 'formula', 'descrizione_formattata', 'formula_formattata',
+                  'utilizzi_rimanenti', 'data_scadenza', 'data_creazione')
+
+    def get_descrizione_formattata(self, obj):
+        personaggio = self.context.get('personaggio')
+        if not personaggio:
+            return obj.descrizione
+        from .models import formatta_testo_generico
+        ctx = {}
+        if obj.effetto_casuale:
+            ctx = {'aura': obj.effetto_casuale.tipologia.aura_collegata, 'elemento': obj.effetto_casuale.elemento_principale}
+        return formatta_testo_generico(obj.descrizione, personaggio=personaggio, context=ctx)
+
+    def get_formula_formattata(self, obj):
+        personaggio = self.context.get('personaggio')
+        if not personaggio or not obj.formula:
+            return obj.formula or ''
+        from .models import formatta_testo_generico
+        ctx = {}
+        if obj.effetto_casuale:
+            ctx = {'aura': obj.effetto_casuale.tipologia.aura_collegata, 'elemento': obj.effetto_casuale.elemento_principale}
+        return formatta_testo_generico(None, formula=obj.formula, personaggio=personaggio, context=ctx, solo_formula=True)
+
+
 class PersonaggioDetailSerializer(serializers.ModelSerializer):
     proprietario = serializers.StringRelatedField(read_only=True)
     crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
@@ -1412,6 +1456,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     attivate_possedute = serializers.SerializerMethodField()
     infusioni_possedute = serializers.SerializerMethodField()
     tessiture_possedute = serializers.SerializerMethodField()
+    consumabili = serializers.SerializerMethodField()
+    creazioni_consumabili_in_corso = serializers.SerializerMethodField()
+    creazioni_consumabili_pronte = serializers.SerializerMethodField()
+    valore_aura_alchimia = serializers.SerializerMethodField()
 
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     is_staff = serializers.BooleanField(source='proprietario.is_staff', read_only=True)
@@ -1431,6 +1479,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'punteggi_base', 'statistiche_base_dict', 'modificatori_calcolati',
             'abilita_possedute', 'oggetti',
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
+            'consumabili', 'creazioni_consumabili_in_corso', 'creazioni_consumabili_pronte', 'valore_aura_alchimia',
             'movimenti_credito',
             'TestoFormattatoPersonale',
             'is_staff', 'modelli_aura',
@@ -1489,6 +1538,51 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             dati['is_favorite'] = pivot.is_favorite if pivot else False
             risultati.append(dati)
         return risultati
+
+    def get_creazioni_consumabili_in_corso(self, personaggio):
+        from django.utils import timezone
+        from .models import CreazioneConsumabileInCorso
+        now = timezone.now()
+        creazioni = CreazioneConsumabileInCorso.objects.filter(
+            personaggio=personaggio, completata=False, data_fine_creazione__gt=now
+        ).select_related('tessitura').order_by('data_fine_creazione')
+        risultati = []
+        for cc in creazioni:
+            delta = (cc.data_fine_creazione - now).total_seconds()
+            risultati.append({
+                'id': cc.id,
+                'tessitura_id': cc.tessitura_id,
+                'tessitura_nome': cc.tessitura.nome,
+                'data_fine_creazione': cc.data_fine_creazione.isoformat(),
+                'secondi_rimanenti': max(0, int(delta)),
+            })
+        return risultati
+
+    def get_creazioni_consumabili_pronte(self, personaggio):
+        from django.utils import timezone
+        from .models import CreazioneConsumabileInCorso
+        now = timezone.now()
+        creazioni = CreazioneConsumabileInCorso.objects.filter(
+            personaggio=personaggio, completata=False, data_fine_creazione__lte=now
+        ).select_related('tessitura').order_by('data_fine_creazione')
+        return [{'id': cc.id, 'tessitura_id': cc.tessitura_id, 'tessitura_nome': cc.tessitura.nome} for cc in creazioni]
+
+    def get_valore_aura_alchimia(self, personaggio):
+        from .models import Punteggio, AURA
+        aura_alc = Punteggio.objects.filter(tipo=AURA, sigla='ALC').first()
+        if not aura_alc:
+            return 0
+        return personaggio.get_valore_aura_effettivo(aura_alc)
+
+    def get_consumabili(self, personaggio):
+        from django.utils import timezone
+        oggi = timezone.now().date()
+        consumabili = personaggio.consumabili.filter(
+            utilizzi_rimanenti__gt=0,
+            data_scadenza__gte=oggi
+        ).order_by('-data_creazione')
+        context_con_pg = {**self.context, 'personaggio': personaggio}
+        return ConsumabilePersonaggioSerializer(consumabili, many=True, context=context_con_pg).data
     
     def get_lavori_pendenti_count(self, obj):
         return obj.richieste_assemblaggio_ricevute.filter(stato='PEND').count()
