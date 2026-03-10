@@ -2033,7 +2033,18 @@ class Personaggio(Inventario):
                 formula_out = formatta_testo_generico(None, formula=consumabile.formula, personaggio=self, context=ctx, solo_formula=True)
                 formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
             return desc, formula_out
-        return consumabile.descrizione or "", (consumabile.formula or "").strip()
+        # Consumabile senza tessitura né effetto casuale: stessa logica visiva delle tessiture
+        # (formatta_testo_generico con personaggio per placeholder e HTML, senza statistiche_base)
+        desc = formatta_testo_generico(
+            consumabile.descrizione, formula=None, statistiche_base=None, personaggio=self, context={}
+        )
+        formula_out = ""
+        if consumabile.formula:
+            formula_out = formatta_testo_generico(
+                None, formula=consumabile.formula, statistiche_base=None, personaggio=self, context={}, solo_formula=True
+            )
+            formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
+        return desc, formula_out
         
     
     def get_valore_statistica(self, sigla):
