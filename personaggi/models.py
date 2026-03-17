@@ -489,7 +489,7 @@ def genera_html_cariche(item, personaggio=None):
 
 
 # --- TIPI ---
-CARATTERISTICA = "CA"; STATISTICA = "ST"; ELEMENTO = "EL"; AURA = "AU"; CONDIZIONE = "CO"; CULTO = "CU"; VIA = "VI"; ARTE = "AR"; ARCHETIPO = "AR"
+CARATTERISTICA = "CA"; STATISTICA = "ST"; ELEMENTO = "EL"; AURA = "AU"; CONDIZIONE = "CO"; CULTO = "CU"; VIA = "VI"; ARTE = "AR"; ARCHETIPO = "AT"
 
 punteggi_tipo = [
     (CARATTERISTICA, 'Caratteristica'), 
