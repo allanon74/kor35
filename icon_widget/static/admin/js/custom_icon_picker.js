@@ -109,12 +109,26 @@ window.initCustomIconPicker = function(options) {
             const saveUrl = options.saveIconUrl || '/api/icon-widget-api/save-icon/';
             const response = await fetch(saveUrl, {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'X-CSRFToken': csrftoken },
                 body: formData
             });
             
-            if (!response.ok) throw new Error(`Errore server: ${response.status}`);
+            if (!response.ok) {
+                const bodyText = await response.text().catch(() => '');
+                throw new Error(
+                    `Errore server: ${response.status} url=${response.url} redirected=${response.redirected} body=${bodyText.slice(0, 200)}`
+                );
+            }
             
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const bodyText = await response.text().catch(() => '');
+                throw new Error(
+                    `Risposta non JSON (content-type=${contentType}) url=${response.url} redirected=${response.redirected} body=${bodyText.slice(0, 200)}`
+                );
+            }
+
             const data = await response.json(); // { "path": "...", "url": "..." }
             
             input.value = data.path; 
