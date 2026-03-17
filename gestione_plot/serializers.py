@@ -5,9 +5,10 @@ from .models import (
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton,
+    WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial,
 )
-from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier
+from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier, Mattone
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
     AbilitaSerializer, PunteggioSerializer, TabellaSerializer, ModelloAuraSerializer,
@@ -258,6 +259,69 @@ class WikiTierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tier
         fields = ['id', 'nome', 'descrizione', 'tipo', 'abilita']
+
+
+class MattoneWikiSerializer(serializers.ModelSerializer):
+    aura = PunteggioWikiSerializer(read_only=True)
+    caratteristica_associata = PunteggioWikiSerializer(read_only=True)
+    icona_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Mattone
+        fields = [
+            'id',
+            'nome',
+            'sigla',
+            'tipo',
+            'ordine',
+            'colore',
+            'icona_url',
+            'aura',
+            'caratteristica_associata',
+            'descrizione',  # da Punteggio (se presente)
+            'descrizione_mattone',
+            'descrizione_metatalento',
+        ]
+
+    def get_icona_url(self, obj):
+        # `Punteggio.icona_url` è una @property sul model
+        try:
+            return obj.icona_url
+        except Exception:
+            return None
+
+
+class WikiMattoniWidgetSerializer(serializers.ModelSerializer):
+    aure = PunteggioWikiSerializer(many=True, read_only=True)
+    caratteristiche = PunteggioWikiSerializer(many=True, read_only=True)
+    aure_ids = serializers.PrimaryKeyRelatedField(
+        source='aure',
+        many=True,
+        queryset=Punteggio.objects.filter(tipo='AU'),
+        required=False,
+        write_only=True,
+    )
+    caratteristiche_ids = serializers.PrimaryKeyRelatedField(
+        source='caratteristiche',
+        many=True,
+        queryset=Punteggio.objects.filter(tipo='CA'),
+        required=False,
+        write_only=True,
+    )
+
+    class Meta:
+        model = WikiMattoniWidget
+        fields = [
+            'id',
+            'title',
+            'filter_type',
+            'aure',
+            'caratteristiche',
+            'aure_ids',
+            'caratteristiche_ids',
+            'data_creazione',
+            'data_modifica',
+        ]
 
 
 class WikiTierWidgetSerializer(serializers.ModelSerializer):

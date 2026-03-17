@@ -3,7 +3,7 @@ from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
     MostroTemplate, AttaccoTemplate, PngAssegnato, 
     StaffOffGame, QuestFase, QuestTask,
-    PaginaRegolamento, WikiImmagine, WikiButtonWidget, WikiButton,
+    PaginaRegolamento, WikiImmagine, WikiButtonWidget, WikiButton, WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
@@ -189,6 +189,20 @@ class WikiButtonWidgetAdmin(admin.ModelAdmin):
     
     def save_model(self, request, obj, form, change):
         if not change:  # Solo quando viene creato
+            obj.creatore = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(WikiMattoniWidget)
+class WikiMattoniWidgetAdmin(admin.ModelAdmin):
+    list_display = ('id', 'title', 'filter_type', 'creatore', 'data_creazione')
+    list_filter = ('filter_type', 'data_creazione', 'creatore')
+    search_fields = ('title',)
+    readonly_fields = ('data_creazione', 'data_modifica')
+    ordering = ('-data_creazione',)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
             obj.creatore = request.user
         super().save_model(request, obj, form, change)
 

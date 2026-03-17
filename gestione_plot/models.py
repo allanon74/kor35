@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from personaggi.models import Personaggio, Manifesto, Inventario, QrCode, Tier
+from personaggi.models import Personaggio, Manifesto, Inventario, QrCode, Tier, Punteggio
 
 # --- 1. SEZIONE TEMPLATE (L'ANAGRAFICA GENERALE) ---
 
@@ -363,6 +363,57 @@ class WikiTierWidget(models.Model):
 
     def __str__(self):
         return f"Widget Tier #{self.id} ({self.tier.nome})"
+
+
+class WikiMattoniWidget(models.Model):
+    """
+    Widget Mattoni configurabile per la wiki.
+    Usato in {{WIDGET_MATTONI:id}} dove id è questo widget.
+    """
+    FILTER_ALL = 'all'
+    FILTER_AURA = 'aura'
+    FILTER_CARATTERISTICA = 'caratteristica'
+    FILTER_CHOICES = [
+        (FILTER_ALL, 'Tutti'),
+        (FILTER_AURA, 'Per Aura'),
+        (FILTER_CARATTERISTICA, 'Per Caratteristica'),
+    ]
+
+    title = models.CharField(max_length=200, blank=True, help_text="Titolo opzionale del widget (per identificazione interna)")
+    filter_type = models.CharField(max_length=20, choices=FILTER_CHOICES, default=FILTER_ALL)
+
+    aure = models.ManyToManyField(
+        Punteggio,
+        blank=True,
+        related_name='wiki_mattoni_widgets_aure',
+        limit_choices_to={'tipo': 'AU'},
+        help_text="Aure da includere (se filtro = Aura).",
+    )
+    caratteristiche = models.ManyToManyField(
+        Punteggio,
+        blank=True,
+        related_name='wiki_mattoni_widgets_caratteristiche',
+        limit_choices_to={'tipo': 'CA'},
+        help_text="Caratteristiche da includere (se filtro = Caratteristica).",
+    )
+
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_modifica = models.DateTimeField(auto_now=True)
+    creatore = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='wiki_mattoni_widgets_creati'
+    )
+
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Widget Mattoni"
+        verbose_name_plural = "Widget Mattoni"
+
+    def __str__(self):
+        return f"Widget Mattoni #{self.id} ({self.title or 'senza titolo'})"
 
 
 class WikiButtonWidget(models.Model):

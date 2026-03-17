@@ -10,9 +10,10 @@ from .views import(
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
-    get_wiki_menu, get_wiki_page, get_wiki_tier_display, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
+    get_wiki_menu, get_wiki_page, get_wiki_tier_display, get_wiki_mattoni_display, public_wiki_punteggi, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
     PublicWikiTierWidgetViewSet, StaffWikiTierWidgetViewSet,
     PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
+    PublicWikiMattoniWidgetViewSet, StaffWikiMattoniWidgetViewSet,
     PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet,
                    )
 from personaggi.views_staff import(
@@ -51,6 +52,9 @@ router.register(r'staff/wiki-buttons',
 router.register(r'staff/wiki-tiers', 
                 StaffWikiTierWidgetViewSet, 
                 basename='staff-wiki-tiers')
+router.register(r'staff/wiki-mattoni',
+                StaffWikiMattoniWidgetViewSet,
+                basename='staff-wiki-mattoni')
 router.register(r'public/wiki-menu', PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
 router.register(r'public/wiki-page', PublicPaginaRegolamentoDetail, basename='public-wiki-page')
 router.register(r'public/wiki-tabelle', PublicTabellaViewSet, basename='public-wiki-tabelle')
@@ -59,6 +63,7 @@ router.register(r'public/wiki-tiers', PublicTierViewSet, basename='public-wiki-t
 router.register(r'public/wiki-immagini', PublicWikiImmagineViewSet, basename='public-wiki-immagini')
 router.register(r'public/wiki-buttons', PublicWikiButtonWidgetViewSet, basename='public-wiki-buttons')
 router.register(r'public/wiki-tier-widgets', PublicWikiTierWidgetViewSet, basename='public-wiki-tier-widgets')
+router.register(r'public/wiki-mattoni-widgets', PublicWikiMattoniWidgetViewSet, basename='public-wiki-mattoni-widgets')
 router.register(r'public/eventi', PublicEventiViewSet, basename='public-eventi')
 router.register(r'public/configurazione-sito', PublicConfigurazioneSitoViewSet, basename='public-configurazione-sito')
 router.register(r'public/link-social', PublicLinkSocialViewSet, basename='public-link-social')
@@ -68,5 +73,7 @@ urlpatterns = [
     path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
     path('api/wiki/image/<slug:slug>/', serve_wiki_image, name='wiki_image'),
     path('api/wiki/tier-display/<int:pk>/', get_wiki_tier_display, name='wiki_tier_display'),
+    path('api/wiki/mattoni-display/<int:pk>/', get_wiki_mattoni_display, name='wiki_mattoni_display'),
+    path('api/wiki/punteggi/', public_wiki_punteggi, name='wiki_punteggi'),
     path('api/', include(router.urls)),
 ]   
