@@ -265,6 +265,7 @@ class MattoneWikiSerializer(serializers.ModelSerializer):
     aura = PunteggioWikiSerializer(read_only=True)
     caratteristica_associata = PunteggioWikiSerializer(read_only=True)
     icona_url = serializers.SerializerMethodField()
+    tipo_display = serializers.SerializerMethodField()
 
     class Meta:
         model = Mattone
@@ -273,6 +274,7 @@ class MattoneWikiSerializer(serializers.ModelSerializer):
             'nome',
             'sigla',
             'tipo',
+            'tipo_display',
             'ordine',
             'colore',
             'icona_url',
@@ -282,6 +284,9 @@ class MattoneWikiSerializer(serializers.ModelSerializer):
             'descrizione_mattone',
             'descrizione_metatalento',
         ]
+
+    def get_tipo_display(self, obj):
+        return obj.get_tipo_display() if obj else ''
 
     def get_icona_url(self, obj):
         # `Punteggio.icona_url` è una @property sul model
