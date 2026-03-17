@@ -1,5 +1,6 @@
 # In icon_widget/widgets.py
 from django import forms
+from django.urls import reverse
 
 class CustomIconWidget(forms.TextInput):
     template_name = 'admin/widgets/custom_icon_widget.html'
@@ -21,4 +22,6 @@ class CustomIconWidget(forms.TextInput):
         context = super().get_context(name, value, attrs)
         # Passa il model_name al template
         context['widget']['model_name'] = attrs.get('model_name', 'personaggi.punteggio')
+        # URL dell'API (risolto via reverse, include eventuali prefissi come /api/)
+        context['widget']['save_icon_url'] = reverse('icon_widget:save_icon')
         return context

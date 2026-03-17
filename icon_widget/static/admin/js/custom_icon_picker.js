@@ -106,7 +106,8 @@ window.initCustomIconPicker = function(options) {
             formData.append('color', color);
             formData.append('model', options.modelName); // Usa il modelName dinamico
 
-            const response = await fetch(`/icon-widget-api/save-icon/`, {
+            const saveUrl = options.saveIconUrl || '/api/icon-widget-api/save-icon/';
+            const response = await fetch(saveUrl, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': csrftoken },
                 body: formData
