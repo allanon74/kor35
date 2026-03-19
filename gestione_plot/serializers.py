@@ -243,10 +243,12 @@ class PunteggioWikiSerializer(serializers.ModelSerializer):
 class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
     caratteristica = PunteggioWikiSerializer(read_only=True)
+    caratteristica_2 = PunteggioWikiSerializer(read_only=True)
+    caratteristica_3 = PunteggioWikiSerializer(read_only=True)
     class Meta:
         model = Abilita
-        fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica'] 
-        
+        fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica', 'caratteristica_2', 'caratteristica_3']
+
     def get_costo(self, obj):
         if obj.costo_pc is not None and obj.costo_pc > 0:
             return f"{obj.costo_pc} PC"

@@ -789,6 +789,8 @@ class Abilita(A_modello):
     costo_pc = models.IntegerField(default=0)
     costo_crediti = models.IntegerField(default=0)
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo__in': [CARATTERISTICA, CONDIZIONE]})
+    caratteristica_2 = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, related_name="abilita_caratteristica_2", limit_choices_to={'tipo__in': [CARATTERISTICA, CONDIZIONE]}, verbose_name="Caratteristica 2")
+    caratteristica_3 = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, related_name="abilita_caratteristica_3", limit_choices_to={'tipo__in': [CARATTERISTICA, CONDIZIONE]}, verbose_name="Caratteristica 3")
     tiers = models.ManyToManyField(Tier, related_name="abilita", through="abilita_tier")
     requisiti = models.ManyToManyField(Punteggio, related_name="abilita_req", through="abilita_requisito")
     tabelle_sbloccate = models.ManyToManyField(Tabella, related_name="abilita_sbloccante", through="abilita_sbloccata")

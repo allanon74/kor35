@@ -12,12 +12,13 @@ from django.conf import settings
 from django.http import HttpResponse, FileResponse, Http404
 from PIL import Image
 
+from django.db.models import Prefetch
 from personaggi.models import (
-    Inventario, Manifesto, Personaggio, QrCode, 
+    Inventario, Manifesto, Personaggio, QrCode,
     Tabella, ModelloAura, Tier, TierPluginModel,
     Tessitura, Infusione, Cerimoniale, Oggetto,
-    Punteggio, Mattone,
-    )
+    Punteggio, Mattone, Abilita,
+)
 
 from personaggi.serializers import (
     InventarioSerializer, ManifestoSerializer, 
@@ -408,7 +409,8 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Espone i Tier (es. Livello 1, Livello 2...) con le relative abilità.
     """
-    queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
+    _abilita_prefetch = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+    queryset = Tier.objects.all().prefetch_related(_abilita_prefetch)
     serializer_class = WikiTierSerializer
     permission_classes = [permissions.AllowAny] # Accesso pubblic
 
@@ -499,7 +501,8 @@ class StaffWikiImmagineViewSet(viewsets.ModelViewSet):
 
 class PublicWikiTierWidgetViewSet(viewsets.ReadOnlyModelViewSet):
     """Espone i widget Tier per l'uso nelle pagine wiki (lettura)."""
-    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related('tier__abilita')
+    _abilita_prefetch = Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related(_abilita_prefetch)
     serializer_class = WikiTierWidgetSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -577,7 +580,8 @@ def get_wiki_tier_display(request, pk):
     tier = None
     extra = {}
     # 1) WikiTierWidget (widget configurabile)
-    widget = WikiTierWidget.objects.filter(pk=pk).select_related('tier').prefetch_related('tier__abilita').first()
+    _abilita_prefetch = Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+    widget = WikiTierWidget.objects.filter(pk=pk).select_related('tier').prefetch_related(_abilita_prefetch).first()
     if widget:
         tier = widget.tier
         extra = {
@@ -588,14 +592,16 @@ def get_wiki_tier_display(request, pk):
             'gradient_colors': getattr(widget, 'gradient_colors', []) or [],
         }
     if not tier:
-        tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
+        _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+        tier = Tier.objects.filter(pk=pk).prefetch_related(_pf).first()
         if tier:
             extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
     if not tier:
         # Plugin in personaggi
         plugin = TierPluginModel.objects.filter(pk=pk).select_related('tier').first()
         if plugin:
-            tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+            _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+            tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
             if tier:
                 extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
     if not tier:
@@ -604,7 +610,8 @@ def get_wiki_tier_display(request, pk):
             from cms_kor.models import TierPluginModel as CmsKorTierPluginModel
             plugin = CmsKorTierPluginModel.objects.filter(pk=pk).select_related('tier').first()
             if plugin:
-                tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+                _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+                tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
                 if tier:
                     extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
         except Exception:
@@ -616,10 +623,11 @@ def get_wiki_tier_display(request, pk):
             cms_plugin = CMSPlugin.objects.filter(pk=pk).first()
             if cms_plugin:
                 instance, _ = cms_plugin.get_plugin_instance()
+                _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
                 if instance and getattr(instance, 'tier_id', None):
-                    tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related('abilita').first()
+                    tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related(_pf).first()
                 elif instance and getattr(instance, 'tier', None):
-                    tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related('abilita').first()
+                    tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related(_pf).first()
                 if tier:
                     extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
         except Exception:
