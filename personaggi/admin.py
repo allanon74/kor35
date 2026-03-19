@@ -545,6 +545,7 @@ class MattoneAdmin(A_Admin):
     
     fieldsets = (
         ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'ordine', 'sigla', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
+        ('Widget Wiki', {'fields': ('mostra_classi_arma',), 'description': 'Se diverso da Nessuno, in fondo alla scheda mattone si mostrano le classi di oggetto (armi) per Materia o per Mod.'}),
         ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
     )
     def get_form(self, request, obj=None, **kwargs):

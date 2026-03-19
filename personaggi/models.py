@@ -489,7 +489,19 @@ def genera_html_cariche(item, personaggio=None):
 
 
 # --- TIPI ---
-CARATTERISTICA = "CA"; STATISTICA = "ST"; ELEMENTO = "EL"; AURA = "AU"; CONDIZIONE = "CO"; CULTO = "CU"; VIA = "VI"; ARTE = "AR"; ARCHETIPO = "AT"
+CARATTERISTICA = "CA"
+STATISTICA = "ST"
+ELEMENTO = "EL"
+AURA = "AU"
+CONDIZIONE = "CO"
+CULTO = "CU"
+VIA = "VI"
+ARTE = "AR"
+ARCHETIPO = "AT"
+MATTONE = "MA"
+CASTONE = "CS"
+NODO = "ND"
+KATA = "KA"
 
 punteggi_tipo = [
     (CARATTERISTICA, 'Caratteristica'), 
@@ -499,7 +511,11 @@ punteggi_tipo = [
     (CULTO, 'Culto'), 
     (VIA, 'Via'), 
     (ARTE, 'Arte'), 
-    (ARCHETIPO, 'Archetipo')
+    (ARCHETIPO, 'Archetipo'),
+    (MATTONE, 'Mattone'),
+    (CASTONE, 'Castone'),
+    (NODO, 'Nodo'),
+    (KATA, 'Kata')
 ]
     
 T_GENERALI = "G0";
@@ -649,6 +665,12 @@ class Statistica(Punteggio):
         if extra_params: items.extend([f"&bull; <b>{p_code}</b>: {p_desc}" for p_code, p_desc in extra_params])
         return mark_safe("<b>Variabili disponibili:</b><br>" + "<br>".join(items))
 
+MOSTRA_CLASSI_ARMA_CHOICES = [
+    ('nessuno', 'Nessuno'),
+    ('materia', 'Mostrare i tipi di arma per Materia'),
+    ('mod', 'Mostrare i tipi di arma per Mod'),
+]
+
 class Mattone(Punteggio):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="mattoni_aura")
     caratteristica_associata = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, related_name="mattoni_caratteristica")
@@ -658,6 +680,13 @@ class Mattone(Punteggio):
     dichiarazione = models.TextField("Dichiarazione", blank=True, null=True)
     funzionamento_metatalento = models.CharField(max_length=2, choices=METATALENTO_CHOICES, default=META_NESSUN_EFFETTO)
     statistiche = models.ManyToManyField(Statistica, through='MattoneStatistica', blank=True, related_name="mattoni_statistiche")
+    mostra_classi_arma = models.CharField(
+        max_length=10,
+        choices=MOSTRA_CLASSI_ARMA_CHOICES,
+        default='nessuno',
+        verbose_name="Mostra classi arma nel widget",
+        help_text="Nessuno: come ora. Materia: classi con questo castone (mattoni_materia_permessi). Mod: classi con limite mod e massimale.",
+    )
     def save(self, *args, **kwargs): self.is_mattone = True; super().save(*args, **kwargs)
     class Meta: verbose_name = "Mattone"; verbose_name_plural = "Mattoni"; unique_together = ('aura', 'caratteristica_associata'); ordering = ['tipo', 'ordine', 'nome'] 
 

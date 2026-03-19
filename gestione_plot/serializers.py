@@ -8,7 +8,7 @@ from .models import (
     WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial,
 )
-from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier, Mattone
+from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier, Mattone, ClasseOggetto, ClasseOggettoLimiteMod
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
     AbilitaSerializer, PunteggioSerializer, TabellaSerializer, ModelloAuraSerializer,
@@ -266,6 +266,8 @@ class MattoneWikiSerializer(serializers.ModelSerializer):
     caratteristica_associata = PunteggioWikiSerializer(read_only=True)
     icona_url = serializers.SerializerMethodField()
     tipo_display = serializers.SerializerMethodField()
+    classi_arma_materia = serializers.SerializerMethodField()
+    classi_arma_mod = serializers.SerializerMethodField()
 
     class Meta:
         model = Mattone
@@ -283,17 +285,34 @@ class MattoneWikiSerializer(serializers.ModelSerializer):
             'descrizione',  # da Punteggio (se presente)
             'descrizione_mattone',
             'descrizione_metatalento',
+            'mostra_classi_arma',
+            'classi_arma_materia',
+            'classi_arma_mod',
         ]
 
     def get_tipo_display(self, obj):
         return obj.get_tipo_display() if obj else ''
 
     def get_icona_url(self, obj):
-        # `Punteggio.icona_url` è una @property sul model
         try:
             return obj.icona_url
         except Exception:
             return None
+
+    def get_classi_arma_materia(self, obj):
+        if getattr(obj, 'mostra_classi_arma', None) != 'materia' or not obj.caratteristica_associata_id:
+            return []
+        return list(
+            ClasseOggetto.objects.filter(mattoni_materia_permessi=obj.caratteristica_associata)
+            .values('id', 'nome')
+            .order_by('nome')
+        )
+
+    def get_classi_arma_mod(self, obj):
+        if getattr(obj, 'mostra_classi_arma', None) != 'mod' or not obj.caratteristica_associata_id:
+            return []
+        rows = ClasseOggettoLimiteMod.objects.filter(caratteristica=obj.caratteristica_associata).select_related('classe_oggetto').order_by('classe_oggetto__nome')
+        return [{'id': r.classe_oggetto_id, 'nome': r.classe_oggetto.nome, 'max_installabili': r.max_installabili} for r in rows]
 
 
 class WikiMattoniWidgetSerializer(serializers.ModelSerializer):
