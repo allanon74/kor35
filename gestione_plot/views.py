@@ -587,6 +587,7 @@ def get_wiki_tier_display(request, pk):
         extra = {
             'abilities_collapsible': widget.abilities_collapsible,
             'abilities_collapsed_by_default': widget.abilities_collapsed_by_default,
+            'abilities_solo_list': getattr(widget, 'abilities_solo_list', False),
             'show_description': widget.show_description,
             'color_style': widget.color_style or 'default',
             'gradient_colors': getattr(widget, 'gradient_colors', []) or [],
@@ -595,7 +596,13 @@ def get_wiki_tier_display(request, pk):
         _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
         tier = Tier.objects.filter(pk=pk).prefetch_related(_pf).first()
         if tier:
-            extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+            extra = {
+                'abilities_collapsible': True,
+                'abilities_collapsed_by_default': False,
+                'abilities_solo_list': False,
+                'show_description': True,
+                'color_style': 'default',
+            }
     if not tier:
         # Plugin in personaggi
         plugin = TierPluginModel.objects.filter(pk=pk).select_related('tier').first()
@@ -603,7 +610,13 @@ def get_wiki_tier_display(request, pk):
             _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
             tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
             if tier:
-                extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+                extra = {
+                    'abilities_collapsible': True,
+                    'abilities_collapsed_by_default': False,
+                    'abilities_solo_list': False,
+                    'show_description': True,
+                    'color_style': 'default',
+                }
     if not tier:
         # Plugin in cms_kor (stesso nome modello, altra app)
         try:
@@ -613,7 +626,13 @@ def get_wiki_tier_display(request, pk):
                 _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
                 tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
                 if tier:
-                    extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+                    extra = {
+                        'abilities_collapsible': True,
+                        'abilities_collapsed_by_default': False,
+                        'abilities_solo_list': False,
+                        'show_description': True,
+                        'color_style': 'default',
+                    }
         except Exception:
             pass
     if not tier:
@@ -629,7 +648,13 @@ def get_wiki_tier_display(request, pk):
                 elif instance and getattr(instance, 'tier', None):
                     tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related(_pf).first()
                 if tier:
-                    extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+                    extra = {
+                        'abilities_collapsible': True,
+                        'abilities_collapsed_by_default': False,
+                        'abilities_solo_list': False,
+                        'show_description': True,
+                        'color_style': 'default',
+                    }
         except Exception:
             pass
     if not tier:

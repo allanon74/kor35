@@ -342,6 +342,7 @@ class WikiTierWidget(models.Model):
     tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='wiki_tier_widgets')
     abilities_collapsible = models.BooleanField(default=True)
     abilities_collapsed_by_default = models.BooleanField(default=False)
+    abilities_solo_list = models.BooleanField(default=False)
     show_description = models.BooleanField(default=True)
     color_style = models.CharField(max_length=20, default='default')
     # Lista colori hex per gradiente (es. ["#1976D2", "#7B1FA2"]). Se vuota si usa color_style.

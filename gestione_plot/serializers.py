@@ -357,7 +357,7 @@ class WikiTierWidgetSerializer(serializers.ModelSerializer):
         model = WikiTierWidget
         fields = [
             'id', 'tier', 'tier_nome', 'abilities_collapsible', 'abilities_collapsed_by_default',
-            'show_description', 'color_style', 'gradient_colors',
+            'show_description', 'abilities_solo_list', 'color_style', 'gradient_colors',
             'data_creazione', 'data_modifica', 'creatore'
         ]
         read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
