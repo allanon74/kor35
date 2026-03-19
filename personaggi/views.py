@@ -158,6 +158,7 @@ class PunteggioViewSet(viewsets.ModelViewSet):
         prefetch_tratti = Prefetch(
             'tratti_collegati',  # Questo deve essere il related_name in Abilita.aura_riferimento
             queryset=Abilita.objects.filter(is_tratto_aura=True)
+            .defer('caratteristica_2', 'caratteristica_3')
             .select_related('caratteristica')
             .prefetch_related('abilitastatistica_set__statistica'),
             to_attr='tratti_aura_prefetched'
@@ -325,7 +326,18 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         sconto_percent = Decimal(sconto_valore) / Decimal(100)
         moltiplicatore_costo = Decimal(1) - sconto_percent
 
-        master_skills_list = Abilita.objects.exclude(id__in=possessed_skill_ids).select_related('caratteristica').prefetch_related('abilita_requisito_set__requisito', 'abilita_prerequisiti__prerequisito', 'abilita_punteggio_set__punteggio', 'abilitastatistica_set__statistica').order_by('nome')
+        master_skills_list = (
+            Abilita.objects.exclude(id__in=possessed_skill_ids)
+            .defer('caratteristica_2', 'caratteristica_3')
+            .select_related('caratteristica')
+            .prefetch_related(
+                'abilita_requisito_set__requisito',
+                'abilita_prerequisiti__prerequisito',
+                'abilita_punteggio_set__punteggio',
+                'abilitastatistica_set__statistica',
+            )
+            .order_by('nome')
+        )
 
         acquirable_skills = []
         for skill in master_skills_list:
@@ -1113,7 +1125,19 @@ class PersonaggioDetailView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request, pk, format=None):
-        personaggio = get_object_or_404(Personaggio, pk=pk)
+        # Workaround temporaneo: se la migrazione DB con i nuovi campi
+        # `caratteristica_2` / `caratteristica_3` non è ancora applicata,
+        # le query su Abilita verrebbero a 500. Deferiamo quelle colonne
+        # finché la migrazione non viene eseguita.
+        personaggio = get_object_or_404(
+            Personaggio.objects.prefetch_related(
+                Prefetch(
+                    'abilita_possedute',
+                    queryset=Abilita.objects.defer('caratteristica_2', 'caratteristica_3').select_related('caratteristica'),
+                ),
+            ),
+            pk=pk,
+        )
         user = request.user
         if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
             return Response({"error": "Non hai il permesso di visualizzare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)

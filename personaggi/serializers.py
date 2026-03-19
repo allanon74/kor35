@@ -117,7 +117,7 @@ class PunteggioSerializer(serializers.ModelSerializer):
             return AbilitaSmallSerializer(obj.tratti_aura_prefetched, many=True).data
         
         # Altrimenti fai la query
-        tratti = Abilita.objects.filter(is_tratto_aura=True, aura_riferimento=obj)
+        tratti = Abilita.objects.filter(is_tratto_aura=True, aura_riferimento=obj).defer('caratteristica_2', 'caratteristica_3')
         return AbilitaSmallSerializer(tratti, many=True).data
 
 
@@ -288,7 +288,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         tratti = Abilita.objects.filter(
             is_tratto_aura=True, 
             aura_riferimento=obj
-        ).select_related('caratteristica')
+        ).defer('caratteristica_2', 'caratteristica_3').select_related('caratteristica')
         
         return AbilitaSmallSerializer(tratti, many=True).data
 
