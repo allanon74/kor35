@@ -55,6 +55,29 @@ from icon_widget.widgets import CustomIconWidget
 HIGHLIGHT_STYLE = 'background-color: #fff3e0; border: 2px solid #ff9800; font-weight: bold;'
 
 class PunteggioAdminForm(forms.ModelForm):
+    def clean_icona_nome_originale(self):
+        """
+        Fallback robusto:
+        - usa il valore normale del campo se presente;
+        - altrimenti recupera da hidden tecnico del widget;
+        - altrimenti prova qualsiasi chiave POST che termini con icona_nome_originale.
+        """
+        value = self.cleaned_data.get('icona_nome_originale')
+        if value:
+            return value
+
+        # 1) Hidden tecnico del widget
+        backup = self.data.get('__icon_original_name__icona')
+        if backup:
+            return backup
+
+        # 2) Qualsiasi chiave compatibile con prefissi (admin/inlines)
+        for key, raw_val in self.data.items():
+            if key.endswith('icona_nome_originale') and raw_val:
+                return raw_val
+
+        return value
+
     class Meta:
         model = Punteggio
         fields = '__all__'

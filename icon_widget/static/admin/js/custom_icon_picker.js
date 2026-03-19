@@ -59,6 +59,22 @@ window.initCustomIconPicker = function(options) {
 
     const iconNameInput = resolveIconNameInput();
 
+    // Campo tecnico di backup per garantire passaggio del nome al submit
+    const ensureBackupIconNameInput = () => {
+        if (!form) return null;
+        const backupName = `__icon_original_name__${options.name}`;
+        let backup = form.querySelector(`input[name="${backupName}"]`);
+        if (!backup) {
+            backup = document.createElement('input');
+            backup.type = 'hidden';
+            backup.name = backupName;
+            backup.id = `${options.inputId}__icon_original_name_backup`;
+            form.appendChild(backup);
+        }
+        return backup;
+    };
+    const backupIconNameInput = ensureBackupIconNameInput();
+
     function setupInitialIcon() {
         const value = input.value;
         if (value && value.endsWith('.svg')) {
@@ -169,6 +185,9 @@ window.initCustomIconPicker = function(options) {
             if (iconNameInput) {
                 iconNameInput.value = data.icon_name || iconName;
             }
+            if (backupIconNameInput) {
+                backupIconNameInput.value = data.icon_name || iconName;
+            }
             preview.src = data.url;
             preview.style.display = 'inline-block';
             statusSpan.textContent = 'Icona salvata!';
@@ -179,6 +198,9 @@ window.initCustomIconPicker = function(options) {
             input.value = iconName; 
             if (iconNameInput) {
                 iconNameInput.value = iconName;
+            }
+            if (backupIconNameInput) {
+                backupIconNameInput.value = iconName;
             }
         }
     }
