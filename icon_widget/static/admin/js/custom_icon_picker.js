@@ -28,7 +28,36 @@ window.initCustomIconPicker = function(options) {
     const resultsDiv = document.getElementById(`icon_results_${options.name}`);
     const statusSpan = document.getElementById(`icon_status_${options.name}`);
     const colorField = document.getElementById('id_colore'); // Come da tua richiesta
-    const iconNameInput = options.iconNameInputId ? document.getElementById(options.iconNameInputId) : null;
+    const form = input.closest('form');
+
+    const resolveIconNameInput = () => {
+        // 1) Prova ID passato dal widget
+        if (options.iconNameInputId) {
+            const byId = document.getElementById(options.iconNameInputId);
+            if (byId) return byId;
+        }
+
+        // 2) Prova per name derivato (supporta anche prefix admin/inlines)
+        const derivedName = `${options.name}_nome_originale`;
+        if (form) {
+            const byName = form.querySelector(`input[name="${derivedName}"]`);
+            if (byName) return byName;
+        }
+
+        // 3) Fallback robusto: crea hidden input se non esiste
+        if (form) {
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = derivedName;
+            hidden.id = options.iconNameInputId || `${options.inputId}_nome_originale`;
+            form.appendChild(hidden);
+            return hidden;
+        }
+
+        return null;
+    };
+
+    const iconNameInput = resolveIconNameInput();
 
     function setupInitialIcon() {
         const value = input.value;
