@@ -482,8 +482,8 @@ class TipologiaPersonaggioAdmin(admin.ModelAdmin):
 @admin.register(Abilita)
 class AbilitaAdmin(A_Admin):
     list_display = ('id', 'nome', 'caratteristica', 'caratteristica_2', 'caratteristica_3', 'costo_pc', 'costo_crediti')
-    list_editable = ('costo_pc', 'costo_crediti')
-    list_filter = ('caratteristica',)
+    list_editable = ('caratteristica', 'caratteristica_2', 'caratteristica_3')
+    list_filter = ('caratteristica', 'caratteristica_2', 'caratteristica_3', 'tipo', 'is_tratto_aura',)
     summernote_fields = ['descrizione']
     search_fields = ['nome', 'descrizione']
     inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline)
