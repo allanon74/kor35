@@ -542,6 +542,7 @@ class MattoneAdmin(A_Admin):
     list_editable = ('tipo', 'ordine',)
     list_filter = ('aura', 'caratteristica_associata'); search_fields = ('nome',); summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
     inlines = [MattoneStatisticaInline]
+    save_as = True
     
     fieldsets = (
         ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'ordine', 'sigla', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
@@ -943,6 +944,7 @@ class EffettoCasualeAdmin(SModelAdmin):
     search_fields = ('nome', 'descrizione')
     summernote_fields = ('descrizione', 'formula')
     autocomplete_fields = ['tipologia', 'elemento_principale']
+    save_as = True
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
