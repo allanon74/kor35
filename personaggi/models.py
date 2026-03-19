@@ -275,6 +275,11 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     formula_out = formula or ""
     if not testo_out and not formula_out: return ""
 
+    # Normalizza placeholder in parentesi quadre [expr] -> {expr} (stessa logica delle tessiture)
+    _norm = lambda s: re.sub(r'\[([^\]]+)\]', r'{\1}', s) if s else s
+    testo_out = _norm(testo_out)
+    formula_out = _norm(formula_out)
+
     base_values = {}
     eval_context = {}
 
