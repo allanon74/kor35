@@ -55,11 +55,35 @@ from icon_widget.widgets import CustomIconWidget
 HIGHLIGHT_STYLE = 'background-color: #fff3e0; border: 2px solid #ff9800; font-weight: bold;'
 
 class PunteggioAdminForm(forms.ModelForm):
+    def clean_icona_nome_originale(self):
+        """
+        Fallback robusto:
+        - usa il valore normale del campo se presente;
+        - altrimenti recupera da hidden tecnico del widget;
+        - altrimenti prova qualsiasi chiave POST che termini con icona_nome_originale.
+        """
+        value = self.cleaned_data.get('icona_nome_originale')
+        if value:
+            return value
+
+        # 1) Hidden tecnico del widget
+        backup = self.data.get('__icon_original_name__icona')
+        if backup:
+            return backup
+
+        # 2) Qualsiasi chiave compatibile con prefissi (admin/inlines)
+        for key, raw_val in self.data.items():
+            if key.endswith('icona_nome_originale') and raw_val:
+                return raw_val
+
+        return value
+
     class Meta:
         model = Punteggio
         fields = '__all__'
         widgets = {
             'icona': CustomIconWidget,
+            'icona_nome_originale': forms.HiddenInput(),
         }
 
 # --- Forms per evidenziare i valori modificati ---
@@ -457,8 +481,9 @@ class TipologiaPersonaggioAdmin(admin.ModelAdmin):
 
 @admin.register(Abilita)
 class AbilitaAdmin(A_Admin):
-    list_display = ('id', 'nome','costo_pc', 'costo_crediti')
-    list_editable = ('costo_pc', 'costo_crediti')
+    list_display = ('id', 'nome', 'caratteristica', 'caratteristica_2', 'caratteristica_3', 'costo_pc', 'costo_crediti')
+    list_editable = ('caratteristica', 'caratteristica_2', 'caratteristica_3')
+    list_filter = ('caratteristica', 'caratteristica_2', 'caratteristica_3', 'is_tratto_aura',)
     summernote_fields = ['descrizione']
     search_fields = ['nome', 'descrizione']
     inlines = (abilita_tier_inline, AbilitaStatisticaInline, abilita_punteggio_inline, abilita_requisito_inline, abilita_prerequisiti_inline)
@@ -483,7 +508,7 @@ class PunteggioAdmin(IconaAdminMixin, A_Admin):
     
     fieldsets = (
         ('Dati Generali', {
-            'fields': (('nome', 'sigla'), ('tipo', 'ordine'), ('icona', 'colore'), 'descrizione')
+            'fields': (('nome', 'sigla'), ('tipo', 'ordine'), ('icona', 'icona_nome_originale', 'colore'), 'descrizione')
         }),
         ('Configurazione Aura (Solo se Tipo = Aura)', {
             'classes': ('collapse',),
@@ -542,9 +567,11 @@ class MattoneAdmin(A_Admin):
     list_editable = ('tipo', 'ordine',)
     list_filter = ('aura', 'caratteristica_associata'); search_fields = ('nome',); summernote_fields = ('descrizione_mattone', 'descrizione_metatalento', 'testo_addizionale')
     inlines = [MattoneStatisticaInline]
+    save_as = True
     
     fieldsets = (
         ('Dati Mattone', {'fields': ('nome', 'aura', 'tipo', 'ordine', 'sigla', 'caratteristica_associata', 'descrizione_mattone', 'icona', 'colore', 'dichiarazione')}),
+        ('Widget Wiki', {'fields': ('mostra_classi_arma',), 'description': 'Se diverso da Nessuno, in fondo alla scheda mattone si mostrano le classi di oggetto (armi) per Materia o per Mod.'}),
         ('Metatalento', {'fields': ('funzionamento_metatalento', 'descrizione_metatalento', 'testo_addizionale')}),
     )
     def get_form(self, request, obj=None, **kwargs):
@@ -942,6 +969,7 @@ class EffettoCasualeAdmin(SModelAdmin):
     search_fields = ('nome', 'descrizione')
     summernote_fields = ('descrizione', 'formula')
     autocomplete_fields = ['tipologia', 'elemento_principale']
+    save_as = True
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)

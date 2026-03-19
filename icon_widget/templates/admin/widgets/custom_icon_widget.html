@@ -16,7 +16,9 @@
             window.initCustomIconPicker({
                 inputId: '{{ widget.attrs.id }}', // es. 'id_icona'
                 name: '{{ widget.name }}',       // es. 'icona'
-                modelName: '{{ widget.model_name }}' // es. 'personaggi.punteggio'
+                modelName: '{{ widget.model_name }}', // es. 'personaggi.punteggio'
+                saveIconUrl: '{{ widget.save_icon_url }}',
+                iconNameInputId: '{{ widget.icon_name_input_id }}'
             });
         }
     });

@@ -292,7 +292,7 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
     """
     CRUD completo per le Abilità (Staff).
     """
-    queryset = Abilita.objects.all().select_related('caratteristica', 'aura_riferimento')
+    queryset = Abilita.objects.all().select_related('caratteristica', 'caratteristica_2', 'caratteristica_3', 'aura_riferimento')
     serializer_class = AbilitaFullEditorSerializer
     permission_classes = [IsAdminUser]
     

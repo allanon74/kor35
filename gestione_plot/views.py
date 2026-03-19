@@ -12,11 +12,13 @@ from django.conf import settings
 from django.http import HttpResponse, FileResponse, Http404
 from PIL import Image
 
+from django.db.models import Prefetch
 from personaggi.models import (
-    Inventario, Manifesto, Personaggio, QrCode, 
+    Inventario, Manifesto, Personaggio, QrCode,
     Tabella, ModelloAura, Tier, TierPluginModel,
     Tessitura, Infusione, Cerimoniale, Oggetto,
-    )
+    Punteggio, Mattone, Abilita,
+)
 
 from personaggi.serializers import (
     InventarioSerializer, ManifestoSerializer, 
@@ -24,12 +26,13 @@ from personaggi.serializers import (
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
     TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
-from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton, ConfigurazioneSito, LinkSocial
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget, ConfigurazioneSito, LinkSocial
 from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiButtonWidgetSerializer,
     ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer
+    , WikiMattoniWidgetSerializer, MattoneWikiSerializer, PunteggioWikiSerializer
 )
 
 
@@ -406,7 +409,8 @@ class PublicTierViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Espone i Tier (es. Livello 1, Livello 2...) con le relative abilità.
     """
-    queryset = Tier.objects.all().prefetch_related('abilita') # Ottimizza la query
+    _abilita_prefetch = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+    queryset = Tier.objects.all().prefetch_related(_abilita_prefetch)
     serializer_class = WikiTierSerializer
     permission_classes = [permissions.AllowAny] # Accesso pubblic
 
@@ -497,7 +501,8 @@ class StaffWikiImmagineViewSet(viewsets.ModelViewSet):
 
 class PublicWikiTierWidgetViewSet(viewsets.ReadOnlyModelViewSet):
     """Espone i widget Tier per l'uso nelle pagine wiki (lettura)."""
-    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related('tier__abilita')
+    _abilita_prefetch = Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related(_abilita_prefetch)
     serializer_class = WikiTierWidgetSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -510,6 +515,27 @@ class StaffWikiTierWidgetViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(creatore=self.request.user)
+
+
+class PublicWikiMattoniWidgetViewSet(viewsets.ReadOnlyModelViewSet):
+    """Espone i widget Mattoni per l'uso nelle pagine wiki (lettura)."""
+    queryset = WikiMattoniWidget.objects.all().prefetch_related('aure', 'caratteristiche')
+    serializer_class = WikiMattoniWidgetSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+
+class StaffWikiMattoniWidgetViewSet(viewsets.ModelViewSet):
+    """CRUD widget Mattoni (solo staff)."""
+    queryset = WikiMattoniWidget.objects.all().prefetch_related('aure', 'caratteristiche')
+    serializer_class = WikiMattoniWidgetSerializer
+    permission_classes = [IsMasterOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(creatore=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save()
 
 
 class PublicWikiButtonWidgetViewSet(viewsets.ReadOnlyModelViewSet):
@@ -554,36 +580,59 @@ def get_wiki_tier_display(request, pk):
     tier = None
     extra = {}
     # 1) WikiTierWidget (widget configurabile)
-    widget = WikiTierWidget.objects.filter(pk=pk).select_related('tier').prefetch_related('tier__abilita').first()
+    _abilita_prefetch = Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+    widget = WikiTierWidget.objects.filter(pk=pk).select_related('tier').prefetch_related(_abilita_prefetch).first()
     if widget:
         tier = widget.tier
         extra = {
             'abilities_collapsible': widget.abilities_collapsible,
             'abilities_collapsed_by_default': widget.abilities_collapsed_by_default,
+            'abilities_solo_list': getattr(widget, 'abilities_solo_list', False),
             'show_description': widget.show_description,
             'color_style': widget.color_style or 'default',
             'gradient_colors': getattr(widget, 'gradient_colors', []) or [],
         }
     if not tier:
-        tier = Tier.objects.filter(pk=pk).prefetch_related('abilita').first()
+        _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+        tier = Tier.objects.filter(pk=pk).prefetch_related(_pf).first()
         if tier:
-            extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+            extra = {
+                'abilities_collapsible': True,
+                'abilities_collapsed_by_default': False,
+                'abilities_solo_list': False,
+                'show_description': True,
+                'color_style': 'default',
+            }
     if not tier:
         # Plugin in personaggi
         plugin = TierPluginModel.objects.filter(pk=pk).select_related('tier').first()
         if plugin:
-            tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+            _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+            tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
             if tier:
-                extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+                extra = {
+                    'abilities_collapsible': True,
+                    'abilities_collapsed_by_default': False,
+                    'abilities_solo_list': False,
+                    'show_description': True,
+                    'color_style': 'default',
+                }
     if not tier:
         # Plugin in cms_kor (stesso nome modello, altra app)
         try:
             from cms_kor.models import TierPluginModel as CmsKorTierPluginModel
             plugin = CmsKorTierPluginModel.objects.filter(pk=pk).select_related('tier').first()
             if plugin:
-                tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related('abilita').first()
+                _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+                tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
                 if tier:
-                    extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+                    extra = {
+                        'abilities_collapsible': True,
+                        'abilities_collapsed_by_default': False,
+                        'abilities_solo_list': False,
+                        'show_description': True,
+                        'color_style': 'default',
+                    }
         except Exception:
             pass
     if not tier:
@@ -593,12 +642,19 @@ def get_wiki_tier_display(request, pk):
             cms_plugin = CMSPlugin.objects.filter(pk=pk).first()
             if cms_plugin:
                 instance, _ = cms_plugin.get_plugin_instance()
+                _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
                 if instance and getattr(instance, 'tier_id', None):
-                    tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related('abilita').first()
+                    tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related(_pf).first()
                 elif instance and getattr(instance, 'tier', None):
-                    tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related('abilita').first()
+                    tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related(_pf).first()
                 if tier:
-                    extra = {'abilities_collapsible': True, 'abilities_collapsed_by_default': False, 'show_description': True, 'color_style': 'default'}
+                    extra = {
+                        'abilities_collapsible': True,
+                        'abilities_collapsed_by_default': False,
+                        'abilities_solo_list': False,
+                        'show_description': True,
+                        'color_style': 'default',
+                    }
         except Exception:
             pass
     if not tier:
@@ -606,6 +662,57 @@ def get_wiki_tier_display(request, pk):
     data = WikiTierSerializer(tier).data
     data.update(extra)
     return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_mattoni_display(request, pk):
+    """
+    Restituisce i dati di un widget Mattoni per {{WIDGET_MATTONI:id}}.
+    Applica i filtri configurati e ordina di default per Aura -> Ordine -> Nome.
+    """
+    widget = get_object_or_404(
+        WikiMattoniWidget.objects.prefetch_related('aure', 'caratteristiche'),
+        pk=pk
+    )
+
+    mattoni_qs = Mattone.objects.select_related('aura', 'caratteristica_associata')
+
+    filter_type = widget.filter_type or WikiMattoniWidget.FILTER_ALL
+    if filter_type == WikiMattoniWidget.FILTER_AURA:
+        aura_ids = list(widget.aure.values_list('id', flat=True))
+        if aura_ids:
+            mattoni_qs = mattoni_qs.filter(aura_id__in=aura_ids)
+    elif filter_type == WikiMattoniWidget.FILTER_CARATTERISTICA:
+        car_ids = list(widget.caratteristiche.values_list('id', flat=True))
+        if car_ids:
+            mattoni_qs = mattoni_qs.filter(caratteristica_associata_id__in=car_ids)
+
+    mattoni_qs = mattoni_qs.order_by('aura__ordine', 'ordine', 'nome')
+
+    return Response({
+        'id': widget.id,
+        'title': widget.title,
+        'filter_type': filter_type,
+        'aure': PunteggioWikiSerializer(widget.aure.all(), many=True).data,
+        'caratteristiche': PunteggioWikiSerializer(widget.caratteristiche.all(), many=True).data,
+        'mattoni': MattoneWikiSerializer(mattoni_qs, many=True).data,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def public_wiki_punteggi(request):
+    """
+    Lista pubblica (ridotta) di Punteggi filtrati per tipo.
+    Query param: ?tipo=AU|CA
+    """
+    tipo = (request.GET.get('tipo') or '').strip().upper()
+    qs = Punteggio.objects.all()
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    qs = qs.order_by('ordine', 'nome')
+    return Response(PunteggioWikiSerializer(qs, many=True).data)
 
 
 @api_view(['GET'])

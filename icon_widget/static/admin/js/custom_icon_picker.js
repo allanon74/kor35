@@ -28,12 +28,62 @@ window.initCustomIconPicker = function(options) {
     const resultsDiv = document.getElementById(`icon_results_${options.name}`);
     const statusSpan = document.getElementById(`icon_status_${options.name}`);
     const colorField = document.getElementById('id_colore'); // Come da tua richiesta
+    const form = input.closest('form');
+
+    const resolveIconNameInput = () => {
+        // 1) Prova ID passato dal widget
+        if (options.iconNameInputId) {
+            const byId = document.getElementById(options.iconNameInputId);
+            if (byId) return byId;
+        }
+
+        // 2) Prova per name derivato (supporta anche prefix admin/inlines)
+        const derivedName = `${options.name}_nome_originale`;
+        if (form) {
+            const byName = form.querySelector(`input[name="${derivedName}"]`);
+            if (byName) return byName;
+        }
+
+        // 3) Fallback robusto: crea hidden input se non esiste
+        if (form) {
+            const hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = derivedName;
+            hidden.id = options.iconNameInputId || `${options.inputId}_nome_originale`;
+            form.appendChild(hidden);
+            return hidden;
+        }
+
+        return null;
+    };
+
+    const iconNameInput = resolveIconNameInput();
+
+    // Campo tecnico di backup per garantire passaggio del nome al submit
+    const ensureBackupIconNameInput = () => {
+        if (!form) return null;
+        const backupName = `__icon_original_name__${options.name}`;
+        let backup = form.querySelector(`input[name="${backupName}"]`);
+        if (!backup) {
+            backup = document.createElement('input');
+            backup.type = 'hidden';
+            backup.name = backupName;
+            backup.id = `${options.inputId}__icon_original_name_backup`;
+            form.appendChild(backup);
+        }
+        return backup;
+    };
+    const backupIconNameInput = ensureBackupIconNameInput();
 
     function setupInitialIcon() {
         const value = input.value;
         if (value && value.endsWith('.svg')) {
             preview.src = `/media/${value}`;
             preview.style.display = 'inline-block';
+            // Fallback per icone già presenti senza nome originale (legacy)
+            if (iconNameInput && !iconNameInput.value) {
+                statusSpan.textContent = 'Icona esistente (salvata prima del nome originale). Seleziona di nuovo per aggiornare.';
+            }
         }
     }
     
@@ -106,17 +156,38 @@ window.initCustomIconPicker = function(options) {
             formData.append('color', color);
             formData.append('model', options.modelName); // Usa il modelName dinamico
 
-            const response = await fetch(`/icon-widget-api/save-icon/`, {
+            const saveUrl = options.saveIconUrl || '/api/icon-widget-api/save-icon/';
+            const response = await fetch(saveUrl, {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: { 'X-CSRFToken': csrftoken },
                 body: formData
             });
             
-            if (!response.ok) throw new Error(`Errore server: ${response.status}`);
+            if (!response.ok) {
+                const bodyText = await response.text().catch(() => '');
+                throw new Error(
+                    `Errore server: ${response.status} url=${response.url} redirected=${response.redirected} body=${bodyText.slice(0, 200)}`
+                );
+            }
             
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const bodyText = await response.text().catch(() => '');
+                throw new Error(
+                    `Risposta non JSON (content-type=${contentType}) url=${response.url} redirected=${response.redirected} body=${bodyText.slice(0, 200)}`
+                );
+            }
+
             const data = await response.json(); // { "path": "...", "url": "..." }
             
             input.value = data.path; 
+            if (iconNameInput) {
+                iconNameInput.value = data.icon_name || iconName;
+            }
+            if (backupIconNameInput) {
+                backupIconNameInput.value = data.icon_name || iconName;
+            }
             preview.src = data.url;
             preview.style.display = 'inline-block';
             statusSpan.textContent = 'Icona salvata!';
@@ -125,6 +196,12 @@ window.initCustomIconPicker = function(options) {
             console.error('Salvataggio icona fallito:', e);
             statusSpan.textContent = 'Salvataggio fallito.';
             input.value = iconName; 
+            if (iconNameInput) {
+                iconNameInput.value = iconName;
+            }
+            if (backupIconNameInput) {
+                backupIconNameInput.value = iconName;
+            }
         }
     }
 };

@@ -5,9 +5,10 @@ from .models import (
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton,
+    WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial,
 )
-from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier
+from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier, Mattone, ClasseOggetto, ClasseOggettoLimiteMod
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
     AbilitaSerializer, PunteggioSerializer, TabellaSerializer, ModelloAuraSerializer,
@@ -242,10 +243,12 @@ class PunteggioWikiSerializer(serializers.ModelSerializer):
 class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
     caratteristica = PunteggioWikiSerializer(read_only=True)
+    caratteristica_2 = PunteggioWikiSerializer(read_only=True)
+    caratteristica_3 = PunteggioWikiSerializer(read_only=True)
     class Meta:
         model = Abilita
-        fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica'] 
-        
+        fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica', 'caratteristica_2', 'caratteristica_3']
+
     def get_costo(self, obj):
         if obj.costo_pc is not None and obj.costo_pc > 0:
             return f"{obj.costo_pc} PC"
@@ -260,6 +263,93 @@ class WikiTierSerializer(serializers.ModelSerializer):
         fields = ['id', 'nome', 'descrizione', 'tipo', 'abilita']
 
 
+class MattoneWikiSerializer(serializers.ModelSerializer):
+    aura = PunteggioWikiSerializer(read_only=True)
+    caratteristica_associata = PunteggioWikiSerializer(read_only=True)
+    icona_url = serializers.SerializerMethodField()
+    tipo_display = serializers.SerializerMethodField()
+    classi_arma_materia = serializers.SerializerMethodField()
+    classi_arma_mod = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Mattone
+        fields = [
+            'id',
+            'nome',
+            'sigla',
+            'tipo',
+            'tipo_display',
+            'ordine',
+            'colore',
+            'icona_url',
+            'aura',
+            'caratteristica_associata',
+            'descrizione',  # da Punteggio (se presente)
+            'descrizione_mattone',
+            'descrizione_metatalento',
+            'mostra_classi_arma',
+            'classi_arma_materia',
+            'classi_arma_mod',
+        ]
+
+    def get_tipo_display(self, obj):
+        return obj.get_tipo_display() if obj else ''
+
+    def get_icona_url(self, obj):
+        try:
+            return obj.icona_url
+        except Exception:
+            return None
+
+    def get_classi_arma_materia(self, obj):
+        if getattr(obj, 'mostra_classi_arma', None) != 'materia' or not obj.caratteristica_associata_id:
+            return []
+        return list(
+            ClasseOggetto.objects.filter(mattoni_materia_permessi=obj.caratteristica_associata)
+            .values('id', 'nome')
+            .order_by('nome')
+        )
+
+    def get_classi_arma_mod(self, obj):
+        if getattr(obj, 'mostra_classi_arma', None) != 'mod' or not obj.caratteristica_associata_id:
+            return []
+        rows = ClasseOggettoLimiteMod.objects.filter(caratteristica=obj.caratteristica_associata).select_related('classe_oggetto').order_by('classe_oggetto__nome')
+        return [{'id': r.classe_oggetto_id, 'nome': r.classe_oggetto.nome, 'max_installabili': r.max_installabili} for r in rows]
+
+
+class WikiMattoniWidgetSerializer(serializers.ModelSerializer):
+    aure = PunteggioWikiSerializer(many=True, read_only=True)
+    caratteristiche = PunteggioWikiSerializer(many=True, read_only=True)
+    aure_ids = serializers.PrimaryKeyRelatedField(
+        source='aure',
+        many=True,
+        queryset=Punteggio.objects.filter(tipo='AU'),
+        required=False,
+        write_only=True,
+    )
+    caratteristiche_ids = serializers.PrimaryKeyRelatedField(
+        source='caratteristiche',
+        many=True,
+        queryset=Punteggio.objects.filter(tipo='CA'),
+        required=False,
+        write_only=True,
+    )
+
+    class Meta:
+        model = WikiMattoniWidget
+        fields = [
+            'id',
+            'title',
+            'filter_type',
+            'aure',
+            'caratteristiche',
+            'aure_ids',
+            'caratteristiche_ids',
+            'data_creazione',
+            'data_modifica',
+        ]
+
+
 class WikiTierWidgetSerializer(serializers.ModelSerializer):
     tier_nome = serializers.CharField(source='tier.nome', read_only=True)
 
@@ -267,7 +357,7 @@ class WikiTierWidgetSerializer(serializers.ModelSerializer):
         model = WikiTierWidget
         fields = [
             'id', 'tier', 'tier_nome', 'abilities_collapsible', 'abilities_collapsed_by_default',
-            'show_description', 'color_style', 'gradient_colors',
+            'show_description', 'abilities_solo_list', 'color_style', 'gradient_colors',
             'data_creazione', 'data_modifica', 'creatore'
         ]
         read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
