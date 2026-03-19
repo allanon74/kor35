@@ -28,12 +28,17 @@ window.initCustomIconPicker = function(options) {
     const resultsDiv = document.getElementById(`icon_results_${options.name}`);
     const statusSpan = document.getElementById(`icon_status_${options.name}`);
     const colorField = document.getElementById('id_colore'); // Come da tua richiesta
+    const iconNameInput = options.iconNameInputId ? document.getElementById(options.iconNameInputId) : null;
 
     function setupInitialIcon() {
         const value = input.value;
         if (value && value.endsWith('.svg')) {
             preview.src = `/media/${value}`;
             preview.style.display = 'inline-block';
+            // Fallback per icone già presenti senza nome originale (legacy)
+            if (iconNameInput && !iconNameInput.value) {
+                statusSpan.textContent = 'Icona esistente (salvata prima del nome originale). Seleziona di nuovo per aggiornare.';
+            }
         }
     }
     
@@ -132,6 +137,9 @@ window.initCustomIconPicker = function(options) {
             const data = await response.json(); // { "path": "...", "url": "..." }
             
             input.value = data.path; 
+            if (iconNameInput) {
+                iconNameInput.value = data.icon_name || iconName;
+            }
             preview.src = data.url;
             preview.style.display = 'inline-block';
             statusSpan.textContent = 'Icona salvata!';
@@ -140,6 +148,9 @@ window.initCustomIconPicker = function(options) {
             console.error('Salvataggio icona fallito:', e);
             statusSpan.textContent = 'Salvataggio fallito.';
             input.value = iconName; 
+            if (iconNameInput) {
+                iconNameInput.value = iconName;
+            }
         }
     }
 };

@@ -1,4 +1,5 @@
 from django.db.models import Sum, F, Count
+import os
 import re
 import secrets
 import string
@@ -566,6 +567,7 @@ class Punteggio(Tabella):
     tipo = models.CharField(choices=punteggi_tipo, max_length=2)
     colore = ColorField(default='#1976D2')
     icona = CustomIconField(blank=True)
+    icona_nome_originale = models.CharField(max_length=255, blank=True, null=True)
     ordine = models.IntegerField(default=0)
     is_mattone = models.BooleanField(default=False)
     is_soprannaturale = models.BooleanField(default=False)
@@ -645,6 +647,20 @@ class Punteggio(Tabella):
     def icona_cerchio_html(self): return self.icona_cerchio(inverted=False)
     @property
     def icona_cerchio_inverted_html(self): return self.icona_cerchio(inverted=True)
+
+    @property
+    def icona_nome_display(self):
+        """Nome icona per visualizzazione: usa icona_nome_originale se presente, altrimenti fallback per icone già salvate (legacy)."""
+        if self.icona_nome_originale and self.icona_nome_originale.strip():
+            return self.icona_nome_originale.strip()
+        if self.icona:
+            # Fallback: nome file senza estensione (es. icon-uuid per file salvati dal widget)
+            try:
+                return os.path.splitext(os.path.basename(str(self.icona)))[0] or "Icona personalizzata"
+            except Exception:
+                return "Icona personalizzata"
+        return None
+
     def __str__(self): return f"{self.tipo} - {self.nome}"
 
 class Caratteristica(Punteggio):

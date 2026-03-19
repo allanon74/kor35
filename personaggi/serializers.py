@@ -84,7 +84,7 @@ class PunteggioSerializer(serializers.ModelSerializer):
             'id', # È sempre utile avere l'ID anche nel serializer base
             'nome', 'sigla', 'tipo', 'icona_url', 'icona_html', 
             'icona_cerchio_html', 'icona_cerchio_inverted_html', 
-            'colore', 'aure_infusione_consentite', 'ordine',
+            'colore', 'icona_nome_originale', 'icona_nome_display', 'aure_infusione_consentite', 'ordine',
             # AGGIUNTI QUESTI:
             'produce_mod', 'produce_materia', 'produce_innesti', 'produce_mutazioni',
             'produce_aumenti', 
@@ -123,9 +123,10 @@ class PunteggioSerializer(serializers.ModelSerializer):
 
 class PunteggioSmallSerializer(serializers.ModelSerializer):
     """ Serializer ridotto per l'uso in liste e relazioni """
+    icona_nome_display = serializers.ReadOnlyField()
     class Meta:
         model = Punteggio
-        fields = ('id', 'nome', 'sigla', 'colore', 'icona_url', 'ordine',)
+        fields = ('id', 'nome', 'sigla', 'colore', 'icona_url', 'icona_nome_originale', 'icona_nome_display', 'ordine',)
 
 
 # -----------------------------------------------------------------------------
@@ -181,7 +182,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         model = Punteggio
         fields = (
             'id', 'nome', 'sigla', 'tipo', 'colore',
-            'icona_url',
+            'icona_url', 'icona_nome_originale', 'icona_nome_display',
             'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'parametro', 'ordine', 'has_models',
             'permette_infusioni', 'permette_tessiture', 'permette_cerimoniali',
             'is_mattone',

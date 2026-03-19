@@ -43,7 +43,11 @@ def download_icon_api(request):
             
             file_path_for_db = os.path.join(save_path_relative, filename)
             
-            return JsonResponse({"path": file_path_for_db, "url": f"{settings.MEDIA_URL}{file_path_for_db}"})
+            return JsonResponse({
+                "path": file_path_for_db,
+                "url": f"{settings.MEDIA_URL}{file_path_for_db}",
+                "icon_name": icon_name,
+            })
         else:
             return JsonResponse(
                 {"error": f"Failed to download SVG. Status: {response.reason}"},

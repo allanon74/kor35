@@ -60,6 +60,7 @@ class PunteggioAdminForm(forms.ModelForm):
         fields = '__all__'
         widgets = {
             'icona': CustomIconWidget,
+            'icona_nome_originale': forms.HiddenInput(),
         }
 
 # --- Forms per evidenziare i valori modificati ---
@@ -483,7 +484,7 @@ class PunteggioAdmin(IconaAdminMixin, A_Admin):
     
     fieldsets = (
         ('Dati Generali', {
-            'fields': (('nome', 'sigla'), ('tipo', 'ordine'), ('icona', 'colore'), 'descrizione')
+            'fields': (('nome', 'sigla'), ('tipo', 'ordine'), ('icona', 'icona_nome_originale', 'colore'), 'descrizione')
         }),
         ('Configurazione Aura (Solo se Tipo = Aura)', {
             'classes': ('collapse',),
