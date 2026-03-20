@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from typing import Any
 
 from django.contrib.auth import get_user_model
@@ -52,6 +53,21 @@ class SyncModelSerializer(serializers.ModelSerializer):
         return SyncForeignKeyField, kwargs
 
 
+def _json_safe_scalar(value: Any) -> Any:
+    """Valori serializzabili da json.dumps (UUID, Decimal, datetime, ...)."""
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, (bytes, memoryview)):
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
 def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
     """
     Export minimalista di un record con FK espresse tramite sync key.
@@ -77,9 +93,6 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
             continue
 
         value = getattr(instance, field.name, None)
-        if hasattr(value, "isoformat"):
-            data[field.name] = value.isoformat()
-        else:
-            data[field.name] = value
+        data[field.name] = _json_safe_scalar(value)
 
     return data
