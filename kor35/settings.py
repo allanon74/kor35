@@ -14,15 +14,21 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import os
 import environ
-env = environ.Env()
-environ.Env.read_env()
+# env = environ.Env()
+# environ.Env.read_env()
 
-# Capisce se siamo su DigitalOcean o sul Raspberry
-CURRENT_ENV = env('ENVIRONMENT', default='production')
+
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+env = environ.Env()
+# MODIFICA QUESTA RIGA: Digli di cercare il file esattamente nella BASE_DIR
+environ.Env.read_env(BASE_DIR / '.env')
+
+# Capisce se siamo su DigitalOcean o sul Raspberry
+CURRENT_ENV = env('ENVIRONMENT', default='production')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
