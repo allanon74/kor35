@@ -17,6 +17,9 @@ import environ
 env = environ.Env()
 environ.Env.read_env()
 
+# Capisce se siamo su DigitalOcean o sul Raspberry
+CURRENT_ENV = env('ENVIRONMENT', default='production')
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -37,7 +40,12 @@ ALLOWED_HOSTS = [
     'www.kor35.it', 
     'app.kor35.it', 
     'app.k-o-r-35.it',
+    'localhost',
                  ]
+
+if CURRENT_ENV == 'raspberry_docker':
+    ALLOWED_HOSTS.extend(['*']) # O metti l'IP specifico es: '192.168.1.100'
+    CORS_ALLOW_ALL_ORIGINS = True
 
 # prova 
 
@@ -207,7 +215,7 @@ CORS_ALLOW_CREDENTIALS = True
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['/home/django/progetti/kor35/templates'],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -233,7 +241,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
+            "hosts": [(env('REDIS_HOST', default='127.0.0.1'), 6379)],
         },
     },
 }
@@ -245,12 +253,12 @@ CHANNEL_LAYERS = {
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'django',
-	'USER': 'django',
-	'PASSWORD': env('DB_PASSWORD', default='Python++'),
-	'HOST': 'localhost',
-	'PORT': '',
-	}
+        'NAME': env('DB_NAME'),
+        'USER': env('DB_USER'),
+        'PASSWORD': env('DB_PASSWORD'),
+        'HOST': env('DB_HOST'),
+        'PORT': env('DB_PORT', default='5432'),
+    }
 }
 
 
@@ -321,7 +329,16 @@ ICON_PICKER_COLOR = "#00bcc9"
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = '/var/www/django/static'
+MEDIA_URL = "/media/"
+
+# Se siamo sul Raspberry Pi (Docker)
+if CURRENT_ENV == 'raspberry_docker':
+    STATIC_ROOT = '/app/static'
+    MEDIA_ROOT = '/app/media'
+# Altrimenti usa i percorsi di DigitalOcean
+else:
+    STATIC_ROOT = '/var/www/django/static'
+    MEDIA_ROOT = '/var/www/django/media'
 
 STATICFILES_FINDERS = [
     'django.contrib.staticfiles.finders.FileSystemFinder',
