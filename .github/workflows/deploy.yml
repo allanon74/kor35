@@ -42,8 +42,14 @@ jobs:
             RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
             cd ~/progetti/kor35
             git fetch --all --tags
-            git checkout "${REF}"
-            git reset --hard "${REF}"
+            if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
+              git checkout -B "${REF}" "origin/${REF}"
+              git reset --hard "origin/${REF}"
+            else
+              git checkout "${REF}"
+              git reset --hard "${REF}"
+            fi
+            echo "DEPLOYED_SHA=$(git rev-parse HEAD)"
             source ~/ambienti/kor35/bin/activate
 
             pip install -r requirements.txt
@@ -82,8 +88,14 @@ jobs:
             git fetch --all --tags
             PREVIOUS_SHA="$(git rev-parse HEAD)"
             echo "PREVIOUS_SHA=${PREVIOUS_SHA}"
-            git checkout "${REF}"
-            git reset --hard "${REF}"
+            if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
+              git checkout -B "${REF}" "origin/${REF}"
+              git reset --hard "origin/${REF}"
+            else
+              git checkout "${REF}"
+              git reset --hard "${REF}"
+            fi
+            echo "DEPLOYED_SHA=$(git rev-parse HEAD)"
             source ~/ambienti/kor35/bin/activate
             pip install -r requirements.txt
             python manage.py migrate --plan
@@ -128,8 +140,14 @@ jobs:
 
             cd "${BACKEND_PATH}"
             git fetch --all --tags
-            git checkout "${REF}"
-            git reset --hard "${REF}"
+            if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
+              git checkout -B "${REF}" "origin/${REF}"
+              git reset --hard "origin/${REF}"
+            else
+              git checkout "${REF}"
+              git reset --hard "${REF}"
+            fi
+            echo "MIRROR_BACKEND_DEPLOYED_SHA=$(git rev-parse HEAD)"
 
             cd "${ROOT_PATH}"
             eval "${DEPLOY_CMD}"
