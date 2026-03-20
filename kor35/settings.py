@@ -290,6 +290,8 @@ EDGE_SYNC_STATE_FILE = env(
     "EDGE_SYNC_STATE_FILE",
     default=str(BASE_DIR / ".edge_sync_state.json"),
 )
+# Risposta JSON con messaggio errore DB completo (endpoint protetto da EdgeToken)
+EDGE_SYNC_VERBOSE_ERRORS = env.bool("EDGE_SYNC_VERBOSE_ERRORS", default=True)
 
 AUTHENTICATION_BACKENDS = [
 	'django.contrib.auth.backends.ModelBackend',

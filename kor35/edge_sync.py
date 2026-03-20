@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission, User
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import ForeignKey
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -67,8 +67,12 @@ class EdgeSyncView(APIView):
             raise
         except Exception as exc:
             logger.exception("Edge sync failed")
-            detail = str(exc) if settings.DEBUG else "Edge sync error"
-            return Response({"detail": detail, "error_type": exc.__class__.__name__}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            verbose = getattr(settings, "EDGE_SYNC_VERBOSE_ERRORS", True)
+            detail = str(exc) if (verbose or settings.DEBUG) else "Edge sync error"
+            payload = {"detail": detail, "error_type": exc.__class__.__name__}
+            if isinstance(exc, IntegrityError) and getattr(exc.__cause__, "pgcode", None):
+                payload["pgcode"] = exc.__cause__.pgcode
+            return Response(payload, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
             {
@@ -259,10 +263,62 @@ class EdgeSyncView(APIView):
             else:
                 update_data[field.name] = value
 
-        obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
-        if remote_updated_at:
+        try:
+            obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
+        except IntegrityError:
+            if self._merge_by_natural_unique_key(
+                model, sync_id, row, update_data, remote_updated_at
+            ):
+                obj = model.objects.filter(sync_id=sync_id).first()
+                if not obj:
+                    raise
+            else:
+                raise
+
+        if remote_updated_at and obj is not None:
             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
         return "applied"
+
+    def _merge_by_natural_unique_key(self, model, sync_id, row, update_data, remote_updated_at):
+        """
+        Replica ha sync_id nuovo ma un campo UNIQUE (es. nome) coincide col Master.
+        Allinea la riga esistente al sync_id della replica e applica LWW sui campi.
+        """
+        try:
+            from cms.models import CMSPlugin
+        except ImportError:
+            CMSPlugin = None
+        if CMSPlugin and issubclass(model, CMSPlugin):
+            return False
+
+        for field in model._meta.concrete_fields:
+            if field.name in ("id", "sync_id"):
+                continue
+            if not getattr(field, "unique", False):
+                continue
+            if isinstance(field, ForeignKey):
+                continue
+            val = row.get(field.name)
+            if val in (None, ""):
+                continue
+            existing = (
+                model.objects.filter(**{field.name: val})
+                .exclude(sync_id=sync_id)
+                .first()
+            )
+            if not existing:
+                continue
+            if model.objects.filter(sync_id=sync_id).exclude(pk=existing.pk).exists():
+                continue
+
+            if remote_updated_at and existing.updated_at and remote_updated_at <= existing.updated_at:
+                model.objects.filter(pk=existing.pk).update(sync_id=sync_id)
+            else:
+                model.objects.filter(pk=existing.pk).update(sync_id=sync_id, **update_data)
+                if remote_updated_at:
+                    model.objects.filter(pk=existing.pk).update(updated_at=remote_updated_at)
+            return True
+        return False
 
     def _resolve_fk_value(self, field, raw_value):
         if raw_value in (None, ""):
