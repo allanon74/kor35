@@ -41,6 +41,9 @@ ALLOWED_HOSTS = [
     'app.kor35.it', 
     'app.k-o-r-35.it',
     'localhost',
+    'kor35.ddns.net',
+    '192.168.1.200',
+    '192.168.1.50',
                  ]
 
 if CURRENT_ENV == 'raspberry_docker':
@@ -188,7 +191,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://www.kor35.it",
     "http://app.kor35.it",
     "https://social.kor35.it",
-    "https://social.k-o-r-35.it",       
+    "https://social.k-o-r-35.it", 
+    "https://kor35.ddns.net",      
 ]
 
 # CORS: senza regex così gli header vengono inviati per tutte le risposte.
@@ -401,4 +405,5 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.kor35.it",
     "https://social.k-o-r-35.it",
     "https://social.kor35.it",
+    "https://kor35.ddns.net",
 ]

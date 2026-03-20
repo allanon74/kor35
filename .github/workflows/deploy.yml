@@ -1,6 +1,9 @@
 name: Safe Release Deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       ref:
@@ -13,6 +16,10 @@ on:
         default: true
         type: boolean
 
+concurrency:
+  group: safe-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   staging-validate:
     name: Staging validate (migrate + smoke)
@@ -21,7 +28,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
 
       - name: Deploy and validate on Staging via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -31,15 +38,17 @@ jobs:
           key: ${{ secrets.STAGING_SERVER_SSH_KEY }}
           port: ${{ secrets.STAGING_SERVER_SSH_PORT || 22 }}
           script: |
+            REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
+            RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
             cd ~/progetti/kor35
             git fetch --all --tags
-            git checkout "${{ github.event.inputs.ref || 'main' }}"
-            git reset --hard "${{ github.event.inputs.ref || 'main' }}"
+            git checkout "${REF}"
+            git reset --hard "${REF}"
             source ~/ambienti/kor35/bin/activate
 
             pip install -r requirements.txt
             python manage.py migrate --plan
-            if [ "${{ github.event.inputs.run_migrations }}" = "true" ]; then
+            if [ "${RUN_MIGRATIONS}" = "true" ]; then
               python manage.py migrate --noinput
             fi
             python manage.py check --deploy
@@ -49,23 +58,15 @@ jobs:
             curl -fsS "${{ secrets.STAGING_HEALTHCHECK_URL }}" >/dev/null
             echo "Staging validation OK"
 
-  production-approval:
-    name: Manual approval for production
-    runs-on: ubuntu-latest
-    needs: [staging-validate]
-    steps:
-      - name: Awaiting environment approval
-        run: 'echo "Approved: continue with production deploy."'
-
   production-deploy:
     name: Production deploy
     runs-on: ubuntu-latest
-    needs: [production-approval]
+    needs: [staging-validate]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
 
       - name: Backup and deploy on Production via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -75,16 +76,18 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT || 22 }}
           script: |
+            REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
+            RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
             cd ~/progetti/kor35
             git fetch --all --tags
             PREVIOUS_SHA="$(git rev-parse HEAD)"
             echo "PREVIOUS_SHA=${PREVIOUS_SHA}"
-            git checkout "${{ github.event.inputs.ref || 'main' }}"
-            git reset --hard "${{ github.event.inputs.ref || 'main' }}"
+            git checkout "${REF}"
+            git reset --hard "${REF}"
             source ~/ambienti/kor35/bin/activate
             pip install -r requirements.txt
             python manage.py migrate --plan
-            if [ "${{ github.event.inputs.run_migrations }}" = "true" ]; then
+            if [ "${RUN_MIGRATIONS}" = "true" ]; then
               python manage.py migrate --noinput
             fi
             python manage.py check --deploy
@@ -93,3 +96,58 @@ jobs:
             sudo systemctl restart kor35-daphne
             curl -fsS "${{ secrets.PRODUCTION_HEALTHCHECK_URL }}" >/dev/null
             echo "Production deploy OK"
+
+  mirror-deploy:
+    name: Mirror Raspberry deploy
+    runs-on: ubuntu-latest
+    needs: [production-deploy]
+    steps:
+      - name: Deploy backend/frontend to mirror via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.MIRROR_SERVER_HOST }}
+          username: ${{ secrets.MIRROR_SERVER_USER }}
+          key: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
+          port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 22 }}
+          script: |
+            REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
+            ROOT_PATH="${{ secrets.MIRROR_ROOT_PATH || '/home/pi/kor35-replica' }}"
+            BACKEND_PATH="${{ secrets.MIRROR_BACKEND_PATH || '/home/pi/kor35-replica/backend_src' }}"
+            FRONTEND_PATH="${{ secrets.MIRROR_FRONTEND_PATH || '/home/pi/kor35-replica/forntend_src' }}"
+            REACT_BUILD_PATH="${{ secrets.MIRROR_REACT_BUILD_PATH || '/home/pi/kor35-replica/react_build' }}"
+            DEPLOY_CMD="${{ secrets.MIRROR_DEPLOY_COMMAND || 'docker compose up -d --build' }}"
+
+            cd "${BACKEND_PATH}"
+            git fetch --all --tags
+            git checkout "${REF}"
+            git reset --hard "${REF}"
+
+            cd "${FRONTEND_PATH}"
+            git fetch --all --tags
+            git checkout "${REF}"
+            git reset --hard "${REF}"
+
+            if [ -f package-lock.json ]; then
+              npm ci
+            else
+              npm install
+            fi
+            npm run build
+
+            mkdir -p "${REACT_BUILD_PATH}"
+            if [ -d dist ]; then
+              rsync -a --delete dist/ "${REACT_BUILD_PATH}/"
+            elif [ -d build ]; then
+              rsync -a --delete build/ "${REACT_BUILD_PATH}/"
+            else
+              echo "Nessuna cartella dist/build trovata dopo npm run build" >&2
+              exit 1
+            fi
+
+            cd "${ROOT_PATH}"
+            eval "${DEPLOY_CMD}"
+
+            if [ -n "${{ secrets.MIRROR_HEALTHCHECK_URL }}" ]; then
+              curl -fsS "${{ secrets.MIRROR_HEALTHCHECK_URL }}" >/dev/null
+            fi
+            echo "Mirror deploy OK"
