@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from django.apps import apps
@@ -9,6 +10,7 @@ from django.db import transaction
 from django.db.models import ForeignKey
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import permissions, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -16,6 +18,8 @@ from rest_framework.views import APIView
 
 from kor35.syncing import serialize_for_sync
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
+
+logger = logging.getLogger(__name__)
 
 
 class HasEdgeSyncToken(permissions.BasePermission):
@@ -52,12 +56,20 @@ class EdgeSyncView(APIView):
         last_sync_timestamp = parse_datetime(last_sync_raw) if last_sync_raw else None
         incoming_records = request.data.get("records", {}) or {}
 
-        with transaction.atomic():
-            self._apply_users(incoming_records.get("auth.user", []))
-            self._apply_groups(incoming_records.get("auth.group", []))
-            self._apply_sync_models(incoming_records)
+        try:
+            with transaction.atomic():
+                self._apply_users(incoming_records.get("auth.user", []))
+                self._apply_groups(incoming_records.get("auth.group", []))
+                self._apply_sync_models(incoming_records)
 
-        outgoing = self._build_outgoing(last_sync_timestamp)
+            outgoing = self._build_outgoing(last_sync_timestamp)
+        except ValidationError:
+            raise
+        except Exception as exc:
+            logger.exception("Edge sync failed")
+            detail = str(exc) if settings.DEBUG else "Edge sync error"
+            return Response({"detail": detail, "error_type": exc.__class__.__name__}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response(
             {
                 "status": "ok",
@@ -93,37 +105,51 @@ class EdgeSyncView(APIView):
         return payload
 
     def _serialize_users(self, last_sync_timestamp):
-        qs = User.objects.all().select_related("sync_state")
+        # Solo utenti con riga AuthUserSyncState (evita OneToOne mancante -> 500).
+        qs = User.objects.filter(pk__in=AuthUserSyncState.objects.values_list("user_id", flat=True))
         if last_sync_timestamp:
             qs = qs.filter(sync_state__updated_at__gt=last_sync_timestamp)
-        return [
-            {
-                "username": u.username,
-                "email": u.email,
-                "first_name": u.first_name,
-                "last_name": u.last_name,
-                "is_active": u.is_active,
-                "is_staff": u.is_staff,
-                "is_superuser": u.is_superuser,
-                "updated_at": u.sync_state.updated_at.isoformat(),
-            }
-            for u in qs.iterator()
-            if hasattr(u, "sync_state")
-        ]
+        qs = qs.select_related("sync_state")
+        rows = []
+        for u in qs.iterator():
+            try:
+                st = u.sync_state
+            except ObjectDoesNotExist:
+                continue
+            if st is None:
+                continue
+            rows.append(
+                {
+                    "username": u.username,
+                    "email": u.email,
+                    "first_name": u.first_name,
+                    "last_name": u.last_name,
+                    "is_active": u.is_active,
+                    "is_staff": u.is_staff,
+                    "is_superuser": u.is_superuser,
+                    "updated_at": st.updated_at.isoformat(),
+                }
+            )
+        return rows
 
     def _serialize_groups(self, last_sync_timestamp):
-        qs = Group.objects.all().select_related("sync_state")
+        qs = Group.objects.filter(pk__in=AuthGroupSyncState.objects.values_list("group_id", flat=True))
         if last_sync_timestamp:
             qs = qs.filter(sync_state__updated_at__gt=last_sync_timestamp)
+        qs = qs.select_related("sync_state")
         rows = []
         for group in qs.iterator():
-            if not hasattr(group, "sync_state"):
+            try:
+                st = group.sync_state
+            except ObjectDoesNotExist:
+                continue
+            if st is None:
                 continue
             rows.append(
                 {
                     "name": group.name,
                     "permissions": list(group.permissions.values_list("codename", flat=True)),
-                    "updated_at": group.sync_state.updated_at.isoformat(),
+                    "updated_at": st.updated_at.isoformat(),
                 }
             )
         return rows
