@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.contrib.auth import get_user_model
+from django.core.files.base import File
 from django.db import models
 from rest_framework import serializers
 
@@ -53,19 +54,41 @@ class SyncModelSerializer(serializers.ModelSerializer):
         return SyncForeignKeyField, kwargs
 
 
-def _json_safe_scalar(value: Any) -> Any:
-    """Valori serializzabili da json.dumps (UUID, Decimal, datetime, ...)."""
+def json_safe_for_sync(value: Any) -> Any:
+    """
+    Valori compatibili con json.dumps (replica -> Master e risposta Master).
+    Gestisce UUID, Decimal, datetime, file upload, JSONField annidati.
+    """
     if value is None:
         return None
+    if isinstance(value, dict):
+        return {str(k): json_safe_for_sync(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe_for_sync(v) for v in value]
     if isinstance(value, uuid.UUID):
         return str(value)
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, (bytes, memoryview)):
         return None
+    if isinstance(value, File):
+        try:
+            name = getattr(value, "name", None)
+            return name or None
+        except Exception:
+            return None
+    if isinstance(value, models.Model):
+        if hasattr(value, "sync_id"):
+            return str(value.sync_id)
+        return value.pk
     if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return value
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
 
 
 def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
@@ -93,6 +116,6 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
             continue
 
         value = getattr(instance, field.name, None)
-        data[field.name] = _json_safe_scalar(value)
+        data[field.name] = json_safe_for_sync(value)
 
     return data

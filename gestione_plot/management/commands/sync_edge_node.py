@@ -44,9 +44,24 @@ class Command(BaseCommand):
             "records": outgoing,
         }
 
-        response = requests.post(sync_url, headers=headers, json=payload, timeout=45)
-        response.raise_for_status()
-        incoming_payload = response.json().get("records", {})
+        try:
+            response = requests.post(sync_url, headers=headers, json=payload, timeout=120)
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = getattr(exc.response, "text", "") or ""
+            self.stderr.write(self.style.ERROR(f"HTTP {exc.response.status_code} da Master"))
+            self.stderr.write(body[:12000] if body else "(nessun body)")
+            raise
+        except requests.RequestException as exc:
+            self.stderr.write(self.style.ERROR(f"Errore di rete: {exc}"))
+            raise
+
+        try:
+            incoming_payload = response.json().get("records", {})
+        except ValueError:
+            self.stderr.write(self.style.ERROR("Risposta non JSON:"))
+            self.stderr.write(response.text[:12000])
+            raise
 
         self._apply_incoming_payload(model_registry, incoming_payload)
         self._save_state(state_path, timezone.now())
