@@ -36,11 +36,11 @@ class Command(BaseCommand):
 
         headers = {"Content-Type": "application/json"}
         if sync_token:
-            headers["Authorization"] = f"Bearer {sync_token}"
+            headers["Authorization"] = f"EdgeToken {sync_token}"
 
         payload = {
             "source_node": getattr(settings, "EDGE_NODE_NAME", "replica"),
-            "since": since.isoformat() if since else None,
+            "last_sync_timestamp": since.isoformat() if since else None,
             "records": outgoing,
         }
 

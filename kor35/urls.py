@@ -20,6 +20,7 @@ from rest_framework.authtoken.views import obtain_auth_token
 from django.conf import settings
 from django.conf.urls.static import static
 from personaggi import views as personaggi_views
+from kor35.edge_sync import EdgeSyncView
 
 from django.views.decorators.csrf import csrf_exempt
 from django_icon_picker import views as icon_picker_views
@@ -65,6 +66,7 @@ urlpatterns = [
         path('auth/', csrf_exempt(personaggi_views.MyAuthToken.as_view())),
         path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
         path('icon-widget-api/', include('icon_widget.urls')),
+        path('sync/edge/', EdgeSyncView.as_view(), name='edge_sync'),
     ])),
 
     # DISABILITATO o DA SPOSTARE, per lasciare la root a React

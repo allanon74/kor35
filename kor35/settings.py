@@ -274,6 +274,10 @@ REST_FRAMEWORK = {
     ]
 }
 
+# Edge sync settings (Master <-> Replica)
+EDGE_SYNC_TOKEN = env("EDGE_SYNC_TOKEN", default="")
+EDGE_NODE_NAME = env("EDGE_NODE_NAME", default="master")
+
 AUTHENTICATION_BACKENDS = [
 	'django.contrib.auth.backends.ModelBackend',
 	'allauth.account.auth_backends.AuthenticationBackend', #allauth
