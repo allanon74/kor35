@@ -98,11 +98,11 @@ jobs:
             echo "Production deploy OK"
 
   mirror-deploy:
-    name: Mirror Raspberry deploy
+    name: Mirror Raspberry backend deploy
     runs-on: ubuntu-latest
     needs: [production-deploy]
     steps:
-      - name: Deploy backend/frontend to mirror via SSH
+      - name: Deploy backend to mirror via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.MIRROR_SERVER_HOST }}
@@ -113,36 +113,23 @@ jobs:
             REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
             ROOT_PATH="${{ secrets.MIRROR_ROOT_PATH || '/home/pi/kor35-replica' }}"
             BACKEND_PATH="${{ secrets.MIRROR_BACKEND_PATH || '/home/pi/kor35-replica/backend_src' }}"
-            FRONTEND_PATH="${{ secrets.MIRROR_FRONTEND_PATH || '/home/pi/kor35-replica/forntend_src' }}"
-            REACT_BUILD_PATH="${{ secrets.MIRROR_REACT_BUILD_PATH || '/home/pi/kor35-replica/react_build' }}"
+            BACKEND_REPO_URL="${{ secrets.MIRROR_BACKEND_REPO_URL || '' }}"
             DEPLOY_CMD="${{ secrets.MIRROR_DEPLOY_COMMAND || 'docker compose up -d --build' }}"
+
+            if [ ! -d "${BACKEND_PATH}" ]; then
+              if [ -n "${BACKEND_REPO_URL}" ]; then
+                mkdir -p "$(dirname "${BACKEND_PATH}")"
+                git clone "${BACKEND_REPO_URL}" "${BACKEND_PATH}"
+              else
+                echo "BACKEND_PATH non esiste: ${BACKEND_PATH}. Imposta MIRROR_BACKEND_PATH corretto o MIRROR_BACKEND_REPO_URL." >&2
+                exit 1
+              fi
+            fi
 
             cd "${BACKEND_PATH}"
             git fetch --all --tags
             git checkout "${REF}"
             git reset --hard "${REF}"
-
-            cd "${FRONTEND_PATH}"
-            git fetch --all --tags
-            git checkout "${REF}"
-            git reset --hard "${REF}"
-
-            if [ -f package-lock.json ]; then
-              npm ci
-            else
-              npm install
-            fi
-            npm run build
-
-            mkdir -p "${REACT_BUILD_PATH}"
-            if [ -d dist ]; then
-              rsync -a --delete dist/ "${REACT_BUILD_PATH}/"
-            elif [ -d build ]; then
-              rsync -a --delete build/ "${REACT_BUILD_PATH}/"
-            else
-              echo "Nessuna cartella dist/build trovata dopo npm run build" >&2
-              exit 1
-            fi
 
             cd "${ROOT_PATH}"
             eval "${DEPLOY_CMD}"
