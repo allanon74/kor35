@@ -282,8 +282,14 @@ REST_FRAMEWORK = {
 }
 
 # Edge sync settings (Master <-> Replica)
-EDGE_SYNC_TOKEN = env("EDGE_SYNC_TOKEN", default="")
+# Replica: imposta EDGE_SYNC_URL (URL assoluto dell'endpoint Master) e EDGE_SYNC_TOKEN uguale al Master.
+EDGE_SYNC_URL = env("EDGE_SYNC_URL", default="").strip()
+EDGE_SYNC_TOKEN = env("EDGE_SYNC_TOKEN", default="").strip()
 EDGE_NODE_NAME = env("EDGE_NODE_NAME", default="master")
+EDGE_SYNC_STATE_FILE = env(
+    "EDGE_SYNC_STATE_FILE",
+    default=str(BASE_DIR / ".edge_sync_state.json"),
+)
 
 AUTHENTICATION_BACKENDS = [
 	'django.contrib.auth.backends.ModelBackend',
