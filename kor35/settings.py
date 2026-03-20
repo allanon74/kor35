@@ -233,11 +233,11 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-					'sekizai.context_processors.sekizai', #cms
-					'cms.context_processors.cms_settings', #cms
-					'django.template.context_processors.i18n', #cms
+                'sekizai.context_processors.sekizai',
+                'cms.context_processors.cms_settings',
+                'django.template.context_processors.i18n',
             ],
-	},
+        },
     },
 ]
 
@@ -361,9 +361,9 @@ STATICFILES_FINDERS = [
     'django_yarnpkg.finders.NodeModulesFinder',
 ]
 
-STATICFILES_DIRS = [
-    BASE_DIR / "static", 
-]
+# STATICFILES_DIRS = [
+#     BASE_DIR / "static", 
+# ]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
