@@ -1052,8 +1052,60 @@ class TipologiaPersonaggio(SyncableModel, models.Model):
     def __str__(self): return self.nome
 
 def get_default_tipologia():
-    t, _ = TipologiaPersonaggio.objects.get_or_create(nome="Standard")
-    return t.pk
+    """
+    Default per FK tipologia su Personaggio (usato dalla migrazione 0019).
+
+    Non usare l'ORM: durante migrate il modello TipologiaPersonaggio include gia'
+    i campi sync (SyncableModel) ma la tabella DB puo' non averli ancora, e la
+    SELECT fallirebbe con UndefinedColumn. Qui usiamo solo colonne realmente presenti.
+    """
+    from django.db import connection
+    from django.utils import timezone
+    import uuid
+
+    table = "personaggi_tipologiapersonaggio"
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f'SELECT "id" FROM "{table}" WHERE "nome" = %s LIMIT 1',
+            ["Standard"],
+        )
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+
+        cursor.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = %s
+              AND column_name = 'sync_id'
+            LIMIT 1
+            """,
+            [table],
+        )
+        has_sync_id = cursor.fetchone() is not None
+
+        if has_sync_id:
+            cursor.execute(
+                f"""
+                INSERT INTO "{table}"
+                    ("nome", "crediti_iniziali", "caratteristiche_iniziali", "giocante", "sync_id", "updated_at")
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING "id"
+                """,
+                ["Standard", 0, 8, True, uuid.uuid4(), timezone.now()],
+            )
+        else:
+            cursor.execute(
+                f"""
+                INSERT INTO "{table}"
+                    ("nome", "crediti_iniziali", "caratteristiche_iniziali", "giocante")
+                VALUES (%s, %s, %s, %s)
+                RETURNING "id"
+                """,
+                ["Standard", 0, 8, True],
+            )
+        return cursor.fetchone()[0]
 
 class PuntiCaratteristicaMovimento(SyncableModel, models.Model):
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="movimenti_pc")
