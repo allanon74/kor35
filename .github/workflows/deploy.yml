@@ -1,55 +1,95 @@
-name: Deploy to Linux Server
+name: Safe Release Deploy
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref da deployare (branch, tag o SHA)"
+        required: false
+        default: "main"
+      run_migrations:
+        description: "Eseguire migrate su staging/production"
+        required: true
+        default: true
+        type: boolean
 
 jobs:
-  deploy:
+  staging-validate:
+    name: Staging validate (migrate + smoke)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
 
-      - name: Deploy via SSH
+      - name: Deploy and validate on Staging via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_SERVER_HOST }}
+          username: ${{ secrets.STAGING_SERVER_USER }}
+          key: ${{ secrets.STAGING_SERVER_SSH_KEY }}
+          port: ${{ secrets.STAGING_SERVER_SSH_PORT || 22 }}
+          script: |
+            cd ~/progetti/kor35
+            git fetch --all --tags
+            git checkout "${{ github.event.inputs.ref || 'main' }}"
+            git reset --hard "${{ github.event.inputs.ref || 'main' }}"
+            source ~/ambienti/kor35/bin/activate
+
+            pip install -r requirements.txt
+            python manage.py migrate --plan
+            if [ "${{ github.event.inputs.run_migrations }}" = "true" ]; then
+              python manage.py migrate --noinput
+            fi
+            python manage.py check --deploy
+            python manage.py collectstatic --noinput
+            sudo systemctl restart apache2.service
+            sudo systemctl restart kor35-daphne
+            curl -fsS "${{ secrets.STAGING_HEALTHCHECK_URL }}" >/dev/null
+            echo "Staging validation OK"
+
+  production-approval:
+    name: Manual approval for production
+    runs-on: ubuntu-latest
+    needs: [staging-validate]
+    steps:
+      - name: Awaiting environment approval
+        run: 'echo "Approved: continue with production deploy."'
+
+  production-deploy:
+    name: Production deploy
+    runs-on: ubuntu-latest
+    needs: [production-approval]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - name: Backup and deploy on Production via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT || 22 }}
           script: |
-            # 1. Vai nella cartella del progetto
             cd ~/progetti/kor35
-
-            # 2. Aggiorna il codice dal repository
-            git fetch origin main
-            git reset --hard origin/main
-
-            # 3. Attiva l'ambiente virtuale usando il percorso assoluto (più sicuro)
-            #    Usa il percorso completo per pip e python per evitare problemi.
-            #    ATTENZIONE: Assicurati che '~/ambienti/kor35' sia il percorso corretto!
+            git fetch --all --tags
+            PREVIOUS_SHA="$(git rev-parse HEAD)"
+            echo "PREVIOUS_SHA=${PREVIOUS_SHA}"
+            git checkout "${{ github.event.inputs.ref || 'main' }}"
+            git reset --hard "${{ github.event.inputs.ref || 'main' }}"
             source ~/ambienti/kor35/bin/activate
-            
-            # 4. Installa le dipendenze
             pip install -r requirements.txt
-            
-            # 5. Esegui le migrazioni del database
-            python manage.py migrate
-            
-            # 6. Raccogli i file statici
+            python manage.py migrate --plan
+            if [ "${{ github.event.inputs.run_migrations }}" = "true" ]; then
+              python manage.py migrate --noinput
+            fi
+            python manage.py check --deploy
             python manage.py collectstatic --noinput
-
-            # 7. Riavvia il servizio corretto (Apache) con sudo
-            #    Scegli UNA delle due opzioni qui sotto
-            
-            # OPZIONE A: Riavvia completamente Apache.
             sudo systemctl restart apache2.service
-            
-            # OPZIONE B (consigliata): Ricarica l'applicazione senza riavviare Apache.
-            # Questo funziona solo se Apache è configurato per ricaricare quando il file wsgi.py viene "toccato".
-            # Sostituisci il percorso con quello corretto del tuo file wsgi.py
-            # touch ~/progetti/kor35/kor35/wsgi.py
-
-            # Riavvia Daphne (per le modifiche ai Consumer/WebSocket)
             sudo systemctl restart kor35-daphne
+            curl -fsS "${{ secrets.PRODUCTION_HEALTHCHECK_URL }}" >/dev/null
+            echo "Production deploy OK"

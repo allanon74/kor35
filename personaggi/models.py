@@ -12,7 +12,8 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
+from kor35.syncing import SyncableModel
 from colorfield.fields import ColorField
 from cms.models.pluginmodel import CMSPlugin
 from django.utils.html import format_html
@@ -535,11 +536,11 @@ MODIFICATORE_CHOICES = [(MODIFICATORE_ADDITIVO, 'Additivo (+N)'), (MODIFICATORE_
 META_NESSUN_EFFETTO = 'NE'; META_VALORE_PUNTEGGIO = 'VP'; META_SOLO_TESTO = 'TX'; META_LIVELLO_INFERIORE = 'LV'
 METATALENTO_CHOICES = [(META_NESSUN_EFFETTO, 'Nessun Effetto'), (META_VALORE_PUNTEGGIO, 'Valore per Punteggio'), (META_SOLO_TESTO, 'Solo Testo Addizionale'), (META_LIVELLO_INFERIORE, 'Solo abilità con livello pari o inferiore')]
 
-class A_modello(models.Model):
+class A_modello(SyncableModel, models.Model):
     id = models.AutoField("Codice Identificativo", primary_key=True)
     class Meta: abstract = True
         
-class A_vista(models.Model):
+class A_vista(SyncableModel, models.Model):
     id = models.AutoField(primary_key=True)
     data_creazione = models.DateTimeField(auto_now_add=True)
     nome = models.CharField(max_length=100)
@@ -547,7 +548,7 @@ class A_vista(models.Model):
     def __str__(self): return f"{self.nome} ({self.id})"
     class Meta: ordering = ['-data_creazione']; verbose_name = "Elemento dell'Oggetto"; verbose_name_plural = "Elementi dell'Oggetto"
 
-class CondizioneStatisticaMixin(models.Model):
+class CondizioneStatisticaMixin(SyncableModel, models.Model):
     usa_limitazione_aura = models.BooleanField("Usa Limitazione Aura", default=False)
     limit_a_aure = models.ManyToManyField('Punteggio', blank=True, limit_choices_to={'tipo': AURA}, related_name="%(class)s_limit_aure", verbose_name="Aure consentite")
     usa_limitazione_elemento = models.BooleanField("Usa Limitazione Elemento", default=False)
@@ -723,22 +724,22 @@ class Aura(Punteggio):
     class Meta: proxy = True; verbose_name = "Aura"; verbose_name_plural = "Aure"
     def save(self, *args, **kwargs): self.type = AURA; super().save(*args, **kwargs)
 
-class ModelloAuraRequisitoDoppia(models.Model):
+class ModelloAuraRequisitoDoppia(SyncableModel, models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_doppia_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
         
-class ModelloAuraRequisitoMattone(models.Model):
+class ModelloAuraRequisitoMattone(SyncableModel, models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_mattone_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
 
-class ModelloAuraRequisitoCaratt(models.Model):
+class ModelloAuraRequisitoCaratt(SyncableModel, models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_caratt_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
 
-class ModelloAura(models.Model):
+class ModelloAura(SyncableModel, models.Model):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="modelli_definiti")
     nome = models.CharField(max_length=100)
     descrizione = models.TextField(blank=True, null=True, verbose_name="Descrizione Breve")
@@ -757,7 +758,7 @@ class ModelloAura(models.Model):
     class Meta: verbose_name = "Modello di Aura"; verbose_name_plural = "Modelli di Aura"
     def __str__(self): return f"Modello {self.aura.nome} - {self.nome}"
 
-class CaratteristicaModificatore(models.Model):
+class CaratteristicaModificatore(SyncableModel, models.Model):
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, related_name="modificatori_dati")
     statistica_modificata = models.ForeignKey(Statistica, on_delete=models.CASCADE, related_name="modificatori_ricevuti")
     modificatore = models.DecimalField(max_digits=5, decimal_places=2, default=1.0)
@@ -772,7 +773,7 @@ class AbilitaStatistica(CondizioneStatisticaMixin):
     class Meta: unique_together = ('abilita', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore}"
     
-class ConfigurazioneLivelloAura(models.Model):
+class ConfigurazioneLivelloAura(SyncableModel, models.Model):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': 'AU'}, related_name="configurazione_livelli")
     livello = models.IntegerField(default=1, help_text="A che valore di aura si sblocca questa scelta?", null=True, blank=True)
     nome_step = models.CharField(max_length=50, help_text="Es. Archetipo, Sottotipo, Dono Divino")
@@ -847,11 +848,11 @@ class Attivata(A_vista):
     @property
     def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.attivatastatisticabase_set.select_related('statistica').all())
 
-class AttivataElemento(models.Model):
+class AttivataElemento(SyncableModel, models.Model):
     attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
     elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'is_mattone': True})
 
-class AttivataStatisticaBase(models.Model):
+class AttivataStatisticaBase(SyncableModel, models.Model):
     attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
@@ -995,31 +996,31 @@ class Cerimoniale(Tecnica):
         if self.effetto: parts.append(f"<strong>Effetto:</strong> {self.effetto}")
         return "<br><br>".join(parts)
 
-class CerimonialeCaratteristica(models.Model):
+class CerimonialeCaratteristica(SyncableModel, models.Model):
     cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE, related_name='componenti')
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
     class Meta: unique_together = ('cerimoniale', 'caratteristica')
 
-class InfusioneCaratteristica(models.Model):
+class InfusioneCaratteristica(SyncableModel, models.Model):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE, related_name='componenti')
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
     class Meta: unique_together = ('infusione', 'caratteristica')
 
-class TessituraCaratteristica(models.Model):
+class TessituraCaratteristica(SyncableModel, models.Model):
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE, related_name='componenti')
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
     class Meta: unique_together = ('tessitura', 'caratteristica')
 
-class InfusioneStatisticaBase(models.Model):
+class InfusioneStatisticaBase(SyncableModel, models.Model):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
     def __str__(self): return f"{self.statistica.nome}: {self.valore_base}"
 
-class TessituraStatisticaBase(models.Model):
+class TessituraStatisticaBase(SyncableModel, models.Model):
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
@@ -1035,14 +1036,14 @@ class Inventario(A_vista):
         if data is None: data = timezone.now()
         return Oggetto.objects.filter(tracciamento_inventario__inventario=self, tracciamento_inventario__data_inizio__lte=data, tracciamento_inventario__data_fine__isnull=True)
 
-class OggettoInInventario(models.Model):
+class OggettoInInventario(SyncableModel, models.Model):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE, related_name="tracciamento_inventario")
     inventario = models.ForeignKey(Inventario, on_delete=models.CASCADE, related_name="tracciamento_oggetti")
     data_inizio = models.DateTimeField(default=timezone.now)
     data_fine = models.DateTimeField(null=True, blank=True)
     class Meta: ordering = ['-data_inizio']
 
-class TipologiaPersonaggio(models.Model):
+class TipologiaPersonaggio(SyncableModel, models.Model):
     nome = models.CharField(max_length=100, unique=True, default="Standard")
     crediti_iniziali = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     caratteristiche_iniziali = models.IntegerField(default=8)
@@ -1054,21 +1055,21 @@ def get_default_tipologia():
     t, _ = TipologiaPersonaggio.objects.get_or_create(nome="Standard")
     return t.pk
 
-class PuntiCaratteristicaMovimento(models.Model):
+class PuntiCaratteristicaMovimento(SyncableModel, models.Model):
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="movimenti_pc")
     importo = models.IntegerField()
     descrizione = models.CharField(max_length=200)
     data = models.DateTimeField(default=timezone.now)
     class Meta: verbose_name="Movimento PC"; ordering=['-data']
 
-class CreditoMovimento(models.Model):
+class CreditoMovimento(SyncableModel, models.Model):
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="movimenti_credito")
     importo = models.DecimalField(max_digits=10, decimal_places=2)
     descrizione = models.CharField(max_length=200)
     data = models.DateTimeField(default=timezone.now)
     class Meta: ordering=['-data']
     
-class PersonaggioLog(models.Model):
+class PersonaggioLog(SyncableModel, models.Model):
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="log_eventi")
     data = models.DateTimeField(default=timezone.now)
     testo_log = models.TextField()
@@ -1078,7 +1079,7 @@ class PersonaggioLog(models.Model):
 #     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
 #     elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': ELEMENTO})
     
-class OggettoCaratteristica(models.Model):
+class OggettoCaratteristica(SyncableModel, models.Model):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE, related_name='componenti')
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
@@ -1096,14 +1097,14 @@ class OggettoStatistica(CondizioneStatisticaMixin):
     class Meta: unique_together = ('oggetto', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore}"
 
-class OggettoStatisticaBase(models.Model):
+class OggettoStatisticaBase(SyncableModel, models.Model):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
     class Meta: unique_together = ('oggetto', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore_base}"
 
-class PersonaggioStatisticaBase(models.Model):
+class PersonaggioStatisticaBase(SyncableModel, models.Model):
     """
     Valori base delle statistiche per il personaggio.
     Questi sono valori intrinseci del personaggio, separati dalle abilità.
@@ -1121,7 +1122,7 @@ class PersonaggioStatisticaBase(models.Model):
     def __str__(self): 
         return f"{self.personaggio.nome} - {self.statistica.nome}: {self.valore_base}"
 
-class QrCode(models.Model):
+class QrCode(SyncableModel, models.Model):
     id = models.CharField(primary_key=True, max_length=14, default=generate_short_id, editable=False)
     data_creazione = models.DateTimeField(auto_now_add=True)
     testo = models.TextField(blank=True, null=True)
@@ -1135,7 +1136,7 @@ class QrCode(models.Model):
         
 # --- NUOVI MODELLI PER GESTIONE TIMER (PUNTO A) ---
 
-class TipologiaTimer(models.Model):
+class TipologiaTimer(SyncableModel, models.Model):
     """
     Definisce le categorie di timer (es. Protezione, Riposo) e il loro comportamento.
     """
@@ -1164,7 +1165,7 @@ class TipologiaTimer(models.Model):
         return self.nome
 
 
-class TimerQrCode(models.Model):
+class TimerQrCode(SyncableModel, models.Model):
     """
     Estensione del modello QrCode per gestire i timer.
     Collega un codice fisico a una durata e una tipologia.
@@ -1197,7 +1198,7 @@ class TimerQrCode(models.Model):
         return f"Timer {self.tipologia.nome} ({self.durata_secondi}s) - QR: {self.qr_code.id}"
 
 
-class StatoTimerAttivo(models.Model):
+class StatoTimerAttivo(SyncableModel, models.Model):
     """
     Modello di runtime per sincronizzare i timer attivi tra tutte le istanze della app.
     Esiste un solo record per TipologiaTimer se il timer è attivo.
@@ -1222,7 +1223,7 @@ class StatoTimerAttivo(models.Model):
     def __str__(self):
         return f"{self.tipologia.nome} - Fine: {self.data_fine}"
             
-class ClasseOggetto(models.Model):
+class ClasseOggetto(SyncableModel, models.Model):
     nome = models.CharField(max_length=50, unique=True)
     max_mod_totali = models.IntegerField(default=0, verbose_name="Max Mod Totali")
     limitazioni_mod = models.ManyToManyField(Punteggio, through='ClasseOggettoLimiteMod', related_name='classi_oggetti_regole_mod', verbose_name="Limiti Mod per Caratteristica")
@@ -1230,13 +1231,13 @@ class ClasseOggetto(models.Model):
     class Meta: verbose_name = "Classe Oggetto (Regole)"; verbose_name_plural = "Classi Oggetto (Regole)"
     def __str__(self): return self.nome
 
-class ClasseOggettoLimiteMod(models.Model):
+class ClasseOggettoLimiteMod(SyncableModel, models.Model):
     classe_oggetto = models.ForeignKey(ClasseOggetto, on_delete=models.CASCADE)
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     max_installabili = models.IntegerField(default=1, verbose_name="Max Mod di questo tipo")
     class Meta: unique_together = ('classe_oggetto', 'caratteristica'); verbose_name = "Limite Mod per Caratteristica"
         
-class OggettoBase(models.Model):
+class OggettoBase(SyncableModel, models.Model):
     nome = models.CharField(max_length=100)
     descrizione = models.TextField(blank=True, null=True)
     tipo_oggetto = models.CharField(max_length=3, choices=TIPO_OGGETTO_CHOICES, default=TIPO_OGGETTO_FISICO)
@@ -1261,13 +1262,13 @@ class OggettoBase(models.Model):
     def __str__(self): 
         return f"{self.nome} ({self.costo} CR)"
 
-class OggettoBaseStatisticaBase(models.Model):
+class OggettoBaseStatisticaBase(SyncableModel, models.Model):
     oggetto_base = models.ForeignKey(OggettoBase, on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
     class Meta: verbose_name = "Statistica Base Template"; verbose_name_plural = "Statistiche Base Template"
 
-class OggettoBaseModificatore(models.Model):
+class OggettoBaseModificatore(SyncableModel, models.Model):
     oggetto_base = models.ForeignKey(OggettoBase, on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore = models.IntegerField(default=0)
@@ -2121,13 +2122,13 @@ class Personaggio(Inventario):
             return int(max(0, costo_base - riduzione))
         return int(costo_base)
 
-class PersonaggioAbilita(models.Model):
+class PersonaggioAbilita(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
-class PersonaggioAttivata(models.Model):
+class PersonaggioAttivata(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
-class PersonaggioInfusione(models.Model):
+class PersonaggioInfusione(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
-class PersonaggioTessitura(models.Model):
+class PersonaggioTessitura(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
@@ -2138,19 +2139,19 @@ class PersonaggioTessitura(models.Model):
         verbose_name_plural = "Personaggio - Tessiture"
         unique_together = [['personaggio', 'tessitura']]
 
-class PersonaggioCerimoniale(models.Model):
+class PersonaggioCerimoniale(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
 
-class PersonaggioModelloAura(models.Model):
+class PersonaggioModelloAura(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); modello_aura = models.ForeignKey(ModelloAura, on_delete=models.CASCADE)
     class Meta: verbose_name_plural="Personaggio - Modelli Aura"
     def clean(self):
         if PersonaggioModelloAura.objects.filter(personaggio=self.personaggio, modello_aura__aura=self.modello_aura.aura).exclude(pk=self.pk).exists(): raise ValidationError("Già presente.")
     def save(self, *args, **kwargs): self.clean(); super().save(*args, **kwargs)
 
-class TransazioneSospesa(models.Model):
+class TransazioneSospesa(SyncableModel, models.Model):
     # Campi legacy (mantenuti per retrocompatibilità)
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE, null=True, blank=True)
     mittente = models.ForeignKey(Inventario, on_delete=models.CASCADE, related_name="transazioni_in_uscita_sospese", null=True, blank=True)
@@ -2251,7 +2252,7 @@ class TransazioneSospesa(models.Model):
         self.data_chiusura = timezone.now()
         self.save()
 
-class PropostaTransazione(models.Model):
+class PropostaTransazione(SyncableModel, models.Model):
     """Proposta all'interno di una transazione"""
     transazione = models.ForeignKey(TransazioneSospesa, on_delete=models.CASCADE, related_name='proposte')
     autore = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='proposte_transazioni')
@@ -2299,11 +2300,11 @@ class PropostaTransazione(models.Model):
                 self.transazione.ultima_proposta_destinatario = self
             self.transazione.save()
 
-class Gruppo(models.Model):
+class Gruppo(SyncableModel, models.Model):
     nome = models.CharField(max_length=100, unique=True); membri = models.ManyToManyField('Personaggio', related_name="gruppi_appartenenza", blank=True)
     def __str__(self): return self.nome
     
-class Messaggio(models.Model):
+class Messaggio(SyncableModel, models.Model):
     TIPO_BROADCAST='BROAD' 
     TIPO_GRUPPO='GROUP' 
     TIPO_INDIVIDUALE='INDV'
@@ -2323,7 +2324,7 @@ class Messaggio(models.Model):
     class Meta: 
         ordering=['-data_invio']
     
-class LetturaMessaggio(models.Model):
+class LetturaMessaggio(SyncableModel, models.Model):
     messaggio = models.ForeignKey(Messaggio, on_delete=models.CASCADE, related_name="stati_lettura")
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="messaggi_stati")
     letto = models.BooleanField(default=False)
@@ -2332,33 +2333,61 @@ class LetturaMessaggio(models.Model):
     class Meta: unique_together = ('messaggio', 'personaggio'); verbose_name = "Stato Lettura Messaggio"; verbose_name_plural = "Stati Lettura Messaggi"
     def __str__(self): return f"{self.personaggio.nome} - {self.messaggio.titolo}"
 
-class AbilitaPluginModel(CMSPlugin):
+
+class AuthUserSyncState(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="sync_state")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Sync State Utente"
+        verbose_name_plural = "Sync State Utenti"
+
+
+class AuthGroupSyncState(models.Model):
+    group = models.OneToOneField(Group, on_delete=models.CASCADE, related_name="sync_state")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Sync State Gruppo"
+        verbose_name_plural = "Sync State Gruppi"
+
+
+@receiver(post_save, sender=User)
+def touch_user_sync_state(sender, instance, **kwargs):
+    AuthUserSyncState.objects.update_or_create(user=instance, defaults={})
+
+
+@receiver(post_save, sender=Group)
+def touch_group_sync_state(sender, instance, **kwargs):
+    AuthGroupSyncState.objects.update_or_create(group=instance, defaults={})
+
+class AbilitaPluginModel(SyncableModel, CMSPlugin):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     def __str__(self): return self.abilita.nome
-class OggettoPluginModel(CMSPlugin):
+class OggettoPluginModel(SyncableModel, CMSPlugin):
     oggetto = models.ForeignKey(Oggetto, on_delete=models.CASCADE)
     def __str__(self): return self.oggetto.nome
-class AttivataPluginModel(CMSPlugin):
+class AttivataPluginModel(SyncableModel, CMSPlugin):
     attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
     def __str__(self): return self.attivata.nome
-class InfusionePluginModel(CMSPlugin):
+class InfusionePluginModel(SyncableModel, CMSPlugin):
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
     def __str__(self): return self.infusione.nome
-class TessituraPluginModel(CMSPlugin):
+class TessituraPluginModel(SyncableModel, CMSPlugin):
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
     def __str__(self): return self.tessitura.nome
-class TabellaPluginModel(CMSPlugin):
+class TabellaPluginModel(SyncableModel, CMSPlugin):
     tabella = models.ForeignKey(Tabella, on_delete=models.CASCADE)
     def __str__(self): return self.tabella.nome
-class TierPluginModel(CMSPlugin):
+class TierPluginModel(SyncableModel, CMSPlugin):
     tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name='cms_kor_tier_plugin')
     def __str__(self): return self.tier.nome
     
-class CerimonialePluginModel(CMSPlugin):
+class CerimonialePluginModel(SyncableModel, CMSPlugin):
     cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE)
     def __str__(self): return self.cerimoniale.nome
     
-class PropostaTecnica(models.Model):
+class PropostaTecnica(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='proposte_tecniche')
     tipo = models.CharField(max_length=3, choices=TIPO_PROPOSTA_CHOICES)
     stato = models.CharField(max_length=15, choices=STATO_PROPOSTA_CHOICES, default=STATO_PROPOSTA_BOZZA)
@@ -2406,7 +2435,7 @@ class PropostaTecnica(models.Model):
             return self.livello_proposto
         return self.componenti.aggregate(tot=models.Sum('valore'))['tot'] or 0
 
-class PropostaTecnicaCaratteristica(models.Model):
+class PropostaTecnicaCaratteristica(SyncableModel, models.Model):
     proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE, related_name='componenti')
     caratteristica = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA})
     valore = models.IntegerField(default=1)
@@ -2415,13 +2444,13 @@ class PropostaTecnicaCaratteristica(models.Model):
         ordering = ['caratteristica__nome']
         unique_together = ('proposta', 'caratteristica')
 
-class PropostaTecnicaMattone(models.Model):
+class PropostaTecnicaMattone(SyncableModel, models.Model):
     # LEGACY: Mantenuto per evitare errori di importazione se ci sono riferimenti, ma non usato
     proposta = models.ForeignKey(PropostaTecnica, on_delete=models.CASCADE)
     mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
     ordine = models.IntegerField(default=0) 
 
-class ForgiaturaInCorso(models.Model):
+class ForgiaturaInCorso(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='forgiature_attive')
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
     data_inizio = models.DateTimeField(default=timezone.now)
@@ -2472,7 +2501,7 @@ STATO_RICHIESTA_CHOICES = [
     (STATO_RICHIESTA_RIFIUTATA, 'Rifiutata'),
 ]
 
-class RichiestaAssemblaggio(models.Model):
+class RichiestaAssemblaggio(SyncableModel, models.Model):
     committente = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='richieste_assemblaggio_inviate')
     artigiano = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name='richieste_assemblaggio_ricevute')
     
@@ -2522,7 +2551,7 @@ class RichiestaAssemblaggio(models.Model):
     
 from django.db import models
 
-class Dichiarazione(models.Model):
+class Dichiarazione(SyncableModel, models.Model):
     # Definizione delle scelte per il tipo
     TIPO_CHOICES = [
         ('DAN_NRM', 'Danno - Normale'),
@@ -2581,7 +2610,7 @@ TIPO_EFFETTO_CHOICES = [
 ]
 
 
-class TipologiaEffetto(models.Model):
+class TipologiaEffetto(SyncableModel, models.Model):
     """
     Tipologia di effetto casuale: può generare un oggetto (da inserire in inventario)
     o una tessitura (da inserire come consumabile).
@@ -2603,7 +2632,7 @@ class TipologiaEffetto(models.Model):
         return f"{self.nome} ({self.get_tipo_display()})"
 
 
-class EffettoCasuale(models.Model):
+class EffettoCasuale(SyncableModel, models.Model):
     """
     Singolo effetto casuale con nome, descrizione, formula.
     Se la tipologia è tessitura, la formula è obbligatoria.
@@ -2633,7 +2662,7 @@ class EffettoCasuale(models.Model):
                 raise ValidationError({'formula': 'La formula è obbligatoria per effetti di tipologia Tessitura.'})
 
 
-class ConsumabilePersonaggio(models.Model):
+class ConsumabilePersonaggio(SyncableModel, models.Model):
     """
     Consumabile assegnato a un personaggio (es. da effetto casuale tessitura).
     Ha utilizzi residui e data di scadenza. Occupa 1 slot COG se il personaggio ha almeno un consumabile.
@@ -2665,7 +2694,7 @@ class ConsumabilePersonaggio(models.Model):
         return f"{self.nome} x{self.utilizzi_rimanenti} ({self.personaggio.nome})"
 
 
-class CreazioneConsumabileInCorso(models.Model):
+class CreazioneConsumabileInCorso(SyncableModel, models.Model):
     """
     Timer di creazione consumabile da tessitura: al termine di data_fine_creazione
     il personaggio può completare e ottenere il consumabile in tab Consumabili.

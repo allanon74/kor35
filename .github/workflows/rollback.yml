@@ -1,0 +1,33 @@
+name: Production Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      rollback_ref:
+        description: "Commit SHA/tag/branch a cui fare rollback"
+        required: true
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rollback via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT || 22 }}
+          script: |
+            cd ~/progetti/kor35
+            git fetch --all --tags
+            git checkout "${{ github.event.inputs.rollback_ref }}"
+            git reset --hard "${{ github.event.inputs.rollback_ref }}"
+            source ~/ambienti/kor35/bin/activate
+            pip install -r requirements.txt
+            python manage.py migrate --plan
+            python manage.py collectstatic --noinput
+            sudo systemctl restart apache2.service
+            sudo systemctl restart kor35-daphne
+            curl -fsS "${{ secrets.PRODUCTION_HEALTHCHECK_URL }}" >/dev/null
+            echo "Rollback completed"

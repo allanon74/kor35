@@ -1,10 +1,11 @@
 from django.db import models
 from django.conf import settings
 from personaggi.models import Personaggio, Manifesto, Inventario, QrCode, Tier, Punteggio
+from kor35.syncing import SyncableModel
 
 # --- 1. SEZIONE TEMPLATE (L'ANAGRAFICA GENERALE) ---
 
-class MostroTemplate(models.Model):
+class MostroTemplate(SyncableModel, models.Model):
     """
     Il record "Master". Definisce le statistiche base di una tipologia di creatura.
     Es: "Zombie", "Vampiro Antico", "Sgherro della Corporazione".
@@ -23,7 +24,7 @@ class MostroTemplate(models.Model):
     def __str__(self):
         return self.nome
 
-class AttaccoTemplate(models.Model):
+class AttaccoTemplate(SyncableModel, models.Model):
     """
     Gli attacchi associati a un Template.
     """
@@ -40,7 +41,7 @@ class AttaccoTemplate(models.Model):
 
 # --- 2. SEZIONE EVENTI E QUEST ---
 
-class Evento(models.Model):
+class Evento(SyncableModel, models.Model):
     titolo = models.CharField(max_length=200)
     pc_guadagnati = models.PositiveIntegerField(default=0)
     data_inizio = models.DateTimeField()
@@ -67,7 +68,7 @@ class Evento(models.Model):
     def __str__(self):
         return self.titolo
 
-class GiornoEvento(models.Model):
+class GiornoEvento(SyncableModel, models.Model):
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='giorni')
     titolo = models.CharField(max_length=200, blank=True, help_text="Titolo identificativo del giorno")
     descrizione_completa = models.TextField(blank=True, help_text="Dettagli completi del plot per questo giorno")
@@ -84,7 +85,7 @@ class GiornoEvento(models.Model):
         # Migliorato per mostrare il titolo se presente
         return self.titolo if self.titolo else f"Giorno del {self.data_ora_inizio.strftime('%d/%m/%Y')}"
 
-class Quest(models.Model):
+class Quest(SyncableModel, models.Model):
     giorno = models.ForeignKey(GiornoEvento, on_delete=models.CASCADE, related_name='quests')
     titolo = models.CharField(max_length=200)
     orario_indicativo = models.TimeField()
@@ -101,7 +102,7 @@ class Quest(models.Model):
 
 # --- 3. SEZIONE ISTANZE (I MOSTRI SUL CAMPO) ---
 
-class QuestMostro(models.Model):
+class QuestMostro(SyncableModel, models.Model):
     """
     L'istanza specifica di un mostro in una Quest. 
     Ereditato dal Template ma assegnabile a uno Staffer specifico.
@@ -140,7 +141,7 @@ class QuestMostro(models.Model):
             self.guscio = self.template.guscio_base
         super().save(*args, **kwargs)
 
-class PngAssegnato(models.Model):
+class PngAssegnato(SyncableModel, models.Model):
     quest = models.ForeignKey(Quest, on_delete=models.CASCADE, related_name='png_richiesti')
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, limit_choices_to={'tipologia__giocante': False})
     staffer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
@@ -151,7 +152,7 @@ class PngAssegnato(models.Model):
         verbose_name_plural = "5. PnG Assegnati"
         ordering = ['staffer', 'ordine_uscita']
 
-class QuestVista(models.Model):
+class QuestVista(SyncableModel, models.Model):
     quest = models.ForeignKey(Quest, on_delete=models.CASCADE, related_name='viste_previste')
     tipo = models.CharField(max_length=3, choices=[
         ('PG', 'Personaggio'),
@@ -179,7 +180,7 @@ class QuestVista(models.Model):
         verbose_name = "Oggetto Vista Quest"
         verbose_name_plural = "6. Oggetti Vista"
         
-class StaffOffGame(models.Model):
+class StaffOffGame(SyncableModel, models.Model):
     """
     Staffer assegnati a compiti di arbitraggio o gestione Off-Game per una specifica Quest.
     """
@@ -195,7 +196,7 @@ class StaffOffGame(models.Model):
     def __str__(self):
         return f"{self.staffer.username} - {self.compito} ({self.quest.titolo})"
     
-class QuestFase(models.Model):
+class QuestFase(SyncableModel, models.Model):
     """
     Rappresenta un momento specifico della Quest (es. Fase 1: Infiltrazione, Fase 2: Scontro).
     """
@@ -212,7 +213,7 @@ class QuestFase(models.Model):
     def __str__(self):
         return f"Fase {self.ordine}: {self.titolo} ({self.quest.titolo})"
 
-class QuestTask(models.Model):
+class QuestTask(SyncableModel, models.Model):
     """
     Un compito specifico assegnato a un membro dello staff durante una fase.
     """
@@ -259,7 +260,7 @@ class QuestTask(models.Model):
         
 # Sezione PAGINE WEB (CMS) del regolamento ed ambientazione
 
-class PaginaRegolamento(models.Model):
+class PaginaRegolamento(SyncableModel, models.Model):
     titolo = models.CharField(max_length=200)
     slug = models.SlugField(unique=True) # Es: 'combattimento'
     
@@ -288,7 +289,7 @@ class PaginaRegolamento(models.Model):
         return f"{self.titolo} ({self.parent.titolo if self.parent else 'Root'})"
 
 
-class WikiImmagine(models.Model):
+class WikiImmagine(SyncableModel, models.Model):
     """
     Modello per gestire immagini caricate nella wiki.
     Le immagini possono essere inserite come widget nel contenuto delle pagine.
@@ -334,7 +335,7 @@ class WikiImmagine(models.Model):
         return f"{self.titolo} ({self.immagine.name if self.immagine else 'Nessuna immagine'})"
 
 
-class WikiTierWidget(models.Model):
+class WikiTierWidget(SyncableModel, models.Model):
     """
     Widget Tier configurabile per la wiki: associa un Tier con opzioni di visualizzazione
     (stile, collapsible, gradiente colori, ecc.). Usato in {{WIDGET_TIER:id}} dove id è questo widget.
@@ -366,7 +367,7 @@ class WikiTierWidget(models.Model):
         return f"Widget Tier #{self.id} ({self.tier.nome})"
 
 
-class WikiMattoniWidget(models.Model):
+class WikiMattoniWidget(SyncableModel, models.Model):
     """
     Widget Mattoni configurabile per la wiki.
     Usato in {{WIDGET_MATTONI:id}} dove id è questo widget.
@@ -417,7 +418,7 @@ class WikiMattoniWidget(models.Model):
         return f"Widget Mattoni #{self.id} ({self.title or 'senza titolo'})"
 
 
-class WikiButtonWidget(models.Model):
+class WikiButtonWidget(SyncableModel, models.Model):
     """
     Modello per gestire widget di pulsanti configurabili nella wiki.
     Ogni widget contiene una lista di pulsanti con link a pagine wiki o sezioni app.
@@ -449,7 +450,7 @@ class WikiButtonWidget(models.Model):
         return f"Widget Pulsanti #{self.id} ({btn_count} pulsanti)"
 
 
-class WikiButton(models.Model):
+class WikiButton(SyncableModel, models.Model):
     """
     Singolo pulsante all'interno di un WikiButtonWidget.
     """
@@ -576,7 +577,7 @@ class WikiButton(models.Model):
 
 # --- CONFIGURAZIONE SITO E SOCIAL ---
 
-class ConfigurazioneSito(models.Model):
+class ConfigurazioneSito(SyncableModel, models.Model):
     """
     Configurazione generale del sito e informazioni sull'associazione.
     Singleton - dovrebbe esistere un solo record.
@@ -623,7 +624,7 @@ class ConfigurazioneSito(models.Model):
         return config
 
 
-class LinkSocial(models.Model):
+class LinkSocial(SyncableModel, models.Model):
     """
     Link ai social media e canali di comunicazione dell'associazione
     """
