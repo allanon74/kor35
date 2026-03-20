@@ -2,6 +2,7 @@ from rest_framework import viewsets, permissions, status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
+from rest_framework.pagination import PageNumberPagination
 from gestione_plot.permissions import IsStaffOrMaster
 from django.shortcuts import get_object_or_404
 from django.db import transaction
@@ -33,11 +34,18 @@ from .serializers import (
     CerimonialeSerializer,
     PropostaTecnicaSerializer,
     AbilitaFullEditorSerializer,
+    AbilitaStaffListSerializer,
     TierStaffSerializer,
     AbilitaSimpleSerializer,
     InventarioStaffSerializer,
     TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
 )
+
+
+class AbilitaStaffPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 200
 
 class QrInspectorView(APIView):
     """
@@ -292,10 +300,57 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
     """
     CRUD completo per le Abilità (Staff).
     """
-    queryset = Abilita.objects.all().select_related('caratteristica', 'caratteristica_2', 'caratteristica_3', 'aura_riferimento')
+    queryset = Abilita.objects.all()
     serializer_class = AbilitaFullEditorSerializer
     permission_classes = [IsAdminUser]
-    
+    pagination_class = AbilitaStaffPagination
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return AbilitaStaffListSerializer
+        return AbilitaFullEditorSerializer
+
+    def get_queryset(self):
+        # Lista staff ottimizzata: payload ridotto, campi minimi e supporto ricerca.
+        if self.action == 'list':
+            queryset = (
+                Abilita.objects
+                .select_related('aura_riferimento')
+                .only(
+                    'id',
+                    'nome',
+                    'costo_pc',
+                    'costo_crediti',
+                    'is_tratto_aura',
+                    'aura_riferimento__id',
+                    'aura_riferimento__nome',
+                    'aura_riferimento__sigla',
+                    'aura_riferimento__colore',
+                    'aura_riferimento__icona',
+                    'aura_riferimento__icona_nome_originale',
+                    'aura_riferimento__ordine',
+                    'livello_riferimento',
+                )
+                .order_by('nome')
+            )
+            search = self.request.query_params.get('search')
+            if search:
+                queryset = queryset.filter(nome__icontains=search)
+
+            is_tratto_aura = self.request.query_params.get('is_tratto_aura')
+            if is_tratto_aura is not None:
+                if is_tratto_aura.lower() in ('1', 'true', 'yes'):
+                    queryset = queryset.filter(is_tratto_aura=True)
+                elif is_tratto_aura.lower() in ('0', 'false', 'no'):
+                    queryset = queryset.filter(is_tratto_aura=False)
+            return queryset
+
+        return Abilita.objects.select_related(
+            'caratteristica',
+            'caratteristica_2',
+            'caratteristica_3',
+            'aura_riferimento',
+        )
 
 
 class TierStaffViewSet(viewsets.ModelViewSet):

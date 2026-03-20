@@ -2316,6 +2316,23 @@ class AbilitaSimpleSerializer(serializers.ModelSerializer):
         model = Abilita
         fields = ['id', 'nome']
 
+
+class AbilitaStaffListSerializer(serializers.ModelSerializer):
+    """Serializer leggero per la lista staff delle abilita."""
+    aura_riferimento = PunteggioSmallSerializer(read_only=True)
+
+    class Meta:
+        model = Abilita
+        fields = [
+            'id',
+            'nome',
+            'costo_pc',
+            'costo_crediti',
+            'is_tratto_aura',
+            'aura_riferimento',
+            'livello_riferimento',
+        ]
+
 class AbilitaTierSerializer(serializers.ModelSerializer):
     """Gestisce la relazione intermedia (abilita_tier)"""
     abilita_id = serializers.IntegerField(source='abilita.id')
