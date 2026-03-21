@@ -31,6 +31,8 @@ ssl_protocols TLSv1.2 TLSv1.3;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
     }
 
     location ~ ^/(admin|api|summernote|icon_picker|icons|webpush|o)(/|$) {
@@ -39,4 +41,6 @@ ssl_protocols TLSv1.2 TLSv1.3;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
     }

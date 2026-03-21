@@ -440,3 +440,9 @@ CSRF_TRUSTED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS += _split_origins_env(env("EXTRA_CSRF_TRUSTED_ORIGINS", default=""))
 
 CORS_ALLOWED_ORIGINS += _split_origins_env(env("EXTRA_CORS_ALLOWED_ORIGINS", default=""))
+
+# Django dietro Nginx reverse proxy (HTTPS terminato su Nginx).
+# Fondamentale per admin/sessioni/CSRF quando si accede via dominio esterno (es. kor35.ddns.net).
+if CURRENT_ENV == "raspberry_docker":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
