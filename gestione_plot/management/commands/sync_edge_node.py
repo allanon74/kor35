@@ -6,8 +6,8 @@ from django.apps import apps
 from django.contrib.auth.models import Group, User
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db import transaction
-from django.db.models import ForeignKey
+from django.db import IntegrityError, transaction
+from django.db.models import ForeignKey, UniqueConstraint
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -178,9 +178,12 @@ class Command(BaseCommand):
         for field in model._meta.concrete_fields:
             if field.name in {"id", "sync_id"}:
                 continue
-            # Multi-table inheritance: il campo parent_link (es. tabella_ptr)
-            # non arriva nel payload ma va risolto via stesso sync_id sul parent.
+            # Multi-table inheritance: solo il parent_link *immediato* (field.model == model).
+            # Altrimenti su Statistica/Mattone si valorizza anche tabella_ptr (modello Punteggio)
+            # con un Tabella grezzo e Django va in errore (manca tabella_ptr_id sul tipo sbagliato).
             if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
+                if field.model != model:
+                    continue
                 parent_obj = field.related_model.objects.filter(sync_id=sync_id).first()
                 if parent_obj is None:
                     return "defer"
@@ -212,6 +215,23 @@ class Command(BaseCommand):
 
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
+        except IntegrityError as exc:
+            if self._merge_after_integrity_error(
+                model, sync_id, row, update_data, remote_updated_at
+            ):
+                obj = model.objects.filter(sync_id=sync_id).first()
+                if obj is None:
+                    msg = str(exc).strip().replace("\n", " ")
+                    err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}: {msg}"
+                    self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
+                    return "defer"
+            else:
+                msg = str(exc).strip().replace("\n", " ")
+                if len(msg) > 120:
+                    msg = msg[:120] + "..."
+                err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}: {msg}"
+                self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
+                return "defer"
         except Exception as exc:
             # Modelli complessi (es. ereditarieta' multi-table) possono richiedere
             # che altre righe siano gia' presenti. Rimanda e riprova al round successivo.
@@ -232,6 +252,86 @@ class Command(BaseCommand):
             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
 
         return "applied"
+
+    def _iter_unique_field_groups(self, model):
+        """Tuple di nomi campo per vincoli UNIQUE (legacy + UniqueConstraint)."""
+        seen = set()
+        for ut in model._meta.unique_together or ():
+            group = tuple(ut) if not isinstance(ut, str) else (ut,)
+            if group and group not in seen:
+                seen.add(group)
+                yield group
+        for c in getattr(model._meta, "constraints", ()) or ():
+            if isinstance(c, UniqueConstraint) and not c.condition and c.fields:
+                group = tuple(c.fields)
+                if group not in seen:
+                    seen.add(group)
+                    yield group
+
+    def _merge_after_integrity_error(self, model, sync_id, row, update_data, remote_updated_at):
+        """
+        Replica: stessa chiave naturale (unique_together / unique) ma sync_id diverso
+        rispetto al master -> allinea sync_id e campi sulla riga esistente.
+        """
+        for group in self._iter_unique_field_groups(model):
+            kwargs = {}
+            for fname in group:
+                if fname not in update_data:
+                    break
+                kwargs[fname] = update_data[fname]
+            else:
+                existing = model.objects.filter(**kwargs).first()
+                if existing and str(existing.sync_id) != str(sync_id):
+                    patch = dict(update_data)
+                    patch["sync_id"] = sync_id
+                    if remote_updated_at:
+                        patch["updated_at"] = remote_updated_at
+                    model.objects.filter(pk=existing.pk).update(**patch)
+                    return True
+
+        if self._merge_by_natural_unique_key(model, sync_id, row, update_data, remote_updated_at):
+            return True
+        return False
+
+    def _merge_by_natural_unique_key(self, model, sync_id, row, update_data, remote_updated_at):
+        """Campo scalare con unique=True (es. nome, sigla)."""
+        try:
+            from cms.models import CMSPlugin
+        except ImportError:
+            CMSPlugin = None
+        if CMSPlugin and issubclass(model, CMSPlugin):
+            return False
+
+        for field in model._meta.concrete_fields:
+            if field.name in ("id", "sync_id"):
+                continue
+            if not getattr(field, "unique", False):
+                continue
+            if isinstance(field, ForeignKey):
+                continue
+            val = row.get(field.name)
+            if val in (None, ""):
+                continue
+            existing = (
+                model.objects.filter(**{field.name: val})
+                .exclude(sync_id=sync_id)
+                .first()
+            )
+            if not existing:
+                continue
+            if model.objects.filter(sync_id=sync_id).exclude(pk=existing.pk).exists():
+                continue
+
+            if remote_updated_at and existing.updated_at and remote_updated_at <= existing.updated_at:
+                model.objects.filter(pk=existing.pk).update(sync_id=sync_id)
+            else:
+                patch = dict(update_data)
+                patch["sync_id"] = sync_id
+                if remote_updated_at:
+                    patch["updated_at"] = remote_updated_at
+                model.objects.filter(pk=existing.pk).update(**patch)
+            return True
+        return False
 
     def _resolve_fk_value(self, model, field_name, raw_value):
         if raw_value in (None, ""):

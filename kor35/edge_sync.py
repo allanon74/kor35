@@ -7,7 +7,7 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth.models import Group, Permission, User
 from django.db import IntegrityError, transaction
-from django.db.models import ForeignKey
+from django.db.models import ForeignKey, UniqueConstraint
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.core.exceptions import ObjectDoesNotExist
@@ -260,6 +260,9 @@ class EdgeSyncView(APIView):
             # Multi-table inheritance: valorizza automaticamente parent_link
             # (es. tabella_ptr) cercando il parent con lo stesso sync_id.
             if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
+                # Solo parent_link immediato: evita tabella_ptr su Statistica/Mattone/Personaggio.
+                if field.model != model:
+                    continue
                 parent_obj = field.related_model.objects.filter(sync_id=sync_id).first()
                 if parent_obj is None:
                     return "defer"
@@ -290,9 +293,12 @@ class EdgeSyncView(APIView):
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except IntegrityError:
-            if self._merge_by_natural_unique_key(
+            merged = self._merge_by_unique_together_key(
+                model, sync_id, update_data, remote_updated_at
+            ) or self._merge_by_natural_unique_key(
                 model, sync_id, row, update_data, remote_updated_at
-            ):
+            )
+            if merged:
                 obj = model.objects.filter(sync_id=sync_id).first()
                 if not obj:
                     raise
@@ -305,6 +311,38 @@ class EdgeSyncView(APIView):
         if remote_updated_at and obj is not None:
             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
         return "applied"
+
+    def _iter_unique_field_groups(self, model):
+        seen = set()
+        for ut in model._meta.unique_together or ():
+            group = tuple(ut) if not isinstance(ut, str) else (ut,)
+            if group and group not in seen:
+                seen.add(group)
+                yield group
+        for c in getattr(model._meta, "constraints", ()) or ():
+            if isinstance(c, UniqueConstraint) and not c.condition and c.fields:
+                group = tuple(c.fields)
+                if group not in seen:
+                    seen.add(group)
+                    yield group
+
+    def _merge_by_unique_together_key(self, model, sync_id, update_data, remote_updated_at):
+        for group in self._iter_unique_field_groups(model):
+            kwargs = {}
+            for fname in group:
+                if fname not in update_data:
+                    break
+                kwargs[fname] = update_data[fname]
+            else:
+                existing = model.objects.filter(**kwargs).first()
+                if existing and str(existing.sync_id) != str(sync_id):
+                    patch = dict(update_data)
+                    patch["sync_id"] = sync_id
+                    if remote_updated_at:
+                        patch["updated_at"] = remote_updated_at
+                    model.objects.filter(pk=existing.pk).update(**patch)
+                    return True
+        return False
 
     def _merge_by_natural_unique_key(self, model, sync_id, row, update_data, remote_updated_at):
         """
