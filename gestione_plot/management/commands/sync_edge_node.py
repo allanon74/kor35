@@ -202,6 +202,7 @@ class Command(BaseCommand):
                 "is_active": user.is_active,
                 "is_staff": user.is_staff,
                 "is_superuser": user.is_superuser,
+                "password": user.password,
                 "updated_at": user.sync_state.updated_at.isoformat() if hasattr(user, "sync_state") else timezone.now().isoformat(),
             }
             for user in qs.iterator()
@@ -242,6 +243,9 @@ class Command(BaseCommand):
                 "is_staff": row.get("is_staff", False),
                 "is_superuser": row.get("is_superuser", False),
             }
+            # Sincronizza anche l'hash password Django tra Master e Replica.
+            if row.get("password"):
+                defaults["password"] = row.get("password")
             user, _ = User.objects.update_or_create(username=username, defaults=defaults)
             AuthUserSyncState.objects.update_or_create(
                 user=user,

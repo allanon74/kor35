@@ -131,6 +131,7 @@ class EdgeSyncView(APIView):
                     "is_active": u.is_active,
                     "is_staff": u.is_staff,
                     "is_superuser": u.is_superuser,
+                    "password": u.password,
                     "updated_at": st.updated_at.isoformat(),
                 }
             )
@@ -169,16 +170,21 @@ class EdgeSyncView(APIView):
             if local and remote_updated_at and local_updated_at and remote_updated_at <= local_updated_at:
                 continue
 
+            defaults = {
+                "email": row.get("email", ""),
+                "first_name": row.get("first_name", ""),
+                "last_name": row.get("last_name", ""),
+                "is_active": row.get("is_active", True),
+                "is_staff": row.get("is_staff", False),
+                "is_superuser": row.get("is_superuser", False),
+            }
+            # Sincronizza anche l'hash password Django tra Master e Replica.
+            if row.get("password"):
+                defaults["password"] = row.get("password")
+
             user, _ = User.objects.update_or_create(
                 username=username,
-                defaults={
-                    "email": row.get("email", ""),
-                    "first_name": row.get("first_name", ""),
-                    "last_name": row.get("last_name", ""),
-                    "is_active": row.get("is_active", True),
-                    "is_staff": row.get("is_staff", False),
-                    "is_superuser": row.get("is_superuser", False),
-                },
+                defaults=defaults,
             )
             state, _ = AuthUserSyncState.objects.get_or_create(user=user)
             if remote_updated_at:
