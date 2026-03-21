@@ -116,48 +116,84 @@ class Command(BaseCommand):
         self._apply_users_payload(incoming_payload.get("auth.user", []))
         self._apply_groups_payload(incoming_payload.get("auth.group", []))
 
-        # Passo 1: upsert campi semplici (inclusi sync_id/updated_at), FK/M2M differite.
-        deferred_updates = []
+        # Applicazione robusta con retry: evita di perdere record quando le dipendenze
+        # (FK non-null, multi-table inheritance) non sono ancora disponibili al primo giro.
+        pending = []
+        for model_key, records in incoming_payload.items():
+            if model_key in {"auth.user", "auth.group"}:
+                continue
+            model = model_registry.get(model_key)
+            if not model:
+                continue
+            for row in records:
+                pending.append((model, row))
+
+        max_rounds = max(len(pending), 1)
         with transaction.atomic():
-            for model_key, records in incoming_payload.items():
-                if model_key in {"auth.user", "auth.group"}:
-                    continue
-                model = model_registry.get(model_key)
-                if not model:
-                    continue
-                for row in records:
-                    deferred_fk, deferred_m2m = self._upsert_scalars_only(model, row)
-                    deferred_updates.append((model, row.get("sync_id"), deferred_fk, deferred_m2m))
+            for _ in range(max_rounds):
+                if not pending:
+                    return
+                next_pending = []
+                progressed = 0
 
-            # Passo 2: risoluzione FK e M2M per sync_id / username-email.
-            for model, sync_id, deferred_fields, deferred_m2m_fields in deferred_updates:
-                if not sync_id:
-                    continue
-                instance = model.objects.filter(sync_id=sync_id).first()
-                if not instance:
-                    continue
-                updated_fields = []
-                for field_name, raw_value in deferred_fields.items():
-                    resolved = self._resolve_fk_value(model, field_name, raw_value)
-                    setattr(instance, field_name, resolved)
-                    updated_fields.append(field_name)
+                for model, row in pending:
+                    status, deferred_fields, deferred_m2m_fields = self._upsert_scalars_only(model, row)
+                    if status == "defer":
+                        next_pending.append((model, row))
+                        continue
+                    if status == "skipped":
+                        progressed += 1
+                        continue
 
-                for field_name, raw_values in deferred_m2m_fields.items():
-                    resolved_list = self._resolve_m2m_values(model, field_name, raw_values)
-                    getattr(instance, field_name).set(resolved_list)
+                    sync_id = row.get("sync_id")
+                    instance = model.objects.filter(sync_id=sync_id).first() if sync_id else None
+                    if not instance:
+                        next_pending.append((model, row))
+                        continue
 
-                if updated_fields:
-                    instance.save(update_fields=updated_fields + ["updated_at"])
+                    can_apply = True
+                    updated_fields = []
+                    for field_name, raw_value in deferred_fields.items():
+                        field = model._meta.get_field(field_name)
+                        resolved = self._resolve_fk_value(model, field_name, raw_value)
+                        if resolved is None and not field.null and raw_value not in (None, ""):
+                            can_apply = False
+                            break
+                        setattr(instance, field_name, resolved)
+                        updated_fields.append(field_name)
+                    if not can_apply:
+                        next_pending.append((model, row))
+                        continue
+
+                    for field_name, raw_values in deferred_m2m_fields.items():
+                        resolved_list = self._resolve_m2m_values(model, field_name, raw_values)
+                        getattr(instance, field_name).set(resolved_list)
+
+                    if updated_fields:
+                        instance.save(update_fields=updated_fields + ["updated_at"])
+                    progressed += 1
+
+                pending = next_pending
+                if progressed == 0:
+                    break
+
+        if pending:
+            first_model, first_row = pending[0]
+            self.stderr.write(
+                self.style.WARNING(
+                    f"Record non applicati ({len(pending)}). Primo: {first_model._meta.label_lower} sync_id={first_row.get('sync_id')}"
+                )
+            )
 
     def _upsert_scalars_only(self, model, row):
         sync_id = row.get("sync_id")
         if not sync_id:
-            return {}, {}
+            return "skipped", {}, {}
 
         remote_updated_at = parse_datetime(row.get("updated_at")) if row.get("updated_at") else None
         local_obj = model.objects.filter(sync_id=sync_id).first()
         if local_obj and remote_updated_at and local_obj.updated_at and remote_updated_at <= local_obj.updated_at:
-            return {}, {}
+            return "skipped", {}, {}
 
         update_data = {}
         deferred_fk = {}
@@ -189,11 +225,11 @@ class Command(BaseCommand):
         try:
             model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except Exception:
-            # Alcuni modelli complessi possono richiedere FK obbligatorie già presenti.
-            # In tal caso il record verrà riprocessato al giro successivo.
-            return {}, {}
+            # Modelli complessi (es. ereditarieta' multi-table) possono richiedere
+            # che altre righe siano gia' presenti. Rimanda e riprova al round successivo.
+            return "defer", {}, {}
 
-        return deferred_fk, deferred_m2m
+        return "applied", deferred_fk, deferred_m2m
 
     def _resolve_fk_value(self, model, field_name, raw_value):
         if raw_value in (None, ""):
