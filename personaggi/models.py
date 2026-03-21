@@ -722,7 +722,7 @@ class MattoneStatistica(CondizioneStatisticaMixin):
 
 class Aura(Punteggio):
     class Meta: proxy = True; verbose_name = "Aura"; verbose_name_plural = "Aure"
-    def save(self, *args, **kwargs): self.type = AURA; super().save(*args, **kwargs)
+    def save(self, *args, **kwargs): self.tipo = AURA; super().save(*args, **kwargs)
 
 class ModelloAuraRequisitoDoppia(SyncableModel, models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_doppia_rel')

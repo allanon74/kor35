@@ -215,12 +215,17 @@ class Command(BaseCommand):
         except Exception as exc:
             # Modelli complessi (es. ereditarieta' multi-table) possono richiedere
             # che altre righe siano gia' presenti. Rimanda e riprova al round successivo.
-            err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}"
+            msg = str(exc).strip().replace("\n", " ")
+            if len(msg) > 120:
+                msg = msg[:120] + "..."
+            err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}: {msg}"
             self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
             return "defer"
 
         for field_name, raw_values in m2m_updates.items():
-            resolved_list = self._resolve_m2m_values(model, field_name, raw_values)
+            resolved_list, unresolved = self._resolve_m2m_values(model, field_name, raw_values)
+            if unresolved:
+                return "defer"
             getattr(obj, field_name).set(resolved_list)
 
         if remote_updated_at:
@@ -248,6 +253,7 @@ class Command(BaseCommand):
         field = model._meta.get_field(field_name)
         related_model = field.related_model
         resolved = []
+        unresolved = 0
         for raw_value in raw_values or []:
             if raw_value in (None, ""):
                 continue
@@ -260,7 +266,9 @@ class Command(BaseCommand):
                 obj = None
             if obj is not None:
                 resolved.append(obj)
-        return resolved
+            else:
+                unresolved += 1
+        return resolved, unresolved
 
     def _build_users_payload(self, since):
         qs = User.objects.all().select_related("sync_state")
