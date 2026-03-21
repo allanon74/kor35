@@ -117,8 +117,8 @@ class Command(BaseCommand):
         self._apply_users_payload(incoming_payload.get("auth.user", []))
         self._apply_groups_payload(incoming_payload.get("auth.group", []))
 
-        # Applicazione robusta con retry: evita di perdere record quando le dipendenze
-        # (FK non-null, multi-table inheritance) non sono ancora disponibili al primo giro.
+        # Applicazione robusta con retry: processa record solo quando tutte le FK
+        # obbligatorie (e parent link) sono risolvibili.
         pending = []
         for model_key, records in incoming_payload.items():
             if model_key in {"auth.user", "auth.group"}:
@@ -138,40 +138,13 @@ class Command(BaseCommand):
                 progressed = 0
 
                 for model, row in pending:
-                    status, deferred_fields, deferred_m2m_fields = self._upsert_scalars_only(model, row)
+                    status = self._try_apply_one(model, row)
                     if status == "defer":
                         next_pending.append((model, row))
                         continue
                     if status == "skipped":
                         progressed += 1
                         continue
-
-                    sync_id = row.get("sync_id")
-                    instance = model.objects.filter(sync_id=sync_id).first() if sync_id else None
-                    if not instance:
-                        next_pending.append((model, row))
-                        continue
-
-                    can_apply = True
-                    updated_fields = []
-                    for field_name, raw_value in deferred_fields.items():
-                        field = model._meta.get_field(field_name)
-                        resolved = self._resolve_fk_value(model, field_name, raw_value)
-                        if resolved is None and not field.null and raw_value not in (None, ""):
-                            can_apply = False
-                            break
-                        setattr(instance, field_name, resolved)
-                        updated_fields.append(field_name)
-                    if not can_apply:
-                        next_pending.append((model, row))
-                        continue
-
-                    for field_name, raw_values in deferred_m2m_fields.items():
-                        resolved_list = self._resolve_m2m_values(model, field_name, raw_values)
-                        getattr(instance, field_name).set(resolved_list)
-
-                    if updated_fields:
-                        instance.save(update_fields=updated_fields + ["updated_at"])
                     progressed += 1
 
                 pending = next_pending
@@ -190,19 +163,17 @@ class Command(BaseCommand):
             for key, count in sorted(self._defer_errors.items(), key=lambda x: x[1], reverse=True)[:10]:
                 self.stderr.write(f" - {key}: {count}")
 
-    def _upsert_scalars_only(self, model, row):
+    def _try_apply_one(self, model, row):
         sync_id = row.get("sync_id")
         if not sync_id:
-            return "skipped", {}, {}
+            return "skipped"
 
         remote_updated_at = parse_datetime(row.get("updated_at")) if row.get("updated_at") else None
         local_obj = model.objects.filter(sync_id=sync_id).first()
         if local_obj and remote_updated_at and local_obj.updated_at and remote_updated_at <= local_obj.updated_at:
-            return "skipped", {}, {}
+            return "skipped"
 
         update_data = {}
-        deferred_fk = {}
-        deferred_m2m = {}
 
         for field in model._meta.concrete_fields:
             if field.name in {"id", "sync_id"}:
@@ -212,14 +183,17 @@ class Command(BaseCommand):
             if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
                 parent_obj = field.related_model.objects.filter(sync_id=sync_id).first()
                 if parent_obj is None:
-                    return "defer", {}, {}
+                    return "defer"
                 update_data[field.name] = parent_obj
                 continue
             if field.name not in row:
                 continue
             value = row[field.name]
             if isinstance(field, ForeignKey):
-                deferred_fk[field.name] = value
+                resolved = self._resolve_fk_value(model, field.name, value)
+                if resolved is None and not field.null and value not in (None, ""):
+                    return "defer"
+                update_data[field.name] = resolved
                 continue
             if field.name == "updated_at":
                 dt = parse_datetime(value) if value else None
@@ -228,23 +202,31 @@ class Command(BaseCommand):
                 continue
             update_data[field.name] = value
 
+        m2m_updates = {}
         for m2m_field in model._meta.many_to_many:
             if m2m_field.auto_created:
                 continue
             if m2m_field.name not in row:
                 continue
-            deferred_m2m[m2m_field.name] = row.get(m2m_field.name) or []
+            m2m_updates[m2m_field.name] = row.get(m2m_field.name) or []
 
         try:
-            model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
+            obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except Exception as exc:
             # Modelli complessi (es. ereditarieta' multi-table) possono richiedere
             # che altre righe siano gia' presenti. Rimanda e riprova al round successivo.
             err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}"
             self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
-            return "defer", {}, {}
+            return "defer"
 
-        return "applied", deferred_fk, deferred_m2m
+        for field_name, raw_values in m2m_updates.items():
+            resolved_list = self._resolve_m2m_values(model, field_name, raw_values)
+            getattr(obj, field_name).set(resolved_list)
+
+        if remote_updated_at:
+            model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+
+        return "applied"
 
     def _resolve_fk_value(self, model, field_name, raw_value):
         if raw_value in (None, ""):
