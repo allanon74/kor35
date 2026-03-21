@@ -36,6 +36,7 @@ class Command(BaseCommand):
             return
 
         model_registry = self._model_registry()
+        self._defer_errors = {}
         since = self._load_since(state_path, options.get("since"))
         pull_only = bool(options.get("pull_only"))
         outgoing = {} if pull_only else self._build_outgoing_payload(model_registry, since)
@@ -184,6 +185,10 @@ class Command(BaseCommand):
                     f"Record non applicati ({len(pending)}). Primo: {first_model._meta.label_lower} sync_id={first_row.get('sync_id')}"
                 )
             )
+        if self._defer_errors:
+            self.stderr.write(self.style.WARNING("Top errori defer:"))
+            for key, count in sorted(self._defer_errors.items(), key=lambda x: x[1], reverse=True)[:10]:
+                self.stderr.write(f" - {key}: {count}")
 
     def _upsert_scalars_only(self, model, row):
         sync_id = row.get("sync_id")
@@ -232,9 +237,11 @@ class Command(BaseCommand):
 
         try:
             model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
-        except Exception:
+        except Exception as exc:
             # Modelli complessi (es. ereditarieta' multi-table) possono richiedere
             # che altre righe siano gia' presenti. Rimanda e riprova al round successivo.
+            err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}"
+            self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
             return "defer", {}, {}
 
         return "applied", deferred_fk, deferred_m2m
