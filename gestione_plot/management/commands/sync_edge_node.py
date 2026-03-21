@@ -20,6 +20,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--since", type=str, default=None, help="ISO datetime override per l'export locale.")
+        parser.add_argument(
+            "--pull-only",
+            action="store_true",
+            help="Scarica e applica solo dati dal Master, senza inviare modifiche locali.",
+        )
 
     def handle(self, *args, **options):
         sync_url = getattr(settings, "EDGE_SYNC_URL", "").strip()
@@ -32,7 +37,8 @@ class Command(BaseCommand):
 
         model_registry = self._model_registry()
         since = self._load_since(state_path, options.get("since"))
-        outgoing = self._build_outgoing_payload(model_registry, since)
+        pull_only = bool(options.get("pull_only"))
+        outgoing = {} if pull_only else self._build_outgoing_payload(model_registry, since)
 
         headers = {"Content-Type": "application/json"}
         if sync_token:
@@ -110,8 +116,8 @@ class Command(BaseCommand):
         self._apply_users_payload(incoming_payload.get("auth.user", []))
         self._apply_groups_payload(incoming_payload.get("auth.group", []))
 
-        # Passo 1: upsert campi semplici (inclusi sync_id/updated_at), FK differite.
-        deferred_fk_updates = []
+        # Passo 1: upsert campi semplici (inclusi sync_id/updated_at), FK/M2M differite.
+        deferred_updates = []
         with transaction.atomic():
             for model_key, records in incoming_payload.items():
                 if model_key in {"auth.user", "auth.group"}:
@@ -120,33 +126,42 @@ class Command(BaseCommand):
                 if not model:
                     continue
                 for row in records:
-                    deferred = self._upsert_scalars_only(model, row)
-                    deferred_fk_updates.append((model, row.get("sync_id"), deferred))
+                    deferred_fk, deferred_m2m = self._upsert_scalars_only(model, row)
+                    deferred_updates.append((model, row.get("sync_id"), deferred_fk, deferred_m2m))
 
-            # Passo 2: risoluzione FK per sync_id / username-email.
-            for model, sync_id, deferred_fields in deferred_fk_updates:
-                if not sync_id or not deferred_fields:
+            # Passo 2: risoluzione FK e M2M per sync_id / username-email.
+            for model, sync_id, deferred_fields, deferred_m2m_fields in deferred_updates:
+                if not sync_id:
                     continue
                 instance = model.objects.filter(sync_id=sync_id).first()
                 if not instance:
                     continue
+                updated_fields = []
                 for field_name, raw_value in deferred_fields.items():
                     resolved = self._resolve_fk_value(model, field_name, raw_value)
                     setattr(instance, field_name, resolved)
-                instance.save(update_fields=list(deferred_fields.keys()) + ["updated_at"])
+                    updated_fields.append(field_name)
+
+                for field_name, raw_values in deferred_m2m_fields.items():
+                    resolved_list = self._resolve_m2m_values(model, field_name, raw_values)
+                    getattr(instance, field_name).set(resolved_list)
+
+                if updated_fields:
+                    instance.save(update_fields=updated_fields + ["updated_at"])
 
     def _upsert_scalars_only(self, model, row):
         sync_id = row.get("sync_id")
         if not sync_id:
-            return {}
+            return {}, {}
 
         remote_updated_at = parse_datetime(row.get("updated_at")) if row.get("updated_at") else None
         local_obj = model.objects.filter(sync_id=sync_id).first()
         if local_obj and remote_updated_at and local_obj.updated_at and remote_updated_at <= local_obj.updated_at:
-            return {}
+            return {}, {}
 
         update_data = {}
         deferred_fk = {}
+        deferred_m2m = {}
 
         for field in model._meta.concrete_fields:
             if field.name in {"id", "sync_id"}:
@@ -164,14 +179,21 @@ class Command(BaseCommand):
                 continue
             update_data[field.name] = value
 
+        for m2m_field in model._meta.many_to_many:
+            if m2m_field.auto_created:
+                continue
+            if m2m_field.name not in row:
+                continue
+            deferred_m2m[m2m_field.name] = row.get(m2m_field.name) or []
+
         try:
             model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except Exception:
             # Alcuni modelli complessi possono richiedere FK obbligatorie già presenti.
             # In tal caso il record verrà riprocessato al giro successivo.
-            return {}
+            return {}, {}
 
-        return deferred_fk
+        return deferred_fk, deferred_m2m
 
     def _resolve_fk_value(self, model, field_name, raw_value):
         if raw_value in (None, ""):
@@ -188,6 +210,24 @@ class Command(BaseCommand):
             return related_model.objects.filter(sync_id=raw_value).first()
 
         return None
+
+    def _resolve_m2m_values(self, model, field_name, raw_values):
+        field = model._meta.get_field(field_name)
+        related_model = field.related_model
+        resolved = []
+        for raw_value in raw_values or []:
+            if raw_value in (None, ""):
+                continue
+            if related_model._meta.label_lower == "auth.user":
+                obj = related_model.objects.filter(email=raw_value).first()
+                obj = obj or related_model.objects.filter(username=raw_value).first()
+            elif hasattr(related_model, "sync_id"):
+                obj = related_model.objects.filter(sync_id=raw_value).first()
+            else:
+                obj = None
+            if obj is not None:
+                resolved.append(obj)
+        return resolved
 
     def _build_users_payload(self, since):
         qs = User.objects.all().select_related("sync_state")

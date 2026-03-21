@@ -118,4 +118,16 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
         value = getattr(instance, field.name, None)
         data[field.name] = json_safe_for_sync(value)
 
+    # Include anche le relazioni M2M espresse come chiavi di sync.
+    for m2m_field in model._meta.many_to_many:
+        if m2m_field.auto_created:
+            continue
+        related_items = []
+        for related_obj in getattr(instance, m2m_field.name).all():
+            if isinstance(related_obj, User):
+                related_items.append(related_obj.email or related_obj.username)
+            elif hasattr(related_obj, "sync_id"):
+                related_items.append(str(related_obj.sync_id))
+        data[m2m_field.name] = related_items
+
     return data

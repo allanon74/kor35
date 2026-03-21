@@ -269,6 +269,16 @@ class EdgeSyncView(APIView):
             else:
                 update_data[field.name] = value
 
+        m2m_updates = {}
+        for m2m_field in model._meta.many_to_many:
+            if m2m_field.auto_created:
+                continue
+            if m2m_field.name not in row:
+                continue
+            raw_values = row.get(m2m_field.name) or []
+            resolved_values = self._resolve_m2m_values(m2m_field, raw_values)
+            m2m_updates[m2m_field.name] = resolved_values
+
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except IntegrityError:
@@ -280,6 +290,9 @@ class EdgeSyncView(APIView):
                     raise
             else:
                 raise
+
+        for field_name, related_list in m2m_updates.items():
+            getattr(obj, field_name).set(related_list)
 
         if remote_updated_at and obj is not None:
             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
@@ -335,3 +348,21 @@ class EdgeSyncView(APIView):
         if hasattr(related_model, "sync_id"):
             return related_model.objects.filter(sync_id=raw_value).first()
         return None
+
+    def _resolve_m2m_values(self, field, raw_values):
+        if not raw_values:
+            return []
+        related_model = field.related_model
+        resolved = []
+        for raw_value in raw_values:
+            if raw_value in (None, ""):
+                continue
+            if related_model._meta.label_lower == "auth.user":
+                obj = related_model.objects.filter(email=raw_value).first() or related_model.objects.filter(username=raw_value).first()
+            elif hasattr(related_model, "sync_id"):
+                obj = related_model.objects.filter(sync_id=raw_value).first()
+            else:
+                obj = None
+            if obj is not None:
+                resolved.append(obj)
+        return resolved
