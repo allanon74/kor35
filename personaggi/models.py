@@ -495,7 +495,7 @@ def genera_html_cariche(item, personaggio=None):
     return html
 
 
-# --- TIPI ---
+# --- TIPI --- 
 CARATTERISTICA = "CA"
 STATISTICA = "ST"
 ELEMENTO = "EL"
