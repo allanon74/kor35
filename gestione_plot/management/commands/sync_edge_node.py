@@ -202,6 +202,14 @@ class Command(BaseCommand):
         for field in model._meta.concrete_fields:
             if field.name in {"id", "sync_id"}:
                 continue
+            # Multi-table inheritance: il campo parent_link (es. tabella_ptr)
+            # non arriva nel payload ma va risolto via stesso sync_id sul parent.
+            if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
+                parent_obj = field.related_model.objects.filter(sync_id=sync_id).first()
+                if parent_obj is None:
+                    return "defer", {}, {}
+                update_data[field.name] = parent_obj
+                continue
             if field.name not in row:
                 continue
             value = row[field.name]

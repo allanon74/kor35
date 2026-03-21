@@ -257,6 +257,14 @@ class EdgeSyncView(APIView):
         for field in model._meta.concrete_fields:
             if field.name in {"id", "sync_id", "updated_at"}:
                 continue
+            # Multi-table inheritance: valorizza automaticamente parent_link
+            # (es. tabella_ptr) cercando il parent con lo stesso sync_id.
+            if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
+                parent_obj = field.related_model.objects.filter(sync_id=sync_id).first()
+                if parent_obj is None:
+                    return "defer"
+                update_data[field.name] = parent_obj
+                continue
             if field.name not in row:
                 continue
 
