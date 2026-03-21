@@ -1,0 +1,94 @@
+services:
+  # --- DATABASE (PostgreSQL) ---
+  db:
+    image: postgres:15-alpine
+    container_name: kor35_db
+    restart: always
+    environment:
+      POSTGRES_DB: kor35_db
+      POSTGRES_USER: user_admin
+      POSTGRES_PASSWORD: 4_Tru87M#zt
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
+# --- REDIS (Per i WebSockets di Django Channels) ---
+  redis:
+    image: redis:7-alpine
+    container_name: kor35_redis
+    restart: always
+    expose:
+      - "6379"
+
+  # --- BACKEND (Django - Gunicorn/WSGI) ---
+  backend:
+    build: 
+      context: ./backend_src
+    container_name: django_app
+    restart: always
+    env_file:                
+      - ./backend_src/.env   
+    depends_on:
+      - db
+    environment:
+      - DEBUG=False  # <-- Lascia solo il debug qui, il DB lo legge dal .env!
+    volumes:
+      - ./backend_src:/app
+      - ./static_data:/app/static
+      - ./media_data:/app/media
+    expose:
+      - "8000"
+    command: gunicorn kor35.wsgi:application --bind 0.0.0.0:8000
+
+  # --- DAPHNE (WebSockets / ASGI) ---
+  daphne:
+    build: 
+      context: ./backend_src
+    container_name: daphne_app
+    restart: always
+    env_file:                
+      - ./backend_src/.env   
+    depends_on:
+      - db
+    environment:
+      - DEBUG=False  # <-- Idem come sopra
+    volumes:
+      - ./backend_src:/app
+      - ./static_data:/app/static
+      - ./media_data:/app/media
+    expose:
+      - "8001"
+    command: daphne -b 0.0.0.0 -p 8001 kor35.asgi:application
+
+# --- FRONTEND (Nginx + React Build) ---
+  frontend:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"    # <-- AGGIUNTA LA PORTA HTTPS
+    volumes:
+      - ./nginx_conf:/etc/nginx/conf.d
+      - ./react_build:/usr/share/nginx/html
+      - ./static_data:/app/static
+      - ./media_data:/app/media
+      - ./certs:/etc/nginx/certs:ro
+      - ./certs_ddns:/etc/nginx/certs_ddns:ro      # <-- AGGIUNTA LA CARTELLA DEI CERTIFICATI
+    depends_on:
+      - backend
+      - daphne
+
+  # --- CONTROLLER ANTENNE (TP-Link Omada) ---
+  omada-controller:
+    image: mbentley/omada-controller:latest
+    container_name: omada_controller
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - MANAGE_HTTP_PORT=8088
+      - MANAGE_HTTPS_PORT=8043
+    volumes:
+      - ./omada_data:/opt/tplink/EAPController/data
+      - ./omada_logs:/opt/tplink/EAPController/logs
