@@ -222,28 +222,10 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     def get_produce_mutazioni(self, obj):
         return obj.produce_aumenti and obj.nome_tipo_aumento == 'Mutazione'
         
-    def get_base_url(self):
-        request = self.context.get('request')
-        if request:
-            return f"{request.scheme}://{request.get_host()}"
-        # FALLBACK HARCODED COME RICHIESTO
-        return "https://www.kor35.it"
-
-    def get_icona_url_assoluto(self, obj):
-        if not obj.icona:
-            return None
-        base_url = self.get_base_url()
-        
-        media_url = settings.MEDIA_URL
-        if not media_url: media_url = "/media/"
-        if media_url.startswith('/'): media_url = media_url[1:]
-        if media_url and not media_url.endswith('/'): media_url = f"{media_url}/"
-        icona_path = str(obj.icona)
-        if icona_path.startswith('/'): icona_path = icona_path[1:]
-        return f"{base_url}/{media_url}{icona_path}"
-
     def get_icona_url(self, obj):
-        return self.get_icona_url_assoluto(obj)
+        # Sempre path relativo (/media/...), come la property sul modello.
+        # Così mirror, staging e prod servono i file dal proprio host (nessun URL fisso verso produzione).
+        return obj.icona_url
 
     def get_is_primaria(self, obj):
         return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False

@@ -381,11 +381,8 @@ class WikiImmagineSerializer(serializers.ModelSerializer):
         read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
     
     def get_immagine_url(self, obj):
-        """Restituisce l'URL completo dell'immagine"""
+        """Path relativo dell'immagine (/media/...): stesso host dell'API (mirror incluso)."""
         if obj.immagine:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.immagine.url)
             return obj.immagine.url
         return None
 
