@@ -416,13 +416,27 @@ DEFAULT_FROM_EMAIL = SMTP_EMAIL
 X_FRAME_OPTIONS = "SAMEORIGIN"
 SILENCED_SYSTEM_CHECKS = ["security.W019"]
 
+def _split_origins_env(value: str):
+    """Lista origini da variabile env separata da virgole (es. mirror su LAN / Pi come AP)."""
+    if not value or not str(value).strip():
+        return []
+    return [o.strip() for o in str(value).split(",") if o.strip()]
+
+
 CSRF_TRUSTED_ORIGINS = [
     "https://www.k-o-r-35.it",
-    "https://localhost:5173", # Fondamentale per le chiamate POST da locale
+    "https://localhost:5173",  # Vite dev (HTTPS)
+    "http://localhost:5173",  # Vite dev (HTTP)
     "https://app.k-o-r-35.it",
     "https://app.kor35.it",
     "https://www.kor35.it",
     "https://social.k-o-r-35.it",
     "https://social.kor35.it",
     "https://kor35.ddns.net",
+    "http://kor35.ddns.net",  # mirror LAN spesso in HTTP
 ]
+# Mirror / Pi come access point: aggiungi l’URL esatto che vedi nel browser (schema+host+porta).
+# Esempio: EXTRA_CSRF_TRUSTED_ORIGINS=http://192.168.4.1,http://192.168.4.1:80
+CSRF_TRUSTED_ORIGINS += _split_origins_env(env("EXTRA_CSRF_TRUSTED_ORIGINS", default=""))
+
+CORS_ALLOWED_ORIGINS += _split_origins_env(env("EXTRA_CORS_ALLOWED_ORIGINS", default=""))
