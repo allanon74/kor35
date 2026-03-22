@@ -5,6 +5,7 @@ import requests
 from django.apps import apps
 from django.contrib.auth.models import Group, User
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand
 from django.db import IntegrityError, transaction
 from django.db.models import ForeignKey, UniqueConstraint
@@ -170,8 +171,35 @@ class Command(BaseCommand):
 
         remote_updated_at = parse_datetime(row.get("updated_at")) if row.get("updated_at") else None
         local_obj = model.objects.filter(sync_id=sync_id).first()
-        if local_obj and remote_updated_at and local_obj.updated_at and remote_updated_at <= local_obj.updated_at:
-            return "skipped"
+
+        # M2M (es. mattoni_materia_permessi) non aggiornano updated_at sul modello padre: se
+        # saltiamo tutto il record per LWW, quei valori non verrebbero mai applicati.
+        m2m_updates = {}
+        for m2m_field in model._meta.many_to_many:
+            if m2m_field.auto_created:
+                continue
+            if m2m_field.name not in row:
+                continue
+            m2m_updates[m2m_field.name] = row.get(m2m_field.name) or []
+
+        skip_scalars = bool(
+            local_obj
+            and remote_updated_at
+            and local_obj.updated_at
+            and remote_updated_at <= local_obj.updated_at
+        )
+        if skip_scalars:
+            if not m2m_updates:
+                return "skipped"
+            obj = local_obj
+            for field_name, raw_values in m2m_updates.items():
+                resolved_list, unresolved = self._resolve_m2m_values(model, field_name, raw_values)
+                if unresolved:
+                    return "defer"
+                getattr(obj, field_name).set(resolved_list)
+            if remote_updated_at:
+                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+            return "applied"
 
         update_data = {}
 
@@ -205,14 +233,6 @@ class Command(BaseCommand):
                 continue
             update_data[field.name] = value
 
-        m2m_updates = {}
-        for m2m_field in model._meta.many_to_many:
-            if m2m_field.auto_created:
-                continue
-            if m2m_field.name not in row:
-                continue
-            m2m_updates[m2m_field.name] = row.get(m2m_field.name) or []
-
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except IntegrityError as exc:
@@ -222,6 +242,25 @@ class Command(BaseCommand):
                 obj = model.objects.filter(sync_id=sync_id).first()
                 if obj is None:
                     msg = str(exc).strip().replace("\n", " ")
+                    err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}: {msg}"
+                    self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
+                    return "defer"
+            else:
+                msg = str(exc).strip().replace("\n", " ")
+                if len(msg) > 120:
+                    msg = msg[:120] + "..."
+                err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}: {msg}"
+                self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
+                return "defer"
+        except ValidationError as exc:
+            if self._merge_after_validation_error(
+                model, sync_id, update_data, remote_updated_at
+            ):
+                obj = model.objects.filter(sync_id=sync_id).first()
+                if obj is None:
+                    msg = str(exc).strip().replace("\n", " ")
+                    if len(msg) > 120:
+                        msg = msg[:120] + "..."
                     err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}: {msg}"
                     self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
                     return "defer"
@@ -292,6 +331,40 @@ class Command(BaseCommand):
         if self._merge_by_natural_unique_key(model, sync_id, row, update_data, remote_updated_at):
             return True
         return False
+
+    def _merge_after_validation_error(self, model, sync_id, update_data, remote_updated_at):
+        """
+        Alcuni modelli applicano vincoli solo in clean()/save() (no unique_together DB).
+        Es. PersonaggioModelloAura: un solo modello per (personaggio, aura).
+        """
+        if model._meta.label_lower == "personaggi.personaggiomodelloaura":
+            return self._merge_personaggio_modello_aura(
+                model, sync_id, update_data, remote_updated_at
+            )
+        return False
+
+    def _merge_personaggio_modello_aura(self, model, sync_id, update_data, remote_updated_at):
+        personaggio = update_data.get("personaggio")
+        modello_aura = update_data.get("modello_aura")
+        if personaggio is None or modello_aura is None:
+            return False
+        aura_id = getattr(modello_aura, "aura_id", None)
+        if aura_id is None:
+            aura = getattr(modello_aura, "aura", None)
+            if aura is None:
+                return False
+            aura_id = aura.pk
+        existing = model.objects.filter(
+            personaggio=personaggio, modello_aura__aura_id=aura_id
+        ).first()
+        if existing is None:
+            return False
+        patch = dict(update_data)
+        patch["sync_id"] = sync_id
+        if remote_updated_at:
+            patch["updated_at"] = remote_updated_at
+        model.objects.filter(pk=existing.pk).update(**patch)
+        return True
 
     def _merge_by_natural_unique_key(self, model, sync_id, row, update_data, remote_updated_at):
         """Campo scalare con unique=True (es. nome, sigla)."""

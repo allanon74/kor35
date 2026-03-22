@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import ForeignKey, UniqueConstraint
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError as DjangoValidationError
 from rest_framework import permissions, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -250,8 +250,32 @@ class EdgeSyncView(APIView):
 
         remote_updated_at = parse_datetime(row.get("updated_at")) if row.get("updated_at") else None
         local = model.objects.filter(sync_id=sync_id).first()
-        if local and remote_updated_at and local.updated_at and remote_updated_at <= local.updated_at:
-            return "skipped"
+
+        m2m_raw = {}
+        for m2m_field in model._meta.many_to_many:
+            if m2m_field.auto_created:
+                continue
+            if m2m_field.name not in row:
+                continue
+            m2m_raw[m2m_field.name] = row.get(m2m_field.name) or []
+
+        skip_scalars = bool(
+            local
+            and remote_updated_at
+            and local.updated_at
+            and remote_updated_at <= local.updated_at
+        )
+        if skip_scalars:
+            if not m2m_raw:
+                return "skipped"
+            obj = local
+            for field_name, raw_list in m2m_raw.items():
+                field = model._meta.get_field(field_name)
+                resolved_list = self._resolve_m2m_values(field, raw_list)
+                getattr(obj, field_name).set(resolved_list)
+            if remote_updated_at:
+                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+            return "applied"
 
         update_data = {}
         for field in model._meta.concrete_fields:
@@ -281,14 +305,9 @@ class EdgeSyncView(APIView):
                 update_data[field.name] = value
 
         m2m_updates = {}
-        for m2m_field in model._meta.many_to_many:
-            if m2m_field.auto_created:
-                continue
-            if m2m_field.name not in row:
-                continue
-            raw_values = row.get(m2m_field.name) or []
-            resolved_values = self._resolve_m2m_values(m2m_field, raw_values)
-            m2m_updates[m2m_field.name] = resolved_values
+        for field_name, raw_list in m2m_raw.items():
+            field = model._meta.get_field(field_name)
+            m2m_updates[field_name] = self._resolve_m2m_values(field, raw_list)
 
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
@@ -299,6 +318,15 @@ class EdgeSyncView(APIView):
                 model, sync_id, row, update_data, remote_updated_at
             )
             if merged:
+                obj = model.objects.filter(sync_id=sync_id).first()
+                if not obj:
+                    raise
+            else:
+                raise
+        except DjangoValidationError:
+            if self._merge_after_validation_error(
+                model, sync_id, update_data, remote_updated_at
+            ):
                 obj = model.objects.filter(sync_id=sync_id).first()
                 if not obj:
                     raise
@@ -343,6 +371,36 @@ class EdgeSyncView(APIView):
                     model.objects.filter(pk=existing.pk).update(**patch)
                     return True
         return False
+
+    def _merge_after_validation_error(self, model, sync_id, update_data, remote_updated_at):
+        if model._meta.label_lower == "personaggi.personaggiomodelloaura":
+            return self._merge_personaggio_modello_aura(
+                model, sync_id, update_data, remote_updated_at
+            )
+        return False
+
+    def _merge_personaggio_modello_aura(self, model, sync_id, update_data, remote_updated_at):
+        personaggio = update_data.get("personaggio")
+        modello_aura = update_data.get("modello_aura")
+        if personaggio is None or modello_aura is None:
+            return False
+        aura_id = getattr(modello_aura, "aura_id", None)
+        if aura_id is None:
+            aura = getattr(modello_aura, "aura", None)
+            if aura is None:
+                return False
+            aura_id = aura.pk
+        existing = model.objects.filter(
+            personaggio=personaggio, modello_aura__aura_id=aura_id
+        ).first()
+        if existing is None:
+            return False
+        patch = dict(update_data)
+        patch["sync_id"] = sync_id
+        if remote_updated_at:
+            patch["updated_at"] = remote_updated_at
+        model.objects.filter(pk=existing.pk).update(**patch)
+        return True
 
     def _merge_by_natural_unique_key(self, model, sync_id, row, update_data, remote_updated_at):
         """
