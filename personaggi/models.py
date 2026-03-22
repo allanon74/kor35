@@ -728,16 +728,27 @@ class ModelloAuraRequisitoDoppia(SyncableModel, models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_doppia_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
-        
+
+    class Meta:
+        unique_together = [["modello", "requisito"]]
+
+
 class ModelloAuraRequisitoMattone(SyncableModel, models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_mattone_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
 
+    class Meta:
+        unique_together = [["modello", "requisito"]]
+
+
 class ModelloAuraRequisitoCaratt(SyncableModel, models.Model):
     modello = models.ForeignKey('ModelloAura', on_delete=models.CASCADE, related_name='req_caratt_rel')
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
+
+    class Meta:
+        unique_together = [["modello", "requisito"]]
 
 class ModelloAura(SyncableModel, models.Model):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="modelli_definiti")
@@ -819,23 +830,42 @@ class abilita_tier(A_modello):
     tabella = models.ForeignKey(Tier, on_delete=models.CASCADE)
     ordine = models.IntegerField(default=10)
 
+    class Meta:
+        unique_together = [["abilita", "tabella"]]
+
+
 class abilita_prerequisito(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_prerequisiti")
     prerequisito = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="abilita_abilitati")
+
+    class Meta:
+        unique_together = [["abilita", "prerequisito"]]
+
 
 class abilita_requisito(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     requisito = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo__in': (CARATTERISTICA, CONDIZIONE, STATISTICA, AURA)})
     valore = models.IntegerField(default=1)
 
+    class Meta:
+        unique_together = [["abilita", "requisito"]]
+
+
 class abilita_sbloccata(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     sbloccata = models.ForeignKey(Tabella, on_delete=models.CASCADE)
-    
+
+    class Meta:
+        unique_together = [["abilita", "sbloccata"]]
+
+
 class abilita_punteggio(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     punteggio = models.ForeignKey(Punteggio, on_delete=models.CASCADE)
     valore = models.IntegerField(default=1)
+
+    class Meta:
+        unique_together = [["abilita", "punteggio"]]
 
 class Attivata(A_vista):
     elementi = models.ManyToManyField(Punteggio, blank=True, through='AttivataElemento')
@@ -851,6 +881,9 @@ class Attivata(A_vista):
 class AttivataElemento(SyncableModel, models.Model):
     attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
     elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'is_mattone': True})
+
+    class Meta:
+        unique_together = [["attivata", "elemento"]]
 
 class AttivataStatisticaBase(SyncableModel, models.Model):
     attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
@@ -2175,11 +2208,36 @@ class Personaggio(Inventario):
         return int(costo_base)
 
 class PersonaggioAbilita(SyncableModel, models.Model):
-    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = [["personaggio", "abilita"]]
+        verbose_name = "Personaggio - Abilità"
+        verbose_name_plural = "Personaggio - Abilità"
 class PersonaggioAttivata(SyncableModel, models.Model):
-    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = [["personaggio", "attivata"]]
+        verbose_name = "Personaggio - Attivata"
+        verbose_name_plural = "Personaggio - Attivate"
+
+
 class PersonaggioInfusione(SyncableModel, models.Model):
-    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE); data_acquisizione = models.DateTimeField(default=timezone.now)
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
+    data_acquisizione = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = [["personaggio", "infusione"]]
+        verbose_name = "Personaggio - Infusione"
+        verbose_name_plural = "Personaggio - Infusioni"
+
+
 class PersonaggioTessitura(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
@@ -2196,12 +2254,29 @@ class PersonaggioCerimoniale(SyncableModel, models.Model):
     cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
 
+    class Meta:
+        unique_together = [["personaggio", "cerimoniale"]]
+        verbose_name = "Personaggio - Cerimoniale"
+        verbose_name_plural = "Personaggio - Cerimoniali"
+
+
 class PersonaggioModelloAura(SyncableModel, models.Model):
-    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE); modello_aura = models.ForeignKey(ModelloAura, on_delete=models.CASCADE)
-    class Meta: verbose_name_plural="Personaggio - Modelli Aura"
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
+    modello_aura = models.ForeignKey(ModelloAura, on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = [["personaggio", "modello_aura"]]
+        verbose_name_plural = "Personaggio - Modelli Aura"
+
     def clean(self):
-        if PersonaggioModelloAura.objects.filter(personaggio=self.personaggio, modello_aura__aura=self.modello_aura.aura).exclude(pk=self.pk).exists(): raise ValidationError("Già presente.")
-    def save(self, *args, **kwargs): self.clean(); super().save(*args, **kwargs)
+        if PersonaggioModelloAura.objects.filter(
+            personaggio=self.personaggio, modello_aura__aura=self.modello_aura.aura
+        ).exclude(pk=self.pk).exists():
+            raise ValidationError("Già presente.")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
 
 class TransazioneSospesa(SyncableModel, models.Model):
     # Campi legacy (mantenuti per retrocompatibilità)
