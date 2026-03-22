@@ -23,7 +23,13 @@ from personaggi import views as personaggi_views
 from kor35.edge_sync import EdgeSyncView
 
 from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse
 from django_icon_picker import views as icon_picker_views
+
+
+def healthz(_request):
+    """Leggero, senza DB: Docker healthcheck e debug 502 (mirror / compose)."""
+    return HttpResponse("ok", content_type="text/plain")
 
 # urlpatterns = [
 #     path('summernote/', include('django_summernote.urls')), # summernote 28/01/2025
@@ -50,6 +56,7 @@ from django_icon_picker import views as icon_picker_views
 # ]
 
 urlpatterns = [
+    path("api/healthz/", healthz, name="healthz"),
     # --- UTILITIES & ADMIN ---
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),
