@@ -1,6 +1,11 @@
 ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
 
+    # DNS interno Docker: con proxy_pass letterale (http://backend:8000) Nginx risolve il nome
+    # all’avvio e può tenere l’IP vecchio dopo docker compose up che ricrea solo backend/daphne
+    # → "Connection refused" / 502. Variabile + resolver = nuova risoluzione ogni valid=10s.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
     location / {
         root /usr/share/nginx/html;
         index index.html;
@@ -24,7 +29,8 @@ ssl_protocols TLSv1.2 TLSv1.3;
     }
 
     location /ws/ {
-        proxy_pass http://daphne:8001; 
+        set $upstream_daphne daphne:8001;
+        proxy_pass http://$upstream_daphne;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -38,7 +44,8 @@ ssl_protocols TLSv1.2 TLSv1.3;
     }
 
     location ~ ^/(admin|api|summernote|icon_picker|icons|webpush|o)(/|$) {
-        proxy_pass http://backend:8000;
+        set $upstream_backend backend:8000;
+        proxy_pass http://$upstream_backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

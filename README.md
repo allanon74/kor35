@@ -48,13 +48,18 @@ Mirror Raspberry:
 
 ### Mirror / Docker: 502 Bad Gateway (dopo deploy o aggiornamenti)
 
-Il 502 di Nginx di solito significa che **Gunicorn o Daphne non rispondono** (ancora in avvio, crash, DB/Redis non pronti, timeout).
+Cause tipiche:
 
-Nel repo sono previsti:
+1. **IP del container cambiato** — Nginx con `proxy_pass http://backend:8000` risolve `backend` all’avvio e può restare sull’IP vecchio se solo il backend viene ricreato → *Connection refused*. **Fix definitivo in repo:** in `nginx_conf/common_locations.snippets` usiamo **`resolver 127.0.0.11`** (DNS Docker) e **`proxy_pass http://$variabile`** così il nome viene risolto di nuovo periodicamente (`valid=10s`).
+2. **Upstream non ancora pronto** — healthcheck Compose + `depends_on: condition: service_healthy` sul `frontend`.
+3. **Crash / migrate / timeout** — log `docker compose logs backend`.
 
-- **`GET /api/healthz/`** — risposta `ok` senza query al DB (healthcheck Docker e monitoraggio).
-- **Docker Compose** (`conf/nginx-docker/docker-compose.yml`): `healthcheck` su `db`, `redis`, `backend`, `daphne`; Nginx (`frontend`) parte solo quando backend e daphne sono **healthy**; Gunicorn con `--timeout 120`.
-- **Nginx**: timeout proxy più alti verso il backend e WebSocket.
+Altri accorgimenti:
+
+- **`GET /api/healthz/`** — risposta `ok` senza DB (healthcheck Docker e monitoraggio).
+- **Docker Compose** (`conf/nginx-docker/docker-compose.yml`): healthcheck su `db`, `redis`, `backend`, `daphne`; Nginx parte quando backend e daphne sono **healthy**; Gunicorn `--timeout 120`.
+- **GitHub Actions** (`mirror-deploy`): dopo `docker compose up` esegue **`nginx -s reload`** sul servizio `frontend` (rete di sicurezza oltre al resolver dinamico).
+- **Nginx**: timeout proxy verso backend e WebSocket.
 
 **Sul Pi, dopo un aggiornamento:**
 

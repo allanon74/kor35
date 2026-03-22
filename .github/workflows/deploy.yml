@@ -152,6 +152,10 @@ jobs:
             cd "${ROOT_PATH}"
             eval "${DEPLOY_CMD}"
 
+            # Rete di sicurezza: dopo ricreazione container backend/daphne, Nginx (se non ricreato)
+            # può tenere IP vecchi; reload + snippet resolver in common_locations.snippets mitigano 502.
+            docker compose exec -T frontend nginx -s reload 2>/dev/null || true
+
             if [ -n "${{ secrets.MIRROR_HEALTHCHECK_URL }}" ]; then
               curl -fsS "${{ secrets.MIRROR_HEALTHCHECK_URL }}" >/dev/null
             fi
