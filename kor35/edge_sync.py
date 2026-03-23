@@ -442,7 +442,9 @@ class EdgeSyncView(APIView):
                 if remote_updated_at:
                     patch["updated_at"] = remote_updated_at
                 try:
-                    model.objects.filter(pk=existing.pk).update(**patch)
+                    # Use a savepoint so IntegrityError doesn't poison outer transaction.
+                    with transaction.atomic():
+                        model.objects.filter(pk=existing.pk).update(**patch)
                 except IntegrityError:
                     # Multi-table inheritance edge-case:
                     # incoming sync_id may already exist on a parent table row.
