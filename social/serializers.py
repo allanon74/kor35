@@ -3,7 +3,14 @@ from rest_framework import serializers
 
 from personaggi.models import Personaggio, PersonaggioKorpMembership
 
-from .models import SocialComment, SocialLike, SocialPost, SocialProfile
+from .models import (
+    SocialComment,
+    SocialCommentTag,
+    SocialLike,
+    SocialPost,
+    SocialPostTag,
+    SocialProfile,
+)
 
 
 class SocialProfileSerializer(serializers.ModelSerializer):
@@ -28,6 +35,33 @@ class SocialProfileSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("personaggio", "personaggio_nome", "korp_nome", "segno_zodiacale")
 
+
+class SocialProfilePublicSerializer(serializers.ModelSerializer):
+    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+    korp_nome = serializers.SerializerMethodField()
+    segno_zodiacale = serializers.CharField(source="personaggio.segno_zodiacale.nome", read_only=True)
+
+    class Meta:
+        model = SocialProfile
+        fields = (
+            "id",
+            "personaggio",
+            "personaggio_nome",
+            "foto_principale",
+            "regione",
+            "prefettura",
+            "descrizione",
+            "professioni",
+            "era_provenienza",
+            "korp_nome",
+            "segno_zodiacale",
+        )
+        read_only_fields = fields
+
+    def get_korp_nome(self, obj):
+        membership = obj.personaggio.korp_membership.filter(data_a__isnull=True).select_related("korp").first()
+        return membership.korp.nome if membership else None
+
     def get_korp_nome(self, obj):
         membership = obj.personaggio.korp_membership.filter(data_a__isnull=True).select_related("korp").first()
         return membership.korp.nome if membership else None
@@ -35,11 +69,15 @@ class SocialProfileSerializer(serializers.ModelSerializer):
 
 class SocialCommentSerializer(serializers.ModelSerializer):
     autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    tags = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialComment
-        fields = ("id", "post", "autore", "autore_nome", "testo", "evento", "created_at")
+        fields = ("id", "post", "autore", "autore_nome", "testo", "evento", "created_at", "tags")
         read_only_fields = ("post", "autore", "evento", "created_at")
+
+    def get_tags(self, obj):
+        return list(obj.tags.select_related("personaggio").values("personaggio_id", "personaggio__nome"))
 
 
 class SocialPostSerializer(serializers.ModelSerializer):
@@ -47,6 +85,8 @@ class SocialPostSerializer(serializers.ModelSerializer):
     likes_count = serializers.IntegerField(read_only=True)
     comments_count = serializers.IntegerField(read_only=True)
     liked_by_me = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+    public_url = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialPost
@@ -65,6 +105,8 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "likes_count",
             "comments_count",
             "liked_by_me",
+            "tags",
+            "public_url",
         )
         read_only_fields = ("autore", "evento", "created_at", "likes_count", "comments_count", "liked_by_me")
 
@@ -80,6 +122,18 @@ class SocialPostSerializer(serializers.ModelSerializer):
         if vis == "KORP" and not korp:
             raise serializers.ValidationError("Per la visibilita KORP devi indicare una KORP.")
         return attrs
+
+    def get_tags(self, obj):
+        return list(obj.tags.select_related("personaggio").values("personaggio_id", "personaggio__nome"))
+
+    def get_public_url(self, obj):
+        if obj.visibilita != "PUB":
+            return None
+        request = self.context.get("request")
+        path = f"/api/social/public/posts/{obj.public_slug}/"
+        if request:
+            return request.build_absolute_uri(path)
+        return path
 
 
 def resolve_active_personaggio(user, explicit_personaggio_id=None):

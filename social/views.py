@@ -5,12 +5,22 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from gestione_plot.models import Evento
-from personaggi.models import PersonaggioKorpMembership
+from personaggi.models import Personaggio, PersonaggioKorpMembership
 
-from .models import SOCIAL_VISIBILITY_KORP, SocialComment, SocialLike, SocialPost, SocialProfile
+from .models import (
+    SOCIAL_VISIBILITY_KORP,
+    SocialComment,
+    SocialCommentTag,
+    SocialLike,
+    SocialPost,
+    SocialPostTag,
+    SocialProfile,
+    extract_mentioned_personaggi_ids,
+)
 from .serializers import (
     SocialCommentSerializer,
     SocialPostSerializer,
+    SocialProfilePublicSerializer,
     SocialProfileSerializer,
     resolve_active_personaggio,
     visible_posts_queryset_for_personaggio,
@@ -59,7 +69,20 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             ).exists()
             if not is_member:
                 raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")
-        serializer.save(autore=personaggio, evento=get_evento_in_corso())
+        post = serializer.save(autore=personaggio, evento=get_evento_in_corso())
+        self._sync_tags_for_post(post)
+
+    def perform_update(self, serializer):
+        post = serializer.save()
+        self._sync_tags_for_post(post)
+
+    def _sync_tags_for_post(self, post):
+        ids = extract_mentioned_personaggi_ids(post.testo)
+        SocialPostTag.objects.filter(post=post).exclude(personaggio_id__in=ids).delete()
+        existing = set(SocialPostTag.objects.filter(post=post).values_list("personaggio_id", flat=True))
+        SocialPostTag.objects.bulk_create(
+            [SocialPostTag(post=post, personaggio_id=pid) for pid in ids if pid not in existing]
+        )
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def like(self, request, pk=None):
@@ -88,8 +111,17 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
         serializer = SocialCommentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(post=post, autore=personaggio, evento=get_evento_in_corso())
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        comment = serializer.save(post=post, autore=personaggio, evento=get_evento_in_corso())
+        self._sync_tags_for_comment(comment)
+        return Response(SocialCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+    def _sync_tags_for_comment(self, comment):
+        ids = extract_mentioned_personaggi_ids(comment.testo)
+        SocialCommentTag.objects.filter(comment=comment).exclude(personaggio_id__in=ids).delete()
+        existing = set(SocialCommentTag.objects.filter(comment=comment).values_list("personaggio_id", flat=True))
+        SocialCommentTag.objects.bulk_create(
+            [SocialCommentTag(comment=comment, personaggio_id=pid) for pid in ids if pid not in existing]
+        )
 
 
 class SocialProfileMeView(APIView):
@@ -125,4 +157,26 @@ class SocialProfileMeView(APIView):
         serializer = SocialProfileSerializer(profile, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        return Response(serializer.data)
+
+
+class SocialProfileDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, personaggio_id):
+        personaggio = Personaggio.objects.filter(id=personaggio_id).first()
+        if not personaggio:
+            return Response({"detail": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        profile, _ = SocialProfile.objects.get_or_create(personaggio=personaggio)
+        return Response(SocialProfilePublicSerializer(profile).data)
+
+
+class SocialPublicPostDetailView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, slug):
+        post = SocialPost.objects.filter(public_slug=slug, visibilita="PUB").first()
+        if not post:
+            return Response({"detail": "Post pubblico non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SocialPostSerializer(post, context={"request": request, "personaggio": None})
         return Response(serializer.data)

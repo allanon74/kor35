@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import SocialPostViewSet, SocialProfileMeView
+from .views import SocialPostViewSet, SocialProfileDetailView, SocialProfileMeView, SocialPublicPostDetailView
 
 app_name = "social"
 
@@ -10,5 +10,7 @@ router.register(r"posts", SocialPostViewSet, basename="social-posts")
 
 urlpatterns = [
     path("profile/me/", SocialProfileMeView.as_view(), name="social-profile-me"),
+    path("profiles/<int:personaggio_id>/", SocialProfileDetailView.as_view(), name="social-profile-detail"),
+    path("public/posts/<slug:slug>/", SocialPublicPostDetailView.as_view(), name="social-public-post-detail"),
     path("", include(router.urls)),
 ]

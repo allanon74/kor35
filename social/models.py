@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from io import BytesIO
 
@@ -65,6 +66,7 @@ class SocialPost(SyncableModel, models.Model):
     korp_visibilita = models.ForeignKey(Korp, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_posts_riservati")
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_posts")
     created_at = models.DateTimeField(default=timezone.now)
+    public_slug = models.SlugField(max_length=64, unique=True, blank=True)
 
     class Meta:
         verbose_name = "Post Social"
@@ -87,6 +89,8 @@ class SocialPost(SyncableModel, models.Model):
             raise ValidationError(f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
 
     def save(self, *args, **kwargs):
+        if not self.public_slug:
+            self.public_slug = uuid.uuid4().hex[:16]
         if self.immagine:
             self.immagine = optimize_uploaded_image(self.immagine)
         self.clean()
@@ -122,6 +126,38 @@ class SocialLike(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.autore.nome} -> {self.post_id}"
+
+
+class SocialPostTag(SyncableModel, models.Model):
+    post = models.ForeignKey(SocialPost, on_delete=models.CASCADE, related_name="tags")
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="tagged_in_social_posts")
+
+    class Meta:
+        verbose_name = "Tag Post Social"
+        verbose_name_plural = "Tag Post Social"
+        unique_together = ("post", "personaggio")
+
+
+class SocialCommentTag(SyncableModel, models.Model):
+    comment = models.ForeignKey(SocialComment, on_delete=models.CASCADE, related_name="tags")
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="tagged_in_social_comments")
+
+    class Meta:
+        verbose_name = "Tag Commento Social"
+        verbose_name_plural = "Tag Commento Social"
+        unique_together = ("comment", "personaggio")
+
+
+MENTION_ID_REGEX = re.compile(r"@(\d+)")
+
+
+def extract_mentioned_personaggi_ids(text):
+    if not text:
+        return []
+    ids = {int(x) for x in MENTION_ID_REGEX.findall(text)}
+    if not ids:
+        return []
+    return list(Personaggio.objects.filter(id__in=ids).values_list("id", flat=True))
 
 
 def optimize_uploaded_image(uploaded_file):
