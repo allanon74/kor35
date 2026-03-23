@@ -1,4 +1,5 @@
 from django.utils import timezone
+from django.db.models import Count
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -187,3 +188,76 @@ class SocialPublicPostDetailView(APIView):
             return Response({"detail": "Post pubblico non trovato."}, status=status.HTTP_404_NOT_FOUND)
         serializer = SocialPostSerializer(post, context={"request": request, "personaggio": None})
         return Response(serializer.data)
+
+
+class SocialStaffEventReportView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        evento_id = request.query_params.get("evento_id")
+        eventi_qs = Evento.objects.order_by("-data_inizio")
+        if evento_id:
+            eventi_qs = eventi_qs.filter(id=evento_id)
+
+        eventi = list(eventi_qs.values("id", "titolo", "data_inizio", "data_fine"))
+        evento_ids = [e["id"] for e in eventi]
+
+        if not evento_ids:
+            return Response({"eventi": [], "rows": [], "totali": {"post": 0, "commenti": 0}})
+
+        post_counts = (
+            SocialPost.objects.filter(evento_id__in=evento_ids)
+            .values("evento_id", "autore_id", "autore__nome")
+            .annotate(post_count=Count("id"))
+        )
+        comment_counts = (
+            SocialComment.objects.filter(evento_id__in=evento_ids)
+            .values("evento_id", "autore_id", "autore__nome")
+            .annotate(comment_count=Count("id"))
+        )
+
+        rows_map = {}
+        for row in post_counts:
+            key = (row["evento_id"], row["autore_id"])
+            rows_map[key] = {
+                "evento_id": row["evento_id"],
+                "personaggio_id": row["autore_id"],
+                "personaggio_nome": row["autore__nome"],
+                "post_count": row["post_count"],
+                "comment_count": 0,
+            }
+
+        for row in comment_counts:
+            key = (row["evento_id"], row["autore_id"])
+            if key not in rows_map:
+                rows_map[key] = {
+                    "evento_id": row["evento_id"],
+                    "personaggio_id": row["autore_id"],
+                    "personaggio_nome": row["autore__nome"],
+                    "post_count": 0,
+                    "comment_count": row["comment_count"],
+                }
+            else:
+                rows_map[key]["comment_count"] = row["comment_count"]
+
+        rows = sorted(
+            [
+                {
+                    **r,
+                    "totale": int(r["post_count"]) + int(r["comment_count"]),
+                }
+                for r in rows_map.values()
+            ],
+            key=lambda x: (x["evento_id"], -x["totale"], x["personaggio_nome"] or ""),
+        )
+
+        return Response(
+            {
+                "eventi": eventi,
+                "rows": rows,
+                "totali": {
+                    "post": sum(int(r["post_count"]) for r in rows),
+                    "commenti": sum(int(r["comment_count"]) for r in rows),
+                },
+            }
+        )

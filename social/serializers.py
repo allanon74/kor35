@@ -35,6 +35,10 @@ class SocialProfileSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("personaggio", "personaggio_nome", "korp_nome", "segno_zodiacale")
 
+    def get_korp_nome(self, obj):
+        membership = obj.personaggio.korp_membership.filter(data_a__isnull=True).select_related("korp").first()
+        return membership.korp.nome if membership else None
+
 
 class SocialProfilePublicSerializer(serializers.ModelSerializer):
     personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
