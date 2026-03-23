@@ -284,6 +284,10 @@ class EdgeSyncView(APIView):
             # Multi-table inheritance: valorizza automaticamente parent_link
             # (es. tabella_ptr) cercando il parent con lo stesso sync_id.
             if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
+                # Never rewrite parent-link on existing rows: it effectively changes PK
+                # and may break FK references (e.g. Personaggio -> SegnoZodiacale).
+                if local is not None:
+                    continue
                 # Solo parent_link immediato: evita tabella_ptr su Statistica/Mattone/Personaggio.
                 if field.model != model:
                     continue
@@ -438,6 +442,10 @@ class EdgeSyncView(APIView):
                 model.objects.filter(pk=existing.pk).update(sync_id=sync_id)
             else:
                 patch = dict(update_data)
+                # Never patch parent-link fields on existing rows.
+                for f in model._meta.concrete_fields:
+                    if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
+                        patch.pop(f.name, None)
                 patch["sync_id"] = sync_id
                 if remote_updated_at:
                     patch["updated_at"] = remote_updated_at

@@ -210,6 +210,10 @@ class Command(BaseCommand):
             # Altrimenti su Statistica/Mattone si valorizza anche tabella_ptr (modello Punteggio)
             # con un Tabella grezzo e Django va in errore (manca tabella_ptr_id sul tipo sbagliato).
             if isinstance(field, ForeignKey) and getattr(field.remote_field, "parent_link", False):
+                # Never rewrite parent-link on existing rows: it effectively changes PK
+                # and may break FK references (e.g. Personaggio -> SegnoZodiacale).
+                if local_obj is not None:
+                    continue
                 if field.model != model:
                     continue
                 parent_obj = field.related_model.objects.filter(sync_id=sync_id).first()
@@ -399,6 +403,10 @@ class Command(BaseCommand):
                 model.objects.filter(pk=existing.pk).update(sync_id=sync_id)
             else:
                 patch = dict(update_data)
+                # Never patch parent-link fields on existing rows.
+                for f in model._meta.concrete_fields:
+                    if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
+                        patch.pop(f.name, None)
                 patch["sync_id"] = sync_id
                 if remote_updated_at:
                     patch["updated_at"] = remote_updated_at
