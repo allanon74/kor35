@@ -1,9 +1,8 @@
-from django.db.models import Q
-from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from gestione_plot.models import Evento
 from personaggi.models import PersonaggioKorpMembership
@@ -13,7 +12,6 @@ from .serializers import (
     SocialCommentSerializer,
     SocialPostSerializer,
     SocialProfileSerializer,
-    get_active_korp,
     resolve_active_personaggio,
     visible_posts_queryset_for_personaggio,
 )
@@ -94,25 +92,34 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class SocialProfileMeViewSet(viewsets.ViewSet):
+class SocialProfileMeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def _get_or_create_profile(self, request):
         requested = request.query_params.get("personaggio_id") or request.data.get("personaggio_id")
         personaggio = resolve_active_personaggio(request.user, requested)
         if not personaggio:
-            return None, None
+            return None
         profile, _ = SocialProfile.objects.get_or_create(personaggio=personaggio)
-        return personaggio, profile
+        return profile
 
-    def list(self, request):
-        _, profile = self._get_or_create_profile(request)
+    def get(self, request):
+        profile = self._get_or_create_profile(request)
         if not profile:
             return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
         return Response(SocialProfileSerializer(profile).data)
 
-    def update(self, request, pk=None):
-        _, profile = self._get_or_create_profile(request)
+    def put(self, request):
+        profile = self._get_or_create_profile(request)
+        if not profile:
+            return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = SocialProfileSerializer(profile, data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def patch(self, request):
+        profile = self._get_or_create_profile(request)
         if not profile:
             return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
         serializer = SocialProfileSerializer(profile, data=request.data, partial=True)

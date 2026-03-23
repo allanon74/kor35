@@ -39,7 +39,7 @@ class SocialCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = SocialComment
         fields = ("id", "post", "autore", "autore_nome", "testo", "evento", "created_at")
-        read_only_fields = ("autore", "evento", "created_at")
+        read_only_fields = ("post", "autore", "evento", "created_at")
 
 
 class SocialPostSerializer(serializers.ModelSerializer):
@@ -104,8 +104,8 @@ def get_active_korp(personaggio):
 
 def visible_posts_queryset_for_personaggio(personaggio):
     base = SocialPost.objects.select_related("autore", "evento", "korp_visibilita").annotate(
-        likes_count=Count("likes"),
-        comments_count=Count("comments"),
+        likes_count=Count("likes", distinct=True),
+        comments_count=Count("comments", distinct=True),
     )
     if not personaggio:
         return base.filter(visibilita="PUB")
