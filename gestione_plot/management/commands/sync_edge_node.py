@@ -402,7 +402,14 @@ class Command(BaseCommand):
                 patch["sync_id"] = sync_id
                 if remote_updated_at:
                     patch["updated_at"] = remote_updated_at
-                model.objects.filter(pk=existing.pk).update(**patch)
+                try:
+                    model.objects.filter(pk=existing.pk).update(**patch)
+                except IntegrityError:
+                    # Multi-table inheritance edge-case:
+                    # the incoming sync_id can already exist on a parent-table row (Tabella/Tier),
+                    # so forcing sync_id here would explode. Keep local sync_id and apply payload fields.
+                    patch.pop("sync_id", None)
+                    model.objects.filter(pk=existing.pk).update(**patch)
             return True
         return False
 

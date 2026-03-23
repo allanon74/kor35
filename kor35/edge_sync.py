@@ -437,9 +437,18 @@ class EdgeSyncView(APIView):
             if remote_updated_at and existing.updated_at and remote_updated_at <= existing.updated_at:
                 model.objects.filter(pk=existing.pk).update(sync_id=sync_id)
             else:
-                model.objects.filter(pk=existing.pk).update(sync_id=sync_id, **update_data)
+                patch = dict(update_data)
+                patch["sync_id"] = sync_id
                 if remote_updated_at:
-                    model.objects.filter(pk=existing.pk).update(updated_at=remote_updated_at)
+                    patch["updated_at"] = remote_updated_at
+                try:
+                    model.objects.filter(pk=existing.pk).update(**patch)
+                except IntegrityError:
+                    # Multi-table inheritance edge-case:
+                    # incoming sync_id may already exist on a parent table row.
+                    # Apply scalar payload without forcing sync_id.
+                    patch.pop("sync_id", None)
+                    model.objects.filter(pk=existing.pk).update(**patch)
             return True
         return False
 
