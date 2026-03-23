@@ -34,6 +34,8 @@ from .models import (
     RichiestaAssemblaggio, OggettoCaratteristica, 
     Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
     TipologiaEffetto, EffettoCasuale,
+    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
+    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
 )
 
 # -----------------------------------------------------------------------------
@@ -56,6 +58,48 @@ class TierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tier
         fields = '__all__'
+
+
+class KorpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Korp
+        fields = "__all__"
+
+
+class CarrieraSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Carriera
+        fields = "__all__"
+
+
+class SegnoZodiacaleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SegnoZodiacale
+        fields = "__all__"
+
+
+class CaricaKorpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CaricaKorp
+        fields = "__all__"
+
+
+class CaricaCarrieraSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CaricaCarriera
+        fields = "__all__"
+
+
+class PersonaggioKorpMembershipSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonaggioKorpMembership
+        fields = "__all__"
+
+
+class PersonaggioCarrieraMembershipSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonaggioCarrieraMembership
+        fields = "__all__"
 
 
 class TabellaSerializer(serializers.ModelSerializer):
@@ -1613,6 +1657,8 @@ class PersonaggioSerializer(serializers.ModelSerializer):
     proprietario = serializers.StringRelatedField(read_only=True)
     proprietario_id = serializers.PrimaryKeyRelatedField(source='proprietario', read_only=True)
     is_staff = serializers.SerializerMethodField()
+    segno_zodiacale = serializers.PrimaryKeyRelatedField(read_only=True)
+    segno_zodiacale_nome = serializers.CharField(source="segno_zodiacale.nome", read_only=True)
     
     class Meta:
         model = Personaggio
@@ -1622,6 +1668,7 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
             'giocante', 'proprietario_id', 'is_staff',
+            'segno_zodiacale', 'segno_zodiacale_nome',
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
     
@@ -1645,6 +1692,8 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     # Per la visualizzazione (se serve)
     tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
     proprietario = serializers.StringRelatedField(read_only=True)
+    segno_zodiacale = serializers.PrimaryKeyRelatedField(read_only=True)
+    segno_zodiacale_nome = serializers.CharField(source="segno_zodiacale.nome", read_only=True)
 
     class Meta:
         model = Personaggio
@@ -1652,7 +1701,8 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'id', 'nome', 'testo', 'costume', 
             'tipologia', 'tipologia_nome', 
             'proprietario', 'data_nascita', 'data_morte',
-            'crediti', 'punti_caratteristica' # Read-only di default qui sotto
+            'crediti', 'punti_caratteristica',
+            'segno_zodiacale', 'segno_zodiacale_nome'
         )
         read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
 

@@ -40,6 +40,8 @@ from .models import (
     ConfigurazioneLivelloAura, Cerimoniale,
     StatoTimerAttivo,
     TipologiaPersonaggio,
+    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
+    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
 )
 
 import uuid 
@@ -98,6 +100,9 @@ from .serializers import (
     StatisticaSerializer, TipologiaPersonaggioSerializer, 
     PersonaggioManageSerializer, SSOUserSerializer,
     ConsumabilePersonaggioSerializer,
+    KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
+    CaricaKorpSerializer, CaricaCarrieraSerializer,
+    PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -2659,6 +2664,48 @@ class TipologiaPersonaggioViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TipologiaPersonaggio.objects.all()
     serializer_class = TipologiaPersonaggioSerializer
     permission_classes = [IsAuthenticated]
+
+
+class KorpViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Korp.objects.all().order_by("nome")
+    serializer_class = KorpSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+class CarrieraViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Carriera.objects.all().order_by("nome")
+    serializer_class = CarrieraSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+class SegnoZodiacaleViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = SegnoZodiacale.objects.all().order_by("numero", "nome")
+    serializer_class = SegnoZodiacaleSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+class CaricaKorpViewSet(viewsets.ModelViewSet):
+    queryset = CaricaKorp.objects.select_related("korp").all().order_by("korp__nome", "ordine", "nome")
+    serializer_class = CaricaKorpSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class CaricaCarrieraViewSet(viewsets.ModelViewSet):
+    queryset = CaricaCarriera.objects.select_related("carriera").all().order_by("carriera__nome", "ordine", "nome")
+    serializer_class = CaricaCarrieraSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class PersonaggioKorpMembershipViewSet(viewsets.ModelViewSet):
+    queryset = PersonaggioKorpMembership.objects.select_related("personaggio", "korp", "carica").all().order_by("-data_da", "-id")
+    serializer_class = PersonaggioKorpMembershipSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class PersonaggioCarrieraMembershipViewSet(viewsets.ModelViewSet):
+    queryset = PersonaggioCarrieraMembership.objects.select_related("personaggio", "carriera", "carica").all().order_by("-data_da", "-id")
+    serializer_class = PersonaggioCarrieraMembershipSerializer
+    permission_classes = [permissions.IsAdminUser]
     
 # Aggiungi in personaggi/views.py
 

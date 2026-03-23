@@ -24,6 +24,9 @@ from .views import (AbilViewSet,
     AbilitaPunteggioViewSet, AbilitaPrerequisitoViewSet,
     MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
     PropostaTecnicaViewSet,
+    KorpViewSet, CarrieraViewSet, SegnoZodiacaleViewSet,
+    CaricaKorpViewSet, CaricaCarrieraViewSet,
+    PersonaggioKorpMembershipViewSet, PersonaggioCarrieraMembershipViewSet,
 )
 
 app_name = 'personaggi'
@@ -72,6 +75,13 @@ router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, bas
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')
+router.register(r'korp', KorpViewSet, basename='korp')
+router.register(r'carriere', CarrieraViewSet, basename='carriere')
+router.register(r'segni-zodiacali', SegnoZodiacaleViewSet, basename='segni-zodiacali')
+router.register(r'staff/cariche-korp', CaricaKorpViewSet, basename='staff-cariche-korp')
+router.register(r'staff/cariche-carriera', CaricaCarrieraViewSet, basename='staff-cariche-carriera')
+router.register(r'staff/personaggi-korp-membership', PersonaggioKorpMembershipViewSet, basename='staff-personaggi-korp-membership')
+router.register(r'staff/personaggi-carriera-membership', PersonaggioCarrieraMembershipViewSet, basename='staff-personaggi-carriera-membership')
 
 urlpatterns = [
     

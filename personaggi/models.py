@@ -1,6 +1,7 @@
 from django.db.models import Sum, F, Count
 import os
 import re
+import random
 import secrets
 import string
 import copy
@@ -567,6 +568,117 @@ class Tier(Tabella):
     tipo = models.CharField(choices=tabelle_tipo, max_length=2)
     foto = models.ImageField(upload_to='tiers/', null=True, blank=True)
     class Meta: verbose_name = "Tier"; verbose_name_plural = "Tiers"
+
+
+class Korp(Tier):
+    class Meta:
+        verbose_name = "KORP"
+        verbose_name_plural = "KORPS"
+
+
+class Carriera(Tier):
+    class Meta:
+        verbose_name = "Carriera"
+        verbose_name_plural = "Carriere"
+
+
+class SegnoZodiacale(Tier):
+    numero = models.PositiveSmallIntegerField(unique=True)
+    testo_pubblico = models.TextField(blank=True, null=True)
+    testo_privato = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Segno Zodiacale"
+        verbose_name_plural = "Segni Zodiacali"
+        ordering = ["numero", "nome"]
+
+
+class CaricaKorp(A_modello):
+    korp = models.ForeignKey(Korp, on_delete=models.CASCADE, related_name="cariche")
+    nome = models.CharField(max_length=120)
+    bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    ordine = models.PositiveIntegerField(default=0)
+    attiva = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Carica KORP"
+        verbose_name_plural = "Cariche KORP"
+        ordering = ["korp__nome", "ordine", "nome"]
+        unique_together = ("korp", "nome")
+
+    def __str__(self):
+        return f"{self.korp.nome} - {self.nome}"
+
+
+class CaricaCarriera(A_modello):
+    carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="cariche")
+    nome = models.CharField(max_length=120)
+    bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    ordine = models.PositiveIntegerField(default=0)
+    attiva = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Carica Carriera"
+        verbose_name_plural = "Cariche Carriera"
+        ordering = ["carriera__nome", "ordine", "nome"]
+        unique_together = ("carriera", "nome")
+
+    def __str__(self):
+        return f"{self.carriera.nome} - {self.nome}"
+
+
+class PersonaggioKorpMembership(A_modello):
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="korp_membership")
+    korp = models.ForeignKey(Korp, on_delete=models.PROTECT, related_name="membership")
+    carica = models.ForeignKey(CaricaKorp, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
+    data_da = models.DateTimeField(default=timezone.now)
+    data_a = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Membership KORP"
+        verbose_name_plural = "Membership KORP"
+        ordering = ["-data_da", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio"],
+                condition=Q(data_a__isnull=True),
+                name="uniq_personaggio_korp_attiva",
+            )
+        ]
+
+    def clean(self):
+        if self.carica and self.carica.korp_id != self.korp_id:
+            raise ValidationError("La carica selezionata non appartiene alla KORP indicata.")
+
+    def __str__(self):
+        return f"{self.personaggio.nome} -> {self.korp.nome}"
+
+
+class PersonaggioCarrieraMembership(A_modello):
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="carriera_membership")
+    carriera = models.ForeignKey(Carriera, on_delete=models.PROTECT, related_name="membership")
+    carica = models.ForeignKey(CaricaCarriera, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
+    data_da = models.DateTimeField(default=timezone.now)
+    data_a = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Membership Carriera"
+        verbose_name_plural = "Membership Carriera"
+        ordering = ["-data_da", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio"],
+                condition=Q(data_a__isnull=True),
+                name="uniq_personaggio_carriera_attiva",
+            )
+        ]
+
+    def clean(self):
+        if self.carica and self.carica.carriera_id != self.carriera_id:
+            raise ValidationError("La carica selezionata non appartiene alla Carriera indicata.")
+
+    def __str__(self):
+        return f"{self.personaggio.nome} -> {self.carriera.nome}"
 
 class Punteggio(Tabella):
     sigla = models.CharField(max_length=3, unique=True)
@@ -1500,6 +1612,7 @@ class Oggetto(A_vista):
 class Personaggio(Inventario):
     proprietario = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     tipologia = models.ForeignKey(TipologiaPersonaggio, on_delete=models.PROTECT, related_name="personaggi", default=get_default_tipologia)
+    segno_zodiacale = models.ForeignKey("SegnoZodiacale", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
@@ -2868,3 +2981,9 @@ def inizializza_statistiche_base_personaggio(sender, instance, created, **kwargs
         # Bulk create per performance
         if records_da_creare:
             PersonaggioStatisticaBase.objects.bulk_create(records_da_creare, ignore_conflicts=True)
+        if instance.segno_zodiacale_id is None:
+            segni_ids = list(SegnoZodiacale.objects.values_list("id", flat=True))
+            if segni_ids:
+                Personaggio.objects.filter(pk=instance.pk, segno_zodiacale__isnull=True).update(
+                    segno_zodiacale_id=random.choice(segni_ids)
+                )

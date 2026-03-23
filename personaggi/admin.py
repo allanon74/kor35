@@ -48,6 +48,8 @@ from .models import (
     TipologiaTimer, TimerQrCode, StatoTimerAttivo,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
+    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
+    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -745,18 +747,103 @@ class PersonaggioStatisticaBaseInline(admin.TabularInline):
     fields = ('statistica', 'valore_base')
     autocomplete_fields = ['statistica']
 
+
+class PersonaggioKorpMembershipInline(admin.TabularInline):
+    model = PersonaggioKorpMembership
+    extra = 0
+    fields = ("korp", "carica", "data_da", "data_a")
+    autocomplete_fields = ["korp", "carica"]
+
+
+class PersonaggioCarrieraMembershipInline(admin.TabularInline):
+    model = PersonaggioCarrieraMembership
+    extra = 0
+    fields = ("carriera", "carica", "data_da", "data_a")
+    autocomplete_fields = ["carriera", "carica"]
+
 @admin.register(Personaggio)
 class PersonaggioAdmin(A_Admin):
-    list_display = ('nome', 'proprietario', 'tipologia', 'crediti', 'punti_caratteristica')
+    list_display = ('nome', 'proprietario', 'tipologia', 'segno_zodiacale', 'crediti', 'punti_caratteristica')
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
-    list_filter = ('tipologia',); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
+    list_filter = ('tipologia', 'segno_zodiacale'); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
     inlines = [
         PersonaggioStatisticaBaseInline,
+        PersonaggioKorpMembershipInline, PersonaggioCarrieraMembershipInline,
         PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, 
         CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline
     ]
-    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'testo', 'impostazioni_ui', ('data_nascita', 'data_morte'))}),
+    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'segno_zodiacale', 'testo', 'impostazioni_ui', ('data_nascita', 'data_morte'))}),
                  ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))}))
+
+
+@admin.register(Korp)
+class KorpAdmin(TierAdmin):
+    list_display = ("nome", "tipo")
+    search_fields = ("nome", "descrizione")
+    list_filter = ("tipo",)
+
+
+@admin.register(Carriera)
+class CarrieraAdmin(TierAdmin):
+    list_display = ("nome", "tipo")
+    search_fields = ("nome", "descrizione")
+    list_filter = ("tipo",)
+
+
+@admin.register(SegnoZodiacale)
+class SegnoZodiacaleAdmin(TierAdmin):
+    list_display = ("numero", "nome", "tipo")
+    search_fields = ("nome", "testo_pubblico", "testo_privato")
+    list_filter = ("tipo",)
+    summernote_fields = ("descrizione", "testo_privato")
+
+
+@admin.register(CaricaKorp)
+class CaricaKorpAdmin(admin.ModelAdmin):
+    list_display = ("nome", "korp", "bonus_stipendio_evento", "ordine", "attiva")
+    list_filter = ("korp", "attiva")
+    search_fields = ("nome", "korp__nome")
+    autocomplete_fields = ("korp",)
+
+
+@admin.register(CaricaCarriera)
+class CaricaCarrieraAdmin(admin.ModelAdmin):
+    list_display = ("nome", "carriera", "bonus_stipendio_evento", "ordine", "attiva")
+    list_filter = ("carriera", "attiva")
+    search_fields = ("nome", "carriera__nome")
+    autocomplete_fields = ("carriera",)
+
+
+@admin.register(PersonaggioKorpMembership)
+class PersonaggioKorpMembershipAdmin(admin.ModelAdmin):
+    list_display = ("personaggio", "korp", "carica", "data_da", "data_a")
+    list_filter = ("korp", "carica")
+    search_fields = ("personaggio__nome", "korp__nome", "carica__nome")
+    autocomplete_fields = ("personaggio", "korp", "carica")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.data_a is None:
+            PersonaggioKorpMembership.objects.filter(
+                personaggio=obj.personaggio,
+                data_a__isnull=True
+            ).exclude(pk=obj.pk).update(data_a=obj.data_da)
+
+
+@admin.register(PersonaggioCarrieraMembership)
+class PersonaggioCarrieraMembershipAdmin(admin.ModelAdmin):
+    list_display = ("personaggio", "carriera", "carica", "data_da", "data_a")
+    list_filter = ("carriera", "carica")
+    search_fields = ("personaggio__nome", "carriera__nome", "carica__nome")
+    autocomplete_fields = ("personaggio", "carriera", "carica")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.data_a is None:
+            PersonaggioCarrieraMembership.objects.filter(
+                personaggio=obj.personaggio,
+                data_a__isnull=True
+            ).exclude(pk=obj.pk).update(data_a=obj.data_da)
 
 @admin.register(Gruppo)
 class GruppoAdmin(admin.ModelAdmin):
