@@ -4,8 +4,13 @@ from rest_framework import serializers
 from personaggi.models import Personaggio, PersonaggioKorpMembership
 
 from .models import (
+    SOCIAL_GROUP_STATUS_ACTIVE,
     SocialComment,
     SocialCommentTag,
+    SocialGroup,
+    SocialGroupMembership,
+    SocialGroupMessage,
+    SocialGroupPost,
     SocialLike,
     SocialPost,
     SocialPostTag,
@@ -140,6 +145,87 @@ class SocialPostSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(path)
         return path
+
+
+class SocialGroupMembershipSerializer(serializers.ModelSerializer):
+    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+    invited_by_nome = serializers.CharField(source="invited_by.nome", read_only=True)
+
+    class Meta:
+        model = SocialGroupMembership
+        fields = (
+            "id",
+            "group",
+            "personaggio",
+            "personaggio_nome",
+            "ruolo",
+            "status",
+            "invited_by",
+            "invited_by_nome",
+            "joined_at",
+            "created_at",
+        )
+        read_only_fields = ("joined_at", "created_at")
+
+
+class SocialGroupSerializer(serializers.ModelSerializer):
+    creatore_nome = serializers.CharField(source="creatore.nome", read_only=True)
+    members_count = serializers.SerializerMethodField()
+    my_membership_status = serializers.SerializerMethodField()
+    my_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SocialGroup
+        fields = (
+            "id",
+            "nome",
+            "slug",
+            "descrizione",
+            "creatore",
+            "creatore_nome",
+            "is_hidden",
+            "requires_approval",
+            "created_at",
+            "members_count",
+            "my_membership_status",
+            "my_role",
+        )
+        read_only_fields = ("slug", "creatore", "created_at", "members_count", "my_membership_status", "my_role")
+
+    def get_members_count(self, obj):
+        return obj.memberships.filter(status=SOCIAL_GROUP_STATUS_ACTIVE).count()
+
+    def get_my_membership_status(self, obj):
+        personaggio = self.context.get("personaggio")
+        if not personaggio:
+            return None
+        m = obj.memberships.filter(personaggio=personaggio).first()
+        return m.status if m else None
+
+    def get_my_role(self, obj):
+        personaggio = self.context.get("personaggio")
+        if not personaggio:
+            return None
+        m = obj.memberships.filter(personaggio=personaggio).first()
+        return m.ruolo if m else None
+
+
+class SocialGroupPostSerializer(serializers.ModelSerializer):
+    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+
+    class Meta:
+        model = SocialGroupPost
+        fields = ("id", "group", "autore", "autore_nome", "titolo", "testo", "immagine", "video", "created_at")
+        read_only_fields = ("group", "autore", "created_at")
+
+
+class SocialGroupMessageSerializer(serializers.ModelSerializer):
+    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+
+    class Meta:
+        model = SocialGroupMessage
+        fields = ("id", "group", "autore", "autore_nome", "testo", "created_at")
+        read_only_fields = ("group", "autore", "created_at")
 
 
 def resolve_active_personaggio(user, explicit_personaggio_id=None):

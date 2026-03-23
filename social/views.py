@@ -1,5 +1,5 @@
 from django.utils import timezone
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -10,9 +10,19 @@ from gestione_plot.models import Evento
 from personaggi.models import Personaggio, PersonaggioKorpMembership
 
 from .models import (
+    SOCIAL_GROUP_ROLE_ADMIN,
+    SOCIAL_GROUP_ROLE_MEMBER,
+    SOCIAL_GROUP_STATUS_ACTIVE,
+    SOCIAL_GROUP_STATUS_INVITED,
+    SOCIAL_GROUP_STATUS_REJECTED,
+    SOCIAL_GROUP_STATUS_REQUESTED,
     SOCIAL_VISIBILITY_KORP,
     SocialComment,
     SocialCommentTag,
+    SocialGroup,
+    SocialGroupMembership,
+    SocialGroupMessage,
+    SocialGroupPost,
     SocialLike,
     SocialPost,
     SocialPostTag,
@@ -21,6 +31,10 @@ from .models import (
 )
 from .serializers import (
     SocialCommentSerializer,
+    SocialGroupMembershipSerializer,
+    SocialGroupMessageSerializer,
+    SocialGroupPostSerializer,
+    SocialGroupSerializer,
     SocialPostSerializer,
     SocialProfilePublicSerializer,
     SocialProfileSerializer,
@@ -48,6 +62,18 @@ class SocialCommentPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = "page_size"
     max_page_size = 30
+
+
+class SocialGroupPostPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 30
+
+
+class SocialGroupMessagePagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
 
 class SocialPostViewSet(viewsets.ModelViewSet):
@@ -146,6 +172,187 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         SocialCommentTag.objects.bulk_create(
             [SocialCommentTag(comment=comment, personaggio_id=pid) for pid in ids if pid not in existing]
         )
+
+
+class SocialGroupViewSet(viewsets.ModelViewSet):
+    serializer_class = SocialGroupSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_personaggio(self):
+        requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
+        return resolve_active_personaggio(self.request.user, requested)
+
+    def _membership(self, group, personaggio):
+        if not personaggio:
+            return None
+        return group.memberships.filter(personaggio=personaggio).first()
+
+    def _is_active_member(self, group, personaggio):
+        m = self._membership(group, personaggio)
+        return bool(m and m.status == SOCIAL_GROUP_STATUS_ACTIVE)
+
+    def _is_group_admin(self, group, personaggio):
+        m = self._membership(group, personaggio)
+        return bool(m and m.status == SOCIAL_GROUP_STATUS_ACTIVE and m.ruolo == SOCIAL_GROUP_ROLE_ADMIN)
+
+    def get_queryset(self):
+        personaggio = self.get_personaggio()
+        qs = SocialGroup.objects.select_related("creatore").all()
+        if self.request.user.is_staff:
+            return qs
+        if not personaggio:
+            return qs.filter(is_hidden=False)
+        member_group_ids = SocialGroupMembership.objects.filter(
+            personaggio=personaggio, status=SOCIAL_GROUP_STATUS_ACTIVE
+        ).values_list("group_id", flat=True)
+        return qs.filter(Q(is_hidden=False) | Q(id__in=member_group_ids)).distinct()
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["personaggio"] = self.get_personaggio()
+        return ctx
+
+    def perform_create(self, serializer):
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            raise permissions.PermissionDenied("Nessun personaggio selezionabile per questo utente.")
+        group = serializer.save(creatore=personaggio)
+        SocialGroupMembership.objects.get_or_create(
+            group=group,
+            personaggio=personaggio,
+            defaults={"ruolo": SOCIAL_GROUP_ROLE_ADMIN, "status": SOCIAL_GROUP_STATUS_ACTIVE},
+        )
+
+    @action(detail=False, methods=["get"])
+    def my(self, request):
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response([], status=status.HTTP_200_OK)
+        group_ids = SocialGroupMembership.objects.filter(
+            personaggio=personaggio, status=SOCIAL_GROUP_STATUS_ACTIVE
+        ).values_list("group_id", flat=True)
+        groups = SocialGroup.objects.filter(id__in=group_ids).select_related("creatore")
+        serializer = self.get_serializer(groups, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def request_join(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        m, created = SocialGroupMembership.objects.get_or_create(group=group, personaggio=personaggio)
+        if not created and m.status == SOCIAL_GROUP_STATUS_ACTIVE:
+            return Response({"detail": "Sei gia membro del gruppo."}, status=status.HTTP_200_OK)
+        m.status = SOCIAL_GROUP_STATUS_REQUESTED if group.requires_approval else SOCIAL_GROUP_STATUS_ACTIVE
+        m.save()
+        return Response(SocialGroupMembershipSerializer(m).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def invite(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not (request.user.is_staff or self._is_group_admin(group, personaggio)):
+            raise permissions.PermissionDenied("Solo admin gruppo o staff possono invitare membri.")
+        target_id = request.data.get("personaggio_target_id")
+        target = Personaggio.objects.filter(id=target_id).first()
+        if not target:
+            return Response({"detail": "Personaggio target non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        m, _ = SocialGroupMembership.objects.get_or_create(group=group, personaggio=target)
+        m.status = SOCIAL_GROUP_STATUS_INVITED if group.requires_approval else SOCIAL_GROUP_STATUS_ACTIVE
+        m.invited_by = personaggio
+        m.save()
+        return Response(SocialGroupMembershipSerializer(m).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def approve_member(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not (request.user.is_staff or self._is_group_admin(group, personaggio)):
+            raise permissions.PermissionDenied("Solo admin gruppo o staff possono approvare membri.")
+        target_id = request.data.get("personaggio_target_id")
+        membership = SocialGroupMembership.objects.filter(group=group, personaggio_id=target_id).first()
+        if not membership:
+            return Response({"detail": "Membership non trovata."}, status=status.HTTP_404_NOT_FOUND)
+        membership.status = SOCIAL_GROUP_STATUS_ACTIVE
+        membership.save()
+        return Response(SocialGroupMembershipSerializer(membership).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def reject_member(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not (request.user.is_staff or self._is_group_admin(group, personaggio)):
+            raise permissions.PermissionDenied("Solo admin gruppo o staff possono rifiutare membri.")
+        target_id = request.data.get("personaggio_target_id")
+        membership = SocialGroupMembership.objects.filter(group=group, personaggio_id=target_id).first()
+        if not membership:
+            return Response({"detail": "Membership non trovata."}, status=status.HTTP_404_NOT_FOUND)
+        membership.status = SOCIAL_GROUP_STATUS_REJECTED
+        membership.save()
+        return Response(SocialGroupMembershipSerializer(membership).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def set_member_role(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not (request.user.is_staff or self._is_group_admin(group, personaggio)):
+            raise permissions.PermissionDenied("Solo admin gruppo o staff possono modificare ruoli.")
+        target_id = request.data.get("personaggio_target_id")
+        ruolo = request.data.get("ruolo")
+        if ruolo not in {SOCIAL_GROUP_ROLE_ADMIN, SOCIAL_GROUP_ROLE_MEMBER}:
+            return Response({"detail": "Ruolo non valido."}, status=status.HTTP_400_BAD_REQUEST)
+        membership = SocialGroupMembership.objects.filter(
+            group=group, personaggio_id=target_id, status=SOCIAL_GROUP_STATUS_ACTIVE
+        ).first()
+        if not membership:
+            return Response({"detail": "Membro attivo non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        membership.ruolo = ruolo
+        membership.save()
+        return Response(SocialGroupMembershipSerializer(membership).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"])
+    def members(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not (request.user.is_staff or self._is_active_member(group, personaggio) or not group.is_hidden):
+            raise permissions.PermissionDenied("Gruppo non accessibile.")
+        qs = group.memberships.select_related("personaggio", "invited_by").all().order_by("-created_at")
+        return Response(SocialGroupMembershipSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["get", "post"])
+    def posts(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not (request.user.is_staff or self._is_active_member(group, personaggio)):
+            raise permissions.PermissionDenied("Solo i membri possono vedere/scrivere post nel gruppo.")
+        if request.method.lower() == "get":
+            qs = group.posts.select_related("autore").all()
+            paginator = SocialGroupPostPagination()
+            page = paginator.paginate_queryset(qs, request, view=self)
+            serializer = SocialGroupPostSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        serializer = SocialGroupPostSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = serializer.save(group=group, autore=personaggio)
+        return Response(SocialGroupPostSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get", "post"])
+    def messages(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not (request.user.is_staff or self._is_active_member(group, personaggio)):
+            raise permissions.PermissionDenied("Solo i membri possono vedere/scrivere messaggi nel gruppo.")
+        if request.method.lower() == "get":
+            qs = group.messages.select_related("autore").all()
+            paginator = SocialGroupMessagePagination()
+            page = paginator.paginate_queryset(qs, request, view=self)
+            serializer = SocialGroupMessageSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        serializer = SocialGroupMessageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = serializer.save(group=group, autore=personaggio)
+        return Response(SocialGroupMessageSerializer(obj).data, status=status.HTTP_201_CREATED)
 
 
 class SocialProfileMeView(APIView):
