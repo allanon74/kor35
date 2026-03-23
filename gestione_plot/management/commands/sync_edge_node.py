@@ -399,27 +399,25 @@ class Command(BaseCommand):
             if model.objects.filter(sync_id=sync_id).exclude(pk=existing.pk).exists():
                 continue
 
-            if remote_updated_at and existing.updated_at and remote_updated_at <= existing.updated_at:
-                model.objects.filter(pk=existing.pk).update(sync_id=sync_id)
-            else:
-                patch = dict(update_data)
-                # Never patch parent-link fields on existing rows.
-                for f in model._meta.concrete_fields:
-                    if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
-                        patch.pop(f.name, None)
-                patch["sync_id"] = sync_id
-                if remote_updated_at:
-                    patch["updated_at"] = remote_updated_at
-                try:
-                    # Use a savepoint so IntegrityError doesn't poison outer transaction.
-                    with transaction.atomic():
-                        model.objects.filter(pk=existing.pk).update(**patch)
-                except IntegrityError:
-                    # Multi-table inheritance edge-case:
-                    # the incoming sync_id can already exist on a parent-table row (Tabella/Tier),
-                    # so forcing sync_id here would explode. Keep local sync_id and apply payload fields.
-                    patch.pop("sync_id", None)
+            # NOTE:
+            # On natural-key merge we never force sync_id alignment for existing rows.
+            # With multi-table inheritance (Tabella/Tier/*) sync_id uniqueness lives on parent
+            # tables too, and forcing sync_id can trigger cross-table collisions.
+            patch = dict(update_data)
+            # Never patch parent-link fields on existing rows.
+            for f in model._meta.concrete_fields:
+                if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
+                    patch.pop(f.name, None)
+            if remote_updated_at:
+                patch["updated_at"] = remote_updated_at
+            try:
+                # Use a savepoint so IntegrityError doesn't poison outer transaction.
+                with transaction.atomic():
                     model.objects.filter(pk=existing.pk).update(**patch)
+            except IntegrityError:
+                # Last-resort fallback: apply only updated_at if payload still conflicts.
+                if "updated_at" in patch:
+                    model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
             return True
         return False
 
