@@ -76,6 +76,12 @@ class SocialGroupMessagePagination(PageNumberPagination):
     max_page_size = 100
 
 
+class SocialGroupMemberPagination(PageNumberPagination):
+    page_size = 30
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class SocialPostViewSet(viewsets.ModelViewSet):
     serializer_class = SocialPostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -195,6 +201,9 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         m = self._membership(group, personaggio)
         return bool(m and m.status == SOCIAL_GROUP_STATUS_ACTIVE and m.ruolo == SOCIAL_GROUP_ROLE_ADMIN)
 
+    def _active_admin_count(self, group):
+        return group.memberships.filter(status=SOCIAL_GROUP_STATUS_ACTIVE, ruolo=SOCIAL_GROUP_ROLE_ADMIN).count()
+
     def get_queryset(self):
         personaggio = self.get_personaggio()
         qs = SocialGroup.objects.select_related("creatore").all()
@@ -288,6 +297,12 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         membership = SocialGroupMembership.objects.filter(group=group, personaggio_id=target_id).first()
         if not membership:
             return Response({"detail": "Membership non trovata."}, status=status.HTTP_404_NOT_FOUND)
+        if (
+            membership.status == SOCIAL_GROUP_STATUS_ACTIVE
+            and membership.ruolo == SOCIAL_GROUP_ROLE_ADMIN
+            and self._active_admin_count(group) <= 1
+        ):
+            return Response({"detail": "Impossibile rimuovere l'ultimo admin del gruppo."}, status=status.HTTP_400_BAD_REQUEST)
         membership.status = SOCIAL_GROUP_STATUS_REJECTED
         membership.save()
         return Response(SocialGroupMembershipSerializer(membership).data, status=status.HTTP_200_OK)
@@ -307,6 +322,12 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         ).first()
         if not membership:
             return Response({"detail": "Membro attivo non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if (
+            membership.ruolo == SOCIAL_GROUP_ROLE_ADMIN
+            and ruolo != SOCIAL_GROUP_ROLE_ADMIN
+            and self._active_admin_count(group) <= 1
+        ):
+            return Response({"detail": "Impossibile degradare l'ultimo admin del gruppo."}, status=status.HTTP_400_BAD_REQUEST)
         membership.ruolo = ruolo
         membership.save()
         return Response(SocialGroupMembershipSerializer(membership).data, status=status.HTTP_200_OK)
@@ -318,7 +339,53 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         if not (request.user.is_staff or self._is_active_member(group, personaggio) or not group.is_hidden):
             raise permissions.PermissionDenied("Gruppo non accessibile.")
         qs = group.memberships.select_related("personaggio", "invited_by").all().order_by("-created_at")
-        return Response(SocialGroupMembershipSerializer(qs, many=True).data)
+        paginator = SocialGroupMemberPagination()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        serializer = SocialGroupMembershipSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    def accept_invite(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        membership = SocialGroupMembership.objects.filter(group=group, personaggio=personaggio).first()
+        if not membership or membership.status != SOCIAL_GROUP_STATUS_INVITED:
+            return Response({"detail": "Nessun invito attivo trovato."}, status=status.HTTP_404_NOT_FOUND)
+        membership.status = SOCIAL_GROUP_STATUS_ACTIVE
+        membership.save()
+        return Response(SocialGroupMembershipSerializer(membership).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def decline_invite(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        membership = SocialGroupMembership.objects.filter(group=group, personaggio=personaggio).first()
+        if not membership or membership.status != SOCIAL_GROUP_STATUS_INVITED:
+            return Response({"detail": "Nessun invito attivo trovato."}, status=status.HTTP_404_NOT_FOUND)
+        membership.status = SOCIAL_GROUP_STATUS_REJECTED
+        membership.save()
+        return Response(SocialGroupMembershipSerializer(membership).data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def leave(self, request, pk=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        membership = SocialGroupMembership.objects.filter(
+            group=group, personaggio=personaggio, status=SOCIAL_GROUP_STATUS_ACTIVE
+        ).first()
+        if not membership:
+            return Response({"detail": "Non sei membro attivo di questo gruppo."}, status=status.HTTP_400_BAD_REQUEST)
+        if membership.ruolo == SOCIAL_GROUP_ROLE_ADMIN and self._active_admin_count(group) <= 1:
+            return Response({"detail": "Impossibile uscire: sei l'ultimo admin del gruppo."}, status=status.HTTP_400_BAD_REQUEST)
+        membership.status = SOCIAL_GROUP_STATUS_REJECTED
+        membership.save()
+        return Response({"detail": "Uscita dal gruppo effettuata."}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["get", "post"])
     def posts(self, request, pk=None):
@@ -337,6 +404,36 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         obj = serializer.save(group=group, autore=personaggio)
         return Response(SocialGroupPostSerializer(obj).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["patch"], url_path=r"posts/(?P<post_id>[^/.]+)")
+    def update_post(self, request, pk=None, post_id=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        post = SocialGroupPost.objects.filter(id=post_id, group=group).first()
+        if not post:
+            return Response({"detail": "Post di gruppo non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        can_moderate = request.user.is_staff or self._is_group_admin(group, personaggio)
+        can_edit_own = personaggio and post.autore_id == personaggio.id
+        if not (can_moderate or can_edit_own):
+            raise permissions.PermissionDenied("Permessi insufficienti per modificare il post.")
+        serializer = SocialGroupPostSerializer(post, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["delete"], url_path=r"posts/(?P<post_id>[^/.]+)")
+    def delete_post(self, request, pk=None, post_id=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        post = SocialGroupPost.objects.filter(id=post_id, group=group).first()
+        if not post:
+            return Response({"detail": "Post di gruppo non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        can_moderate = request.user.is_staff or self._is_group_admin(group, personaggio)
+        can_delete_own = personaggio and post.autore_id == personaggio.id
+        if not (can_moderate or can_delete_own):
+            raise permissions.PermissionDenied("Permessi insufficienti per eliminare il post.")
+        post.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=["get", "post"])
     def messages(self, request, pk=None):
         group = self.get_object()
@@ -353,6 +450,20 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         obj = serializer.save(group=group, autore=personaggio)
         return Response(SocialGroupMessageSerializer(obj).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"messages/(?P<message_id>[^/.]+)")
+    def delete_message(self, request, pk=None, message_id=None):
+        group = self.get_object()
+        personaggio = self.get_personaggio()
+        message = SocialGroupMessage.objects.filter(id=message_id, group=group).first()
+        if not message:
+            return Response({"detail": "Messaggio di gruppo non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        can_moderate = request.user.is_staff or self._is_group_admin(group, personaggio)
+        can_delete_own = personaggio and message.autore_id == personaggio.id
+        if not (can_moderate or can_delete_own):
+            raise permissions.PermissionDenied("Permessi insufficienti per eliminare il messaggio.")
+        message.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class SocialProfileMeView(APIView):
