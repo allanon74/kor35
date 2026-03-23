@@ -40,6 +40,13 @@ class SocialPostViewSet(viewsets.ModelViewSet):
     serializer_class = SocialPostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+    def get_permissions(self):
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [permissions.IsAdminUser()]
+        if self.action in {"create", "like", "comments"}:
+            return [permissions.IsAuthenticatedOrReadOnly()]
+        return [permissions.IsAuthenticatedOrReadOnly()]
+
     def get_personaggio(self):
         if not self.request.user.is_authenticated:
             return None

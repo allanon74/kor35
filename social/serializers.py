@@ -130,7 +130,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
         if obj.visibilita != "PUB":
             return None
         request = self.context.get("request")
-        path = f"/api/social/public/posts/{obj.public_slug}/"
+        path = f"/social/post/{obj.public_slug}"
         if request:
             return request.build_absolute_uri(path)
         return path

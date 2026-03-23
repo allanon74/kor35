@@ -148,16 +148,30 @@ class SocialCommentTag(SyncableModel, models.Model):
         unique_together = ("comment", "personaggio")
 
 
-MENTION_ID_REGEX = re.compile(r"@(\d+)")
+MENTION_TOKEN_REGEX = re.compile(r"@([A-Za-z0-9_]+)")
 
 
 def extract_mentioned_personaggi_ids(text):
     if not text:
         return []
-    ids = {int(x) for x in MENTION_ID_REGEX.findall(text)}
-    if not ids:
+    tokens = set(MENTION_TOKEN_REGEX.findall(text))
+    if not tokens:
         return []
-    return list(Personaggio.objects.filter(id__in=ids).values_list("id", flat=True))
+
+    explicit_ids = {int(t) for t in tokens if t.isdigit()}
+    names = {t.replace("_", " ").strip() for t in tokens if not t.isdigit()}
+
+    found_ids = set()
+    if explicit_ids:
+        found_ids.update(Personaggio.objects.filter(id__in=explicit_ids).values_list("id", flat=True))
+
+    for nome in names:
+        if not nome:
+            continue
+        matched = Personaggio.objects.filter(nome__iexact=nome).values_list("id", flat=True)
+        found_ids.update(matched)
+
+    return list(found_ids)
 
 
 def optimize_uploaded_image(uploaded_file):
