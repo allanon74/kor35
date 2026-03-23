@@ -44,6 +44,12 @@ class SocialPostPagination(PageNumberPagination):
     max_page_size = 30
 
 
+class SocialCommentPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 30
+
+
 class SocialPostViewSet(viewsets.ModelViewSet):
     serializer_class = SocialPostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -117,8 +123,10 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         post = self.get_object()
         if request.method.lower() == "get":
             qs = post.comments.select_related("autore", "evento").all()
-            serializer = SocialCommentSerializer(qs, many=True)
-            return Response(serializer.data)
+            paginator = SocialCommentPagination()
+            page = paginator.paginate_queryset(qs, request, view=self)
+            serializer = SocialCommentSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
 
         if not request.user.is_authenticated:
             raise permissions.PermissionDenied("Login richiesto.")
