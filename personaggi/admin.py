@@ -861,7 +861,7 @@ class LetturaMessaggioInline(admin.TabularInline):
 
 @admin.register(Messaggio)
 class MessaggioAdmin(SModelAdmin):
-    list_display = ('titolo', 'tipo_messaggio', 'mittente', 'get_destinatario', 'data_invio')
+    list_display = ('titolo', 'tipo_messaggio', 'mittente', 'get_destinatario', 'crediti_allegati', 'data_invio')
     list_filter = ('tipo_messaggio', 'salva_in_cronologia', 'data_invio')
     search_fields = ('titolo', 'testo', 'mittente__username')
     date_hierarchy = 'data_invio'
@@ -871,7 +871,8 @@ class MessaggioAdmin(SModelAdmin):
     fieldsets = (
         ('Dettagli', {'fields': ('titolo', 'mittente', 'data_invio', 'salva_in_cronologia')}),
         ('Contenuto', {'fields': ('testo',)}),
-        ('Destinazione', {'fields': ('tipo_messaggio', 'destinatario_personaggio', 'destinatario_gruppo')})
+        ('Destinazione', {'fields': ('tipo_messaggio', 'destinatario_personaggio', 'destinatario_gruppo')}),
+        ('Allegati', {'fields': ('crediti_allegati', 'oggetti_allegati_snapshot')}),
     )
     def get_destinatario(self, obj):
         if obj.tipo_messaggio == 'BROAD': return format_html("<b>TUTTI</b>")

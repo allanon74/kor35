@@ -1762,12 +1762,25 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                     tipo_messaggio=Messaggio.TIPO_STAFF,
                     is_staff_message=True,
                     destinatario_personaggio=None,
+                    crediti_allegati=0,
+                    oggetti_allegati_snapshot=[],
                 )
             else:
+                oggetti_snapshot = [
+                    {
+                        "id": o.id,
+                        "sync_id": str(o.sync_id),
+                        "nome": o.nome,
+                        "tipo_oggetto": o.tipo_oggetto,
+                    }
+                    for o in oggetti_da_trasferire
+                ]
                 serializer.save(
                     mittente=self.request.user,
                     mittente_personaggio=personaggio_mittente,
                     destinatario_personaggio=destinatario,
+                    crediti_allegati=crediti_da_inviare,
+                    oggetti_allegati_snapshot=oggetti_snapshot,
                 )
 
                 # Applica trasferimenti allegati in modo atomico con la creazione messaggio.

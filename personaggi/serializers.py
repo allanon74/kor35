@@ -1930,6 +1930,7 @@ class MessaggioSerializer(serializers.ModelSerializer):
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
             'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
+            'crediti_allegati', 'oggetti_allegati_snapshot',
             'in_risposta_a_id', 'risposte_count'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
