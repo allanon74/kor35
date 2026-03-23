@@ -91,6 +91,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
     liked_by_me = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
+    evento_titolo = serializers.CharField(source="evento.titolo", read_only=True)
 
     class Meta:
         model = SocialPost
@@ -105,6 +106,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "visibilita",
             "korp_visibilita",
             "evento",
+            "evento_titolo",
             "created_at",
             "likes_count",
             "comments_count",
