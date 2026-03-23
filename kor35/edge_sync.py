@@ -85,7 +85,7 @@ class EdgeSyncView(APIView):
 
     def _sync_model_registry(self):
         registry = {}
-        for app_label in ("personaggi", "gestione_plot"):
+        for app_label in ("personaggi", "gestione_plot", "social"):
             app_config = apps.get_app_config(app_label)
             for model in app_config.get_models():
                 if model._meta.abstract:
