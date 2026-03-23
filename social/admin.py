@@ -1,7 +1,18 @@
 from django.contrib import admin
 from django_summernote.admin import SummernoteModelAdmin
 
-from .models import SocialComment, SocialCommentTag, SocialLike, SocialPost, SocialPostTag, SocialProfile
+from .models import (
+    SocialComment,
+    SocialCommentTag,
+    SocialGroup,
+    SocialGroupMembership,
+    SocialGroupMessage,
+    SocialGroupPost,
+    SocialLike,
+    SocialPost,
+    SocialPostTag,
+    SocialProfile,
+)
 
 
 @admin.register(SocialProfile)
@@ -77,3 +88,60 @@ class SocialCommentTagAdmin(admin.ModelAdmin):
     list_display = ("comment", "personaggio")
     search_fields = ("comment__testo", "personaggio__nome")
     autocomplete_fields = ("comment", "personaggio")
+
+
+class SocialGroupMembershipInline(admin.TabularInline):
+    model = SocialGroupMembership
+    extra = 0
+    autocomplete_fields = ("personaggio", "invited_by")
+    readonly_fields = ("joined_at", "created_at")
+
+
+class SocialGroupPostInline(admin.TabularInline):
+    model = SocialGroupPost
+    extra = 0
+    autocomplete_fields = ("autore",)
+    readonly_fields = ("created_at",)
+
+
+class SocialGroupMessageInline(admin.TabularInline):
+    model = SocialGroupMessage
+    extra = 0
+    autocomplete_fields = ("autore",)
+    readonly_fields = ("created_at",)
+
+
+@admin.register(SocialGroup)
+class SocialGroupAdmin(SummernoteModelAdmin):
+    list_display = ("nome", "creatore", "is_hidden", "requires_approval", "created_at")
+    list_filter = ("is_hidden", "requires_approval")
+    search_fields = ("nome", "descrizione", "creatore__nome")
+    autocomplete_fields = ("creatore",)
+    summernote_fields = ("descrizione",)
+    inlines = [SocialGroupMembershipInline, SocialGroupPostInline, SocialGroupMessageInline]
+
+
+@admin.register(SocialGroupMembership)
+class SocialGroupMembershipAdmin(admin.ModelAdmin):
+    list_display = ("group", "personaggio", "ruolo", "status", "invited_by", "joined_at", "created_at")
+    list_filter = ("ruolo", "status")
+    search_fields = ("group__nome", "personaggio__nome", "invited_by__nome")
+    autocomplete_fields = ("group", "personaggio", "invited_by")
+
+
+@admin.register(SocialGroupPost)
+class SocialGroupPostAdmin(SummernoteModelAdmin):
+    list_display = ("group", "titolo", "autore", "created_at")
+    list_filter = ("group",)
+    search_fields = ("titolo", "testo", "group__nome", "autore__nome")
+    autocomplete_fields = ("group", "autore")
+    summernote_fields = ("testo",)
+
+
+@admin.register(SocialGroupMessage)
+class SocialGroupMessageAdmin(SummernoteModelAdmin):
+    list_display = ("group", "autore", "created_at")
+    list_filter = ("group",)
+    search_fields = ("testo", "group__nome", "autore__nome")
+    autocomplete_fields = ("group", "autore")
+    summernote_fields = ("testo",)

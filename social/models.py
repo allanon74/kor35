@@ -24,6 +24,24 @@ SOCIAL_VISIBILITY_CHOICES = [
 MAX_IMAGE_SIZE = (1600, 1600)
 MAX_VIDEO_BYTES = 30 * 1024 * 1024
 
+SOCIAL_GROUP_ROLE_MEMBER = "MEMBER"
+SOCIAL_GROUP_ROLE_ADMIN = "ADMIN"
+SOCIAL_GROUP_ROLE_CHOICES = [
+    (SOCIAL_GROUP_ROLE_MEMBER, "Membro"),
+    (SOCIAL_GROUP_ROLE_ADMIN, "Admin"),
+]
+
+SOCIAL_GROUP_STATUS_INVITED = "INVITED"
+SOCIAL_GROUP_STATUS_REQUESTED = "REQUESTED"
+SOCIAL_GROUP_STATUS_ACTIVE = "ACTIVE"
+SOCIAL_GROUP_STATUS_REJECTED = "REJECTED"
+SOCIAL_GROUP_STATUS_CHOICES = [
+    (SOCIAL_GROUP_STATUS_INVITED, "Invitato"),
+    (SOCIAL_GROUP_STATUS_REQUESTED, "Richiesta inviata"),
+    (SOCIAL_GROUP_STATUS_ACTIVE, "Attivo"),
+    (SOCIAL_GROUP_STATUS_REJECTED, "Rifiutato"),
+]
+
 
 def social_post_media_upload_to(instance, filename):
     return f"social/posts/{instance.autore_id}/{filename}"
@@ -146,6 +164,104 @@ class SocialCommentTag(SyncableModel, models.Model):
         verbose_name = "Tag Commento Social"
         verbose_name_plural = "Tag Commento Social"
         unique_together = ("comment", "personaggio")
+
+
+class SocialGroup(SyncableModel, models.Model):
+    nome = models.CharField(max_length=160)
+    slug = models.SlugField(max_length=64, unique=True, blank=True)
+    descrizione = models.TextField(null=True, blank=True)
+    creatore = models.ForeignKey(
+        Personaggio, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_groups_created"
+    )
+    is_hidden = models.BooleanField(default=False)
+    requires_approval = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Gruppo Social"
+        verbose_name_plural = "Gruppi Social"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return self.nome
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = uuid.uuid4().hex[:16]
+        super().save(*args, **kwargs)
+
+
+class SocialGroupMembership(SyncableModel, models.Model):
+    group = models.ForeignKey(SocialGroup, on_delete=models.CASCADE, related_name="memberships")
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_group_memberships")
+    ruolo = models.CharField(max_length=10, choices=SOCIAL_GROUP_ROLE_CHOICES, default=SOCIAL_GROUP_ROLE_MEMBER)
+    status = models.CharField(max_length=10, choices=SOCIAL_GROUP_STATUS_CHOICES, default=SOCIAL_GROUP_STATUS_REQUESTED)
+    invited_by = models.ForeignKey(
+        Personaggio, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_group_invites_sent"
+    )
+    joined_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Membro Gruppo Social"
+        verbose_name_plural = "Membri Gruppi Social"
+        unique_together = ("group", "personaggio")
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.group.nome} - {self.personaggio.nome} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if self.status == SOCIAL_GROUP_STATUS_ACTIVE and not self.joined_at:
+            self.joined_at = timezone.now()
+        super().save(*args, **kwargs)
+
+
+class SocialGroupPost(SyncableModel, models.Model):
+    group = models.ForeignKey(SocialGroup, on_delete=models.CASCADE, related_name="posts")
+    autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_group_posts")
+    titolo = models.CharField(max_length=180)
+    testo = models.TextField(null=True, blank=True)
+    immagine = models.ImageField(upload_to=social_post_media_upload_to, null=True, blank=True)
+    video = models.FileField(upload_to=social_post_media_upload_to, null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Post Gruppo Social"
+        verbose_name_plural = "Post Gruppi Social"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.group.nome} - {self.titolo}"
+
+    def clean(self):
+        if not self.testo and not self.immagine and not self.video:
+            raise ValidationError("Un post di gruppo deve avere testo, immagine o video.")
+        if self.immagine and self.video:
+            raise ValidationError("Un post di gruppo non puo avere contemporaneamente immagine e video.")
+        if self.video and getattr(self.video, "size", 0) > MAX_VIDEO_BYTES:
+            raise ValidationError(f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
+
+    def save(self, *args, **kwargs):
+        if self.immagine:
+            self.immagine = optimize_uploaded_image(self.immagine)
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class SocialGroupMessage(SyncableModel, models.Model):
+    group = models.ForeignKey(SocialGroup, on_delete=models.CASCADE, related_name="messages")
+    autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_group_messages")
+    testo = models.TextField()
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Messaggio Gruppo Social"
+        verbose_name_plural = "Messaggi Gruppi Social"
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return f"{self.group.nome} - {self.autore.nome}: {self.testo[:30]}"
 
 
 MENTION_TOKEN_REGEX = re.compile(r"@([A-Za-z0-9_]+)")

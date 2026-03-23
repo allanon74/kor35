@@ -277,3 +277,116 @@ class SocialStaffEventReportView(APIView):
                 },
             }
         )
+
+
+class SocialNotificationsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        requested = request.query_params.get("personaggio_id")
+        personaggio = resolve_active_personaggio(request.user, requested)
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
+
+        limit = request.query_params.get("limit")
+        try:
+            limit = max(1, min(int(limit or 30), 100))
+        except (TypeError, ValueError):
+            limit = 30
+
+        likes_qs = (
+            SocialLike.objects.filter(post__autore=personaggio)
+            .exclude(autore=personaggio)
+            .select_related("autore", "post")
+        )
+        comments_qs = (
+            SocialComment.objects.filter(post__autore=personaggio)
+            .exclude(autore=personaggio)
+            .select_related("autore", "post")
+        )
+        post_mentions_qs = (
+            SocialPostTag.objects.filter(personaggio=personaggio)
+            .exclude(post__autore=personaggio)
+            .select_related("post", "post__autore")
+        )
+        comment_mentions_qs = (
+            SocialCommentTag.objects.filter(personaggio=personaggio)
+            .exclude(comment__autore=personaggio)
+            .select_related("comment", "comment__autore", "comment__post")
+        )
+
+        events = []
+        for like in likes_qs[:limit]:
+            events.append(
+                {
+                    "kind": "like",
+                    "created_at": like.created_at,
+                    "post_id": like.post_id,
+                    "post_title": like.post.titolo or "",
+                    "actor_id": like.autore_id,
+                    "actor_name": like.autore.nome if like.autore else "",
+                    "text": "",
+                }
+            )
+        for comment in comments_qs[:limit]:
+            events.append(
+                {
+                    "kind": "comment",
+                    "created_at": comment.created_at,
+                    "post_id": comment.post_id,
+                    "post_title": comment.post.titolo or "",
+                    "actor_id": comment.autore_id,
+                    "actor_name": comment.autore.nome if comment.autore else "",
+                    "text": comment.testo or "",
+                }
+            )
+        for tag in post_mentions_qs[:limit]:
+            events.append(
+                {
+                    "kind": "mention_post",
+                    "created_at": tag.created_at,
+                    "post_id": tag.post_id,
+                    "post_title": tag.post.titolo or "",
+                    "actor_id": tag.post.autore_id,
+                    "actor_name": tag.post.autore.nome if tag.post and tag.post.autore else "",
+                    "text": tag.post.testo or "",
+                }
+            )
+        for tag in comment_mentions_qs[:limit]:
+            events.append(
+                {
+                    "kind": "mention_comment",
+                    "created_at": tag.created_at,
+                    "post_id": tag.comment.post_id if tag.comment else None,
+                    "post_title": tag.comment.post.titolo if tag.comment and tag.comment.post else "",
+                    "actor_id": tag.comment.autore_id if tag.comment else None,
+                    "actor_name": tag.comment.autore.nome if tag.comment and tag.comment.autore else "",
+                    "text": tag.comment.testo if tag.comment else "",
+                }
+            )
+
+        events.sort(key=lambda e: e["created_at"], reverse=True)
+        events = events[:limit]
+
+        since_param = request.query_params.get("since")
+        unread_count = 0
+        if since_param:
+            try:
+                since_dt = timezone.datetime.fromisoformat(since_param.replace("Z", "+00:00"))
+                unread_count = sum(1 for e in events if e["created_at"] > since_dt)
+            except ValueError:
+                unread_count = 0
+
+        return Response(
+            {
+                "count": len(events),
+                "unread_count": unread_count,
+                "results": [
+                    {
+                        **e,
+                        "created_at": e["created_at"].isoformat() if e["created_at"] else None,
+                    }
+                    for e in events
+                ],
+            }
+        )
