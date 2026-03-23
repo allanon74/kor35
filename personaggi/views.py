@@ -1695,24 +1695,96 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
     serializer_class = MessaggioCreateSerializer
     
     def perform_create(self, serializer):
-        # Recupera il personaggio mittente
-        personaggio_mittente = Personaggio.objects.filter(proprietario=self.request.user).first()
-        
-        # Se is_staff_message è True, crea un messaggio allo staff
-        if self.request.data.get('is_staff_message'):
-            serializer.save(
-                mittente=self.request.user,
-                mittente_personaggio=personaggio_mittente,
-                tipo_messaggio=Messaggio.TIPO_STAFF,
-                is_staff_message=True,
-                destinatario_personaggio=None  # Non c'è destinatario specifico per lo staff
-            )
+        validated = serializer.validated_data
+        is_staff_message = bool(validated.get('is_staff_message'))
+        requested_sender = validated.get('mittente_personaggio')
+        crediti_da_inviare = int(validated.get('crediti_da_inviare') or 0)
+        oggetti_ids = list(dict.fromkeys(validated.get('oggetti_ids') or []))
+
+        # Mittente: usa il personaggio selezionato in UI, altrimenti fallback al primo.
+        if requested_sender:
+            if requested_sender.proprietario_id != self.request.user.id:
+                raise serializers.ValidationError({"mittente_personaggio_id": "Personaggio mittente non valido."})
+            personaggio_mittente = requested_sender
         else:
-            # Messaggio normale a un altro personaggio
-            serializer.save(
-                mittente=self.request.user,
-                mittente_personaggio=personaggio_mittente
+            personaggio_mittente = Personaggio.objects.filter(proprietario=self.request.user).first()
+
+        if not personaggio_mittente:
+            raise serializers.ValidationError({"detail": "Nessun personaggio mittente disponibile."})
+
+        if is_staff_message and (crediti_da_inviare > 0 or oggetti_ids):
+            raise serializers.ValidationError(
+                {"detail": "Non puoi allegare crediti o oggetti nei messaggi allo staff."}
             )
+
+        if not is_staff_message and not validated.get('destinatario_personaggio'):
+            raise serializers.ValidationError({"destinatario_id": "Destinatario obbligatorio."})
+
+        with transaction.atomic():
+            # Lock pessimista su mittente (e destinatario, se presente) prima dei check economici.
+            personaggio_mittente = Personaggio.objects.select_for_update().get(id=personaggio_mittente.id)
+            destinatario = validated.get('destinatario_personaggio')
+            if destinatario:
+                destinatario = Personaggio.objects.select_for_update().get(id=destinatario.id)
+
+            # Validazioni allegati economici.
+            if not is_staff_message and crediti_da_inviare > 0 and personaggio_mittente.crediti < crediti_da_inviare:
+                raise serializers.ValidationError(
+                    {"crediti_da_inviare": f"Crediti insufficienti. Disponibili: {personaggio_mittente.crediti}."}
+                )
+
+            oggetti_da_trasferire = []
+            if not is_staff_message and oggetti_ids:
+                oggetti_da_trasferire = list(
+                    Oggetto.objects.filter(
+                        id__in=oggetti_ids,
+                        tracciamento_inventario__inventario=personaggio_mittente,
+                        tracciamento_inventario__data_fine__isnull=True,
+                    ).distinct()
+                )
+                found_ids = {o.id for o in oggetti_da_trasferire}
+                missing_ids = [oid for oid in oggetti_ids if oid not in found_ids]
+                if missing_ids:
+                    raise serializers.ValidationError(
+                        {"oggetti_ids": f"Oggetti non trasferibili o non posseduti: {missing_ids}."}
+                    )
+                blocked = [o.nome for o in oggetti_da_trasferire if getattr(o, 'is_equipaggiato', False)]
+                if blocked:
+                    raise serializers.ValidationError(
+                        {"oggetti_ids": f"Non puoi inviare oggetti equipaggiati: {', '.join(blocked)}."}
+                    )
+
+            # Crea messaggio.
+            if is_staff_message:
+                serializer.save(
+                    mittente=self.request.user,
+                    mittente_personaggio=personaggio_mittente,
+                    tipo_messaggio=Messaggio.TIPO_STAFF,
+                    is_staff_message=True,
+                    destinatario_personaggio=None,
+                )
+            else:
+                serializer.save(
+                    mittente=self.request.user,
+                    mittente_personaggio=personaggio_mittente,
+                    destinatario_personaggio=destinatario,
+                )
+
+                # Applica trasferimenti allegati in modo atomico con la creazione messaggio.
+                if crediti_da_inviare > 0:
+                    CreditoMovimento.objects.create(
+                        personaggio=personaggio_mittente,
+                        importo=-crediti_da_inviare,
+                        descrizione=f"Invio crediti via messaggio a {destinatario.nome}",
+                    )
+                    CreditoMovimento.objects.create(
+                        personaggio=destinatario,
+                        importo=crediti_da_inviare,
+                        descrizione=f"Ricezione crediti via messaggio da {personaggio_mittente.nome}",
+                    )
+
+                for oggetto in oggetti_da_trasferire:
+                    oggetto.sposta_in_inventario(destinatario)
         
         
 class OggettoViewSet(viewsets.ModelViewSet):

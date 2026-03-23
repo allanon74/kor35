@@ -2023,12 +2023,32 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         queryset=Personaggio.objects.all(), source='destinatario_personaggio', write_only=True, required=False, allow_null=True
     )
     is_staff_message = serializers.BooleanField(required=False, default=False)
+    mittente_personaggio_id = serializers.PrimaryKeyRelatedField(
+        queryset=Personaggio.objects.all(), source='mittente_personaggio', write_only=True, required=False, allow_null=True
+    )
+    crediti_da_inviare = serializers.IntegerField(required=False, min_value=0, default=0)
+    oggetti_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
 
     class Meta:
         model = Messaggio
-        fields = ('destinatario_id', 'titolo', 'testo', 'is_staff_message')
+        fields = (
+            'destinatario_id',
+            'titolo',
+            'testo',
+            'is_staff_message',
+            'mittente_personaggio_id',
+            'crediti_da_inviare',
+            'oggetti_ids',
+        )
 
     def create(self, validated_data):
+        validated_data.pop('crediti_da_inviare', None)
+        validated_data.pop('oggetti_ids', None)
         validated_data['mittente'] = self.context['request'].user
         
         # Se è un messaggio staff, imposta tipo_messaggio a STAFF
