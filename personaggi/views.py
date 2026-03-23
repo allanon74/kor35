@@ -42,6 +42,7 @@ from .models import (
     TipologiaPersonaggio,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    UserSocialPreference,
 )
 
 import uuid 
@@ -1124,7 +1125,39 @@ class PersonaggioListView(APIView):
         if (request.user.is_staff or request.user.is_superuser) and request.query_params.get('view_all') == 'true':
             queryset = Personaggio.objects.all()
         serializer = PersonaggioListSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = serializer.data
+
+        if queryset and request.user and (request.user.is_authenticated):
+            pref = UserSocialPreference.objects.filter(user=request.user).select_related("preferred_personaggio").first()
+            pref_id = pref.preferred_personaggio_id if pref else None
+            for row in data:
+                row["is_main"] = bool(pref_id and int(row.get("id")) == int(pref_id))
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class PreferredPersonaggioView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        pref = UserSocialPreference.objects.filter(user=request.user).first()
+        return Response(
+            {"preferred_personaggio_id": pref.preferred_personaggio_id if pref else None},
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        preferred_id = request.data.get("preferred_personaggio_id")
+        preferred = None
+        if preferred_id not in (None, "", "null"):
+            preferred = get_object_or_404(Personaggio, id=preferred_id, proprietario=request.user)
+        pref, _ = UserSocialPreference.objects.get_or_create(user=request.user)
+        pref.preferred_personaggio = preferred
+        pref.save(update_fields=["preferred_personaggio", "updated_at"])
+        return Response(
+            {"preferred_personaggio_id": pref.preferred_personaggio_id},
+            status=status.HTTP_200_OK,
+        )
     
 class PersonaggioDetailView(APIView):
     permission_classes = [IsAuthenticated]

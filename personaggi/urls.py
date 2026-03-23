@@ -165,6 +165,7 @@ urlpatterns = [
     path('api/staff/messages/<int:message_id>/cancella/', views.StaffMessageDeleteView.as_view(), name='staff-message-delete'),
     
     path('api/personaggi/search/', views.PersonaggioAutocompleteView.as_view(), name='personaggio-search'),
+    path('api/personaggi/preferred/', views.PreferredPersonaggioView.as_view(), name='personaggio-preferred'),
     path('api/messaggi/send/', views.MessaggioPrivateCreateView.as_view(), name='messaggio-send'),
     
     path('api/oggetti/equipaggia/', views.equipaggia_item_view, name='api_equipaggia_item'),

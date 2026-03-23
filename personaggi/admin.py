@@ -50,6 +50,7 @@ from .models import (
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    UserSocialPreference,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -849,6 +850,13 @@ class PersonaggioCarrieraMembershipAdmin(admin.ModelAdmin):
 class GruppoAdmin(admin.ModelAdmin):
     list_display = ('nome', 'conteggio_membri'); search_fields = ('nome',); filter_horizontal = ('membri',)
     def conteggio_membri(self, obj): return obj.membri.count()
+
+
+@admin.register(UserSocialPreference)
+class UserSocialPreferenceAdmin(admin.ModelAdmin):
+    list_display = ("user", "preferred_personaggio", "updated_at")
+    search_fields = ("user__username", "preferred_personaggio__nome")
+    autocomplete_fields = ("user", "preferred_personaggio")
 
 class LetturaMessaggioInline(admin.TabularInline):
     model = LetturaMessaggio

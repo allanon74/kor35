@@ -2603,6 +2603,26 @@ def touch_user_sync_state(sender, instance, **kwargs):
 def touch_group_sync_state(sender, instance, **kwargs):
     AuthGroupSyncState.objects.update_or_create(group=instance, defaults={})
 
+
+class UserSocialPreference(SyncableModel, models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="social_preference")
+    preferred_personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preferred_by_users",
+    )
+
+    class Meta:
+        verbose_name = "Preferenza Social Utente"
+        verbose_name_plural = "Preferenze Social Utenti"
+
+    def __str__(self):
+        if self.preferred_personaggio:
+            return f"{self.user.username} -> {self.preferred_personaggio.nome}"
+        return f"{self.user.username} -> Nessun preferito"
+
 class AbilitaPluginModel(SyncableModel, CMSPlugin):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     def __str__(self): return self.abilita.nome
