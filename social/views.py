@@ -2,6 +2,7 @@ from django.utils import timezone
 from django.db.models import Count
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -37,9 +38,16 @@ def get_evento_in_corso(reference_dt=None):
     )
 
 
+class SocialPostPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 30
+
+
 class SocialPostViewSet(viewsets.ModelViewSet):
     serializer_class = SocialPostSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    pagination_class = SocialPostPagination
 
     def get_permissions(self):
         if self.action in {"update", "partial_update", "destroy"}:
