@@ -108,7 +108,23 @@ class EdgeSyncView(APIView):
 
         payload["auth.user"] = self._serialize_users(last_sync_timestamp)
         payload["auth.group"] = self._serialize_groups(last_sync_timestamp)
+        payload["catalog.segnozodiacale"] = self._serialize_zodiac_catalog()
         return payload
+
+    def _serialize_zodiac_catalog(self):
+        SegnoZodiacale = apps.get_model("personaggi", "SegnoZodiacale")
+        rows = []
+        for segno in SegnoZodiacale.objects.all().order_by("numero").iterator():
+            rows.append(
+                {
+                    "numero": segno.numero,
+                    "nome": segno.nome,
+                    "descrizione": segno.descrizione,
+                    "testo_pubblico": segno.testo_pubblico,
+                    "testo_privato": segno.testo_privato,
+                }
+            )
+        return rows
 
     def _serialize_users(self, last_sync_timestamp):
         # Solo utenti con riga AuthUserSyncState (evita OneToOne mancante -> 500).
@@ -212,10 +228,11 @@ class EdgeSyncView(APIView):
                 AuthGroupSyncState.objects.filter(pk=state.pk).update(updated_at=remote_updated_at)
 
     def _apply_sync_models(self, incoming_records):
+        self._apply_zodiac_catalog(incoming_records.get("catalog.segnozodiacale", []))
         registry = self._sync_model_registry()
         pending = []
         for model_key, rows in incoming_records.items():
-            if model_key in {"auth.user", "auth.group"}:
+            if model_key in {"auth.user", "auth.group", "catalog.segnozodiacale"}:
                 continue
             model = registry.get(model_key)
             if not model:
@@ -244,6 +261,30 @@ class EdgeSyncView(APIView):
             raise ValidationError(
                 f"Sync FK unresolved: model={first.model_key} sync_id={first.payload.get('sync_id')}"
             )
+
+    def _apply_zodiac_catalog(self, rows):
+        if not rows:
+            return
+        SegnoZodiacale = apps.get_model("personaggi", "SegnoZodiacale")
+        fallback_tipo = (
+            SegnoZodiacale.objects.exclude(tipo__isnull=True).values_list("tipo", flat=True).first()
+            or "T1"
+        )
+        for row in rows:
+            numero = row.get("numero")
+            if numero in (None, ""):
+                continue
+            defaults = {
+                "nome": row.get("nome") or f"Segno {numero}",
+                "descrizione": row.get("descrizione"),
+                "testo_pubblico": row.get("testo_pubblico"),
+                "testo_privato": row.get("testo_privato"),
+            }
+            obj = SegnoZodiacale.objects.filter(numero=numero).first()
+            if obj:
+                SegnoZodiacale.objects.filter(pk=obj.pk).update(**defaults)
+            else:
+                SegnoZodiacale.objects.create(numero=numero, tipo=fallback_tipo, **defaults)
 
     def _try_apply_one(self, model, row):
         sync_id = row.get("sync_id")

@@ -114,17 +114,34 @@ class Command(BaseCommand):
 
         payload["auth.user"] = self._build_users_payload(since)
         payload["auth.group"] = self._build_groups_payload(since)
+        payload["catalog.segnozodiacale"] = self._build_zodiac_catalog_payload()
         return payload
+
+    def _build_zodiac_catalog_payload(self):
+        SegnoZodiacale = apps.get_model("personaggi", "SegnoZodiacale")
+        rows = []
+        for segno in SegnoZodiacale.objects.all().order_by("numero").iterator():
+            rows.append(
+                {
+                    "numero": segno.numero,
+                    "nome": segno.nome,
+                    "descrizione": segno.descrizione,
+                    "testo_pubblico": segno.testo_pubblico,
+                    "testo_privato": segno.testo_privato,
+                }
+            )
+        return rows
 
     def _apply_incoming_payload(self, model_registry, incoming_payload):
         self._apply_users_payload(incoming_payload.get("auth.user", []))
         self._apply_groups_payload(incoming_payload.get("auth.group", []))
+        self._apply_zodiac_catalog_payload(incoming_payload.get("catalog.segnozodiacale", []))
 
         # Applicazione robusta con retry: processa record solo quando tutte le FK
         # obbligatorie (e parent link) sono risolvibili.
         pending = []
         for model_key, records in incoming_payload.items():
-            if model_key in {"auth.user", "auth.group"}:
+            if model_key in {"auth.user", "auth.group", "catalog.segnozodiacale"}:
                 continue
             model = model_registry.get(model_key)
             if not model:
@@ -165,6 +182,30 @@ class Command(BaseCommand):
             self.stderr.write(self.style.WARNING("Top errori defer:"))
             for key, count in sorted(self._defer_errors.items(), key=lambda x: x[1], reverse=True)[:10]:
                 self.stderr.write(f" - {key}: {count}")
+
+    def _apply_zodiac_catalog_payload(self, rows):
+        if not rows:
+            return
+        SegnoZodiacale = apps.get_model("personaggi", "SegnoZodiacale")
+        fallback_tipo = (
+            SegnoZodiacale.objects.exclude(tipo__isnull=True).values_list("tipo", flat=True).first()
+            or "T1"
+        )
+        for row in rows:
+            numero = row.get("numero")
+            if numero in (None, ""):
+                continue
+            defaults = {
+                "nome": row.get("nome") or f"Segno {numero}",
+                "descrizione": row.get("descrizione"),
+                "testo_pubblico": row.get("testo_pubblico"),
+                "testo_privato": row.get("testo_privato"),
+            }
+            obj = SegnoZodiacale.objects.filter(numero=numero).first()
+            if obj:
+                SegnoZodiacale.objects.filter(pk=obj.pk).update(**defaults)
+            else:
+                SegnoZodiacale.objects.create(numero=numero, tipo=fallback_tipo, **defaults)
 
     def _try_apply_one(self, model, row):
         sync_id = row.get("sync_id")
