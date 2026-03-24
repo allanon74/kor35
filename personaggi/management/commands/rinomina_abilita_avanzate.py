@@ -1,10 +1,10 @@
 """
 Rinomina i suffissi nel campo nome delle Abilità:
-- termina con "3" → sostituisce la "3" finale con "Avanzata 1"
-- termina con "4" → sostituisce la "4" finale con "Avanzata 2"
+- termina con "III" → sostituisce "III" con "Avanzata I"
+- termina con "IV" → sostituisce "IV" con "Avanzata II"
 - termina con "Extra" o "extra" → sostituisce il suffisso con "Avanzata Extra"
 
-L'ordine di valutazione è: Extra/extra, poi 4, poi 3 (così non si confondono suffissi composti).
+Ordine: Extra/extra, poi IV, poi III (IV prima di III per evitare match ambigui su suffissi).
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -17,16 +17,16 @@ def propone_nuovo_nome(nome: str) -> str | None:
         return nome[:-5] + "Avanzata Extra"
     if nome.endswith("extra"):
         return nome[:-5] + "Avanzata Extra"
-    if nome.endswith("4"):
-        return nome[:-1] + "Avanzata 2"
-    if nome.endswith("3"):
-        return nome[:-1] + "Avanzata 1"
+    if nome.endswith("IV"):
+        return nome[:-2] + "Avanzata II"
+    if nome.endswith("III"):
+        return nome[:-3] + "Avanzata I"
     return None
 
 
 class Command(BaseCommand):
     help = (
-        "Aggiorna il nome delle Abilità: suffissi 3/4/Extra → Avanzata 1 / Avanzata 2 / Avanzata Extra"
+        "Aggiorna il nome delle Abilità: suffissi III/IV/Extra → Avanzata I / II / Avanzata Extra"
     )
 
     def add_arguments(self, parser):
