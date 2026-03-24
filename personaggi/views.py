@@ -42,6 +42,7 @@ from .models import (
     TipologiaPersonaggio,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    UserSocialPreference,
 )
 
 import uuid 
@@ -1045,6 +1046,54 @@ class PersonaggioMeView(APIView):
         
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class PreferredPersonaggioView(APIView):
+    """
+    Personaggio preferito dell'utente (sync multi-dispositivo via UserSocialPreference).
+    GET → {"preferred_personaggio_id": "<uuid>" | null}
+    POST → body JSON {"preferred_personaggio_id": "<uuid>" | null}
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        pref = UserSocialPreference.objects.filter(user=request.user).first()
+        pid = pref.preferred_personaggio_id if pref else None
+        return Response(
+            {"preferred_personaggio_id": str(pid) if pid else None},
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request, format=None):
+        raw = request.data.get("preferred_personaggio_id")
+        if raw in (None, "", "null"):
+            personaggio = None
+        else:
+            try:
+                uuid.UUID(str(raw))
+            except (ValueError, TypeError):
+                return Response(
+                    {"detail": "preferred_personaggio_id non valido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            personaggio = get_object_or_404(
+                Personaggio,
+                id=raw,
+                proprietario=request.user,
+            )
+
+        with transaction.atomic():
+            obj, _ = UserSocialPreference.objects.update_or_create(
+                user=request.user,
+                defaults={"preferred_personaggio": personaggio},
+            )
+        new_id = obj.preferred_personaggio_id
+        return Response(
+            {"preferred_personaggio_id": str(new_id) if new_id else None},
+            status=status.HTTP_200_OK,
+        )
+
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 20
