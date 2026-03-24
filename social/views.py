@@ -171,6 +171,34 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         self._sync_tags_for_comment(comment)
         return Response(SocialCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
+    @action(
+        detail=True,
+        methods=["patch", "delete"],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path=r"comments/(?P<comment_id>[^/.]+)",
+    )
+    def comment_detail(self, request, pk=None, comment_id=None):
+        post = self.get_object()
+        personaggio = self.get_personaggio()
+        comment = SocialComment.objects.filter(id=comment_id, post=post).first()
+        if not comment:
+            return Response({"detail": "Commento non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        can_moderate = request.user.is_staff or request.user.is_superuser
+        can_edit_own = personaggio and comment.autore_id == personaggio.id
+        if not (can_moderate or can_edit_own):
+            raise permissions.PermissionDenied("Permessi insufficienti per modificare il commento.")
+
+        if request.method.lower() == "delete":
+            comment.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        serializer = SocialCommentSerializer(comment, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_comment = serializer.save()
+        self._sync_tags_for_comment(updated_comment)
+        return Response(SocialCommentSerializer(updated_comment).data, status=status.HTTP_200_OK)
+
     def _sync_tags_for_comment(self, comment):
         ids = extract_mentioned_personaggi_ids(comment.testo)
         SocialCommentTag.objects.filter(comment=comment).exclude(personaggio_id__in=ids).delete()
