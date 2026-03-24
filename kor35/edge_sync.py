@@ -435,8 +435,6 @@ class EdgeSyncView(APIView):
             )
             if not existing:
                 continue
-            if model.objects.filter(sync_id=sync_id).exclude(pk=existing.pk).exists():
-                continue
 
             # NOTE:
             # On natural-key merge we never force sync_id alignment for existing rows.
