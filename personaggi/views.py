@@ -40,9 +40,6 @@ from .models import (
     ConfigurazioneLivelloAura, Cerimoniale,
     StatoTimerAttivo,
     TipologiaPersonaggio,
-    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
-    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
-    UserSocialPreference,
 )
 
 import uuid 
@@ -101,9 +98,6 @@ from .serializers import (
     StatisticaSerializer, TipologiaPersonaggioSerializer, 
     PersonaggioManageSerializer, SSOUserSerializer,
     ConsumabilePersonaggioSerializer,
-    KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
-    CaricaKorpSerializer, CaricaCarrieraSerializer,
-    PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -266,7 +260,11 @@ class AcquisisciAbilitaView(APIView):
         except Personaggio.DoesNotExist: return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
         except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         try:
-            abilita = Abilita.objects.prefetch_related('abilita_requisito_set__requisito', 'abilita_prerequisiti').get(id=abilita_id)
+            abilita = (
+                Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'aura_riferimento')
+                .prefetch_related('abilita_requisito_set__requisito', 'abilita_prerequisiti')
+                .get(id=abilita_id)
+            )
         except Abilita.DoesNotExist: return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
 
         if personaggio.abilita_possedute.filter(id=abilita_id).exists(): return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
@@ -283,6 +281,37 @@ class AcquisisciAbilitaView(APIView):
             possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
             for prereq in required_prereqs:
                 if prereq.id not in possessed_skill_ids: return Response({"error": f"Prerequisito non soddisfatto: {prereq.nome}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Tratti di razza in scheda: un solo archetipo e una sola forma per aura (sostituisce il precedente)
+        if abilita.is_tratto_razza_scheda and abilita.aura_riferimento_id:
+            if abilita.is_archetipo_razza:
+                for old in personaggio.abilita_possedute.filter(
+                    is_tratto_aura=True,
+                    aura_riferimento_id=abilita.aura_riferimento_id,
+                    nome__startswith="Archetipo -",
+                    livello_riferimento__in=(0, 1),
+                ):
+                    personaggio.abilita_possedute.remove(old)
+                # Forme su un'altra linea d'aura non sono coerenti col nuovo archetipo
+                for old_forma in personaggio.abilita_possedute.filter(
+                    is_tratto_aura=True,
+                    nome__startswith="Forma -",
+                ).exclude(aura_riferimento_id=abilita.aura_riferimento_id):
+                    personaggio.abilita_possedute.remove(old_forma)
+            elif abilita.is_forma_razza:
+                for old in personaggio.abilita_possedute.filter(
+                    is_tratto_aura=True,
+                    aura_riferimento_id=abilita.aura_riferimento_id,
+                    nome__startswith="Forma -",
+                    livello_riferimento=2,
+                ):
+                    personaggio.abilita_possedute.remove(old)
+
+        valida_ok, valida_msg = personaggio.valida_acquisizione_abilita(
+            abilita, consenti_sostituzione_tratto_razza=False
+        )
+        if not valida_ok:
+            return Response({"error": valida_msg}, status=status.HTTP_400_BAD_REQUEST)
 
         mods = personaggio.modificatori_calcolati
         sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0}) 
@@ -304,6 +333,49 @@ class AcquisisciAbilitaView(APIView):
         
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TrattiRazzaOpzioniView(APIView):
+    """Opzioni di archetipo/forma di razza per la scheda (tratti «Archetipo -» / «Forma -»)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        character_id = request.query_params.get('char_id')
+        if not character_id:
+            return Response({"error": "L'ID del personaggio è richiesto (char_id)."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            personaggio = Personaggio.objects.select_related('tipologia').get(id=character_id)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+            return Response({"error": "Personaggio non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
+
+        info = personaggio.get_razza_info()
+        candidati = (
+            Abilita.objects.filter(is_tratto_aura=True, aura_riferimento__isnull=False)
+            .filter(Q(nome__startswith="Archetipo -") | Q(nome__startswith="Forma -"))
+            .select_related('aura_riferimento', 'caratteristica', 'caratteristica_2')
+            .order_by('aura_riferimento__nome', 'livello_riferimento', 'nome')
+        )
+        archetipi = []
+        forme = []
+        for ab in candidati:
+            ok, _ = personaggio.valida_tratto_razza_scheda(ab, consenti_sostituzione=True)
+            if not ok:
+                continue
+            row = {
+                'id': ab.id,
+                'nome': ab.nome,
+                'livello_riferimento': ab.livello_riferimento,
+                'aura_id': ab.aura_riferimento_id,
+                'aura_nome': ab.aura_riferimento.nome if ab.aura_riferimento else None,
+            }
+            if ab.is_archetipo_razza:
+                archetipi.append(row)
+            elif ab.is_forma_razza:
+                forme.append(row)
+        return Response({**info, 'archetipi_selezionabili': archetipi, 'forme_selezionabili': forme})
+
 
 class AbilitaAcquistabiliView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
@@ -334,6 +406,10 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
 
         master_skills_list = (
             Abilita.objects.exclude(id__in=possessed_skill_ids)
+            .exclude(
+                Q(is_tratto_aura=True)
+                & (Q(nome__startswith="Archetipo -") | Q(nome__startswith="Forma -"))
+            )
             .defer('caratteristica_2', 'caratteristica_3')
             .select_related('caratteristica')
             .prefetch_related(
@@ -1125,39 +1201,7 @@ class PersonaggioListView(APIView):
         if (request.user.is_staff or request.user.is_superuser) and request.query_params.get('view_all') == 'true':
             queryset = Personaggio.objects.all()
         serializer = PersonaggioListSerializer(queryset, many=True)
-        data = serializer.data
-
-        if queryset and request.user and (request.user.is_authenticated):
-            pref = UserSocialPreference.objects.filter(user=request.user).select_related("preferred_personaggio").first()
-            pref_id = pref.preferred_personaggio_id if pref else None
-            for row in data:
-                row["is_main"] = bool(pref_id and int(row.get("id")) == int(pref_id))
-
-        return Response(data, status=status.HTTP_200_OK)
-
-
-class PreferredPersonaggioView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        pref = UserSocialPreference.objects.filter(user=request.user).first()
-        return Response(
-            {"preferred_personaggio_id": pref.preferred_personaggio_id if pref else None},
-            status=status.HTTP_200_OK,
-        )
-
-    def post(self, request):
-        preferred_id = request.data.get("preferred_personaggio_id")
-        preferred = None
-        if preferred_id not in (None, "", "null"):
-            preferred = get_object_or_404(Personaggio, id=preferred_id, proprietario=request.user)
-        pref, _ = UserSocialPreference.objects.get_or_create(user=request.user)
-        pref.preferred_personaggio = preferred
-        pref.save(update_fields=["preferred_personaggio", "updated_at"])
-        return Response(
-            {"preferred_personaggio_id": pref.preferred_personaggio_id},
-            status=status.HTTP_200_OK,
-        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
 class PersonaggioDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1168,10 +1212,12 @@ class PersonaggioDetailView(APIView):
         # le query su Abilita verrebbero a 500. Deferiamo quelle colonne
         # finché la migrazione non viene eseguita.
         personaggio = get_object_or_404(
-            Personaggio.objects.prefetch_related(
+            Personaggio.objects.select_related('tipologia').prefetch_related(
                 Prefetch(
                     'abilita_possedute',
-                    queryset=Abilita.objects.defer('caratteristica_2', 'caratteristica_3').select_related('caratteristica'),
+                    queryset=Abilita.objects.select_related(
+                        'caratteristica', 'caratteristica_2', 'aura_riferimento'
+                    ),
                 ),
             ),
             pk=pk,
@@ -1728,109 +1774,24 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
     serializer_class = MessaggioCreateSerializer
     
     def perform_create(self, serializer):
-        validated = serializer.validated_data
-        is_staff_message = bool(validated.get('is_staff_message'))
-        requested_sender = validated.get('mittente_personaggio')
-        crediti_da_inviare = int(validated.get('crediti_da_inviare') or 0)
-        oggetti_ids = list(dict.fromkeys(validated.get('oggetti_ids') or []))
-
-        # Mittente: usa il personaggio selezionato in UI, altrimenti fallback al primo.
-        if requested_sender:
-            if requested_sender.proprietario_id != self.request.user.id:
-                raise serializers.ValidationError({"mittente_personaggio_id": "Personaggio mittente non valido."})
-            personaggio_mittente = requested_sender
-        else:
-            personaggio_mittente = Personaggio.objects.filter(proprietario=self.request.user).first()
-
-        if not personaggio_mittente:
-            raise serializers.ValidationError({"detail": "Nessun personaggio mittente disponibile."})
-
-        if is_staff_message and (crediti_da_inviare > 0 or oggetti_ids):
-            raise serializers.ValidationError(
-                {"detail": "Non puoi allegare crediti o oggetti nei messaggi allo staff."}
+        # Recupera il personaggio mittente
+        personaggio_mittente = Personaggio.objects.filter(proprietario=self.request.user).first()
+        
+        # Se is_staff_message è True, crea un messaggio allo staff
+        if self.request.data.get('is_staff_message'):
+            serializer.save(
+                mittente=self.request.user,
+                mittente_personaggio=personaggio_mittente,
+                tipo_messaggio=Messaggio.TIPO_STAFF,
+                is_staff_message=True,
+                destinatario_personaggio=None  # Non c'è destinatario specifico per lo staff
             )
-
-        if not is_staff_message and not validated.get('destinatario_personaggio'):
-            raise serializers.ValidationError({"destinatario_id": "Destinatario obbligatorio."})
-
-        with transaction.atomic():
-            # Lock pessimista su mittente (e destinatario, se presente) prima dei check economici.
-            personaggio_mittente = Personaggio.objects.select_for_update().get(id=personaggio_mittente.id)
-            destinatario = validated.get('destinatario_personaggio')
-            if destinatario:
-                destinatario = Personaggio.objects.select_for_update().get(id=destinatario.id)
-
-            # Validazioni allegati economici.
-            if not is_staff_message and crediti_da_inviare > 0 and personaggio_mittente.crediti < crediti_da_inviare:
-                raise serializers.ValidationError(
-                    {"crediti_da_inviare": f"Crediti insufficienti. Disponibili: {personaggio_mittente.crediti}."}
-                )
-
-            oggetti_da_trasferire = []
-            if not is_staff_message and oggetti_ids:
-                oggetti_da_trasferire = list(
-                    Oggetto.objects.filter(
-                        id__in=oggetti_ids,
-                        tracciamento_inventario__inventario=personaggio_mittente,
-                        tracciamento_inventario__data_fine__isnull=True,
-                    ).distinct()
-                )
-                found_ids = {o.id for o in oggetti_da_trasferire}
-                missing_ids = [oid for oid in oggetti_ids if oid not in found_ids]
-                if missing_ids:
-                    raise serializers.ValidationError(
-                        {"oggetti_ids": f"Oggetti non trasferibili o non posseduti: {missing_ids}."}
-                    )
-                blocked = [o.nome for o in oggetti_da_trasferire if getattr(o, 'is_equipaggiato', False)]
-                if blocked:
-                    raise serializers.ValidationError(
-                        {"oggetti_ids": f"Non puoi inviare oggetti equipaggiati: {', '.join(blocked)}."}
-                    )
-
-            # Crea messaggio.
-            if is_staff_message:
-                serializer.save(
-                    mittente=self.request.user,
-                    mittente_personaggio=personaggio_mittente,
-                    tipo_messaggio=Messaggio.TIPO_STAFF,
-                    is_staff_message=True,
-                    destinatario_personaggio=None,
-                    crediti_allegati=0,
-                    oggetti_allegati_snapshot=[],
-                )
-            else:
-                oggetti_snapshot = [
-                    {
-                        "id": o.id,
-                        "sync_id": str(o.sync_id),
-                        "nome": o.nome,
-                        "tipo_oggetto": o.tipo_oggetto,
-                    }
-                    for o in oggetti_da_trasferire
-                ]
-                serializer.save(
-                    mittente=self.request.user,
-                    mittente_personaggio=personaggio_mittente,
-                    destinatario_personaggio=destinatario,
-                    crediti_allegati=crediti_da_inviare,
-                    oggetti_allegati_snapshot=oggetti_snapshot,
-                )
-
-                # Applica trasferimenti allegati in modo atomico con la creazione messaggio.
-                if crediti_da_inviare > 0:
-                    CreditoMovimento.objects.create(
-                        personaggio=personaggio_mittente,
-                        importo=-crediti_da_inviare,
-                        descrizione=f"Invio crediti via messaggio a {destinatario.nome}",
-                    )
-                    CreditoMovimento.objects.create(
-                        personaggio=destinatario,
-                        importo=crediti_da_inviare,
-                        descrizione=f"Ricezione crediti via messaggio da {personaggio_mittente.nome}",
-                    )
-
-                for oggetto in oggetti_da_trasferire:
-                    oggetto.sposta_in_inventario(destinatario)
+        else:
+            # Messaggio normale a un altro personaggio
+            serializer.save(
+                mittente=self.request.user,
+                mittente_personaggio=personaggio_mittente
+            )
         
         
 class OggettoViewSet(viewsets.ModelViewSet):
@@ -2782,48 +2743,6 @@ class TipologiaPersonaggioViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = TipologiaPersonaggio.objects.all()
     serializer_class = TipologiaPersonaggioSerializer
     permission_classes = [IsAuthenticated]
-
-
-class KorpViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Korp.objects.all().order_by("nome")
-    serializer_class = KorpSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-
-class CarrieraViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Carriera.objects.all().order_by("nome")
-    serializer_class = CarrieraSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-
-class SegnoZodiacaleViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = SegnoZodiacale.objects.all().order_by("numero", "nome")
-    serializer_class = SegnoZodiacaleSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-
-class CaricaKorpViewSet(viewsets.ModelViewSet):
-    queryset = CaricaKorp.objects.select_related("korp").all().order_by("korp__nome", "ordine", "nome")
-    serializer_class = CaricaKorpSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-
-class CaricaCarrieraViewSet(viewsets.ModelViewSet):
-    queryset = CaricaCarriera.objects.select_related("carriera").all().order_by("carriera__nome", "ordine", "nome")
-    serializer_class = CaricaCarrieraSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-
-class PersonaggioKorpMembershipViewSet(viewsets.ModelViewSet):
-    queryset = PersonaggioKorpMembership.objects.select_related("personaggio", "korp", "carica").all().order_by("-data_da", "-id")
-    serializer_class = PersonaggioKorpMembershipSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-
-class PersonaggioCarrieraMembershipViewSet(viewsets.ModelViewSet):
-    queryset = PersonaggioCarrieraMembership.objects.select_related("personaggio", "carriera", "carica").all().order_by("-data_da", "-id")
-    serializer_class = PersonaggioCarrieraMembershipSerializer
-    permission_classes = [permissions.IsAdminUser]
     
 # Aggiungi in personaggi/views.py
 

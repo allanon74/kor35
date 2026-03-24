@@ -34,8 +34,6 @@ from .models import (
     RichiestaAssemblaggio, OggettoCaratteristica, 
     Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
     TipologiaEffetto, EffettoCasuale,
-    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
-    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
 )
 
 # -----------------------------------------------------------------------------
@@ -58,48 +56,6 @@ class TierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tier
         fields = '__all__'
-
-
-class KorpSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Korp
-        fields = "__all__"
-
-
-class CarrieraSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Carriera
-        fields = "__all__"
-
-
-class SegnoZodiacaleSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SegnoZodiacale
-        fields = "__all__"
-
-
-class CaricaKorpSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CaricaKorp
-        fields = "__all__"
-
-
-class CaricaCarrieraSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CaricaCarriera
-        fields = "__all__"
-
-
-class PersonaggioKorpMembershipSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PersonaggioKorpMembership
-        fields = "__all__"
-
-
-class PersonaggioCarrieraMembershipSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PersonaggioCarrieraMembership
-        fields = "__all__"
 
 
 class TabellaSerializer(serializers.ModelSerializer):
@@ -451,6 +407,7 @@ class AbilitaPrerequisitoSmallSerializer(serializers.ModelSerializer):
 
 class AbilitaMasterListSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(read_only=True)
+    aura_riferimento = PunteggioSmallSerializer(read_only=True)
     requisiti = AbilitaRequisitoSmallSerializer(source='abilita_requisito_set', many=True, read_only=True)
     prerequisiti = AbilitaPrerequisitoSmallSerializer(source='abilita_prerequisiti', many=True, read_only=True)
     punteggi_assegnati = AbilitaPunteggioSmallSerializer(source='abilita_punteggio_set', many=True, read_only=True)
@@ -465,9 +422,10 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'nome', 'descrizione',
             'costo_pc', 'costo_crediti',
-            'caratteristica', 'requisiti', 'prerequisiti',
+            'caratteristica', 'aura_riferimento', 'requisiti', 'prerequisiti',
             'punteggi_assegnati', 'statistiche_modificate',
             'costo_pieno', 'costo_effettivo', 'is_tratto_aura',
+            'livello_riferimento',
         )
 
     def get_costo_effettivo(self, obj):
@@ -1496,6 +1454,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     statistiche_primarie = serializers.SerializerMethodField()
     
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
+    razza = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -1503,6 +1462,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte', 'costume',
             'tipologia', 'crediti', 'punti_caratteristica',
             'punteggi_base', 'statistiche_base_dict', 'modificatori_calcolati',
+            'razza',
             'abilita_possedute', 'oggetti',
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
             'consumabili', 'creazioni_consumabili_in_corso', 'creazioni_consumabili_pronte', 'valore_aura_alchimia',
@@ -1513,6 +1473,9 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'statistiche_temporanee',
             'impostazioni_ui',
         )
+
+    def get_razza(self, personaggio):
+        return personaggio.get_razza_info()
 
     def get_oggetti(self, personaggio):
         if hasattr(personaggio.inventario_ptr, 'tracciamento_oggetti_correnti'):
@@ -1657,8 +1620,6 @@ class PersonaggioSerializer(serializers.ModelSerializer):
     proprietario = serializers.StringRelatedField(read_only=True)
     proprietario_id = serializers.PrimaryKeyRelatedField(source='proprietario', read_only=True)
     is_staff = serializers.SerializerMethodField()
-    segno_zodiacale = serializers.PrimaryKeyRelatedField(read_only=True)
-    segno_zodiacale_nome = serializers.CharField(source="segno_zodiacale.nome", read_only=True)
     
     class Meta:
         model = Personaggio
@@ -1668,7 +1629,6 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
             'giocante', 'proprietario_id', 'is_staff',
-            'segno_zodiacale', 'segno_zodiacale_nome',
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
     
@@ -1692,8 +1652,6 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     # Per la visualizzazione (se serve)
     tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
     proprietario = serializers.StringRelatedField(read_only=True)
-    segno_zodiacale = serializers.PrimaryKeyRelatedField(read_only=True)
-    segno_zodiacale_nome = serializers.CharField(source="segno_zodiacale.nome", read_only=True)
 
     class Meta:
         model = Personaggio
@@ -1701,8 +1659,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'id', 'nome', 'testo', 'costume', 
             'tipologia', 'tipologia_nome', 
             'proprietario', 'data_nascita', 'data_morte',
-            'crediti', 'punti_caratteristica',
-            'segno_zodiacale', 'segno_zodiacale_nome'
+            'crediti', 'punti_caratteristica' # Read-only di default qui sotto
         )
         read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
 
@@ -1930,7 +1887,6 @@ class MessaggioSerializer(serializers.ModelSerializer):
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
             'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
-            'crediti_allegati', 'oggetti_allegati_snapshot',
             'in_risposta_a_id', 'risposte_count'
         )
         read_only_fields = ('mittente', 'data_invio', 'tipo_messaggio')
@@ -2024,32 +1980,12 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         queryset=Personaggio.objects.all(), source='destinatario_personaggio', write_only=True, required=False, allow_null=True
     )
     is_staff_message = serializers.BooleanField(required=False, default=False)
-    mittente_personaggio_id = serializers.PrimaryKeyRelatedField(
-        queryset=Personaggio.objects.all(), source='mittente_personaggio', write_only=True, required=False, allow_null=True
-    )
-    crediti_da_inviare = serializers.IntegerField(required=False, min_value=0, default=0)
-    oggetti_ids = serializers.ListField(
-        child=serializers.IntegerField(min_value=1),
-        required=False,
-        allow_empty=True,
-        default=list,
-    )
 
     class Meta:
         model = Messaggio
-        fields = (
-            'destinatario_id',
-            'titolo',
-            'testo',
-            'is_staff_message',
-            'mittente_personaggio_id',
-            'crediti_da_inviare',
-            'oggetti_ids',
-        )
+        fields = ('destinatario_id', 'titolo', 'testo', 'is_staff_message')
 
     def create(self, validated_data):
-        validated_data.pop('crediti_da_inviare', None)
-        validated_data.pop('oggetti_ids', None)
         validated_data['mittente'] = self.context['request'].user
         
         # Se è un messaggio staff, imposta tipo_messaggio a STAFF
