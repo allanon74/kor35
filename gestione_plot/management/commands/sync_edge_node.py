@@ -316,6 +316,10 @@ class Command(BaseCommand):
         Replica: stessa chiave naturale (unique_together / unique) ma sync_id diverso
         rispetto al master -> allinea sync_id e campi sulla riga esistente.
         """
+        if model._meta.label_lower == "personaggi.segnozodiacale":
+            if self._merge_segno_zodiacale_by_numero(model, row, update_data, remote_updated_at):
+                return True
+
         for group in self._iter_unique_field_groups(model):
             kwargs = {}
             for fname in group:
@@ -335,6 +339,28 @@ class Command(BaseCommand):
         if self._merge_by_natural_unique_key(model, sync_id, row, update_data, remote_updated_at):
             return True
         return False
+
+    def _merge_segno_zodiacale_by_numero(self, model, row, update_data, remote_updated_at):
+        numero = row.get("numero")
+        if numero in (None, ""):
+            return False
+        existing = model.objects.filter(numero=numero).first()
+        if not existing:
+            return False
+        patch = dict(update_data)
+        # Never patch parent-link fields on existing rows.
+        for f in model._meta.concrete_fields:
+            if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
+                patch.pop(f.name, None)
+        if remote_updated_at:
+            patch["updated_at"] = remote_updated_at
+        try:
+            with transaction.atomic():
+                model.objects.filter(pk=existing.pk).update(**patch)
+        except IntegrityError:
+            if "updated_at" in patch:
+                model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
+        return True
 
     def _merge_after_validation_error(self, model, sync_id, update_data, remote_updated_at):
         """
