@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django.utils import timezone
 from django.db.models import Count, Q
 from rest_framework import permissions, status, viewsets
@@ -686,11 +688,12 @@ class SocialNotificationsView(APIView):
                     "text": comment.testo or "",
                 }
             )
+        # SocialPostTag non ha created_at (solo updated_at su SyncableModel): usiamo updated_at come istante menzione.
         for tag in post_mentions_qs[:limit]:
             events.append(
                 {
                     "kind": "mention_post",
-                    "created_at": tag.created_at,
+                    "created_at": tag.updated_at,
                     "post_id": tag.post_id,
                     "post_title": tag.post.titolo or "",
                     "actor_id": tag.post.autore_id,
@@ -702,7 +705,7 @@ class SocialNotificationsView(APIView):
             events.append(
                 {
                     "kind": "mention_comment",
-                    "created_at": tag.created_at,
+                    "created_at": tag.updated_at,
                     "post_id": tag.comment.post_id if tag.comment else None,
                     "post_title": tag.comment.post.titolo if tag.comment and tag.comment.post else "",
                     "actor_id": tag.comment.autore_id if tag.comment else None,
@@ -718,9 +721,9 @@ class SocialNotificationsView(APIView):
         unread_count = 0
         if since_param:
             try:
-                since_dt = timezone.datetime.fromisoformat(since_param.replace("Z", "+00:00"))
+                since_dt = datetime.fromisoformat(since_param.replace("Z", "+00:00"))
                 unread_count = sum(1 for e in events if e["created_at"] > since_dt)
-            except ValueError:
+            except (ValueError, TypeError):
                 unread_count = 0
 
         return Response(

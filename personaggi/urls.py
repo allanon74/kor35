@@ -120,7 +120,6 @@ urlpatterns = [
     path('api/transazioni/<int:pk>/proposta/', views.PropostaTransazioneCreateView.as_view(), name='api_transazioni_proposta'),
     path('api/abilita/master_list/', views.AbilitaMasterListView.as_view(), name='abilita_master_list'),
     path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
-    path('api/personaggio/me/tratti_razza_opzioni/', views.TrattiRazzaOpzioniView.as_view(), name='tratti_razza_opzioni'),
     path('api/personaggio/me/abilita_acquistabili/', views.AbilitaAcquistabiliView.as_view(), name='abilita-acquistabili'),
     path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
     

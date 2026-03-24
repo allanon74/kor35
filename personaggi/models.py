@@ -1,7 +1,7 @@
-from django.db.models import Sum, F, Count, Value
-from django.db.models.functions import Coalesce
+from django.db.models import Sum, F, Count
 import os
 import re
+import random
 import secrets
 import string
 import copy
@@ -501,8 +501,6 @@ CARATTERISTICA = "CA"
 STATISTICA = "ST"
 ELEMENTO = "EL"
 AURA = "AU"
-# Aura «Aura innata» nel DB (proxy Aura / modello Punteggio tipo AU)
-SIGLA_AURA_INNATA = "AIN"
 CONDIZIONE = "CO"
 CULTO = "CU"
 VIA = "VI"
@@ -575,7 +573,7 @@ class Tier(Tabella):
 class Korp(Tier):
     class Meta:
         verbose_name = "KORP"
-        verbose_name_plural = "KORP"
+        verbose_name_plural = "KORPS"
 
 
 class Carriera(Tier):
@@ -595,33 +593,92 @@ class SegnoZodiacale(Tier):
         ordering = ["numero", "nome"]
 
 
-class CaricaKorp(SyncableModel, models.Model):
+class CaricaKorp(A_modello):
+    korp = models.ForeignKey(Korp, on_delete=models.CASCADE, related_name="cariche")
     nome = models.CharField(max_length=120)
     bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)
-    korp = models.ForeignKey(Korp, on_delete=models.CASCADE, related_name="cariche")
 
     class Meta:
         verbose_name = "Carica KORP"
         verbose_name_plural = "Cariche KORP"
         ordering = ["korp__nome", "ordine", "nome"]
-        unique_together = [["korp", "nome"]]
+        unique_together = ("korp", "nome")
+
+    def __str__(self):
+        return f"{self.korp.nome} - {self.nome}"
 
 
-class CaricaCarriera(SyncableModel, models.Model):
+class CaricaCarriera(A_modello):
+    carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="cariche")
     nome = models.CharField(max_length=120)
     bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)
-    carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="cariche")
 
     class Meta:
         verbose_name = "Carica Carriera"
         verbose_name_plural = "Cariche Carriera"
         ordering = ["carriera__nome", "ordine", "nome"]
-        unique_together = [["carriera", "nome"]]
+        unique_together = ("carriera", "nome")
 
+    def __str__(self):
+        return f"{self.carriera.nome} - {self.nome}"
+
+
+class PersonaggioKorpMembership(A_modello):
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="korp_membership")
+    korp = models.ForeignKey(Korp, on_delete=models.PROTECT, related_name="membership")
+    carica = models.ForeignKey(CaricaKorp, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
+    data_da = models.DateTimeField(default=timezone.now)
+    data_a = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Membership KORP"
+        verbose_name_plural = "Membership KORP"
+        ordering = ["-data_da", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio"],
+                condition=Q(data_a__isnull=True),
+                name="uniq_personaggio_korp_attiva",
+            )
+        ]
+
+    def clean(self):
+        if self.carica and self.carica.korp_id != self.korp_id:
+            raise ValidationError("La carica selezionata non appartiene alla KORP indicata.")
+
+    def __str__(self):
+        return f"{self.personaggio.nome} -> {self.korp.nome}"
+
+
+class PersonaggioCarrieraMembership(A_modello):
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="carriera_membership")
+    carriera = models.ForeignKey(Carriera, on_delete=models.PROTECT, related_name="membership")
+    carica = models.ForeignKey(CaricaCarriera, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
+    data_da = models.DateTimeField(default=timezone.now)
+    data_a = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Membership Carriera"
+        verbose_name_plural = "Membership Carriera"
+        ordering = ["-data_da", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio"],
+                condition=Q(data_a__isnull=True),
+                name="uniq_personaggio_carriera_attiva",
+            )
+        ]
+
+    def clean(self):
+        if self.carica and self.carica.carriera_id != self.carriera_id:
+            raise ValidationError("La carica selezionata non appartiene alla Carriera indicata.")
+
+    def __str__(self):
+        return f"{self.personaggio.nome} -> {self.carriera.nome}"
 
 class Punteggio(Tabella):
     sigla = models.CharField(max_length=3, unique=True)
@@ -879,22 +936,6 @@ class Abilita(A_modello):
     
     def __str__(self): 
         return self.nome
-
-    @property
-    def is_tratto_razza_scheda(self):
-        """Tratti di razza in scheda: nomi 'Archetipo - …' e 'Forma - …' (non altri tratti d'aura)."""
-        if not self.is_tratto_aura:
-            return False
-        n = (self.nome or "").strip()
-        return n.startswith("Archetipo -") or n.startswith("Forma -")
-
-    @property
-    def is_archetipo_razza(self):
-        return self.is_tratto_razza_scheda and (self.nome or "").strip().startswith("Archetipo -")
-
-    @property
-    def is_forma_razza(self):
-        return self.is_tratto_razza_scheda and (self.nome or "").strip().startswith("Forma -")
 
 class abilita_tier(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
@@ -1154,19 +1195,6 @@ class TipologiaPersonaggio(SyncableModel, models.Model):
     giocante = models.BooleanField(default=True)
     class Meta: verbose_name="Tipologia Personaggio"
     def __str__(self): return self.nome
-
-
-# Nome mostrato in scheda se il PG non ha un'abilità «Archetipo - …» posseduta
-RAZZA_ARCHETIPO_DEFAULT_NOME = "Archetipo - Umano"
-
-
-def get_punteggio_aura_innata():
-    """Record Punteggio (tipo AU) per Aura Innata: sigla AIN o nome «aura Innata»."""
-    return (
-        Punteggio.objects.filter(tipo=AURA, sigla=SIGLA_AURA_INNATA).first()
-        or Punteggio.objects.filter(tipo=AURA, nome__iexact="aura innata").first()
-    )
-
 
 def get_default_tipologia():
     """
@@ -1584,6 +1612,7 @@ class Oggetto(A_vista):
 class Personaggio(Inventario):
     proprietario = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     tipologia = models.ForeignKey(TipologiaPersonaggio, on_delete=models.PROTECT, related_name="personaggi", default=get_default_tipologia)
+    segno_zodiacale = models.ForeignKey("SegnoZodiacale", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
@@ -1601,13 +1630,6 @@ class Personaggio(Inventario):
     # --- CAMPO CERIMONIALI ---
     cerimoniali_posseduti = models.ManyToManyField(Cerimoniale, through='PersonaggioCerimoniale', blank=True)
     impostazioni_ui = models.JSONField(default=dict, blank=True, verbose_name="Impostazioni UI")
-    segno_zodiacale = models.ForeignKey(
-        "SegnoZodiacale",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="personaggi",
-    )
     # -------------------
     
     class Meta: 
@@ -1640,12 +1662,7 @@ class Personaggio(Inventario):
     def punteggi_base(self):
         if hasattr(self, '_punteggi_base_cache'): return self._punteggi_base_cache
         links = abilita_punteggio.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('punteggio')
-        p = {
-            i['punteggio__nome']: i['valore_totale']
-            for i in links.values('punteggio__nome').annotate(
-                valore_totale=Coalesce(Sum('valore'), Value(0))
-            )
-        }
+        p = {i['punteggio__nome']: i['valore_totale'] for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))}
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
         if agen:
             others = set(Punteggio.objects.filter(tipo=AURA).exclude(id=agen.id).values_list('nome', flat=True))
@@ -1710,163 +1727,8 @@ class Personaggio(Inventario):
     
     def get_valore_aura_effettivo(self, aura):
         pb = self.punteggi_base
-        if aura.is_generica:
-            nums = []
-            for k, v in pb.items():
-                if not Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists():
-                    continue
-                if v is None:
-                    continue
-                try:
-                    nums.append(int(v))
-                except (TypeError, ValueError):
-                    continue
-            return max(nums) if nums else 0
-        v = pb.get(aura.nome, 0)
-        if v is None:
-            return 0
-        try:
-            return int(v)
-        except (TypeError, ValueError):
-            return 0
-
-    def get_valore_aura_innata(self):
-        """
-        Valore intero dell'Aura Innata (Punteggio sigla AIN, nome tipico «aura Innata»),
-        dai punteggi del personaggio (abilità / punteggi acquisiti). Default 0 se non configurata.
-        """
-        aura_ain = get_punteggio_aura_innata()
-        if not aura_ain:
-            return 0
-        # get_valore_aura_effettivo restituisce sempre int (gestisce None da Sum SQL)
-        return self.get_valore_aura_effettivo(aura_ain)
-
-    def get_tratti_razza_scheda_posseduti_qs(self):
-        """Tratti d'aura di razza in scheda (prefissi Archetipo - / Forma -)."""
-        return self.abilita_possedute.filter(
-            is_tratto_aura=True,
-            aura_riferimento__isnull=False,
-        ).filter(
-            Q(nome__startswith="Archetipo -") | Q(nome__startswith="Forma -")
-        )
-
-    def get_trait_razza_archetipo(self):
-        return (
-            self.get_tratti_razza_scheda_posseduti_qs()
-            .filter(nome__startswith="Archetipo -", livello_riferimento__in=(0, 1))
-            .order_by('-livello_riferimento')
-            .first()
-        )
-
-    def get_trait_razza_forma(self):
-        return (
-            self.get_tratti_razza_scheda_posseduti_qs()
-            .filter(nome__startswith="Forma -", livello_riferimento=2)
-            .first()
-        )
-
-    def get_razza_info(self):
-        arc = self.get_trait_razza_archetipo()
-        forma = self.get_trait_razza_forma()
-        arc_nome = arc.nome if arc else RAZZA_ARCHETIPO_DEFAULT_NOME
-        forma_nome = forma.nome if forma else None
-        testo = f"Razza: {arc_nome} · {forma_nome}" if forma_nome else f"Razza: {arc_nome}"
-        innata = self.get_valore_aura_innata()
-        return {
-            'testo': testo,
-            'archetipo_nome': arc_nome,
-            'forma_nome': forma_nome,
-            'aura_innata': innata,
-            'archetipo_abilita_id': arc.id if arc else None,
-            'forma_abilita_id': forma.id if forma else None,
-        }
-
-    def _valida_requisiti_caratteristica_forma_razza(self, abilita):
-        c2 = abilita.caratteristica_2
-        if not c2:
-            return False, "Forma non configurata (manca caratteristica 2)."
-        cb = self.caratteristiche_base
-        n1 = abilita.caratteristica.nome
-        n2 = c2.nome
-        v1 = cb.get(n1, 0)
-        v2 = cb.get(n2, 0)
-        if n1 == n2:
-            if v1 < 2:
-                return False, f"Per questa forma servono almeno 2 punti in {n1} (ne hai {v1})."
-        else:
-            if v1 < 1 or v2 < 1:
-                return False, f"Per questa forma servono almeno 1 in {n1} e 1 in {n2}."
-        return True, ""
-
-    def valida_tratto_razza_scheda(self, abilita, consenti_sostituzione=False):
-        """
-        Regole per tratti con nome «Archetipo - …» / «Forma - …».
-        consenti_sostituzione: se True, non applica l'esclusività (la view rimuove il precedente).
-        """
-        if not abilita.is_tratto_razza_scheda or not abilita.aura_riferimento:
-            return True, None
-
-        innata = self.get_valore_aura_innata()
-        lv = abilita.livello_riferimento
-
-        if abilita.is_forma_razza:
-            if innata < 2:
-                return False, "Il tuo valore di Aura Innata (AIN) non consente forme (serve almeno 2)."
-            if lv != 2:
-                return False, "Forma di razza: livello riferimento atteso 2."
-        elif abilita.is_archetipo_razza:
-            if lv == 0:
-                pass
-            elif lv == 1:
-                if innata < 1:
-                    return False, "Il tuo valore di Aura Innata (AIN) non consente archetipi non umani (serve almeno 1)."
-                c = abilita.caratteristica
-                if c.tipo != CARATTERISTICA:
-                    return False, "Archetipo non collegato a una caratteristica valida."
-                if self.caratteristiche_base.get(c.nome, 0) < 1:
-                    return False, f"Serve almeno 1 punto in {c.nome} per questo archetipo."
-            else:
-                return False, f"Livello riferimento archetipo non valido ({lv})."
-
-        valore_aura = self.get_valore_aura_effettivo(abilita.aura_riferimento)
-        if valore_aura < lv:
-            return False, (
-                f"La tua Aura {abilita.aura_riferimento.nome} è troppo bassa per questo tratto di razza "
-                f"({valore_aura}/{lv})."
-            )
-
-        if not consenti_sostituzione:
-            if abilita.is_archetipo_razza:
-                tratti_conf = self.abilita_possedute.filter(
-                    is_tratto_aura=True,
-                    aura_riferimento_id=abilita.aura_riferimento_id,
-                    nome__startswith="Archetipo -",
-                    livello_riferimento__in=(0, 1),
-                ).exclude(pk=abilita.pk)
-                if tratti_conf.exists():
-                    return False, (
-                        f"Hai già un archetipo di razza per l'aura {abilita.aura_riferimento.nome}. "
-                        "Sostituiscilo dalla sezione Razza in scheda."
-                    )
-            if abilita.is_forma_razza:
-                tratti_conf = self.abilita_possedute.filter(
-                    is_tratto_aura=True,
-                    aura_riferimento_id=abilita.aura_riferimento_id,
-                    nome__startswith="Forma -",
-                    livello_riferimento=2,
-                ).exclude(pk=abilita.pk)
-                if tratti_conf.exists():
-                    return False, (
-                        f"Hai già una forma di razza per l'aura {abilita.aura_riferimento.nome}. "
-                        "Sostituiscila dalla sezione Razza in scheda."
-                    )
-
-        if abilita.is_forma_razza:
-            ok_c, msg_c = self._valida_requisiti_caratteristica_forma_razza(abilita)
-            if not ok_c:
-                return False, msg_c
-
-        return True, None
+        if aura.is_generica: return max([v for k,v in pb.items() if Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists()] or [0])
+        return pb.get(aura.nome, 0)
     
     def valida_acquisto_tecnica(self, t):
         if not t.aura_richiesta: return False, "Aura mancante."
@@ -1906,25 +1768,25 @@ class Personaggio(Inventario):
         
         return True, "OK"
     
-    def valida_acquisizione_abilita(self, abilita, consenti_sostituzione_tratto_razza=False):
+    def valida_acquisizione_abilita(self, abilita):
+        # ... controlli standard (costi, requisiti) ...
+
+        # Controllo Esclusività Tratto Aura
         if abilita.is_tratto_aura and abilita.aura_riferimento:
-            if abilita.is_tratto_razza_scheda:
-                ok, err = self.valida_tratto_razza_scheda(abilita, consenti_sostituzione_tratto_razza)
-                if not ok:
-                    return False, err
-            else:
-                tratti_esistenti = self.abilita_possedute.filter(
-                    is_tratto_aura=True,
-                    aura_riferimento=abilita.aura_riferimento,
-                    livello_riferimento=abilita.livello_riferimento
-                ).exclude(pk=abilita.pk)
+            # Cerca se il personaggio ha già un'abilità per questa Aura e questo Livello
+            tratti_esistenti = self.abilita_possedute.filter(
+                is_tratto_aura=True,
+                aura_riferimento=abilita.aura_riferimento,
+                livello_riferimento=abilita.livello_riferimento
+            ).exclude(pk=abilita.pk) # Escludi se stessa se stiamo aggiornando
+            
+            if tratti_esistenti.exists():
+                return False, f"Hai già selezionato un {tratti_esistenti.first().nome} per il livello {abilita.livello_riferimento} di {abilita.aura_riferimento.nome}."
 
-                if tratti_esistenti.exists():
-                    return False, f"Hai già selezionato un {tratti_esistenti.first().nome} per il livello {abilita.livello_riferimento} di {abilita.aura_riferimento.nome}."
-
-                valore_aura = self.get_valore_aura_effettivo(abilita.aura_riferimento)
-                if valore_aura < abilita.livello_riferimento:
-                    return False, f"La tua Aura {abilita.aura_riferimento.nome} è troppo bassa ({valore_aura}/{abilita.livello_riferimento})."
+            # Controllo: Ho il punteggio di Aura necessario?
+            valore_aura = self.get_valore_aura_effettivo(abilita.aura_riferimento)
+            if valore_aura < abilita.livello_riferimento:
+                return False, f"La tua Aura {abilita.aura_riferimento.nome} è troppo bassa ({valore_aura}/{abilita.livello_riferimento})."
 
         return True, "OK"
     
@@ -2458,74 +2320,6 @@ class Personaggio(Inventario):
             return int(max(0, costo_base - riduzione))
         return int(costo_base)
 
-
-class UserSocialPreference(SyncableModel, models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="social_preference")
-    preferred_personaggio = models.ForeignKey(
-        "Personaggio",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="preferred_by_users",
-    )
-
-    class Meta:
-        verbose_name = "Preferenza Social Utente"
-        verbose_name_plural = "Preferenze Social Utenti"
-
-
-class PersonaggioKorpMembership(SyncableModel, models.Model):
-    data_da = models.DateTimeField(default=timezone.now)
-    data_a = models.DateTimeField(null=True, blank=True)
-    carica = models.ForeignKey(
-        CaricaKorp,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="membership",
-    )
-    korp = models.ForeignKey(Korp, on_delete=models.PROTECT, related_name="membership")
-    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="korp_membership")
-
-    class Meta:
-        verbose_name = "Membership KORP"
-        verbose_name_plural = "Membership KORP"
-        ordering = ["-data_da", "-id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["personaggio"],
-                condition=Q(data_a__isnull=True),
-                name="uniq_personaggio_korp_attiva",
-            ),
-        ]
-
-
-class PersonaggioCarrieraMembership(SyncableModel, models.Model):
-    data_da = models.DateTimeField(default=timezone.now)
-    data_a = models.DateTimeField(null=True, blank=True)
-    carica = models.ForeignKey(
-        CaricaCarriera,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="membership",
-    )
-    carriera = models.ForeignKey(Carriera, on_delete=models.PROTECT, related_name="membership")
-    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="carriera_membership")
-
-    class Meta:
-        verbose_name = "Membership Carriera"
-        verbose_name_plural = "Membership Carriera"
-        ordering = ["-data_da", "-id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["personaggio"],
-                condition=Q(data_a__isnull=True),
-                name="uniq_personaggio_carriera_attiva",
-            ),
-        ]
-
-
 class PersonaggioAbilita(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
@@ -2808,6 +2602,26 @@ def touch_user_sync_state(sender, instance, **kwargs):
 @receiver(post_save, sender=Group)
 def touch_group_sync_state(sender, instance, **kwargs):
     AuthGroupSyncState.objects.update_or_create(group=instance, defaults={})
+
+
+class UserSocialPreference(SyncableModel, models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="social_preference")
+    preferred_personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preferred_by_users",
+    )
+
+    class Meta:
+        verbose_name = "Preferenza Social Utente"
+        verbose_name_plural = "Preferenze Social Utenti"
+
+    def __str__(self):
+        if self.preferred_personaggio:
+            return f"{self.user.username} -> {self.preferred_personaggio.nome}"
+        return f"{self.user.username} -> Nessun preferito"
 
 class AbilitaPluginModel(SyncableModel, CMSPlugin):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
@@ -3189,3 +3003,9 @@ def inizializza_statistiche_base_personaggio(sender, instance, created, **kwargs
         # Bulk create per performance
         if records_da_creare:
             PersonaggioStatisticaBase.objects.bulk_create(records_da_creare, ignore_conflicts=True)
+        if instance.segno_zodiacale_id is None:
+            segni_ids = list(SegnoZodiacale.objects.values_list("id", flat=True))
+            if segni_ids:
+                Personaggio.objects.filter(pk=instance.pk, segno_zodiacale__isnull=True).update(
+                    segno_zodiacale_id=random.choice(segni_ids)
+                )

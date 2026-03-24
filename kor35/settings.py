@@ -78,7 +78,7 @@ INSTALLED_APPS = [
 	'personaggi.apps.PersonaggiConfig', #personaggi
 	# 'oggetti.apps.OggettiConfig', #oggetti
     'gestione_plot.apps.GestionePlotConfig', #gestione plot
-    'social.apps.SocialConfig',  # social (ripristinato: rimosso per errore in commit RAZZE 29f5655)
+    'social.apps.SocialConfig', # social
 	'django.contrib.sites',
 	'cms', #cms
 	'menus', #cms
