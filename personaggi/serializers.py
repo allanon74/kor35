@@ -161,7 +161,9 @@ class PunteggioSerializer(serializers.ModelSerializer):
             return AbilitaSmallSerializer(obj.tratti_aura_prefetched, many=True).data
         
         # Altrimenti fai la query
-        tratti = Abilita.objects.filter(is_tratto_aura=True, aura_riferimento=obj).defer('caratteristica_2', 'caratteristica_3')
+        tratti = Abilita.objects.filter(is_tratto_aura=True, aura_riferimento=obj).select_related(
+            'caratteristica', 'caratteristica_2'
+        )
         return AbilitaSmallSerializer(tratti, many=True).data
 
 
@@ -314,7 +316,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
         tratti = Abilita.objects.filter(
             is_tratto_aura=True, 
             aura_riferimento=obj
-        ).defer('caratteristica_2', 'caratteristica_3').select_related('caratteristica')
+        ).select_related('caratteristica', 'caratteristica_2')
         
         return AbilitaSmallSerializer(tratti, many=True).data
 
@@ -335,6 +337,7 @@ class AbilSerializer(serializers.ModelSerializer):
 
 class AbilitaSmallSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(many=False)
+    caratteristica_2 = PunteggioSmallSerializer(many=False, allow_null=True, read_only=True)
     statistica_modificata = serializers.SerializerMethodField()
     
 
@@ -347,6 +350,7 @@ class AbilitaSmallSerializer(serializers.ModelSerializer):
             'livello_riferimento',  # <--- CRUCIALE PER IL FILTRO
             'is_tratto_aura',
             'caratteristica',
+            'caratteristica_2',
             'statistica_modificata',
         )
         
@@ -451,6 +455,8 @@ class AbilitaPrerequisitoSmallSerializer(serializers.ModelSerializer):
 
 class AbilitaMasterListSerializer(serializers.ModelSerializer):
     caratteristica = PunteggioSmallSerializer(read_only=True)
+    caratteristica_2 = PunteggioSmallSerializer(read_only=True, allow_null=True)
+    aura_riferimento = PunteggioSmallSerializer(read_only=True, allow_null=True)
     requisiti = AbilitaRequisitoSmallSerializer(source='abilita_requisito_set', many=True, read_only=True)
     prerequisiti = AbilitaPrerequisitoSmallSerializer(source='abilita_prerequisiti', many=True, read_only=True)
     punteggi_assegnati = AbilitaPunteggioSmallSerializer(source='abilita_punteggio_set', many=True, read_only=True)
@@ -465,7 +471,8 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'nome', 'descrizione',
             'costo_pc', 'costo_crediti',
-            'caratteristica', 'requisiti', 'prerequisiti',
+            'caratteristica', 'caratteristica_2', 'aura_riferimento', 'livello_riferimento',
+            'requisiti', 'prerequisiti',
             'punteggi_assegnati', 'statistiche_modificate',
             'costo_pieno', 'costo_effettivo', 'is_tratto_aura',
         )

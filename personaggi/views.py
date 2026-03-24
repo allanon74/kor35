@@ -24,7 +24,7 @@ from .models import (
     PersonaggioModelloAura, ModelloAura, PropostaTecnica, 
     # NUOVI MODELLI INTERMEDI
     PropostaTecnicaCaratteristica, InfusioneCaratteristica, TessituraCaratteristica,
-    PersonaggioTessitura,
+    PersonaggioTessitura, PersonaggioAbilita,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, LetturaMessaggio, PersonaggioLog,
     STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES,
     PropostaTransazione,
@@ -266,38 +266,88 @@ class AcquisisciAbilitaView(APIView):
         except Personaggio.DoesNotExist: return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
         except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         try:
-            abilita = Abilita.objects.prefetch_related('abilita_requisito_set__requisito', 'abilita_prerequisiti').get(id=abilita_id)
+            abilita = (
+                Abilita.objects.select_related('aura_riferimento', 'caratteristica', 'caratteristica_2')
+                .prefetch_related('abilita_requisito_set__requisito', 'abilita_prerequisiti')
+                .get(id=abilita_id)
+            )
         except Abilita.DoesNotExist: return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
 
-        if personaggio.abilita_possedute.filter(id=abilita_id).exists(): return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+        if personaggio.abilita_possedute.filter(id=abilita_id).exists():
+            return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
 
-        character_scores = personaggio.caratteristiche_base
-        for req in abilita.abilita_requisito_set.all():
-            punteggio_nome = req.requisito.nome
-            valore_richiesto = req.valore
-            punteggio_pg = character_scores.get(punteggio_nome, 0)
-            if punteggio_pg < valore_richiesto: return Response({"error": f"Requisito non soddisfatto: {punteggio_nome} {valore_richiesto} (possiedi {punteggio_pg})"}, status=status.HTTP_400_BAD_REQUEST)
+        is_tratto_ain = (
+            abilita.is_tratto_aura
+            and abilita.aura_riferimento_id
+            and getattr(abilita.aura_riferimento, 'sigla', None) == 'AIN'
+        )
+
+        ok_val, msg_val = personaggio.valida_acquisizione_abilita(abilita)
+        if not ok_val:
+            return Response({"error": msg_val}, status=status.HTTP_400_BAD_REQUEST)
+
+        if is_tratto_ain:
+            liv = abilita.livello_riferimento
+            if liv in (0, 1):
+                PersonaggioAbilita.objects.filter(
+                    personaggio=personaggio,
+                    abilita__is_tratto_aura=True,
+                    abilita__aura_riferimento_id=abilita.aura_riferimento_id,
+                    abilita__livello_riferimento__in=(0, 1),
+                ).delete()
+            elif liv == 2:
+                PersonaggioAbilita.objects.filter(
+                    personaggio=personaggio,
+                    abilita__is_tratto_aura=True,
+                    abilita__aura_riferimento_id=abilita.aura_riferimento_id,
+                    abilita__livello_riferimento=2,
+                ).delete()
+            # Cache M2M: ricarica il personaggio dopo lo swap dei tratti AIN
+            personaggio = Personaggio.objects.select_related('tipologia').get(pk=personaggio.pk)
+
+        if not is_tratto_ain:
+            character_scores = personaggio.caratteristiche_base
+            for req in abilita.abilita_requisito_set.all():
+                punteggio_nome = req.requisito.nome
+                valore_richiesto = req.valore
+                punteggio_pg = character_scores.get(punteggio_nome, 0)
+                if punteggio_pg < valore_richiesto:
+                    return Response(
+                        {"error": f"Requisito non soddisfatto: {punteggio_nome} {valore_richiesto} (possiedi {punteggio_pg})"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
         required_prereqs = [p.prerequisito for p in abilita.abilita_prerequisiti.all()]
         if required_prereqs:
             possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
             for prereq in required_prereqs:
-                if prereq.id not in possessed_skill_ids: return Response({"error": f"Prerequisito non soddisfatto: {prereq.nome}"}, status=status.HTTP_400_BAD_REQUEST)
+                if prereq.id not in possessed_skill_ids:
+                    return Response({"error": f"Prerequisito non soddisfatto: {prereq.nome}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        mods = personaggio.modificatori_calcolati
-        sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0}) 
-        sconto_valore = max(0, sconto_stat.get('add', 0)) 
-        sconto_percent = Decimal(sconto_valore) / Decimal(100)
-        moltiplicatore_costo = Decimal(1) - sconto_percent
-        costo_pc_finale = abilita.costo_pc 
-        costo_crediti_base = Decimal(abilita.costo_crediti)
-        costo_crediti_finale = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal('0.01'))
+        if is_tratto_ain:
+            costo_pc_finale = 0
+            costo_crediti_finale = Decimal(0)
+        else:
+            mods = personaggio.modificatori_calcolati
+            sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0})
+            sconto_valore = max(0, sconto_stat.get('add', 0))
+            sconto_percent = Decimal(sconto_valore) / Decimal(100)
+            moltiplicatore_costo = Decimal(1) - sconto_percent
+            costo_pc_finale = abilita.costo_pc
+            costo_crediti_base = Decimal(abilita.costo_crediti)
+            costo_crediti_finale = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal('0.01'))
 
-        if personaggio.punti_caratteristica < costo_pc_finale: return Response({"error": f"Punti Caratteristica insufficenti. Richiesti: {costo_pc_finale}"}, status=status.HTTP_400_BAD_REQUEST) 
-        if personaggio.crediti < costo_crediti_finale: return Response({"error": f"Crediti insufficenti. Richiesti: {costo_crediti_finale} (Costo base: {abilita.costo_crediti}, Sconto: {sconto_valore}%)"}, status=status.HTTP_400_BAD_REQUEST)
+            if personaggio.punti_caratteristica < costo_pc_finale:
+                return Response({"error": f"Punti Caratteristica insufficenti. Richiesti: {costo_pc_finale}"}, status=status.HTTP_400_BAD_REQUEST)
+            if personaggio.crediti < costo_crediti_finale:
+                return Response(
+                    {"error": f"Crediti insufficenti. Richiesti: {costo_crediti_finale} (Costo base: {abilita.costo_crediti}, Sconto: {sconto_valore}%)"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
-        personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
+            personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
+            personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
+
         personaggio.abilita_possedute.add(abilita)
         
         cache.delete(f"acquirable_skills_{personaggio.id}")

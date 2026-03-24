@@ -1672,6 +1672,55 @@ class Personaggio(Inventario):
             p[agen.nome] = max_val
         self._punteggi_base_cache = p
         return p
+
+    def get_punteggi_base_escludendo_abilita(self, exclude_abilita_ids):
+        """
+        Come punteggi_base ma esclude i contributi delle abilità indicate
+        (usato per requisiti di razza / tratti aura innata senza effetto circolare).
+        """
+        exclude_abilita_ids = set(exclude_abilita_ids or [])
+        links = abilita_punteggio.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).exclude(abilita_id__in=exclude_abilita_ids).select_related('punteggio')
+        p = {
+            i['punteggio__nome']: i['valore_totale']
+            for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))
+        }
+        agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
+        if agen:
+            others = set(
+                Punteggio.objects.filter(tipo=AURA).exclude(id=agen.id).values_list('nome', flat=True)
+            )
+            max_val = 0
+            for k, v in p.items():
+                if k in others and v > max_val:
+                    max_val = v
+            p[agen.nome] = max_val
+        return p
+
+    def _caratteristiche_dict_da_punteggi_nomi(self, punteggi_per_nome):
+        """Filtra un dict {nome_punteggio: valore} lasciando solo le caratteristiche (tipo CA)."""
+        nomi_ca = set(
+            Punteggio.objects.filter(tipo=CARATTERISTICA).values_list('nome', flat=True)
+        )
+        return {k: v for k, v in punteggi_per_nome.items() if k in nomi_ca}
+
+    def _ids_tratti_aura_innata_slot(self, slot):
+        """
+        ID delle abilità possedute che sono tratti AIN nello slot indicato.
+        slot 'archetipo' -> livello_riferimento 0 o 1; 'forma' -> livello 2.
+        """
+        qs = self.abilita_possedute.filter(
+            is_tratto_aura=True,
+            aura_riferimento__sigla='AIN',
+        )
+        if slot == 'archetipo':
+            qs = qs.filter(livello_riferimento__in=(0, 1))
+        elif slot == 'forma':
+            qs = qs.filter(livello_riferimento=2)
+        else:
+            return []
+        return list(qs.values_list('id', flat=True))
     
     def get_valore_statistica_base(self, statistica):
         """
@@ -1767,23 +1816,80 @@ class Personaggio(Inventario):
                     if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids: return False, f"Manca componente obbligatorio: {m_obb.nome}."
         
         return True, "OK"
+
+    def valida_tratto_aura_innata(self, abilita):
+        """
+        Regole per tratti d'aura legati all'aura innata (Punteggio con sigla AIN).
+        Archetipo: livello 0 (Umano) o 1 (altri); Forma: livello 2.
+        I requisiti sulle caratteristiche usano i punteggi del PG escludendo
+        i tratti dello stesso slot, per evitare dipendenze circolari.
+        """
+        aura = abilita.aura_riferimento
+        if not aura or getattr(aura, 'sigla', None) != 'AIN':
+            return True, "OK"
+
+        ain_val = self.get_valore_aura_effettivo(aura)
+        liv = abilita.livello_riferimento
+
+        if liv == 0:
+            nome_norm = (abilita.nome or '').strip().casefold()
+            if nome_norm != 'archetipo - umano':
+                return False, "A livello 0 è consentito solo l'archetipo Umano."
+            return True, "OK"
+
+        if liv == 1:
+            if ain_val < 1:
+                return False, "Serve aura innata almeno 1 per questo archetipo."
+            excl = self._ids_tratti_aura_innata_slot('archetipo')
+            chars = self._caratteristiche_dict_da_punteggi_nomi(
+                self.get_punteggi_base_escludendo_abilita(excl)
+            )
+            req_nome = abilita.caratteristica.nome
+            if chars.get(req_nome, 0) < 1:
+                return False, f"Serve almeno 1 in {req_nome} per questo archetipo."
+            return True, "OK"
+
+        if liv == 2:
+            if ain_val < 2:
+                return False, "Serve aura innata almeno 2 per selezionare una forma."
+            if not abilita.caratteristica_2_id:
+                return False, "Forma senza seconda caratteristica configurata."
+            excl = self._ids_tratti_aura_innata_slot('forma')
+            chars = self._caratteristiche_dict_da_punteggi_nomi(
+                self.get_punteggi_base_escludendo_abilita(excl)
+            )
+            n1 = abilita.caratteristica.nome
+            n2 = abilita.caratteristica_2.nome
+            v1 = chars.get(n1, 0)
+            v2 = chars.get(n2, 0)
+            if n1 == n2:
+                if v1 < 2:
+                    return False, f"Per questa forma (doppia {n1}) servono almeno 2 punti in {n1}."
+            else:
+                if v1 < 1 or v2 < 1:
+                    return False, f"Servono almeno 1 in {n1} e 1 in {n2} per questa forma."
+            return True, "OK"
+
+        return True, "OK"
     
     def valida_acquisizione_abilita(self, abilita):
-        # ... controlli standard (costi, requisiti) ...
+        # Tratto aura innata (AIN): regole dedicate; lo swap è gestito in AcquisisciAbilitaView.
+        if abilita.is_tratto_aura and abilita.aura_riferimento_id:
+            ar = abilita.aura_riferimento
+            if getattr(ar, 'sigla', None) == 'AIN':
+                return self.valida_tratto_aura_innata(abilita)
 
-        # Controllo Esclusività Tratto Aura
+        # Controllo Esclusività Tratto Aura (altre aure)
         if abilita.is_tratto_aura and abilita.aura_riferimento:
-            # Cerca se il personaggio ha già un'abilità per questa Aura e questo Livello
             tratti_esistenti = self.abilita_possedute.filter(
                 is_tratto_aura=True,
                 aura_riferimento=abilita.aura_riferimento,
                 livello_riferimento=abilita.livello_riferimento
-            ).exclude(pk=abilita.pk) # Escludi se stessa se stiamo aggiornando
+            ).exclude(pk=abilita.pk)
             
             if tratti_esistenti.exists():
                 return False, f"Hai già selezionato un {tratti_esistenti.first().nome} per il livello {abilita.livello_riferimento} di {abilita.aura_riferimento.nome}."
 
-            # Controllo: Ho il punteggio di Aura necessario?
             valore_aura = self.get_valore_aura_effettivo(abilita.aura_riferimento)
             if valore_aura < abilita.livello_riferimento:
                 return False, f"La tua Aura {abilita.aura_riferimento.nome} è troppo bassa ({valore_aura}/{abilita.livello_riferimento})."
