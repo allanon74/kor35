@@ -283,6 +283,12 @@ class Command(BaseCommand):
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except IntegrityError as exc:
+            if model._meta.label_lower == "social.socialprofile":
+                merged = self._merge_social_profile_by_personaggio(model, update_data, remote_updated_at)
+                if merged:
+                    obj = model.objects.filter(personaggio=update_data.get("personaggio")).first()
+                    if obj is not None:
+                        return "applied"
             if self._merge_after_integrity_error(
                 model, sync_id, row, update_data, remote_updated_at
             ):

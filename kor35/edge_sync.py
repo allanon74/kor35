@@ -359,6 +359,16 @@ class EdgeSyncView(APIView):
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except IntegrityError:
+            if model._meta.label_lower == "social.socialprofile":
+                merged = self._merge_social_profile_by_personaggio(model, update_data, remote_updated_at)
+                if merged:
+                    obj = model.objects.filter(personaggio=update_data.get("personaggio")).first()
+                    if obj is not None:
+                        for field_name, related_list in m2m_updates.items():
+                            getattr(obj, field_name).set(related_list)
+                        if remote_updated_at and obj is not None:
+                            model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+                        return "applied"
             merged = self._merge_by_unique_together_key(
                 model, sync_id, update_data, remote_updated_at
             ) or self._merge_by_natural_unique_key(
