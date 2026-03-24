@@ -91,6 +91,8 @@ class EdgeSyncView(APIView):
                 if model._meta.abstract:
                     continue
                 if hasattr(model, "sync_id") and hasattr(model, "updated_at"):
+                    if model._meta.label_lower == "personaggi.segnozodiacale":
+                        continue
                     registry[model._meta.label_lower] = model
         return registry
 
