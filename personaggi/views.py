@@ -73,6 +73,8 @@ from django.conf import settings
 from webpush.models import PushInformation, SubscriptionInfo
 import json
 
+from . import api_cache_revision
+
 # --- IMPORT SERVICES ---
 from .services import (
     # monta_potenziamento, crea_oggetto_da_infusione, 
@@ -1333,7 +1335,55 @@ def download_icon_patch(request):
         else: return HttpResponse(f"Failed to download SVG file. Status code: {response.reason}", status=response.status_code)
     except requests.RequestException as e: return HttpResponse(f"Failed to contact Iconify API: {e}", status=500)
     except Exception as e: return HttpResponse(f"Internal server error: {e}", status=500)
-    
+
+
+class CacheRevisionView(APIView):
+    """
+    GET ?q=punteggi_all,personaggi_list:0,personaggio:42,negozio_listino
+    Restituisce JSON { "punteggi_all": "<iso>", ... } per saltare fetch pesanti lato client.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        raw = request.query_params.get("q", "")
+        parts = [p.strip() for p in raw.split(",") if p.strip()]
+        out = {}
+        for part in parts:
+            if part == "punteggi_all":
+                out[part] = api_cache_revision.format_revision_iso(api_cache_revision.revision_punteggi_all())
+            elif part == "negozio_listino":
+                out[part] = api_cache_revision.format_revision_iso(api_cache_revision.revision_negozio_listino())
+            elif part.startswith("personaggi_list:"):
+                try:
+                    view_all = part.split(":", 1)[1].strip() == "1"
+                except IndexError:
+                    out[part] = None
+                    continue
+                dt = api_cache_revision.revision_personaggi_list(request.user, view_all)
+                out[part] = api_cache_revision.format_revision_iso(dt)
+            elif part.startswith("personaggio:"):
+                pk_str = part.split(":", 1)[1].strip()
+                try:
+                    pk = int(pk_str)
+                except ValueError:
+                    out[part] = None
+                    continue
+                personaggio = Personaggio.objects.filter(pk=pk).first()
+                if not personaggio:
+                    out[part] = None
+                    continue
+                user = request.user
+                if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
+                    out[part] = None
+                    continue
+                dt = api_cache_revision.revision_personaggio_detail(pk)
+                out[part] = api_cache_revision.format_revision_iso(dt)
+            else:
+                out[part] = None
+        return Response(out, status=status.HTTP_200_OK)
+
+
 class PunteggiListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PunteggioDetailSerializer

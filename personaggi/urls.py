@@ -122,6 +122,7 @@ urlpatterns = [
     path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
     path('api/personaggio/me/abilita_acquistabili/', views.AbilitaAcquistabiliView.as_view(), name='abilita-acquistabili'),
     path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
+    path('api/cache-revision/', views.CacheRevisionView.as_view(), name='api_cache_revision'),
     
     # --- MESSAGING ENDPOINTS (Phase 1) ---
     path('api/messaggi/', views.MessaggioListView.as_view(), name='api_messaggi_list'),
