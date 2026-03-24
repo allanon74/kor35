@@ -40,6 +40,8 @@ from .models import (
     ConfigurazioneLivelloAura, Cerimoniale,
     StatoTimerAttivo,
     TipologiaPersonaggio,
+    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
+    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
 )
 
 import uuid 
@@ -89,7 +91,10 @@ from .serializers import (
     PropostaTecnicaSerializer, PersonaggioLogSerializer, PersonaggioAutocompleteSerializer,
     MessaggioCreateSerializer, MessaggioSerializer, MessaggioBroadcastCreateSerializer,
     AbilitaMasterListSerializer, PersonaggioPublicSerializer,
-    AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer, 
+    AbilSerializer, AbilitaSerializer, AbilitaUpdateSerializer, TierSerializer,
+    KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
+    CaricaKorpSerializer, CaricaCarrieraSerializer,
+    PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
     PunteggioSerializer, TabellaSerializer,
     AbilitaTierSerializer, AbilitaRequisitoSerializer, AbilitaSbloccataSerializer,
     AbilitaPunteggioSerializer, AbilitaPrerequisitoSerializer, UserSerializer,
@@ -140,6 +145,56 @@ class TierViewSet(viewsets.ModelViewSet):
     queryset = Tier.objects.all()
     serializer_class = TierSerializer
     authentication_classes = (TokenAuthentication,)
+
+
+class KorpViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Korp.objects.all()
+    serializer_class = KorpSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = [IsAuthenticated]
+
+
+class CarrieraViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Carriera.objects.all()
+    serializer_class = CarrieraSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = [IsAuthenticated]
+
+
+class SegnoZodiacaleViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = SegnoZodiacale.objects.all()
+    serializer_class = SegnoZodiacaleSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = [IsAuthenticated]
+
+
+class CaricaKorpViewSet(viewsets.ModelViewSet):
+    queryset = CaricaKorp.objects.select_related("korp").all()
+    serializer_class = CaricaKorpSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = [IsAuthenticated, permissions.IsAdminUser]
+
+
+class CaricaCarrieraViewSet(viewsets.ModelViewSet):
+    queryset = CaricaCarriera.objects.select_related("carriera").all()
+    serializer_class = CaricaCarrieraSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = [IsAuthenticated, permissions.IsAdminUser]
+
+
+class PersonaggioKorpMembershipViewSet(viewsets.ModelViewSet):
+    queryset = PersonaggioKorpMembership.objects.select_related("personaggio", "korp", "carica").all()
+    serializer_class = PersonaggioKorpMembershipSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = [IsAuthenticated, permissions.IsAdminUser]
+
+
+class PersonaggioCarrieraMembershipViewSet(viewsets.ModelViewSet):
+    queryset = PersonaggioCarrieraMembership.objects.select_related("personaggio", "carriera", "carica").all()
+    serializer_class = PersonaggioCarrieraMembershipSerializer
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = [IsAuthenticated, permissions.IsAdminUser]
+
 
 class PunteggioViewSet(viewsets.ModelViewSet):
     # queryset = Punteggio.objects.all()

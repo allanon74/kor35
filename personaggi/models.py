@@ -1,5 +1,5 @@
-from django.db.models import Sum, F, Count
-from functools import lru_cache
+from django.db.models import Sum, F, Count, Value
+from django.db.models.functions import Coalesce
 import os
 import re
 import secrets
@@ -571,6 +571,58 @@ class Tier(Tabella):
     foto = models.ImageField(upload_to='tiers/', null=True, blank=True)
     class Meta: verbose_name = "Tier"; verbose_name_plural = "Tiers"
 
+
+class Korp(Tier):
+    class Meta:
+        verbose_name = "KORP"
+        verbose_name_plural = "KORP"
+
+
+class Carriera(Tier):
+    class Meta:
+        verbose_name = "Carriera"
+        verbose_name_plural = "Carriere"
+
+
+class SegnoZodiacale(Tier):
+    numero = models.PositiveSmallIntegerField(unique=True)
+    testo_pubblico = models.TextField(blank=True, null=True)
+    testo_privato = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Segno Zodiacale"
+        verbose_name_plural = "Segni Zodiacali"
+        ordering = ["numero", "nome"]
+
+
+class CaricaKorp(SyncableModel, models.Model):
+    nome = models.CharField(max_length=120)
+    bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    ordine = models.PositiveIntegerField(default=0)
+    attiva = models.BooleanField(default=True)
+    korp = models.ForeignKey(Korp, on_delete=models.CASCADE, related_name="cariche")
+
+    class Meta:
+        verbose_name = "Carica KORP"
+        verbose_name_plural = "Cariche KORP"
+        ordering = ["korp__nome", "ordine", "nome"]
+        unique_together = [["korp", "nome"]]
+
+
+class CaricaCarriera(SyncableModel, models.Model):
+    nome = models.CharField(max_length=120)
+    bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    ordine = models.PositiveIntegerField(default=0)
+    attiva = models.BooleanField(default=True)
+    carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="cariche")
+
+    class Meta:
+        verbose_name = "Carica Carriera"
+        verbose_name_plural = "Cariche Carriera"
+        ordering = ["carriera__nome", "ordine", "nome"]
+        unique_together = [["carriera", "nome"]]
+
+
 class Punteggio(Tabella):
     sigla = models.CharField(max_length=3, unique=True)
     tipo = models.CharField(choices=punteggi_tipo, max_length=2)
@@ -1108,7 +1160,6 @@ class TipologiaPersonaggio(SyncableModel, models.Model):
 RAZZA_ARCHETIPO_DEFAULT_NOME = "Archetipo - Umano"
 
 
-@lru_cache(maxsize=1)
 def get_punteggio_aura_innata():
     """Record Punteggio (tipo AU) per Aura Innata: sigla AIN o nome «aura Innata»."""
     return (
@@ -1550,6 +1601,13 @@ class Personaggio(Inventario):
     # --- CAMPO CERIMONIALI ---
     cerimoniali_posseduti = models.ManyToManyField(Cerimoniale, through='PersonaggioCerimoniale', blank=True)
     impostazioni_ui = models.JSONField(default=dict, blank=True, verbose_name="Impostazioni UI")
+    segno_zodiacale = models.ForeignKey(
+        "SegnoZodiacale",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="personaggi",
+    )
     # -------------------
     
     class Meta: 
@@ -1582,7 +1640,12 @@ class Personaggio(Inventario):
     def punteggi_base(self):
         if hasattr(self, '_punteggi_base_cache'): return self._punteggi_base_cache
         links = abilita_punteggio.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('punteggio')
-        p = {i['punteggio__nome']: i['valore_totale'] for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))}
+        p = {
+            i['punteggio__nome']: i['valore_totale']
+            for i in links.values('punteggio__nome').annotate(
+                valore_totale=Coalesce(Sum('valore'), Value(0))
+            )
+        }
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
         if agen:
             others = set(Punteggio.objects.filter(tipo=AURA).exclude(id=agen.id).values_list('nome', flat=True))
@@ -1647,8 +1710,25 @@ class Personaggio(Inventario):
     
     def get_valore_aura_effettivo(self, aura):
         pb = self.punteggi_base
-        if aura.is_generica: return max([v for k,v in pb.items() if Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists()] or [0])
-        return pb.get(aura.nome, 0)
+        if aura.is_generica:
+            nums = []
+            for k, v in pb.items():
+                if not Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists():
+                    continue
+                if v is None:
+                    continue
+                try:
+                    nums.append(int(v))
+                except (TypeError, ValueError):
+                    continue
+            return max(nums) if nums else 0
+        v = pb.get(aura.nome, 0)
+        if v is None:
+            return 0
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 0
 
     def get_valore_aura_innata(self):
         """
@@ -1658,7 +1738,8 @@ class Personaggio(Inventario):
         aura_ain = get_punteggio_aura_innata()
         if not aura_ain:
             return 0
-        return int(self.get_valore_aura_effettivo(aura_ain))
+        # get_valore_aura_effettivo restituisce sempre int (gestisce None da Sum SQL)
+        return self.get_valore_aura_effettivo(aura_ain)
 
     def get_tratti_razza_scheda_posseduti_qs(self):
         """Tratti d'aura di razza in scheda (prefissi Archetipo - / Forma -)."""
@@ -2376,6 +2457,74 @@ class Personaggio(Inventario):
             riduzione = (costo_base * sconto_perc) / 100
             return int(max(0, costo_base - riduzione))
         return int(costo_base)
+
+
+class UserSocialPreference(SyncableModel, models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="social_preference")
+    preferred_personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="preferred_by_users",
+    )
+
+    class Meta:
+        verbose_name = "Preferenza Social Utente"
+        verbose_name_plural = "Preferenze Social Utenti"
+
+
+class PersonaggioKorpMembership(SyncableModel, models.Model):
+    data_da = models.DateTimeField(default=timezone.now)
+    data_a = models.DateTimeField(null=True, blank=True)
+    carica = models.ForeignKey(
+        CaricaKorp,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="membership",
+    )
+    korp = models.ForeignKey(Korp, on_delete=models.PROTECT, related_name="membership")
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="korp_membership")
+
+    class Meta:
+        verbose_name = "Membership KORP"
+        verbose_name_plural = "Membership KORP"
+        ordering = ["-data_da", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio"],
+                condition=Q(data_a__isnull=True),
+                name="uniq_personaggio_korp_attiva",
+            ),
+        ]
+
+
+class PersonaggioCarrieraMembership(SyncableModel, models.Model):
+    data_da = models.DateTimeField(default=timezone.now)
+    data_a = models.DateTimeField(null=True, blank=True)
+    carica = models.ForeignKey(
+        CaricaCarriera,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="membership",
+    )
+    carriera = models.ForeignKey(Carriera, on_delete=models.PROTECT, related_name="membership")
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="carriera_membership")
+
+    class Meta:
+        verbose_name = "Membership Carriera"
+        verbose_name_plural = "Membership Carriera"
+        ordering = ["-data_da", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio"],
+                condition=Q(data_a__isnull=True),
+                name="uniq_personaggio_carriera_attiva",
+            ),
+        ]
+
 
 class PersonaggioAbilita(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)

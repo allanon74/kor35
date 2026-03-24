@@ -11,7 +11,10 @@ from .models import ConfigurazioneLivelloAura, formatta_testo_generico, Consumab
 # Importa i modelli e le funzioni helper
 from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
-    QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
+    QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Korp, Carriera, SegnoZodiacale,
+    CaricaKorp, CaricaCarriera, PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    UserSocialPreference,
+    Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_prerequisito, Attivata, Manifesto, A_vista, Mattone,
     AURA, 
@@ -55,6 +58,54 @@ class UserSerializer(serializers.ModelSerializer):
 class TierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tier
+        fields = '__all__'
+
+
+class KorpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Korp
+        fields = '__all__'
+
+
+class CarrieraSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Carriera
+        fields = '__all__'
+
+
+class SegnoZodiacaleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SegnoZodiacale
+        fields = '__all__'
+
+
+class CaricaKorpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CaricaKorp
+        fields = '__all__'
+
+
+class CaricaCarrieraSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CaricaCarriera
+        fields = '__all__'
+
+
+class PersonaggioKorpMembershipSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonaggioKorpMembership
+        fields = '__all__'
+
+
+class PersonaggioCarrieraMembershipSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonaggioCarrieraMembership
+        fields = '__all__'
+
+
+class UserSocialPreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserSocialPreference
         fields = '__all__'
 
 
