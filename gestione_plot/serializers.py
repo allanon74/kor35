@@ -242,8 +242,8 @@ class PunteggioWikiSerializer(serializers.ModelSerializer):
         
 class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
-    costo_pc = serializers.IntegerField(source='costo_pc', read_only=True)
-    costo_crediti = serializers.IntegerField(source='costo_crediti', read_only=True)
+    costo_pc = serializers.SerializerMethodField()
+    costo_crediti = serializers.SerializerMethodField()
     caratteristica = PunteggioWikiSerializer(read_only=True)
     caratteristica_2 = PunteggioWikiSerializer(read_only=True)
     caratteristica_3 = PunteggioWikiSerializer(read_only=True)
@@ -252,8 +252,8 @@ class AbilitaTierSerializer(serializers.ModelSerializer):
         fields = ['id', 'nome', 'descrizione', 'costo', 'costo_pc', 'costo_crediti', 'caratteristica', 'caratteristica_2', 'caratteristica_3']
 
     def get_costo(self, obj):
-        pc = int(obj.costo_pc or 0)
-        cr = int(obj.costo_crediti or 0)
+        pc = int(self.get_costo_pc(obj) or 0)
+        cr = int(self.get_costo_crediti(obj) or 0)
         if pc <= 0 and cr <= 0:
             return ''
         if pc > 0 and cr > 0:
@@ -261,6 +261,18 @@ class AbilitaTierSerializer(serializers.ModelSerializer):
         if pc > 0:
             return f"{pc} PC"
         return f"{cr} Cr"
+
+    def get_costo_pc(self, obj):
+        try:
+            return int(getattr(obj, 'costo_pc', 0) or 0)
+        except Exception:
+            return 0
+
+    def get_costo_crediti(self, obj):
+        try:
+            return int(getattr(obj, 'costo_crediti', 0) or 0)
+        except Exception:
+            return 0
 
 class WikiTierSerializer(serializers.ModelSerializer):
     # FONDAMENTALE: Recuperiamo le abilità figlie di questo Tier
