@@ -1503,6 +1503,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     statistiche_primarie = serializers.SerializerMethodField()
     
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
+    can_edit_razza = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -1519,7 +1520,21 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
             'impostazioni_ui',
+            'can_edit_razza',
         )
+
+    def get_can_edit_razza(self, personaggio):
+        """
+        Razza (archetipo/forma AIN) modificabile solo finché il personaggio
+        non ha partecipazioni a eventi già iniziati (o conclusi).
+        """
+        try:
+            from django.utils import timezone
+            now = timezone.now()
+            return not personaggio.eventi_partecipati.filter(data_inizio__lte=now).exists()
+        except Exception:
+            # fallback conservativo: se non riusciamo a calcolare, non blocchiamo la UI
+            return True
 
     def get_oggetti(self, personaggio):
         if hasattr(personaggio.inventario_ptr, 'tracciamento_oggetti_correnti'):

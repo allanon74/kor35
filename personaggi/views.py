@@ -284,6 +284,14 @@ class AcquisisciAbilitaView(APIView):
             and getattr(abilita.aura_riferimento, 'sigla', None) == 'AIN'
         )
 
+        if is_tratto_ain:
+            now = timezone.now()
+            if personaggio.eventi_partecipati.filter(data_inizio__lte=now).exists():
+                return Response(
+                    {"error": "Non puoi modificare la razza: il personaggio partecipa già a un evento iniziato (o concluso)."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         ok_val, msg_val = personaggio.valida_acquisizione_abilita(abilita)
         if not ok_val:
             return Response({"error": msg_val}, status=status.HTTP_400_BAD_REQUEST)
