@@ -242,17 +242,25 @@ class PunteggioWikiSerializer(serializers.ModelSerializer):
         
 class AbilitaTierSerializer(serializers.ModelSerializer):
     costo = serializers.SerializerMethodField()
+    costo_pc = serializers.IntegerField(source='costo_pc', read_only=True)
+    costo_crediti = serializers.IntegerField(source='costo_crediti', read_only=True)
     caratteristica = PunteggioWikiSerializer(read_only=True)
     caratteristica_2 = PunteggioWikiSerializer(read_only=True)
     caratteristica_3 = PunteggioWikiSerializer(read_only=True)
     class Meta:
         model = Abilita
-        fields = ['id', 'nome', 'descrizione', 'costo', 'caratteristica', 'caratteristica_2', 'caratteristica_3']
+        fields = ['id', 'nome', 'descrizione', 'costo', 'costo_pc', 'costo_crediti', 'caratteristica', 'caratteristica_2', 'caratteristica_3']
 
     def get_costo(self, obj):
-        if obj.costo_pc is not None and obj.costo_pc > 0:
-            return f"{obj.costo_pc} PC"
-        return f"{obj.costo_crediti} Cr"
+        pc = int(obj.costo_pc or 0)
+        cr = int(obj.costo_crediti or 0)
+        if pc <= 0 and cr <= 0:
+            return ''
+        if pc > 0 and cr > 0:
+            return f"{pc} PC + {cr} Cr"
+        if pc > 0:
+            return f"{pc} PC"
+        return f"{cr} Cr"
 
 class WikiTierSerializer(serializers.ModelSerializer):
     # FONDAMENTALE: Recuperiamo le abilità figlie di questo Tier
