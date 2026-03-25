@@ -26,6 +26,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse
 from django_icon_picker import views as icon_picker_views
 
+from kor35 import views as kor35_views
+
 
 def healthz(_request):
     """Leggero, senza DB: Docker healthcheck e debug 502 (mirror / compose)."""
@@ -57,6 +59,7 @@ def healthz(_request):
 
 urlpatterns = [
     path("api/healthz/", healthz, name="healthz"),
+    path("api/version/", kor35_views.version, name="version"),
     # --- UTILITIES & ADMIN ---
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     re_path(r'^admin/', admin.site.urls),

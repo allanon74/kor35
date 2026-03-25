@@ -49,7 +49,11 @@ jobs:
               git checkout "${REF}"
               git reset --hard "${REF}"
             fi
-            echo "DEPLOYED_SHA=$(git rev-parse HEAD)"
+            DEPLOYED_SHA="$(git rev-parse HEAD)"
+            export KOR35_BUILD_SHA="${DEPLOYED_SHA}"
+            export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
+            export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "DEPLOYED_SHA=${DEPLOYED_SHA}"
             source ~/ambienti/kor35/bin/activate
 
             pip install -r requirements.txt
@@ -95,7 +99,11 @@ jobs:
               git checkout "${REF}"
               git reset --hard "${REF}"
             fi
-            echo "DEPLOYED_SHA=$(git rev-parse HEAD)"
+            DEPLOYED_SHA="$(git rev-parse HEAD)"
+            export KOR35_BUILD_SHA="${DEPLOYED_SHA}"
+            export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
+            export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "DEPLOYED_SHA=${DEPLOYED_SHA}"
             source ~/ambienti/kor35/bin/activate
             pip install -r requirements.txt
             python manage.py migrate --plan
@@ -147,7 +155,11 @@ jobs:
               git checkout "${REF}"
               git reset --hard "${REF}"
             fi
-            echo "MIRROR_BACKEND_DEPLOYED_SHA=$(git rev-parse HEAD)"
+            MIRROR_BACKEND_DEPLOYED_SHA="$(git rev-parse HEAD)"
+            export KOR35_BUILD_SHA="${MIRROR_BACKEND_DEPLOYED_SHA}"
+            export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
+            export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "MIRROR_BACKEND_DEPLOYED_SHA=${MIRROR_BACKEND_DEPLOYED_SHA}"
 
             cd "${ROOT_PATH}"
             eval "${DEPLOY_CMD}"

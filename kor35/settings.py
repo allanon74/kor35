@@ -237,6 +237,7 @@ TEMPLATES = [
                 'sekizai.context_processors.sekizai',
                 'cms.context_processors.cms_settings',
                 'django.template.context_processors.i18n',
+                'kor35.context_processors.build_info',
             ],
         },
     },

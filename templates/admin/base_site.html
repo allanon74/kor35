@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+
+{% block footer %}
+  {{ block.super }}
+  <div style="padding: 12px 20px; opacity: .75; font-size: 12px;">
+    <strong>KOR35</strong>
+    {% if KOR35_BUILD %}
+      — build: <code>{{ KOR35_BUILD.version }}</code>
+      {% if KOR35_BUILD.sha and KOR35_BUILD.sha != "unknown" %}
+        (<code>{{ KOR35_BUILD.sha|slice:":12" }}</code>)
+      {% endif %}
+      {% if KOR35_BUILD.time %} — {{ KOR35_BUILD.time }}{% endif %}
+      {% if KOR35_BUILD.environment %} — env: <code>{{ KOR35_BUILD.environment }}</code>{% endif %}
+    {% endif %}
+  </div>
+{% endblock %}
+

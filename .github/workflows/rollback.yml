@@ -23,6 +23,10 @@ jobs:
             git fetch --all --tags
             git checkout "${{ github.event.inputs.rollback_ref }}"
             git reset --hard "${{ github.event.inputs.rollback_ref }}"
+            ROLLBACK_SHA="$(git rev-parse HEAD)"
+            export KOR35_BUILD_SHA="${ROLLBACK_SHA}"
+            export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
+            export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             source ~/ambienti/kor35/bin/activate
             pip install -r requirements.txt
             python manage.py migrate --plan
