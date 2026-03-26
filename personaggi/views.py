@@ -1472,6 +1472,62 @@ class MessaggioActionView(APIView):
             return Response({"status": "Messaggio cancellato"})
         return Response({"error": "Azione non valida"}, status=status.HTTP_400_BAD_REQUEST)
 
+
+class MessaggiUnreadCountsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        Ritorna solo i personaggi dell'utente con messaggi non letti.
+        Output: [{ personaggio_id, personaggio_nome, unread_count }]
+        """
+        user = request.user
+        personaggi = list(Personaggio.objects.filter(proprietario=user).values("id", "nome").order_by("id"))
+        if not personaggi:
+            return Response([])
+
+        out = []
+        for pg in personaggi:
+            target_pg = Personaggio.objects.filter(id=pg["id"]).first()
+            if not target_pg:
+                continue
+
+            q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST)
+            q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
+            gruppi_id = target_pg.gruppi_appartenenza.values_list("id", flat=True)
+            q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
+
+            messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo)
+
+            ids_cancellati = LetturaMessaggio.objects.filter(
+                personaggio=target_pg,
+                cancellato=True,
+            ).values_list("messaggio_id", flat=True)
+
+            lettura_stato = LetturaMessaggio.objects.filter(
+                messaggio=OuterRef("pk"),
+                personaggio=target_pg,
+            ).values("letto")[:1]
+
+            unread_count = (
+                messaggi.exclude(id__in=ids_cancellati)
+                .annotate(is_letto_db=Coalesce(Subquery(lettura_stato), Value(False)))
+                .filter(is_letto_db=False)
+                .count()
+            )
+
+            if unread_count > 0:
+                out.append(
+                    {
+                        "personaggio_id": pg["id"],
+                        "personaggio_nome": pg["nome"],
+                        "unread_count": unread_count,
+                    }
+                )
+
+        out.sort(key=lambda r: (-int(r["unread_count"]), str(r["personaggio_nome"] or "")))
+        return Response(out)
+
 class ConversazioniView(APIView):
     """View per ottenere messaggi organizzati per conversazione"""
     permission_classes = [IsAuthenticated]

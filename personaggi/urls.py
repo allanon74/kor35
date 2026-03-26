@@ -126,6 +126,7 @@ urlpatterns = [
     
     # --- MESSAGING ENDPOINTS (Phase 1) ---
     path('api/messaggi/', views.MessaggioListView.as_view(), name='api_messaggi_list'),
+    path('api/messaggi/unread_counts/', views.MessaggiUnreadCountsView.as_view(), name='api_messaggi_unread_counts'),
     path('api/messaggi/conversazioni/', views.ConversazioniView.as_view(), name='api_conversazioni'),
     path('api/messaggi/<int:messaggio_id>/rispondi/', views.RispondiMessaggioView.as_view(), name='api_rispondi_messaggio'),
     path('api/messaggi/broadcast/send/', views.MessaggioBroadcastCreateView.as_view(), name='api_messaggi_broadcast_send'),
