@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 
 from django.utils import timezone
 from django.db.models import Count, Q
@@ -53,6 +54,8 @@ from .serializers import (
     resolve_active_personaggio,
     visible_posts_queryset_for_personaggio,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_evento_in_corso(reference_dt=None):
@@ -163,7 +166,11 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         personaggio = self.get_personaggio()
-        self._auto_convert_expired_stories()
+        # Non bloccare mai la fruizione stories se la conversione automatica fallisce.
+        try:
+            self._auto_convert_expired_stories()
+        except Exception:
+            logger.exception("Auto-conversione stories scadute fallita")
         return visible_stories_queryset_for_personaggio(personaggio)
 
     def get_serializer_context(self):
@@ -188,13 +195,19 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         story = serializer.save(autore=personaggio, evento=get_evento_in_corso())
         sync_story_tags(story)
         if story.auto_publish_mode == SocialStory.AUTO_PUBLISH_NOW:
-            self._promote_story_to_post(story)
+            try:
+                self._promote_story_to_post(story)
+            except Exception:
+                logger.exception("Conversione immediata story->post fallita (story_id=%s)", story.id)
 
     def perform_update(self, serializer):
         story = serializer.save()
         sync_story_tags(story)
         if story.auto_publish_mode == SocialStory.AUTO_PUBLISH_NOW and not story.converted_post_id:
-            self._promote_story_to_post(story)
+            try:
+                self._promote_story_to_post(story)
+            except Exception:
+                logger.exception("Conversione immediata story->post fallita in update (story_id=%s)", story.id)
 
     def _auto_convert_expired_stories(self):
         now = timezone.now()
@@ -204,7 +217,10 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             expires_at__lte=now,
         )[:50]
         for s in qs:
-            self._promote_story_to_post(s)
+            try:
+                self._promote_story_to_post(s)
+            except Exception:
+                logger.exception("Auto-conversione a scadenza fallita (story_id=%s)", s.id)
 
     def _promote_story_to_post(self, story):
         if story.converted_post_id:
@@ -358,7 +374,11 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         can_convert = request.user.is_staff or request.user.is_superuser or (personaggio and story.autore_id == personaggio.id)
         if not can_convert:
             raise permissions.PermissionDenied("Permessi insufficienti.")
-        post = self._promote_story_to_post(story)
+        try:
+            post = self._promote_story_to_post(story)
+        except Exception:
+            logger.exception("Conversione manuale story->post fallita (story_id=%s)", story.id)
+            return Response({"detail": "Errore durante la conversione story -> post."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response({"post_id": post.id, "story_id": story.id}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"])
