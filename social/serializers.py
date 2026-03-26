@@ -15,6 +15,7 @@ from .models import (
     SocialPost,
     SocialPostTag,
     SocialProfile,
+    extract_hashtags,
 )
 
 
@@ -97,6 +98,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
     tags = serializers.SerializerMethodField()
     public_url = serializers.SerializerMethodField()
     evento_titolo = serializers.CharField(source="evento.titolo", read_only=True)
+    hashtags = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialPost
@@ -117,6 +119,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "comments_count",
             "liked_by_me",
             "tags",
+            "hashtags",
             "public_url",
         )
         read_only_fields = ("autore", "evento", "created_at", "likes_count", "comments_count", "liked_by_me")
@@ -145,6 +148,10 @@ class SocialPostSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(path)
         return path
+
+    def get_hashtags(self, obj):
+        text = f"{obj.titolo or ''} {obj.testo or ''}".strip()
+        return extract_hashtags(text)
 
 
 class SocialGroupMembershipSerializer(serializers.ModelSerializer):

@@ -265,6 +265,7 @@ class SocialGroupMessage(SyncableModel, models.Model):
 
 
 MENTION_TOKEN_REGEX = re.compile(r"@([A-Za-z0-9_]+)")
+HASHTAG_TOKEN_REGEX = re.compile(r"(?<!\w)#([A-Za-z0-9_]{2,40})")
 
 
 def extract_mentioned_personaggi_ids(text):
@@ -288,6 +289,13 @@ def extract_mentioned_personaggi_ids(text):
         found_ids.update(matched)
 
     return list(found_ids)
+
+
+def extract_hashtags(text):
+    if not text:
+        return []
+    tags = {t.lower() for t in HASHTAG_TOKEN_REGEX.findall(text or "") if t}
+    return sorted(tags)
 
 
 def optimize_uploaded_image(uploaded_file):

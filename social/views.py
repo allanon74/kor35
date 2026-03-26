@@ -104,7 +104,12 @@ class SocialPostViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         personaggio = self.get_personaggio()
-        return visible_posts_queryset_for_personaggio(personaggio)
+        qs = visible_posts_queryset_for_personaggio(personaggio)
+        hashtag = (self.request.query_params.get("hashtag") or "").strip().lstrip("#")
+        if hashtag:
+            token = f"#{hashtag}"
+            qs = qs.filter(Q(testo__icontains=token) | Q(titolo__icontains=token)).distinct()
+        return qs
 
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
