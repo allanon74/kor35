@@ -1478,15 +1478,32 @@ class MessaggiUnreadCountsView(APIView):
 
     def get(self, request):
         """
-        Ritorna solo i personaggi dell'utente con messaggi non letti.
-        Output: [{ personaggio_id, personaggio_nome, unread_count }]
+        Ritorna gli unread a livello GIOCATORE (utente loggato), con dettaglio
+        per personaggio e separazione player/staff.
+
+        Formato:
+        {
+          totals: { player, staff, all },
+          by_scope: {
+            player: [{ personaggio_id, personaggio_nome, unread_count }],
+            staff:  [{ personaggio_id, personaggio_nome, unread_count }]
+          },
+          by_character: [{ personaggio_id, personaggio_nome, unread_count }]
+        }
         """
         user = request.user
         personaggi = list(Personaggio.objects.filter(proprietario=user).values("id", "nome").order_by("id"))
         if not personaggi:
-            return Response([])
+            return Response(
+                {
+                    "totals": {"player": 0, "staff": 0, "all": 0},
+                    "by_scope": {"player": [], "staff": []},
+                    "by_character": [],
+                }
+            )
 
-        out = []
+        player_rows = []
+        staff_rows = []
         for pg in personaggi:
             target_pg = Personaggio.objects.filter(id=pg["id"]).first()
             if not target_pg:
@@ -1496,6 +1513,8 @@ class MessaggiUnreadCountsView(APIView):
             q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
             gruppi_id = target_pg.gruppi_appartenenza.values_list("id", flat=True)
             q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
+            # Messaggi staff: la lettura non passa da LetturaMessaggio ma da letto_staff/cancellato_staff.
+            q_staff = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(destinatario_personaggio=target_pg)
 
             messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo)
 
@@ -1516,17 +1535,53 @@ class MessaggiUnreadCountsView(APIView):
                 .count()
             )
 
-            if unread_count > 0:
-                out.append(
+            unread_staff_count = (
+                Messaggio.objects.filter(q_staff, cancellato_staff=False)
+                .filter(letto_staff=False)
+                .count()
+            )
+
+            if int(unread_count) > 0:
+                player_rows.append(
                     {
                         "personaggio_id": pg["id"],
                         "personaggio_nome": pg["nome"],
-                        "unread_count": unread_count,
+                        "unread_count": int(unread_count),
+                    }
+                )
+            if int(unread_staff_count) > 0:
+                staff_rows.append(
+                    {
+                        "personaggio_id": pg["id"],
+                        "personaggio_nome": pg["nome"],
+                        "unread_count": int(unread_staff_count),
                     }
                 )
 
-        out.sort(key=lambda r: (-int(r["unread_count"]), str(r["personaggio_nome"] or "")))
-        return Response(out)
+        player_rows.sort(key=lambda r: (-int(r["unread_count"]), str(r["personaggio_nome"] or "")))
+        staff_rows.sort(key=lambda r: (-int(r["unread_count"]), str(r["personaggio_nome"] or "")))
+
+        merged = {}
+        for row in player_rows + staff_rows:
+            pid = row["personaggio_id"]
+            if pid not in merged:
+                merged[pid] = {
+                    "personaggio_id": row["personaggio_id"],
+                    "personaggio_nome": row["personaggio_nome"],
+                    "unread_count": 0,
+                }
+            merged[pid]["unread_count"] += int(row["unread_count"])
+        by_character = sorted(merged.values(), key=lambda r: (-int(r["unread_count"]), str(r["personaggio_nome"] or "")))
+
+        total_player = sum(int(r["unread_count"]) for r in player_rows)
+        total_staff = sum(int(r["unread_count"]) for r in staff_rows)
+        return Response(
+            {
+                "totals": {"player": total_player, "staff": total_staff, "all": total_player + total_staff},
+                "by_scope": {"player": player_rows, "staff": staff_rows},
+                "by_character": by_character,
+            }
+        )
 
 class ConversazioniView(APIView):
     """View per ottenere messaggi organizzati per conversazione"""
