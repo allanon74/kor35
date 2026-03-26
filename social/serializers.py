@@ -252,6 +252,7 @@ class SocialStorySerializer(serializers.ModelSerializer):
     reactions_count = serializers.IntegerField(read_only=True)
     reacted_by_me = serializers.SerializerMethodField()
     my_reaction = serializers.SerializerMethodField()
+    converted_post_id = serializers.IntegerField(source="converted_post.id", read_only=True)
 
     class Meta:
         model = SocialStory
@@ -261,10 +262,13 @@ class SocialStorySerializer(serializers.ModelSerializer):
             "autore_nome",
             "testo",
             "media",
+            "text_size",
             "visibilita",
             "korp_visibilita",
             "evento",
             "evento_titolo",
+            "auto_publish_mode",
+            "converted_post_id",
             "created_at",
             "expires_at",
             "tags",
@@ -282,6 +286,7 @@ class SocialStorySerializer(serializers.ModelSerializer):
             "expires_at",
             "tags",
             "hashtags",
+            "converted_post_id",
             "views_count",
             "viewed_by_me",
             "reactions_count",

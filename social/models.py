@@ -269,14 +269,30 @@ class SocialGroupMessage(SyncableModel, models.Model):
 
 
 class SocialStory(SyncableModel, models.Model):
+    AUTO_PUBLISH_OFF = "OFF"
+    AUTO_PUBLISH_NOW = "NOW"
+    AUTO_PUBLISH_ON_EXPIRE = "EXPIRE"
+    AUTO_PUBLISH_CHOICES = [
+        (AUTO_PUBLISH_OFF, "Non pubblicare come post"),
+        (AUTO_PUBLISH_NOW, "Pubblica subito anche come post"),
+        (AUTO_PUBLISH_ON_EXPIRE, "Pubblica come post alla scadenza"),
+    ]
+
     autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_stories")
     testo = models.TextField(null=True, blank=True)
     media = models.FileField(upload_to=social_story_media_upload_to, null=True, blank=True)
+    text_size = models.PositiveSmallIntegerField(default=22)
     visibilita = models.CharField(max_length=4, choices=SOCIAL_VISIBILITY_CHOICES, default=SOCIAL_VISIBILITY_PUBLIC)
     korp_visibilita = models.ForeignKey(
         Korp, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_stories_riservate"
     )
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_stories")
+    auto_publish_mode = models.CharField(
+        max_length=10, choices=AUTO_PUBLISH_CHOICES, default=AUTO_PUBLISH_OFF
+    )
+    converted_post = models.ForeignKey(
+        "SocialPost", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_stories"
+    )
     created_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField(null=True, blank=True)
 
@@ -288,6 +304,8 @@ class SocialStory(SyncableModel, models.Model):
     def clean(self):
         if not self.testo and not self.media:
             raise ValidationError("Una story deve avere testo o media.")
+        if int(self.text_size or 22) < 12 or int(self.text_size or 22) > 56:
+            raise ValidationError("Dimensione testo story non valida (12-56).")
         if self.visibilita == SOCIAL_VISIBILITY_KORP and not self.korp_visibilita_id:
             raise ValidationError("Per la visibilita KORP devi selezionare una KORP.")
         if self.visibilita != SOCIAL_VISIBILITY_KORP and self.korp_visibilita_id:

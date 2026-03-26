@@ -183,10 +183,10 @@ class SocialStoryReplyInline(admin.TabularInline):
 
 @admin.register(SocialStory)
 class SocialStoryAdmin(SummernoteModelAdmin):
-    list_display = ("autore", "visibilita", "korp_visibilita", "evento", "created_at", "expires_at")
-    list_filter = ("visibilita", "korp_visibilita", "evento")
+    list_display = ("autore", "visibilita", "korp_visibilita", "auto_publish_mode", "converted_post", "evento", "created_at", "expires_at")
+    list_filter = ("visibilita", "korp_visibilita", "auto_publish_mode", "evento")
     search_fields = ("testo", "autore__nome")
-    autocomplete_fields = ("autore", "korp_visibilita", "evento")
+    autocomplete_fields = ("autore", "korp_visibilita", "evento", "converted_post")
     summernote_fields = ("testo",)
     readonly_fields = ("created_at", "expires_at")
     inlines = [SocialStoryTagInline, SocialStoryViewInline, SocialStoryReactionInline, SocialStoryReplyInline]

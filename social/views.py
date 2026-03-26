@@ -125,6 +125,24 @@ def visible_stories_queryset_for_personaggio(personaggio):
     return base.filter(Q(visibilita="PUB") | Q(visibilita="KORP", korp_visibilita=active_korp)).distinct()
 
 
+def sync_story_tags(story):
+    ids = extract_mentioned_personaggi_ids(story.testo)
+    SocialStoryTag.objects.filter(story=story).exclude(personaggio_id__in=ids).delete()
+    existing = set(SocialStoryTag.objects.filter(story=story).values_list("personaggio_id", flat=True))
+    SocialStoryTag.objects.bulk_create(
+        [SocialStoryTag(story=story, personaggio_id=pid) for pid in ids if pid not in existing]
+    )
+
+
+def sync_post_tags(post):
+    ids = extract_mentioned_personaggi_ids(post.testo)
+    SocialPostTag.objects.filter(post=post).exclude(personaggio_id__in=ids).delete()
+    existing = set(SocialPostTag.objects.filter(post=post).values_list("personaggio_id", flat=True))
+    SocialPostTag.objects.bulk_create(
+        [SocialPostTag(post=post, personaggio_id=pid) for pid in ids if pid not in existing]
+    )
+
+
 class SocialStoryViewSet(viewsets.ModelViewSet):
     serializer_class = SocialStorySerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -145,6 +163,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         personaggio = self.get_personaggio()
+        self._auto_convert_expired_stories()
         return visible_stories_queryset_for_personaggio(personaggio)
 
     def get_serializer_context(self):
@@ -167,19 +186,70 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             if not is_member:
                 raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")
         story = serializer.save(autore=personaggio, evento=get_evento_in_corso())
-        self._sync_tags_for_story(story)
+        sync_story_tags(story)
+        if story.auto_publish_mode == SocialStory.AUTO_PUBLISH_NOW:
+            self._promote_story_to_post(story)
 
     def perform_update(self, serializer):
         story = serializer.save()
-        self._sync_tags_for_story(story)
+        sync_story_tags(story)
+        if story.auto_publish_mode == SocialStory.AUTO_PUBLISH_NOW and not story.converted_post_id:
+            self._promote_story_to_post(story)
 
-    def _sync_tags_for_story(self, story):
-        ids = extract_mentioned_personaggi_ids(story.testo)
-        SocialStoryTag.objects.filter(story=story).exclude(personaggio_id__in=ids).delete()
-        existing = set(SocialStoryTag.objects.filter(story=story).values_list("personaggio_id", flat=True))
-        SocialStoryTag.objects.bulk_create(
-            [SocialStoryTag(story=story, personaggio_id=pid) for pid in ids if pid not in existing]
+    def _auto_convert_expired_stories(self):
+        now = timezone.now()
+        qs = SocialStory.objects.filter(
+            auto_publish_mode=SocialStory.AUTO_PUBLISH_ON_EXPIRE,
+            converted_post__isnull=True,
+            expires_at__lte=now,
+        )[:50]
+        for s in qs:
+            self._promote_story_to_post(s)
+
+    def _promote_story_to_post(self, story):
+        if story.converted_post_id:
+            return story.converted_post
+        titolo = (story.testo or "").strip().split("\n")[0][:180] if story.testo else "Story convertita"
+        post = SocialPost.objects.create(
+            autore=story.autore,
+            titolo=titolo or "Story convertita",
+            testo=story.testo or "",
+            visibilita=story.visibilita,
+            korp_visibilita=story.korp_visibilita if story.visibilita == SOCIAL_VISIBILITY_KORP else None,
+            evento=story.evento,
+            created_at=story.created_at,
         )
+        if story.media:
+            name = str(story.media.name or "").lower()
+            if name.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
+                post.immagine = story.media
+            else:
+                post.video = story.media
+            post.save()
+        sync_post_tags(post)
+
+        # Migra replies -> commenti post
+        for rp in story.replies.select_related("autore").all():
+            c = SocialComment.objects.create(
+                post=post,
+                autore=rp.autore,
+                testo=rp.testo,
+                evento=story.evento,
+                created_at=rp.created_at,
+            )
+            ids = extract_mentioned_personaggi_ids(c.testo)
+            existing = set(SocialCommentTag.objects.filter(comment=c).values_list("personaggio_id", flat=True))
+            SocialCommentTag.objects.bulk_create(
+                [SocialCommentTag(comment=c, personaggio_id=pid) for pid in ids if pid not in existing]
+            )
+
+        # Migra reactions -> like post (1 per autore)
+        for r in story.reactions.select_related("autore").all():
+            SocialLike.objects.get_or_create(post=post, autore=r.autore, defaults={"created_at": r.created_at})
+
+        story.converted_post = post
+        story.save(update_fields=["converted_post", "updated_at"])
+        return post
 
     @action(detail=True, methods=["post"])
     def viewed(self, request, pk=None):
@@ -281,6 +351,141 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         SocialStoryHighlightItem.objects.get_or_create(highlight=highlight, story=story)
         return Response({"ok": True}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["post"])
+    def convert_to_post(self, request, pk=None):
+        story = self.get_object()
+        personaggio = self.get_personaggio()
+        can_convert = request.user.is_staff or request.user.is_superuser or (personaggio and story.autore_id == personaggio.id)
+        if not can_convert:
+            raise permissions.PermissionDenied("Permessi insufficienti.")
+        post = self._promote_story_to_post(story)
+        return Response({"post_id": post.id, "story_id": story.id}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"])
+    def my_activity(self, request):
+        """
+        Summary attività sulle mie stories:
+        - visualizzazioni
+        - reazioni
+        - risposte/commenti (replies)
+        """
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response(
+                {
+                    "totals": {"stories": 0, "views": 0, "reactions": 0, "replies": 0},
+                    "stories": [],
+                    "events": [],
+                }
+            )
+
+        qs = (
+            SocialStory.objects.filter(autore=personaggio)
+            .select_related("autore", "evento", "korp_visibilita")
+            .annotate(
+                views_count=Count("views", distinct=True),
+                reactions_count=Count("reactions", distinct=True),
+                replies_count=Count("replies", distinct=True),
+            )
+            .order_by("-created_at")
+        )
+        stories = list(qs[:100])
+
+        recent_events = []
+        for s in stories[:30]:
+            for v in s.views.select_related("viewer").all()[:10]:
+                recent_events.append(
+                    {
+                        "kind": "view",
+                        "created_at": v.viewed_at,
+                        "story_id": s.id,
+                        "story_text": (s.testo or "")[:80],
+                        "actor_id": v.viewer_id,
+                        "actor_name": v.viewer.nome if v.viewer else "",
+                        "payload": "",
+                    }
+                )
+            for r in s.reactions.select_related("autore").all()[:10]:
+                recent_events.append(
+                    {
+                        "kind": "reaction",
+                        "created_at": r.created_at,
+                        "story_id": s.id,
+                        "story_text": (s.testo or "")[:80],
+                        "actor_id": r.autore_id,
+                        "actor_name": r.autore.nome if r.autore else "",
+                        "payload": r.emoji or "",
+                    }
+                )
+            for rp in s.replies.select_related("autore").all()[:10]:
+                recent_events.append(
+                    {
+                        "kind": "reply",
+                        "created_at": rp.created_at,
+                        "story_id": s.id,
+                        "story_text": (s.testo or "")[:80],
+                        "actor_id": rp.autore_id,
+                        "actor_name": rp.autore.nome if rp.autore else "",
+                        "payload": (rp.testo or "")[:120],
+                    }
+                )
+
+        recent_events.sort(key=lambda e: e["created_at"], reverse=True)
+        recent_events = recent_events[:120]
+
+        total_views = sum(int(getattr(s, "views_count", 0) or 0) for s in stories)
+        total_reactions = sum(int(getattr(s, "reactions_count", 0) or 0) for s in stories)
+        total_replies = sum(int(getattr(s, "replies_count", 0) or 0) for s in stories)
+
+        return Response(
+            {
+                "totals": {
+                    "stories": len(stories),
+                    "views": total_views,
+                    "reactions": total_reactions,
+                    "replies": total_replies,
+                },
+                "stories": [
+                    {
+                        **SocialStorySerializer(s, context={"personaggio": personaggio, "request": request}).data,
+                        "replies_count": int(getattr(s, "replies_count", 0) or 0),
+                    }
+                    for s in stories
+                ],
+                "events": [
+                    {
+                        **e,
+                        "created_at": e["created_at"].isoformat() if e["created_at"] else None,
+                    }
+                    for e in recent_events
+                ],
+            }
+        )
+
+    @action(detail=False, methods=["get"])
+    def my_history(self, request):
+        """
+        Storico stories del personaggio attivo.
+        include_expired=true per includere anche scadute (default: true).
+        """
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"count": 0, "results": []})
+        include_expired = str(request.query_params.get("include_expired", "true")).lower() != "false"
+        qs = (
+            SocialStory.objects.filter(autore=personaggio)
+            .select_related("autore", "evento", "korp_visibilita")
+            .annotate(
+                views_count=Count("views", distinct=True),
+                reactions_count=Count("reactions", distinct=True),
+            )
+            .order_by("-created_at")
+        )
+        if not include_expired:
+            qs = qs.filter(expires_at__gt=timezone.now())
+        rows = [SocialStorySerializer(s, context={"personaggio": personaggio, "request": request}).data for s in qs[:200]]
+        return Response({"count": len(rows), "results": rows})
+
 
 class SocialPostViewSet(viewsets.ModelViewSet):
     serializer_class = SocialPostSerializer
@@ -336,12 +541,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         self._sync_tags_for_post(post)
 
     def _sync_tags_for_post(self, post):
-        ids = extract_mentioned_personaggi_ids(post.testo)
-        SocialPostTag.objects.filter(post=post).exclude(personaggio_id__in=ids).delete()
-        existing = set(SocialPostTag.objects.filter(post=post).values_list("personaggio_id", flat=True))
-        SocialPostTag.objects.bulk_create(
-            [SocialPostTag(post=post, personaggio_id=pid) for pid in ids if pid not in existing]
-        )
+        sync_post_tags(post)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def like(self, request, pk=None):
