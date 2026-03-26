@@ -2,11 +2,15 @@ from django.db import migrations, models
 import django.db.models.deletion
 from django.utils import timezone
 
-from social.models import social_story_media_upload_to
-
 
 def _default_expires():
     return timezone.now() + timezone.timedelta(hours=24)
+
+
+def _story_media_upload_to(instance, filename):
+    # Evita import di modelli in migrazione.
+    autore_id = getattr(instance, "autore_id", "unknown")
+    return f"social/stories/{autore_id}/{filename}"
 
 
 class Migration(migrations.Migration):
@@ -25,7 +29,7 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField(default=timezone.now)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("testo", models.TextField(blank=True, null=True)),
-                ("media", models.FileField(blank=True, null=True, upload_to=social_story_media_upload_to)),
+                ("media", models.FileField(blank=True, null=True, upload_to=_story_media_upload_to)),
                 ("visibilita", models.CharField(choices=[("PUB", "Pubblico"), ("KORP", "Solo KORP")], default="PUB", max_length=4)),
                 ("expires_at", models.DateTimeField(blank=True, null=True, default=_default_expires)),
                 ("autore", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="social_stories", to="personaggi.personaggio")),
