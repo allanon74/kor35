@@ -329,6 +329,7 @@ class SocialStory(SyncableModel, models.Model):
 class SocialStoryTag(SyncableModel, models.Model):
     story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="tags")
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="tagged_in_social_stories")
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         verbose_name = "Tag Story Social"
@@ -339,6 +340,7 @@ class SocialStoryTag(SyncableModel, models.Model):
 class SocialStoryView(SyncableModel, models.Model):
     story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="views")
     viewer = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_story_views")
+    created_at = models.DateTimeField(default=timezone.now)
     viewed_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -390,6 +392,7 @@ class SocialStoryHighlight(SyncableModel, models.Model):
 class SocialStoryHighlightItem(SyncableModel, models.Model):
     highlight = models.ForeignKey(SocialStoryHighlight, on_delete=models.CASCADE, related_name="items")
     story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="in_highlights")
+    created_at = models.DateTimeField(default=timezone.now)
     added_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
