@@ -51,6 +51,10 @@ def social_profile_image_upload_to(instance, filename):
     return f"social/profiles/{instance.personaggio_id}/{filename}"
 
 
+def social_story_media_upload_to(instance, filename):
+    return f"social/stories/{instance.autore_id}/{filename}"
+
+
 class SocialProfile(SyncableModel, models.Model):
     personaggio = models.OneToOneField(Personaggio, on_delete=models.CASCADE, related_name="social_profile")
     foto_principale = models.ImageField(upload_to=social_profile_image_upload_to, null=True, blank=True)
@@ -262,6 +266,119 @@ class SocialGroupMessage(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.group.nome} - {self.autore.nome}: {self.testo[:30]}"
+
+
+class SocialStory(SyncableModel, models.Model):
+    autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_stories")
+    testo = models.TextField(null=True, blank=True)
+    media = models.FileField(upload_to=social_story_media_upload_to, null=True, blank=True)
+    visibilita = models.CharField(max_length=4, choices=SOCIAL_VISIBILITY_CHOICES, default=SOCIAL_VISIBILITY_PUBLIC)
+    korp_visibilita = models.ForeignKey(
+        Korp, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_stories_riservate"
+    )
+    evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_stories")
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Story Social"
+        verbose_name_plural = "Stories Social"
+        ordering = ["-created_at", "-id"]
+
+    def clean(self):
+        if not self.testo and not self.media:
+            raise ValidationError("Una story deve avere testo o media.")
+        if self.visibilita == SOCIAL_VISIBILITY_KORP and not self.korp_visibilita_id:
+            raise ValidationError("Per la visibilita KORP devi selezionare una KORP.")
+        if self.visibilita != SOCIAL_VISIBILITY_KORP and self.korp_visibilita_id:
+            raise ValidationError("La KORP visibilita e ammessa solo per story visibili alla KORP.")
+        if self.media and getattr(self.media, "size", 0) > MAX_VIDEO_BYTES:
+            # Limite anche per immagini grandi, coerente con video.
+            raise ValidationError(f"Media troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = (self.created_at or timezone.now()) + timezone.timedelta(hours=24)
+        # Se è un'immagine, comprimila (come per i post).
+        if self.media and hasattr(self.media, "name"):
+            name = str(self.media.name or "").lower()
+            if name.endswith((".jpg", ".jpeg", ".png", ".webp")):
+                self.media = optimize_uploaded_image(self.media)
+        self.clean()
+        super().save(*args, **kwargs)
+
+
+class SocialStoryTag(SyncableModel, models.Model):
+    story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="tags")
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="tagged_in_social_stories")
+
+    class Meta:
+        verbose_name = "Tag Story Social"
+        verbose_name_plural = "Tag Stories Social"
+        unique_together = ("story", "personaggio")
+
+
+class SocialStoryView(SyncableModel, models.Model):
+    story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="views")
+    viewer = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_story_views")
+    viewed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Visualizzazione Story"
+        verbose_name_plural = "Visualizzazioni Stories"
+        unique_together = ("story", "viewer")
+        ordering = ["-viewed_at", "-id"]
+
+
+class SocialStoryReaction(SyncableModel, models.Model):
+    story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="reactions")
+    autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_story_reactions")
+    emoji = models.CharField(max_length=16, default="❤️")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Reazione Story"
+        verbose_name_plural = "Reazioni Stories"
+        unique_together = ("story", "autore")
+        ordering = ["-created_at", "-id"]
+
+
+class SocialStoryReply(SyncableModel, models.Model):
+    story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="replies")
+    autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_story_replies")
+    testo = models.TextField()
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Risposta Story"
+        verbose_name_plural = "Risposte Stories"
+        ordering = ["-created_at", "-id"]
+
+
+class SocialStoryHighlight(SyncableModel, models.Model):
+    owner = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_story_highlights")
+    titolo = models.CharField(max_length=80)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Highlight Stories"
+        verbose_name_plural = "Highlights Stories"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.owner.nome} - {self.titolo}"
+
+
+class SocialStoryHighlightItem(SyncableModel, models.Model):
+    highlight = models.ForeignKey(SocialStoryHighlight, on_delete=models.CASCADE, related_name="items")
+    story = models.ForeignKey(SocialStory, on_delete=models.CASCADE, related_name="in_highlights")
+    added_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Item Highlight"
+        verbose_name_plural = "Items Highlights"
+        unique_together = ("highlight", "story")
+        ordering = ["-added_at", "-id"]
 
 
 MENTION_TOKEN_REGEX = re.compile(r"@([A-Za-z0-9_]+)")

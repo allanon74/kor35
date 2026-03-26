@@ -12,6 +12,13 @@ from .models import (
     SocialPost,
     SocialPostTag,
     SocialProfile,
+    SocialStory,
+    SocialStoryHighlight,
+    SocialStoryHighlightItem,
+    SocialStoryReaction,
+    SocialStoryReply,
+    SocialStoryTag,
+    SocialStoryView,
 )
 
 
@@ -144,4 +151,87 @@ class SocialGroupMessageAdmin(SummernoteModelAdmin):
     list_filter = ("group",)
     search_fields = ("testo", "group__nome", "autore__nome")
     autocomplete_fields = ("group", "autore")
+    summernote_fields = ("testo",)
+
+
+class SocialStoryTagInline(admin.TabularInline):
+    model = SocialStoryTag
+    extra = 0
+    autocomplete_fields = ("personaggio",)
+
+
+class SocialStoryViewInline(admin.TabularInline):
+    model = SocialStoryView
+    extra = 0
+    autocomplete_fields = ("viewer",)
+    readonly_fields = ("viewed_at",)
+
+
+class SocialStoryReactionInline(admin.TabularInline):
+    model = SocialStoryReaction
+    extra = 0
+    autocomplete_fields = ("autore",)
+    readonly_fields = ("created_at",)
+
+
+class SocialStoryReplyInline(admin.TabularInline):
+    model = SocialStoryReply
+    extra = 0
+    autocomplete_fields = ("autore",)
+    readonly_fields = ("created_at",)
+
+
+@admin.register(SocialStory)
+class SocialStoryAdmin(SummernoteModelAdmin):
+    list_display = ("autore", "visibilita", "korp_visibilita", "evento", "created_at", "expires_at")
+    list_filter = ("visibilita", "korp_visibilita", "evento")
+    search_fields = ("testo", "autore__nome")
+    autocomplete_fields = ("autore", "korp_visibilita", "evento")
+    summernote_fields = ("testo",)
+    readonly_fields = ("created_at", "expires_at")
+    inlines = [SocialStoryTagInline, SocialStoryViewInline, SocialStoryReactionInline, SocialStoryReplyInline]
+
+
+class SocialStoryHighlightItemInline(admin.TabularInline):
+    model = SocialStoryHighlightItem
+    extra = 0
+    autocomplete_fields = ("story",)
+    readonly_fields = ("added_at",)
+
+
+@admin.register(SocialStoryHighlight)
+class SocialStoryHighlightAdmin(admin.ModelAdmin):
+    list_display = ("owner", "titolo", "created_at")
+    search_fields = ("owner__nome", "titolo")
+    autocomplete_fields = ("owner",)
+    readonly_fields = ("created_at",)
+    inlines = [SocialStoryHighlightItemInline]
+
+
+@admin.register(SocialStoryHighlightItem)
+class SocialStoryHighlightItemAdmin(admin.ModelAdmin):
+    list_display = ("highlight", "story", "added_at")
+    autocomplete_fields = ("highlight", "story")
+    readonly_fields = ("added_at",)
+
+
+@admin.register(SocialStoryView)
+class SocialStoryViewAdmin(admin.ModelAdmin):
+    list_display = ("story", "viewer", "viewed_at")
+    autocomplete_fields = ("story", "viewer")
+    readonly_fields = ("viewed_at",)
+
+
+@admin.register(SocialStoryReaction)
+class SocialStoryReactionAdmin(admin.ModelAdmin):
+    list_display = ("story", "autore", "emoji", "created_at")
+    autocomplete_fields = ("story", "autore")
+    readonly_fields = ("created_at",)
+
+
+@admin.register(SocialStoryReply)
+class SocialStoryReplyAdmin(SummernoteModelAdmin):
+    list_display = ("story", "autore", "created_at")
+    autocomplete_fields = ("story", "autore")
+    readonly_fields = ("created_at",)
     summernote_fields = ("testo",)

@@ -15,6 +15,13 @@ from .models import (
     SocialPost,
     SocialPostTag,
     SocialProfile,
+    SocialStory,
+    SocialStoryHighlight,
+    SocialStoryHighlightItem,
+    SocialStoryReaction,
+    SocialStoryReply,
+    SocialStoryTag,
+    SocialStoryView,
     extract_hashtags,
 )
 
@@ -233,6 +240,114 @@ class SocialGroupMessageSerializer(serializers.ModelSerializer):
         model = SocialGroupMessage
         fields = ("id", "group", "autore", "autore_nome", "testo", "created_at")
         read_only_fields = ("group", "autore", "created_at")
+
+
+class SocialStorySerializer(serializers.ModelSerializer):
+    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    evento_titolo = serializers.CharField(source="evento.titolo", read_only=True)
+    hashtags = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+    viewed_by_me = serializers.SerializerMethodField()
+    views_count = serializers.IntegerField(read_only=True)
+    reactions_count = serializers.IntegerField(read_only=True)
+    reacted_by_me = serializers.SerializerMethodField()
+    my_reaction = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SocialStory
+        fields = (
+            "id",
+            "autore",
+            "autore_nome",
+            "testo",
+            "media",
+            "visibilita",
+            "korp_visibilita",
+            "evento",
+            "evento_titolo",
+            "created_at",
+            "expires_at",
+            "tags",
+            "hashtags",
+            "views_count",
+            "viewed_by_me",
+            "reactions_count",
+            "reacted_by_me",
+            "my_reaction",
+        )
+        read_only_fields = (
+            "autore",
+            "evento",
+            "created_at",
+            "expires_at",
+            "tags",
+            "hashtags",
+            "views_count",
+            "viewed_by_me",
+            "reactions_count",
+            "reacted_by_me",
+            "my_reaction",
+        )
+
+    def get_hashtags(self, obj):
+        text = f"{obj.testo or ''}".strip()
+        return extract_hashtags(text)
+
+    def get_tags(self, obj):
+        return list(obj.tags.select_related("personaggio").values("personaggio_id", "personaggio__nome"))
+
+    def get_viewed_by_me(self, obj):
+        personaggio = self.context.get("personaggio")
+        if not personaggio:
+            return False
+        return SocialStoryView.objects.filter(story=obj, viewer=personaggio).exists()
+
+    def get_reacted_by_me(self, obj):
+        personaggio = self.context.get("personaggio")
+        if not personaggio:
+            return False
+        return SocialStoryReaction.objects.filter(story=obj, autore=personaggio).exists()
+
+    def get_my_reaction(self, obj):
+        personaggio = self.context.get("personaggio")
+        if not personaggio:
+            return None
+        r = SocialStoryReaction.objects.filter(story=obj, autore=personaggio).first()
+        return r.emoji if r else None
+
+
+class SocialStoryReplySerializer(serializers.ModelSerializer):
+    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+
+    class Meta:
+        model = SocialStoryReply
+        fields = ("id", "story", "autore", "autore_nome", "testo", "created_at")
+        read_only_fields = ("story", "autore", "created_at")
+
+
+class SocialStoryHighlightItemSerializer(serializers.ModelSerializer):
+    story = SocialStorySerializer(read_only=True)
+
+    class Meta:
+        model = SocialStoryHighlightItem
+        fields = ("id", "highlight", "story", "added_at")
+        read_only_fields = fields
+
+
+class SocialStoryHighlightSerializer(serializers.ModelSerializer):
+    owner_nome = serializers.CharField(source="owner.nome", read_only=True)
+    items = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SocialStoryHighlight
+        fields = ("id", "owner", "owner_nome", "titolo", "created_at", "items")
+        read_only_fields = ("owner", "owner_nome", "created_at", "items")
+
+    def get_items(self, obj):
+        qs = obj.items.select_related("story", "story__autore", "story__evento", "story__korp_visibilita").all()
+        # Context: passa personaggio per viewed/reacted.
+        personaggio = self.context.get("personaggio")
+        return SocialStoryHighlightItemSerializer(qs, many=True, context={"personaggio": personaggio}).data
 
 
 def resolve_active_personaggio(user, explicit_personaggio_id=None):

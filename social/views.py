@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from gestione_plot.models import Evento
-from personaggi.models import Personaggio, PersonaggioKorpMembership
+from personaggi.models import Messaggio, Personaggio, PersonaggioKorpMembership
 
 from .models import (
     SOCIAL_GROUP_ROLE_ADMIN,
@@ -29,6 +29,13 @@ from .models import (
     SocialPost,
     SocialPostTag,
     SocialProfile,
+    SocialStory,
+    SocialStoryHighlight,
+    SocialStoryHighlightItem,
+    SocialStoryReaction,
+    SocialStoryReply,
+    SocialStoryTag,
+    SocialStoryView,
     extract_mentioned_personaggi_ids,
 )
 from .serializers import (
@@ -40,6 +47,9 @@ from .serializers import (
     SocialPostSerializer,
     SocialProfilePublicSerializer,
     SocialProfileSerializer,
+    SocialStoryHighlightSerializer,
+    SocialStoryReplySerializer,
+    SocialStorySerializer,
     resolve_active_personaggio,
     visible_posts_queryset_for_personaggio,
 )
@@ -82,6 +92,194 @@ class SocialGroupMemberPagination(PageNumberPagination):
     page_size = 30
     page_size_query_param = "page_size"
     max_page_size = 100
+
+
+class SocialStoryPagination(PageNumberPagination):
+    page_size = 30
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+def visible_stories_queryset_for_personaggio(personaggio):
+    now = timezone.now()
+    base = (
+        SocialStory.objects.select_related("autore", "evento", "korp_visibilita")
+        .filter(expires_at__gt=now)
+        .annotate(
+            views_count=Count("views", distinct=True),
+            reactions_count=Count("reactions", distinct=True),
+        )
+    )
+    if not personaggio:
+        return base.filter(visibilita="PUB")
+    active_korp = None
+    membership = (
+        PersonaggioKorpMembership.objects.filter(personaggio=personaggio, data_a__isnull=True)
+        .select_related("korp")
+        .first()
+    )
+    if membership:
+        active_korp = membership.korp
+    if not active_korp:
+        return base.filter(visibilita="PUB")
+    return base.filter(Q(visibilita="PUB") | Q(visibilita="KORP", korp_visibilita=active_korp)).distinct()
+
+
+class SocialStoryViewSet(viewsets.ModelViewSet):
+    serializer_class = SocialStorySerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    pagination_class = SocialStoryPagination
+
+    def get_permissions(self):
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [permissions.IsAdminUser()]
+        if self.action in {"create", "viewed", "react", "reply", "replies", "highlights", "add_to_highlight"}:
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticatedOrReadOnly()]
+
+    def get_personaggio(self):
+        if not self.request.user.is_authenticated:
+            return None
+        requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
+        return resolve_active_personaggio(self.request.user, requested)
+
+    def get_queryset(self):
+        personaggio = self.get_personaggio()
+        return visible_stories_queryset_for_personaggio(personaggio)
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["personaggio"] = self.get_personaggio()
+        return ctx
+
+    def perform_create(self, serializer):
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            raise permissions.PermissionDenied("Nessun personaggio selezionabile per questo utente.")
+        visibilita = serializer.validated_data.get("visibilita")
+        korp_visibilita = serializer.validated_data.get("korp_visibilita")
+        if visibilita == SOCIAL_VISIBILITY_KORP:
+            if not korp_visibilita:
+                raise permissions.PermissionDenied("Serve una KORP per story riservata.")
+            is_member = PersonaggioKorpMembership.objects.filter(
+                personaggio=personaggio, korp=korp_visibilita, data_a__isnull=True
+            ).exists()
+            if not is_member:
+                raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")
+        story = serializer.save(autore=personaggio, evento=get_evento_in_corso())
+        self._sync_tags_for_story(story)
+
+    def perform_update(self, serializer):
+        story = serializer.save()
+        self._sync_tags_for_story(story)
+
+    def _sync_tags_for_story(self, story):
+        ids = extract_mentioned_personaggi_ids(story.testo)
+        SocialStoryTag.objects.filter(story=story).exclude(personaggio_id__in=ids).delete()
+        existing = set(SocialStoryTag.objects.filter(story=story).values_list("personaggio_id", flat=True))
+        SocialStoryTag.objects.bulk_create(
+            [SocialStoryTag(story=story, personaggio_id=pid) for pid in ids if pid not in existing]
+        )
+
+    @action(detail=True, methods=["post"])
+    def viewed(self, request, pk=None):
+        story = self.get_object()
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        SocialStoryView.objects.update_or_create(
+            story=story,
+            viewer=personaggio,
+            defaults={"viewed_at": timezone.now()},
+        )
+        return Response({"viewed": True}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def react(self, request, pk=None):
+        story = self.get_object()
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        emoji = (request.data.get("emoji") or "❤️").strip()
+        if len(emoji) > 16:
+            return Response({"detail": "Emoji non valida."}, status=status.HTTP_400_BAD_REQUEST)
+        existing = SocialStoryReaction.objects.filter(story=story, autore=personaggio).first()
+        if existing and existing.emoji == emoji:
+            existing.delete()
+            return Response({"reacted": False}, status=status.HTTP_200_OK)
+        SocialStoryReaction.objects.update_or_create(
+            story=story,
+            autore=personaggio,
+            defaults={"emoji": emoji, "created_at": timezone.now()},
+        )
+        return Response({"reacted": True, "emoji": emoji}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get", "post"])
+    def replies(self, request, pk=None):
+        story = self.get_object()
+        if request.method.lower() == "get":
+            qs = story.replies.select_related("autore").all()
+            serializer = SocialStoryReplySerializer(qs, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = SocialStoryReplySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        reply = serializer.save(story=story, autore=personaggio)
+
+        # Reply in DM (unified messaging): invia un INDV verso l'autore della story.
+        send_dm = request.data.get("send_dm", True)
+        try:
+            send_dm = bool(send_dm)
+        except Exception:
+            send_dm = True
+        if send_dm and story.autore_id and story.autore_id != personaggio.id:
+            Messaggio.objects.create(
+                mittente=request.user,
+                mittente_personaggio=personaggio,
+                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+                destinatario_personaggio=story.autore,
+                titolo=f"Risposta alla tua story",
+                testo=reply.testo,
+                salva_in_cronologia=True,
+            )
+        return Response(SocialStoryReplySerializer(reply).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get"])
+    def highlights(self, request):
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response([], status=status.HTTP_200_OK)
+        qs = SocialStoryHighlight.objects.filter(owner=personaggio)
+        return Response(SocialStoryHighlightSerializer(qs, many=True, context={"personaggio": personaggio}).data)
+
+    @action(detail=False, methods=["post"])
+    def create_highlight(self, request):
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        titolo = (request.data.get("titolo") or "").strip()
+        if not titolo:
+            return Response({"detail": "Titolo obbligatorio."}, status=status.HTTP_400_BAD_REQUEST)
+        h = SocialStoryHighlight.objects.create(owner=personaggio, titolo=titolo)
+        return Response(SocialStoryHighlightSerializer(h, context={"personaggio": personaggio}).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path=r"highlights/(?P<highlight_id>[^/.]+)/add")
+    def add_to_highlight(self, request, highlight_id=None):
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        highlight = SocialStoryHighlight.objects.filter(id=highlight_id, owner=personaggio).first()
+        if not highlight:
+            return Response({"detail": "Highlight non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        story_id = request.data.get("story_id")
+        story = SocialStory.objects.filter(id=story_id, autore=personaggio).first()
+        if not story:
+            return Response({"detail": "Story non trovata."}, status=status.HTTP_404_NOT_FOUND)
+        SocialStoryHighlightItem.objects.get_or_create(highlight=highlight, story=story)
+        return Response({"ok": True}, status=status.HTTP_200_OK)
 
 
 class SocialPostViewSet(viewsets.ModelViewSet):
