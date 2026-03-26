@@ -1483,12 +1483,13 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     TestoFormattatoPersonale = serializers.JSONField(read_only=True, required=False)
     tipologia = TipologiaPersonaggioSerializer(read_only=True)
 
-    abilita_possedute = AbilitaMasterListSerializer(many=True, read_only=True)
+    abilita_possedute = serializers.SerializerMethodField()
 
     oggetti = serializers.SerializerMethodField()
     attivate_possedute = serializers.SerializerMethodField()
     infusioni_possedute = serializers.SerializerMethodField()
     tessiture_possedute = serializers.SerializerMethodField()
+    cerimoniali_posseduti = serializers.SerializerMethodField()
     consumabili = serializers.SerializerMethodField()
     creazioni_consumabili_in_corso = serializers.SerializerMethodField()
     creazioni_consumabili_pronte = serializers.SerializerMethodField()
@@ -1513,6 +1514,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'punteggi_base', 'statistiche_base_dict', 'modificatori_calcolati',
             'abilita_possedute', 'oggetti',
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
+            'cerimoniali_posseduti',
             'consumabili', 'creazioni_consumabili_in_corso', 'creazioni_consumabili_pronte', 'valore_aura_alchimia',
             'movimenti_credito',
             'TestoFormattatoPersonale',
@@ -1535,6 +1537,54 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         except Exception:
             # fallback conservativo: se non riusciamo a calcolare, non blocchiamo la UI
             return True
+
+    def _get_event_mod_context_cache(self):
+        """
+        Cache per una singola serializzazione: evita di rifare query eventi in ogni get_*.
+        """
+        if not hasattr(self, "_event_mod_context_cache"):
+            from .modificabilita import get_event_context
+            self._event_mod_context_cache = get_event_context()
+        return self._event_mod_context_cache
+
+    def _is_modificabile_per_eventi(self, acquisizione_dt):
+        from .modificabilita import is_modificabile_per_eventi
+        event_in_corso, latest_event_start = self._get_event_mod_context_cache()
+        return is_modificabile_per_eventi(
+            acquisizione_dt,
+            event_in_corso=event_in_corso,
+            latest_event_start=latest_event_start,
+        )
+
+    def get_abilita_possedute(self, personaggio):
+        from .models import PersonaggioAbilita
+        from .modificabilita import get_abilita_bloccate_da_prerequisito
+
+        abilita_qs = personaggio.abilita_possedute.all()
+        abilita_ids = list(abilita_qs.values_list("id", flat=True))
+        if not abilita_ids:
+            return []
+
+        # data_acquisizione per singola abilità posseduta
+        pivots = (
+            PersonaggioAbilita.objects.filter(personaggio=personaggio, abilita_id__in=abilita_ids)
+            .values("abilita_id", "data_acquisizione")
+        )
+        acq_map = {p["abilita_id"]: p["data_acquisizione"] for p in pivots}
+
+        # Vincolo: se l'abilità è prerequisito di almeno un'altra abilità posseduta, non è mai modificabile
+        prereq_locked_ids = get_abilita_bloccate_da_prerequisito(abilita_ids)
+
+        context_con_pg = {**self.context, "personaggio": personaggio}
+        serialized = AbilitaMasterListSerializer(abilita_qs, many=True, context=context_con_pg).data
+
+        for item in serialized:
+            ab_id = item.get("id")
+            acquired_at = acq_map.get(ab_id)
+            mod_base = self._is_modificabile_per_eventi(acquired_at)
+            item["is_modifiable"] = bool(mod_base and ab_id not in prereq_locked_ids)
+
+        return serialized
 
     def get_oggetti(self, personaggio):
         if hasattr(personaggio.inventario_ptr, 'tracciamento_oggetti_correnti'):
@@ -1564,28 +1614,73 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return risultati
 
     def get_infusioni_possedute(self, personaggio):
+        from .models import PersonaggioInfusione
+
         infusioni = personaggio.infusioni_possedute.all()
+        infusioni_ids = list(infusioni.values_list("id", flat=True))
+        if not infusioni_ids:
+            return []
+
+        pivots = (
+            PersonaggioInfusione.objects.filter(personaggio=personaggio, infusione_id__in=infusioni_ids)
+            .values("infusione_id", "data_acquisizione")
+        )
+        acq_map = {p["infusione_id"]: p["data_acquisizione"] for p in pivots}
+
         risultati = []
-        context_con_pg = {**self.context, 'personaggio': personaggio}
+        context_con_pg = {**self.context, "personaggio": personaggio}
         for inf in infusioni:
             dati = InfusioneSerializer(inf, context=context_con_pg).data
-            dati['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(inf)
+            dati["testo_formattato_personaggio"] = personaggio.get_testo_formattato_per_item(inf)
+            dati["is_modifiable"] = bool(self._is_modificabile_per_eventi(acq_map.get(inf.id)))
             risultati.append(dati)
         return risultati
 
     def get_tessiture_possedute(self, personaggio):
         from .models import PersonaggioTessitura
         tessiture = personaggio.tessiture_possedute.all()
+        tessiture_ids = list(tessiture.values_list("id", flat=True))
+        if not tessiture_ids:
+            return []
+
+        pivots = (
+            PersonaggioTessitura.objects.filter(personaggio=personaggio, tessitura_id__in=tessiture_ids)
+            .values("tessitura_id", "data_acquisizione", "is_favorite")
+        )
+        acq_map = {p["tessitura_id"]: p["data_acquisizione"] for p in pivots}
+        fav_map = {p["tessitura_id"]: p["is_favorite"] for p in pivots}
+
         risultati = []
-        context_con_pg = {**self.context, 'personaggio': personaggio}
+        context_con_pg = {**self.context, "personaggio": personaggio}
         for tes in tessiture:
             dati = TessituraSerializer(tes, context=context_con_pg).data
-            dati['testo_formattato_personaggio'] = personaggio.get_testo_formattato_per_item(tes)
-            # Aggiungi informazione se è favorita
-            pivot = PersonaggioTessitura.objects.filter(personaggio=personaggio, tessitura=tes).first()
-            dati['is_favorite'] = pivot.is_favorite if pivot else False
+            dati["testo_formattato_personaggio"] = personaggio.get_testo_formattato_per_item(tes)
+            dati["is_favorite"] = bool(fav_map.get(tes.id, False))
+            dati["is_modifiable"] = bool(self._is_modificabile_per_eventi(acq_map.get(tes.id)))
             risultati.append(dati)
         return risultati
+
+    def get_cerimoniali_posseduti(self, personaggio):
+        from .models import PersonaggioCerimoniale
+
+        cerimoniali = personaggio.cerimoniali_posseduti.all()
+        cer_ids = list(cerimoniali.values_list("id", flat=True))
+        if not cer_ids:
+            return []
+
+        pivots = (
+            PersonaggioCerimoniale.objects.filter(personaggio=personaggio, cerimoniale_id__in=cer_ids)
+            .values("cerimoniale_id", "data_acquisizione")
+        )
+        acq_map = {p["cerimoniale_id"]: p["data_acquisizione"] for p in pivots}
+
+        context_con_pg = {**self.context, "personaggio": personaggio}
+        serialized = CerimonialeSerializer(cerimoniali, many=True, context=context_con_pg).data
+
+        for item in serialized:
+            item["is_modifiable"] = bool(self._is_modificabile_per_eventi(acq_map.get(item.get("id"))))
+
+        return serialized
 
     def get_creazioni_consumabili_in_corso(self, personaggio):
         from django.utils import timezone

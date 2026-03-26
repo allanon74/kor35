@@ -780,6 +780,353 @@ class AcquisisciCerimonialeView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class RevocaAbilitaView(APIView):
+    """
+    Revoca l'acquisto di un'abilità posseduta, se e solo se è "modificabile".
+    Restituisce PC e crediti spesi (via log movimenti, con fallback di calcolo).
+    """
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, format=None):
+        from .modificabilita import get_event_context, is_modificabile_per_eventi, get_abilita_bloccate_da_prerequisito
+
+        personaggio_id = request.data.get("personaggio_id")
+        abilita_id = request.data.get("abilita_id")
+        if not personaggio_id or not abilita_id:
+            return Response({"error": "Dati mancanti (personaggio_id, abilita_id)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.select_related("tipologia").get(id=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            pivot = PersonaggioAbilita.objects.select_related("abilita").get(
+                personaggio=personaggio,
+                abilita_id=abilita_id,
+            )
+        except PersonaggioAbilita.DoesNotExist:
+            return Response({"error": "Abilità non posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+
+        abilita = pivot.abilita
+        acquired_at = pivot.data_acquisizione
+
+        event_in_corso, latest_event_start = get_event_context()
+        if not is_modificabile_per_eventi(
+            acquired_at,
+            event_in_corso=event_in_corso,
+            latest_event_start=latest_event_start,
+        ):
+            return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
+
+        possessed_ids = set(personaggio.abilita_possedute.values_list("id", flat=True))
+        prereq_locked_ids = get_abilita_bloccate_da_prerequisito(possessed_ids)
+        if abilita.id in prereq_locked_ids:
+            return Response(
+                {"error": "Abilità non revocabile: è prerequisito di un'altra abilità posseduta."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        window = timedelta(minutes=10)
+        start_dt = acquired_at - window
+        end_dt = acquired_at + window
+
+        desc_prefix = f"Acquisito abilità: {abilita.nome}"
+
+        pc_mov = (
+            PuntiCaratteristicaMovimento.objects.filter(
+                personaggio=personaggio,
+                descrizione__startswith=desc_prefix,
+                data__gte=start_dt,
+                data__lte=end_dt,
+            )
+            .order_by("-data")
+            .first()
+        )
+        credit_mov = (
+            CreditoMovimento.objects.filter(
+                personaggio=personaggio,
+                descrizione__startswith=desc_prefix,
+                data__gte=start_dt,
+                data__lte=end_dt,
+            )
+            .order_by("-data")
+            .first()
+        )
+
+        pc_refund = 0
+        if pc_mov and pc_mov.importo < 0:
+            pc_refund = -pc_mov.importo
+
+        credits_refund = 0
+        if credit_mov and credit_mov.importo < 0:
+            credits_refund = -credit_mov.importo
+
+        # Fallback: se non troviamo i movimenti, ricalcoliamo costi attuali come in fase di acquisto.
+        is_tratto_ain = (
+            abilita.is_tratto_aura
+            and abilita.aura_riferimento_id
+            and getattr(abilita.aura_riferimento, "sigla", None) == "AIN"
+        )
+        if pc_refund == 0 and credits_refund == 0 and not is_tratto_ain:
+            mods = personaggio.modificatori_calcolati
+            sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {"add": 0, "mol": 1.0})
+            sconto_valore = max(0, sconto_stat.get("add", 0))
+            sconto_percent = Decimal(sconto_valore) / Decimal(100)
+            moltiplicatore_costo = Decimal(1) - sconto_percent
+            costo_pc_finale = abilita.costo_pc
+            costo_crediti_base = Decimal(abilita.costo_crediti)
+            costo_crediti_finale = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal("0.01"))
+            pc_refund = costo_pc_finale
+            credits_refund = costo_crediti_finale
+
+        if pc_refund:
+            personaggio.modifica_pc(pc_refund, f"Revocato acquisto abilità: {abilita.nome}")
+        if credits_refund:
+            personaggio.modifica_crediti(credits_refund, f"Revocato acquisto abilità: {abilita.nome}")
+
+        pivot.delete()
+        personaggio.aggiungi_log(f"Ha revocato l'acquisto dell'abilità '{abilita.nome}'.")
+
+        cache.delete(f"acquirable_skills_{personaggio.id}")
+
+        serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RevocaInfusioneView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, format=None):
+        from .modificabilita import get_event_context, is_modificabile_per_eventi
+        from .models import PersonaggioInfusione
+
+        personaggio_id = request.data.get("personaggio_id")
+        infusione_id = request.data.get("infusione_id")
+        if not personaggio_id or not infusione_id:
+            return Response({"error": "Dati mancanti (personaggio_id, infusione_id)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.select_related("tipologia").get(id=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            pivot = PersonaggioInfusione.objects.select_related("infusione").get(
+                personaggio=personaggio,
+                infusione_id=infusione_id,
+            )
+        except PersonaggioInfusione.DoesNotExist:
+            return Response({"error": "Infusione non posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+
+        infusione = pivot.infusione
+        acquired_at = pivot.data_acquisizione
+
+        event_in_corso, latest_event_start = get_event_context()
+        if not is_modificabile_per_eventi(
+            acquired_at,
+            event_in_corso=event_in_corso,
+            latest_event_start=latest_event_start,
+        ):
+            return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
+
+        window = timedelta(minutes=10)
+        start_dt = acquired_at - window
+        end_dt = acquired_at + window
+        desc = f"Acquisito infusione: {infusione.nome}"
+
+        credit_mov = (
+            CreditoMovimento.objects.filter(
+                personaggio=personaggio,
+                descrizione=desc,
+                data__gte=start_dt,
+                data__lte=end_dt,
+            )
+            .order_by("-data")
+            .first()
+        )
+
+        credits_refund = 0
+        if credit_mov and credit_mov.importo < 0:
+            credits_refund = -credit_mov.importo
+        else:
+            credits_refund = infusione.costo_crediti
+
+        if credits_refund:
+            personaggio.modifica_crediti(credits_refund, f"Revocato acquisto infusione: {infusione.nome}")
+
+        # Retrocedi anche la royalty (stesso calcolo del purchase view).
+        if hasattr(infusione, "proposta_creazione") and infusione.proposta_creazione:
+            creatore = infusione.proposta_creazione.personaggio
+            if creatore and creatore.id != personaggio.id:
+                royalty = int(round(float(credits_refund) * 0.10))
+                if royalty > 0:
+                    creatore.modifica_crediti(-royalty, f"Revocata royalty per l'acquisto di '{infusione.nome}' da parte di {personaggio.nome}")
+                    creatore.aggiungi_log(f"Ha ricevuto -{royalty} CR (revoca) di royalty per la tecnica '{infusione.nome}'.")
+
+        pivot.delete()
+        personaggio.aggiungi_log(f"Ha revocato l'acquisto dell'infusione '{infusione.nome}'.")
+
+        serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RevocaTessituraView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, format=None):
+        from .modificabilita import get_event_context, is_modificabile_per_eventi
+        from .models import PersonaggioTessitura
+
+        personaggio_id = request.data.get("personaggio_id")
+        tessitura_id = request.data.get("tessitura_id")
+        if not personaggio_id or not tessitura_id:
+            return Response({"error": "Dati mancanti (personaggio_id, tessitura_id)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.select_related("tipologia").get(id=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            pivot = PersonaggioTessitura.objects.select_related("tessitura").get(
+                personaggio=personaggio,
+                tessitura_id=tessitura_id,
+            )
+        except PersonaggioTessitura.DoesNotExist:
+            return Response({"error": "Tessitura non posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+
+        tessitura = pivot.tessitura
+        acquired_at = pivot.data_acquisizione
+
+        event_in_corso, latest_event_start = get_event_context()
+        if not is_modificabile_per_eventi(
+            acquired_at,
+            event_in_corso=event_in_corso,
+            latest_event_start=latest_event_start,
+        ):
+            return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
+
+        window = timedelta(minutes=10)
+        start_dt = acquired_at - window
+        end_dt = acquired_at + window
+        desc = f"Acquisito tessitura: {tessitura.nome}"
+
+        credit_mov = (
+            CreditoMovimento.objects.filter(
+                personaggio=personaggio,
+                descrizione=desc,
+                data__gte=start_dt,
+                data__lte=end_dt,
+            )
+            .order_by("-data")
+            .first()
+        )
+
+        credits_refund = 0
+        if credit_mov and credit_mov.importo < 0:
+            credits_refund = -credit_mov.importo
+        else:
+            credits_refund = tessitura.costo_crediti
+
+        if credits_refund:
+            personaggio.modifica_crediti(credits_refund, f"Revocato acquisto tessitura: {tessitura.nome}")
+
+        if hasattr(tessitura, "proposta_creazione") and tessitura.proposta_creazione:
+            creatore = tessitura.proposta_creazione.personaggio
+            if creatore and creatore.id != personaggio.id:
+                royalty = int(round(float(credits_refund) * 0.10))
+                if royalty > 0:
+                    creatore.modifica_crediti(-royalty, f"Revocata royalty per l'acquisto di '{tessitura.nome}' da parte di {personaggio.nome}")
+                    creatore.aggiungi_log(f"Ha ricevuto -{royalty} CR (revoca) di royalty per la tecnica '{tessitura.nome}'.")
+
+        pivot.delete()
+        personaggio.aggiungi_log(f"Ha revocato l'acquisto della tessitura '{tessitura.nome}'.")
+
+        serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RevocaCerimonialeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, format=None):
+        from .modificabilita import get_event_context, is_modificabile_per_eventi
+        from .models import PersonaggioCerimoniale
+
+        personaggio_id = request.data.get("personaggio_id")
+        cerimoniale_id = request.data.get("cerimoniale_id")
+        if not personaggio_id or not cerimoniale_id:
+            return Response({"error": "Dati mancanti (personaggio_id, cerimoniale_id)."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            personaggio = Personaggio.objects.select_related("tipologia").get(id=personaggio_id, proprietario=request.user)
+        except Personaggio.DoesNotExist:
+            return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            pivot = PersonaggioCerimoniale.objects.select_related("cerimoniale").get(
+                personaggio=personaggio,
+                cerimoniale_id=cerimoniale_id,
+            )
+        except PersonaggioCerimoniale.DoesNotExist:
+            return Response({"error": "Cerimoniale non posseduto."}, status=status.HTTP_400_BAD_REQUEST)
+
+        cerimoniale = pivot.cerimoniale
+        acquired_at = pivot.data_acquisizione
+
+        event_in_corso, latest_event_start = get_event_context()
+        if not is_modificabile_per_eventi(
+            acquired_at,
+            event_in_corso=event_in_corso,
+            latest_event_start=latest_event_start,
+        ):
+            return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
+
+        window = timedelta(minutes=10)
+        start_dt = acquired_at - window
+        end_dt = acquired_at + window
+        desc = f"Appreso cerimoniale: {cerimoniale.nome}"
+
+        credit_mov = (
+            CreditoMovimento.objects.filter(
+                personaggio=personaggio,
+                descrizione=desc,
+                data__gte=start_dt,
+                data__lte=end_dt,
+            )
+            .order_by("-data")
+            .first()
+        )
+
+        credits_refund = 0
+        if credit_mov and credit_mov.importo < 0:
+            credits_refund = -credit_mov.importo
+        else:
+            credits_refund = cerimoniale.costo_crediti
+
+        if credits_refund:
+            personaggio.modifica_crediti(credits_refund, f"Revocato acquisto cerimoniale: {cerimoniale.nome}")
+
+        if hasattr(cerimoniale, "proposta_creazione") and cerimoniale.proposta_creazione:
+            creatore = cerimoniale.proposta_creazione.personaggio
+            if creatore and creatore.id != personaggio.id:
+                royalty = int(round(float(credits_refund) * 0.10))
+                if royalty > 0:
+                    creatore.modifica_crediti(-royalty, f"Revocata royalty per l'acquisto di '{cerimoniale.nome}' da parte di {personaggio.nome}")
+                    creatore.aggiungi_log(f"Ha ricevuto -{royalty} CR (revoca) di royalty per la tecnica '{cerimoniale.nome}'.")
+
+        pivot.delete()
+        personaggio.aggiungi_log(f"Ha revocato l'acquisto del cerimoniale '{cerimoniale.nome}'.")
+
+        serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
 def qr_code_html_view(request: HttpRequest) -> HttpResponse:
     uuid_str = request.GET.get('id')
     if not uuid_str: return HttpResponse("ID non fornito.", status=400)

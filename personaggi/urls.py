@@ -120,6 +120,7 @@ urlpatterns = [
     path('api/transazioni/<int:pk>/proposta/', views.PropostaTransazioneCreateView.as_view(), name='api_transazioni_proposta'),
     path('api/abilita/master_list/', views.AbilitaMasterListView.as_view(), name='abilita_master_list'),
     path('api/personaggio/me/acquisisci_abilita/', views.AcquisisciAbilitaView.as_view(), name='acquisisci_abilita'),
+    path('api/personaggio/me/revoca_abilita/', views.RevocaAbilitaView.as_view(), name='revoca_abilita'),
     path('api/personaggio/me/abilita_acquistabili/', views.AbilitaAcquistabiliView.as_view(), name='abilita-acquistabili'),
     path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
     path('api/cache-revision/', views.CacheRevisionView.as_view(), name='api_cache_revision'),
@@ -137,10 +138,12 @@ urlpatterns = [
     # Endpoint per Infusioni
     path('api/personaggio/me/infusioni_acquistabili/', views.InfusioniAcquistabiliView.as_view(), name='infusioni_acquistabili'),
     path('api/personaggio/me/acquisisci_infusione/', views.AcquisisciInfusioneView.as_view(), name='acquisisci_infusione'),
+    path('api/personaggio/me/revoca_infusione/', views.RevocaInfusioneView.as_view(), name='revoca_infusione'),
 
     # Endpoint per Tessiture
     path('api/personaggio/me/tessiture_acquistabili/', views.TessitureAcquistabiliView.as_view(), name='tessiture_acquistabili'),
     path('api/personaggio/me/acquisisci_tessitura/', views.AcquisisciTessituraView.as_view(), name='acquisisci_tessitura'),
+    path('api/personaggio/me/revoca_tessitura/', views.RevocaTessituraView.as_view(), name='revoca_tessitura'),
     path('api/personaggio/me/toggle_tessitura_favorite/', views.ToggleTessituraFavoriteView.as_view(), name='toggle_tessitura_favorite'),
     path('api/personaggio/me/consuma_consumabile/', views.ConsumaConsumabileView.as_view(), name='consuma_consumabile'),
     path('api/personaggio/me/avvia_creazione_consumabile/', views.AvviaCreazioneConsumabileView.as_view(), name='avvia_creazione_consumabile'),
@@ -149,6 +152,7 @@ urlpatterns = [
     # Endpoint per Cerimoniali
     path('api/personaggio/me/cerimoniali_acquistabili/', views.CerimonialiAcquistabiliView.as_view(), name='api_cerimoniali_acquistabili'),
     path('api/personaggio/me/acquisisci_cerimoniale/', views.AcquisisciCerimonialeView.as_view(), name='api_acquisisci_cerimoniale'),
+    path('api/personaggio/me/revoca_cerimoniale/', views.RevocaCerimonialeView.as_view(), name='revoca_cerimoniale'),
     
     # Endpoint per Modelli Aura
     path('api/punteggio/<int:aura_id>/modelli/', views.ModelliAuraListView.as_view(), name='lista_modelli_aura'),
