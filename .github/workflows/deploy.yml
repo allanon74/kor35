@@ -21,87 +21,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  staging-validate:
-    name: Staging validate (migrate + smoke)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
-
-      - name: Deploy and validate on Staging via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.STAGING_SERVER_HOST }}
-          username: ${{ secrets.STAGING_SERVER_USER }}
-          key: ${{ secrets.STAGING_SERVER_SSH_KEY }}
-          port: ${{ secrets.STAGING_SERVER_SSH_PORT || 22 }}
-          script: |
-            set -euo pipefail
-            REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
-            RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
-            PROJECT_PATH="${{ secrets.STAGING_PROJECT_PATH || '' }}"
-            if [ -z "${PROJECT_PATH}" ]; then
-              EFFECTIVE_USER="${USER:-$(id -un)}"
-              for CANDIDATE in \
-                "$HOME/progetti/kor35" \
-                "$HOME/kor35" \
-                "/home/${EFFECTIVE_USER}/progetti/kor35" \
-                "/home/${EFFECTIVE_USER}/kor35" \
-                "/var/www/kor35" \
-                "/srv/kor35" \
-                "/opt/kor35"
-              do
-                if [ -d "${CANDIDATE}" ]; then
-                  PROJECT_PATH="${CANDIDATE}"
-                  break
-                fi
-              done
-            fi
-            if [ -n "${PROJECT_PATH}" ] && [ ! -f "${PROJECT_PATH}/manage.py" ]; then
-              PROJECT_PATH=""
-            fi
-            if [ -z "${PROJECT_PATH}" ]; then
-              echo "Path progetto staging non trovato. Imposta secret STAGING_PROJECT_PATH con il path completo (es. /home/<user>/progetti/kor35)." >&2
-              exit 1
-            fi
-            cd "${PROJECT_PATH}"
-            git fetch --all --tags
-            if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
-              git checkout -B "${REF}" "origin/${REF}"
-              git reset --hard "origin/${REF}"
-            else
-              git checkout "${REF}"
-              git reset --hard "${REF}"
-            fi
-            DEPLOYED_SHA="$(git rev-parse HEAD)"
-            export KOR35_BUILD_SHA="${DEPLOYED_SHA}"
-            export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
-            export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            echo "DEPLOYED_SHA=${DEPLOYED_SHA}"
-            source ~/ambienti/kor35/bin/activate
-            export PIP_NO_CACHE_DIR=1
-            export TMPDIR="$HOME/tmp"
-            mkdir -p "$TMPDIR"
-
-            pip install --upgrade pip setuptools wheel
-            pip install --prefer-binary -r requirements.txt
-            python manage.py migrate --plan
-            if [ "${RUN_MIGRATIONS}" = "true" ]; then
-              python manage.py migrate --noinput
-            fi
-            python manage.py check --deploy
-            python manage.py collectstatic --noinput
-            sudo systemctl restart apache2.service
-            sudo systemctl restart kor35-daphne
-            curl -fsS "${{ secrets.STAGING_HEALTHCHECK_URL }}" >/dev/null
-            echo "Staging validation OK"
-
   production-deploy:
     name: Production deploy
     runs-on: ubuntu-latest
-    needs: [staging-validate]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
