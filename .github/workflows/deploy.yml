@@ -38,6 +38,7 @@ jobs:
           key: ${{ secrets.STAGING_SERVER_SSH_KEY }}
           port: ${{ secrets.STAGING_SERVER_SSH_PORT || 22 }}
           script: |
+            set -euo pipefail
             REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
             RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
             cd ~/progetti/kor35
@@ -55,8 +56,12 @@ jobs:
             export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "DEPLOYED_SHA=${DEPLOYED_SHA}"
             source ~/ambienti/kor35/bin/activate
+            export PIP_NO_CACHE_DIR=1
+            export TMPDIR="$HOME/tmp"
+            mkdir -p "$TMPDIR"
 
-            pip install -r requirements.txt
+            pip install --upgrade pip setuptools wheel
+            pip install --prefer-binary -r requirements.txt
             python manage.py migrate --plan
             if [ "${RUN_MIGRATIONS}" = "true" ]; then
               python manage.py migrate --noinput
@@ -86,6 +91,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT || 22 }}
           script: |
+            set -euo pipefail
             REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
             RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
             cd ~/progetti/kor35
@@ -105,7 +111,12 @@ jobs:
             export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "DEPLOYED_SHA=${DEPLOYED_SHA}"
             source ~/ambienti/kor35/bin/activate
-            pip install -r requirements.txt
+            export PIP_NO_CACHE_DIR=1
+            export TMPDIR="$HOME/tmp"
+            mkdir -p "$TMPDIR"
+
+            pip install --upgrade pip setuptools wheel
+            pip install --prefer-binary -r requirements.txt
             python manage.py migrate --plan
             if [ "${RUN_MIGRATIONS}" = "true" ]; then
               python manage.py migrate --noinput

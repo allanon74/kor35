@@ -80,22 +80,11 @@ INSTALLED_APPS = [
     'gestione_plot.apps.GestionePlotConfig', #gestione plot
     'social.apps.SocialConfig', # social
 	'django.contrib.sites',
-	'cms', #cms
-	'menus', #cms
+	# 'cms', #cms
+	# 'menus', #cms
 	'treebeard', #cms
 	'sekizai', #cms
 	'filer', #cms
-	'easy_thumbnails', #cms
-	#'mptt', #cms
-	'djangocms_text_ckeditor', #cms
-	'djangocms_link', #cms
-	'djangocms_file', #cms
-	'djangocms_picture', #cms
-	'djangocms_video', #cms
-	'djangocms_googlemap', #cms
-	'djangocms_snippet', #cms
-	'djangocms_style', #cms
-	'djangocms_versioning', # correzione errore
 	'allauth',  #allauth
 	'allauth.account',  #allauth
 	'allauth.socialaccount',  #allauth
