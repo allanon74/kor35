@@ -20,6 +20,7 @@ from colorfield.fields import ColorField
 from cms.models.pluginmodel import CMSPlugin
 from django.utils.html import format_html
 from icon_widget.fields import CustomIconField
+from datetime import datetime, timezone as dt_timezone
 
 # --- COSTANTI DI SISTEMA (FALLBACK) ---
 # COSTANTI DI FALLBACK (usate quando stat_costo_* non è configurato sull'aura)
@@ -984,6 +985,25 @@ class abilita_punteggio(A_modello):
     class Meta:
         unique_together = [["abilita", "punteggio"]]
 
+
+class abilita_punteggio_dipendente(A_modello):
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="punteggi_dipendenti")
+    punteggio_target = models.ForeignKey(
+        Punteggio,
+        on_delete=models.CASCADE,
+        related_name="abilita_punteggio_target_rel",
+    )
+    punteggio_sorgente = models.ForeignKey(
+        Punteggio,
+        on_delete=models.CASCADE,
+        related_name="abilita_punteggio_sorgente_rel",
+    )
+    incremento = models.IntegerField(default=1)
+    ogni_x = models.IntegerField(default=1)
+
+    class Meta:
+        unique_together = [["abilita", "punteggio_target", "punteggio_sorgente"]]
+
 class Attivata(A_vista):
     elementi = models.ManyToManyField(Punteggio, blank=True, through='AttivataElemento')
     statistiche_base = models.ManyToManyField(Statistica, through='AttivataStatisticaBase', blank=True, related_name='attivata_statistiche_base')
@@ -1652,6 +1672,206 @@ class Personaggio(Inventario):
     
     def modifica_pc(self, i, d): 
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+
+    def _build_punteggi_base_indipendenti(self, exclude_abilita_ids=None):
+        exclude_abilita_ids = set(exclude_abilita_ids or [])
+        links = abilita_punteggio.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).exclude(abilita_id__in=exclude_abilita_ids).select_related('punteggio')
+        p = {
+            i['punteggio__nome']: i['valore_totale']
+            for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))
+        }
+
+        forma_oggi = self.get_forma_camaleonte_del_giorno()
+        if forma_oggi and forma_oggi.id not in exclude_abilita_ids:
+            extra_links = abilita_punteggio.objects.filter(abilita=forma_oggi).select_related('punteggio')
+            for row in extra_links.values('punteggio__nome').annotate(valore_totale=Sum('valore')):
+                nome = row['punteggio__nome']
+                p[nome] = (p.get(nome, 0) or 0) + (row['valore_totale'] or 0)
+        return p
+
+    def _get_abilita_data_acquisizione_map(self, include_camaleonte=True):
+        acq_map = dict(
+            PersonaggioAbilita.objects.filter(personaggio=self).values_list("abilita_id", "data_acquisizione")
+        )
+        if include_camaleonte:
+            forma_oggi = self.get_forma_camaleonte_del_giorno()
+            if forma_oggi:
+                acq_map.setdefault(forma_oggi.id, timezone.now())
+        return acq_map
+
+    def _collect_regole_punteggio_dipendente(self, exclude_abilita_ids=None):
+        exclude_abilita_ids = set(exclude_abilita_ids or [])
+        acq_map = self._get_abilita_data_acquisizione_map(include_camaleonte=True)
+        abilita_ids = set(acq_map.keys()) - exclude_abilita_ids
+        if not abilita_ids:
+            return []
+
+        regole_qs = abilita_punteggio_dipendente.objects.filter(
+            abilita_id__in=abilita_ids
+        ).select_related("punteggio_target", "punteggio_sorgente")
+
+        regole = []
+        for regola in regole_qs:
+            if regola.ogni_x <= 0:
+                continue
+            regole.append({
+                "id": regola.id,
+                "abilita_id": regola.abilita_id,
+                "acquired_at": acq_map.get(regola.abilita_id),
+                "target_nome": regola.punteggio_target.nome,
+                "source_nome": regola.punteggio_sorgente.nome,
+                "incremento": int(regola.incremento or 0),
+                "ogni_x": int(regola.ogni_x or 1),
+            })
+        return regole
+
+    def _ordina_scc_topologico(self, scc_ids, edges_between_scc):
+        indeg = {sid: 0 for sid in scc_ids}
+        for src_sid, dsts in edges_between_scc.items():
+            for dst_sid in dsts:
+                if src_sid != dst_sid:
+                    indeg[dst_sid] += 1
+        queue = sorted([sid for sid, v in indeg.items() if v == 0])
+        ordine = []
+        while queue:
+            sid = queue.pop(0)
+            ordine.append(sid)
+            for next_sid in sorted(edges_between_scc.get(sid, [])):
+                if sid == next_sid:
+                    continue
+                indeg[next_sid] -= 1
+                if indeg[next_sid] == 0:
+                    queue.append(next_sid)
+                    queue.sort()
+        return ordine if len(ordine) == len(scc_ids) else sorted(list(scc_ids))
+
+    def _applica_punteggi_dipendenti(self, punteggi_per_nome, regole):
+        if not regole:
+            return punteggi_per_nome
+        max_dt = datetime.max.replace(tzinfo=dt_timezone.utc)
+
+        nodes = set()
+        graph = {}
+        for r in regole:
+            src = r["source_nome"]
+            dst = r["target_nome"]
+            nodes.add(src)
+            nodes.add(dst)
+            graph.setdefault(src, []).append(dst)
+            graph.setdefault(dst, [])
+
+        index_counter = 0
+        stack = []
+        on_stack = set()
+        index_map = {}
+        low_map = {}
+        sccs = []
+
+        def strongconnect(v):
+            nonlocal index_counter
+            index_map[v] = index_counter
+            low_map[v] = index_counter
+            index_counter += 1
+            stack.append(v)
+            on_stack.add(v)
+
+            for w in graph.get(v, []):
+                if w not in index_map:
+                    strongconnect(w)
+                    low_map[v] = min(low_map[v], low_map[w])
+                elif w in on_stack:
+                    low_map[v] = min(low_map[v], index_map[w])
+
+            if low_map[v] == index_map[v]:
+                component = []
+                while True:
+                    w = stack.pop()
+                    on_stack.remove(w)
+                    component.append(w)
+                    if w == v:
+                        break
+                sccs.append(component)
+
+        for n in sorted(nodes):
+            if n not in index_map:
+                strongconnect(n)
+
+        node_to_scc = {}
+        for sid, comp in enumerate(sccs):
+            for n in comp:
+                node_to_scc[n] = sid
+
+        has_self_loop = set()
+        for r in regole:
+            if r["source_nome"] == r["target_nome"]:
+                has_self_loop.add(node_to_scc[r["source_nome"]])
+
+        cyclic_scc = set()
+        for sid, comp in enumerate(sccs):
+            if len(comp) > 1 or sid in has_self_loop:
+                cyclic_scc.add(sid)
+
+        scc_edges = {sid: set() for sid in range(len(sccs))}
+        for r in regole:
+            src_sid = node_to_scc[r["source_nome"]]
+            dst_sid = node_to_scc[r["target_nome"]]
+            if src_sid != dst_sid:
+                scc_edges[src_sid].add(dst_sid)
+
+        scc_order = self._ordina_scc_topologico(set(range(len(sccs))), scc_edges)
+        rules_by_target_scc = {}
+        rules_by_internal_scc = {}
+        for r in regole:
+            src_sid = node_to_scc[r["source_nome"]]
+            dst_sid = node_to_scc[r["target_nome"]]
+            if src_sid == dst_sid:
+                rules_by_internal_scc.setdefault(dst_sid, []).append(r)
+            else:
+                rules_by_target_scc.setdefault(dst_sid, []).append(r)
+
+        for sid in scc_order:
+            incoming = rules_by_target_scc.get(sid, [])
+            incoming.sort(
+                key=lambda r: (
+                    r["acquired_at"] or max_dt,
+                    r["abilita_id"],
+                    r["id"],
+                )
+            )
+            for r in incoming:
+                source_val = int(punteggi_per_nome.get(r["source_nome"], 0) or 0)
+                blocchi = source_val // r["ogni_x"]
+                bonus = blocchi * r["incremento"]
+                if bonus:
+                    target = r["target_nome"]
+                    punteggi_per_nome[target] = int(punteggi_per_nome.get(target, 0) or 0) + int(bonus)
+
+            internal = rules_by_internal_scc.get(sid, [])
+            if not internal:
+                continue
+
+            if sid in cyclic_scc:
+                internal.sort(
+                    key=lambda r: (
+                        r["acquired_at"] or max_dt,
+                        r["abilita_id"],
+                        r["id"],
+                    )
+                )
+            else:
+                internal.sort(key=lambda r: (r["abilita_id"], r["id"]))
+
+            for r in internal:
+                source_val = int(punteggi_per_nome.get(r["source_nome"], 0) or 0)
+                blocchi = source_val // r["ogni_x"]
+                bonus = blocchi * r["incremento"]
+                if bonus:
+                    target = r["target_nome"]
+                    punteggi_per_nome[target] = int(punteggi_per_nome.get(target, 0) or 0) + int(bonus)
+
+        return punteggi_per_nome
     
     @property
     def crediti(self):
@@ -1666,18 +1886,9 @@ class Personaggio(Inventario):
     @property
     def punteggi_base(self):
         if hasattr(self, '_punteggi_base_cache'): return self._punteggi_base_cache
-        links = abilita_punteggio.objects.filter(
-            abilita__personaggioabilita__personaggio=self
-        ).select_related('punteggio')
-        p = {i['punteggio__nome']: i['valore_totale'] for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))}
-
-        # Forma camaleonte: applica anche i punteggi della forma del giorno.
-        forma_oggi = self.get_forma_camaleonte_del_giorno()
-        if forma_oggi:
-            extra_links = abilita_punteggio.objects.filter(abilita=forma_oggi).select_related('punteggio')
-            for row in extra_links.values('punteggio__nome').annotate(valore_totale=Sum('valore')):
-                nome = row['punteggio__nome']
-                p[nome] = (p.get(nome, 0) or 0) + (row['valore_totale'] or 0)
+        p = self._build_punteggi_base_indipendenti(exclude_abilita_ids=None)
+        regole = self._collect_regole_punteggio_dipendente(exclude_abilita_ids=None)
+        p = self._applica_punteggi_dipendenti(p, regole)
 
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
         if agen:
@@ -1695,22 +1906,9 @@ class Personaggio(Inventario):
         (usato per requisiti di razza / tratti aura innata senza effetto circolare).
         """
         exclude_abilita_ids = set(exclude_abilita_ids or [])
-        links = abilita_punteggio.objects.filter(
-            abilita__personaggioabilita__personaggio=self
-        ).exclude(abilita_id__in=exclude_abilita_ids).select_related('punteggio')
-        p = {
-            i['punteggio__nome']: i['valore_totale']
-            for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))
-        }
-
-        # Mantiene la stessa logica del tratto camaleonte anche nei controlli requisiti,
-        # ma senza introdurre dipendenze circolari quando il tratto stesso è escluso.
-        forma_oggi = self.get_forma_camaleonte_del_giorno()
-        if forma_oggi and forma_oggi.id not in exclude_abilita_ids:
-            extra_links = abilita_punteggio.objects.filter(abilita=forma_oggi).select_related('punteggio')
-            for row in extra_links.values('punteggio__nome').annotate(valore_totale=Sum('valore')):
-                nome = row['punteggio__nome']
-                p[nome] = (p.get(nome, 0) or 0) + (row['valore_totale'] or 0)
+        p = self._build_punteggi_base_indipendenti(exclude_abilita_ids=exclude_abilita_ids)
+        regole = self._collect_regole_punteggio_dipendente(exclude_abilita_ids=exclude_abilita_ids)
+        p = self._applica_punteggi_dipendenti(p, regole)
 
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
         if agen:

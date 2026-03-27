@@ -13,7 +13,7 @@ from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
-    abilita_punteggio, abilita_prerequisito, Attivata, Manifesto, A_vista, Mattone,
+    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, A_vista, Mattone,
     AURA, 
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -2388,6 +2388,12 @@ class AbilitaPunteggioEditorSerializer(serializers.ModelSerializer):
         fields = ['punteggio', 'valore']
         read_only_fields = ['abilita'] # Fondamentale
 
+class AbilitaPunteggioDipendenteEditorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = abilita_punteggio_dipendente
+        fields = ['punteggio_target', 'incremento', 'ogni_x', 'punteggio_sorgente']
+        read_only_fields = ['abilita']
+
 class AbilitaPrerequisitoEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = abilita_prerequisito
@@ -2409,6 +2415,7 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     tiers = AbilitaTierEditorSerializer(source='abilita_tier_set', many=True, required=False)
     requisiti = AbilitaRequisitoEditorSerializer(source='abilita_requisito_set', many=True, required=False)
     punteggi_assegnati = AbilitaPunteggioEditorSerializer(source='abilita_punteggio_set', many=True, required=False)
+    punteggi_dipendenti = AbilitaPunteggioDipendenteEditorSerializer(source='punteggi_dipendenti', many=True, required=False)
     prerequisiti = AbilitaPrerequisitoEditorSerializer(source='abilita_prerequisiti', many=True, required=False)
     statistiche = AbilitaStatisticaEditorSerializer(source='abilitastatistica_set', many=True, required=False)
 
@@ -2421,11 +2428,12 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
         tiers_data = validated_data.pop('abilita_tier_set', [])
         req_data = validated_data.pop('abilita_requisito_set', [])
         punt_data = validated_data.pop('abilita_punteggio_set', [])
+        punt_dep_data = validated_data.pop('punteggi_dipendenti', [])
         pre_data = validated_data.pop('abilita_prerequisiti', [])
         stat_data = validated_data.pop('abilitastatistica_set', [])
 
         abilita = Abilita.objects.create(**validated_data)
-        self._save_inlines(abilita, tiers_data, req_data, punt_data, pre_data, stat_data)
+        self._save_inlines(abilita, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data)
         return abilita
 
     @transaction.atomic
@@ -2433,6 +2441,7 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
         tiers_data = validated_data.pop('abilita_tier_set', None)
         req_data = validated_data.pop('abilita_requisito_set', None)
         punt_data = validated_data.pop('abilita_punteggio_set', None)
+        punt_dep_data = validated_data.pop('punteggi_dipendenti', None)
         pre_data = validated_data.pop('abilita_prerequisiti', None)
         stat_data = validated_data.pop('abilitastatistica_set', None)
 
@@ -2440,10 +2449,10 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
 
-        self._save_inlines(instance, tiers_data, req_data, punt_data, pre_data, stat_data)
+        self._save_inlines(instance, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data)
         return instance
 
-    def _save_inlines(self, instance, tiers, reqs, punts, pres, stats):
+    def _save_inlines(self, instance, tiers, reqs, punts, punt_deps, pres, stats):
         # 1. Tiers
         if tiers is not None:
             instance.abilita_tier_set.all().delete()
@@ -2462,13 +2471,19 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
             for item in punts:
                 abilita_punteggio.objects.create(abilita=instance, **item)
 
-        # 4. Prerequisiti
+        # 4. Punteggi Dipendenti
+        if punt_deps is not None:
+            instance.punteggi_dipendenti.all().delete()
+            for item in punt_deps:
+                abilita_punteggio_dipendente.objects.create(abilita=instance, **item)
+
+        # 5. Prerequisiti
         if pres is not None:
             instance.abilita_prerequisiti.all().delete()
             for item in pres:
                 abilita_prerequisito.objects.create(abilita=instance, **item)
 
-        # 5. Statistiche
+        # 6. Statistiche
         if stats is not None:
             instance.abilitastatistica_set.all().delete()
             for item in stats:
