@@ -3,7 +3,7 @@ from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
     MostroTemplate, AttaccoTemplate, PngAssegnato, 
     StaffOffGame, QuestFase, QuestTask,
-    PaginaRegolamento, WikiImmagine, WikiButtonWidget, WikiButton, WikiMattoniWidget,
+    PaginaRegolamento, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
@@ -63,6 +63,15 @@ class MostroTemplateAdmin(SModelAdmin):
     search_fields = ('nome', 'note_generali')
     inlines = [AttaccoTemplateInline]
 
+
+@admin.register(AttaccoTemplate)
+class AttaccoTemplateAdmin(admin.ModelAdmin):
+    list_display = ('nome_attacco', 'template', 'descrizione_danno', 'ordine')
+    list_filter = ('template',)
+    search_fields = ('nome_attacco', 'descrizione_danno', 'template__nome')
+    list_editable = ('ordine',)
+    ordering = ('template', 'ordine')
+
 @admin.register(Evento)
 class EventoAdmin(SModelAdmin):
     list_display = ('titolo', 'data_inizio', 'data_fine', 'luogo')
@@ -86,6 +95,15 @@ class QuestAdmin(SModelAdmin):
     search_fields = ('titolo', 'descrizione_ampia')
     inlines = [QuestFaseInline, QuestMostroInline]
     # Rimosso autocomplete_fields perché 'staff_responsabile' non c'è.
+
+
+@admin.register(QuestMostro)
+class QuestMostroAdmin(admin.ModelAdmin):
+    list_display = ('template', 'quest', 'staffer', 'punti_vita', 'armatura', 'guscio')
+    list_filter = ('quest__giorno__evento', 'template', 'staffer')
+    search_fields = ('template__nome', 'quest__titolo', 'staffer__username', 'note_per_staffer')
+    autocomplete_fields = ('quest', 'template', 'staffer')
+    ordering = ('quest', 'template')
 
 @admin.register(QuestFase)
 class QuestFaseAdmin(SModelAdmin):
@@ -198,6 +216,40 @@ class WikiMattoniWidgetAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'filter_type', 'creatore', 'data_creazione')
     list_filter = ('filter_type', 'data_creazione', 'creatore')
     search_fields = ('title',)
+    readonly_fields = ('data_creazione', 'data_modifica')
+    ordering = ('-data_creazione',)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.creatore = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(WikiTierWidget)
+class WikiTierWidgetAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'tier',
+        'abilities_collapsible',
+        'abilities_collapsed_by_default',
+        'abilities_solo_list',
+        'show_description',
+        'color_style',
+        'creatore',
+        'data_creazione',
+    )
+    list_filter = (
+        'abilities_collapsible',
+        'abilities_collapsed_by_default',
+        'abilities_solo_list',
+        'show_description',
+        'color_style',
+        'data_creazione',
+        'creatore',
+        'tier__tipo',
+    )
+    search_fields = ('tier__nome', 'tier__descrizione')
+    autocomplete_fields = ('tier',)
     readonly_fields = ('data_creazione', 'data_modifica')
     ordering = ('-data_creazione',)
 
