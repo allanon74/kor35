@@ -2415,7 +2415,7 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     tiers = AbilitaTierEditorSerializer(source='abilita_tier_set', many=True, required=False)
     requisiti = AbilitaRequisitoEditorSerializer(source='abilita_requisito_set', many=True, required=False)
     punteggi_assegnati = AbilitaPunteggioEditorSerializer(source='abilita_punteggio_set', many=True, required=False)
-    punteggi_dipendenti = AbilitaPunteggioDipendenteEditorSerializer(source='punteggi_dipendenti', many=True, required=False)
+    punteggi_dipendenti = AbilitaPunteggioDipendenteEditorSerializer(many=True, required=False)
     prerequisiti = AbilitaPrerequisitoEditorSerializer(source='abilita_prerequisiti', many=True, required=False)
     statistiche = AbilitaStatisticaEditorSerializer(source='abilitastatistica_set', many=True, required=False)
 
