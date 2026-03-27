@@ -63,7 +63,7 @@ if CURRENT_ENV == 'raspberry_docker':
 
 INSTALLED_APPS = [
     'daphne',
-	'djangocms_admin_style', #cms
+	# 'djangocms_admin_style', #cms
 	'admin_interface', #admin interface
 	'colorfield', 
 	"dj_iconify.apps.DjIconifyConfig",
