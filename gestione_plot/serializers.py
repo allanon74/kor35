@@ -359,6 +359,7 @@ class WikiMattoniWidgetSerializer(serializers.ModelSerializer):
         model = WikiMattoniWidget
         fields = [
             'id',
+            'sync_id',
             'title',
             'filter_type',
             'aure',
@@ -376,7 +377,7 @@ class WikiTierWidgetSerializer(serializers.ModelSerializer):
     class Meta:
         model = WikiTierWidget
         fields = [
-            'id', 'tier', 'tier_nome', 'abilities_collapsible', 'abilities_collapsed_by_default',
+            'id', 'sync_id', 'tier', 'tier_nome', 'abilities_collapsible', 'abilities_collapsed_by_default',
             'show_description', 'abilities_solo_list', 'color_style', 'gradient_colors',
             'data_creazione', 'data_modifica', 'creatore'
         ]
@@ -394,7 +395,7 @@ class WikiImmagineSerializer(serializers.ModelSerializer):
     class Meta:
         model = WikiImmagine
         fields = [
-            'id', 'titolo', 'descrizione', 'immagine', 'immagine_url',
+            'id', 'sync_id', 'titolo', 'descrizione', 'immagine', 'immagine_url',
             'data_creazione', 'data_modifica', 'creatore', 'creatore_nome',
             'larghezza_max', 'allineamento'
         ]
@@ -431,7 +432,7 @@ class WikiButtonWidgetSerializer(serializers.ModelSerializer):
     class Meta:
         model = WikiButtonWidget
         fields = [
-            'id', 'title', 'buttons',
+            'id', 'sync_id', 'title', 'buttons',
             'data_creazione', 'data_modifica', 'creatore', 'creatore_nome'
         ]
         read_only_fields = ['data_creazione', 'data_modifica', 'creatore']

@@ -570,9 +570,21 @@ class StaffWikiButtonWidgetViewSet(viewsets.ModelViewSet):
 def is_staff_user(user):
     return user.is_authenticated and (user.is_staff or user.is_superuser)
 
+def _resolve_by_pk_or_sync_id(qs, raw_key):
+    """
+    Accetta token wiki in formato legacy (id numerico) o stabile (sync_id UUID).
+    """
+    key = str(raw_key).strip()
+    if not key:
+        return None
+    if key.isdigit():
+        return qs.filter(pk=int(key)).first()
+    return qs.filter(sync_id=key).first()
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def get_wiki_tier_display(request, pk):
+def get_wiki_tier_display(request, key):
     """
     Restituisce i dati di un Tier per {{WIDGET_TIER:id}}.
     Ordine: 1) WikiTierWidget (id widget), 2) Tier (id tier), 3) plugin CMS.
@@ -581,7 +593,10 @@ def get_wiki_tier_display(request, pk):
     extra = {}
     # 1) WikiTierWidget (widget configurabile)
     _abilita_prefetch = Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
-    widget = WikiTierWidget.objects.filter(pk=pk).select_related('tier').prefetch_related(_abilita_prefetch).first()
+    widget = _resolve_by_pk_or_sync_id(
+        WikiTierWidget.objects.select_related('tier').prefetch_related(_abilita_prefetch),
+        key,
+    )
     if widget:
         tier = widget.tier
         extra = {
@@ -594,7 +609,10 @@ def get_wiki_tier_display(request, pk):
         }
     if not tier:
         _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
-        tier = Tier.objects.filter(pk=pk).prefetch_related(_pf).first()
+        tier = _resolve_by_pk_or_sync_id(
+            Tier.objects.prefetch_related(_pf),
+            key,
+        )
         if tier:
             extra = {
                 'abilities_collapsible': True,
@@ -605,7 +623,10 @@ def get_wiki_tier_display(request, pk):
             }
     if not tier:
         # Plugin in personaggi
-        plugin = TierPluginModel.objects.filter(pk=pk).select_related('tier').first()
+        plugin = _resolve_by_pk_or_sync_id(
+            TierPluginModel.objects.select_related('tier'),
+            key,
+        )
         if plugin:
             _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
             tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
@@ -621,7 +642,10 @@ def get_wiki_tier_display(request, pk):
         # Plugin in cms_kor (stesso nome modello, altra app)
         try:
             from cms_kor.models import TierPluginModel as CmsKorTierPluginModel
-            plugin = CmsKorTierPluginModel.objects.filter(pk=pk).select_related('tier').first()
+            plugin = _resolve_by_pk_or_sync_id(
+                CmsKorTierPluginModel.objects.select_related('tier'),
+                key,
+            )
             if plugin:
                 _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
                 tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
@@ -639,7 +663,10 @@ def get_wiki_tier_display(request, pk):
         # Fallback: qualsiasi CMSPlugin con questo pk che abbia un FK tier (get_plugin_instance)
         try:
             from cms.models.pluginmodel import CMSPlugin
-            cms_plugin = CMSPlugin.objects.filter(pk=pk).first()
+            cms_plugin = _resolve_by_pk_or_sync_id(
+                CMSPlugin.objects.all(),
+                key,
+            )
             if cms_plugin:
                 instance, _ = cms_plugin.get_plugin_instance()
                 _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
@@ -660,21 +687,24 @@ def get_wiki_tier_display(request, pk):
     if not tier:
         raise Http404("No Tier matches the given query.")
     data = WikiTierSerializer(tier).data
+    data["sync_id"] = str(getattr(tier, "sync_id", "") or "")
     data.update(extra)
     return Response(data)
 
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def get_wiki_mattoni_display(request, pk):
+def get_wiki_mattoni_display(request, key):
     """
     Restituisce i dati di un widget Mattoni per {{WIDGET_MATTONI:id}}.
     Applica i filtri configurati e ordina di default per Aura -> Ordine -> Nome.
     """
-    widget = get_object_or_404(
+    widget = _resolve_by_pk_or_sync_id(
         WikiMattoniWidget.objects.prefetch_related('aure', 'caratteristiche'),
-        pk=pk
+        key,
     )
+    if not widget:
+        raise Http404("No WikiMattoniWidget matches the given query.")
 
     mattoni_qs = Mattone.objects.select_related('aura', 'caratteristica_associata')
 
@@ -692,12 +722,42 @@ def get_wiki_mattoni_display(request, pk):
 
     return Response({
         'id': widget.id,
+        'sync_id': str(widget.sync_id) if getattr(widget, 'sync_id', None) else None,
         'title': widget.title,
         'filter_type': filter_type,
         'aure': PunteggioWikiSerializer(widget.aure.all(), many=True).data,
         'caratteristiche': PunteggioWikiSerializer(widget.caratteristiche.all(), many=True).data,
         'mattoni': MattoneWikiSerializer(mattoni_qs, many=True).data,
     })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_image_display(request, key):
+    """
+    Dettaglio immagine wiki con token stabile: accetta id numerico o sync_id.
+    """
+    obj = _resolve_by_pk_or_sync_id(WikiImmagine.objects.all(), key)
+    if not obj:
+        raise Http404("No WikiImmagine matches the given query.")
+    serializer = WikiImmagineSerializer(obj, context={"request": request})
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_buttons_display(request, key):
+    """
+    Dettaglio widget pulsanti con token stabile: accetta id numerico o sync_id.
+    """
+    obj = _resolve_by_pk_or_sync_id(
+        WikiButtonWidget.objects.prefetch_related("buttons"),
+        key,
+    )
+    if not obj:
+        raise Http404("No WikiButtonWidget matches the given query.")
+    serializer = WikiButtonWidgetSerializer(obj)
+    return Response(serializer.data)
 
 
 @api_view(['GET'])
