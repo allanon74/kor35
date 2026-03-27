@@ -2,6 +2,7 @@ from django.db.models import Sum, F, Count
 import os
 import re
 import random
+import hashlib
 import secrets
 import string
 import copy
@@ -929,6 +930,10 @@ class Abilita(A_modello):
     is_tratto_aura = models.BooleanField(default=False, verbose_name="È un Tratto d'Aura?")
     aura_riferimento = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': 'AU'}, related_name="tratti_collegati")
     livello_riferimento = models.IntegerField(default=0, help_text="A quale livello di questa aura appartiene questo tratto?")
+    camaleontica = models.BooleanField(
+        default=False,
+        help_text="Se attiva, questa forma AIN usa una forma del giorno randomica (deterministica).",
+    )
     
     class Meta: 
         verbose_name = "Abilità" 
@@ -1661,8 +1666,19 @@ class Personaggio(Inventario):
     @property
     def punteggi_base(self):
         if hasattr(self, '_punteggi_base_cache'): return self._punteggi_base_cache
-        links = abilita_punteggio.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('punteggio')
+        links = abilita_punteggio.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).select_related('punteggio')
         p = {i['punteggio__nome']: i['valore_totale'] for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))}
+
+        # Forma camaleonte: applica anche i punteggi della forma del giorno.
+        forma_oggi = self.get_forma_camaleonte_del_giorno()
+        if forma_oggi:
+            extra_links = abilita_punteggio.objects.filter(abilita=forma_oggi).select_related('punteggio')
+            for row in extra_links.values('punteggio__nome').annotate(valore_totale=Sum('valore')):
+                nome = row['punteggio__nome']
+                p[nome] = (p.get(nome, 0) or 0) + (row['valore_totale'] or 0)
+
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
         if agen:
             others = set(Punteggio.objects.filter(tipo=AURA).exclude(id=agen.id).values_list('nome', flat=True))
@@ -1686,6 +1702,16 @@ class Personaggio(Inventario):
             i['punteggio__nome']: i['valore_totale']
             for i in links.values('punteggio__nome').annotate(valore_totale=Sum('valore'))
         }
+
+        # Mantiene la stessa logica del tratto camaleonte anche nei controlli requisiti,
+        # ma senza introdurre dipendenze circolari quando il tratto stesso è escluso.
+        forma_oggi = self.get_forma_camaleonte_del_giorno()
+        if forma_oggi and forma_oggi.id not in exclude_abilita_ids:
+            extra_links = abilita_punteggio.objects.filter(abilita=forma_oggi).select_related('punteggio')
+            for row in extra_links.values('punteggio__nome').annotate(valore_totale=Sum('valore')):
+                nome = row['punteggio__nome']
+                p[nome] = (p.get(nome, 0) or 0) + (row['valore_totale'] or 0)
+
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
         if agen:
             others = set(
@@ -1956,6 +1982,13 @@ class Personaggio(Inventario):
         for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): 
             if _is_global(l):
                 _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+
+        # 1b. Forma camaleonte del giorno: stessi modificatori di una forma reale.
+        forma_oggi = self.get_forma_camaleonte_del_giorno()
+        if forma_oggi:
+            for l in AbilitaStatistica.objects.filter(abilita=forma_oggi).select_related('statistica'):
+                if _is_global(l):
+                    _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
         
         # 2. Oggetti e Innesti (CON CHECK TIMER)
         oggetti_inventario = self.get_oggetti().select_related(
@@ -1997,6 +2030,43 @@ class Personaggio(Inventario):
         
         self._modificatori_calcolati_cache = mods
         return mods
+
+    def get_tratto_camaleonte_posseduto(self):
+        """
+        Tratto forma "camaleonte" posseduto dal personaggio (AIN livello 2).
+        """
+        return self.abilita_possedute.filter(
+            is_tratto_aura=True,
+            aura_riferimento__sigla='AIN',
+            livello_riferimento=2,
+            camaleontica=True,
+        ).first()
+
+    def get_forma_camaleonte_del_giorno(self):
+        """
+        Se il personaggio possiede la forma camaleonte, seleziona deterministicamente
+        una forma AIN livello 2 diversa, stabile per-personaggio per la data odierna.
+        Non scrive su DB: persiste per la giornata anche dopo logout/login.
+        """
+        trait = self.get_tratto_camaleonte_posseduto()
+        if not trait:
+            return None
+
+        qs = Abilita.objects.filter(
+            is_tratto_aura=True,
+            aura_riferimento__sigla='AIN',
+            livello_riferimento=2,
+            camaleontica=False,
+        ).exclude(pk=trait.pk).order_by('id')
+
+        count = qs.count()
+        if count == 0:
+            return None
+
+        day = timezone.localdate().isoformat()
+        seed = f"{self.sync_id}:{trait.sync_id}:{day}"
+        idx = int(hashlib.sha256(seed.encode("utf-8")).hexdigest(), 16) % count
+        return qs[idx]
     
     def get_modificatori_dettagliati(self):
         """
@@ -2308,6 +2378,22 @@ class Personaggio(Inventario):
                 if formule_html: return f"{descrizione_html}<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/><div style='font-size: 0.95em;'><strong>Formule:</strong>{''.join(formule_html)}</div>"
                 testo_finale =  descrizione_html
         
+        if isinstance(item, Abilita):
+            testo_finale = item.TestoFormattato
+            if item.pk == getattr(self.get_tratto_camaleonte_posseduto(), 'pk', None):
+                forma_oggi = self.get_forma_camaleonte_del_giorno()
+                if forma_oggi:
+                    testo_forma = forma_oggi.TestoFormattato or (forma_oggi.descrizione or '')
+                    if testo_forma:
+                        testo_finale = (
+                            f"{testo_finale}"
+                            f"<hr style='margin: 10px 0; border: 0; border-top: 1px dashed #555;'/>"
+                            f"<div style='font-size:0.95em;'>"
+                            f"<strong>Forma del giorno:</strong> {forma_oggi.nome}<br/>"
+                            f"{testo_forma}"
+                            f"</div>"
+                        )
+
         if isinstance(item, (Oggetto, Infusione)):
             testo_finale += genera_html_cariche(item, self)
 

@@ -1577,12 +1577,19 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
         context_con_pg = {**self.context, "personaggio": personaggio}
         serialized = AbilitaMasterListSerializer(abilita_qs, many=True, context=context_con_pg).data
+        abilita_by_id = {ab.id: ab for ab in abilita_qs}
 
         for item in serialized:
             ab_id = item.get("id")
             acquired_at = acq_map.get(ab_id)
             mod_base = self._is_modificabile_per_eventi(acquired_at)
             item["is_modifiable"] = bool(mod_base and ab_id not in prereq_locked_ids)
+
+            # Se è la forma camaleonte posseduta, mostra la formattazione con "forma del giorno"
+            # direttamente sotto la descrizione nella scheda personaggio.
+            ab_obj = abilita_by_id.get(ab_id)
+            if ab_obj and ab_obj.pk == getattr(personaggio.get_tratto_camaleonte_posseduto(), "pk", None):
+                item["descrizione"] = personaggio.get_testo_formattato_per_item(ab_obj)
 
         return serialized
 
