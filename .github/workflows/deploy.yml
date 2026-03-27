@@ -44,15 +44,26 @@ jobs:
             PROJECT_PATH="${{ secrets.STAGING_PROJECT_PATH || '' }}"
             if [ -z "${PROJECT_PATH}" ]; then
               EFFECTIVE_USER="${USER:-$(id -un)}"
-              for CANDIDATE in "$HOME/progetti/kor35" "/home/${EFFECTIVE_USER}/progetti/kor35"; do
+              for CANDIDATE in \
+                "$HOME/progetti/kor35" \
+                "$HOME/kor35" \
+                "/home/${EFFECTIVE_USER}/progetti/kor35" \
+                "/home/${EFFECTIVE_USER}/kor35" \
+                "/var/www/kor35" \
+                "/srv/kor35" \
+                "/opt/kor35"
+              do
                 if [ -d "${CANDIDATE}" ]; then
                   PROJECT_PATH="${CANDIDATE}"
                   break
                 fi
               done
             fi
-            if [ -z "${PROJECT_PATH}" ] || [ ! -d "${PROJECT_PATH}" ]; then
-              echo "Path progetto staging non trovato. Imposta secret STAGING_PROJECT_PATH." >&2
+            if [ -n "${PROJECT_PATH}" ] && [ ! -f "${PROJECT_PATH}/manage.py" ]; then
+              PROJECT_PATH=""
+            fi
+            if [ -z "${PROJECT_PATH}" ]; then
+              echo "Path progetto staging non trovato. Imposta secret STAGING_PROJECT_PATH con il path completo (es. /home/<user>/progetti/kor35)." >&2
               exit 1
             fi
             cd "${PROJECT_PATH}"
@@ -111,15 +122,26 @@ jobs:
             PROJECT_PATH="${{ secrets.SERVER_PROJECT_PATH || '' }}"
             if [ -z "${PROJECT_PATH}" ]; then
               EFFECTIVE_USER="${USER:-$(id -un)}"
-              for CANDIDATE in "$HOME/progetti/kor35" "/home/${EFFECTIVE_USER}/progetti/kor35"; do
+              for CANDIDATE in \
+                "$HOME/progetti/kor35" \
+                "$HOME/kor35" \
+                "/home/${EFFECTIVE_USER}/progetti/kor35" \
+                "/home/${EFFECTIVE_USER}/kor35" \
+                "/var/www/kor35" \
+                "/srv/kor35" \
+                "/opt/kor35"
+              do
                 if [ -d "${CANDIDATE}" ]; then
                   PROJECT_PATH="${CANDIDATE}"
                   break
                 fi
               done
             fi
-            if [ -z "${PROJECT_PATH}" ] || [ ! -d "${PROJECT_PATH}" ]; then
-              echo "Path progetto production non trovato. Imposta secret SERVER_PROJECT_PATH." >&2
+            if [ -n "${PROJECT_PATH}" ] && [ ! -f "${PROJECT_PATH}/manage.py" ]; then
+              PROJECT_PATH=""
+            fi
+            if [ -z "${PROJECT_PATH}" ]; then
+              echo "Path progetto production non trovato. Imposta secret SERVER_PROJECT_PATH con il path completo (es. /home/<user>/progetti/kor35)." >&2
               exit 1
             fi
             cd "${PROJECT_PATH}"
