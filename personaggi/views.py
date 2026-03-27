@@ -302,14 +302,14 @@ class AcquisisciAbilitaView(APIView):
                 PersonaggioAbilita.objects.filter(
                     personaggio=personaggio,
                     abilita__is_tratto_aura=True,
-                    abilita__aura_riferimento_id=abilita.aura_riferimento_id,
+                    abilita__aura_riferimento__sigla='AIN',
                     abilita__livello_riferimento__in=(0, 1),
                 ).delete()
             elif liv == 2:
                 PersonaggioAbilita.objects.filter(
                     personaggio=personaggio,
                     abilita__is_tratto_aura=True,
-                    abilita__aura_riferimento_id=abilita.aura_riferimento_id,
+                    abilita__aura_riferimento__sigla='AIN',
                     abilita__livello_riferimento=2,
                 ).delete()
             # Cache M2M: ricarica il personaggio dopo lo swap dei tratti AIN

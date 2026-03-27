@@ -2435,6 +2435,47 @@ class PersonaggioAbilita(SyncableModel, models.Model):
         unique_together = [["personaggio", "abilita"]]
         verbose_name = "Personaggio - Abilità"
         verbose_name_plural = "Personaggio - Abilità"
+
+    def save(self, *args, **kwargs):
+        """
+        Regola hard: per AIN un personaggio può avere al massimo
+        - 1 Archetipo (livello 0/1)
+        - 1 Forma (livello 2)
+        Qualsiasi nuova assegnazione sostituisce quella precedente nello slot.
+        """
+        with transaction.atomic():
+            ab = self.abilita
+            is_ain_trait = (
+                bool(ab)
+                and ab.is_tratto_aura
+                and ab.aura_riferimento_id
+                and getattr(ab.aura_riferimento, "sigla", None) == "AIN"
+            )
+            if is_ain_trait:
+                liv = ab.livello_riferimento
+                if liv in (0, 1):
+                    slot_qs = PersonaggioAbilita.objects.filter(
+                        personaggio=self.personaggio,
+                        abilita__is_tratto_aura=True,
+                        abilita__aura_riferimento__sigla="AIN",
+                        abilita__livello_riferimento__in=(0, 1),
+                    )
+                elif liv == 2:
+                    slot_qs = PersonaggioAbilita.objects.filter(
+                        personaggio=self.personaggio,
+                        abilita__is_tratto_aura=True,
+                        abilita__aura_riferimento__sigla="AIN",
+                        abilita__livello_riferimento=2,
+                    )
+                else:
+                    slot_qs = None
+
+                if slot_qs is not None:
+                    if self.pk:
+                        slot_qs = slot_qs.exclude(pk=self.pk)
+                    slot_qs.delete()
+
+            super().save(*args, **kwargs)
 class PersonaggioAttivata(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     attivata = models.ForeignKey(Attivata, on_delete=models.CASCADE)
