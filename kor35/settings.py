@@ -84,6 +84,7 @@ INSTALLED_APPS = [
 	'menus', #cms
 	'treebeard', #cms
 	'sekizai', #cms
+	'easy_thumbnails', #cms/filer
 	'filer', #cms
 	'allauth',  #allauth
 	'allauth.account',  #allauth
