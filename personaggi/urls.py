@@ -196,6 +196,8 @@ urlpatterns = [
     path('api/staff/oggetti-senza-posizione/', views_staff.OggettiSenzaPosizioneView.as_view(), name='staff-oggetti-senza-posizione'),
     path('api/staff/seleziona-effetto-casuale/', SelezionaEffettoCasualeView.as_view(), name='staff-seleziona-effetto-casuale'),
     path('api/staff/mattoni-magici/', MattoniMagiciListView.as_view(), name='staff-mattoni-magici'),
+    path('api/staff/risorse-pool/', views.StaffRisorsaPoolListView.as_view(), name='staff-risorse-pool-list'),
+    path('api/staff/risorse-pool/incrementa/', views.StaffRisorsaIncrementView.as_view(), name='staff-risorse-pool-incrementa'),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     

@@ -36,7 +36,7 @@ from .models import (
     COSTO_PER_MATTONE_CREAZIONE, 
     COSTO_DEFAULT_INVIO_PROPOSTA,
     RichiestaAssemblaggio, STATO_RICHIESTA_PENDENTE,
-    ClasseOggetto, Statistica, 
+    ClasseOggetto, Statistica,
     ConfigurazioneLivelloAura, Cerimoniale,
     StatoTimerAttivo,
     TipologiaPersonaggio,
@@ -57,7 +57,7 @@ from rest_framework.response import Response
 from rest_framework import viewsets, status, permissions
 from rest_framework.authtoken.admin import User
 from rest_framework.authentication import TokenAuthentication
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
@@ -3196,7 +3196,67 @@ class ClasseOggettoListView(generics.ListAPIView):
     queryset = ClasseOggetto.objects.all().order_by('nome')
     serializer_class = ClasseOggettoSerializer
     permission_classes = [IsAuthenticated]
-    
+
+
+class StaffRisorsaPoolListView(APIView):
+    """Elenco personaggi con almeno una risorsa a pool configurata (staff)."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        stats = list(Statistica.objects.filter(is_risorsa_pool=True).order_by('ordine', 'nome'))
+        if not stats:
+            return Response({'personaggi': [], 'statistiche': []})
+        stat_meta = [{'sigla': s.sigla, 'nome': s.nome} for s in stats]
+        out = []
+        qs = Personaggio.objects.all().select_related('tipologia').order_by('nome')
+        for pg in qs:
+            pools = []
+            for st in stats:
+                max_v = pg.get_valore_statistica(st.sigla)
+                if max_v <= 0:
+                    continue
+                pools.append({
+                    'sigla': st.sigla,
+                    'nome': st.nome,
+                    'valore_max': max_v,
+                    'valore_corrente': pg.get_risorsa_corrente(st.sigla),
+                })
+            if pools:
+                out.append({
+                    'id': pg.id,
+                    'nome': pg.nome,
+                    'tipologia': pg.tipologia.nome if pg.tipologia else None,
+                    'pools': pools,
+                })
+        return Response({'personaggi': out, 'statistiche': stat_meta})
+
+
+class StaffRisorsaIncrementView(APIView):
+    """Aggiunge un punto al pool corrente (non oltre il massimo)."""
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        pg_id = request.data.get('personaggio_id')
+        stat_sigla = request.data.get('stat_sigla')
+        motivo = request.data.get('motivo') or ''
+        if not pg_id or not stat_sigla:
+            return Response({'error': 'personaggio_id e stat_sigla sono obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
+        pg = get_object_or_404(Personaggio, pk=pg_id)
+        try:
+            with transaction.atomic():
+                nuovo = pg.incrementa_risorsa_staff(stat_sigla, staff_user=request.user, motivo=motivo)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        max_v = pg.get_valore_statistica(stat_sigla)
+        return Response({
+            'status': 'ok',
+            'personaggio_id': pg.id,
+            'stat_sigla': stat_sigla,
+            'valore_corrente': nuovo,
+            'valore_max': max_v,
+            'risorse_consumabili': pg.risorse_consumabili,
+        })
+
 
 class GameActionsViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -3253,6 +3313,28 @@ class GameActionsViewSet(viewsets.ViewSet):
             'max': val_max,
             # Ritorniamo tutto l'oggetto aggiornato per sicurezza
             'statistiche_temporanee': pg.statistiche_temporanee 
+        })
+
+    @action(detail=False, methods=['post'])
+    def consuma_risorsa(self, request):
+        """Consuma un punto da una risorsa a pool (es. Fortuna FRT)."""
+        char_id = request.data.get('char_id')
+        stat_sigla = request.data.get('stat_sigla')
+        if not char_id or not stat_sigla:
+            return Response({'error': 'char_id e stat_sigla sono obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        try:
+            with transaction.atomic():
+                nuovo = pg.consuma_risorsa_statistica(stat_sigla)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        max_v = pg.get_valore_statistica(stat_sigla)
+        return Response({
+            'status': 'ok',
+            'stat_sigla': stat_sigla,
+            'valore_corrente': nuovo,
+            'valore_max': max_v,
+            'risorse_consumabili': pg.risorse_consumabili,
         })
 
     @action(detail=False, methods=['post'])

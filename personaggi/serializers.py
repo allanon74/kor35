@@ -23,7 +23,7 @@ from .models import (
     OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, 
     ForgiaturaInCorso, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
-    AttivataElemento, OggettoInInventario, Statistica, Personaggio, 
+    AttivataElemento, OggettoInInventario,     Statistica, Personaggio, EffettoRisorsaTemporaneo,
     CreditoMovimento, PersonaggioLog, TransazioneSospesa, PropostaTransazione,
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
@@ -1502,6 +1502,9 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     lavori_pendenti_count = serializers.SerializerMethodField()
     messaggi_non_letti_count = serializers.SerializerMethodField()
     statistiche_primarie = serializers.SerializerMethodField()
+    risorse_consumabili = serializers.JSONField(read_only=True)
+    risorse_pool_ui = serializers.SerializerMethodField()
+    effetti_risorsa_attivi = serializers.SerializerMethodField()
     
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
     can_edit_razza = serializers.SerializerMethodField()
@@ -1521,6 +1524,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'is_staff', 'modelli_aura',
             'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
+            'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi',
             'impostazioni_ui',
             'can_edit_razza',
         )
@@ -1761,6 +1765,38 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
                 'valore_corrente': val_current
             })
         return stats
+
+    def get_risorse_pool_ui(self, obj):
+        """Pool consumabili (Fortuna e future statistiche is_risorsa_pool)."""
+        out = []
+        for stat in Statistica.objects.filter(is_risorsa_pool=True).order_by('ordine', 'nome'):
+            max_v = obj.get_valore_statistica(stat.sigla)
+            if max_v <= 0:
+                continue
+            cur = obj.get_risorsa_corrente(stat.sigla)
+            out.append({
+                'sigla': stat.sigla,
+                'nome': stat.nome,
+                'descrizione': stat.descrizione or '',
+                'valore_max': max_v,
+                'valore_corrente': cur,
+            })
+        return out
+
+    def get_effetti_risorsa_attivi(self, obj):
+        now = timezone.now()
+        qs = EffettoRisorsaTemporaneo.objects.filter(personaggio=obj, scadenza__gt=now).select_related('abilita')
+        return [
+            {
+                'id': str(e.id),
+                'stat_sigla': e.statistica_risorsa_sigla,
+                'abilita_nome': e.abilita.nome if e.abilita else None,
+                'scadenza': e.scadenza.isoformat(),
+                'durata_tipo': e.durata_tipo,
+                'modifiche': e.modifiche or [],
+            }
+            for e in qs
+        ]
 
 
 class PersonaggioPublicSerializer(serializers.ModelSerializer):

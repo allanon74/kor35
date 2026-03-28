@@ -20,7 +20,8 @@ from colorfield.fields import ColorField
 from cms.models.pluginmodel import CMSPlugin
 from django.utils.html import format_html
 from icon_widget.fields import CustomIconField
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
+import uuid
 
 # --- COSTANTI DI SISTEMA (FALLBACK) ---
 # COSTANTI DI FALLBACK (usate quando stat_costo_* non è configurato sull'aura)
@@ -536,6 +537,26 @@ TIER_4 = "T4"
 tabelle_tipo = [(T_GENERALI, 'Tabelle Generali'), (TIER_1, 'Tier 1'), (TIER_2, 'Tier 2'), (TIER_3, 'Tier 3'), (TIER_4, 'Tier 4')]
 MODIFICATORE_ADDITIVO = 'ADD'; MODIFICATORE_MOLTIPLICATIVO = 'MOL'
 MODIFICATORE_CHOICES = [(MODIFICATORE_ADDITIVO, 'Additivo (+N)'), (MODIFICATORE_MOLTIPLICATIVO, 'Moltiplicativo (xN)')]
+
+# --- Risorse statistiche (pool consumabile: es. Fortuna FRT) ---
+RISORSA_DURATA_ORA_1 = 'O1H'
+RISORSA_DURATA_GIORNO = 'DAY'
+RISORSA_DURATA_EVENTO = 'EVT'
+RISORSA_DURATA_CHOICES = [
+    (RISORSA_DURATA_ORA_1, '1 ora'),
+    (RISORSA_DURATA_GIORNO, 'Fino a fine giornata (locale)'),
+    (RISORSA_DURATA_EVENTO, 'Evento in corso'),
+]
+RISORSA_MOV_CONSUMO = 'CON'
+RISORSA_MOV_RECUPERO = 'REC'
+RISORSA_MOV_STAFF = 'STF'
+RISORSA_MOV_SISTEMA = 'SYS'
+RISORSA_MOV_CHOICES = [
+    (RISORSA_MOV_CONSUMO, 'Consumo'),
+    (RISORSA_MOV_RECUPERO, 'Recupero'),
+    (RISORSA_MOV_STAFF, 'Staff'),
+    (RISORSA_MOV_SISTEMA, 'Sistema'),
+]
 META_NESSUN_EFFETTO = 'NE'; META_VALORE_PUNTEGGIO = 'VP'; META_SOLO_TESTO = 'TX'; META_LIVELLO_INFERIORE = 'LV'
 METATALENTO_CHOICES = [(META_NESSUN_EFFETTO, 'Nessun Effetto'), (META_VALORE_PUNTEGGIO, 'Valore per Punteggio'), (META_SOLO_TESTO, 'Solo Testo Addizionale'), (META_LIVELLO_INFERIORE, 'Solo abilità con livello pari o inferiore')]
 
@@ -792,6 +813,12 @@ class Statistica(Punteggio):
     valore_base_predefinito = models.IntegerField(default=0)
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     is_primaria = models.BooleanField(default=False)
+    is_risorsa_pool = models.BooleanField(
+        default=False,
+        verbose_name="Risorsa a pool",
+        help_text="Se attivo, il valore massimo della statistica definisce il tetto di un pool "
+        "con contatore separato (consumi, log, effetti temporanei). Es. Fortuna (FRT).",
+    )
     def save(self, *args, **kwargs): self.tipo = STATISTICA; super().save(*args, **kwargs)
     class Meta: verbose_name = "Statistica"; verbose_name_plural = "Statistiche"
     @classmethod
@@ -935,7 +962,19 @@ class Abilita(A_modello):
         default=False,
         help_text="Se attiva, questa forma AIN usa una forma del giorno randomica (deterministica).",
     )
-    
+    effetto_uso_risorsa = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Effetto all'uso risorsa",
+        help_text='Opzionale. Es.: {"stat_sigla":"FRT","durata":"O1H","modifiche":[{"stat_sigla":"PV","valore":1,"tipo_modificatore":"ADD"}]}',
+    )
+    recupero_risorsa = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Recupero risorsa",
+        help_text='Opzionale. Es.: {"stat_sigla":"FRT","quando":"FINE_EVENTO"} oppure FINE_ANNO_GIOCO (gestione manuale/automatismi futuri).',
+    )
+
     class Meta: 
         verbose_name = "Abilità" 
         verbose_name_plural = "Abilità"
@@ -1297,6 +1336,73 @@ class PersonaggioLog(SyncableModel, models.Model):
     testo_log = models.TextField()
     class Meta: ordering=['-data']
 
+
+class RisorsaStatisticaMovimento(SyncableModel, models.Model):
+    """Movimenti sui pool di risorse statistiche (sync-friendly)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='movimenti_risorsa_stat')
+    statistica_sigla = models.CharField(max_length=3, db_index=True)
+    importo = models.IntegerField()
+    descrizione = models.CharField(max_length=240)
+    tipo_movimento = models.CharField(max_length=3, choices=RISORSA_MOV_CHOICES, default=RISORSA_MOV_CONSUMO)
+    data = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-data']
+        verbose_name = 'Movimento risorsa statistica'
+        verbose_name_plural = 'Movimenti risorse statistiche'
+
+
+class EffettoRisorsaTemporaneo(SyncableModel, models.Model):
+    """
+    Modificatori temporanei attivati consumando un punto risorsa (es. effetto Fortuna).
+    Scadenza valutata in modificatori_calcolati.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='effetti_risorsa_temp')
+    statistica_risorsa_sigla = models.CharField(max_length=3)
+    abilita = models.ForeignKey('Abilita', on_delete=models.SET_NULL, null=True, blank=True, related_name='effetti_risorsa_generati')
+    durata_tipo = models.CharField(max_length=3, choices=RISORSA_DURATA_CHOICES, default=RISORSA_DURATA_ORA_1)
+    scadenza = models.DateTimeField(db_index=True)
+    modifiche = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Lista di {"stat_sigla":"PV","valore":1,"tipo_modificatore":"ADD"|"MOL"}',
+    )
+
+    class Meta:
+        ordering = ['-scadenza']
+        verbose_name = 'Effetto risorsa temporaneo'
+        verbose_name_plural = 'Effetti risorsa temporanei'
+
+
+def calcola_scadenza_effetto_risorsa(durata_tipo):
+    """Calcola datetime di scadenza per un effetto legato al consumo di una risorsa."""
+    try:
+        from gestione_plot.models import Evento
+    except Exception:
+        Evento = None  # type: ignore
+    now = timezone.now()
+    if durata_tipo == RISORSA_DURATA_ORA_1:
+        return now + timedelta(hours=1)
+    if durata_tipo == RISORSA_DURATA_GIORNO:
+        d = timezone.localdate()
+        end_local = datetime.combine(d, dt_time(23, 59, 59))
+        if timezone.is_naive(end_local):
+            end_local = timezone.make_aware(end_local, timezone.get_current_timezone())
+        return end_local if end_local > now else now + timedelta(seconds=1)
+    if durata_tipo == RISORSA_DURATA_EVENTO and Evento is not None:
+        ev = (
+            Evento.objects.filter(data_inizio__lte=now, data_fine__gte=now)
+            .order_by('-data_inizio')
+            .first()
+        )
+        if ev:
+            return ev.data_fine
+    return now + timedelta(hours=1)
+
 # class OggettoElemento(models.Model):
 #     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
 #     elemento = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': ELEMENTO})
@@ -1648,7 +1754,13 @@ class Personaggio(Inventario):
     tessiture_possedute = models.ManyToManyField(Tessitura, through='PersonaggioTessitura', blank=True)
     modelli_aura = models.ManyToManyField(ModelloAura, through='PersonaggioModelloAura', blank=True, verbose_name="Modelli di Aura")
     statistiche_temporanee = models.JSONField(default=dict, blank=True, verbose_name="Valori Correnti Statistiche")
-    
+    risorse_consumabili = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Risorse a pool (corrente)",
+        help_text='Contatori attuali per statistiche con pool (es. {"FRT": 2}). Se assente, si assume pari al massimo.',
+    )
+
     # Statistiche base del personaggio (valori intrinseci, separati dalle abilità)
     statistiche_base = models.ManyToManyField(Statistica, through='PersonaggioStatisticaBase', blank=True, related_name='personaggi_base')
     
@@ -1672,6 +1784,109 @@ class Personaggio(Inventario):
     
     def modifica_pc(self, i, d): 
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+
+    def get_risorsa_corrente(self, sigla):
+        """Punti correnti nel pool per una statistica contrassegnata come risorsa (es. FRT)."""
+        stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
+        if not stat:
+            return 0
+        max_v = self.get_valore_statistica(sigla)
+        if max_v <= 0:
+            return 0
+        raw = (self.risorse_consumabili or {}).get(sigla)
+        if raw is None:
+            return max_v
+        try:
+            v = int(raw)
+        except (TypeError, ValueError):
+            return max_v
+        return max(0, min(v, max_v))
+
+    def consuma_risorsa_statistica(self, sigla):
+        """
+        Consuma un punto dal pool. Crea movimento, log ed eventuali effetti temporanei dalle abilità.
+        """
+        stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
+        if not stat:
+            raise ValueError('Statistica non configurata come risorsa a pool.')
+        max_v = self.get_valore_statistica(sigla)
+        if max_v <= 0:
+            raise ValueError('Pool non disponibile (massimo 0).')
+        cur = self.get_risorsa_corrente(sigla)
+        if cur <= 0:
+            raise ValueError('Nessun punto disponibile da consumare.')
+        nuovo = cur - 1
+        self._set_risorsa_corrente(sigla, nuovo)
+        self.save(update_fields=['risorse_consumabili'])
+        RisorsaStatisticaMovimento.objects.create(
+            personaggio=self,
+            statistica_sigla=sigla,
+            importo=-1,
+            descrizione=f'Consumo 1 punto {stat.nome} ({sigla})',
+            tipo_movimento=RISORSA_MOV_CONSUMO,
+        )
+        self.aggiungi_log(
+            f'Consumo 1 punto {stat.nome} ({sigla}). Rimasti: {nuovo}/{max_v}.'
+        )
+        self._crea_effetti_temporanei_da_abilita(sigla)
+        if hasattr(self, '_modificatori_calcolati_cache'):
+            delattr(self, '_modificatori_calcolati_cache')
+        return nuovo
+
+    def incrementa_risorsa_staff(self, sigla, staff_user=None, motivo=''):
+        """Aggiunge un punto al pool (es. staff). Rispetta il massimo dalla statistica."""
+        stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
+        if not stat:
+            raise ValueError('Statistica non configurata come risorsa a pool.')
+        max_v = self.get_valore_statistica(sigla)
+        if max_v <= 0:
+            raise ValueError('Pool non disponibile (massimo 0).')
+        cur = self.get_risorsa_corrente(sigla)
+        if cur >= max_v:
+            raise ValueError('Il pool è già al massimo.')
+        nuovo = min(max_v, cur + 1)
+        self._set_risorsa_corrente(sigla, nuovo)
+        self.save(update_fields=['risorse_consumabili'])
+        who = getattr(staff_user, 'username', None) or getattr(staff_user, 'email', None) or 'staff'
+        desc = f'Assegnazione staff (+1) {stat.nome} ({sigla})'
+        if motivo:
+            desc = f'{desc} — {motivo}'
+        RisorsaStatisticaMovimento.objects.create(
+            personaggio=self,
+            statistica_sigla=sigla,
+            importo=+1,
+            descrizione=desc[:240],
+            tipo_movimento=RISORSA_MOV_STAFF,
+        )
+        self.aggiungi_log(f'{desc}. Nuovo totale: {nuovo}/{max_v} (operatore: {who}).')
+        if hasattr(self, '_modificatori_calcolati_cache'):
+            delattr(self, '_modificatori_calcolati_cache')
+        return nuovo
+
+    def _set_risorsa_corrente(self, sigla, valore):
+        rc = dict(self.risorse_consumabili or {})
+        rc[sigla] = valore
+        self.risorse_consumabili = rc
+
+    def _crea_effetti_temporanei_da_abilita(self, sigla):
+        """Crea EffettoRisorsaTemporaneo per ogni abilità posseduta con effetto_uso_risorsa compatibile."""
+        for ab in self.abilita_possedute.all():
+            spec = ab.effetto_uso_risorsa
+            if not spec or spec.get('stat_sigla') != sigla:
+                continue
+            durata = spec.get('durata') or RISORSA_DURATA_ORA_1
+            if durata not in (RISORSA_DURATA_ORA_1, RISORSA_DURATA_GIORNO, RISORSA_DURATA_EVENTO):
+                durata = RISORSA_DURATA_ORA_1
+            scad = calcola_scadenza_effetto_risorsa(durata)
+            modifiche = spec.get('modifiche') or []
+            EffettoRisorsaTemporaneo.objects.create(
+                personaggio=self,
+                statistica_risorsa_sigla=sigla,
+                abilita=ab,
+                durata_tipo=durata,
+                scadenza=scad,
+                modifiche=modifiche,
+            )
 
     def _build_punteggi_base_indipendenti(self, exclude_abilita_ids=None):
         exclude_abilita_ids = set(exclude_abilita_ids or [])
@@ -2225,6 +2440,29 @@ class Personaggio(Inventario):
                 if pts > 0 and l.ogni_x_punti > 0:
                     b = (pts // l.ogni_x_punti) * l.modificatore
                     if b > 0: _add(l.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, b)
+
+        # 4. Effetti temporanei da consumo risorse (Fortuna / future pool)
+        now_ts = timezone.now()
+        eff_qs = EffettoRisorsaTemporaneo.objects.filter(personaggio=self, scadenza__gt=now_ts)
+        stat_cache = {}
+        for eff in eff_qs:
+            for m in eff.modifiche or []:
+                s_sig = m.get('stat_sigla')
+                if not s_sig:
+                    continue
+                if s_sig not in stat_cache:
+                    stat_cache[s_sig] = Statistica.objects.filter(sigla=s_sig).first()
+                st_obj = stat_cache[s_sig]
+                if not st_obj or not st_obj.parametro:
+                    continue
+                tmod = m.get('tipo_modificatore') or MODIFICATORE_ADDITIVO
+                if tmod not in (MODIFICATORE_ADDITIVO, MODIFICATORE_MOLTIPLICATIVO):
+                    tmod = MODIFICATORE_ADDITIVO
+                try:
+                    val = float(m.get('valore', 0))
+                except (TypeError, ValueError):
+                    val = 0.0
+                _add(st_obj.parametro, tmod, val)
         
         self._modificatori_calcolati_cache = mods
         return mods

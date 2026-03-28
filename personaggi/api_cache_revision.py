@@ -75,6 +75,7 @@ def revision_personaggio_detail(personaggio_pk: int) -> Optional[datetime]:
         ConsumabilePersonaggio,
         CreditoMovimento,
         CreazioneConsumabileInCorso,
+        EffettoRisorsaTemporaneo,
         Infusione,
         LetturaMessaggio,
         Messaggio,
@@ -91,6 +92,7 @@ def revision_personaggio_detail(personaggio_pk: int) -> Optional[datetime]:
         PersonaggioTessitura,
         PuntiCaratteristicaMovimento,
         RichiestaAssemblaggio,
+        RisorsaStatisticaMovimento,
         Statistica,
         Tessitura,
     )
@@ -121,6 +123,8 @@ def revision_personaggio_detail(personaggio_pk: int) -> Optional[datetime]:
     psb = pivot_max(PersonaggioStatisticaBase)
     cred = pivot_max(CreditoMovimento)
     pcm = pivot_max(PuntiCaratteristicaMovimento)
+    rsm = pivot_max(RisorsaStatisticaMovimento)
+    ert = pivot_max(EffettoRisorsaTemporaneo)
     cc = pivot_max(CreazioneConsumabileInCorso)
     cons = pivot_max(ConsumabilePersonaggio)
     lm = pivot_max(LetturaMessaggio)
@@ -164,6 +168,8 @@ def revision_personaggio_detail(personaggio_pk: int) -> Optional[datetime]:
         psb,
         cred,
         pcm,
+        rsm,
+        ert,
         cc,
         cons,
         ra,
