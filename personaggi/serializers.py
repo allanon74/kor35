@@ -177,7 +177,7 @@ class PunteggioSmallSerializer(serializers.ModelSerializer):
 
 
 class StatisticaContainerItemSerializer(serializers.ModelSerializer):
-    statistica_id = serializers.IntegerField(source="statistica_id", read_only=True)
+    statistica_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = StatisticaContainerItem
@@ -185,7 +185,7 @@ class StatisticaContainerItemSerializer(serializers.ModelSerializer):
 
 
 class StatisticaContainerSerializer(serializers.ModelSerializer):
-    parent_id = serializers.UUIDField(source="parent_id", allow_null=True, read_only=True)
+    parent_id = serializers.UUIDField(allow_null=True, read_only=True)
     icona_url = serializers.ReadOnlyField()
     icona_nome_display = serializers.ReadOnlyField()
     items = StatisticaContainerItemSerializer(many=True, read_only=True)
