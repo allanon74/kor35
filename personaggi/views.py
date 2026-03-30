@@ -43,6 +43,7 @@ from .models import (
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     UserSocialPreference,
+    StatisticaContainer,
 )
 
 import uuid 
@@ -106,6 +107,7 @@ from .serializers import (
     KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
     CaricaKorpSerializer, CaricaCarrieraSerializer,
     PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
+    StatisticaContainerSerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
@@ -1743,6 +1745,19 @@ class PunteggiListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PunteggioDetailSerializer
     queryset = Punteggio.objects.all().order_by('tipo','ordine', 'nome')
+
+
+class StatisticaContainerListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = StatisticaContainerSerializer
+
+    def get_queryset(self):
+        return (
+            StatisticaContainer.objects.all()
+            .select_related("parent")
+            .prefetch_related("items", "items__statistica")
+            .order_by("ordine", "nome")
+        )
     
 class MessaggioListView(generics.ListAPIView):
     serializer_class = MessaggioSerializer

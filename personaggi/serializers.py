@@ -36,6 +36,7 @@ from .models import (
     TipologiaEffetto, EffettoCasuale,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    StatisticaContainer, StatisticaContainerItem,
 )
 
 # -----------------------------------------------------------------------------
@@ -173,6 +174,37 @@ class PunteggioSmallSerializer(serializers.ModelSerializer):
     class Meta:
         model = Punteggio
         fields = ('id', 'nome', 'sigla', 'colore', 'icona_url', 'icona_nome_originale', 'icona_nome_display', 'ordine',)
+
+
+class StatisticaContainerItemSerializer(serializers.ModelSerializer):
+    statistica_id = serializers.IntegerField(source="statistica_id", read_only=True)
+
+    class Meta:
+        model = StatisticaContainerItem
+        fields = ("id", "ordine", "statistica_id")
+
+
+class StatisticaContainerSerializer(serializers.ModelSerializer):
+    parent_id = serializers.UUIDField(source="parent_id", allow_null=True, read_only=True)
+    icona_url = serializers.ReadOnlyField()
+    icona_nome_display = serializers.ReadOnlyField()
+    items = StatisticaContainerItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = StatisticaContainer
+        fields = (
+            "id",
+            "nome",
+            "sigla",
+            "ordine",
+            "colore",
+            "icona_url",
+            "icona_nome_originale",
+            "icona_nome_display",
+            "parent_id",
+            "render_in_primarie",
+            "items",
+        )
 
 
 # -----------------------------------------------------------------------------

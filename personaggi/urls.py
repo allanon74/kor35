@@ -123,6 +123,7 @@ urlpatterns = [
     path('api/personaggio/me/revoca_abilita/', views.RevocaAbilitaView.as_view(), name='revoca_abilita'),
     path('api/personaggio/me/abilita_acquistabili/', views.AbilitaAcquistabiliView.as_view(), name='abilita-acquistabili'),
     path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
+    path('api/statistiche/containers/', views.StatisticaContainerListView.as_view(), name='api_statistiche_containers'),
     path('api/cache-revision/', views.CacheRevisionView.as_view(), name='api_cache_revision'),
     
     # --- MESSAGING ENDPOINTS (Phase 1) ---

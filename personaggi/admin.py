@@ -51,6 +51,7 @@ from .models import (
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     UserSocialPreference,
+    StatisticaContainer, StatisticaContainerItem,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -601,6 +602,37 @@ class StatisticaAdmin(A_Admin):
     exclude = ('tipo',)
     summernote_fields = ('descrizione',)
     search_fields = ['nome', 'parametro']
+
+
+class StatisticaContainerItemInline(admin.TabularInline):
+    model = StatisticaContainerItem
+    extra = 0
+    autocomplete_fields = ["statistica"]
+    fields = ("statistica", "ordine")
+    ordering = ("ordine",)
+
+
+@admin.register(StatisticaContainer)
+class StatisticaContainerAdmin(IconaAdminMixin, A_Admin):
+    list_display = ("nome", "parent", "ordine", "render_in_primarie", "icona_html", "colore")
+    list_filter = ("render_in_primarie",)
+    search_fields = ("nome", "sigla")
+    list_editable = ("parent", "ordine", "render_in_primarie")
+    inlines = [StatisticaContainerItemInline]
+    save_as = True
+
+    fieldsets = (
+        (
+            "Dati contenitore",
+            {
+                "fields": (
+                    ("nome", "sigla"),
+                    ("parent", "ordine", "render_in_primarie"),
+                    ("icona", "icona_nome_originale", "colore"),
+                )
+            },
+        ),
+    )
 
 admin.site.register(Tabella)
 admin.site.register(abilita_tier)

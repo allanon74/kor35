@@ -828,6 +828,128 @@ class Statistica(Punteggio):
         if extra_params: items.extend([f"&bull; <b>{p_code}</b>: {p_desc}" for p_code, p_desc in extra_params])
         return mark_safe("<b>Variabili disponibili:</b><br>" + "<br>".join(items))
 
+
+class StatisticaContainer(SyncableModel, models.Model):
+    """
+    Contenitore (annidabile) per raggruppare statistiche nella scheda personaggio.
+    Configurabile a DB e sincronizzabile Edge/Master.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    nome = models.CharField(max_length=90)
+    sigla = models.CharField(max_length=10, blank=True, null=True)
+    ordine = models.IntegerField(default=0)
+
+    colore = ColorField(default="#1976D2")
+    icona = CustomIconField(blank=True)
+    icona_nome_originale = models.CharField(max_length=255, blank=True, null=True)
+
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        related_name="children",
+        null=True,
+        blank=True,
+    )
+
+    render_in_primarie = models.BooleanField(
+        default=True,
+        verbose_name="Mostra in Statistiche (primarie)",
+        help_text="Se attivo, il contenitore viene renderizzato nella sezione 'Statistiche' della scheda.",
+    )
+
+    class Meta:
+        verbose_name = "Contenitore Statistiche"
+        verbose_name_plural = "Contenitori Statistiche"
+        ordering = ["ordine", "nome"]
+
+    @property
+    def icona_url(self):
+        return f"{settings.MEDIA_URL}{self.icona}" if self.icona else None
+
+    @property
+    def icona_html(self):
+        if self.icona and self.colore:
+            return format_html(
+                '<div style="width: 24px; height: 24px; background-color: {}; mask-image: url({}); -webkit-mask-image: url({}); mask-size: contain; -webkit-mask-size: contain; display: inline-block; vertical-align: middle;"></div>',
+                self.colore,
+                self.icona_url,
+                self.icona_url,
+            )
+        return ""
+
+    def icona_cerchio(self, inverted=True):
+        if not self.icona or not self.colore:
+            return ""
+        bg = _get_icon_color_from_bg(self.colore) if inverted else self.colore
+        fg = self.colore if inverted else _get_icon_color_from_bg(self.colore)
+        return format_html(
+            '<div style="display: inline-block; width: 30px; height: 30px; background-color: {}; border-radius: 50%; vertical-align: middle; text-align: center; line-height: 30px;"><div style="display: inline-block; width: 24px; height: 24px; vertical-align: middle; background-color: {}; mask-image: url({}); -webkit-mask-image: url({}); mask-size: contain; -webkit-mask-size: contain;"></div></div>',
+            bg,
+            fg,
+            self.icona_url,
+            self.icona_url,
+        )
+
+    @property
+    def icona_cerchio_html(self):
+        return self.icona_cerchio(inverted=False)
+
+    @property
+    def icona_cerchio_inverted_html(self):
+        return self.icona_cerchio(inverted=True)
+
+    @property
+    def icona_nome_display(self):
+        if self.icona_nome_originale and self.icona_nome_originale.strip():
+            return self.icona_nome_originale.strip()
+        if self.icona:
+            try:
+                return os.path.splitext(os.path.basename(str(self.icona)))[0] or "Icona personalizzata"
+            except Exception:
+                return "Icona personalizzata"
+        return None
+
+    def __str__(self):
+        return self.nome
+
+
+class StatisticaContainerItem(SyncableModel, models.Model):
+    """
+    Legame contenitore -> statistica, con ordine interno.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    container = models.ForeignKey(
+        StatisticaContainer,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    statistica = models.ForeignKey(
+        Statistica,
+        on_delete=models.CASCADE,
+        related_name="in_containers",
+    )
+    ordine = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Statistica in contenitore"
+        verbose_name_plural = "Statistiche in contenitori"
+        ordering = ["container__ordine", "ordine", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["container", "statistica"],
+                name="uniq_stat_container_item",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.container.nome} -> {self.statistica.sigla or self.statistica.nome}"
+
 MOSTRA_CLASSI_ARMA_CHOICES = [
     ('nessuno', 'Nessuno'),
     ('materia', 'Mostrare i tipi di arma per Materia'),
