@@ -485,7 +485,7 @@ class TipologiaPersonaggioAdmin(admin.ModelAdmin):
 @admin.register(Abilita)
 class AbilitaAdmin(A_Admin):
     list_display = ('id', 'nome', 'caratteristica', 'caratteristica_2', 'caratteristica_3', 'costo_pc', 'costo_crediti')
-    list_editable = ('caratteristica', 'caratteristica_2', 'caratteristica_3')
+    # list_editable = ('caratteristica', 'caratteristica_2', 'caratteristica_3')
     list_filter = ('caratteristica', 'caratteristica_2', 'caratteristica_3', 'is_tratto_aura',)
     summernote_fields = ['descrizione']
     search_fields = ['nome', 'descrizione']
@@ -596,7 +596,7 @@ class TierAdmin(A_Admin):
 @admin.register(Statistica)
 class StatisticaAdmin(A_Admin):
     form = PunteggioAdminForm
-    list_display = ('nome', 'parametro', 'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'tipo_modificatore')
+    list_display = ('nome', 'parametro', 'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'sigla')
     list_editable = ('is_primaria',)
     exclude = ('tipo',)
     summernote_fields = ('descrizione',)
