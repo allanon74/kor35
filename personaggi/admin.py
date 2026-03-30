@@ -90,6 +90,31 @@ class PunteggioAdminForm(forms.ModelForm):
             'icona_nome_originale': forms.HiddenInput(),
         }
 
+
+class StatisticaContainerAdminForm(forms.ModelForm):
+    def clean_icona_nome_originale(self):
+        value = self.cleaned_data.get("icona_nome_originale")
+        if value:
+            return value
+
+        backup = self.data.get("__icon_original_name__icona")
+        if backup:
+            return backup
+
+        for key, raw_val in self.data.items():
+            if key.endswith("icona_nome_originale") and raw_val:
+                return raw_val
+
+        return value
+
+    class Meta:
+        model = StatisticaContainer
+        fields = "__all__"
+        widgets = {
+            "icona": CustomIconWidget,
+            "icona_nome_originale": forms.HiddenInput(),
+        }
+
 # --- Forms per evidenziare i valori modificati ---
 
 def create_stat_form(model_class, field_valore, field_default_stat):
@@ -614,6 +639,7 @@ class StatisticaContainerItemInline(admin.TabularInline):
 
 @admin.register(StatisticaContainer)
 class StatisticaContainerAdmin(IconaAdminMixin, A_Admin):
+    form = StatisticaContainerAdminForm
     list_display = ("nome", "parent", "ordine", "render_in_primarie", "icona_html", "colore")
     list_filter = ("render_in_primarie",)
     search_fields = ("nome", "sigla")
