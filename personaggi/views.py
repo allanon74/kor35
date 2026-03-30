@@ -3254,12 +3254,16 @@ class StaffRisorsaIncrementView(APIView):
         pg_id = request.data.get('personaggio_id')
         stat_sigla = request.data.get('stat_sigla')
         motivo = request.data.get('motivo') or ''
+        try:
+            delta = int(request.data.get('delta', 1))
+        except (ValueError, TypeError):
+            return Response({'error': 'delta non valido (intero, default 1).'}, status=status.HTTP_400_BAD_REQUEST)
         if not pg_id or not stat_sigla:
             return Response({'error': 'personaggio_id e stat_sigla sono obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
         pg = get_object_or_404(Personaggio, pk=pg_id)
         try:
             with transaction.atomic():
-                nuovo = pg.incrementa_risorsa_staff(stat_sigla, staff_user=request.user, motivo=motivo)
+                nuovo = pg.regola_risorsa_staff(stat_sigla, delta, staff_user=request.user, motivo=motivo)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         max_v = pg.get_valore_statistica(stat_sigla)

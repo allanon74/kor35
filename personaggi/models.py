@@ -1960,8 +1960,17 @@ class Personaggio(Inventario):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo
 
-    def incrementa_risorsa_staff(self, sigla, staff_user=None, motivo=''):
-        """Aggiunge un punto al pool (es. staff). Rispetta il massimo dalla statistica."""
+    def regola_risorsa_staff(self, sigla, delta, staff_user=None, motivo=''):
+        """
+        Varia il pool corrente di una risorsa statistica (staff). delta può essere positivo o negativo;
+        il valore viene clampato tra 0 e il massimo di scheda.
+        """
+        try:
+            delta = int(delta)
+        except (TypeError, ValueError):
+            raise ValueError('Variazione non valida.')
+        if delta == 0:
+            raise ValueError('La variazione non può essere zero.')
         stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
         if not stat:
             raise ValueError('Statistica non configurata come risorsa a pool.')
@@ -1969,26 +1978,34 @@ class Personaggio(Inventario):
         if max_v <= 0:
             raise ValueError('Pool non disponibile (massimo 0).')
         cur = self.get_risorsa_corrente(sigla)
-        if cur >= max_v:
-            raise ValueError('Il pool è già al massimo.')
-        nuovo = min(max_v, cur + 1)
+        nuovo = max(0, min(max_v, cur + delta))
+        if nuovo == cur:
+            raise ValueError(
+                'Impossibile applicare la variazione: il totale è già al minimo (0) o al massimo previsto da scheda.'
+            )
+        diff = nuovo - cur
         self._set_risorsa_corrente(sigla, nuovo)
         self.save(update_fields=['risorse_consumabili'])
         who = getattr(staff_user, 'username', None) or getattr(staff_user, 'email', None) or 'staff'
-        desc = f'Assegnazione staff (+1) {stat.nome} ({sigla})'
+        segno = f'+{diff}' if diff > 0 else str(diff)
+        desc = f'Regolazione staff {segno} pt. {stat.nome} ({sigla})'
         if motivo:
             desc = f'{desc} — {motivo}'
         RisorsaStatisticaMovimento.objects.create(
             personaggio=self,
             statistica_sigla=sigla,
-            importo=+1,
+            importo=diff,
             descrizione=desc[:240],
             tipo_movimento=RISORSA_MOV_STAFF,
         )
-        self.aggiungi_log(f'{desc}. Nuovo totale: {nuovo}/{max_v} (operatore: {who}).')
+        self.aggiungi_log(f'{desc}. Totale: {nuovo}/{max_v} (operatore: {who}).')
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo
+
+    def incrementa_risorsa_staff(self, sigla, staff_user=None, motivo=''):
+        """Aggiunge esattamente un punto al pool (compatibilità con client che chiamano solo +1)."""
+        return self.regola_risorsa_staff(sigla, 1, staff_user=staff_user, motivo=motivo)
 
     def _set_risorsa_corrente(self, sigla, valore):
         rc = dict(self.risorse_consumabili or {})
