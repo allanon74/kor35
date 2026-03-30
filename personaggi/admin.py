@@ -640,10 +640,10 @@ class StatisticaContainerItemInline(admin.TabularInline):
 @admin.register(StatisticaContainer)
 class StatisticaContainerAdmin(IconaAdminMixin, A_Admin):
     form = StatisticaContainerAdminForm
-    list_display = ("nome", "parent", "ordine", "render_in_primarie", "icona_html", "colore")
+    list_display = ("nome", "parent", "ordine", "render_in_primarie", "usa_colore_contenitore_per_figli", "icona_html", "colore")
     list_filter = ("render_in_primarie",)
     search_fields = ("nome", "sigla")
-    list_editable = ("parent", "ordine", "render_in_primarie")
+    list_editable = ("parent", "ordine", "render_in_primarie", "usa_colore_contenitore_per_figli")
     inlines = [StatisticaContainerItemInline]
     save_as = True
 
@@ -654,6 +654,7 @@ class StatisticaContainerAdmin(IconaAdminMixin, A_Admin):
                 "fields": (
                     ("nome", "sigla"),
                     ("parent", "ordine", "render_in_primarie"),
+                    ("usa_colore_contenitore_per_figli",),
                     ("icona", "icona_nome_originale", "colore"),
                 )
             },

@@ -203,6 +203,7 @@ class StatisticaContainerSerializer(serializers.ModelSerializer):
             "icona_nome_display",
             "parent_id",
             "render_in_primarie",
+            "usa_colore_contenitore_per_figli",
             "items",
         )
 

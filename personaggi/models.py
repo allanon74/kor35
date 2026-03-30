@@ -859,6 +859,11 @@ class StatisticaContainer(SyncableModel, models.Model):
         verbose_name="Mostra in Statistiche (primarie)",
         help_text="Se attivo, il contenitore viene renderizzato nella sezione 'Statistiche' della scheda.",
     )
+    usa_colore_contenitore_per_figli = models.BooleanField(
+        default=True,
+        verbose_name="Forza colore contenitore sui figli",
+        help_text="Se attivo, le statistiche contenute usano il colore del contenitore in scheda.",
+    )
 
     class Meta:
         verbose_name = "Contenitore Statistiche"
