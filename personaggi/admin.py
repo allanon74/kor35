@@ -633,17 +633,17 @@ class StatisticaContainerItemInline(admin.TabularInline):
     model = StatisticaContainerItem
     extra = 0
     autocomplete_fields = ["statistica"]
-    fields = ("statistica", "ordine")
+    fields = ("statistica", "ordine", "dimensione")
     ordering = ("ordine",)
 
 
 @admin.register(StatisticaContainer)
 class StatisticaContainerAdmin(IconaAdminMixin, A_Admin):
     form = StatisticaContainerAdminForm
-    list_display = ("nome", "parent", "ordine", "render_in_primarie", "usa_colore_contenitore_per_figli", "icona_html", "colore")
+    list_display = ("nome", "parent", "ordine", "dimensione", "render_in_primarie", "usa_colore_contenitore_per_figli", "icona_html", "colore")
     list_filter = ("render_in_primarie",)
     search_fields = ("nome", "sigla")
-    list_editable = ("parent", "ordine", "render_in_primarie", "usa_colore_contenitore_per_figli")
+    list_editable = ("parent", "ordine", "dimensione", "render_in_primarie", "usa_colore_contenitore_per_figli")
     inlines = [StatisticaContainerItemInline]
     save_as = True
 
@@ -653,7 +653,7 @@ class StatisticaContainerAdmin(IconaAdminMixin, A_Admin):
             {
                 "fields": (
                     ("nome", "sigla"),
-                    ("parent", "ordine", "render_in_primarie"),
+                    ("parent", "ordine", "dimensione", "render_in_primarie"),
                     ("usa_colore_contenitore_per_figli",),
                     ("icona", "icona_nome_originale", "colore"),
                 )

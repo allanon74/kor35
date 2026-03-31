@@ -537,6 +537,14 @@ TIER_4 = "T4"
 tabelle_tipo = [(T_GENERALI, 'Tabelle Generali'), (TIER_1, 'Tier 1'), (TIER_2, 'Tier 2'), (TIER_3, 'Tier 3'), (TIER_4, 'Tier 4')]
 MODIFICATORE_ADDITIVO = 'ADD'; MODIFICATORE_MOLTIPLICATIVO = 'MOL'
 MODIFICATORE_CHOICES = [(MODIFICATORE_ADDITIVO, 'Additivo (+N)'), (MODIFICATORE_MOLTIPLICATIVO, 'Moltiplicativo (xN)')]
+DISPLAY_SIZE_CHOICES = [
+    ("badge", "Badge"),
+    ("xs", "Extra Small"),
+    ("s", "Small"),
+    ("m", "Medium"),
+    ("l", "Large"),
+    ("xl", "Extra Large"),
+]
 
 # --- Risorse statistiche (pool consumabile: es. Fortuna FRT) ---
 RISORSA_DURATA_ORA_1 = 'O1H'
@@ -841,6 +849,12 @@ class StatisticaContainer(SyncableModel, models.Model):
     nome = models.CharField(max_length=90)
     sigla = models.CharField(max_length=10, blank=True, null=True)
     ordine = models.IntegerField(default=0)
+    dimensione = models.CharField(
+        max_length=10,
+        choices=DISPLAY_SIZE_CHOICES,
+        default="s",
+        help_text="Dimensione di rendering dell'intestazione contenitore in scheda.",
+    )
 
     colore = ColorField(default="#1976D2")
     icona = CustomIconField(blank=True)
@@ -940,6 +954,12 @@ class StatisticaContainerItem(SyncableModel, models.Model):
         related_name="in_containers",
     )
     ordine = models.IntegerField(default=0)
+    dimensione = models.CharField(
+        max_length=10,
+        choices=DISPLAY_SIZE_CHOICES,
+        default="s",
+        help_text="Dimensione di rendering della statistica nel contenitore.",
+    )
 
     class Meta:
         verbose_name = "Statistica in contenitore"

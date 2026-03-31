@@ -181,7 +181,7 @@ class StatisticaContainerItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StatisticaContainerItem
-        fields = ("id", "ordine", "statistica_id")
+        fields = ("id", "ordine", "dimensione", "statistica_id")
 
 
 class StatisticaContainerSerializer(serializers.ModelSerializer):
@@ -197,6 +197,7 @@ class StatisticaContainerSerializer(serializers.ModelSerializer):
             "nome",
             "sigla",
             "ordine",
+            "dimensione",
             "colore",
             "icona_url",
             "icona_nome_originale",
