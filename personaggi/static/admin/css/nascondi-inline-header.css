@@ -39,3 +39,11 @@ fieldset.collapsed #req_doppia_rel-group,
 fieldset.collapsed #req_caratt_rel-group {
     display: none !important;
 }
+
+/* Fix: su alcune pagine (es. inline Stacked) il collasso dei fieldset non
+   nasconde più i contenuti. Quando Django aggiunge la classe `collapsed`,
+   forziamo la scomparsa di tutto il contenuto lasciando visibile il titolo
+   cliccabile (h2/legend). */
+fieldset.collapse.collapsed > :not(h2):not(legend) {
+    display: none !important;
+}
