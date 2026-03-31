@@ -1559,9 +1559,9 @@ class PropostaTransazioneCreateView(APIView):
 class PersonaggioListView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
-        queryset = Personaggio.objects.filter(proprietario=request.user)
+        queryset = Personaggio.objects.filter(proprietario=request.user).select_related("era", "prefettura", "prefettura__era")
         if (request.user.is_staff or request.user.is_superuser) and request.query_params.get('view_all') == 'true':
-            queryset = Personaggio.objects.all()
+            queryset = Personaggio.objects.all().select_related("era", "prefettura", "prefettura__era")
         serializer = PersonaggioListSerializer(queryset, many=True)
         data = serializer.data
 
@@ -3547,14 +3547,20 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_staff or user.is_superuser:
-            return Personaggio.objects.all().select_related('tipologia', 'proprietario', 'era', 'prefettura').order_by('nome')
-        return Personaggio.objects.filter(proprietario=user).select_related('tipologia', 'era', 'prefettura').order_by('nome')
+            return Personaggio.objects.all().select_related('tipologia', 'proprietario', 'era', 'prefettura', 'prefettura__era').order_by('nome')
+        return Personaggio.objects.filter(proprietario=user).select_related('tipologia', 'era', 'prefettura', 'prefettura__era').order_by('nome')
 
     def perform_create(self, serializer):
         era = serializer.validated_data.get("era")
         prefettura = serializer.validated_data.get("prefettura")
+        prefettura_esterna = bool(serializer.validated_data.get("prefettura_esterna", False))
         personaggio = serializer.save(proprietario=self.request.user, prefettura=None)
-        personaggio.assegna_era_e_prefettura(era=era, prefettura=prefettura, force=True)
+        personaggio.assegna_era_e_prefettura(
+            era=era,
+            prefettura=prefettura,
+            prefettura_esterna=prefettura_esterna,
+            force=True,
+        )
 
     def perform_update(self, serializer):
         instance = serializer.instance
@@ -3566,7 +3572,12 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             prefettura = None
         else:
             prefettura = instance.prefettura
-        changing_era_data = ("era" in serializer.validated_data) or ("prefettura" in serializer.validated_data)
+        prefettura_esterna = bool(serializer.validated_data.get("prefettura_esterna", instance.prefettura_esterna))
+        changing_era_data = (
+            ("era" in serializer.validated_data)
+            or ("prefettura" in serializer.validated_data)
+            or ("prefettura_esterna" in serializer.validated_data)
+        )
         if changing_era_data and not (user.is_staff or user.is_superuser):
             if not instance.can_edit_era_prefettura():
                 raise serializers.ValidationError("Non puoi più modificare Era/Prefettura dopo l'inizio del primo evento.")
@@ -3574,6 +3585,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         personaggio.assegna_era_e_prefettura(
             era=era,
             prefettura=prefettura,
+            prefettura_esterna=prefettura_esterna,
             force=bool(user.is_staff or user.is_superuser),
         )
 

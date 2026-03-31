@@ -18,6 +18,7 @@ from .models import (
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
     TipologiaEffetto, EffettoCasuale,
+    Era, Prefettura,
 )
 
 from .serializers import (
@@ -39,6 +40,7 @@ from .serializers import (
     AbilitaSimpleSerializer,
     InventarioStaffSerializer,
     TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
+    EraStaffSerializer, PrefetturaStaffSerializer,
 )
 
 
@@ -496,6 +498,18 @@ class EffettoCasualeViewSet(viewsets.ModelViewSet):
     serializer_class = EffettoCasualeStaffSerializer
     permission_classes = [IsStaffOrMaster]
     filterset_fields = ['tipologia']
+
+
+class EraStaffViewSet(viewsets.ModelViewSet):
+    queryset = Era.objects.all().order_by("ordine", "nome")
+    serializer_class = EraStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+
+class PrefetturaStaffViewSet(viewsets.ModelViewSet):
+    queryset = Prefettura.objects.select_related("era").all().order_by("era__ordine", "ordine", "nome")
+    serializer_class = PrefetturaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
 
 
 class MattoniMagiciListView(APIView):

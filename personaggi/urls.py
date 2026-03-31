@@ -73,6 +73,8 @@ router.register(r'staff/tiers', TierStaffViewSet, basename='staff-tiers')
 router.register(r'staff/inventari', views_staff.InventarioStaffViewSet, basename='staff-inventari')
 router.register(r'staff/tipologie-effetto', views_staff.TipologiaEffettoViewSet, basename='staff-tipologie-effetto')
 router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, basename='staff-effetti-casuali')
+router.register(r'staff/ere', views_staff.EraStaffViewSet, basename='staff-ere')
+router.register(r'staff/prefetture', views_staff.PrefetturaStaffViewSet, basename='staff-prefetture')
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')

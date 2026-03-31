@@ -1409,6 +1409,7 @@ class TipologiaPersonaggio(SyncableModel, models.Model):
 
 class Era(SyncableModel, models.Model):
     nome = models.CharField(max_length=120, unique=True)
+    abbreviazione = models.CharField(max_length=30, blank=True, default="")
     descrizione_breve = models.CharField(max_length=280, blank=True, default="")
     descrizione = models.TextField(blank=True, default="")
     abilita = models.ManyToManyField("Abilita", through="EraAbilita", related_name="ere_collegate", blank=True)
@@ -1950,6 +1951,7 @@ class Personaggio(Inventario):
     segno_zodiacale = models.ForeignKey("SegnoZodiacale", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     era = models.ForeignKey("Era", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     prefettura = models.ForeignKey("Prefettura", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
+    prefettura_esterna = models.BooleanField(default=False)
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
@@ -2028,18 +2030,19 @@ class Personaggio(Inventario):
         if nuovi_link:
             PersonaggioAbilita.objects.bulk_create(nuovi_link, ignore_conflicts=True)
 
-    def assegna_era_e_prefettura(self, era=None, prefettura=None, force=False):
+    def assegna_era_e_prefettura(self, era=None, prefettura=None, prefettura_esterna=False, force=False):
         if not force and not self.can_edit_era_prefettura():
             raise ValidationError("Non è più possibile cambiare Era dopo l'inizio del primo evento.")
 
-        if prefettura and era and prefettura.era_id != era.id:
+        if prefettura and era and prefettura.era_id != era.id and not prefettura_esterna:
             raise ValidationError("La prefettura selezionata non appartiene all'era indicata.")
         if prefettura and not era:
             raise ValidationError("Impossibile impostare una prefettura senza selezionare un'era.")
 
         self.era = era
         self.prefettura = prefettura
-        self.save(update_fields=["era", "prefettura", "updated_at"])
+        self.prefettura_esterna = bool(prefettura_esterna)
+        self.save(update_fields=["era", "prefettura", "prefettura_esterna", "updated_at"])
         self._sync_abilita_default_era()
 
     def get_risorsa_corrente(self, sigla):

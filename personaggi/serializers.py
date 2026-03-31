@@ -105,9 +105,12 @@ class PersonaggioCarrieraMembershipSerializer(serializers.ModelSerializer):
 
 
 class PrefetturaSerializer(serializers.ModelSerializer):
+    era_nome = serializers.CharField(source="era.nome", read_only=True)
+    era_abbreviazione = serializers.CharField(source="era.abbreviazione", read_only=True)
+
     class Meta:
         model = Prefettura
-        fields = ("id", "era", "nome", "descrizione", "ordine")
+        fields = ("id", "era", "era_nome", "era_abbreviazione", "nome", "descrizione", "ordine")
 
 
 class EraSerializer(serializers.ModelSerializer):
@@ -115,7 +118,21 @@ class EraSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Era
-        fields = ("id", "nome", "descrizione_breve", "descrizione", "ordine", "attiva", "prefetture")
+        fields = ("id", "nome", "abbreviazione", "descrizione_breve", "descrizione", "ordine", "attiva", "prefetture")
+
+
+class EraStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Era
+        fields = "__all__"
+
+
+class PrefetturaStaffSerializer(serializers.ModelSerializer):
+    era_nome = serializers.CharField(source="era.nome", read_only=True)
+
+    class Meta:
+        model = Prefettura
+        fields = ("id", "era", "era_nome", "nome", "descrizione", "ordine", "sync_id", "updated_at")
 
 
 class TabellaSerializer(serializers.ModelSerializer):
@@ -1560,6 +1577,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     can_edit_era = serializers.SerializerMethodField()
     era = EraSerializer(read_only=True)
     prefettura = PrefetturaSerializer(read_only=True)
+    prefettura_esterna = serializers.BooleanField(required=False)
 
     class Meta:
         model = Personaggio
@@ -1580,7 +1598,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'impostazioni_ui',
             'can_edit_razza',
             'can_edit_era',
-            'era', 'prefettura',
+            'era', 'prefettura', 'prefettura_esterna',
         )
 
     def get_can_edit_razza(self, personaggio):
@@ -1881,8 +1899,10 @@ class PersonaggioSerializer(serializers.ModelSerializer):
     segno_zodiacale_nome = serializers.CharField(source="segno_zodiacale.nome", read_only=True)
     era = serializers.PrimaryKeyRelatedField(queryset=Era.objects.filter(attiva=True), allow_null=True, required=False)
     prefettura = serializers.PrimaryKeyRelatedField(queryset=Prefettura.objects.all(), allow_null=True, required=False)
+    prefettura_esterna = serializers.BooleanField(required=False)
     era_nome = serializers.CharField(source="era.nome", read_only=True)
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
+    prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
     
     class Meta:
         model = Personaggio
@@ -1893,7 +1913,7 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'crediti', 'punti_caratteristica',
             'giocante', 'proprietario_id', 'is_staff',
             'segno_zodiacale', 'segno_zodiacale_nome',
-            'era', 'prefettura', 'era_nome', 'prefettura_nome',
+            'era', 'prefettura', 'prefettura_esterna', 'era_nome', 'prefettura_nome', 'prefettura_era_nome',
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
     
@@ -1921,8 +1941,10 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     segno_zodiacale_nome = serializers.CharField(source="segno_zodiacale.nome", read_only=True)
     era = serializers.PrimaryKeyRelatedField(queryset=Era.objects.filter(attiva=True), allow_null=True, required=False)
     prefettura = serializers.PrimaryKeyRelatedField(queryset=Prefettura.objects.all(), allow_null=True, required=False)
+    prefettura_esterna = serializers.BooleanField(required=False)
     era_nome = serializers.CharField(source="era.nome", read_only=True)
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
+    prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
 
     class Meta:
         model = Personaggio
@@ -1932,7 +1954,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
             'segno_zodiacale', 'segno_zodiacale_nome',
-            'era', 'prefettura', 'era_nome', 'prefettura_nome',
+            'era', 'prefettura', 'prefettura_esterna', 'era_nome', 'prefettura_nome', 'prefettura_era_nome',
         )
         read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
 
@@ -2057,8 +2079,10 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
     proprietario_nome = serializers.SerializerMethodField()
     era = serializers.PrimaryKeyRelatedField(read_only=True)
     prefettura = serializers.PrimaryKeyRelatedField(read_only=True)
+    prefettura_esterna = serializers.BooleanField(read_only=True)
     era_nome = serializers.CharField(source="era.nome", read_only=True)
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
+    prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
 
     class Meta:
         model = Personaggio
@@ -2066,8 +2090,8 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'id', 'nome', 'proprietario', 'tipologia', 
             'proprietario_nome', 'data_nascita', 'data_morte',
             'testo', 'costume', 'crediti', 'punti_caratteristica',
-            'era', 'prefettura',
-            'era_nome', 'prefettura_nome',
+            'era', 'prefettura', 'prefettura_esterna',
+            'era_nome', 'prefettura_nome', 'prefettura_era_nome',
             )
         read_only_fields = ('crediti', 'punti_caratteristica') 
 
