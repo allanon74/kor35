@@ -1583,7 +1583,8 @@ class PersonaggioStatisticaBase(SyncableModel, models.Model):
     """
     Valori base delle statistiche per il personaggio.
     Questi sono valori intrinseci del personaggio, separati dalle abilità.
-    Vengono inizializzati automaticamente con valore_base_predefinito quando mancanti.
+    Salviamo solo gli override rispetto al valore_base_predefinito della statistica
+    (modello "sparse"): se il record manca, vale il default della statistica.
     """
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='personaggiostatisticabase_set')
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE, related_name="personaggi_che_hanno_base")
@@ -2328,31 +2329,21 @@ class Personaggio(Inventario):
     def get_valore_statistica_base(self, statistica):
         """
         Recupera il valore base di una statistica per questo personaggio.
-        Se non esiste il record, lo crea usando valore_base_predefinito.
+        Se non esiste il record, usa valore_base_predefinito senza creare righe.
         """
-        # Cerca il record esistente
         link = PersonaggioStatisticaBase.objects.filter(
             personaggio=self,
             statistica=statistica
         ).first()
-        
         if link:
             return link.valore_base
-        
-        # Se non esiste, crea il record con il valore predefinito
-        valore_predefinito = statistica.valore_base_predefinito
-        PersonaggioStatisticaBase.objects.create(
-            personaggio=self,
-            statistica=statistica,
-            valore_base=valore_predefinito
-        )
-        return valore_predefinito
+        return statistica.valore_base_predefinito
     
     @property
     def statistiche_base_dict(self):
         """
         Restituisce un dizionario {parametro: valore} per tutte le statistiche base.
-        Inizializza automaticamente i valori mancanti.
+        In caso di record mancante usa il valore_base_predefinito della statistica.
         """
         # Cache per evitare query multiple
         if hasattr(self, '_statistiche_base_cache'):
@@ -3815,27 +3806,10 @@ class CreazioneConsumabileInCorso(SyncableModel, models.Model):
 @receiver(post_save, sender=Personaggio)
 def inizializza_statistiche_base_personaggio(sender, instance, created, **kwargs):
     """
-    Quando viene creato un nuovo Personaggio, inizializza tutte le sue statistiche_base
-    con i valori predefiniti (valore_base_predefinito) di ogni Statistica.
+    Alla creazione personaggio non materializziamo più tutte le statistiche base.
+    Usiamo un modello sparse: i record vengono salvati solo quando diversi dal default.
     """
     if created:
-        # Recupera tutte le statistiche
-        tutte_statistiche = Statistica.objects.all()
-        
-        # Crea i record PersonaggioStatisticaBase per ogni statistica
-        records_da_creare = []
-        for stat in tutte_statistiche:
-            records_da_creare.append(
-                PersonaggioStatisticaBase(
-                    personaggio=instance,
-                    statistica=stat,
-                    valore_base=stat.valore_base_predefinito
-                )
-            )
-        
-        # Bulk create per performance
-        if records_da_creare:
-            PersonaggioStatisticaBase.objects.bulk_create(records_da_creare, ignore_conflicts=True)
         if instance.segno_zodiacale_id is None:
             segni_ids = list(SegnoZodiacale.objects.values_list("id", flat=True))
             if segni_ids:
