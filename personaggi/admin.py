@@ -52,6 +52,7 @@ from .models import (
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     UserSocialPreference,
     StatisticaContainer, StatisticaContainerItem,
+    Era, Prefettura, EraAbilita,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -821,19 +822,45 @@ class PersonaggioCarrieraMembershipInline(admin.TabularInline):
     fields = ("carriera", "carica", "data_da", "data_a")
     autocomplete_fields = ["carriera", "carica"]
 
+
+class EraAbilitaInline(admin.TabularInline):
+    model = EraAbilita
+    extra = 1
+    autocomplete_fields = ["abilita"]
+
+
+class PrefetturaInline(admin.TabularInline):
+    model = Prefettura
+    extra = 1
+
 @admin.register(Personaggio)
 class PersonaggioAdmin(A_Admin):
-    list_display = ('nome', 'proprietario', 'tipologia', 'segno_zodiacale', 'crediti', 'punti_caratteristica')
+    list_display = ('nome', 'proprietario', 'tipologia', 'era', 'prefettura', 'segno_zodiacale', 'crediti', 'punti_caratteristica')
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
-    list_filter = ('tipologia', 'segno_zodiacale'); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
+    list_filter = ('tipologia', 'era', 'prefettura', 'segno_zodiacale'); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
     inlines = [
         PersonaggioStatisticaBaseInline,
         PersonaggioKorpMembershipInline, PersonaggioCarrieraMembershipInline,
         PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, 
         CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline
     ]
-    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', 'segno_zodiacale', 'testo', 'impostazioni_ui', ('data_nascita', 'data_morte'))}),
+    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', ('era', 'prefettura'), 'segno_zodiacale', 'testo', 'impostazioni_ui', ('data_nascita', 'data_morte'))}),
                  ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))}))
+
+
+@admin.register(Era)
+class EraAdmin(admin.ModelAdmin):
+    list_display = ("nome", "ordine", "attiva")
+    list_editable = ("ordine", "attiva")
+    search_fields = ("nome", "descrizione_breve", "descrizione")
+    inlines = [EraAbilitaInline, PrefetturaInline]
+
+
+@admin.register(Prefettura)
+class PrefetturaAdmin(admin.ModelAdmin):
+    list_display = ("nome", "era", "ordine")
+    list_filter = ("era",)
+    search_fields = ("nome", "descrizione")
 
 
 @admin.register(Korp)

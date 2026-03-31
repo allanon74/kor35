@@ -1407,6 +1407,62 @@ class TipologiaPersonaggio(SyncableModel, models.Model):
     class Meta: verbose_name="Tipologia Personaggio"
     def __str__(self): return self.nome
 
+class Era(SyncableModel, models.Model):
+    nome = models.CharField(max_length=120, unique=True)
+    descrizione_breve = models.CharField(max_length=280, blank=True, default="")
+    descrizione = models.TextField(blank=True, default="")
+    abilita = models.ManyToManyField("Abilita", through="EraAbilita", related_name="ere_collegate", blank=True)
+    ordine = models.PositiveIntegerField(default=0)
+    attiva = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Era"
+        verbose_name_plural = "Ere"
+        ordering = ["ordine", "nome"]
+
+    def __str__(self):
+        return self.nome
+
+
+class Prefettura(SyncableModel, models.Model):
+    era = models.ForeignKey("Era", on_delete=models.CASCADE, related_name="prefetture")
+    nome = models.CharField(max_length=120)
+    descrizione = models.TextField(blank=True, default="")
+    ordine = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Prefettura"
+        verbose_name_plural = "Prefetture"
+        ordering = ["era__ordine", "ordine", "nome"]
+        unique_together = [["era", "nome"]]
+
+    def __str__(self):
+        return f"{self.nome} ({self.era.nome})"
+
+
+class EraAbilita(SyncableModel, models.Model):
+    era = models.ForeignKey("Era", on_delete=models.CASCADE, related_name="ere_abilita")
+    abilita = models.ForeignKey("Abilita", on_delete=models.CASCADE, related_name="abilita_era")
+    is_default = models.BooleanField(
+        default=False,
+        verbose_name="Assegna in automatico al personaggio",
+        help_text="Se attivo, l'abilità viene aggiunta quando il personaggio seleziona questa era.",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Abilità Era"
+        verbose_name_plural = "Abilità Ere"
+        ordering = ["ordine", "abilita__nome"]
+        unique_together = [["era", "abilita"]]
+
+    def __str__(self):
+        return f"{self.era.nome} -> {self.abilita.nome}"
+
+PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO = "acquisto"
+PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT = "era_default"
+
+
 def get_default_tipologia():
     """
     Default per FK tipologia su Personaggio (usato dalla migrazione 0019).
@@ -1892,6 +1948,8 @@ class Personaggio(Inventario):
     proprietario = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     tipologia = models.ForeignKey(TipologiaPersonaggio, on_delete=models.PROTECT, related_name="personaggi", default=get_default_tipologia)
     segno_zodiacale = models.ForeignKey("SegnoZodiacale", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
+    era = models.ForeignKey("Era", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
+    prefettura = models.ForeignKey("Prefettura", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
@@ -1932,6 +1990,57 @@ class Personaggio(Inventario):
     
     def modifica_pc(self, i, d): 
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+
+    def ha_eventi_iniziati(self):
+        now = timezone.now()
+        return self.eventi_partecipati.filter(data_inizio__lte=now).exists()
+
+    def can_edit_era_prefettura(self):
+        return not self.ha_eventi_iniziati()
+
+    def _sync_abilita_default_era(self):
+        # Rimuove solo le abilità "gratuite da era" già assegnate in precedenza.
+        PersonaggioAbilita.objects.filter(
+            personaggio=self,
+            origine=PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT,
+        ).delete()
+
+        if not self.era_id:
+            return
+
+        default_ids = EraAbilita.objects.filter(
+            era_id=self.era_id,
+            is_default=True,
+        ).values_list("abilita_id", flat=True)
+
+        possessed_ids = set(
+            PersonaggioAbilita.objects.filter(personaggio=self).values_list("abilita_id", flat=True)
+        )
+        nuovi_link = [
+            PersonaggioAbilita(
+                personaggio=self,
+                abilita_id=abilita_id,
+                origine=PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT,
+            )
+            for abilita_id in default_ids
+            if abilita_id not in possessed_ids
+        ]
+        if nuovi_link:
+            PersonaggioAbilita.objects.bulk_create(nuovi_link, ignore_conflicts=True)
+
+    def assegna_era_e_prefettura(self, era=None, prefettura=None, force=False):
+        if not force and not self.can_edit_era_prefettura():
+            raise ValidationError("Non è più possibile cambiare Era dopo l'inizio del primo evento.")
+
+        if prefettura and era and prefettura.era_id != era.id:
+            raise ValidationError("La prefettura selezionata non appartiene all'era indicata.")
+        if prefettura and not era:
+            raise ValidationError("Impossibile impostare una prefettura senza selezionare un'era.")
+
+        self.era = era
+        self.prefettura = prefettura
+        self.save(update_fields=["era", "prefettura", "updated_at"])
+        self._sync_abilita_default_era()
 
     def get_risorsa_corrente(self, sigla):
         """Punti correnti nel pool per una statistica contrassegnata come risorsa (es. FRT)."""
@@ -3107,6 +3216,14 @@ class PersonaggioAbilita(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
+    origine = models.CharField(
+        max_length=20,
+        choices=[
+            (PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO, "Acquisto"),
+            (PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT, "Era (default)"),
+        ],
+        default=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
+    )
 
     class Meta:
         unique_together = [["personaggio", "abilita"]]

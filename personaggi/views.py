@@ -40,10 +40,13 @@ from .models import (
     ConfigurazioneLivelloAura, Cerimoniale,
     StatoTimerAttivo,
     TipologiaPersonaggio,
+    Era, Prefettura, EraAbilita,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     UserSocialPreference,
     StatisticaContainer,
+    PersonaggioInfusione, PersonaggioCerimoniale,
+    PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
 )
 
 import uuid 
@@ -104,6 +107,7 @@ from .serializers import (
     StatisticaSerializer, TipologiaPersonaggioSerializer, 
     PersonaggioManageSerializer, SSOUserSerializer,
     ConsumabilePersonaggioSerializer,
+    EraSerializer, PrefetturaSerializer,
     KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
     CaricaKorpSerializer, CaricaCarrieraSerializer,
     PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
@@ -277,6 +281,19 @@ class AcquisisciAbilitaView(APIView):
             )
         except Abilita.DoesNotExist: return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
 
+        era_ids_abilita = set(EraAbilita.objects.filter(abilita_id=abilita.id).values_list("era_id", flat=True))
+        if era_ids_abilita:
+            if not personaggio.era_id:
+                return Response(
+                    {"error": "Questa abilità richiede la selezione di un'Era di provenienza."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if personaggio.era_id not in era_ids_abilita:
+                return Response(
+                    {"error": "Questa abilità appartiene a un'altra Era e non è acquistabile dal personaggio."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         if personaggio.abilita_possedute.filter(id=abilita_id).exists():
             return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -360,7 +377,11 @@ class AcquisisciAbilitaView(APIView):
             personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
             personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
 
-        personaggio.abilita_possedute.add(abilita)
+        PersonaggioAbilita.objects.create(
+            personaggio=personaggio,
+            abilita=abilita,
+            origine=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
+        )
         
         cache.delete(f"acquirable_skills_{personaggio.id}")
         
@@ -409,6 +430,9 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
 
         acquirable_skills = []
         for skill in master_skills_list:
+            era_ids_skill = set(EraAbilita.objects.filter(abilita_id=skill.id).values_list("era_id", flat=True))
+            if era_ids_skill and personaggio.era_id not in era_ids_skill:
+                continue
             meets_reqs = True
             for req in skill.abilita_requisito_set.all():
                 if char_scores.get(req.requisito.nome, 0) < req.valore:
@@ -813,6 +837,11 @@ class RevocaAbilitaView(APIView):
 
         abilita = pivot.abilita
         acquired_at = pivot.data_acquisizione
+        if pivot.origine != PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO:
+            return Response(
+                {"error": "Questa abilità è assegnata dall'Era e non può essere revocata singolarmente."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         event_in_corso, latest_event_start = get_event_context()
         if not is_modificabile_per_eventi(
@@ -3469,6 +3498,18 @@ class SegnoZodiacaleViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
+class EraViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Era.objects.filter(attiva=True).prefetch_related("prefetture").order_by("ordine", "nome")
+    serializer_class = EraSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+class PrefetturaViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Prefettura.objects.select_related("era").order_by("era__ordine", "ordine", "nome")
+    serializer_class = PrefetturaSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
 class CaricaKorpViewSet(viewsets.ModelViewSet):
     queryset = CaricaKorp.objects.select_related("korp").all().order_by("korp__nome", "ordine", "nome")
     serializer_class = CaricaKorpSerializer
@@ -3506,11 +3547,35 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_staff or user.is_superuser:
-            return Personaggio.objects.all().select_related('tipologia', 'proprietario').order_by('nome')
-        return Personaggio.objects.filter(proprietario=user).select_related('tipologia').order_by('nome')
+            return Personaggio.objects.all().select_related('tipologia', 'proprietario', 'era', 'prefettura').order_by('nome')
+        return Personaggio.objects.filter(proprietario=user).select_related('tipologia', 'era', 'prefettura').order_by('nome')
 
     def perform_create(self, serializer):
-        serializer.save(proprietario=self.request.user)
+        era = serializer.validated_data.get("era")
+        prefettura = serializer.validated_data.get("prefettura")
+        personaggio = serializer.save(proprietario=self.request.user, prefettura=None)
+        personaggio.assegna_era_e_prefettura(era=era, prefettura=prefettura, force=True)
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        user = self.request.user
+        era = serializer.validated_data.get("era", instance.era)
+        if "prefettura" in serializer.validated_data:
+            prefettura = serializer.validated_data.get("prefettura")
+        elif "era" in serializer.validated_data:
+            prefettura = None
+        else:
+            prefettura = instance.prefettura
+        changing_era_data = ("era" in serializer.validated_data) or ("prefettura" in serializer.validated_data)
+        if changing_era_data and not (user.is_staff or user.is_superuser):
+            if not instance.can_edit_era_prefettura():
+                raise serializers.ValidationError("Non puoi più modificare Era/Prefettura dopo l'inizio del primo evento.")
+        personaggio = serializer.save(prefettura=None if changing_era_data else instance.prefettura)
+        personaggio.assegna_era_e_prefettura(
+            era=era,
+            prefettura=prefettura,
+            force=bool(user.is_staff or user.is_superuser),
+        )
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def add_resources(self, request, pk=None):
@@ -3535,6 +3600,54 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             return Response({"error": "Tipo risorsa non valido"}, status=400)
             
         return Response({"status": "success", "new_val": val, "msg": "Risorse aggiornate"})
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    @transaction.atomic
+    def reset_personaggio(self, request, pk=None):
+        personaggio = self.get_object()
+        note = (request.data.get("reason") or "Reset personaggio staff").strip()
+
+        abilita_links = PersonaggioAbilita.objects.filter(
+            personaggio=personaggio,
+            origine=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
+        ).select_related("abilita")
+        infusioni_links = PersonaggioInfusione.objects.filter(personaggio=personaggio).select_related("infusione")
+        tessiture_links = PersonaggioTessitura.objects.filter(personaggio=personaggio).select_related("tessitura")
+        cerimoniali_links = PersonaggioCerimoniale.objects.filter(personaggio=personaggio).select_related("cerimoniale")
+
+        rimborso_pc = 0
+        rimborso_crediti = Decimal("0")
+
+        for link in abilita_links:
+            rimborso_pc += int(link.abilita.costo_pc or 0)
+            rimborso_crediti += Decimal(link.abilita.costo_crediti or 0)
+
+        for link in infusioni_links:
+            rimborso_crediti += Decimal(link.infusione.costo_crediti or 0)
+
+        for link in tessiture_links:
+            rimborso_crediti += Decimal(link.tessitura.costo_crediti or 0)
+
+        for link in cerimoniali_links:
+            rimborso_crediti += Decimal(link.cerimoniale.costo_crediti or 0)
+
+        PersonaggioAbilita.objects.filter(personaggio=personaggio).delete()
+        PersonaggioInfusione.objects.filter(personaggio=personaggio).delete()
+        PersonaggioTessitura.objects.filter(personaggio=personaggio).delete()
+        PersonaggioCerimoniale.objects.filter(personaggio=personaggio).delete()
+        PersonaggioModelloAura.objects.filter(personaggio=personaggio).delete()
+
+        if rimborso_pc:
+            personaggio.modifica_pc(rimborso_pc, f"Reset personaggio: rimborso PC ({note})")
+        if rimborso_crediti:
+            personaggio.modifica_crediti(rimborso_crediti, f"Reset personaggio: rimborso crediti ({note})")
+
+        personaggio.aggiungi_log(
+            f"Reset personaggio eseguito da staff. Rimborso: +{rimborso_pc} PC, +{rimborso_crediti} CR."
+        )
+        cache.delete(f"acquirable_skills_{personaggio.id}")
+        serializer = self.get_serializer(personaggio)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     # OAUTH2 SSO per OSSN
     

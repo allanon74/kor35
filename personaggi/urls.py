@@ -24,6 +24,7 @@ from .views import (AbilViewSet,
     AbilitaPunteggioViewSet, AbilitaPrerequisitoViewSet,
     MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
     PropostaTecnicaViewSet,
+    EraViewSet, PrefetturaViewSet,
     KorpViewSet, CarrieraViewSet, SegnoZodiacaleViewSet,
     CaricaKorpViewSet, CaricaCarrieraViewSet,
     PersonaggioKorpMembershipViewSet, PersonaggioCarrieraMembershipViewSet,
@@ -75,6 +76,8 @@ router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, bas
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')
+router.register(r'ere', EraViewSet, basename='ere')
+router.register(r'prefetture', PrefetturaViewSet, basename='prefetture')
 router.register(r'korp', KorpViewSet, basename='korp')
 router.register(r'carriere', CarrieraViewSet, basename='carriere')
 router.register(r'segni-zodiacali', SegnoZodiacaleViewSet, basename='segni-zodiacali')
