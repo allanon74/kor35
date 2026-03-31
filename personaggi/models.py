@@ -1425,8 +1425,26 @@ class Era(SyncableModel, models.Model):
         return self.nome
 
 
+class Regione(SyncableModel, models.Model):
+    nome = models.CharField(max_length=120, unique=True)
+    sigla = models.CharField(max_length=20, blank=True, default="")
+    descrizione = models.TextField(blank=True, default="")
+    abilita = models.ManyToManyField("Abilita", through="RegioneAbilita", related_name="regioni_collegate", blank=True)
+    ordine = models.PositiveIntegerField(default=0)
+    attiva = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Regione"
+        verbose_name_plural = "Regioni"
+        ordering = ["ordine", "nome"]
+
+    def __str__(self):
+        return self.nome
+
+
 class Prefettura(SyncableModel, models.Model):
     era = models.ForeignKey("Era", on_delete=models.CASCADE, related_name="prefetture")
+    regione = models.ForeignKey("Regione", on_delete=models.SET_NULL, related_name="prefetture", null=True, blank=True)
     nome = models.CharField(max_length=120)
     descrizione = models.TextField(blank=True, default="")
     ordine = models.PositiveIntegerField(default=0)
@@ -1460,8 +1478,29 @@ class EraAbilita(SyncableModel, models.Model):
     def __str__(self):
         return f"{self.era.nome} -> {self.abilita.nome}"
 
+
+class RegioneAbilita(SyncableModel, models.Model):
+    regione = models.ForeignKey("Regione", on_delete=models.CASCADE, related_name="regioni_abilita")
+    abilita = models.ForeignKey("Abilita", on_delete=models.CASCADE, related_name="abilita_regione")
+    is_default = models.BooleanField(
+        default=False,
+        verbose_name="Assegna in automatico al personaggio",
+        help_text="Se attivo, l'abilità viene aggiunta quando il personaggio seleziona una prefettura di questa regione.",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Abilità Regione"
+        verbose_name_plural = "Abilità Regioni"
+        ordering = ["ordine", "abilita__nome"]
+        unique_together = [["regione", "abilita"]]
+
+    def __str__(self):
+        return f"{self.regione.nome} -> {self.abilita.nome}"
+
 PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO = "acquisto"
 PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT = "era_default"
+PERSONAGGIO_ABILITA_ORIGINE_REGIONE_DEFAULT = "regione_default"
 
 
 def get_default_tipologia():
@@ -2001,32 +2040,53 @@ class Personaggio(Inventario):
         return not self.ha_eventi_iniziati()
 
     def _sync_abilita_default_era(self):
-        # Rimuove solo le abilità "gratuite da era" già assegnate in precedenza.
+        # Rimuove solo le abilità "gratuite da era/regione" già assegnate in precedenza.
         PersonaggioAbilita.objects.filter(
             personaggio=self,
-            origine=PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT,
+            origine__in=[PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT, PERSONAGGIO_ABILITA_ORIGINE_REGIONE_DEFAULT],
         ).delete()
-
-        if not self.era_id:
-            return
-
-        default_ids = EraAbilita.objects.filter(
-            era_id=self.era_id,
-            is_default=True,
-        ).values_list("abilita_id", flat=True)
 
         possessed_ids = set(
             PersonaggioAbilita.objects.filter(personaggio=self).values_list("abilita_id", flat=True)
         )
-        nuovi_link = [
-            PersonaggioAbilita(
-                personaggio=self,
-                abilita_id=abilita_id,
-                origine=PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT,
-            )
-            for abilita_id in default_ids
-            if abilita_id not in possessed_ids
-        ]
+
+        nuovi_link = []
+
+        if self.era_id:
+            default_era_ids = EraAbilita.objects.filter(
+                era_id=self.era_id,
+                is_default=True,
+            ).values_list("abilita_id", flat=True)
+            for abilita_id in default_era_ids:
+                if abilita_id in possessed_ids:
+                    continue
+                nuovi_link.append(
+                    PersonaggioAbilita(
+                        personaggio=self,
+                        abilita_id=abilita_id,
+                        origine=PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT,
+                    )
+                )
+                possessed_ids.add(abilita_id)
+
+        regione_id = getattr(self.prefettura, "regione_id", None)
+        if regione_id:
+            default_regione_ids = RegioneAbilita.objects.filter(
+                regione_id=regione_id,
+                is_default=True,
+            ).values_list("abilita_id", flat=True)
+            for abilita_id in default_regione_ids:
+                if abilita_id in possessed_ids:
+                    continue
+                nuovi_link.append(
+                    PersonaggioAbilita(
+                        personaggio=self,
+                        abilita_id=abilita_id,
+                        origine=PERSONAGGIO_ABILITA_ORIGINE_REGIONE_DEFAULT,
+                    )
+                )
+                possessed_ids.add(abilita_id)
+
         if nuovi_link:
             PersonaggioAbilita.objects.bulk_create(nuovi_link, ignore_conflicts=True)
 
@@ -2044,6 +2104,7 @@ class Personaggio(Inventario):
         self.prefettura_esterna = bool(prefettura_esterna)
         self.save(update_fields=["era", "prefettura", "prefettura_esterna", "updated_at"])
         self._sync_abilita_default_era()
+
 
     def get_risorsa_corrente(self, sigla):
         """Punti correnti nel pool per una statistica contrassegnata come risorsa (es. FRT)."""
@@ -3224,6 +3285,7 @@ class PersonaggioAbilita(SyncableModel, models.Model):
         choices=[
             (PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO, "Acquisto"),
             (PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT, "Era (default)"),
+            (PERSONAGGIO_ABILITA_ORIGINE_REGIONE_DEFAULT, "Regione (default)"),
         ],
         default=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
     )

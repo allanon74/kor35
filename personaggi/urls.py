@@ -24,7 +24,7 @@ from .views import (AbilViewSet,
     AbilitaPunteggioViewSet, AbilitaPrerequisitoViewSet,
     MyAuthToken, get_csrf_token, AbilitaAcquistabiliView,	
     PropostaTecnicaViewSet,
-    EraViewSet, PrefetturaViewSet,
+    EraViewSet, PrefetturaViewSet, RegioneViewSet,
     KorpViewSet, CarrieraViewSet, SegnoZodiacaleViewSet,
     CaricaKorpViewSet, CaricaCarrieraViewSet,
     PersonaggioKorpMembershipViewSet, PersonaggioCarrieraMembershipViewSet,
@@ -74,12 +74,14 @@ router.register(r'staff/inventari', views_staff.InventarioStaffViewSet, basename
 router.register(r'staff/tipologie-effetto', views_staff.TipologiaEffettoViewSet, basename='staff-tipologie-effetto')
 router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, basename='staff-effetti-casuali')
 router.register(r'staff/ere', views_staff.EraStaffViewSet, basename='staff-ere')
+router.register(r'staff/regioni', views_staff.RegioneStaffViewSet, basename='staff-regioni')
 router.register(r'staff/prefetture', views_staff.PrefetturaStaffViewSet, basename='staff-prefetture')
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')
 router.register(r'ere', EraViewSet, basename='ere')
 router.register(r'prefetture', PrefetturaViewSet, basename='prefetture')
+router.register(r'regioni', RegioneViewSet, basename='regioni')
 router.register(r'korp', KorpViewSet, basename='korp')
 router.register(r'carriere', CarrieraViewSet, basename='carriere')
 router.register(r'segni-zodiacali', SegnoZodiacaleViewSet, basename='segni-zodiacali')

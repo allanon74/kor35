@@ -40,7 +40,7 @@ from .models import (
     ConfigurazioneLivelloAura, Cerimoniale,
     StatoTimerAttivo,
     TipologiaPersonaggio,
-    Era, Prefettura, EraAbilita,
+    Era, Prefettura, EraAbilita, Regione, RegioneAbilita,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     UserSocialPreference,
@@ -107,7 +107,7 @@ from .serializers import (
     StatisticaSerializer, TipologiaPersonaggioSerializer, 
     PersonaggioManageSerializer, SSOUserSerializer,
     ConsumabilePersonaggioSerializer,
-    EraSerializer, PrefetturaSerializer,
+    EraSerializer, PrefetturaSerializer, RegioneSerializer,
     KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
     CaricaKorpSerializer, CaricaCarrieraSerializer,
     PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
@@ -293,6 +293,19 @@ class AcquisisciAbilitaView(APIView):
                     {"error": "Questa abilità appartiene a un'altra Era e non è acquistabile dal personaggio."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
+        regione_ids_abilita = set(RegioneAbilita.objects.filter(abilita_id=abilita.id).values_list("regione_id", flat=True))
+        if regione_ids_abilita:
+            regione_pg_id = getattr(getattr(personaggio, "prefettura", None), "regione_id", None)
+            if not regione_pg_id:
+                return Response(
+                    {"error": "Questa abilità richiede una regione di provenienza (tramite prefettura)."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if regione_pg_id not in regione_ids_abilita:
+                return Response(
+                    {"error": "Questa abilità appartiene a un'altra Regione e non è acquistabile dal personaggio."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         if personaggio.abilita_possedute.filter(id=abilita_id).exists():
             return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
@@ -432,6 +445,10 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         for skill in master_skills_list:
             era_ids_skill = set(EraAbilita.objects.filter(abilita_id=skill.id).values_list("era_id", flat=True))
             if era_ids_skill and personaggio.era_id not in era_ids_skill:
+                continue
+            regione_ids_skill = set(RegioneAbilita.objects.filter(abilita_id=skill.id).values_list("regione_id", flat=True))
+            regione_pg_id = getattr(getattr(personaggio, "prefettura", None), "regione_id", None)
+            if regione_ids_skill and regione_pg_id not in regione_ids_skill:
                 continue
             meets_reqs = True
             for req in skill.abilita_requisito_set.all():
@@ -3507,6 +3524,12 @@ class EraViewSet(viewsets.ReadOnlyModelViewSet):
 class PrefetturaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Prefettura.objects.select_related("era").order_by("era__ordine", "ordine", "nome")
     serializer_class = PrefetturaSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+
+class RegioneViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Regione.objects.filter(attiva=True).order_by("ordine", "nome")
+    serializer_class = RegioneSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 

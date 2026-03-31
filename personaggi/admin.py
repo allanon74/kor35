@@ -52,7 +52,7 @@ from .models import (
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     UserSocialPreference,
     StatisticaContainer, StatisticaContainerItem,
-    Era, Prefettura, EraAbilita,
+    Era, Prefettura, EraAbilita, Regione, RegioneAbilita,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -829,6 +829,12 @@ class EraAbilitaInline(admin.TabularInline):
     autocomplete_fields = ["abilita"]
 
 
+class RegioneAbilitaInline(admin.TabularInline):
+    model = RegioneAbilita
+    extra = 1
+    autocomplete_fields = ["abilita"]
+
+
 class PrefetturaInline(admin.TabularInline):
     model = Prefettura
     extra = 1
@@ -858,9 +864,17 @@ class EraAdmin(admin.ModelAdmin):
 
 @admin.register(Prefettura)
 class PrefetturaAdmin(admin.ModelAdmin):
-    list_display = ("nome", "era", "ordine")
-    list_filter = ("era",)
+    list_display = ("nome", "era", "regione", "ordine")
+    list_filter = ("era", "regione")
     search_fields = ("nome", "descrizione")
+
+
+@admin.register(Regione)
+class RegioneAdmin(admin.ModelAdmin):
+    list_display = ("nome", "sigla", "ordine", "attiva")
+    list_editable = ("sigla", "ordine", "attiva")
+    search_fields = ("nome", "sigla", "descrizione")
+    inlines = [RegioneAbilitaInline]
 
 
 @admin.register(Korp)

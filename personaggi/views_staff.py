@@ -18,7 +18,7 @@ from .models import (
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
     TipologiaEffetto, EffettoCasuale,
-    Era, Prefettura,
+    Era, Prefettura, Regione,
 )
 
 from .serializers import (
@@ -40,7 +40,7 @@ from .serializers import (
     AbilitaSimpleSerializer,
     InventarioStaffSerializer,
     TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
-    EraStaffSerializer, PrefetturaStaffSerializer,
+    EraStaffSerializer, PrefetturaStaffSerializer, RegioneStaffSerializer,
 )
 
 
@@ -509,6 +509,12 @@ class EraStaffViewSet(viewsets.ModelViewSet):
 class PrefetturaStaffViewSet(viewsets.ModelViewSet):
     queryset = Prefettura.objects.select_related("era").all().order_by("era__ordine", "ordine", "nome")
     serializer_class = PrefetturaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+
+class RegioneStaffViewSet(viewsets.ModelViewSet):
+    queryset = Regione.objects.all().order_by("ordine", "nome")
+    serializer_class = RegioneStaffSerializer
     permission_classes = [IsStaffOrMaster]
 
 
