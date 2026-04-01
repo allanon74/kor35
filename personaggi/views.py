@@ -1638,6 +1638,7 @@ class PersonaggioDetailView(APIView):
         if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
             return Response({"error": "Non hai il permesso di visualizzare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
         _sync_coma_state(personaggio)
+        personaggio.advance_recuperi_risorse()
         serializer = PersonaggioDetailSerializer(personaggio)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
@@ -3514,6 +3515,7 @@ class GameActionsViewSet(viewsets.ViewSet):
             
         # 4. Salva nel DB
         pg.statistiche_temporanee[stat_sigla] = nuovo_valore
+        base_sigla_for_regen = stat_sigla.split('_')[0]
 
         if stat_sigla == 'PV_CUR':
             ui = dict(pg.impostazioni_ui or {})
@@ -3546,6 +3548,8 @@ class GameActionsViewSet(viewsets.ViewSet):
             pg.impostazioni_ui = ui
 
         pg.save(update_fields=['statistiche_temporanee', 'impostazioni_ui', 'updated_at'])
+        pg.sync_recuperi_automatici(only_sigla=base_sigla_for_regen)
+        pg.advance_recuperi_risorse(only_sigla=base_sigla_for_regen)
         timers_state = _sync_coma_state(pg)
         
         return Response({

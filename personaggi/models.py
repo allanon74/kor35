@@ -1667,6 +1667,7 @@ class RecuperoRisorsaAttivo(SyncableModel, models.Model):
     interval_seconds = models.PositiveIntegerField(default=300)
     step = models.PositiveIntegerField(default=1)
     is_active = models.BooleanField(default=True, db_index=True)
+    pause_started_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = 'Recupero risorsa attivo'
@@ -2188,6 +2189,189 @@ class Personaggio(Inventario):
             'stat_nome': stat.nome,
         }
 
+    def _parse_recupero_item(self, raw):
+        if not isinstance(raw, dict):
+            return None
+        sigla = (raw.get('stat_sigla') or '').strip().upper()
+        if not sigla:
+            return None
+        interval = (
+            raw.get('interval_seconds')
+            or raw.get('ogni_secondi')
+            or raw.get('every_seconds')
+        )
+        if interval in (None, ''):
+            minutes = raw.get('interval_minutes') or raw.get('ogni_minuti') or raw.get('every_minutes')
+            if minutes not in (None, ''):
+                try:
+                    interval = int(minutes) * 60
+                except Exception:
+                    interval = None
+        try:
+            interval = max(1, int(interval))
+        except Exception:
+            return None
+        try:
+            step = max(1, int(raw.get('step', 1)))
+        except Exception:
+            step = 1
+        return {'stat_sigla': sigla, 'interval_seconds': interval, 'step': step}
+
+    def _get_cfg_recuperi_da_abilita(self):
+        out = {}
+        for ab in self.abilita_possedute.all():
+            spec = ab.recupero_risorsa
+            if not spec:
+                continue
+            entries = []
+            if isinstance(spec, list):
+                entries = spec
+            elif isinstance(spec, dict):
+                if isinstance(spec.get('rigenerazioni'), list):
+                    entries = spec.get('rigenerazioni') or []
+                else:
+                    entries = [spec]
+            for raw in entries:
+                item = self._parse_recupero_item(raw)
+                if not item:
+                    continue
+                sigla = item['stat_sigla']
+                row = out.get(sigla)
+                if not row:
+                    out[sigla] = {
+                        'interval_seconds': item['interval_seconds'],
+                        'step': item['step'],
+                        'fonti': [ab.nome],
+                    }
+                else:
+                    row['interval_seconds'] = min(row['interval_seconds'], item['interval_seconds'])
+                    row['step'] = max(row['step'], item['step'])
+                    row['fonti'].append(ab.nome)
+        return out
+
+    def _is_recupero_enabled_now(self, now_ts=None):
+        now_ts = now_ts or timezone.now()
+        # PNG: rigenerazione sempre attiva, anche fuori evento.
+        if self.tipologia and not self.tipologia.giocante:
+            return True
+        try:
+            return self.eventi_partecipati.filter(data_inizio__lte=now_ts, data_fine__gte=now_ts).exists()
+        except Exception:
+            return False
+
+    def get_risorsa_corrente_runtime(self, sigla):
+        stat = Statistica.objects.filter(sigla=sigla).first()
+        if not stat:
+            return 0
+        max_v = self.get_valore_statistica(sigla)
+        if max_v <= 0:
+            return 0
+        if stat.is_risorsa_pool:
+            return self.get_risorsa_corrente(sigla)
+        cur_key = f'{sigla}_CUR'
+        raw = (self.statistiche_temporanee or {}).get(cur_key, (self.statistiche_temporanee or {}).get(sigla))
+        if raw is None:
+            return max_v
+        try:
+            v = int(raw)
+        except (TypeError, ValueError):
+            return max_v
+        return max(0, min(v, max_v))
+
+    def _set_risorsa_corrente_runtime(self, sigla, valore):
+        stat = Statistica.objects.filter(sigla=sigla).first()
+        if stat and stat.is_risorsa_pool:
+            self._set_risorsa_corrente(sigla, valore)
+            return
+        key = f'{sigla}_CUR'
+        temp = dict(self.statistiche_temporanee or {})
+        temp[key] = valore
+        self.statistiche_temporanee = temp
+
+    def get_cfg_recuperi_automatici(self):
+        cfg = self._get_cfg_recuperi_da_abilita()
+        # Compatibilità con la configurazione legacy su Statistica (pool).
+        for st in Statistica.objects.filter(is_risorsa_pool=True, auto_recupero_attivo=True):
+            sigla = st.sigla
+            row = cfg.get(sigla)
+            interval_seconds = max(1, int(st.auto_recupero_intervallo_secondi or 1))
+            step = max(1, int(st.auto_recupero_step or 1))
+            if not row:
+                cfg[sigla] = {'interval_seconds': interval_seconds, 'step': step, 'fonti': ['statistica:auto']}
+            else:
+                row['interval_seconds'] = min(row['interval_seconds'], interval_seconds)
+                row['step'] = max(row['step'], step)
+        return cfg
+
+    def sync_recuperi_automatici(self, now_ts=None, only_sigla=None):
+        now_ts = now_ts or timezone.now()
+        cfg_map = self.get_cfg_recuperi_automatici()
+        if only_sigla:
+            only_sigla = only_sigla.upper()
+            cfg_map = {k: v for k, v in cfg_map.items() if k == only_sigla}
+
+        enabled_now = self._is_recupero_enabled_now(now_ts=now_ts)
+        rec_qs = RecuperoRisorsaAttivo.objects.filter(personaggio=self)
+        if only_sigla:
+            rec_qs = rec_qs.filter(statistica_sigla=only_sigla)
+        existing_map = {r.statistica_sigla: r for r in rec_qs}
+
+        all_sigle = set(existing_map.keys()) | set(cfg_map.keys())
+        for sigla in all_sigle:
+            cfg = cfg_map.get(sigla)
+            rec = existing_map.get(sigla)
+            max_v = self.get_valore_statistica(sigla)
+            cur = self.get_risorsa_corrente_runtime(sigla)
+            has_cfg = bool(cfg and max_v > 0 and cur < max_v)
+
+            if not has_cfg:
+                if rec and rec.is_active:
+                    rec.is_active = False
+                    rec.pause_started_at = None
+                    rec.save(update_fields=['is_active', 'pause_started_at', 'updated_at'])
+                continue
+
+            next_tick = now_ts + timedelta(seconds=cfg['interval_seconds'])
+            if rec:
+                updates = []
+                if not rec.is_active:
+                    rec.is_active = True
+                    rec.started_at = now_ts
+                    rec.next_tick_at = next_tick
+                    rec.pause_started_at = None if enabled_now else now_ts
+                    updates.extend(['is_active', 'started_at', 'next_tick_at', 'pause_started_at'])
+                if rec.interval_seconds != cfg['interval_seconds']:
+                    rec.interval_seconds = cfg['interval_seconds']
+                    updates.append('interval_seconds')
+                if rec.step != cfg['step']:
+                    rec.step = cfg['step']
+                    updates.append('step')
+                if enabled_now:
+                    if rec.pause_started_at:
+                        shift = now_ts - rec.pause_started_at
+                        rec.next_tick_at = rec.next_tick_at + shift
+                        rec.pause_started_at = None
+                        updates.extend(['next_tick_at', 'pause_started_at'])
+                else:
+                    if rec.pause_started_at is None:
+                        rec.pause_started_at = now_ts
+                        updates.append('pause_started_at')
+                if updates:
+                    updates.append('updated_at')
+                    rec.save(update_fields=updates)
+                continue
+
+            RecuperoRisorsaAttivo.objects.create(
+                personaggio=self,
+                statistica_sigla=sigla,
+                started_at=now_ts,
+                next_tick_at=next_tick,
+                interval_seconds=cfg['interval_seconds'],
+                step=cfg['step'],
+                is_active=True,
+                pause_started_at=None if enabled_now else now_ts,
+            )
+
     def sync_recupero_risorsa(self, sigla, now_ts=None):
         """
         Sincronizza start/stop del recupero automatico in base al valore corrente.
@@ -2241,6 +2425,7 @@ class Personaggio(Inventario):
         Applica i tick maturati (idempotente rispetto a now_ts) e ferma i timer a cap raggiunto.
         """
         now_ts = now_ts or timezone.now()
+        self.sync_recuperi_automatici(now_ts=now_ts, only_sigla=only_sigla)
         rec_qs = RecuperoRisorsaAttivo.objects.filter(personaggio=self, is_active=True)
         if only_sigla:
             rec_qs = rec_qs.filter(statistica_sigla=only_sigla)
@@ -2251,15 +2436,28 @@ class Personaggio(Inventario):
         out = {}
         changed = False
         rc = dict(self.risorse_consumabili or {})
+        temp_stats = dict(self.statistiche_temporanee or {})
 
         for rec in recs:
             sigla = rec.statistica_sigla
             max_v = self.get_valore_statistica(sigla)
-            cur = self.get_risorsa_corrente(sigla)
+            cur = self.get_risorsa_corrente_runtime(sigla)
             if max_v <= 0 or cur >= max_v:
                 rec.is_active = False
                 rec.save(update_fields=['is_active', 'updated_at'])
                 out[sigla] = {'active': False, 'valore_corrente': cur, 'valore_max': max_v}
+                continue
+
+            if rec.pause_started_at:
+                remaining = max(0, int((rec.next_tick_at - now_ts).total_seconds()))
+                out[sigla] = {
+                    'active': True,
+                    'paused': True,
+                    'valore_corrente': cur,
+                    'valore_max': max_v,
+                    'next_tick_at': rec.next_tick_at,
+                    'seconds_to_next_tick': remaining,
+                }
                 continue
 
             if now_ts < rec.next_tick_at:
@@ -2279,7 +2477,11 @@ class Personaggio(Inventario):
             rec.next_tick_at = rec.next_tick_at + timedelta(seconds=ticks * max(1, rec.interval_seconds))
 
             if delta > 0:
-                rc[sigla] = new_cur
+                stat = Statistica.objects.filter(sigla=sigla).first()
+                if stat and stat.is_risorsa_pool:
+                    rc[sigla] = new_cur
+                else:
+                    temp_stats[f'{sigla}_CUR'] = new_cur
                 changed = True
                 RisorsaStatisticaMovimento.objects.create(
                     personaggio=self,
@@ -2293,6 +2495,7 @@ class Personaggio(Inventario):
                 rec.save(update_fields=['next_tick_at', 'is_active', 'updated_at'])
                 out[sigla] = {
                     'active': rec.is_active,
+                    'paused': False,
                     'valore_corrente': new_cur,
                     'valore_max': max_v,
                     'next_tick_at': rec.next_tick_at if rec.is_active else None,
@@ -2301,6 +2504,7 @@ class Personaggio(Inventario):
                 rec.save(update_fields=['next_tick_at', 'updated_at'])
                 out[sigla] = {
                     'active': rec.is_active,
+                    'paused': False,
                     'valore_corrente': cur,
                     'valore_max': max_v,
                     'next_tick_at': rec.next_tick_at,
@@ -2308,19 +2512,22 @@ class Personaggio(Inventario):
 
         if changed:
             self.risorse_consumabili = rc
-            self.save(update_fields=['risorse_consumabili', 'updated_at'])
+            self.statistiche_temporanee = temp_stats
+            self.save(update_fields=['risorse_consumabili', 'statistiche_temporanee', 'updated_at'])
             if hasattr(self, '_modificatori_calcolati_cache'):
                 delattr(self, '_modificatori_calcolati_cache')
         return out
 
     def get_recuperi_risorsa_stato(self, now_ts=None):
         now_ts = now_ts or timezone.now()
+        self.sync_recuperi_automatici(now_ts=now_ts)
         out = {}
         recs = RecuperoRisorsaAttivo.objects.filter(personaggio=self, is_active=True)
         for rec in recs:
             remaining = max(0, int((rec.next_tick_at - now_ts).total_seconds()))
             out[rec.statistica_sigla] = {
                 'active': True,
+                'paused': bool(rec.pause_started_at),
                 'next_tick_at': rec.next_tick_at,
                 'seconds_to_next_tick': remaining,
                 'step': rec.step,
@@ -2355,7 +2562,7 @@ class Personaggio(Inventario):
             f'Consumo 1 punto {stat.nome} ({sigla}). Rimasti: {nuovo}/{max_v}.'
         )
         self._crea_effetti_temporanei_da_abilita(sigla)
-        self.sync_recupero_risorsa(sigla)
+        self.sync_recuperi_automatici(only_sigla=sigla)
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo
@@ -2399,7 +2606,7 @@ class Personaggio(Inventario):
             tipo_movimento=RISORSA_MOV_STAFF,
         )
         self.aggiungi_log(f'{desc}. Totale: {nuovo}/{max_v} (operatore: {who}).')
-        self.sync_recupero_risorsa(sigla)
+        self.sync_recuperi_automatici(only_sigla=sigla)
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo

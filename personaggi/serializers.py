@@ -1596,6 +1596,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     risorse_consumabili = serializers.JSONField(read_only=True)
     risorse_pool_ui = serializers.SerializerMethodField()
     effetti_risorsa_attivi = serializers.SerializerMethodField()
+    rigenerazioni_auto_ui = serializers.SerializerMethodField()
     
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
     can_edit_razza = serializers.SerializerMethodField()
@@ -1619,7 +1620,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'is_staff', 'modelli_aura',
             'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
-            'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi',
+            'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi', 'rigenerazioni_auto_ui',
             'impostazioni_ui',
             'can_edit_razza',
             'can_edit_era',
@@ -1909,6 +1910,25 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             }
             for e in qs
         ]
+
+    def get_rigenerazioni_auto_ui(self, obj):
+        rec_map = obj.get_recuperi_risorsa_stato()
+        out = []
+        for sigla, rec in rec_map.items():
+            max_v = obj.get_valore_statistica(sigla)
+            cur = obj.get_risorsa_corrente_runtime(sigla)
+            out.append({
+                'sigla': sigla,
+                'active': bool(rec.get('active')),
+                'paused': bool(rec.get('paused')),
+                'valore_corrente': cur,
+                'valore_max': max_v,
+                'next_tick_at': rec.get('next_tick_at').isoformat() if rec.get('next_tick_at') else None,
+                'seconds_to_next_tick': rec.get('seconds_to_next_tick'),
+                'step': rec.get('step'),
+                'interval_seconds': rec.get('interval_seconds'),
+            })
+        return sorted(out, key=lambda x: x['sigla'])
 
 
 class PersonaggioPublicSerializer(serializers.ModelSerializer):
