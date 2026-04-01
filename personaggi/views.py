@@ -3351,9 +3351,9 @@ def _to_iso(dt):
     return dt.isoformat()
 
 
-def _send_staff_death_message(personaggio):
+def _send_staff_death_message(personaggio, reason_text="Morte personaggio"):
     testo_msg = (
-        f"Il personaggio <b>{escape(personaggio.nome)}</b> ha raggiunto il termine del conto alla rovescia coma.<br>"
+        f"{escape(reason_text)}: <b>{escape(personaggio.nome)}</b><br>"
         f"Selezionare azione:<br>"
         f"[CONFIRM_DEATH:{personaggio.id}] [REVOKE_DEATH:{personaggio.id}]"
     )
@@ -3370,20 +3370,50 @@ def _send_staff_death_message(personaggio):
 def _sync_coma_state(personaggio):
     """
     Mantiene coerente lo stato coma lato server, con persistenza anche dopo chiusura app.
-    Ritorna il dict coma_state aggiornato.
+    Ritorna un dict con coma_state e rianimazione_state aggiornati.
     """
     ui = dict(personaggio.impostazioni_ui or {})
     coma = dict(ui.get("coma_state") or {})
-    if not coma:
-        return {}
-
+    rianimazione = dict(ui.get("rianimazione_state") or {})
     now = timezone.now()
+
+    # 1) Sync rianimazione
+    if rianimazione:
+        r_status = str(rianimazione.get("status") or "").lower()
+        r_end_at = _parse_dt_iso(rianimazione.get("end_at"))
+        if r_status in {"idle", "resolved"}:
+            ui.pop("rianimazione_state", None)
+            rianimazione = {}
+        elif personaggio.data_morte:
+            ui.pop("rianimazione_state", None)
+            rianimazione = {}
+        elif r_end_at and now >= r_end_at:
+            # Fine rianimazione: ripristina PV al massimo e riabilita la webapp
+            pv_max = max(0, int(personaggio.get_valore_statistica("PV") or 0))
+            temp_stats = dict(personaggio.statistiche_temporanee or {})
+            temp_stats["PV_CUR"] = pv_max
+            personaggio.statistiche_temporanee = temp_stats
+            ui.pop("rianimazione_state", None)
+            rianimazione = {}
+            personaggio.aggiungi_log("Rianimazione completata: PV ripristinati al massimo.")
+            personaggio.impostazioni_ui = ui
+            personaggio.save(update_fields=["statistiche_temporanee", "impostazioni_ui", "updated_at"])
+        elif r_end_at:
+            rianimazione["remaining_seconds"] = max(0, int((r_end_at - now).total_seconds()))
+            ui["rianimazione_state"] = rianimazione
+
+    # 2) Sync coma
     status_val = str(coma.get("status") or "").lower()
+    if not coma:
+        personaggio.impostazioni_ui = ui
+        personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
+        return {"coma_state": {}, "rianimazione_state": rianimazione}
+
     if status_val in {"idle", "resolved"}:
         ui.pop("coma_state", None)
         personaggio.impostazioni_ui = ui
         personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return {}
+        return {"coma_state": {}, "rianimazione_state": rianimazione}
 
     if personaggio.data_morte:
         coma["status"] = "dead"
@@ -3391,7 +3421,7 @@ def _sync_coma_state(personaggio):
         ui["coma_state"] = coma
         personaggio.impostazioni_ui = ui
         personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return coma
+        return {"coma_state": coma, "rianimazione_state": rianimazione}
 
     if coma.get("is_paused"):
         paused_at = _parse_dt_iso(coma.get("paused_at"))
@@ -3402,18 +3432,35 @@ def _sync_coma_state(personaggio):
         end_at = _parse_dt_iso(coma.get("end_at"))
         if end_at and now >= end_at:
             coma["remaining_seconds"] = 0
-            coma["status"] = "dead"
-            personaggio.data_morte = now
-            personaggio.aggiungi_log("Morte automatica per termine conto alla rovescia coma.")
-            _send_staff_death_message(personaggio)
-            personaggio.save(update_fields=["data_morte", "updated_at"])
+            death_mode = str(coma.get("death_mode") or "none").lower()
+            if death_mode == "fatale":
+                coma["status"] = "dead"
+                personaggio.data_morte = now
+                personaggio.aggiungi_log("Morte per colpo fatale al termine del coma.")
+                _send_staff_death_message(personaggio, reason_text="Morte per colpo fatale")
+                personaggio.save(update_fields=["data_morte", "updated_at"])
+            else:
+                tri_seconds = max(0, int(personaggio.get_valore_statistica("TRI") or 0))
+                r_end = now + timedelta(seconds=tri_seconds)
+                rianimazione = {
+                    "status": "counting",
+                    "started_at": _to_iso(now),
+                    "end_at": _to_iso(r_end),
+                    "remaining_seconds": tri_seconds,
+                    "tri_seconds": tri_seconds,
+                }
+                ui["rianimazione_state"] = rianimazione
+                ui.pop("coma_state", None)
+                personaggio.impostazioni_ui = ui
+                personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
+                return {"coma_state": {}, "rianimazione_state": rianimazione}
         elif end_at:
             coma["remaining_seconds"] = max(0, int((end_at - now).total_seconds()))
 
     ui["coma_state"] = coma
     personaggio.impostazioni_ui = ui
     personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-    return coma
+    return {"coma_state": coma, "rianimazione_state": rianimazione}
 
 
 class GameActionsViewSet(viewsets.ViewSet):
@@ -3483,9 +3530,11 @@ class GameActionsViewSet(viewsets.ViewSet):
                         'paused_at': None,
                         'remaining_seconds': tco_seconds,
                         'tco_seconds': tco_seconds,
+                        'death_mode': 'none',
                     }
             else:
                 coma = {}
+                ui.pop('rianimazione_state', None)
 
             if coma:
                 ui['coma_state'] = coma
@@ -3494,7 +3543,7 @@ class GameActionsViewSet(viewsets.ViewSet):
             pg.impostazioni_ui = ui
 
         pg.save(update_fields=['statistiche_temporanee', 'impostazioni_ui', 'updated_at'])
-        coma_state = _sync_coma_state(pg)
+        timers_state = _sync_coma_state(pg)
         
         return Response({
             'status': 'ok',
@@ -3503,7 +3552,8 @@ class GameActionsViewSet(viewsets.ViewSet):
             'max': val_max,
             # Ritorniamo tutto l'oggetto aggiornato per sicurezza
             'statistiche_temporanee': pg.statistiche_temporanee,
-            'coma_state': coma_state,
+            'coma_state': timers_state.get('coma_state', {}),
+            'rianimazione_state': timers_state.get('rianimazione_state', {}),
             'data_morte': pg.data_morte,
         })
 
@@ -3537,7 +3587,7 @@ class GameActionsViewSet(viewsets.ViewSet):
         action_name = (request.data.get('action') or '').strip().lower()
         if not char_id:
             return Response({'error': 'char_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
-        if action_name not in {'stabilize_start', 'stabilize_stop'}:
+        if action_name not in {'stabilize_start', 'stabilize_stop', 'fatal_hit', 'mortal_hit'}:
             return Response({'error': 'Azione non valida.'}, status=status.HTTP_400_BAD_REQUEST)
 
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
@@ -3550,6 +3600,35 @@ class GameActionsViewSet(viewsets.ViewSet):
             return Response({'error': 'Nessun conto alla rovescia coma attivo.'}, status=status.HTTP_400_BAD_REQUEST)
 
         now = timezone.now()
+        if action_name == 'fatal_hit':
+            coma['death_mode'] = 'fatale'
+            ui['coma_state'] = coma
+            pg.impostazioni_ui = ui
+            pg.save(update_fields=['impostazioni_ui', 'updated_at'])
+            timers_state = _sync_coma_state(pg)
+            return Response({
+                'status': 'ok',
+                'coma_state': timers_state.get('coma_state', {}),
+                'rianimazione_state': timers_state.get('rianimazione_state', {}),
+                'data_morte': pg.data_morte,
+            })
+
+        if action_name == 'mortal_hit':
+            now = timezone.now()
+            pg.data_morte = now
+            ui.pop('coma_state', None)
+            ui.pop('rianimazione_state', None)
+            pg.impostazioni_ui = ui
+            pg.save(update_fields=['data_morte', 'impostazioni_ui', 'updated_at'])
+            pg.aggiungi_log('Morte immediata per colpo mortale durante il coma.')
+            _send_staff_death_message(pg, reason_text="Morte immediata per colpo mortale")
+            return Response({
+                'status': 'ok',
+                'coma_state': {},
+                'rianimazione_state': {},
+                'data_morte': pg.data_morte,
+            })
+
         if action_name == 'stabilize_start':
             if coma.get('is_paused'):
                 return Response({'error': 'Timer già in pausa.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -3571,8 +3650,13 @@ class GameActionsViewSet(viewsets.ViewSet):
         ui['coma_state'] = coma
         pg.impostazioni_ui = ui
         pg.save(update_fields=['impostazioni_ui', 'updated_at'])
-        coma_state = _sync_coma_state(pg)
-        return Response({'status': 'ok', 'coma_state': coma_state, 'data_morte': pg.data_morte})
+        timers_state = _sync_coma_state(pg)
+        return Response({
+            'status': 'ok',
+            'coma_state': timers_state.get('coma_state', {}),
+            'rianimazione_state': timers_state.get('rianimazione_state', {}),
+            'data_morte': pg.data_morte,
+        })
 
     @action(detail=False, methods=['post'])
     def usa_oggetto(self, request):
@@ -3869,6 +3953,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             'remaining_seconds': 0,
             'forced_by_staff': True,
         }
+        ui.pop('rianimazione_state', None)
         personaggio.impostazioni_ui = ui
         personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'updated_at'])
         personaggio.aggiungi_log('Personaggio ucciso manualmente dallo staff.')
@@ -3881,6 +3966,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         personaggio.data_morte = None
         ui = dict(personaggio.impostazioni_ui or {})
         ui.pop('coma_state', None)
+        ui.pop('rianimazione_state', None)
         personaggio.impostazioni_ui = ui
         personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'updated_at'])
         personaggio.aggiungi_log('Personaggio rivissuto manualmente dallo staff.')
