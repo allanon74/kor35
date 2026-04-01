@@ -54,7 +54,7 @@ import qrcode
 import io
 import base64
 from django.utils.html import escape
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -398,6 +398,7 @@ class AcquisisciAbilitaView(APIView):
         
         cache.delete(f"acquirable_skills_{personaggio.id}")
         
+        _sync_coma_state(personaggio)
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -1634,6 +1635,7 @@ class PersonaggioDetailView(APIView):
         user = request.user
         if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
             return Response({"error": "Non hai il permesso di visualizzare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
+        _sync_coma_state(personaggio)
         serializer = PersonaggioDetailSerializer(personaggio)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
@@ -3323,6 +3325,97 @@ class StaffRisorsaIncrementView(APIView):
         })
 
 
+def _parse_dt_iso(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        raw = str(value).strip()
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(raw)
+        except Exception:
+            return None
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    return dt
+
+
+def _to_iso(dt):
+    if not dt:
+        return None
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    return dt.isoformat()
+
+
+def _send_staff_death_message(personaggio):
+    testo_msg = (
+        f"Il personaggio <b>{escape(personaggio.nome)}</b> ha raggiunto il termine del conto alla rovescia coma.<br>"
+        f"Selezionare azione:<br>"
+        f"[CONFIRM_DEATH:{personaggio.id}] [REVOKE_DEATH:{personaggio.id}]"
+    )
+    Messaggio.objects.create(
+        mittente=None,
+        destinatario_personaggio=None,
+        titolo=f"Morte personaggio: {personaggio.nome}",
+        testo=testo_msg,
+        tipo_messaggio=Messaggio.TIPO_STAFF,
+        is_staff_message=True,
+    )
+
+
+def _sync_coma_state(personaggio):
+    """
+    Mantiene coerente lo stato coma lato server, con persistenza anche dopo chiusura app.
+    Ritorna il dict coma_state aggiornato.
+    """
+    ui = dict(personaggio.impostazioni_ui or {})
+    coma = dict(ui.get("coma_state") or {})
+    if not coma:
+        return {}
+
+    now = timezone.now()
+    status_val = str(coma.get("status") or "").lower()
+    if status_val in {"idle", "resolved"}:
+        ui.pop("coma_state", None)
+        personaggio.impostazioni_ui = ui
+        personaggio.save(update_fields=["impostazioni_ui"])
+        return {}
+
+    if personaggio.data_morte:
+        coma["status"] = "dead"
+        coma["remaining_seconds"] = 0
+        ui["coma_state"] = coma
+        personaggio.impostazioni_ui = ui
+        personaggio.save(update_fields=["impostazioni_ui"])
+        return coma
+
+    if coma.get("is_paused"):
+        paused_at = _parse_dt_iso(coma.get("paused_at"))
+        if paused_at:
+            remaining = max(0, int(((_parse_dt_iso(coma.get("end_at")) or now) - paused_at).total_seconds()))
+            coma["remaining_seconds"] = remaining
+    else:
+        end_at = _parse_dt_iso(coma.get("end_at"))
+        if end_at and now >= end_at:
+            coma["remaining_seconds"] = 0
+            coma["status"] = "dead"
+            personaggio.data_morte = now
+            personaggio.aggiungi_log("Morte automatica per termine conto alla rovescia coma.")
+            _send_staff_death_message(personaggio)
+            personaggio.save(update_fields=["data_morte"])
+        elif end_at:
+            coma["remaining_seconds"] = max(0, int((end_at - now).total_seconds()))
+
+    ui["coma_state"] = coma
+    personaggio.impostazioni_ui = ui
+    personaggio.save(update_fields=["impostazioni_ui"])
+    return coma
+
+
 class GameActionsViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
@@ -3335,6 +3428,8 @@ class GameActionsViewSet(viewsets.ViewSet):
         max_val_param = request.data.get('max_value') 
         
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        if pg.data_morte:
+            return Response({'error': 'Personaggio morto: operazione non consentita.'}, status=status.HTTP_409_CONFLICT)
         
         # 1. Determina il Valore Massimo
         val_max = 0
@@ -3369,7 +3464,37 @@ class GameActionsViewSet(viewsets.ViewSet):
             
         # 4. Salva nel DB
         pg.statistiche_temporanee[stat_sigla] = nuovo_valore
-        pg.save(update_fields=['statistiche_temporanee']) 
+
+        if stat_sigla == 'PV_CUR':
+            ui = dict(pg.impostazioni_ui or {})
+            coma = dict(ui.get('coma_state') or {})
+            tco_seconds = max(0, int(pg.get_valore_statistica('TCO') or 0))
+            now = timezone.now()
+
+            if nuovo_valore <= 0:
+                is_active = coma.get('status') in {'counting', 'paused'}
+                if not is_active and not pg.data_morte:
+                    end_at = now + timedelta(seconds=tco_seconds)
+                    coma = {
+                        'status': 'counting',
+                        'started_at': _to_iso(now),
+                        'end_at': _to_iso(end_at),
+                        'is_paused': False,
+                        'paused_at': None,
+                        'remaining_seconds': tco_seconds,
+                        'tco_seconds': tco_seconds,
+                    }
+            else:
+                coma = {}
+
+            if coma:
+                ui['coma_state'] = coma
+            else:
+                ui.pop('coma_state', None)
+            pg.impostazioni_ui = ui
+
+        pg.save(update_fields=['statistiche_temporanee', 'impostazioni_ui'])
+        coma_state = _sync_coma_state(pg)
         
         return Response({
             'status': 'ok',
@@ -3377,7 +3502,9 @@ class GameActionsViewSet(viewsets.ViewSet):
             'current': nuovo_valore, 
             'max': val_max,
             # Ritorniamo tutto l'oggetto aggiornato per sicurezza
-            'statistiche_temporanee': pg.statistiche_temporanee 
+            'statistiche_temporanee': pg.statistiche_temporanee,
+            'coma_state': coma_state,
+            'data_morte': pg.data_morte,
         })
 
     @action(detail=False, methods=['post'])
@@ -3388,6 +3515,8 @@ class GameActionsViewSet(viewsets.ViewSet):
         if not char_id or not stat_sigla:
             return Response({'error': 'char_id e stat_sigla sono obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        if pg.data_morte:
+            return Response({'error': 'Personaggio morto: operazione non consentita.'}, status=status.HTTP_409_CONFLICT)
         try:
             with transaction.atomic():
                 nuovo = pg.consuma_risorsa_statistica(stat_sigla)
@@ -3401,6 +3530,49 @@ class GameActionsViewSet(viewsets.ViewSet):
             'valore_max': max_v,
             'risorse_consumabili': pg.risorse_consumabili,
         })
+
+    @action(detail=False, methods=['post'])
+    def coma_control(self, request):
+        char_id = request.data.get('char_id')
+        action_name = (request.data.get('action') or '').strip().lower()
+        if not char_id:
+            return Response({'error': 'char_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        if action_name not in {'stabilize_start', 'stabilize_stop'}:
+            return Response({'error': 'Azione non valida.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        if pg.data_morte:
+            return Response({'error': 'Personaggio morto: operazione non consentita.'}, status=status.HTTP_409_CONFLICT)
+
+        ui = dict(pg.impostazioni_ui or {})
+        coma = dict(ui.get('coma_state') or {})
+        if not coma:
+            return Response({'error': 'Nessun conto alla rovescia coma attivo.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        if action_name == 'stabilize_start':
+            if coma.get('is_paused'):
+                return Response({'error': 'Timer già in pausa.'}, status=status.HTTP_400_BAD_REQUEST)
+            coma['is_paused'] = True
+            coma['status'] = 'paused'
+            coma['paused_at'] = _to_iso(now)
+        else:
+            if not coma.get('is_paused'):
+                return Response({'error': 'Timer non in pausa.'}, status=status.HTTP_400_BAD_REQUEST)
+            paused_at = _parse_dt_iso(coma.get('paused_at')) or now
+            end_at = _parse_dt_iso(coma.get('end_at')) or now
+            if end_at > paused_at:
+                end_at = end_at + (now - paused_at)
+            coma['end_at'] = _to_iso(end_at)
+            coma['is_paused'] = False
+            coma['status'] = 'counting'
+            coma['paused_at'] = None
+
+        ui['coma_state'] = coma
+        pg.impostazioni_ui = ui
+        pg.save(update_fields=['impostazioni_ui'])
+        coma_state = _sync_coma_state(pg)
+        return Response({'status': 'ok', 'coma_state': coma_state, 'data_morte': pg.data_morte})
 
     @action(detail=False, methods=['post'])
     def usa_oggetto(self, request):
@@ -3683,6 +3855,36 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         cache.delete(f"acquirable_skills_{personaggio.id}")
         serializer = self.get_serializer(personaggio)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    @transaction.atomic
+    def kill(self, request, pk=None):
+        personaggio = self.get_object()
+        now = timezone.now()
+        personaggio.data_morte = now
+        ui = dict(personaggio.impostazioni_ui or {})
+        ui['coma_state'] = {
+            'status': 'dead',
+            'is_paused': False,
+            'remaining_seconds': 0,
+            'forced_by_staff': True,
+        }
+        personaggio.impostazioni_ui = ui
+        personaggio.save(update_fields=['data_morte', 'impostazioni_ui'])
+        personaggio.aggiungi_log('Personaggio ucciso manualmente dallo staff.')
+        return Response({'status': 'ok', 'message': 'Personaggio marcato come morto.'}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
+    @transaction.atomic
+    def revive(self, request, pk=None):
+        personaggio = self.get_object()
+        personaggio.data_morte = None
+        ui = dict(personaggio.impostazioni_ui or {})
+        ui.pop('coma_state', None)
+        personaggio.impostazioni_ui = ui
+        personaggio.save(update_fields=['data_morte', 'impostazioni_ui'])
+        personaggio.aggiungi_log('Personaggio rivissuto manualmente dallo staff.')
+        return Response({'status': 'ok', 'message': 'Personaggio rivissuto.'}, status=status.HTTP_200_OK)
     
     # OAUTH2 SSO per OSSN
     
