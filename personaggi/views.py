@@ -3360,7 +3360,8 @@ def _send_staff_death_message(personaggio, reason_text="Morte personaggio"):
         f"[CONFIRM_DEATH:{personaggio.id}] [REVOKE_DEATH:{personaggio.id}]"
     )
     Messaggio.objects.create(
-        mittente=None,
+        mittente=personaggio.proprietario,
+        mittente_personaggio=personaggio,
         destinatario_personaggio=None,
         titolo=f"Morte personaggio: {personaggio.nome}",
         testo=testo_msg,
@@ -3979,9 +3980,13 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         ui = dict(personaggio.impostazioni_ui or {})
         ui.pop('coma_state', None)
         ui.pop('rianimazione_state', None)
+        pv_max = max(0, int(personaggio.get_valore_statistica('PV') or 0))
+        temp_stats = dict(personaggio.statistiche_temporanee or {})
+        temp_stats['PV_CUR'] = pv_max
         personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'updated_at'])
-        personaggio.aggiungi_log('Personaggio rivissuto manualmente dallo staff.')
+        personaggio.statistiche_temporanee = temp_stats
+        personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'statistiche_temporanee', 'updated_at'])
+        personaggio.aggiungi_log(f'Personaggio rivissuto manualmente dallo staff. PV ripristinati a {pv_max}.')
         return Response({'status': 'ok', 'message': 'Personaggio rivissuto.'}, status=status.HTTP_200_OK)
     
     # OAUTH2 SSO per OSSN

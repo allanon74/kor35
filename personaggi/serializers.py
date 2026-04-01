@@ -2242,6 +2242,8 @@ class MessaggioSerializer(serializers.ModelSerializer):
     def get_mittente_nome(self, obj):
         if obj.mittente:
             return obj.mittente.username
+        if obj.mittente_personaggio:
+            return obj.mittente_personaggio.nome
         return None
     
     def get_mittente_is_staff(self, obj):
