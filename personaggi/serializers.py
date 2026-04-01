@@ -233,6 +233,7 @@ class StatisticaContainerItemSerializer(serializers.ModelSerializer):
             "id",
             "ordine",
             "dimensione",
+            "is_dipendente",
             "nascondi_se_negativa",
             "nascondi_se_zero",
             "nascondi_se_uno",

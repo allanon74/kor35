@@ -972,6 +972,11 @@ class StatisticaContainerItem(SyncableModel, models.Model):
         default=False,
         help_text="Se attivo, non renderizza la statistica quando il valore e 1.",
     )
+    is_dipendente = models.BooleanField(
+        default=False,
+        verbose_name="Dipendente",
+        help_text="Se attivo, questa statistica non abilita da sola la visibilita del contenitore.",
+    )
 
     class Meta:
         verbose_name = "Statistica in contenitore"
