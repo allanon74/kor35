@@ -32,7 +32,7 @@ from .models import (
     STATO_TRANSAZIONE_IN_ATTESA,
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
-    Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
+    Cerimoniale, StatoTimerAttivo, TimerRuntime, MattoneStatistica, abilita_tier as AbilitaTier,
     TipologiaEffetto, EffettoCasuale,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
@@ -1597,7 +1597,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     risorse_pool_ui = serializers.SerializerMethodField()
     effetti_risorsa_attivi = serializers.SerializerMethodField()
     rigenerazioni_auto_ui = serializers.SerializerMethodField()
-    
+    unified_timers = serializers.SerializerMethodField()
+
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
     can_edit_razza = serializers.SerializerMethodField()
     can_edit_era = serializers.SerializerMethodField()
@@ -1621,6 +1622,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
             'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi', 'rigenerazioni_auto_ui',
+            'unified_timers',
             'impostazioni_ui',
             'can_edit_razza',
             'can_edit_era',
@@ -1932,6 +1934,40 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
                 'abilita_nomi': rec.get('abilita_nomi') or [],
             })
         return sorted(out, key=lambda x: x['sigla'])
+
+    def get_unified_timers(self, personaggio):
+        """TimerRuntime attivi del personaggio (widget unificato)."""
+        from .models import TIMER_STATUS_ACTIVE, TIMER_STATUS_PAUSED, TimerRuntime
+
+        now = timezone.now()
+        qs = (
+            TimerRuntime.objects.filter(
+                personaggio=personaggio,
+                status__in=[TIMER_STATUS_ACTIVE, TIMER_STATUS_PAUSED],
+                end_at__gt=now,
+            )
+            .order_by("end_at")
+        )
+        out = []
+        for t in qs:
+            sp = t.scope_payload or {}
+            out.append(
+                {
+                    "id": str(t.id),
+                    "nome": t.label,
+                    "data_fine": t.end_at.isoformat(),
+                    "alert_suono": bool(sp.get("alert_suono", False)),
+                    "notifica_push": bool(sp.get("notifica_push", False)),
+                    "messaggio_in_app": bool(sp.get("messaggio_in_app", True)),
+                    "render_slot": t.render_slot,
+                    "scope_kind": t.scope_kind,
+                    "action_key": t.action_key,
+                    "is_master_timer": t.is_master_timer,
+                    "source_kind": t.source_kind,
+                    "unified": True,
+                }
+            )
+        return out
 
 
 class PersonaggioPublicSerializer(serializers.ModelSerializer):
@@ -2443,6 +2479,48 @@ class StatoTimerSerializer(serializers.ModelSerializer):
     class Meta:
         model = StatoTimerAttivo
         fields = ['id', 'nome', 'data_fine', 'alert_suono', 'notifica_push', 'messaggio_in_app']
+
+
+class TimerRuntimeActiveSerializer(serializers.ModelSerializer):
+    """
+    Formato compatibile con StatoTimerSerializer per overlay (nome, data_fine, flags).
+    """
+
+    nome = serializers.CharField(source="label", read_only=True)
+    data_fine = serializers.DateTimeField(source="end_at", read_only=True)
+    alert_suono = serializers.SerializerMethodField()
+    notifica_push = serializers.SerializerMethodField()
+    messaggio_in_app = serializers.SerializerMethodField()
+    unified = serializers.BooleanField(default=True, read_only=True)
+
+    class Meta:
+        model = TimerRuntime
+        fields = [
+            "id",
+            "nome",
+            "data_fine",
+            "alert_suono",
+            "notifica_push",
+            "messaggio_in_app",
+            "render_slot",
+            "scope_kind",
+            "action_key",
+            "is_master_timer",
+            "source_kind",
+            "unified",
+        ]
+
+    def _sp(self, obj):
+        return obj.scope_payload or {}
+
+    def get_alert_suono(self, obj):
+        return bool(self._sp(obj).get("alert_suono", False))
+
+    def get_notifica_push(self, obj):
+        return bool(self._sp(obj).get("notifica_push", False))
+
+    def get_messaggio_in_app(self, obj):
+        return bool(self._sp(obj).get("messaggio_in_app", True))
 
 
 class OggettoBaseStatisticaBaseSerializer(serializers.ModelSerializer):

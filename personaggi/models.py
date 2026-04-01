@@ -1848,7 +1848,128 @@ class StatoTimerAttivo(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.tipologia.nome} - Fine: {self.data_fine}"
-            
+
+
+# --- Timer unificato (runtime sincronizzabile tra Master/Edge) ---
+TIMER_STATUS_ACTIVE = "active"
+TIMER_STATUS_PAUSED = "paused"
+TIMER_STATUS_DONE = "done"
+TIMER_STATUS_CANCELLED = "cancelled"
+
+TIMER_STATUS_CHOICES = [
+    (TIMER_STATUS_ACTIVE, "Attivo"),
+    (TIMER_STATUS_PAUSED, "In pausa"),
+    (TIMER_STATUS_DONE, "Completato"),
+    (TIMER_STATUS_CANCELLED, "Annullato"),
+]
+
+# Slot di rendering lato client (widget unificato)
+TIMER_RENDER_GAME_PANEL = "game_panel"
+TIMER_RENDER_GLOBAL_OVERLAY = "global_overlay"
+TIMER_RENDER_CRAFTING_TAB = "crafting_tab"
+TIMER_RENDER_STAFF_DASHBOARD = "staff_dashboard"
+
+# Scope destinatari (estendibile)
+TIMER_SCOPE_OWNER_ONLY = "owner_only"
+TIMER_SCOPE_ALL = "all"
+TIMER_SCOPE_EVENT_PARTICIPANTS = "event_participants"
+TIMER_SCOPE_GUILD = "guild"
+TIMER_SCOPE_REGION = "region"
+
+TIMER_SCOPE_KIND_CHOICES = [
+    (TIMER_SCOPE_OWNER_ONLY, "Solo owner"),
+    (TIMER_SCOPE_ALL, "Tutti"),
+    (TIMER_SCOPE_EVENT_PARTICIPANTS, "Partecipanti evento"),
+    (TIMER_SCOPE_GUILD, "Gilda"),
+    (TIMER_SCOPE_REGION, "Regione"),
+]
+
+# Riferimenti sorgente legacy / dominio
+TIMER_SOURCE_QR_TIPOLOGIA = "qr_tipologia"
+TIMER_SOURCE_RECUPERO_RISORSA = "recupero_risorsa"
+TIMER_SOURCE_COMA = "coma"
+TIMER_SOURCE_RIANIMAZIONE = "rianimazione"
+TIMER_SOURCE_FORGIATURA = "forgiatura"
+TIMER_SOURCE_CREAZIONE_CONSUMABILE = "creazione_consumabile"
+
+
+class TimerRuntime(SyncableModel, models.Model):
+    """
+    Runtime unico per countdown e azioni a scadenza (sincronizzabile LWW su updated_at).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="timer_runtimes",
+        db_index=True,
+    )
+
+    end_at = models.DateTimeField(db_index=True)
+    status = models.CharField(
+        max_length=16,
+        choices=TIMER_STATUS_CHOICES,
+        default=TIMER_STATUS_ACTIVE,
+        db_index=True,
+    )
+
+    render_slot = models.CharField(max_length=64, default=TIMER_RENDER_GLOBAL_OVERLAY, db_index=True)
+    scope_kind = models.CharField(
+        max_length=32,
+        choices=TIMER_SCOPE_KIND_CHOICES,
+        default=TIMER_SCOPE_ALL,
+    )
+    scope_payload = models.JSONField(default=dict, blank=True)
+
+    label = models.CharField(max_length=200, default="")
+    description = models.TextField(blank=True, default="")
+
+    action_key = models.CharField(max_length=64, default="noop")
+    action_payload = models.JSONField(default=dict, blank=True)
+
+    is_master_timer = models.BooleanField(default=False, db_index=True)
+
+    source_kind = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    source_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+
+    started_at = models.DateTimeField(default=timezone.now)
+    pause_started_at = models.DateTimeField(null=True, blank=True)
+    accumulated_pause_seconds = models.PositiveIntegerField(default=0)
+
+    action_executed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Ultima esecuzione idempotente dell'azione a scadenza.",
+    )
+
+    class Meta:
+        verbose_name = "Timer runtime"
+        verbose_name_plural = "Timer runtime"
+        indexes = [
+            models.Index(fields=["personaggio", "status", "end_at"]),
+            models.Index(fields=["is_master_timer", "status"]),
+            models.Index(fields=["render_slot", "status"]),
+            models.Index(fields=["status", "end_at"]),
+            models.Index(fields=["source_kind", "source_id"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_kind", "source_id"],
+                condition=Q(source_id__gt="")
+                & Q(status__in=[TIMER_STATUS_ACTIVE, TIMER_STATUS_PAUSED]),
+                name="uniq_timer_runtime_source_active",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.label or self.action_key} → {self.end_at} ({self.status})"
+
+
 class ClasseOggetto(SyncableModel, models.Model):
     nome = models.CharField(max_length=50, unique=True)
     max_mod_totali = models.IntegerField(default=0, verbose_name="Max Mod Totali")
@@ -4401,6 +4522,15 @@ class CreazioneConsumabileInCorso(SyncableModel, models.Model):
 # ============================================================================
 # SIGNALS - Inizializzazione automatica
 # ============================================================================
+
+
+@receiver(post_save, sender=RecuperoRisorsaAttivo)
+def mirror_recupero_risorsa_timer_runtime(sender, instance, **kwargs):
+    """Mirror write-through su TimerRuntime per il countdown unificato."""
+    from .timer_adapters import sync_recupero_risorsa_timer
+
+    sync_recupero_risorsa_timer(instance)
+
 
 @receiver(post_save, sender=Personaggio)
 def inizializza_statistiche_base_personaggio(sender, instance, created, **kwargs):

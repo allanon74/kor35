@@ -13,6 +13,9 @@ from rest_framework.decorators import action
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
+    TimerRuntime,
+    TIMER_STATUS_ACTIVE,
+    TIMER_STATUS_PAUSED,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
@@ -41,6 +44,7 @@ from .serializers import (
     InventarioStaffSerializer,
     TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
     EraStaffSerializer, PrefetturaStaffSerializer, RegioneStaffSerializer,
+    TimerRuntimeActiveSerializer,
 )
 
 
@@ -558,3 +562,25 @@ class SelezionaEffettoCasualeView(APIView):
         if 'consumabile_creato' in risultato:
             out['consumabile_creato_id'] = risultato['consumabile_creato'].id
         return Response(out, status=status.HTTP_200_OK)
+
+
+class MasterTimerViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Timer contrassegnati is_master_timer (es. QR globali) per dashboard staff / futura UI dedicata.
+    """
+
+    permission_classes = [IsStaffOrMaster]
+    serializer_class = TimerRuntimeActiveSerializer
+    pagination_class = AbilitaStaffPagination
+
+    def get_queryset(self):
+        now = timezone.now()
+        return (
+            TimerRuntime.objects.filter(
+                is_master_timer=True,
+                status__in=[TIMER_STATUS_ACTIVE, TIMER_STATUS_PAUSED],
+                end_at__gt=now,
+            )
+            .select_related("personaggio")
+            .order_by("end_at")
+        )

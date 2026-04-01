@@ -1305,8 +1305,12 @@ class QrCodeDetailView(APIView):
             # Registriamo l'attivazione per questo QR specifico
             config.ultima_attivazione = oggi
             config.save()
-        
+
         stato.save()
+
+        from .timer_adapters import sync_qr_global_timer_from_stato
+
+        sync_qr_global_timer_from_stato(stato, config.tipologia)
 
         # BROADCAST via WebSocket
         channel_layer = get_channel_layer()
@@ -3376,6 +3380,12 @@ def _sync_coma_state(personaggio):
     Mantiene coerente lo stato coma lato server, con persistenza anche dopo chiusura app.
     Ritorna un dict con coma_state e rianimazione_state aggiornati.
     """
+    from .timer_adapters import sync_coma_and_rianimazione_timers
+
+    def _finish(result):
+        sync_coma_and_rianimazione_timers(personaggio)
+        return result
+
     ui = dict(personaggio.impostazioni_ui or {})
     coma = dict(ui.get("coma_state") or {})
     rianimazione = dict(ui.get("rianimazione_state") or {})
@@ -3411,13 +3421,13 @@ def _sync_coma_state(personaggio):
     if not coma:
         personaggio.impostazioni_ui = ui
         personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return {"coma_state": {}, "rianimazione_state": rianimazione}
+        return _finish({"coma_state": {}, "rianimazione_state": rianimazione})
 
     if status_val in {"idle", "resolved"}:
         ui.pop("coma_state", None)
         personaggio.impostazioni_ui = ui
         personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return {"coma_state": {}, "rianimazione_state": rianimazione}
+        return _finish({"coma_state": {}, "rianimazione_state": rianimazione})
 
     if personaggio.data_morte:
         coma["status"] = "dead"
@@ -3425,7 +3435,7 @@ def _sync_coma_state(personaggio):
         ui["coma_state"] = coma
         personaggio.impostazioni_ui = ui
         personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-        return {"coma_state": coma, "rianimazione_state": rianimazione}
+        return _finish({"coma_state": coma, "rianimazione_state": rianimazione})
 
     if coma.get("is_paused"):
         paused_at = _parse_dt_iso(coma.get("paused_at"))
@@ -3457,14 +3467,14 @@ def _sync_coma_state(personaggio):
                 ui.pop("coma_state", None)
                 personaggio.impostazioni_ui = ui
                 personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-                return {"coma_state": {}, "rianimazione_state": rianimazione}
+                return _finish({"coma_state": {}, "rianimazione_state": rianimazione})
         elif end_at:
             coma["remaining_seconds"] = max(0, int((end_at - now).total_seconds()))
 
     ui["coma_state"] = coma
     personaggio.impostazioni_ui = ui
     personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
-    return {"coma_state": coma, "rianimazione_state": rianimazione}
+    return _finish({"coma_state": coma, "rianimazione_state": rianimazione})
 
 
 class GameActionsViewSet(viewsets.ViewSet):
@@ -3749,12 +3759,56 @@ class GameActionsViewSet(viewsets.ViewSet):
         return Response(serializer.data)
     
 class ActiveTimersViewSet(viewsets.ReadOnlyModelViewSet):
-    """API per recuperare i timer attualmente attivi al caricamento dell'app"""
-    serializer_class = StatoTimerSerializer
+    """
+    API timer attivi: unisce legacy (StatoTimerAttivo) e TimerRuntime,
+    evitando duplicati sui timer QR già mirrorati.
+    """
 
-    def get_queryset(self):
-        # Restituisce solo i timer la cui data di fine è nel futuro
-        return StatoTimerAttivo.objects.filter(data_fine__gt=timezone.now())
+    queryset = StatoTimerAttivo.objects.none()
+    serializer_class = StatoTimerSerializer
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        from django.db.models import Q
+
+        from .models import (
+            TIMER_SOURCE_QR_TIPOLOGIA,
+            TIMER_STATUS_ACTIVE,
+            TIMER_STATUS_PAUSED,
+            TimerRuntime,
+        )
+        from .serializers import StatoTimerSerializer, TimerRuntimeActiveSerializer
+        from .timer_adapters import tipologia_timer_source_id
+
+        now = timezone.now()
+        mirrored_tipologia = set(
+            TimerRuntime.objects.filter(
+                source_kind=TIMER_SOURCE_QR_TIPOLOGIA,
+                end_at__gt=now,
+                status__in=[TIMER_STATUS_ACTIVE, TIMER_STATUS_PAUSED],
+            ).values_list("source_id", flat=True)
+        )
+
+        legacy_qs = (
+            StatoTimerAttivo.objects.filter(data_fine__gt=now)
+            .select_related("tipologia")
+        )
+        legacy_items = []
+        for s in legacy_qs:
+            if tipologia_timer_source_id(s.tipologia) in mirrored_tipologia:
+                continue
+            legacy_items.append(s)
+        legacy_data = StatoTimerSerializer(legacy_items, many=True).data
+
+        unified_qs = TimerRuntime.objects.filter(
+            end_at__gt=now,
+            status__in=[TIMER_STATUS_ACTIVE, TIMER_STATUS_PAUSED],
+        ).filter(
+            Q(personaggio__isnull=True) | Q(personaggio__proprietario=request.user)
+        )
+        unified_data = TimerRuntimeActiveSerializer(unified_qs, many=True).data
+
+        return Response(legacy_data + unified_data)
     
 class StatisticaViewSet(viewsets.ReadOnlyModelViewSet):
     """Visualizza l'elenco delle statistiche tecniche disponibili"""

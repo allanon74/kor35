@@ -45,7 +45,7 @@ from .models import (
     InfusioneStatistica,
     ConfigurazioneLivelloAura,
     Cerimoniale, CerimonialeCaratteristica,
-    TipologiaTimer, TimerQrCode, StatoTimerAttivo,
+    TipologiaTimer, TimerQrCode, StatoTimerAttivo, TimerRuntime,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
@@ -708,6 +708,24 @@ class StatoTimerAttivoAdmin(admin.ModelAdmin):
     def secondi_rimanenti_display(self, obj):
         return f"{obj.secondi_rimanenti} secondi"
     secondi_rimanenti_display.short_description = "Tempo Rimasto"
+
+
+@admin.register(TimerRuntime)
+class TimerRuntimeAdmin(admin.ModelAdmin):
+    list_display = (
+        "label",
+        "personaggio",
+        "end_at",
+        "status",
+        "render_slot",
+        "action_key",
+        "is_master_timer",
+        "source_kind",
+        "source_id",
+    )
+    list_filter = ("status", "render_slot", "is_master_timer", "action_key")
+    search_fields = ("label", "source_id", "sync_id")
+    readonly_fields = ("sync_id", "created_at", "updated_at", "action_executed_at")
 
 
 @admin.register(QrCode)

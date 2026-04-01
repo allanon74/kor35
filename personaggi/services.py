@@ -896,7 +896,11 @@ class GestioneCraftingService:
                 slot_target=slot_target,
                 destinatario_finale=destinatario_finale
             )
-            
+
+        from .timer_adapters import sync_forgiatura_timer
+
+        sync_forgiatura_timer(forgiatura)
+
         return forgiatura
 
     @staticmethod
@@ -942,6 +946,11 @@ class GestioneCraftingService:
                 nuovo_oggetto.is_equipaggiato = True
                 nuovo_oggetto.save()
             
+            from .models import TIMER_SOURCE_FORGIATURA
+            from .timer_adapters import cancel_timer_by_source
+
+            cancel_timer_by_source(TIMER_SOURCE_FORGIATURA, str(task.sync_id))
+
             task.delete()
             
             # Log
@@ -1080,6 +1089,11 @@ class CreazioneConsumabileService:
                 data_fine_creazione=data_fine,
                 completata=False,
             )
+
+        from .timer_adapters import sync_creazione_consumabile_timer
+
+        sync_creazione_consumabile_timer(cc)
+
         return True, {
             "creazione_id": cc.id,
             "data_fine_creazione": data_fine.isoformat(),
@@ -1136,6 +1150,12 @@ class CreazioneConsumabileService:
             )
             creazione.completata = True
             creazione.save()
+
+            from .models import TIMER_SOURCE_CREAZIONE_CONSUMABILE
+            from .timer_adapters import cancel_timer_by_source
+
+            cancel_timer_by_source(TIMER_SOURCE_CREAZIONE_CONSUMABILE, str(creazione.sync_id))
+
         return True, {"consumabile_creato": True, "utilizzi": utilizzi, "data_scadenza": data_scadenza.isoformat()}
 
     

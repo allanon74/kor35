@@ -92,6 +92,7 @@ def revision_personaggio_detail(personaggio_pk: int) -> Optional[datetime]:
         PersonaggioTessitura,
         PuntiCaratteristicaMovimento,
         RecuperoRisorsaAttivo,
+        TimerRuntime,
         RichiestaAssemblaggio,
         RisorsaStatisticaMovimento,
         Statistica,
@@ -126,6 +127,7 @@ def revision_personaggio_detail(personaggio_pk: int) -> Optional[datetime]:
     pcm = pivot_max(PuntiCaratteristicaMovimento)
     rsm = pivot_max(RisorsaStatisticaMovimento)
     rra = pivot_max(RecuperoRisorsaAttivo)
+    trt = pivot_max(TimerRuntime)
     ert = pivot_max(EffettoRisorsaTemporaneo)
     cc = pivot_max(CreazioneConsumabileInCorso)
     cons = pivot_max(ConsumabilePersonaggio)
@@ -172,6 +174,7 @@ def revision_personaggio_detail(personaggio_pk: int) -> Optional[datetime]:
         pcm,
         rsm,
         rra,
+        trt,
         ert,
         cc,
         cons,
