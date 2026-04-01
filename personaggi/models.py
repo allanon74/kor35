@@ -960,6 +960,18 @@ class StatisticaContainerItem(SyncableModel, models.Model):
         default="s",
         help_text="Dimensione di rendering della statistica nel contenitore.",
     )
+    nascondi_se_negativa = models.BooleanField(
+        default=True,
+        help_text="Se attivo, non renderizza la statistica quando il valore e negativo.",
+    )
+    nascondi_se_zero = models.BooleanField(
+        default=True,
+        help_text="Se attivo, non renderizza la statistica quando il valore e 0.",
+    )
+    nascondi_se_uno = models.BooleanField(
+        default=False,
+        help_text="Se attivo, non renderizza la statistica quando il valore e 1.",
+    )
 
     class Meta:
         verbose_name = "Statistica in contenitore"

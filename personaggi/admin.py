@@ -634,7 +634,14 @@ class StatisticaContainerItemInline(admin.TabularInline):
     model = StatisticaContainerItem
     extra = 0
     autocomplete_fields = ["statistica"]
-    fields = ("statistica", "ordine", "dimensione")
+    fields = (
+        "statistica",
+        "ordine",
+        "dimensione",
+        "nascondi_se_negativa",
+        "nascondi_se_zero",
+        "nascondi_se_uno",
+    )
     ordering = ("ordine",)
 
 

@@ -229,7 +229,15 @@ class StatisticaContainerItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StatisticaContainerItem
-        fields = ("id", "ordine", "dimensione", "statistica_id")
+        fields = (
+            "id",
+            "ordine",
+            "dimensione",
+            "nascondi_se_negativa",
+            "nascondi_se_zero",
+            "nascondi_se_uno",
+            "statistica_id",
+        )
 
 
 class StatisticaContainerSerializer(serializers.ModelSerializer):
