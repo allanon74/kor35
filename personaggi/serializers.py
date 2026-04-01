@@ -1915,10 +1915,12 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         rec_map = obj.get_recuperi_risorsa_stato()
         out = []
         for sigla, rec in rec_map.items():
+            stat_obj = Statistica.objects.filter(sigla=sigla).first()
             max_v = obj.get_valore_statistica(sigla)
             cur = obj.get_risorsa_corrente_runtime(sigla)
             out.append({
                 'sigla': sigla,
+                'nome': stat_obj.nome if stat_obj else sigla,
                 'active': bool(rec.get('active')),
                 'paused': bool(rec.get('paused')),
                 'valore_corrente': cur,
@@ -1927,6 +1929,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
                 'seconds_to_next_tick': rec.get('seconds_to_next_tick'),
                 'step': rec.get('step'),
                 'interval_seconds': rec.get('interval_seconds'),
+                'abilita_nomi': rec.get('abilita_nomi') or [],
             })
         return sorted(out, key=lambda x: x['sigla'])
 

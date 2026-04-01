@@ -2521,10 +2521,12 @@ class Personaggio(Inventario):
     def get_recuperi_risorsa_stato(self, now_ts=None):
         now_ts = now_ts or timezone.now()
         self.sync_recuperi_automatici(now_ts=now_ts)
+        cfg_map = self.get_cfg_recuperi_automatici()
         out = {}
         recs = RecuperoRisorsaAttivo.objects.filter(personaggio=self, is_active=True)
         for rec in recs:
             remaining = max(0, int((rec.next_tick_at - now_ts).total_seconds()))
+            cfg = cfg_map.get(rec.statistica_sigla) or {}
             out[rec.statistica_sigla] = {
                 'active': True,
                 'paused': bool(rec.pause_started_at),
@@ -2532,6 +2534,7 @@ class Personaggio(Inventario):
                 'seconds_to_next_tick': remaining,
                 'step': rec.step,
                 'interval_seconds': rec.interval_seconds,
+                'abilita_nomi': cfg.get('fonti') or [],
             }
         return out
 
