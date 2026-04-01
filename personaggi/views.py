@@ -1367,7 +1367,9 @@ class PersonaggioMeView(APIView):
         
         except Personaggio.DoesNotExist: 
             return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
-        
+
+        # Sincronizza eventuali tick maturati prima di serializzare la scheda.
+        personaggio.advance_recuperi_risorse()
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -3570,15 +3572,25 @@ class GameActionsViewSet(viewsets.ViewSet):
         try:
             with transaction.atomic():
                 nuovo = pg.consuma_risorsa_statistica(stat_sigla)
+                pg.advance_recuperi_risorse(only_sigla=stat_sigla)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         max_v = pg.get_valore_statistica(stat_sigla)
+        rec_map = pg.get_recuperi_risorsa_stato()
+        rec = rec_map.get(stat_sigla) or {}
         return Response({
             'status': 'ok',
             'stat_sigla': stat_sigla,
             'valore_corrente': nuovo,
             'valore_max': max_v,
             'risorse_consumabili': pg.risorse_consumabili,
+            'recupero_auto': {
+                'active': bool(rec.get('active')),
+                'next_tick_at': rec.get('next_tick_at').isoformat() if rec.get('next_tick_at') else None,
+                'seconds_to_next_tick': rec.get('seconds_to_next_tick'),
+                'step': rec.get('step'),
+                'interval_seconds': rec.get('interval_seconds'),
+            },
         })
 
     @action(detail=False, methods=['post'])

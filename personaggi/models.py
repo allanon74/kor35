@@ -827,6 +827,21 @@ class Statistica(Punteggio):
         help_text="Se attivo, il valore massimo della statistica definisce il tetto di un pool "
         "con contatore separato (consumi, log, effetti temporanei). Es. Fortuna (FRT).",
     )
+    auto_recupero_attivo = models.BooleanField(
+        default=False,
+        verbose_name="Recupero automatico attivo",
+        help_text="Se attivo su una risorsa pool, avvia il recupero periodico quando il valore scende sotto il massimo.",
+    )
+    auto_recupero_intervallo_secondi = models.PositiveIntegerField(
+        default=300,
+        verbose_name="Intervallo recupero (sec)",
+        help_text="Ogni quanti secondi viene recuperato lo step configurato.",
+    )
+    auto_recupero_step = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Step recupero",
+        help_text="Quanti punti recuperare ad ogni tick.",
+    )
     def save(self, *args, **kwargs): self.tipo = STATISTICA; super().save(*args, **kwargs)
     class Meta: verbose_name = "Statistica"; verbose_name_plural = "Statistiche"
     @classmethod
@@ -1638,6 +1653,27 @@ class EffettoRisorsaTemporaneo(SyncableModel, models.Model):
         verbose_name_plural = 'Effetti risorsa temporanei'
 
 
+class RecuperoRisorsaAttivo(SyncableModel, models.Model):
+    """
+    Stato runtime del recupero automatico per una risorsa pool di un personaggio.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='recuperi_risorsa_attivi')
+    statistica_sigla = models.CharField(max_length=3, db_index=True)
+    started_at = models.DateTimeField(default=timezone.now)
+    next_tick_at = models.DateTimeField(db_index=True)
+    interval_seconds = models.PositiveIntegerField(default=300)
+    step = models.PositiveIntegerField(default=1)
+    is_active = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Recupero risorsa attivo'
+        verbose_name_plural = 'Recuperi risorsa attivi'
+        unique_together = [('personaggio', 'statistica_sigla')]
+
+
 def calcola_scadenza_effetto_risorsa(durata_tipo):
     """Calcola datetime di scadenza per un effetto legato al consumo di una risorsa."""
     try:
@@ -2140,6 +2176,158 @@ class Personaggio(Inventario):
             return max_v
         return max(0, min(v, max_v))
 
+    def _get_cfg_recupero_risorsa(self, sigla):
+        stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
+        if not stat or not stat.auto_recupero_attivo:
+            return None
+        interval_seconds = max(1, int(stat.auto_recupero_intervallo_secondi or 0))
+        step = max(1, int(stat.auto_recupero_step or 0))
+        return {
+            'interval_seconds': interval_seconds,
+            'step': step,
+            'stat_nome': stat.nome,
+        }
+
+    def sync_recupero_risorsa(self, sigla, now_ts=None):
+        """
+        Sincronizza start/stop del recupero automatico in base al valore corrente.
+        """
+        now_ts = now_ts or timezone.now()
+        cfg = self._get_cfg_recupero_risorsa(sigla)
+        existing = RecuperoRisorsaAttivo.objects.filter(personaggio=self, statistica_sigla=sigla).first()
+        max_v = self.get_valore_statistica(sigla)
+        cur = self.get_risorsa_corrente(sigla)
+
+        if not cfg or max_v <= 0 or cur >= max_v:
+            if existing and existing.is_active:
+                existing.is_active = False
+                existing.save(update_fields=['is_active', 'updated_at'])
+            return
+
+        next_tick = now_ts + timedelta(seconds=cfg['interval_seconds'])
+        if existing:
+            updates = []
+            if not existing.is_active:
+                existing.is_active = True
+                updates.append('is_active')
+            if existing.interval_seconds != cfg['interval_seconds']:
+                existing.interval_seconds = cfg['interval_seconds']
+                updates.append('interval_seconds')
+            if existing.step != cfg['step']:
+                existing.step = cfg['step']
+                updates.append('step')
+            # Se il timer non era attivo, riparte da ora.
+            if 'is_active' in updates:
+                existing.started_at = now_ts
+                existing.next_tick_at = next_tick
+                updates.extend(['started_at', 'next_tick_at'])
+            if updates:
+                updates.append('updated_at')
+                existing.save(update_fields=updates)
+            return
+
+        RecuperoRisorsaAttivo.objects.create(
+            personaggio=self,
+            statistica_sigla=sigla,
+            started_at=now_ts,
+            next_tick_at=next_tick,
+            interval_seconds=cfg['interval_seconds'],
+            step=cfg['step'],
+            is_active=True,
+        )
+
+    def advance_recuperi_risorse(self, now_ts=None, only_sigla=None):
+        """
+        Applica i tick maturati (idempotente rispetto a now_ts) e ferma i timer a cap raggiunto.
+        """
+        now_ts = now_ts or timezone.now()
+        rec_qs = RecuperoRisorsaAttivo.objects.filter(personaggio=self, is_active=True)
+        if only_sigla:
+            rec_qs = rec_qs.filter(statistica_sigla=only_sigla)
+        recs = list(rec_qs)
+        if not recs:
+            return {}
+
+        out = {}
+        changed = False
+        rc = dict(self.risorse_consumabili or {})
+
+        for rec in recs:
+            sigla = rec.statistica_sigla
+            max_v = self.get_valore_statistica(sigla)
+            cur = self.get_risorsa_corrente(sigla)
+            if max_v <= 0 or cur >= max_v:
+                rec.is_active = False
+                rec.save(update_fields=['is_active', 'updated_at'])
+                out[sigla] = {'active': False, 'valore_corrente': cur, 'valore_max': max_v}
+                continue
+
+            if now_ts < rec.next_tick_at:
+                out[sigla] = {
+                    'active': True,
+                    'valore_corrente': cur,
+                    'valore_max': max_v,
+                    'next_tick_at': rec.next_tick_at,
+                }
+                continue
+
+            elapsed = (now_ts - rec.next_tick_at).total_seconds()
+            ticks = int(elapsed // max(1, rec.interval_seconds)) + 1
+            gain = max(0, ticks * max(1, rec.step))
+            new_cur = min(max_v, cur + gain)
+            delta = new_cur - cur
+            rec.next_tick_at = rec.next_tick_at + timedelta(seconds=ticks * max(1, rec.interval_seconds))
+
+            if delta > 0:
+                rc[sigla] = new_cur
+                changed = True
+                RisorsaStatisticaMovimento.objects.create(
+                    personaggio=self,
+                    statistica_sigla=sigla,
+                    importo=delta,
+                    descrizione=f'Recupero automatico +{delta} ({sigla})',
+                    tipo_movimento=RISORSA_MOV_RECUPERO,
+                )
+                if new_cur >= max_v:
+                    rec.is_active = False
+                rec.save(update_fields=['next_tick_at', 'is_active', 'updated_at'])
+                out[sigla] = {
+                    'active': rec.is_active,
+                    'valore_corrente': new_cur,
+                    'valore_max': max_v,
+                    'next_tick_at': rec.next_tick_at if rec.is_active else None,
+                }
+            else:
+                rec.save(update_fields=['next_tick_at', 'updated_at'])
+                out[sigla] = {
+                    'active': rec.is_active,
+                    'valore_corrente': cur,
+                    'valore_max': max_v,
+                    'next_tick_at': rec.next_tick_at,
+                }
+
+        if changed:
+            self.risorse_consumabili = rc
+            self.save(update_fields=['risorse_consumabili', 'updated_at'])
+            if hasattr(self, '_modificatori_calcolati_cache'):
+                delattr(self, '_modificatori_calcolati_cache')
+        return out
+
+    def get_recuperi_risorsa_stato(self, now_ts=None):
+        now_ts = now_ts or timezone.now()
+        out = {}
+        recs = RecuperoRisorsaAttivo.objects.filter(personaggio=self, is_active=True)
+        for rec in recs:
+            remaining = max(0, int((rec.next_tick_at - now_ts).total_seconds()))
+            out[rec.statistica_sigla] = {
+                'active': True,
+                'next_tick_at': rec.next_tick_at,
+                'seconds_to_next_tick': remaining,
+                'step': rec.step,
+                'interval_seconds': rec.interval_seconds,
+            }
+        return out
+
     def consuma_risorsa_statistica(self, sigla):
         """
         Consuma un punto dal pool. Crea movimento, log ed eventuali effetti temporanei dalle abilità.
@@ -2167,6 +2355,7 @@ class Personaggio(Inventario):
             f'Consumo 1 punto {stat.nome} ({sigla}). Rimasti: {nuovo}/{max_v}.'
         )
         self._crea_effetti_temporanei_da_abilita(sigla)
+        self.sync_recupero_risorsa(sigla)
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo
@@ -2210,6 +2399,7 @@ class Personaggio(Inventario):
             tipo_movimento=RISORSA_MOV_STAFF,
         )
         self.aggiungi_log(f'{desc}. Totale: {nuovo}/{max_v} (operatore: {who}).')
+        self.sync_recupero_risorsa(sigla)
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo

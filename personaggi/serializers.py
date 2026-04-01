@@ -1872,17 +1872,26 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     def get_risorse_pool_ui(self, obj):
         """Pool consumabili (Fortuna e future statistiche is_risorsa_pool)."""
         out = []
+        rec_map = obj.get_recuperi_risorsa_stato()
         for stat in Statistica.objects.filter(is_risorsa_pool=True).order_by('ordine', 'nome'):
             max_v = obj.get_valore_statistica(stat.sigla)
             if max_v <= 0:
                 continue
             cur = obj.get_risorsa_corrente(stat.sigla)
+            rec = rec_map.get(stat.sigla) or {}
             out.append({
                 'sigla': stat.sigla,
                 'nome': stat.nome,
                 'descrizione': stat.descrizione or '',
                 'valore_max': max_v,
                 'valore_corrente': cur,
+                'recupero_auto': {
+                    'active': bool(rec.get('active')),
+                    'next_tick_at': rec.get('next_tick_at').isoformat() if rec.get('next_tick_at') else None,
+                    'seconds_to_next_tick': rec.get('seconds_to_next_tick'),
+                    'step': rec.get('step'),
+                    'interval_seconds': rec.get('interval_seconds'),
+                },
             })
         return out
 
