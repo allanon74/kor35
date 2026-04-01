@@ -3382,7 +3382,7 @@ def _sync_coma_state(personaggio):
     if status_val in {"idle", "resolved"}:
         ui.pop("coma_state", None)
         personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=["impostazioni_ui"])
+        personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
         return {}
 
     if personaggio.data_morte:
@@ -3390,7 +3390,7 @@ def _sync_coma_state(personaggio):
         coma["remaining_seconds"] = 0
         ui["coma_state"] = coma
         personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=["impostazioni_ui"])
+        personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
         return coma
 
     if coma.get("is_paused"):
@@ -3406,13 +3406,13 @@ def _sync_coma_state(personaggio):
             personaggio.data_morte = now
             personaggio.aggiungi_log("Morte automatica per termine conto alla rovescia coma.")
             _send_staff_death_message(personaggio)
-            personaggio.save(update_fields=["data_morte"])
+            personaggio.save(update_fields=["data_morte", "updated_at"])
         elif end_at:
             coma["remaining_seconds"] = max(0, int((end_at - now).total_seconds()))
 
     ui["coma_state"] = coma
     personaggio.impostazioni_ui = ui
-    personaggio.save(update_fields=["impostazioni_ui"])
+    personaggio.save(update_fields=["impostazioni_ui", "updated_at"])
     return coma
 
 
@@ -3493,7 +3493,7 @@ class GameActionsViewSet(viewsets.ViewSet):
                 ui.pop('coma_state', None)
             pg.impostazioni_ui = ui
 
-        pg.save(update_fields=['statistiche_temporanee', 'impostazioni_ui'])
+        pg.save(update_fields=['statistiche_temporanee', 'impostazioni_ui', 'updated_at'])
         coma_state = _sync_coma_state(pg)
         
         return Response({
@@ -3570,7 +3570,7 @@ class GameActionsViewSet(viewsets.ViewSet):
 
         ui['coma_state'] = coma
         pg.impostazioni_ui = ui
-        pg.save(update_fields=['impostazioni_ui'])
+        pg.save(update_fields=['impostazioni_ui', 'updated_at'])
         coma_state = _sync_coma_state(pg)
         return Response({'status': 'ok', 'coma_state': coma_state, 'data_morte': pg.data_morte})
 
@@ -3870,7 +3870,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             'forced_by_staff': True,
         }
         personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=['data_morte', 'impostazioni_ui'])
+        personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'updated_at'])
         personaggio.aggiungi_log('Personaggio ucciso manualmente dallo staff.')
         return Response({'status': 'ok', 'message': 'Personaggio marcato come morto.'}, status=status.HTTP_200_OK)
 
@@ -3882,7 +3882,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         ui = dict(personaggio.impostazioni_ui or {})
         ui.pop('coma_state', None)
         personaggio.impostazioni_ui = ui
-        personaggio.save(update_fields=['data_morte', 'impostazioni_ui'])
+        personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'updated_at'])
         personaggio.aggiungi_log('Personaggio rivissuto manualmente dallo staff.')
         return Response({'status': 'ok', 'message': 'Personaggio rivissuto.'}, status=status.HTTP_200_OK)
     
