@@ -1753,6 +1753,16 @@ class QrCode(SyncableModel, models.Model):
     data_creazione = models.DateTimeField(auto_now_add=True)
     testo = models.TextField(blank=True, null=True)
     vista = models.OneToOneField(A_vista, blank=True, null=True, on_delete=models.SET_NULL)
+    stl_creato = models.BooleanField(
+        default=False, 
+        verbose_name="STL preparato", 
+    )
+    qr_stampato = models.BooleanField(
+        default=False, 
+        verbose_name="QR stampato",
+    )
+    
+    
     def save(self, *args, **kwargs):
         if self._state.adding:
             while True:

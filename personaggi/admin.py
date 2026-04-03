@@ -730,7 +730,8 @@ class TimerRuntimeAdmin(admin.ModelAdmin):
 
 @admin.register(QrCode)
 class QrCodeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'data_creazione', 'get_timer_info')
+    list_display = ('id', 'data_creazione', 'stl_creato', 'qr_stampato')
+    list_editable = ('stl_creato', 'qr_stampato')
     readonly_fields = ('id', 'data_creazione')
     search_fields = ('id',)
     summernote_fields = ['testo']

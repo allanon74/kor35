@@ -169,11 +169,12 @@ class PunteggioViewSet(viewsets.ModelViewSet):
         
         # 1. Prepariamo la regola per scaricare i TRATTI (le opzioni selezionabili)
         #    e li mettiamo nell'attributo 'tratti_aura_prefetched' che il Serializer cerca.
+        # caratteristica_2 deve essere caricata: le forme (liv.2) usano c1+c2 anche se uguali (doppio requisito).
         prefetch_tratti = Prefetch(
             'tratti_collegati',  # Questo deve essere il related_name in Abilita.aura_riferimento
             queryset=Abilita.objects.filter(is_tratto_aura=True)
-            .defer('caratteristica_2', 'caratteristica_3')
-            .select_related('caratteristica')
+            .defer('caratteristica_3')
+            .select_related('caratteristica', 'caratteristica_2')
             .prefetch_related('abilitastatistica_set__statistica'),
             to_attr='tratti_aura_prefetched'
         )
