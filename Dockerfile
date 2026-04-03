@@ -23,5 +23,8 @@ COPY requirements.txt /app/
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
+# Installa esplicitamente i server Gunicorn e Daphne
+RUN pip install gunicorn daphne
+
 # Copia tutto il resto del codice del backend
 COPY . /app/
