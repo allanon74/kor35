@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     git \
+    libxml2-dev \
+    libxslt1-dev \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Crea e imposta la cartella di lavoro dentro il container
