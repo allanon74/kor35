@@ -1,5 +1,5 @@
 # Usa una versione leggera di Python
-FROM python:3.13-5
+FROM python:3.13-slim
 
 # Evita che Python scriva file .pyc sul disco e forza l'output dei log
 ENV PYTHONDONTWRITEBYTECODE=1
