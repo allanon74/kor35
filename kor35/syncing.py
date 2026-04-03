@@ -11,6 +11,18 @@ from rest_framework import serializers
 User = get_user_model()
 
 
+def model_allows_natural_merge_patch_sync_id(model) -> bool:
+    """
+    True se, in merge per chiave naturale (es. nome UNIQUE), si può aggiornare sync_id
+    sulla riga esistente. Su MTI (ForeignKey parent_link) lo stesso sync_id può vincolare
+    più tabelle: non va forzato.
+    """
+    for f in model._meta.concrete_fields:
+        if isinstance(f, models.ForeignKey) and getattr(f.remote_field, "parent_link", False):
+            return False
+    return True
+
+
 class SyncableModel(models.Model):
     """
     Base astratta per record sincronizzabili tra nodi.

@@ -16,7 +16,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from kor35.syncing import serialize_for_sync
+from kor35.syncing import model_allows_natural_merge_patch_sync_id, serialize_for_sync
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
 
 logger = logging.getLogger(__name__)
@@ -535,15 +535,13 @@ class EdgeSyncView(APIView):
             if not existing:
                 continue
 
-            # NOTE:
-            # On natural-key merge we never force sync_id alignment for existing rows.
-            # With multi-table inheritance (Tabella/Tier/*) sync_id uniqueness lives on parent
-            # tables too, and forcing sync_id can trigger cross-table collisions.
             patch = dict(update_data)
             # Never patch parent-link fields on existing rows.
             for f in model._meta.concrete_fields:
                 if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
                     patch.pop(f.name, None)
+            if model_allows_natural_merge_patch_sync_id(model):
+                patch["sync_id"] = sync_id
             if remote_updated_at:
                 patch["updated_at"] = remote_updated_at
             try:

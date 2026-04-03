@@ -12,7 +12,7 @@ from django.db.models import ForeignKey, UniqueConstraint
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from kor35.syncing import serialize_for_sync
+from kor35.syncing import model_allows_natural_merge_patch_sync_id, serialize_for_sync
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
 
 
@@ -493,15 +493,14 @@ class Command(BaseCommand):
             if not existing:
                 continue
 
-            # NOTE:
-            # On natural-key merge we never force sync_id alignment for existing rows.
-            # With multi-table inheritance (Tabella/Tier/*) sync_id uniqueness lives on parent
-            # tables too, and forcing sync_id can trigger cross-table collisions.
             patch = dict(update_data)
             # Never patch parent-link fields on existing rows.
             for f in model._meta.concrete_fields:
                 if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
                     patch.pop(f.name, None)
+            # Allinea sync_id al Master (es. TipologiaPersonaggio "Standard") salvo MTI.
+            if model_allows_natural_merge_patch_sync_id(model):
+                patch["sync_id"] = sync_id
             if remote_updated_at:
                 patch["updated_at"] = remote_updated_at
             try:

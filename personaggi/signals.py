@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -8,25 +10,35 @@ from webpush import send_user_notification
 
 from .models import ClasseOggetto, Infusione, Messaggio
 
+logger = logging.getLogger(__name__)
+
+
 @receiver(post_save, sender=Messaggio)
 def invia_notifica_messaggio(sender, instance, created, **kwargs):
-    if created: 
-        # --- 1. WebSocket (Invariato) ---
-        channel_layer = get_channel_layer()
-        data = {
-            'id': instance.id,
-            'titolo': instance.titolo,
-            'testo': instance.testo,
-            'tipo': instance.tipo_messaggio,
-            'mittente': instance.mittente.username if instance.mittente else "Sistema",
-            'destinatario_id': instance.destinatario_personaggio.id if instance.destinatario_personaggio else None,
-            'gruppo_id': instance.destinatario_gruppo.id if instance.destinatario_gruppo else None,
-        }
-
-        async_to_sync(channel_layer.group_send)(
-            'kor35_notifications',
-            {'type': 'send_notification', 'message': data}
-        )
+    if created:
+        # --- 1. WebSocket (Redis/Channels: su replica o offline può non essere raggiungibile) ---
+        try:
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                data = {
+                    "id": instance.id,
+                    "titolo": instance.titolo,
+                    "testo": instance.testo,
+                    "tipo": instance.tipo_messaggio,
+                    "mittente": instance.mittente.username if instance.mittente else "Sistema",
+                    "destinatario_id": instance.destinatario_personaggio.id
+                    if instance.destinatario_personaggio
+                    else None,
+                    "gruppo_id": instance.destinatario_gruppo.id
+                    if instance.destinatario_gruppo
+                    else None,
+                }
+                async_to_sync(channel_layer.group_send)(
+                    "kor35_notifications",
+                    {"type": "send_notification", "message": data},
+                )
+        except Exception as exc:
+            logger.debug("Notifica WS messaggio saltata (sync/replica/offline): %s", exc)
 
         # --- 2. Web Push (Aggiornato) ---
         try:

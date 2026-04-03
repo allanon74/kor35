@@ -73,7 +73,7 @@ class SocialProfile(SyncableModel, models.Model):
         return f"Profilo social {self.personaggio.nome}"
 
     def save(self, *args, **kwargs):
-        if self.foto_principale:
+        if self.foto_principale and media_file_exists_on_storage(self.foto_principale):
             self.foto_principale = optimize_uploaded_image(self.foto_principale)
         super().save(*args, **kwargs)
 
@@ -107,13 +107,13 @@ class SocialPost(SyncableModel, models.Model):
             raise ValidationError("Per la visibilita KORP devi selezionare una KORP.")
         if self.visibilita != SOCIAL_VISIBILITY_KORP and self.korp_visibilita_id:
             raise ValidationError("La KORP visibilita e ammessa solo per post visibili alla KORP.")
-        if self.video and getattr(self.video, "size", 0) > MAX_VIDEO_BYTES:
+        if self.video and fieldfile_size_safe(self.video) > MAX_VIDEO_BYTES:
             raise ValidationError(f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
 
     def save(self, *args, **kwargs):
         if not self.public_slug:
             self.public_slug = uuid.uuid4().hex[:16]
-        if self.immagine:
+        if self.immagine and media_file_exists_on_storage(self.immagine):
             self.immagine = optimize_uploaded_image(self.immagine)
         self.clean()
         super().save(*args, **kwargs)
@@ -243,11 +243,11 @@ class SocialGroupPost(SyncableModel, models.Model):
             raise ValidationError("Un post di gruppo deve avere testo, immagine o video.")
         if self.immagine and self.video:
             raise ValidationError("Un post di gruppo non puo avere contemporaneamente immagine e video.")
-        if self.video and getattr(self.video, "size", 0) > MAX_VIDEO_BYTES:
+        if self.video and fieldfile_size_safe(self.video) > MAX_VIDEO_BYTES:
             raise ValidationError(f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
 
     def save(self, *args, **kwargs):
-        if self.immagine:
+        if self.immagine and media_file_exists_on_storage(self.immagine):
             self.immagine = optimize_uploaded_image(self.immagine)
         self.clean()
         super().save(*args, **kwargs)
@@ -310,15 +310,15 @@ class SocialStory(SyncableModel, models.Model):
             raise ValidationError("Per la visibilita KORP devi selezionare una KORP.")
         if self.visibilita != SOCIAL_VISIBILITY_KORP and self.korp_visibilita_id:
             raise ValidationError("La KORP visibilita e ammessa solo per story visibili alla KORP.")
-        if self.media and getattr(self.media, "size", 0) > MAX_VIDEO_BYTES:
+        if self.media and fieldfile_size_safe(self.media) > MAX_VIDEO_BYTES:
             # Limite anche per immagini grandi, coerente con video.
             raise ValidationError(f"Media troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
             self.expires_at = (self.created_at or timezone.now()) + timezone.timedelta(hours=24)
-        # Se è un'immagine, comprimila (come per i post).
-        if self.media and hasattr(self.media, "name"):
+        # Se è un'immagine, comprimila (come per i post); senza file su disco (replica) salta.
+        if self.media and hasattr(self.media, "name") and media_file_exists_on_storage(self.media):
             name = str(self.media.name or "").lower()
             if name.endswith((".jpg", ".jpeg", ".png", ".webp")):
                 self.media = optimize_uploaded_image(self.media)
@@ -436,11 +436,34 @@ def extract_hashtags(text):
     return sorted(tags)
 
 
+def fieldfile_size_safe(fieldfile):
+    """Dimensione file su storage; su replica senza media fisico non solleva eccezioni."""
+    if not fieldfile:
+        return 0
+    try:
+        return int(getattr(fieldfile, "size", 0) or 0)
+    except (FileNotFoundError, OSError, ValueError):
+        return 0
+
+
+def media_file_exists_on_storage(fieldfile) -> bool:
+    if not fieldfile or not getattr(fieldfile, "name", None):
+        return False
+    try:
+        return fieldfile.storage.exists(fieldfile.name)
+    except Exception:
+        return False
+
+
 def optimize_uploaded_image(uploaded_file):
     """
     Resize/compressione semplice per ridurre spazio media.
     """
     try:
+        if hasattr(uploaded_file, "storage") and hasattr(uploaded_file, "name"):
+            nm = getattr(uploaded_file, "name", None) or ""
+            if nm and not uploaded_file.storage.exists(nm):
+                return uploaded_file
         image = Image.open(uploaded_file)
         image = image.convert("RGB")
         image.thumbnail(MAX_IMAGE_SIZE, Image.Resampling.LANCZOS)
