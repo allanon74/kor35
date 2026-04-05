@@ -3177,12 +3177,14 @@ class Personaggio(Inventario):
             n2 = abilita.caratteristica_2.nome
             v1 = chars.get(n1, 0)
             v2 = chars.get(n2, 0)
+            if v1 <= 0:
+                return False, f"Serve un valore > 0 in {n1} per questa forma."
             if n1 == n2:
-                if v1 < 2:
-                    return False, f"Per questa forma (doppia {n1}) servono almeno 2 punti in {n1}."
+                if v1 <= 1:
+                    return False, f"Per questa forma (doppia {n1}) serve {n1} > 1 (almeno 2 se valori interi)."
             else:
-                if v1 < 1 or v2 < 1:
-                    return False, f"Servono almeno 1 in {n1} e 1 in {n2} per questa forma."
+                if v2 <= 0:
+                    return False, f"Serve un valore > 0 in {n2} per questa forma (ibrida)."
             return True, "OK"
 
         return True, "OK"
