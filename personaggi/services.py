@@ -28,14 +28,29 @@ from .models import (
 class GestioneOggettiService:
     
     @staticmethod
+    def oggetto_fisico_occupa_slot_cog(oggetto: Oggetto) -> bool:
+        """
+        Uno slot COG (oggetti speciali) si consuma solo se contemporaneamente:
+        - oggetto fisico equipaggiato
+        - ha almeno un potenziamento (mod/materia/POT) montato su di esso (ospitato_su → host).
+        """
+        if oggetto.tipo_oggetto != TIPO_OGGETTO_FISICO or not oggetto.is_equipaggiato:
+            return False
+        return oggetto.potenziamenti_installati.exists()
+
+    @staticmethod
     def calcola_cog_utilizzata(pg: Personaggio):
         """Calcola la Capacità Oggetti (COG) occupata.
-        Include: oggetti fisici equipaggiati + 1 slot se il personaggio ha almeno un consumabile valido.
+        Include: oggetti fisici equipaggiati che hanno almeno una mod/materia montata
+        + 1 slot se il personaggio ha almeno un consumabile valido.
         """
-        cog_oggetti = pg.get_oggetti().filter(
-            tipo_oggetto=TIPO_OGGETTO_FISICO, 
-            is_equipaggiato=True
-        ).count()
+        cog_oggetti = (
+            pg.get_oggetti()
+            .filter(tipo_oggetto=TIPO_OGGETTO_FISICO, is_equipaggiato=True)
+            .filter(potenziamenti_installati__isnull=False)
+            .distinct()
+            .count()
+        )
         oggi = timezone.now().date()
         has_consumabili = ConsumabilePersonaggio.objects.filter(
             personaggio=pg,
@@ -74,12 +89,23 @@ class GestioneOggettiService:
             oggetto.save()
             return "Disequipaggiato"
         
-        # 1. Controllo COG (Esistente)
+        # 1. Controllo COG: solo se equipaggiare aggiunge un consumo (FIS con mod/materia già montate)
+        delta_cog = (
+            1
+            if (
+                oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO
+                and oggetto.potenziamenti_installati.exists()
+            )
+            else 0
+        )
         cog_used = GestioneOggettiService.calcola_cog_utilizzata(personaggio)
         cog_max = personaggio.get_valore_statistica('COG')
-        
-        if cog_used >= cog_max:
-             raise ValidationError(f"Capacità Oggetti raggiunta ({cog_used}/{cog_max}).")
+
+        if cog_used + delta_cog > cog_max:
+            raise ValidationError(
+                f"Capacità Oggetti (COG) insufficiente: con questa azione supereresti il limite "
+                f"({cog_used + delta_cog}/{cog_max})."
+            )
         
         # 2. Controllo OGP (NUOVO - Oggetti Pesanti)
         if oggetto.is_pesante:
@@ -292,6 +318,22 @@ class GestioneOggettiService:
         if check_skills:
             can_do, msg = GestioneOggettiService.verifica_competenza_assemblaggio(assemblatore, oggetto_ospite, potenziamento)
             if not can_do: raise ValidationError(msg)
+
+        # COG: montare la prima mod su un host già equipaggiato attiva uno slot COG
+        if (
+            oggetto_ospite.tipo_oggetto == TIPO_OGGETTO_FISICO
+            and oggetto_ospite.is_equipaggiato
+            and not oggetto_ospite.potenziamenti_installati.exists()
+            and hasattr(proprietario_items, 'personaggio')
+        ):
+            pg = proprietario_items.personaggio
+            cog_used = GestioneOggettiService.calcola_cog_utilizzata(pg)
+            cog_max = pg.get_valore_statistica('COG')
+            if cog_used + 1 > cog_max:
+                raise ValidationError(
+                    f"Capacità Oggetti (COG) insufficiente: montando questo componente supereresti il limite "
+                    f"({cog_used + 1}/{cog_max})."
+                )
 
         # Esecuzione
         with transaction.atomic():
