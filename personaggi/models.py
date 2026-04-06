@@ -2357,14 +2357,16 @@ class Personaggio(Inventario):
     def _max_valore_for_regen(self, sigla):
         """
         Massimo usato per rigenerazione automatica.
-        Per CHK molti PG hanno il cap sulla stat CHA (primaria) e CHK a 0 in DB: usiamo CHA come fallback.
+        Per CHK: in scheda il pool è mostrato con cap CHA (punti disponibili), mentre CHK può essere 0
+        o un valore basso (es. 1) per altri usi. Usiamo sempre max(CHK, CHA) quando CHA > 0 così
+        il tick non clampa erroneamente a 1 con 7 chakra ancora da recuperare.
         """
         sigla = (sigla or "").strip().upper()
         max_v = self.get_valore_statistica(sigla)
-        if sigla == "CHK" and max_v <= 0:
-            fb = self.get_valore_statistica("CHA")
-            if fb > 0:
-                return fb
+        if sigla == "CHK":
+            cha_v = self.get_valore_statistica("CHA")
+            if cha_v > 0:
+                return max(max_v, cha_v)
         return max_v
 
     def _get_cfg_recuperi_da_abilita(self):

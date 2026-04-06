@@ -1918,7 +1918,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         out = []
         for sigla, rec in rec_map.items():
             stat_obj = Statistica.objects.filter(sigla=sigla).first()
-            max_v = obj.get_valore_statistica(sigla)
+            max_v = obj._max_valore_for_regen(sigla)
             cur = obj.get_risorsa_corrente_runtime(sigla)
             out.append({
                 'sigla': sigla,
