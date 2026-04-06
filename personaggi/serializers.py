@@ -314,13 +314,14 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     produce_mutazioni = serializers.SerializerMethodField()
     configurazione_livelli = ConfigurazioneLivelloAuraSerializer(many=True, read_only=True)
     tratti_disponibili = serializers.SerializerMethodField()
+    is_risorsa_pool = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
         fields = (
             'id', 'nome', 'sigla', 'tipo', 'colore',
             'icona_url', 'icona_nome_originale', 'icona_nome_display',
-            'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'parametro', 'ordine', 'has_models',
+            'is_primaria', 'is_risorsa_pool', 'valore_predefinito', 'valore_base_predefinito', 'parametro', 'ordine', 'has_models',
             'permette_infusioni', 'permette_tessiture', 'permette_cerimoniali',
             'is_mattone',
             'aura_id', 'caratteristica_associata_nome',
@@ -366,6 +367,10 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
 
     def get_is_primaria(self, obj):
         return True if hasattr(obj, 'statistica') and obj.statistica.is_primaria else False
+
+    def get_is_risorsa_pool(self, obj):
+        """Solo per righe Statistica: risorse a pool (FRT, …) usano contatore runtime separato."""
+        return bool(isinstance(obj, Statistica) and obj.is_risorsa_pool)
 
     def get_valore_predefinito(self, obj):
         return obj.statistica.valore_predefinito if hasattr(obj, 'statistica') else 0

@@ -2849,6 +2849,28 @@ class Personaggio(Inventario):
             })
         return regole
 
+    def _merge_statistiche_runtime_nei_punteggi_dipendenti(self, punteggi_per_nome, regole):
+        """
+        `_build_punteggi_base_indipendenti` popola i nomi solo da abilita_punteggio (valori fissi).
+        Per condizioni tipo «ogni X Chakra» serve il valore **attuale** della statistica:
+        pool (FRT, …) o contatore tattico CHK_CUR / PV_CUR, non solo eventuali +1 fissi da abilità.
+        """
+        if not regole:
+            return punteggi_per_nome
+        source_nomi = {r["source_nome"] for r in regole}
+        if not source_nomi:
+            return punteggi_per_nome
+        for stat in Statistica.objects.filter(nome__in=source_nomi):
+            sigla = (stat.sigla or "").strip().upper()
+            if not sigla:
+                continue
+            if stat.is_risorsa_pool:
+                eff = int(self.get_risorsa_corrente(sigla))
+            else:
+                eff = int(self.get_risorsa_corrente_runtime(sigla))
+            punteggi_per_nome[stat.nome] = eff
+        return punteggi_per_nome
+
     def _ordina_scc_topologico(self, scc_ids, edges_between_scc):
         indeg = {sid: 0 for sid in scc_ids}
         for src_sid, dsts in edges_between_scc.items():
@@ -3010,6 +3032,7 @@ class Personaggio(Inventario):
         if hasattr(self, '_punteggi_base_cache'): return self._punteggi_base_cache
         p = self._build_punteggi_base_indipendenti(exclude_abilita_ids=None)
         regole = self._collect_regole_punteggio_dipendente(exclude_abilita_ids=None)
+        p = self._merge_statistiche_runtime_nei_punteggi_dipendenti(p, regole)
         p = self._applica_punteggi_dipendenti(p, regole)
 
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
@@ -3030,6 +3053,7 @@ class Personaggio(Inventario):
         exclude_abilita_ids = set(exclude_abilita_ids or [])
         p = self._build_punteggi_base_indipendenti(exclude_abilita_ids=exclude_abilita_ids)
         regole = self._collect_regole_punteggio_dipendente(exclude_abilita_ids=exclude_abilita_ids)
+        p = self._merge_statistiche_runtime_nei_punteggi_dipendenti(p, regole)
         p = self._applica_punteggi_dipendenti(p, regole)
 
         agen = Punteggio.objects.filter(tipo=AURA, is_generica=True).first()
