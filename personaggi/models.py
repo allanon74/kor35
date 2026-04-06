@@ -2346,7 +2346,26 @@ class Personaggio(Inventario):
             step = max(1, int(raw.get('step', 1)))
         except Exception:
             step = 1
+        # Chakra: in tab Gioco il corrente è CHK_CUR ma il massimo in primarie è spesso CHA.
+        # Senza questa normalizzazione il JSON con "CHA" non si aggancia a only_sigla=CHK dopo il consumo.
+        if sigla == "CHA":
+            st_cha = Statistica.objects.filter(sigla="CHA").first()
+            if st_cha is None or not st_cha.is_risorsa_pool:
+                sigla = "CHK"
         return {'stat_sigla': sigla, 'interval_seconds': interval, 'step': step}
+
+    def _max_valore_for_regen(self, sigla):
+        """
+        Massimo usato per rigenerazione automatica.
+        Per CHK molti PG hanno il cap sulla stat CHA (primaria) e CHK a 0 in DB: usiamo CHA come fallback.
+        """
+        sigla = (sigla or "").strip().upper()
+        max_v = self.get_valore_statistica(sigla)
+        if sigla == "CHK" and max_v <= 0:
+            fb = self.get_valore_statistica("CHA")
+            if fb > 0:
+                return fb
+        return max_v
 
     def _get_cfg_recuperi_da_abilita(self):
         out = {}
@@ -2394,7 +2413,7 @@ class Personaggio(Inventario):
         stat = Statistica.objects.filter(sigla=sigla).first()
         if not stat:
             return 0
-        max_v = self.get_valore_statistica(sigla)
+        max_v = self._max_valore_for_regen(sigla)
         if max_v <= 0:
             return 0
         if stat.is_risorsa_pool:
@@ -2451,7 +2470,7 @@ class Personaggio(Inventario):
         for sigla in all_sigle:
             cfg = cfg_map.get(sigla)
             rec = existing_map.get(sigla)
-            max_v = self.get_valore_statistica(sigla)
+            max_v = self._max_valore_for_regen(sigla)
             cur = self.get_risorsa_corrente_runtime(sigla)
             has_cfg = bool(cfg and max_v > 0 and cur < max_v)
 
@@ -2571,7 +2590,7 @@ class Personaggio(Inventario):
 
         for rec in recs:
             sigla = rec.statistica_sigla
-            max_v = self.get_valore_statistica(sigla)
+            max_v = self._max_valore_for_regen(sigla)
             cur = self.get_risorsa_corrente_runtime(sigla)
             if max_v <= 0 or cur >= max_v:
                 rec.is_active = False
