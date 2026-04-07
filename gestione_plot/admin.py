@@ -301,6 +301,9 @@ class ConfigurazioneSitoAdmin(admin.ModelAdmin):
         ('Contatti', {
             'fields': ('email', 'pec', 'telefono')
         }),
+        ('Gameplay', {
+            'fields': ('abilita_ritorno_in_vita', 'parametro_ritorno_in_vita')
+        }),
         ('Metadata', {
             'fields': ('ultima_modifica',),
             'classes': ('collapse',)

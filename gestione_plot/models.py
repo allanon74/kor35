@@ -601,6 +601,20 @@ class ConfigurazioneSito(SyncableModel, models.Model):
     email = models.EmailField(default="info@kor35.it", help_text="Email principale")
     pec = models.EmailField(blank=True, help_text="Email PEC (opzionale)")
     telefono = models.CharField(max_length=50, blank=True, help_text="Telefono (opzionale)")
+
+    # Gameplay - ritorno in vita dopo il coma
+    abilita_ritorno_in_vita = models.BooleanField(
+        default=True,
+        help_text="Se disattivo, al termine del coma non parte il countdown OFFGAME di ritorno in vita."
+    )
+    parametro_ritorno_in_vita = models.CharField(
+        max_length=32,
+        default="TRI",
+        help_text=(
+            "Valore del countdown OFFGAME: numero di secondi (es. 300) "
+            "oppure sigla caratteristica (es. TRI)."
+        ),
+    )
     
     # Metadata
     ultima_modifica = models.DateTimeField(auto_now=True)

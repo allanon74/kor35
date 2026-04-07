@@ -3359,6 +3359,28 @@ def _to_iso(dt):
     return dt.isoformat()
 
 
+def _get_ritorno_in_vita_seconds(personaggio):
+    """
+    Legge la configurazione sito e calcola i secondi del countdown di ritorno in vita.
+    Ritorna 0 se disattivato o configurazione non valida.
+    """
+    from gestione_plot.models import ConfigurazioneSito
+
+    config = ConfigurazioneSito.get_config()
+    if not getattr(config, "abilita_ritorno_in_vita", True):
+        return 0
+
+    raw_param = str(getattr(config, "parametro_ritorno_in_vita", "") or "").strip()
+    if not raw_param:
+        return 0
+
+    if raw_param.isdigit():
+        return max(0, int(raw_param))
+
+    sigla = raw_param.upper()
+    return max(0, int(personaggio.get_valore_statistica(sigla) or 0))
+
+
 def _send_staff_death_message(personaggio, reason_text="Morte personaggio"):
     testo_msg = (
         f"{escape(reason_text)}: <b>{escape(personaggio.nome)}</b><br>"
@@ -3455,7 +3477,7 @@ def _sync_coma_state(personaggio):
                 _send_staff_death_message(personaggio, reason_text="Morte per colpo fatale")
                 personaggio.save(update_fields=["data_morte", "updated_at"])
             else:
-                tri_seconds = max(0, int(personaggio.get_valore_statistica("TRI") or 0))
+                tri_seconds = _get_ritorno_in_vita_seconds(personaggio)
                 r_end = now + timedelta(seconds=tri_seconds)
                 rianimazione = {
                     "status": "counting",
