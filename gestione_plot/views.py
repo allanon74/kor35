@@ -13,6 +13,7 @@ from django.http import HttpResponse, FileResponse, Http404
 from PIL import Image
 
 from django.db.models import Prefetch
+import logging
 from personaggi.models import (
     Inventario, Manifesto, Personaggio, QrCode,
     Tabella, ModelloAura, Tier, TierPluginModel,
@@ -31,7 +32,7 @@ from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiButtonWidgetSerializer,
-    ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer
+    ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer, UserShortSerializer
     , WikiMattoniWidgetSerializer, MattoneWikiSerializer, PunteggioWikiSerializer
 )
 
@@ -39,6 +40,8 @@ from .serializers import (
 from django.contrib.auth.models import User
 
 from .permissions import IsStaffOrMaster
+
+logger = logging.getLogger(__name__)
 
 class IsMasterOrReadOnly(permissions.BasePermission):
     """
@@ -174,34 +177,41 @@ class EventoViewSet(viewsets.ModelViewSet):
         Esclude inventari di Personaggi/PnG e carica solo i dati minimi.
         Ottimizzato con select_related e only() per ridurre le query.
         """
-        # Ottimizzazione: select_related per evitare N+1 queries
-        # NOTA: 'crediti' e 'punti_caratteristica' sono @property, non vanno in only()
-        png_queryset = Personaggio.objects.select_related(
-            'tipologia', 'proprietario'
-        ).only(
-            'id', 'nome', 'testo', 'costume', 'data_nascita', 'data_morte',
-            'tipologia', 'proprietario'
-        )
-        
-        # Filtra inventari per escludere personaggi (che ereditano da Inventario)
-        inventari_non_personaggi = Inventario.objects.filter(
-            personaggio__isnull=True
-        ).only('id', 'nome')
-        
-        # Oggetti: serializza solo id e nome per performance
-        oggetti_data = [{'id': o.id, 'nome': o.nome} for o in Oggetto.objects.only('id', 'nome')]
-        
-        return Response({
-            'png': PersonaggioSerializer(png_queryset, many=True).data,
-            'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
-            'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
-            'inventari': InventarioSerializer(inventari_non_personaggi, many=True).data,
-            'tessiture': TessituraSerializer(Tessitura.objects.all().select_related('aura_richiesta', 'elemento_principale'), many=True).data,
-            'infusioni': InfusioneSerializer(Infusione.objects.all().select_related('aura_richiesta', 'aura_infusione'), many=True).data,
-            'cerimoniali': CerimonialeSerializer(Cerimoniale.objects.all(), many=True).data,
-            'oggetti': oggetti_data,
-            'staff': UserShortSerializer(User.objects.filter(is_staff=True).only('id', 'username', 'first_name', 'last_name'), many=True).data,
-        })
+        try:
+            # Ottimizzazione: select_related per evitare N+1 queries
+            # NOTA: 'crediti' e 'punti_caratteristica' sono @property, non vanno in only()
+            png_queryset = Personaggio.objects.select_related(
+                'tipologia', 'proprietario'
+            ).only(
+                'id', 'nome', 'testo', 'costume', 'data_nascita', 'data_morte',
+                'tipologia', 'proprietario'
+            )
+            
+            # Filtra inventari per escludere personaggi (che ereditano da Inventario)
+            inventari_non_personaggi = Inventario.objects.filter(
+                personaggio__isnull=True
+            ).only('id', 'nome')
+            
+            # Oggetti: serializza solo id e nome per performance
+            oggetti_data = [{'id': o.id, 'nome': o.nome} for o in Oggetto.objects.only('id', 'nome')]
+            
+            return Response({
+                'png': PersonaggioSerializer(png_queryset, many=True).data,
+                'templates': MostroTemplateSerializer(MostroTemplate.objects.all(), many=True).data,
+                'manifesti': ManifestoSerializer(Manifesto.objects.all(), many=True).data,
+                'inventari': InventarioSerializer(inventari_non_personaggi, many=True).data,
+                'tessiture': TessituraSerializer(Tessitura.objects.all().select_related('aura_richiesta', 'elemento_principale'), many=True).data,
+                'infusioni': InfusioneSerializer(Infusione.objects.all().select_related('aura_richiesta', 'aura_infusione'), many=True).data,
+                'cerimoniali': CerimonialeSerializer(Cerimoniale.objects.all(), many=True).data,
+                'oggetti': oggetti_data,
+                'staff': UserShortSerializer(User.objects.filter(is_staff=True).only('id', 'username', 'first_name', 'last_name'), many=True).data,
+            })
+        except Exception:
+            logger.exception("Errore nel caricamento risorse editor plot")
+            return Response(
+                {'detail': 'Errore interno durante il caricamento delle risorse editor.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class GiornoEventoViewSet(viewsets.ModelViewSet):
     queryset = GiornoEvento.objects.all()
