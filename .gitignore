@@ -140,3 +140,8 @@ GitHub.sublime-settings
 .history
 
 contesto_*.txt
+
+# Monorepo local workspace artifacts
+*.code-workspace
+frontend/*.code-workspace
+backend/*.code-workspace
