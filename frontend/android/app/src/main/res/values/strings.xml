@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">com.kor35.app</string>
+    <string name="title_activity_main">com.kor35.app</string>
+    <string name="package_name">nativeapp.kor35.it</string>
+    <string name="custom_url_scheme">nativeapp.kor35.it</string>
+</resources>

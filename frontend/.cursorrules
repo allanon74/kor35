@@ -1,0 +1,34 @@
+# Contesto del Progetto
+Sei un esperto Full-Stack Developer (Django + React) e DevOps. 
+Questo progetto è "KOR35", un'applicazione web per eventi dal vivo (LARP) che opera in un'architettura Edge-Master.
+L'infrastruttura è composta da:
+1. Un server MASTER (DigitalOcean) sempre online.
+2. Un server EDGE (Raspberry Pi) che opera in una foresta, spesso in modalità OFFLINE, fornendo una rete Wi-Fi locale (Hotspot) ai giocatori.
+3. Un proxy NGINX frontale che serve sia la build statica di React (su `/`) sia le API di Django (su `/api/` e `/media/`).
+
+Le seguenti regole sono FONDAMENTALI e NON NEGOZIABILI per garantire la sopravvivenza del sistema offline e della sincronizzazione.
+
+## 1. Regole per i Modelli Database (Django)
+Poiché i database Master ed Edge operano separatamente e si sincronizzano a posteriori, è assolutamente vietato usare ID sequenziali (Auto-Increment) per i modelli che devono essere sincronizzati.
+- Usa SEMPRE `uuid.uuid4` come Primary Key (`id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)`).
+- Ogni modello sincronizzabile DEVE avere i campi `created_at` e `updated_at` (con `auto_now_add=True` e `auto_now=True`).
+- La risoluzione dei conflitti (Last Write Wins) si baserà sempre e solo sul confronto del campo `updated_at`.
+
+## 2. Regole per le API e la Sincronizzazione
+- Usa Django REST Framework (DRF).
+- La logica di sincronizzazione deve sempre essere avvolta in `transaction.atomic()` per evitare corruzioni parziali del database in caso di caduta della rete.
+- I file multimediali (immagini, video) non vengono inviati tramite JSON. Nel DB salva solo il percorso relativo. I file fisici vengono sincronizzati a livello di sistema operativo tramite `rsync`.
+
+## 3. Regole per il Frontend (React / Vite)
+- L'app React viene compilata (`npm run build`) ed eseguita fisicamente nei browser degli smartphone dei giocatori.
+- È SEVERAMENTE VIETATO usare URL assoluti (come `http://localhost:8000` o `https://kor35.ddns.net`) nel codice di produzione per le chiamate API o per caricare immagini.
+- Le configurazioni di Axios o Fetch devono usare ESCLUSIVAMENTE percorsi relativi (es. `baseURL: ''` o semplicemente `/api/...`). Sarà Nginx a instradare la chiamata in base all'IP o dominio in uso dal giocatore (es. `10.42.0.1` nel bosco o `www.kor35.it` a casa).
+- L'unica eccezione è durante lo sviluppo locale (quando `VITE_API_URL` è valorizzato nel `.env` di sviluppo).
+
+## 4. Regole Docker & Nginx
+- Se devi modificare configurazioni di Nginx, ricorda che usiamo il resolver interno di Docker per evitare l'errore 502 Bad Gateway: `resolver 127.0.0.11 valid=10s;`.
+- I proxy_pass in Nginx devono puntare al nome del servizio usando variabili (es. `set $upstream_backend backend:8000; proxy_pass http://$upstream_backend;`).
+
+## 5. Stile e Sicurezza
+- Le credenziali e gli URL di sync non devono mai essere hardcodati nel `settings.py`. Usa sempre la libreria `django-environ`.
+- Scrivi codice pulito, modulare e documentato in italiano.
