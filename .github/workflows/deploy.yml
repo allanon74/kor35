@@ -92,7 +92,7 @@ jobs:
                 fi
               done
             fi
-            if [ -n "${PROJECT_PATH}" ] && [ ! -f "${PROJECT_PATH}/backend/manage.py" ]; then
+            if [ -n "${PROJECT_PATH}" ] && [ ! -f "${PROJECT_PATH}/manage.py" ]; then
               PROJECT_PATH=""
             fi
             if [ -z "${PROJECT_PATH}" ]; then
@@ -100,13 +100,16 @@ jobs:
               exit 1
             fi
 
-            # Cutover monorepo: backend sempre in /backend.
-            if [ ! -f "${PROJECT_PATH}/backend/manage.py" ]; then
+            # Monorepo compat: backend in /backend (nuovo layout) oppure root (layout legacy).
+            if [ -f "${PROJECT_PATH}/backend/manage.py" ]; then
+              BACKEND_DIR="${PROJECT_PATH}/backend"
+            elif [ -f "${PROJECT_PATH}/manage.py" ]; then
+              BACKEND_DIR="${PROJECT_PATH}"
+            else
               echo "manage.py non trovato né in ${PROJECT_PATH}/backend né in ${PROJECT_PATH}." >&2
               exit 1
             fi
-            BACKEND_DIR="${PROJECT_PATH}/backend"
-            cd "${PROJECT_PATH}"
+            cd "${BACKEND_DIR}"
             git fetch --all --tags
             PREVIOUS_SHA="$(git rev-parse HEAD)"
             echo "PREVIOUS_SHA=${PREVIOUS_SHA}"
@@ -125,7 +128,6 @@ jobs:
             source ~/ambienti/kor35/bin/activate
             export TMPDIR="$HOME/tmp"
             mkdir -p "$TMPDIR"
-            cd "${BACKEND_DIR}"
 
             pip install --prefer-binary -r requirements.txt
             python manage.py migrate --plan
@@ -141,6 +143,9 @@ jobs:
             APACHE_SITE_SRC=""
             if [ -f "${PROJECT_PATH}/config/production/apache/kor35.conf" ]; then
               APACHE_SITE_SRC="${PROJECT_PATH}/config/production/apache/kor35.conf"
+            elif [ -f "${PROJECT_PATH}/backend/conf/apache/kor35-unified.conf" ]; then
+              # fallback legacy (finché non migriamo davvero i file in /config)
+              APACHE_SITE_SRC="${PROJECT_PATH}/backend/conf/apache/kor35-unified.conf"
             fi
             if [ -n "${APACHE_SITE_DEST}" ] && [ -n "${APACHE_SITE_SRC}" ]; then
               if [ ! -f "${APACHE_SITE_DEST}" ] || ! /usr/bin/cmp -s "${APACHE_SITE_SRC}" "${APACHE_SITE_DEST}"; then
@@ -167,21 +172,39 @@ jobs:
           port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 22 }}
           script: |
             REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
-            MONOREPO_PATH="${{ secrets.MIRROR_MONOREPO_PATH || '/home/pi/kor35-replica' }}"
-            MONOREPO_REPO_URL="${{ secrets.MIRROR_MONOREPO_REPO_URL || '' }}"
             ROOT_PATH="${{ secrets.MIRROR_ROOT_PATH || '/home/pi/kor35-replica' }}"
+            # Monorepo: un solo clone; backend è in /backend.
+            MONOREPO_PATH="${{ secrets.MIRROR_MONOREPO_PATH || '' }}"
+            MONOREPO_REPO_URL="${{ secrets.MIRROR_MONOREPO_REPO_URL || '' }}"
+
+            BACKEND_PATH="${{ secrets.MIRROR_BACKEND_PATH || '/home/pi/kor35-replica/backend_src' }}"
+            BACKEND_REPO_URL="${{ secrets.MIRROR_BACKEND_REPO_URL || '' }}"
             DEPLOY_CMD="${{ secrets.MIRROR_DEPLOY_COMMAND || 'docker compose up -d --build' }}"
 
-            if [ ! -d "${MONOREPO_PATH}" ]; then
-              if [ -n "${MONOREPO_REPO_URL}" ]; then
-                mkdir -p "$(dirname "${MONOREPO_PATH}")"
-                git clone "${MONOREPO_REPO_URL}" "${MONOREPO_PATH}"
-              else
-                echo "MONOREPO_PATH non esiste: ${MONOREPO_PATH}. Imposta MIRROR_MONOREPO_REPO_URL." >&2
-                exit 1
+            # Prefer monorepo layout se configurato; fallback al layout legacy.
+            if [ -n "${MONOREPO_PATH}" ]; then
+              if [ ! -d "${MONOREPO_PATH}" ]; then
+                if [ -n "${MONOREPO_REPO_URL}" ]; then
+                  mkdir -p "$(dirname "${MONOREPO_PATH}")"
+                  git clone "${MONOREPO_REPO_URL}" "${MONOREPO_PATH}"
+                else
+                  echo "MONOREPO_PATH non esiste: ${MONOREPO_PATH}. Imposta MIRROR_MONOREPO_REPO_URL." >&2
+                  exit 1
+                fi
               fi
+              cd "${MONOREPO_PATH}"
+            else
+              if [ ! -d "${BACKEND_PATH}" ]; then
+                if [ -n "${BACKEND_REPO_URL}" ]; then
+                  mkdir -p "$(dirname "${BACKEND_PATH}")"
+                  git clone "${BACKEND_REPO_URL}" "${BACKEND_PATH}"
+                else
+                  echo "BACKEND_PATH non esiste: ${BACKEND_PATH}. Imposta MIRROR_BACKEND_PATH corretto o MIRROR_BACKEND_REPO_URL." >&2
+                  exit 1
+                fi
+              fi
+              cd "${BACKEND_PATH}"
             fi
-            cd "${MONOREPO_PATH}"
 
             git fetch --all --tags
             if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
@@ -196,13 +219,6 @@ jobs:
             export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
             export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "MIRROR_BACKEND_DEPLOYED_SHA=${MIRROR_BACKEND_DEPLOYED_SHA}"
-
-            # Config mirror versionata nel monorepo (opzionale): aggiorna compose solo se cambiato.
-            if [ -f "${MONOREPO_PATH}/config/mirror/docker-compose.yml" ]; then
-              if [ ! -f "${ROOT_PATH}/docker-compose.yml" ] || ! /usr/bin/cmp -s "${MONOREPO_PATH}/config/mirror/docker-compose.yml" "${ROOT_PATH}/docker-compose.yml"; then
-                cp "${MONOREPO_PATH}/config/mirror/docker-compose.yml" "${ROOT_PATH}/docker-compose.yml"
-              fi
-            fi
 
             cd "${ROOT_PATH}"
             eval "${DEPLOY_CMD}"
@@ -252,12 +268,10 @@ jobs:
               git reset --hard "${REF}"
             fi
 
-            # Cutover monorepo: frontend sempre in /frontend.
-            if [ ! -f "${{ secrets.REPO_PATH_ON_SERVER }}/frontend/package.json" ]; then
-              echo "frontend/package.json non trovato in REPO_PATH_ON_SERVER." >&2
-              exit 1
+            # Monorepo compat: frontend in /frontend (nuovo layout) oppure root (layout legacy).
+            if [ -f "${{ secrets.REPO_PATH_ON_SERVER }}/frontend/package.json" ]; then
+              cd "${{ secrets.REPO_PATH_ON_SERVER }}/frontend"
             fi
-            cd "${{ secrets.REPO_PATH_ON_SERVER }}/frontend"
             export VITE_BUILD_SHA="$(git rev-parse HEAD)"
             export VITE_BUILD_VERSION="g$(git rev-parse --short HEAD)"
             export VITE_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -304,35 +318,64 @@ jobs:
           port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 22 }}
           script: |
             REF="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
-            MONOREPO_PATH="${{ secrets.MIRROR_MONOREPO_PATH || '/home/pi/kor35-replica' }}"
+            MONOREPO_PATH="${{ secrets.MIRROR_MONOREPO_PATH || '' }}"
             MONOREPO_REPO_URL="${{ secrets.MIRROR_MONOREPO_REPO_URL || '' }}"
+
+            FRONTEND_PATH="${{ secrets.MIRROR_FRONTEND_PATH || '/home/pi/kor35-replica/frontend_src' }}"
+            FRONTEND_PATH_LEGACY="/home/pi/kor35-replica/forntend_src"
             MIRROR_ROOT_PATH="${{ secrets.MIRROR_ROOT_PATH || '/home/pi/kor35-replica' }}"
             REACT_BUILD_PATH="${{ secrets.MIRROR_REACT_BUILD_PATH || '/home/pi/kor35-replica/react_build' }}"
+            FRONTEND_REPO_URL="${{ secrets.MIRROR_FRONTEND_REPO_URL || '' }}"
             MIRROR_POST_DEPLOY_CMD="${{ secrets.MIRROR_FRONTEND_POST_DEPLOY_COMMAND || '' }}"
             COMPOSE_PROJECT_NAME="${{ secrets.MIRROR_COMPOSE_PROJECT_NAME || 'kor35-replica' }}"
 
             source /etc/profile
             set -euo pipefail
 
-            if [ ! -d "${MONOREPO_PATH}" ]; then
-              if [ -n "${MONOREPO_REPO_URL}" ]; then
-                mkdir -p "$(dirname "${MONOREPO_PATH}")"
-                git clone "${MONOREPO_REPO_URL}" "${MONOREPO_PATH}"
+            # Prefer monorepo layout se configurato; fallback al layout legacy.
+            if [ -n "${MONOREPO_PATH}" ]; then
+              if [ ! -d "${MONOREPO_PATH}" ]; then
+                if [ -n "${MONOREPO_REPO_URL}" ]; then
+                  mkdir -p "$(dirname "${MONOREPO_PATH}")"
+                  git clone "${MONOREPO_REPO_URL}" "${MONOREPO_PATH}"
+                else
+                  echo "MONOREPO_PATH non esiste: ${MONOREPO_PATH}. Imposta MIRROR_MONOREPO_REPO_URL." >&2
+                  exit 1
+                fi
+              fi
+              cd "${MONOREPO_PATH}"
+              git fetch --all --tags
+              if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
+                git checkout -B "${REF}" "origin/${REF}"
+                git reset --hard "origin/${REF}"
               else
-                echo "MONOREPO_PATH non esiste: ${MONOREPO_PATH}. Imposta MIRROR_MONOREPO_REPO_URL." >&2
-                exit 1
+                git checkout "${REF}"
+                git reset --hard "${REF}"
+              fi
+              cd "${MONOREPO_PATH}/frontend"
+            else
+              if [ ! -d "${FRONTEND_PATH}" ] && [ -d "${FRONTEND_PATH_LEGACY}" ]; then
+                FRONTEND_PATH="${FRONTEND_PATH_LEGACY}"
+              fi
+              if [ ! -d "${FRONTEND_PATH}" ]; then
+                if [ -n "${FRONTEND_REPO_URL}" ]; then
+                  mkdir -p "$(dirname "${FRONTEND_PATH}")"
+                  git clone "${FRONTEND_REPO_URL}" "${FRONTEND_PATH}"
+                else
+                  echo "FRONTEND_PATH non esiste: ${FRONTEND_PATH}. Imposta MIRROR_FRONTEND_PATH corretto o MIRROR_FRONTEND_REPO_URL." >&2
+                  exit 1
+                fi
+              fi
+              cd "${FRONTEND_PATH}"
+              git fetch --all --tags
+              if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
+                git checkout -B "${REF}" "origin/${REF}"
+                git reset --hard "origin/${REF}"
+              else
+                git checkout "${REF}"
+                git reset --hard "${REF}"
               fi
             fi
-            cd "${MONOREPO_PATH}"
-            git fetch --all --tags
-            if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
-              git checkout -B "${REF}" "origin/${REF}"
-              git reset --hard "origin/${REF}"
-            else
-              git checkout "${REF}"
-              git reset --hard "${REF}"
-            fi
-            cd "${MONOREPO_PATH}/frontend"
 
             export VITE_BUILD_SHA="$(git rev-parse HEAD)"
             export VITE_BUILD_VERSION="g$(git rev-parse --short HEAD)"
