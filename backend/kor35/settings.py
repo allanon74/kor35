@@ -34,26 +34,31 @@ CURRENT_ENV = env('ENVIRONMENT', default='production')
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-2v412!5-=9cils@7_78wzzssrnkf*5)(%z2a6d*z2!3khn1w9c'
+SECRET_KEY = env(
+    "SECRET_KEY",
+    default="django-insecure-2v412!5-=9cils@7_78wzzssrnkf*5)(%z2a6d*z2!3khn1w9c",
+)
+
+
+def _split_hosts_env(value: str):
+    """Host Django da variabile env separati da virgola (es. domini e IP)."""
+    if not value or not str(value).strip():
+        return []
+    return [h.strip() for h in str(value).split(",") if h.strip()]
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# DEBUG = True
 DEBUG = env.bool("DEBUG", default=False)
 
-ALLOWED_HOSTS = [
-    'www.k-o-r-35.it',
-    '127.0.0.1', 
-    'www.kor35.it', 
-    'app.kor35.it', 
-    'app.k-o-r-35.it',
-    'localhost',
-    'kor35.ddns.net',
-    '192.168.1.200',
-    '192.168.1.50',
-                 ]
+# Host permessi: imposta ALLOWED_HOSTS nel file .env (virgola, senza spazi).
+# Se manca o è vuoto, solo sviluppo locale (imposta esplicitamente in produzione).
+_allowed_from_env = _split_hosts_env(env("ALLOWED_HOSTS", default=""))
+ALLOWED_HOSTS = _allowed_from_env if _allowed_from_env else ["127.0.0.1", "localhost"]
 
-if CURRENT_ENV == 'raspberry_docker':
-    ALLOWED_HOSTS.extend(['*']) # O metti l'IP specifico es: '192.168.1.100'
+if CURRENT_ENV == "raspberry_docker":
+    # Mirror/Pi: consente accesso da IP/host vari in LAN (hotspot).
+    if "*" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append("*")
     CORS_ALLOW_ALL_ORIGINS = True
 
 # prova 
