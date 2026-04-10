@@ -56,10 +56,11 @@ Workflow secondari in `frontend/.github/workflows/` sono legacy/storici e non go
   - `run_migrations`: abilita/disabilita migrate
 - Fasi:
   - `guard-main-ref`: blocca deploy se `ref != main`
-  - `production-deploy`: deploy su server produzione in Docker (`compose.base + compose.prod`)
-  - `mirror-deploy`: deploy su Raspberry mirror in Docker (`compose.base + compose.mirror`)
+  - `build-frontend`: se in questo deploy sono cambiati file sotto `frontend/`, su **GitHub Actions** esegue `npm ci` e `npm run build` e salva `dist/` come artifact (Node sul runner, **non sul server**)
+  - `production-deploy`: opzionale `rsync` di `dist/` in `config/docker/nginx-docker/react_build/` sul server, poi SSH con `git pull` e `docker compose` (`compose.base + compose.prod`)
+  - `mirror-deploy`: stesso `rsync` verso il Pi (se il frontend è stato buildato), poi SSH con compose mirror
 
-Nota: il workflow deploya la monorepo completa (frontend + backend + servizi Docker) lato server, quindi i container vengono riavviati con il codice aggiornato del branch `main`.
+**Scelta deploy frontend (decisione progetto):** il build React avviene **in CI** (runner Ubuntu), poi gli statici vanno sul server con `rsync` **solo quando `frontend/` è cambiato**. Così il server di produzione resta minimale: **Docker + git**, senza installare npm/Node in produzione. Sul server **senza** npm usa `./scripts/setup_wsl_pi_like.sh --skip-frontend-build` (crea le directory; `react_build` la popoli con deploy CI o copiando `dist/` da un PC con Node). In locale (es. WSL) puoi usare lo script senza skip se hai `npm` installato.
 
 Rollback manuale: `.github/workflows/rollback.yml`
 

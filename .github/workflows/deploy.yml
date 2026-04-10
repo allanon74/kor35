@@ -35,15 +35,102 @@ jobs:
           fi
           echo "Deploy ref valido: ${REF_INPUT}"
 
-  production-deploy:
-    name: Production deploy
+  # Build React su runner GitHub (niente npm sul server): solo se frontend/ è cambiato.
+  build-frontend:
+    name: Build frontend (if frontend/ changed)
     runs-on: ubuntu-latest
     needs: [guard-main-ref]
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
+
+      - name: Rileva modifiche in frontend/
+        id: detect
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+          else
+            REF_INPUT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
+            git fetch origin "${REF_INPUT}"
+            git checkout "${REF_INPUT}"
+            AFTER="$(git rev-parse HEAD)"
+            BEFORE="$(git rev-parse HEAD~1 2>/dev/null || true)"
+          fi
+          if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Frontend: nessun before affidabile — eseguo build."
+            exit 0
+          fi
+          if git diff --name-only "$BEFORE" "$AFTER" -- frontend/ | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Frontend: modifiche tra ${BEFORE:0:8}..${AFTER:0:8}"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Frontend: nessun file modificato in frontend/"
+          fi
+
+      - name: Setup Node
+        if: steps.detect.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci && npm run build
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Upload dist
+        if: steps.detect.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 3
+
+  production-deploy:
+    name: Production deploy
+    runs-on: ubuntu-latest
+    needs: [guard-main-ref, build-frontend]
+    steps:
+      - name: Download frontend dist
+        if: needs.build-frontend.outputs.changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist-upload
+
+      - name: Rsync frontend verso produzione
+        if: needs.build-frontend.outputs.changed == 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+          PORT: ${{ secrets.SERVER_SSH_PORT }}
+          PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+        run: |
+          set -euo pipefail
+          REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
+          REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          rsync -avz --delete -e "ssh -p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa" \
+            dist-upload/ "${USER}@${HOST}:${REMOTE}/"
 
       - name: Backup and deploy on Production via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -119,8 +206,35 @@ jobs:
   mirror-deploy:
     name: Mirror Raspberry backend deploy
     runs-on: ubuntu-latest
-    needs: [production-deploy]
+    needs: [production-deploy, build-frontend]
     steps:
+      - name: Download frontend dist
+        if: needs.build-frontend.outputs.changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist-upload
+
+      - name: Rsync frontend verso mirror
+        if: needs.build-frontend.outputs.changed == 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
+          HOST: ${{ secrets.MIRROR_SERVER_HOST }}
+          USER: ${{ secrets.MIRROR_SERVER_USER }}
+          PORT: ${{ secrets.MIRROR_SERVER_SSH_PORT }}
+          ROOT_PATH: ${{ secrets.MIRROR_ROOT_PATH }}
+        run: |
+          set -euo pipefail
+          REMOTE_BASE="${ROOT_PATH:-/home/pi/kor35-replica}"
+          REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          rsync -avz --delete -e "ssh -p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa" \
+            dist-upload/ "${USER}@${HOST}:${REMOTE}/"
+
       - name: Deploy backend to mirror via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -186,8 +300,6 @@ jobs:
             fi
             docker compose -f compose.base.yml -f compose.mirror.yml exec -T backend python manage.py collectstatic --noinput
 
-            # Rete di sicurezza: dopo ricreazione container backend/daphne, Nginx (se non ricreato)
-            # può tenere IP vecchi; reload + snippet resolver in common_locations.snippets mitigano 502.
             docker compose -f compose.base.yml -f compose.mirror.yml exec -T frontend nginx -s reload 2>/dev/null || true
 
             if [ -n "${HEALTHCHECK_URL}" ]; then
