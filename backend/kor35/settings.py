@@ -376,6 +376,14 @@ STATICFILES_FINDERS = [
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Migrazioni di pacchetti terze nel repo (non in site-packages): makemigrations e migrate
+# usano gli stessi file in dev Docker, prod e locale.
+MIGRATION_MODULES = {
+    "django_summernote": "kor35.vendor_migrations.django_summernote",
+    "webpush": "kor35.vendor_migrations.webpush",
+}
+
 CMS_CONFIRM_VERSION4 = True
 
 # Google OAuth: imposta GOOGLE_OAUTH_CLIENT_ID e GOOGLE_OAUTH_CLIENT_SECRET nel file .env
