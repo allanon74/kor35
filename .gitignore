@@ -147,6 +147,8 @@ config/docker/nginx-docker/react_build/
 config/docker/nginx-docker/postgres_data/
 config/docker/nginx-docker/static_data/
 config/docker/nginx-docker/media_data/
+# Config Nginx attiva sul Pi per kor35.ddns.net (generata da ddns.conf.example)
+config/docker/nginx-docker/nginx_conf/ddns.conf
 .edge_sync_state.json
 
 # Root cleanup / quarantine area

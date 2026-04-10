@@ -30,4 +30,3 @@ services:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
       - ./nginx-docker/certs:/etc/nginx/certs:ro
-      - ./nginx-docker/certs_ddns:/etc/nginx/certs_ddns:ro

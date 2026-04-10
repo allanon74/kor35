@@ -1,0 +1,24 @@
+# Solo Raspberry Pi / ambiente mirror (kor35.ddns.net).
+# In produzione Docker (compose.prod.yml) NON usare questo file.
+#
+# Sul Pi, dopo aver copiato i certificati in nginx-docker/certs_ddns/:
+#   cp ddns.conf.example ddns.conf
+#   docker compose ... restart frontend
+#
+# Richiede il volume certs_ddns (già in compose.mirror.yml).
+
+server {
+    listen 80;
+    server_name kor35.ddns.net;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name kor35.ddns.net;
+
+    ssl_certificate /etc/nginx/certs_ddns/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs_ddns/privkey.pem;
+    include /etc/nginx/conf.d/ssl_params.snippets;
+    include /etc/nginx/conf.d/common_locations.snippets;
+}

@@ -1,6 +1,3 @@
-ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
     # DNS interno Docker: con proxy_pass letterale (http://backend:8000) Nginx risolve il nome
     # all’avvio e può tenere l’IP vecchio dopo docker compose up che ricrea solo backend/daphne
     # → "Connection refused" / 502. Variabile + resolver = nuova risoluzione ogni valid=10s.

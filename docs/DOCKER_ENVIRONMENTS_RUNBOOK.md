@@ -183,8 +183,8 @@ Runtime persistente (in `config/docker/nginx-docker/`):
 - `media_data/`
 - `static_data/`
 - `react_build/`
-- `certs/`
-- `certs_ddns/` (se usato)
+- `certs/` (TLS produzione)
+- `certs_ddns/` solo sul **mirror/Pi** (dominio DDNS), non sul server Docker di produzione
 
 ### 6.2 Raspberry mirror
 
