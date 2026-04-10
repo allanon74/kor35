@@ -26,7 +26,7 @@ Sottostrutture rilevanti:
 - `config/docker/compose.prod.yml`
 - `config/docker/compose.dev-standalone.yml` (db+redis stand-alone)
 - `config/docker/nginx-docker/` (nginx conf + runtime dirs legacy)
-- `config/env/` template env backend per ambiente
+- `config/env_templates/` template env backend per ambiente
 
 ## 2) Profili ambiente supportati
 
@@ -43,10 +43,10 @@ Ogni profilo seleziona:
 
 Template disponibili:
 
-- `config/env/backend.dev-home.env.example`
-- `config/env/backend.dev-office.env.example`
-- `config/env/backend.mirror.env.example`
-- `config/env/backend.prod.env.example`
+- `config/env_templates/backend.dev-home.env.example`
+- `config/env_templates/backend.dev-office.env.example`
+- `config/env_templates/backend.mirror.env.example`
+- `config/env_templates/backend.prod.env.example`
 
 Script consigliato:
 

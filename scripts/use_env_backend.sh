@@ -10,7 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_DIR="$ROOT_DIR/config/env"
+ENV_DIR="$ROOT_DIR/config/env_templates"
 BACKEND_DIR="$ROOT_DIR/backend"
 
 ENV_PROFILE=""

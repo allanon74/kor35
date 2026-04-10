@@ -77,7 +77,7 @@ wsl_pi_set_env_profile() {
 wsl_pi_require_backend_env() {
   if [ ! -f "$KOR35_BACKEND_ENV_FILE" ]; then
     echo "File env backend mancante: $KOR35_BACKEND_ENV_FILE" >&2
-    echo "Crea il file da template in config/env oppure usa scripts/use_env_backend.sh" >&2
+    echo "Crea il file da template in config/env_templates oppure usa scripts/use_env_backend.sh" >&2
     return 1
   fi
 }

@@ -43,7 +43,7 @@ Struttura root attesa:
 
 Dettagli:
 - `config/docker/compose.base.yml` + `compose.<env>.yml`
-- `config/env/*.env.example` template env backend per profilo
+- `config/env_templates/*.env.example` template env backend per profilo
 - `scripts/use_env_backend.sh` per inizializzare `backend/.env.<profilo>`
 
 ## Deploy sicuro (GitHub Actions)
@@ -129,7 +129,7 @@ Per setup completo backend + frontend + Postgres locale + sync pull-only dal Mas
 - stack Docker "Pi-like" WSL: `scripts/setup_wsl_pi_like.sh`, poi `scripts/up_wsl_pi_like.sh` / `scripts/down_wsl_pi_like.sh`
 - media pull-only (rsync): `scripts/sync_media_pull_wsl_pi_like.sh`
 - stato migrazione monorepo: `docs/MONOREPO_MIGRATION.md`
-- env per ambiente: `config/env/README.md`
+- env per ambiente: `config/env_templates/README.md`
 - runbook docker ambienti: `docs/DOCKER_ENVIRONMENTS_RUNBOOK.md`
 - comandi rapidi: `Makefile` (`make help`)
 
