@@ -238,11 +238,23 @@ sudo mkdir -p /srv/kor35
 sudo chown -R <deploy-user>:<deploy-user> /srv/kor35
 cd /srv/kor35
 git clone https://github.com/allanon74/kor35.git .
-cp backend/.env.prod.example backend/.env.prod   # se disponibile nel tuo setup
+cp config/env_templates/backend.prod.env.example backend/.env.prod
+nano backend/.env.prod
+# Django legge anche backend/.env (vedi kor35/settings.py): punta al profilo con un symlink
+cd backend && ln -sf .env.prod .env && cd ..
 cd config/docker
 KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
 docker compose -f compose.base.yml -f compose.prod.yml up -d --build
 ```
+
+**Nota su `backend/.env`:** `settings.py` chiama `read_env(BASE_DIR / '.env')`. Il compose usa `KOR35_BACKEND_ENV_FILE` (es. `.env.prod`) e va bene per i container; per allineare anche comandi `manage.py` eseguiti a mano nella cartella `backend`, crea un symlink al file del profilo, ad esempio:
+
+```bash
+cd /srv/kor35/backend
+ln -sf .env.prod .env
+```
+
+Stesso schema per il mirror: `ln -sf .env.mirror .env`. In alternativa puoi usare `cp` invece del symlink, ma dovrai ricordarti di aggiornare due file quando cambi la configurazione.
 
 Verifica endpoint health lato produzione:
 
@@ -288,8 +300,8 @@ Esegui questa checklist prima di lanciare `workflow_dispatch` o prima di fare pu
    - Production: `SERVER_PROJECT_PATH` punta alla root monorepo (es. `/srv/kor35`).
    - Mirror: `MIRROR_ROOT_PATH` (o fallback `MIRROR_BACKEND_PATH`) punta alla root monorepo.
 3. **File env backend presenti sui server**
-   - Production: `backend/.env.prod`
-   - Mirror: `backend/.env.mirror`
+   - Production: `backend/.env.prod` (opzionale ma consigliato: `ln -sf .env.prod .env` in `backend/`)
+   - Mirror: `backend/.env.mirror` (stesso schema: `ln -sf .env.mirror .env`)
 4. **Docker compose monorepo presente sui server**
    - Deve esistere `config/docker/compose.base.yml` nella root repo.
 5. **Healthcheck URL raggiungibili (se configurati)**
@@ -331,13 +343,22 @@ cd /home/django/progetti/kor35
 ./scripts/use_env_backend.sh --env dev-home
 ```
 
-Compila `backend/.env.dev-home` (segreti reali), poi:
+Compila `backend/.env.dev-home` (segreti reali), poi allinea `backend/.env` al profilo attivo.
+
+Lo script `use_env_backend.sh` copia già il contenuto del profilo in `backend/.env`. In alternativa puoi usare un **symlink** (un solo file da modificare, come in produzione):
 
 ```bash
-cp backend/.env.dev-home backend/.env
+cd /home/django/progetti/kor35/backend
+ln -sf .env.dev-home .env
 ```
 
-(lo script lo fa già per compatibilità)
+Per un altro profilo, ad esempio `dev-office` o `prod` locale:
+
+```bash
+ln -sf .env.dev-office .env
+# oppure
+ln -sf .env.prod .env
+```
 
 ### 3) Setup e avvio stack
 
@@ -373,6 +394,7 @@ Bootstrap ambiente dev-home:
 ```bash
 cd /home/django/progetti/kor35
 ./scripts/use_env_backend.sh --env dev-home
+cd backend && ln -sf .env.dev-home .env && cd ..
 make setup
 make up ENV=dev-home
 ```
@@ -388,8 +410,11 @@ Cambio profilo:
 
 ```bash
 ./scripts/use_env_backend.sh --env dev-office
+cd backend && ln -sf .env.dev-office .env && cd ..
 make up ENV=dev-office
 ```
+
+(`use_env_backend.sh` aggiorna già `backend/.env`; il `ln -sf` è opzionale se preferisci solo il symlink al file di profilo.)
 
 Stop:
 
