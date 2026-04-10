@@ -14,6 +14,17 @@ services:
     volumes:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
+    # Primo avvio su DB vuoto: migrate richiede diversi minuti; l'healthcheck di default (120s) falliva prima di Gunicorn.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz/').read()\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 600s
 
   daphne:
     container_name: kor35_prod_daphne
