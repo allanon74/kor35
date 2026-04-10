@@ -107,8 +107,17 @@ class SocialPost(SyncableModel, models.Model):
             raise ValidationError("Per la visibilita KORP devi selezionare una KORP.")
         if self.visibilita != SOCIAL_VISIBILITY_KORP and self.korp_visibilita_id:
             raise ValidationError("La KORP visibilita e ammessa solo per post visibili alla KORP.")
-        if self.video and getattr(self.video, "size", 0) > MAX_VIDEO_BYTES:
-            raise ValidationError(f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
+        # Nota sync/offline:
+        # In modalità replica i file fisici vengono sincronizzati via rsync, non via JSON.
+        # Durante una sync DB può arrivare prima del file → size() può sollevare FileNotFoundError.
+        if self.video:
+            try:
+                if getattr(self.video, "size", 0) > MAX_VIDEO_BYTES:
+                    raise ValidationError(
+                        f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB)."
+                    )
+            except FileNotFoundError:
+                pass
 
     def save(self, *args, **kwargs):
         if not self.public_slug:
@@ -243,8 +252,14 @@ class SocialGroupPost(SyncableModel, models.Model):
             raise ValidationError("Un post di gruppo deve avere testo, immagine o video.")
         if self.immagine and self.video:
             raise ValidationError("Un post di gruppo non puo avere contemporaneamente immagine e video.")
-        if self.video and getattr(self.video, "size", 0) > MAX_VIDEO_BYTES:
-            raise ValidationError(f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
+        if self.video:
+            try:
+                if getattr(self.video, "size", 0) > MAX_VIDEO_BYTES:
+                    raise ValidationError(
+                        f"Video troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB)."
+                    )
+            except FileNotFoundError:
+                pass
 
     def save(self, *args, **kwargs):
         if self.immagine:
@@ -310,9 +325,15 @@ class SocialStory(SyncableModel, models.Model):
             raise ValidationError("Per la visibilita KORP devi selezionare una KORP.")
         if self.visibilita != SOCIAL_VISIBILITY_KORP and self.korp_visibilita_id:
             raise ValidationError("La KORP visibilita e ammessa solo per story visibili alla KORP.")
-        if self.media and getattr(self.media, "size", 0) > MAX_VIDEO_BYTES:
-            # Limite anche per immagini grandi, coerente con video.
-            raise ValidationError(f"Media troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB).")
+        if self.media:
+            try:
+                if getattr(self.media, "size", 0) > MAX_VIDEO_BYTES:
+                    # Limite anche per immagini grandi, coerente con video.
+                    raise ValidationError(
+                        f"Media troppo grande (max {MAX_VIDEO_BYTES // (1024 * 1024)}MB)."
+                    )
+            except FileNotFoundError:
+                pass
 
     def save(self, *args, **kwargs):
         if not self.expires_at:

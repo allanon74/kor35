@@ -1,0 +1,121 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: kor35_wsl_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kor35_dev
+      POSTGRES_USER: kor35_dev
+      POSTGRES_PASSWORD: kor35_dev
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: kor35_wsl_redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend_src
+    container_name: kor35_wsl_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend_src/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      ENVIRONMENT: raspberry_docker
+      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend_src:/app
+      - ./static_data:/app/static
+      - ./media_data:/app/media
+    expose:
+      - "8000"
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+      gunicorn kor35.wsgi:application --bind 0.0.0.0:8000 --timeout 120 --graceful-timeout 30"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz/').read()\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 120s
+
+  daphne:
+    build:
+      context: ./backend_src
+    container_name: kor35_wsl_daphne
+    restart: unless-stopped
+    env_file:
+      - ./backend_src/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      ENVIRONMENT: raspberry_docker
+      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./backend_src:/app
+      - ./static_data:/app/static
+      - ./media_data:/app/media
+    expose:
+      - "8001"
+    command: daphne -b 0.0.0.0 -p 8001 kor35.asgi:application
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api/healthz/').read()\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 120s
+
+  frontend:
+    image: nginx:alpine
+    container_name: kor35_wsl_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx_conf_wsl:/etc/nginx/conf.d
+      - ./react_build:/usr/share/nginx/html
+      - ./static_data:/app/static
+      - ./media_data:/app/media
+    depends_on:
+      backend:
+        condition: service_healthy
+      daphne:
+        condition: service_healthy

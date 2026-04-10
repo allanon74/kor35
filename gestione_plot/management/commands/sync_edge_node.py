@@ -365,6 +365,19 @@ class Command(BaseCommand):
         Replica: stessa chiave naturale (unique_together / unique) ma sync_id diverso
         rispetto al master -> allinea sync_id e campi sulla riga esistente.
         """
+        if model._meta.label_lower == "personaggi.tipologiapersonaggio":
+            nome = (row.get("nome") or update_data.get("nome") or "").strip()
+            if not nome:
+                return False
+            existing = model.objects.filter(nome=nome).exclude(sync_id=sync_id).first()
+            if not existing:
+                return False
+            patch = dict(update_data)
+            patch["sync_id"] = sync_id
+            if remote_updated_at:
+                patch["updated_at"] = remote_updated_at
+            model.objects.filter(pk=existing.pk).update(**patch)
+            return True
         if model._meta.label_lower == "social.socialprofile":
             if self._merge_social_profile_by_personaggio(model, update_data, remote_updated_at):
                 return True

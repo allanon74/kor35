@@ -190,6 +190,8 @@ CORS_ALLOWED_ORIGINS = [
     "https://social.kor35.it",
     "https://social.k-o-r-35.it", 
     "https://kor35.ddns.net",      
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
 ]
 
 # CORS: senza regex così gli header vengono inviati per tutte le risposte.
@@ -426,6 +428,8 @@ CSRF_TRUSTED_ORIGINS = [
     "https://social.kor35.it",
     "https://kor35.ddns.net",
     "http://kor35.ddns.net",  # mirror LAN spesso in HTTP
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
 ]
 # Mirror / Pi come access point: aggiungi l’URL esatto che vedi nel browser (schema+host+porta).
 # Esempio: EXTRA_CSRF_TRUSTED_ORIGINS=http://192.168.4.1,http://192.168.4.1:80

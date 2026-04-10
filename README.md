@@ -74,3 +74,11 @@ Altri accorgimenti:
 ### Nota importante
 
 Se non hai un server staging separato puoi riusare i secrets di produzione anche per `STAGING_*`.
+
+## Sviluppo locale in WSL
+
+Per setup completo backend + frontend + Postgres locale + sync pull-only dal Master:
+
+- vedi `docs/WSL_DEV_SETUP.md`
+- stack Docker "Pi-like" WSL: `scripts/setup_wsl_pi_like.sh`, poi `scripts/up_wsl_pi_like.sh` / `scripts/down_wsl_pi_like.sh`
+- media pull-only (rsync): `scripts/sync_media_pull_wsl_pi_like.sh`

@@ -140,3 +140,11 @@ GitHub.sublime-settings
 .history
 
 contesto_*.txt
+
+# WSL Pi-like local stack artifacts
+conf/nginx-docker/backend_src
+conf/nginx-docker/react_build/
+conf/nginx-docker/postgres_data/
+conf/nginx-docker/static_data/
+conf/nginx-docker/media_data/
+.edge_sync_state.json
