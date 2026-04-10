@@ -18,8 +18,13 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BACKEND_DIR="$PROJECT_ROOT/backend"
 
-cd "$PROJECT_ROOT"
+if [ -f "$BACKEND_DIR/manage.py" ]; then
+  cd "$BACKEND_DIR"
+else
+  cd "$PROJECT_ROOT"
+fi
 
 echo "Avvio sync pull-only ogni ${SYNC_INTERVAL_SECONDS}s (Ctrl+C per fermare)..."
 

@@ -3,7 +3,7 @@
 # shellcheck shell=bash
 
 KOR35_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WSL_PI_STACK_DIR="${WSL_PI_STACK_DIR:-$KOR35_ROOT/conf/nginx-docker}"
+WSL_PI_STACK_DIR="${WSL_PI_STACK_DIR:-$KOR35_ROOT/config/docker/nginx-docker}"
 WSL_PI_COMPOSE_FILE="${WSL_PI_COMPOSE_FILE:-docker-compose.wsl-pi.yml}"
 
 wsl_pi_require_docker() {

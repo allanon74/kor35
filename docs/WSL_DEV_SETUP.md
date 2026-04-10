@@ -1,8 +1,8 @@
 # Setup WSL sviluppo (backend + frontend + DB locale)
 
 Questa guida prepara un ambiente locale completo in WSL con:
-- backend Django (`/home/django/progetti/kor35`)
-- frontend Vite React (`/home/django/progetti/kor35-app`)
+- backend Django (`/home/django/progetti/kor35/backend`)
+- frontend Vite React (`/home/django/progetti/kor35/frontend`, fallback legacy `/home/django/progetti/kor35-app`)
 - PostgreSQL + Redis locali via Docker
 - sincronizzazione **pull-only** dal Master/Pi verso il DB locale
 
@@ -20,8 +20,8 @@ Include due modalita':
 Nel repo backend:
 
 ```bash
-cd /home/django/progetti/kor35
-cp .env.wsl.example .env
+cd /home/django/progetti/kor35/backend
+cp ../.env.wsl.example .env
 ```
 
 Compila nel file `.env` almeno:
@@ -34,13 +34,13 @@ Nel repo backend:
 
 ```bash
 cd /home/django/progetti/kor35
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f config/docker/compose.dev-standalone.yml up -d
 ```
 
 Verifica:
 
 ```bash
-docker compose -f docker-compose.dev.yml ps
+docker compose -f config/docker/compose.dev-standalone.yml ps
 ```
 
 ## 4) Backend Django locale
@@ -48,7 +48,7 @@ docker compose -f docker-compose.dev.yml ps
 Nel repo backend:
 
 ```bash
-cd /home/django/progetti/kor35
+cd /home/django/progetti/kor35/backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -60,10 +60,10 @@ Backend disponibile su `http://127.0.0.1:8000`.
 
 ## 5) Frontend locale (Vite)
 
-Nel repo frontend:
+Nel repo frontend (monorepo):
 
 ```bash
-cd /home/django/progetti/kor35-app
+cd /home/django/progetti/kor35/frontend
 cp .env.example .env
 npm install
 npm run dev
@@ -76,7 +76,7 @@ Il frontend usa percorsi relativi `/api` e `/media`, con proxy Vite verso `127.0
 Con backend avviato e `.env` configurato:
 
 ```bash
-cd /home/django/progetti/kor35
+cd /home/django/progetti/kor35/backend
 source .venv/bin/activate
 python manage.py sync_edge_node --pull-only
 ```
@@ -88,9 +88,9 @@ Questo comando **non invia** modifiche locali al Master.
 Per mantenere il DB locale allineato in polling:
 
 ```bash
-cd /home/django/progetti/kor35
+cd /home/django/progetti/kor35/backend
 source .venv/bin/activate
-SYNC_INTERVAL_SECONDS=60 ./scripts/sync_edge_pull_only.sh
+SYNC_INTERVAL_SECONDS=60 ../scripts/sync_edge_pull_only.sh
 ```
 
 Il loop richiama internamente:
@@ -108,7 +108,7 @@ python manage.py sync_edge_node --pull-only
 
 ```bash
 cd /home/django/progetti/kor35
-docker compose -f docker-compose.dev.yml down
+docker compose -f config/docker/compose.dev-standalone.yml down
 ```
 
 ## 9) Modalita' Pi-like completa (Docker)
@@ -166,6 +166,6 @@ URL:
 Equivalente manuale (stessa directory del compose):
 
 ```bash
-cd /home/django/progetti/kor35/conf/nginx-docker
+cd /home/django/progetti/kor35/config/docker/nginx-docker
 docker compose -f docker-compose.wsl-pi.yml up -d --build
 ```

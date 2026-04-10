@@ -142,9 +142,12 @@ GitHub.sublime-settings
 contesto_*.txt
 
 # WSL Pi-like local stack artifacts
-conf/nginx-docker/backend_src
-conf/nginx-docker/react_build/
-conf/nginx-docker/postgres_data/
-conf/nginx-docker/static_data/
-conf/nginx-docker/media_data/
+config/docker/nginx-docker/backend_src
+config/docker/nginx-docker/react_build/
+config/docker/nginx-docker/postgres_data/
+config/docker/nginx-docker/static_data/
+config/docker/nginx-docker/media_data/
 .edge_sync_state.json
+
+# Root cleanup / quarantine area
+extra/local-artifacts/

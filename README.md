@@ -57,7 +57,7 @@ Cause tipiche:
 Altri accorgimenti:
 
 - **`GET /api/healthz/`** — risposta `ok` senza DB (healthcheck Docker e monitoraggio).
-- **Docker Compose** (`conf/nginx-docker/docker-compose.yml`): healthcheck su `db`, `redis`, `backend`, `daphne`; Nginx parte quando backend e daphne sono **healthy**; Gunicorn `--timeout 120`.
+- **Docker Compose** (`config/docker/nginx-docker/docker-compose.yml`): healthcheck su `db`, `redis`, `backend`, `daphne`; Nginx parte quando backend e daphne sono **healthy**; Gunicorn `--timeout 120`.
 - **GitHub Actions** (`mirror-deploy`): dopo `docker compose up` esegue **`nginx -s reload`** sul servizio `frontend` (rete di sicurezza oltre al resolver dinamico).
 - **Nginx**: timeout proxy verso backend e WebSocket.
 
@@ -82,3 +82,4 @@ Per setup completo backend + frontend + Postgres locale + sync pull-only dal Mas
 - vedi `docs/WSL_DEV_SETUP.md`
 - stack Docker "Pi-like" WSL: `scripts/setup_wsl_pi_like.sh`, poi `scripts/up_wsl_pi_like.sh` / `scripts/down_wsl_pi_like.sh`
 - media pull-only (rsync): `scripts/sync_media_pull_wsl_pi_like.sh`
+- stato migrazione monorepo: `docs/MONOREPO_MIGRATION.md`
