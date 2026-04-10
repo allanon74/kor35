@@ -11,7 +11,7 @@ on:
         required: false
         default: "main"
       run_migrations:
-        description: "Eseguire migrate su staging/production"
+        description: "Eseguire migrate su production/mirror"
         required: true
         default: true
         type: boolean
@@ -58,30 +58,25 @@ jobs:
             REF="main"
             RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
             PROJECT_PATH="${{ secrets.SERVER_PROJECT_PATH || '' }}"
+            COMPOSE_PROJECT_NAME="${{ secrets.PROD_COMPOSE_PROJECT_NAME || 'kor35-prod' }}"
+            HEALTHCHECK_URL="${{ secrets.PRODUCTION_HEALTHCHECK_URL || '' }}"
+
             if [ -z "${PROJECT_PATH}" ]; then
-              EFFECTIVE_USER="${USER:-$(id -un)}"
-              for CANDIDATE in \
-                "$HOME/progetti/kor35" \
-                "$HOME/kor35" \
-                "/home/${EFFECTIVE_USER}/progetti/kor35" \
-                "/home/${EFFECTIVE_USER}/kor35" \
-                "/var/www/kor35" \
-                "/srv/kor35" \
-                "/opt/kor35"
-              do
-                if [ -d "${CANDIDATE}" ]; then
-                  PROJECT_PATH="${CANDIDATE}"
-                  break
-                fi
-              done
-            fi
-            if [ -n "${PROJECT_PATH}" ] && [ ! -f "${PROJECT_PATH}/manage.py" ]; then
-              PROJECT_PATH=""
+              PROJECT_PATH="/srv/kor35"
             fi
             if [ -z "${PROJECT_PATH}" ]; then
               echo "Path progetto production non trovato. Imposta secret SERVER_PROJECT_PATH con il path completo (es. /home/<user>/progetti/kor35)." >&2
               exit 1
             fi
+            if [ ! -d "${PROJECT_PATH}" ]; then
+              echo "SERVER_PROJECT_PATH non esiste: ${PROJECT_PATH}" >&2
+              exit 1
+            fi
+            if [ ! -f "${PROJECT_PATH}/config/docker/compose.base.yml" ]; then
+              echo "Monorepo docker non rilevato in ${PROJECT_PATH} (manca config/docker/compose.base.yml)." >&2
+              exit 1
+            fi
+
             cd "${PROJECT_PATH}"
             git fetch --all --tags
             PREVIOUS_SHA="$(git rev-parse HEAD)"
@@ -98,20 +93,27 @@ jobs:
             export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
             export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "DEPLOYED_SHA=${DEPLOYED_SHA}"
-            source ~/ambienti/kor35/bin/activate
-            export TMPDIR="$HOME/tmp"
-            mkdir -p "$TMPDIR"
 
-            pip install --prefer-binary -r requirements.txt
-            python manage.py migrate --plan
-            if [ "${RUN_MIGRATIONS}" = "true" ]; then
-              python manage.py migrate --noinput
+            export KOR35_BACKEND_ENV_FILE="${PROJECT_PATH}/backend/.env.prod"
+            if [ ! -f "${KOR35_BACKEND_ENV_FILE}" ]; then
+              echo "File env production mancante: ${KOR35_BACKEND_ENV_FILE}" >&2
+              exit 1
             fi
-            python manage.py check --deploy
-            python manage.py collectstatic --noinput
-            sudo systemctl restart apache2.service
-            sudo systemctl restart kor35-daphne
-            curl -fsS "${{ secrets.PRODUCTION_HEALTHCHECK_URL }}" >/dev/null
+
+            cd "${PROJECT_PATH}/config/docker"
+            export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}"
+            docker compose -f compose.base.yml -f compose.prod.yml up -d --build
+
+            if [ "${RUN_MIGRATIONS}" = "true" ]; then
+              docker compose -f compose.base.yml -f compose.prod.yml exec -T backend python manage.py migrate --noinput
+            fi
+            docker compose -f compose.base.yml -f compose.prod.yml exec -T backend python manage.py check --deploy
+            docker compose -f compose.base.yml -f compose.prod.yml exec -T backend python manage.py collectstatic --noinput
+            docker compose -f compose.base.yml -f compose.prod.yml ps
+
+            if [ -n "${HEALTHCHECK_URL}" ]; then
+              curl -fsS "${HEALTHCHECK_URL}" >/dev/null
+            fi
             echo "Production deploy OK"
 
   mirror-deploy:
@@ -127,23 +129,30 @@ jobs:
           key: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
           port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 22 }}
           script: |
+            set -euo pipefail
             REF="main"
             ROOT_PATH="${{ secrets.MIRROR_ROOT_PATH || '/home/pi/kor35-replica' }}"
-            BACKEND_PATH="${{ secrets.MIRROR_BACKEND_PATH || '/home/pi/kor35-replica/backend_src' }}"
-            BACKEND_REPO_URL="${{ secrets.MIRROR_BACKEND_REPO_URL || '' }}"
-            DEPLOY_CMD="${{ secrets.MIRROR_DEPLOY_COMMAND || 'docker compose up -d --build' }}"
+            MIRROR_REPO_PATH="${{ secrets.MIRROR_BACKEND_PATH || '/home/pi/kor35-replica' }}"
+            MIRROR_REPO_URL="${{ secrets.MIRROR_BACKEND_REPO_URL || '' }}"
+            COMPOSE_PROJECT_NAME="${{ secrets.MIRROR_COMPOSE_PROJECT_NAME || 'kor35-replica' }}"
+            HEALTHCHECK_URL="${{ secrets.MIRROR_HEALTHCHECK_URL || '' }}"
+            RUN_MIGRATIONS="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_migrations || 'true' }}"
 
-            if [ ! -d "${BACKEND_PATH}" ]; then
-              if [ -n "${BACKEND_REPO_URL}" ]; then
-                mkdir -p "$(dirname "${BACKEND_PATH}")"
-                git clone "${BACKEND_REPO_URL}" "${BACKEND_PATH}"
+            if [ -d "${ROOT_PATH}" ]; then
+              MIRROR_REPO_PATH="${ROOT_PATH}"
+            fi
+
+            if [ ! -d "${MIRROR_REPO_PATH}" ]; then
+              if [ -n "${MIRROR_REPO_URL}" ]; then
+                mkdir -p "$(dirname "${MIRROR_REPO_PATH}")"
+                git clone "${MIRROR_REPO_URL}" "${MIRROR_REPO_PATH}"
               else
-                echo "BACKEND_PATH non esiste: ${BACKEND_PATH}. Imposta MIRROR_BACKEND_PATH corretto o MIRROR_BACKEND_REPO_URL." >&2
+                echo "Repo mirror non trovato: ${MIRROR_REPO_PATH}. Imposta MIRROR_ROOT_PATH/MIRROR_BACKEND_PATH oppure MIRROR_BACKEND_REPO_URL." >&2
                 exit 1
               fi
             fi
 
-            cd "${BACKEND_PATH}"
+            cd "${MIRROR_REPO_PATH}"
             git fetch --all --tags
             if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
               git checkout -B "${REF}" "origin/${REF}"
@@ -158,14 +167,30 @@ jobs:
             export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             echo "MIRROR_BACKEND_DEPLOYED_SHA=${MIRROR_BACKEND_DEPLOYED_SHA}"
 
-            cd "${ROOT_PATH}"
-            eval "${DEPLOY_CMD}"
+            if [ ! -f "config/docker/compose.base.yml" ]; then
+              echo "Monorepo docker non rilevato su mirror (manca config/docker/compose.base.yml)." >&2
+              exit 1
+            fi
+
+            export KOR35_BACKEND_ENV_FILE="${MIRROR_REPO_PATH}/backend/.env.mirror"
+            if [ ! -f "${KOR35_BACKEND_ENV_FILE}" ]; then
+              echo "File env mirror mancante: ${KOR35_BACKEND_ENV_FILE}" >&2
+              exit 1
+            fi
+
+            cd "${MIRROR_REPO_PATH}/config/docker"
+            export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}"
+            docker compose -f compose.base.yml -f compose.mirror.yml up -d --build
+            if [ "${RUN_MIGRATIONS}" = "true" ]; then
+              docker compose -f compose.base.yml -f compose.mirror.yml exec -T backend python manage.py migrate --noinput
+            fi
+            docker compose -f compose.base.yml -f compose.mirror.yml exec -T backend python manage.py collectstatic --noinput
 
             # Rete di sicurezza: dopo ricreazione container backend/daphne, Nginx (se non ricreato)
             # può tenere IP vecchi; reload + snippet resolver in common_locations.snippets mitigano 502.
-            docker compose exec -T frontend nginx -s reload 2>/dev/null || true
+            docker compose -f compose.base.yml -f compose.mirror.yml exec -T frontend nginx -s reload 2>/dev/null || true
 
-            if [ -n "${{ secrets.MIRROR_HEALTHCHECK_URL }}" ]; then
-              curl -fsS "${{ secrets.MIRROR_HEALTHCHECK_URL }}" >/dev/null
+            if [ -n "${HEALTHCHECK_URL}" ]; then
+              curl -fsS "${HEALTHCHECK_URL}" >/dev/null
             fi
             echo "Mirror deploy OK"

@@ -244,6 +244,9 @@ make setup
 # 3) avvia stack
 make up ENV=dev-home
 
+# opzionale: pulizia automatica vecchi container kor35_wsl_* prima dell'up
+make up ENV=dev-home CLEANUP_LEGACY=1
+
 # 4) controlla stato e log
 make status ENV=dev-home
 make logs ENV=dev-home
@@ -253,6 +256,9 @@ make sync-db ENV=dev-home
 
 # 6) stop stack
 make down ENV=dev-home
+
+# 7) cleanup manuale container legacy
+make cleanup-legacy
 ```
 
 Altri profili:

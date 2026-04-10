@@ -115,10 +115,10 @@ jobs:
           port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 22 }}
           script: |
             REF="main"
-            FRONTEND_PATH="${{ secrets.MIRROR_FRONTEND_PATH || '/home/pi/kor35-replica/frontend_src' }}"
+            FRONTEND_PATH="${{ secrets.MIRROR_FRONTEND_PATH || '/home/pi/kor35-replica/frontend' }}"
             FRONTEND_PATH_LEGACY="/home/pi/kor35-replica/forntend_src"
             MIRROR_ROOT_PATH="${{ secrets.MIRROR_ROOT_PATH || '/home/pi/kor35-replica' }}"
-            REACT_BUILD_PATH="${{ secrets.MIRROR_REACT_BUILD_PATH || '/home/pi/kor35-replica/react_build' }}"
+            REACT_BUILD_PATH="${{ secrets.MIRROR_REACT_BUILD_PATH || '/home/pi/kor35-replica/config/docker/nginx-docker/react_build' }}"
             FRONTEND_REPO_URL="${{ secrets.MIRROR_FRONTEND_REPO_URL || '' }}"
             MIRROR_POST_DEPLOY_CMD="${{ secrets.MIRROR_FRONTEND_POST_DEPLOY_COMMAND || '' }}"
             # IMPORTANT: usa un project name stabile per docker compose sul mirror.
@@ -176,17 +176,16 @@ jobs:
               echo "MIRROR_ROOT_PATH non esiste: ${MIRROR_ROOT_PATH}" >&2
               exit 1
             fi
-            if [ ! -f "${MIRROR_ROOT_PATH}/docker-compose.yml" ]; then
-              echo "docker-compose.yml non trovato in MIRROR_ROOT_PATH: ${MIRROR_ROOT_PATH}" >&2
+            if [ ! -f "${MIRROR_ROOT_PATH}/config/docker/compose.base.yml" ]; then
+              echo "compose.base.yml non trovato in MIRROR_ROOT_PATH: ${MIRROR_ROOT_PATH}" >&2
               exit 1
             fi
             cd "${MIRROR_ROOT_PATH}"
-            export COMPOSE_FILE="${MIRROR_ROOT_PATH}/docker-compose.yml"
             export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}"
 
             # Deploy frontend robusto: non rebuilda backend/daphne nel job frontend.
-            docker compose -f "${COMPOSE_FILE}" up -d frontend
-            docker compose -f "${COMPOSE_FILE}" exec -T frontend nginx -s reload 2>/dev/null || true
+            docker compose -f config/docker/compose.base.yml -f config/docker/compose.mirror.yml up -d frontend
+            docker compose -f config/docker/compose.base.yml -f config/docker/compose.mirror.yml exec -T frontend nginx -s reload 2>/dev/null || true
 
             # Hook opzionale solo per comandi aggiuntivi (non necessari al deploy base frontend).
             if [ -n "${MIRROR_POST_DEPLOY_CMD}" ]; then

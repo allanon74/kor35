@@ -49,14 +49,17 @@ Dettagli:
 ## Deploy sicuro (GitHub Actions)
 
 Workflow principale: `.github/workflows/deploy.yml`
+Workflow secondari in `frontend/.github/workflows/` sono legacy/storici e non governano il deploy monorepo corrente.
 
 - Trigger automatico su `push` in `main` + trigger manuale (`workflow_dispatch`) con:
   - `ref`: branch/tag/SHA da rilasciare
   - `run_migrations`: abilita/disabilita migrate
 - Fasi:
-  - `staging-validate`: deploy su staging, `migrate --plan`, `migrate --noinput`, `check --deploy`, `collectstatic`, healthcheck
-  - `production-deploy`: deploy produzione con gli stessi controlli + healthcheck
-  - `mirror-deploy`: deploy su Raspberry mirror (backend + frontend + build React + comando Docker)
+  - `guard-main-ref`: blocca deploy se `ref != main`
+  - `production-deploy`: deploy su server produzione in Docker (`compose.base + compose.prod`)
+  - `mirror-deploy`: deploy su Raspberry mirror in Docker (`compose.base + compose.mirror`)
+
+Nota: il workflow deploya la monorepo completa (frontend + backend + servizi Docker) lato server, quindi i container vengono riavviati con il codice aggiornato del branch `main`.
 
 Rollback manuale: `.github/workflows/rollback.yml`
 
@@ -65,31 +68,29 @@ Rollback manuale: `.github/workflows/rollback.yml`
 
 ### Secrets richiesti
 
-Staging:
-- `STAGING_SERVER_HOST`
-- `STAGING_SERVER_USER`
-- `STAGING_SERVER_SSH_KEY`
-- `STAGING_SERVER_SSH_PORT` (opzionale, default 22)
-- `STAGING_HEALTHCHECK_URL`
-
-Produzione:
+Produzione (obbligatori):
 - `SERVER_HOST`
 - `SERVER_USER`
 - `SERVER_SSH_KEY`
-- `SERVER_SSH_PORT` (opzionale, default 22)
-- `PRODUCTION_HEALTHCHECK_URL`
 
-Mirror Raspberry:
+Produzione (opzionali ma consigliati):
+- `SERVER_SSH_PORT` (default `22`)
+- `SERVER_PROJECT_PATH` (default `/srv/kor35`)
+- `PROD_COMPOSE_PROJECT_NAME` (default `kor35-prod`)
+- `PRODUCTION_HEALTHCHECK_URL` (fortemente consigliato)
+
+Mirror Raspberry (obbligatori):
 - `MIRROR_SERVER_HOST`
 - `MIRROR_SERVER_USER`
 - `MIRROR_SERVER_SSH_KEY`
-- `MIRROR_SERVER_SSH_PORT` (opzionale, default 22)
-- `MIRROR_ROOT_PATH` (opzionale, default `/home/pi/kor35-replica`)
-- `MIRROR_BACKEND_PATH` (opzionale, default `/home/pi/kor35-replica/backend_src`)
-- `MIRROR_FRONTEND_PATH` (opzionale, default `/home/pi/kor35-replica/forntend_src`)
-- `MIRROR_REACT_BUILD_PATH` (opzionale, default `/home/pi/kor35-replica/react_build`)
-- `MIRROR_DEPLOY_COMMAND` (opzionale, default `docker compose up -d --build`)
-- `MIRROR_HEALTHCHECK_URL` (opzionale, es. `https://kor35.ddns.net/api/healthz/`)
+
+Mirror Raspberry (opzionali):
+- `MIRROR_SERVER_SSH_PORT` (default `22`)
+- `MIRROR_ROOT_PATH` (default `/home/pi/kor35-replica`)
+- `MIRROR_BACKEND_PATH` (fallback path monorepo, default `/home/pi/kor35-replica`)
+- `MIRROR_BACKEND_REPO_URL` (usato solo bootstrap se il path non esiste)
+- `MIRROR_COMPOSE_PROJECT_NAME` (default `kor35-replica`)
+- `MIRROR_HEALTHCHECK_URL` (fortemente consigliato)
 
 ### Mirror / Docker: 502 Bad Gateway (dopo deploy o aggiornamenti)
 
@@ -118,7 +119,7 @@ Altri accorgimenti:
 
 ### Nota importante
 
-Se non hai un server staging separato puoi riusare i secrets di produzione anche per `STAGING_*`.
+Il deploy è intenzionalmente **main-only**: anche da `workflow_dispatch` viene rifiutato qualsiasi `ref` diverso da `main`.
 
 ## Sviluppo locale in WSL
 
@@ -142,7 +143,7 @@ Questa sezione descrive i passi minimi per attivare deploy automatico da GitHub 
 
 - Repository GitHub con workflow attivi in `.github/workflows/`.
 - Branch `main` già protetto come branch di release.
-- Sul server remoto: `git`, `python3`, `pip`, `venv` (o Docker, in base al target), `curl`.
+- Sul server remoto: `git`, `docker` + `docker compose v2`, `curl`.
 - DNS/host già risolti (`A` record o DDNS) e endpoint health raggiungibile.
 
 ### 2) Generare chiave SSH dedicata CI
@@ -180,11 +181,12 @@ Repository GitHub -> **Settings -> Secrets and variables -> Actions -> New repos
 - `SERVER_USER`
 - `SERVER_SSH_KEY` (contenuto della chiave privata `kor35_actions`)
 - `SERVER_SSH_PORT` (opzionale, default `22`)
+
+#### Produzione (opzionali consigliati)
+
 - `PRODUCTION_HEALTHCHECK_URL` (es. `https://www.kor35.it/api/healthz/`)
-
-#### Produzione (consigliati)
-
 - `SERVER_PROJECT_PATH` (es. `/srv/kor35`)
+- `PROD_COMPOSE_PROJECT_NAME` (es. `kor35-prod`)
 
 #### Mirror Raspberry (obbligatori)
 
@@ -193,13 +195,12 @@ Repository GitHub -> **Settings -> Secrets and variables -> Actions -> New repos
 - `MIRROR_SERVER_SSH_KEY` (può essere la stessa privata o una dedicata)
 - `MIRROR_SERVER_SSH_PORT` (opzionale)
 
-#### Mirror Raspberry (consigliati)
+#### Mirror Raspberry (opzionali consigliati)
 
 - `MIRROR_ROOT_PATH` (default `/home/pi/kor35-replica`)
 - `MIRROR_BACKEND_PATH`
-- `MIRROR_FRONTEND_PATH`
-- `MIRROR_REACT_BUILD_PATH`
-- `MIRROR_DEPLOY_COMMAND` (default `docker compose up -d --build`)
+- `MIRROR_BACKEND_REPO_URL` (bootstrap da zero, opzionale)
+- `MIRROR_COMPOSE_PROJECT_NAME` (es. `kor35-replica`)
 - `MIRROR_HEALTHCHECK_URL`
 
 ### 4.1) Tabella rapida Secrets GitHub Actions
@@ -210,22 +211,17 @@ Repository GitHub -> **Settings -> Secrets and variables -> Actions -> New repos
 | `SERVER_USER` | Produzione | Sì | `deploy` | Utente SSH deploy |
 | `SERVER_SSH_KEY` | Produzione | Sì | `-----BEGIN OPENSSH PRIVATE KEY-----...` | Chiave privata CI |
 | `SERVER_SSH_PORT` | Produzione | No | `22` | Se diverso dalla porta standard |
-| `PRODUCTION_HEALTHCHECK_URL` | Produzione | Sì | `https://www.kor35.it/api/healthz/` | Fail workflow se non raggiungibile |
-| `SERVER_PROJECT_PATH` | Produzione | Consigliato | `/srv/kor35` | Evita autodiscovery path |
+| `PRODUCTION_HEALTHCHECK_URL` | Produzione | No (consigliato) | `https://www.kor35.it/api/healthz/` | Se impostato, fallisce il workflow se non raggiungibile |
+| `SERVER_PROJECT_PATH` | Produzione | No (consigliato) | `/srv/kor35` | Path repo monorepo sul server |
+| `PROD_COMPOSE_PROJECT_NAME` | Produzione | No | `kor35-prod` | Nome progetto compose per evitare collisioni |
 | `MIRROR_SERVER_HOST` | Mirror | Sì | `kor35.ddns.net` | Host/IP Raspberry |
 | `MIRROR_SERVER_USER` | Mirror | Sì | `pi` | Utente SSH mirror |
 | `MIRROR_SERVER_SSH_KEY` | Mirror | Sì | `-----BEGIN OPENSSH PRIVATE KEY-----...` | Chiave privata CI |
 | `MIRROR_SERVER_SSH_PORT` | Mirror | No | `22` | Se custom |
 | `MIRROR_ROOT_PATH` | Mirror | No | `/home/pi/kor35-replica` | Root progetto mirror |
-| `MIRROR_BACKEND_PATH` | Mirror | No | `/home/pi/kor35-replica/backend` | Path backend |
-| `MIRROR_FRONTEND_PATH` | Mirror | No | `/home/pi/kor35-replica/frontend` | Path frontend |
-| `MIRROR_REACT_BUILD_PATH` | Mirror | No | `/home/pi/kor35-replica/config/docker/nginx-docker/react_build` | Build React deployata |
-| `MIRROR_DEPLOY_COMMAND` | Mirror | No | `docker compose -f compose.base.yml -f compose.mirror.yml up -d --build` | Comando deploy mirror |
+| `MIRROR_BACKEND_PATH` | Mirror | No | `/home/pi/kor35-replica` | Fallback path repo se `MIRROR_ROOT_PATH` non esiste |
 | `MIRROR_HEALTHCHECK_URL` | Mirror | No (forte consigliato) | `https://kor35.ddns.net/api/healthz/` | Validazione fine deploy |
-| `MIRROR_BACKEND_REPO_URL` | Mirror | Solo se bootstrap da zero | `https://github.com/allanon74/kor35.git` | Usato se path backend non esiste |
-| `MIRROR_FRONTEND_REPO_URL` | Mirror | Solo se bootstrap da zero | `https://github.com/allanon74/kor35.git` | Usato se path frontend non esiste |
-| `MIRROR_FRONTEND_POST_DEPLOY_COMMAND` | Mirror frontend | No | `docker image prune -f` | Hook post deploy frontend |
-| `MIRROR_FRONTEND_HEALTHCHECK_URL` | Mirror frontend | No | `https://kor35.ddns.net/` | Healthcheck frontend |
+| `MIRROR_BACKEND_REPO_URL` | Mirror | Solo se bootstrap da zero | `https://github.com/allanon74/kor35.git` | Clonato se la repo non esiste sul Pi |
 | `MIRROR_COMPOSE_PROJECT_NAME` | Mirror | No | `kor35-replica` | Previene collisioni nomi container |
 
 Note pratiche:
@@ -233,7 +229,7 @@ Note pratiche:
 - Usa chiavi SSH dedicate alla CI e ruotale periodicamente.
 - Se un secret è “No” ma lo usi in pipeline, trattalo come obbligatorio nel tuo contesto.
 
-### 5) Preparazione server Produzione (Python stack corrente)
+### 5) Preparazione server Produzione (Docker monorepo)
 
 Esempio minimo:
 
@@ -242,9 +238,10 @@ sudo mkdir -p /srv/kor35
 sudo chown -R <deploy-user>:<deploy-user> /srv/kor35
 cd /srv/kor35
 git clone https://github.com/allanon74/kor35.git .
-python3 -m venv ~/ambienti/kor35
-source ~/ambienti/kor35/bin/activate
-pip install -r backend/requirements.txt
+cp backend/.env.prod.example backend/.env.prod   # se disponibile nel tuo setup
+cd config/docker
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml up -d --build
 ```
 
 Verifica endpoint health lato produzione:
@@ -279,6 +276,38 @@ curl -fsS https://kor35.ddns.net/api/healthz/
    - `production-deploy` OK
    - `mirror-deploy` OK
 3. Verifica servizi su DO/Pi con healthcheck.
+
+### 7.1) Pre-flight checklist (prima del deploy)
+
+Esegui questa checklist prima di lanciare `workflow_dispatch` o prima di fare push su `main`:
+
+1. **Secrets presenti su GitHub**
+   - Verifica almeno gli obbligatori (`SERVER_*`, `MIRROR_*` minimi) in:
+     `Settings -> Secrets and variables -> Actions`.
+2. **Path repo corretti sui server**
+   - Production: `SERVER_PROJECT_PATH` punta alla root monorepo (es. `/srv/kor35`).
+   - Mirror: `MIRROR_ROOT_PATH` (o fallback `MIRROR_BACKEND_PATH`) punta alla root monorepo.
+3. **File env backend presenti sui server**
+   - Production: `backend/.env.prod`
+   - Mirror: `backend/.env.mirror`
+4. **Docker compose monorepo presente sui server**
+   - Deve esistere `config/docker/compose.base.yml` nella root repo.
+5. **Healthcheck URL raggiungibili (se configurati)**
+   - Production: `PRODUCTION_HEALTHCHECK_URL`
+   - Mirror: `MIRROR_HEALTHCHECK_URL`
+
+Comandi rapidi consigliati (da eseguire sui server):
+
+```bash
+# nella root repo
+test -f config/docker/compose.base.yml && echo "compose ok"
+test -f backend/.env.prod && echo "env prod ok"     # production
+test -f backend/.env.mirror && echo "env mirror ok" # mirror
+
+cd config/docker
+docker compose -f compose.base.yml -f compose.prod.yml ps      # production
+docker compose -f compose.base.yml -f compose.mirror.yml ps    # mirror
+```
 
 ### 8) Safety (già attiva in questo branch)
 
@@ -315,6 +344,8 @@ cp backend/.env.dev-home backend/.env
 ```bash
 make setup
 make up ENV=dev-home
+# se hai vecchi container "kor35_wsl_*" che occupano porte:
+make up ENV=dev-home CLEANUP_LEGACY=1
 ```
 
 ### 4) Verifica operatività
@@ -364,4 +395,10 @@ Stop:
 
 ```bash
 make down ENV=dev-home
+```
+
+Cleanup legacy (vecchio stack WSL):
+
+```bash
+make cleanup-legacy
 ```

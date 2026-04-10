@@ -2,14 +2,16 @@ SHELL := /bin/bash
 
 # Profili supportati: dev-home, dev-office, mirror, prod
 ENV ?= dev-home
+CLEANUP_LEGACY ?= 0
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic sync-db sync-media
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic sync-db sync-media cleanup-legacy
 
 help:
 	@echo "KOR35 monorepo helper"
 	@echo ""
 	@echo "Uso:"
 	@echo "  make <target> [ENV=dev-home|dev-office|mirror|prod]"
+	@echo "  opzionale: CLEANUP_LEGACY=1 (rimuove container legacy kor35_wsl_*)"
 	@echo ""
 	@echo "Target principali:"
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
@@ -21,6 +23,7 @@ help:
 	@echo "  make logs                    # log live (tutti i servizi)"
 	@echo "  make down                    # stop stack"
 	@echo "  make down-volumes            # stop + rimozione volumi"
+	@echo "  make cleanup-legacy          # rimuove vecchi container kor35_wsl_*"
 	@echo ""
 	@echo "Sync:"
 	@echo "  make sync-db                 # pull-only DB (backend container)"
@@ -33,12 +36,15 @@ env:
 	./scripts/use_env_backend.sh --env "$(ENV)"
 
 up:
+	@if [ "$(CLEANUP_LEGACY)" = "1" ]; then ./scripts/cleanup_legacy_wsl_stack.sh; fi
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)"
 
 up-no-build:
+	@if [ "$(CLEANUP_LEGACY)" = "1" ]; then ./scripts/cleanup_legacy_wsl_stack.sh; fi
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build
 
 up-no-static:
+	@if [ "$(CLEANUP_LEGACY)" = "1" ]; then ./scripts/cleanup_legacy_wsl_stack.sh; fi
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --skip-collectstatic
 
 down:
@@ -62,3 +68,6 @@ sync-db:
 
 sync-media:
 	./scripts/sync_media_pull_wsl_pi_like.sh
+
+cleanup-legacy:
+	./scripts/cleanup_legacy_wsl_stack.sh
