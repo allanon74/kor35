@@ -1,6 +1,8 @@
 services:
   db:
     container_name: kor35_prod_db
+    # Solo produzione: PG17 per pg_restore compatibile con dump pg_dump 16+ (mirror/Pi restano su compose.base → PG15).
+    image: postgres:17-alpine
     volumes:
       - ./nginx-docker/postgres_data:/var/lib/postgresql/data
 
