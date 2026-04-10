@@ -1,0 +1,33 @@
+services:
+  db:
+    container_name: kor35_prod_db
+    volumes:
+      - ./nginx-docker/postgres_data:/var/lib/postgresql/data
+
+  redis:
+    container_name: kor35_prod_redis
+
+  backend:
+    container_name: kor35_prod_backend
+    volumes:
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+
+  daphne:
+    container_name: kor35_prod_daphne
+    volumes:
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+
+  frontend:
+    container_name: kor35_prod_frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-docker/nginx_conf:/etc/nginx/conf.d
+      - ./nginx-docker/react_build:/usr/share/nginx/html
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+      - ./nginx-docker/certs:/etc/nginx/certs:ro
+      - ./nginx-docker/certs_ddns:/etc/nginx/certs_ddns:ro

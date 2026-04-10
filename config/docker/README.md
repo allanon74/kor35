@@ -8,5 +8,8 @@ Struttura prevista:
 - `compose.mirror.yml` (Raspberry mirror, include Omada)
 - `compose.dev-home.yml` (sviluppo locale casa)
 - `compose.dev-office.yml` (sviluppo locale ufficio)
+- `compose.dev-standalone.yml` (db+redis stand-alone legacy)
 
-In questa fase iniziale il branch mantiene ancora i compose legacy in `config/docker/nginx-docker/`.
+Compatibilità:
+- i file legacy in `config/docker/nginx-docker/` restano come asset di transizione
+  (nginx conf, compose storico e runtime dirs).

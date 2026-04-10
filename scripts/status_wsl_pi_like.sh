@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Segue i log dello stack WSL Pi-like (docker compose logs -f).
-# Opzioni:
-#   --env <nome> profilo ambiente: dev-home | dev-office | mirror | prod
-#   qualsiasi argomento extra va a docker compose logs (es. un nome servizio).
+# Mostra lo stato dello stack docker per un profilo ambiente.
+# Uso:
+#   ./scripts/status_wsl_pi_like.sh --env dev-home
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib_wsl_pi_like.sh
 source "$SCRIPT_DIR/lib_wsl_pi_like.sh"
 
 ENV_PROFILE="dev-home"
-LOGS_EXTRA=()
+STATUS_EXTRA=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -25,11 +24,11 @@ while [ $# -gt 0 ]; do
       ;;
     --)
       shift
-      LOGS_EXTRA+=("$@")
+      STATUS_EXTRA+=("$@")
       break
       ;;
     *)
-      LOGS_EXTRA+=("$1")
+      STATUS_EXTRA+=("$1")
       shift
       ;;
   esac
@@ -39,4 +38,5 @@ wsl_pi_set_env_profile "$ENV_PROFILE"
 wsl_pi_require_docker
 wsl_pi_require_stack_dir
 
-wsl_pi_compose logs -f "${LOGS_EXTRA[@]}"
+echo "Stato stack [$WSL_PI_ENV_PROFILE] in $WSL_PI_STACK_DIR"
+wsl_pi_compose ps "${STATUS_EXTRA[@]}"

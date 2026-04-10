@@ -151,3 +151,8 @@ config/docker/nginx-docker/media_data/
 
 # Root cleanup / quarantine area
 extra/local-artifacts/
+
+# Backend environment profiles (secrets)
+backend/.env
+backend/.env.*
+!backend/.env.example

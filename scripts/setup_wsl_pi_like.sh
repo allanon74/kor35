@@ -31,11 +31,6 @@ fi
 
 mkdir -p "$STACK_DIR/postgres_data" "$STACK_DIR/static_data" "$STACK_DIR/media_data" "$STACK_DIR/react_build"
 
-if [ -L "$STACK_DIR/backend_src" ] || [ -d "$STACK_DIR/backend_src" ]; then
-  rm -rf "$STACK_DIR/backend_src"
-fi
-ln -s "$BACKEND_DIR" "$STACK_DIR/backend_src"
-
 if [ ! -d "$BACKEND_DIR" ] || [ ! -f "$BACKEND_DIR/manage.py" ]; then
   echo "Backend non trovato in: $BACKEND_DIR" >&2
   exit 1

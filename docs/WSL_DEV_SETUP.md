@@ -1,5 +1,8 @@
 # Setup WSL sviluppo (backend + frontend + DB locale)
 
+Per la versione completa multi-ambiente (profili, `.env`, layout server, script):
+- vedi `docs/DOCKER_ENVIRONMENTS_RUNBOOK.md`
+
 Questa guida prepara un ambiente locale completo in WSL con:
 - backend Django (`/home/django/progetti/kor35/backend`)
 - frontend Vite React (`/home/django/progetti/kor35/frontend`, fallback legacy `/home/django/progetti/kor35-app`)
@@ -20,11 +23,11 @@ Include due modalita':
 Nel repo backend:
 
 ```bash
-cd /home/django/progetti/kor35/backend
-cp ../.env.wsl.example .env
+cd /home/django/progetti/kor35
+./scripts/use_env_backend.sh --env dev-home
 ```
 
-Compila nel file `.env` almeno:
+Compila nel file `backend/.env.dev-home` (e in `backend/.env`) almeno:
 - `EDGE_SYNC_URL` (es. `https://<host-master>/api/sync/edge/`)
 - `EDGE_SYNC_TOKEN` (lo stesso token accettato dal Master)
 
@@ -131,6 +134,7 @@ In un solo comando (setup + build frontend + avvio):
 
 ```bash
 ./scripts/up_wsl_pi_like.sh --setup
+./scripts/up_wsl_pi_like.sh --env dev-home --setup
 ```
 
 Altri comodi:
@@ -138,7 +142,9 @@ Altri comodi:
 ```bash
 ./scripts/logs_wsl_pi_like.sh              # log tutti i servizi
 ./scripts/logs_wsl_pi_like.sh backend    # solo backend
+./scripts/logs_wsl_pi_like.sh --env dev-office backend
 ./scripts/down_wsl_pi_like.sh             # stop
+./scripts/down_wsl_pi_like.sh --env dev-office
 ./scripts/down_wsl_pi_like.sh --volumes   # stop e cancella dati DB del compose
 ```
 
@@ -166,6 +172,6 @@ URL:
 Equivalente manuale (stessa directory del compose):
 
 ```bash
-cd /home/django/progetti/kor35/config/docker/nginx-docker
-docker compose -f docker-compose.wsl-pi.yml up -d --build
+cd /home/django/progetti/kor35/config/docker
+docker compose -f compose.base.yml -f compose.dev-home.yml up -d --build
 ```

@@ -1,0 +1,99 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-kor35_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-kor35_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kor35_dev}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ../../backend
+    restart: unless-stopped
+    env_file:
+      - ${KOR35_BACKEND_ENV_FILE:-../../backend/.env}
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      ENVIRONMENT: raspberry_docker
+      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+      gunicorn kor35.wsgi:application --bind 0.0.0.0:8000 --timeout 120 --graceful-timeout 30"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz/').read()\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 120s
+
+  daphne:
+    build:
+      context: ../../backend
+    restart: unless-stopped
+    env_file:
+      - ${KOR35_BACKEND_ENV_FILE:-../../backend/.env}
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      ENVIRONMENT: raspberry_docker
+      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    expose:
+      - "8001"
+    command: daphne -b 0.0.0.0 -p 8001 kor35.asgi:application
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api/healthz/').read()\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 120s
+
+  frontend:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      daphne:
+        condition: service_healthy

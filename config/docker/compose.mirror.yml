@@ -1,0 +1,47 @@
+services:
+  db:
+    container_name: kor35_mirror_db
+    volumes:
+      - ./nginx-docker/postgres_data:/var/lib/postgresql/data
+
+  redis:
+    container_name: kor35_mirror_redis
+
+  backend:
+    container_name: kor35_mirror_backend
+    volumes:
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+
+  daphne:
+    container_name: kor35_mirror_daphne
+    volumes:
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+
+  frontend:
+    container_name: kor35_mirror_frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-docker/nginx_conf:/etc/nginx/conf.d
+      - ./nginx-docker/react_build:/usr/share/nginx/html
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+      - ./nginx-docker/certs:/etc/nginx/certs:ro
+      - ./nginx-docker/certs_ddns:/etc/nginx/certs_ddns:ro
+
+  omada-controller:
+    image: mbentley/omada-controller:latest
+    container_name: omada_controller
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - MANAGE_HTTP_PORT=8088
+      - MANAGE_HTTPS_PORT=8043
+    volumes:
+      - ./nginx-docker/omada_data:/opt/tplink/EAPController/data
+      - ./nginx-docker/omada_logs:/opt/tplink/EAPController/logs
