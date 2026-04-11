@@ -20,6 +20,11 @@ concurrency:
   group: safe-release-${{ github.ref }}
   cancel-in-progress: false
 
+# Transizione monorepo (sostituisce i vecchi deploy: kor35 su Apache/venv + kor35-app frontend separato).
+# - Build frontend solo su GitHub; rsync della dist verso .../nginx-docker/react_build (prod e mirror).
+# - Produzione: compose.base + compose.prod; mirror: compose.base + compose.mirror (include Omada).
+# - NON usare `docker compose down -v` sul Pi: i volumi sotto nginx-docker/omada_* e postgres_data sono persistenti.
+
 jobs:
   guard-main-ref:
     name: Guard main-only deploy ref
@@ -203,6 +208,9 @@ jobs:
             fi
             echo "Production deploy OK"
 
+  # Mirror = monorepo completo su ROOT_PATH (non più solo backend_src): stesso repo di produzione.
+  # Omada (compose.mirror.yml) condivide il progetto compose: `up -d --build` aggiorna kor35_* senza toccare
+  # i bind mount omada_data/omada_logs se i container Omada non vanno ricreati.
   mirror-deploy:
     name: Mirror Raspberry backend deploy
     runs-on: ubuntu-latest
@@ -223,9 +231,11 @@ jobs:
           USER: ${{ secrets.MIRROR_SERVER_USER }}
           PORT: ${{ secrets.MIRROR_SERVER_SSH_PORT }}
           ROOT_PATH: ${{ secrets.MIRROR_ROOT_PATH }}
+          BACKEND_PATH: ${{ secrets.MIRROR_BACKEND_PATH }}
         run: |
           set -euo pipefail
-          REMOTE_BASE="${ROOT_PATH:-/home/pi/kor35-replica}"
+          # Stessa logica dello step SSH: root monorepo = MIRROR_ROOT_PATH se valorizzato, altrimenti MIRROR_BACKEND_PATH, altrimenti default.
+          REMOTE_BASE="${ROOT_PATH:-${BACKEND_PATH:-/home/pi/kor35-replica}}"
           REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa

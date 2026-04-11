@@ -154,6 +154,10 @@ config/docker/nginx-docker/certs_ddns/
 config/docker/nginx-docker/nginx_conf/ddns.conf
 .edge_sync_state.json
 
+# Omada (mirror/Pi): volumi alla root monorepo, non in repo
+omada_data/
+omada_logs/
+
 # Root cleanup / quarantine area
 extra/local-artifacts/
 

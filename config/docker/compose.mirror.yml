@@ -42,6 +42,8 @@ services:
       - PGID=1000
       - MANAGE_HTTP_PORT=8088
       - MANAGE_HTTPS_PORT=8043
+    # Path alla root del monorepo (../../ da config/docker): stesso layout già usato sul Pi
+    # (/home/pi/kor35-replica/omada_*), così al passaggio a compose.base+mirror non serve spostare i dati.
     volumes:
-      - ./nginx-docker/omada_data:/opt/tplink/EAPController/data
-      - ./nginx-docker/omada_logs:/opt/tplink/EAPController/logs
+      - ../../omada_data:/opt/tplink/EAPController/data
+      - ../../omada_logs:/opt/tplink/EAPController/logs

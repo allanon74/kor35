@@ -13,42 +13,20 @@ The React Compiler is not enabled on this template because of its impact on dev 
 
 ## Expanding the ESLint configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in this project.
 
-## Deploy automatico + mirror
+## Deploy (monorepo KOR35)
 
-Workflow: `.github/workflows/deploy.yml`
+Il build e il deploy non sono definiti in questa cartella: vedi il workflow **alla root del monorepo**:
 
-- Trigger automatico su push in `main`
-- Trigger manuale (`workflow_dispatch`) con input `ref`
-- Job `production-deploy`: build e deploy frontend su server principale
-- Job `mirror-deploy`: build e deploy frontend su Raspberry mirror (`forntend_src` -> `react_build`)
+- **`/.github/workflows/deploy.yml`** — build `npm` su GitHub Actions, rsync di `frontend/dist` verso `config/docker/nginx-docker/react_build`, deploy Docker produzione e mirror.
 
-Secrets principali:
+Secrets e passi: **README principale** del repository, sezione *Deploy sicuro* e *Transizione post-merge*.
 
-- `DEPLOY_HOST`
-- `DEPLOY_USER`
-- `DEPLOY_SSH_KEY`
-- `DEPLOY_SSH_PORT` (opzionale, default 22)
-- `REPO_PATH_ON_SERVER`
-- `DEPLOY_TARGET_PATH`
-- `FRONTEND_HEALTHCHECK_URL` (opzionale)
+**Produzione e mirror:** non impostare `VITE_API_URL` al build (il workflow fa `unset VITE_API_URL` dove serve): le chiamate restano relative a `/api/...` e `/media/...` sull’host che serve l’app.
 
-Secrets mirror:
+---
 
-- `MIRROR_SERVER_HOST`
-- `MIRROR_SERVER_USER`
-- `MIRROR_SERVER_SSH_KEY`
-- `MIRROR_SERVER_SSH_PORT` (opzionale, default 22)
-- `MIRROR_FRONTEND_PATH` (opzionale, default `/home/pi/kor35-replica/frontend_src`)
-- `MIRROR_REACT_BUILD_PATH` (opzionale, default `/home/pi/kor35-replica/react_build`)
-- `MIRROR_FRONTEND_POST_DEPLOY_COMMAND` (opzionale)
-- `MIRROR_FRONTEND_HEALTHCHECK_URL` (opzionale)
+## Note storiche (kor35-app separato)
 
-### API e media: percorsi relativi (default)
-
-Il bundle usa **`API_BASE_URL` vuoto** di default: tutte le chiamate vanno a **`/api/...`** e i media a **`/media/...`** rispetto all’host da cui apri l’app (produzione, mirror, staging). Serve che il web server / reverse proxy sul quel host inoltri `/api` e `/media` a Django e serva lo static del frontend.
-
-- **Produzione e mirror**: non impostare `VITE_API_URL` al build (il workflow mirror fa `unset VITE_API_URL`).
-- **Sviluppo locale** (`npm run dev`): `vite.config.js` fa proxy di `/api` e `/media` verso `http://127.0.0.1:8000` così i percorsi relativi funzionano senza CORS.
-- **Solo eccezione**: se il frontend è servito da un host e l’API da un altro senza proxy, puoi impostare `VITE_API_URL` al build (URL assoluto del backend); non è lo schema consigliato per prod/mirror.
+In passato esisteva un workflow solo `frontend` con secret tipo `DEPLOY_HOST`, `REPO_PATH_ON_SERVER`, Apache, ecc. Con il monorepo quel flusso è **sostituito** dal file unico in root.

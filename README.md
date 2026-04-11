@@ -10,6 +10,7 @@ sito kor35
 - [Setup Da Zero: Deploy Automatico GitHub](#setup-da-zero-deploy-automatico-github)
 - [Setup Ambienti Di Sviluppo (prima di `make`)](#setup-ambienti-di-sviluppo-prima-di-make)
 - [Appendice: Comandi rapidi quotidiani](#appendice-comandi-rapidi-quotidiani)
+- [Transizione post-merge (docker → main)](#transizione-post-merge-docker--main)
 
 ## Panoramica rapida
 
@@ -49,7 +50,7 @@ Dettagli:
 ## Deploy sicuro (GitHub Actions)
 
 Workflow principale: `.github/workflows/deploy.yml`
-Workflow secondari in `frontend/.github/workflows/` sono legacy/storici e non governano il deploy monorepo corrente.
+I workflow sotto `frontend/.github/workflows/` sono stati **rimossi** (non erano caricati da GitHub nel monorepo, ma generavano confusione).
 
 - Trigger automatico su `push` in `main` + trigger manuale (`workflow_dispatch`) con:
   - `ref`: branch/tag/SHA da rilasciare
@@ -93,6 +94,10 @@ Mirror Raspberry (opzionali):
 - `MIRROR_COMPOSE_PROJECT_NAME` (default `kor35-replica`)
 - `MIRROR_HEALTHCHECK_URL` (fortemente consigliato)
 
+**Allineamento path:** `MIRROR_ROOT_PATH` e `MIRROR_BACKEND_PATH` devono indicare la **stessa root del monorepo** sul Pi (dove esistono `config/docker/compose.base.yml` e `backend/.env.mirror`). Se imposti solo uno dei due, ora anche lo **rsync** del frontend usa la stessa priorità dello step SSH (`ROOT_PATH` → `BACKEND_PATH` → default).
+
+**Legacy:** il vecchio workflow solo-frontend in `frontend/.github/workflows/` è stato **rimosso**; il deploy è solo `.github/workflows/deploy.yml` in root.
+
 ### Mirror / Docker: 502 Bad Gateway (dopo deploy o aggiornamenti)
 
 Cause tipiche:
@@ -121,6 +126,122 @@ Altri accorgimenti:
 ### Nota importante
 
 Il deploy è intenzionalmente **main-only**: anche da `workflow_dispatch` viene rifiutato qualsiasi `ref` diverso da `main`.
+
+## Transizione post-merge (docker → main)
+
+Sequenza pensata quando **il branch `docker` non è ancora in `main`**, il **server di produzione** è già stato portato al layout Docker (monorepo sul branch `docker`, es. `www.kor35.it` risponde) e il **Raspberry** è ancora allo **stadio precedente** (es. solo `docker-compose.yml` in root del clone, non `config/docker/compose.base.yml` + `compose.mirror.yml`).
+
+### Stato tipico prima del merge
+
+| Ambiente | Situazione |
+|----------|------------|
+| **Git** | `main` = vecchio deploy (Apache/venv o incompleto); `docker` = monorepo + `config/docker` + workflow CI aggiornato |
+| **Produzione** | Clone già aggiornato in gran parte da `docker`, DNS (es. `www.kor35.it`) punta al nuovo host |
+| **Pi** | Clone `~/kor35-replica`, stack avviato con compose **legacy**; dati Omada in `/home/pi/kor35-replica/omada_data` e `omada_logs` (bind mount attuali) |
+
+Nel repo, `compose.mirror.yml` monta Omada su **`../../omada_data`** e **`../../omada_logs`** (root monorepo), **stessi path** del Pi attuale: al passaggio al compose del monorepo **non** serve spostare i dati Omada.
+
+### Fase A — Repository e GitHub
+
+1. **Merge** del branch `docker` in `main` (PR consigliata, review di `deploy.yml` e `compose.*`).
+2. **Push** su `origin/main`.
+3. Il workflow legacy in **`frontend/.github/workflows/`** è stato **rimosso** dal repo; il deploy ufficiale è solo **`.github/workflows/deploy.yml`** in root.
+4. **Secrets**: compila o aggiorna secondo la tabella **«Riepilogo secrets»** in questa sezione e la tabella **4.1** in *Setup Da Zero*; in particolare `SERVER_PROJECT_PATH` e `PRODUCTION_HEALTHCHECK_URL` per produzione, `MIRROR_*` per il Pi.
+
+### Fase B — Server di produzione (dopo il merge)
+
+Esegui come utente deploy (es. `deploy`):
+
+```bash
+cd /srv/kor35   # o il path in SERVER_PROJECT_PATH
+git fetch origin
+git checkout main
+git pull origin main
+
+cd config/docker
+export KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.prod"
+docker compose -f compose.base.yml -f compose.prod.yml build --pull backend daphne
+docker compose -f compose.base.yml -f compose.prod.yml up -d
+docker compose -f compose.base.yml -f compose.prod.yml exec -T backend python manage.py migrate --noinput
+docker compose -f compose.base.yml -f compose.prod.yml exec -T backend python manage.py collectstatic --noinput
+```
+
+Verifica:
+
+```bash
+curl -fsS https://www.kor35.it/api/healthz/
+docker compose -f compose.base.yml -f compose.prod.yml ps
+```
+
+**Errori comuni:** `backend/.env.prod` mancante o symlink `backend/.env` errato; certificati TLS in `nginx-docker/certs/`; primo avvio lento (healthcheck backend).
+
+### Fase C — Raspberry Pi (da layout precedente a monorepo)
+
+1. **Backup opzionale** (consigliato prima del primo `switch`):
+   ```bash
+   sudo tar -czf ~/backup-omada-pre-merge-$(date +%Y%m%d).tar.gz -C /home/pi/kor35-replica omada_data omada_logs
+   ```
+2. **Ferma** lo stack **senza** ` -v` (non cancellare volumi/bind mount):
+   ```bash
+   cd /home/pi/kor35-replica
+   docker compose down
+   ```
+   (o il comando che usi oggi; l’importante è **non** usare `docker compose down -v`.)
+3. **Aggiorna** il repo alla `main` con merge:
+   ```bash
+   cd /home/pi/kor35-replica
+   git fetch origin
+   git checkout main
+   git pull origin main
+   ```
+4. **Env mirror:** `backend/.env.mirror` da template e symlink `backend/.env` → `.env.mirror` se usi comandi locali.
+5. **Avvio stack monorepo** (Omada e KOR35 nello stesso progetto compose):
+   ```bash
+   cd /home/pi/kor35-replica/config/docker
+   export KOR35_BACKEND_ENV_FILE=/home/pi/kor35-replica/backend/.env.mirror
+   docker compose -f compose.base.yml -f compose.mirror.yml up -d --build
+   ```
+6. Verifica: `docker compose ps`, interfaccia Omada (porte `8088` / `8043` come da compose), `curl` su healthcheck mirror.
+
+Se il vecchio `docker-compose.yml` in root non serve più, rinominalo (es. `docker-compose.yml.legacy`) per evitare confusione; **non** cancellare `omada_data` / `omada_logs`.
+
+### Fase D — CI e validazione end-to-end
+
+1. Da GitHub: **Actions → Safe Release Deploy → Run workflow** (workflow_dispatch), `run_migrations` come preferisci.
+2. Controlla che **production-deploy** e **mirror-deploy** siano verdi.
+3. Se fallisce lo **rsync** mirror: allinea `MIRROR_ROOT_PATH` e `MIRROR_BACKEND_PATH` alla stessa root (`/home/pi/kor35-replica`).
+
+### Riepilogo secrets (inserire / modificare in GitHub)
+
+Usa **Settings → Secrets and variables → Actions**. Valori da adattare ai tuoi host/path.
+
+**Produzione**
+
+| Secret | Obbligatorio | Valore tipico / note |
+|--------|--------------|----------------------|
+| `SERVER_HOST` | Sì | IP o hostname raggiungibile dal runner (es. host del nuovo server) |
+| `SERVER_USER` | Sì | Utente SSH (es. `deploy`) |
+| `SERVER_SSH_KEY` | Sì | Chiave **privata** OpenSSH per la CI |
+| `SERVER_SSH_PORT` | No | `22` se standard |
+| `SERVER_PROJECT_PATH` | Forte consiglio | `/srv/kor35` (o path reale del clone) |
+| `PROD_COMPOSE_PROJECT_NAME` | No | Es. `kor35-prod` (deve coincidere con `docker compose ls` sul server) |
+| `PRODUCTION_HEALTHCHECK_URL` | Forte consiglio | `https://www.kor35.it/api/healthz/` |
+
+**Mirror (Pi)**
+
+| Secret | Obbligatorio | Valore tipico / note |
+|--------|--------------|----------------------|
+| `MIRROR_SERVER_HOST` | Sì | Hostname/IP del Pi (es. `kor35.ddns.net`) |
+| `MIRROR_SERVER_USER` | Sì | Es. `pi` |
+| `MIRROR_SERVER_SSH_KEY` | Sì | Chiave privata CI per il Pi |
+| `MIRROR_SERVER_SSH_PORT` | No | `22` |
+| `MIRROR_ROOT_PATH` | Forte consiglio | `/home/pi/kor35-replica` (root monorepo) |
+| `MIRROR_BACKEND_PATH` | No | Stesso valore di `MIRROR_ROOT_PATH` se usi solo un path |
+| `MIRROR_COMPOSE_PROJECT_NAME` | No | `kor35-replica` (come `docker compose ls` sul Pi) |
+| `MIRROR_HEALTHCHECK_URL` | Forte consiglio | `https://kor35.ddns.net/api/healthz/` (o URL pubblico del mirror) |
+| `MIRROR_BACKEND_REPO_URL` | Solo bootstrap | URL `git clone` se la cartella su Pi non esiste ancora |
+
+Dopo la transizione, un **push su `main`** con modifiche a `frontend/` esegue build + rsync + deploy; senza modifiche frontend solo deploy backend via SSH.
 
 ## Sviluppo locale in WSL
 
