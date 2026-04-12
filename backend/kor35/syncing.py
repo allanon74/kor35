@@ -1,6 +1,6 @@
 import uuid
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import File
@@ -91,6 +91,30 @@ def json_safe_for_sync(value: Any) -> Any:
     return str(value)
 
 
+def expand_paginaregolamento_queryset_with_ancestors(model: type[models.Model], qs):
+    """
+    Per PaginaRegolamento (FK parent -> self), estende il queryset includendo
+    tutti gli antenati delle righe già selezionate. Serve ai delta incrementali:
+    altrimenti il payload può contenere una pagina figlia senza il record padre.
+    """
+    pks = set(qs.values_list("pk", flat=True))
+    if not pks:
+        return qs
+    depth_guard = 0
+    while depth_guard < 256:
+        depth_guard += 1
+        parent_ids = set(
+            model.objects.filter(pk__in=pks)
+            .exclude(parent_id__isnull=True)
+            .values_list("parent_id", flat=True)
+        )
+        new_parents = parent_ids - pks
+        if not new_parents:
+            break
+        pks |= new_parents
+    return model.objects.filter(pk__in=pks)
+
+
 def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
     """
     Export minimalista di un record con FK espresse tramite sync key.
@@ -131,3 +155,39 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
         data[m2m_field.name] = related_items
 
     return data
+
+
+def try_apply_pagina_regolamento_structure_when_skipped(
+    local_obj: models.Model, row: dict[str, Any]
+) -> Literal["defer", "applied", "noop"]:
+    """
+    Con Last-Write-Wins il record intero può essere saltato pur essendo il payload remoto
+    l'unica fonte corretta per l'albero del menu wiki (parent / ordine).
+
+    Allinea comunque parent e ordine dal payload quando la riga locale esiste già e il
+    sync avrebbe ignorato gli scalari per timestamp.
+    """
+    Model = local_obj.__class__
+    raw_parent = row.get("parent")
+    resolved = None
+    if raw_parent not in (None, ""):
+        parent_row = Model.objects.filter(sync_id=raw_parent).first()
+        if parent_row is None:
+            return "defer"
+        resolved = parent_row
+
+    ordine_raw = row.get("ordine")
+    if ordine_raw is None:
+        ordine = local_obj.ordine
+    else:
+        try:
+            ordine = int(ordine_raw)
+        except (TypeError, ValueError):
+            ordine = local_obj.ordine
+
+    target_parent_id = resolved.pk if resolved is not None else None
+    if local_obj.parent_id == target_parent_id and local_obj.ordine == ordine:
+        return "noop"
+
+    Model.objects.filter(pk=local_obj.pk).update(parent=resolved, ordine=ordine)
+    return "applied"

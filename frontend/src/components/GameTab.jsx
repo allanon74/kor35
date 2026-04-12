@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'; 
+import React, { useState, useEffect, useMemo, useRef } from 'react'; 
 import { useCharacter } from './CharacterContext';
 import { 
     Heart, Zap, Crosshair, Clock, Battery, RefreshCw, 
@@ -248,13 +248,13 @@ const ChakraWidget = ({ current, max, onChange }) => {
             <div className="flex justify-between items-center mb-2">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2"><Hexagon size={12} className="text-pink-500" /> Chakra</span>
                 <div className="flex gap-2">
-                    <button onClick={() => onChange('CHK_CUR', 'add', max)} className="text-xs text-green-400 hover:text-green-300 font-bold px-2 bg-green-900/20 rounded">+1</button>
-                    <button onClick={() => onChange('CHK_CUR', 'reset', max)} className="text-gray-500 hover:text-white"><RefreshCw size={12}/></button>
+                    <button onClick={() => onChange('CHA_CUR', 'add', max)} className="text-xs text-green-400 hover:text-green-300 font-bold px-2 bg-green-900/20 rounded">+1</button>
+                    <button onClick={() => onChange('CHA_CUR', 'reset', max)} className="text-gray-500 hover:text-white"><RefreshCw size={12}/></button>
                 </div>
             </div>
             <div className="flex flex-wrap gap-1.5">
                 {[...Array(max)].map((_, i) => (
-                    <button key={i} onClick={() => onChange('CHK_CUR', 'consuma', max)} disabled={i >= current} className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${i < current ? 'bg-pink-600 border-pink-400 shadow-[0_0_8px_#db2777] scale-100' : 'bg-gray-900 border-gray-700 scale-90 opacity-50'}`}>
+                    <button key={i} onClick={() => onChange('CHA_CUR', 'consuma', max)} disabled={i >= current} className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${i < current ? 'bg-pink-600 border-pink-400 shadow-[0_0_8px_#db2777] scale-100' : 'bg-gray-900 border-gray-700 scale-90 opacity-50'}`}>
                         {i < current && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />}
                     </button>
                 ))}
@@ -264,12 +264,35 @@ const ChakraWidget = ({ current, max, onChange }) => {
     );
 };
 
-const RigenerazioneTimerWidget = ({ rows }) => {
+const RigenerazioneTimerWidget = ({ rows, onAfterTick }) => {
     const [nowTs, setNowTs] = useState(Date.now());
+    const prevLeftSecRef = useRef({});
+
     useEffect(() => {
         const id = window.setInterval(() => setNowTs(Date.now()), 1000);
         return () => window.clearInterval(id);
     }, []);
+
+    // Quando il countdown locale passa da >0 a 0, il server ha (o sta per) applicare il tick:
+    // senza refetch, risorse_pool_ui / primarie restano obsoleti fino a navigazione o azione.
+    useEffect(() => {
+        if (typeof onAfterTick !== 'function' || !Array.isArray(rows) || rows.length === 0) return;
+        let fired = false;
+        for (const r of rows) {
+            if (r.paused) continue;
+            const key = r.sigla || '_';
+            const nextMs = r?.next_tick_at ? new Date(r.next_tick_at).getTime() : null;
+            const left = nextMs != null ? Math.max(0, Math.ceil((nextMs - nowTs) / 1000)) : 0;
+            const prev = prevLeftSecRef.current[key];
+            if (prev !== undefined && prev > 0 && left === 0) {
+                fired = true;
+            }
+            prevLeftSecRef.current[key] = left;
+        }
+        if (fired) {
+            onAfterTick();
+        }
+    }, [nowTs, rows, onAfterTick]);
 
     if (!Array.isArray(rows) || rows.length === 0) return null;
     return (
@@ -528,11 +551,17 @@ const GameTab = ({ onNavigate }) => {
     const rankShell = pickPrimaryRank('RPG');
 
     const tempStats = char.statistiche_temporanee || {};
+    const poolUi = char.risorse_pool_ui || [];
+    const poolCur = (sigla) => {
+        const row = poolUi.find((p) => p.sigla === sigla);
+        return row != null ? row.valore_corrente : undefined;
+    };
     const tacticalStats = {
-        'PV_CUR': tempStats['PV_CUR'] !== undefined ? tempStats['PV_CUR'] : maxHP,
-        'PA_CUR': tempStats['PA_CUR'] !== undefined ? tempStats['PA_CUR'] : maxArmor,
-        'PS_CUR': tempStats['PS_CUR'] !== undefined ? tempStats['PS_CUR'] : maxShell,
-        'CHK_CUR': tempStats['CHK_CUR'] !== undefined ? tempStats['CHK_CUR'] : maxChakra,
+        'PV_CUR': poolCur('PV') ?? tempStats['PV_CUR'] ?? maxHP,
+        'PA_CUR': poolCur('PA') ?? tempStats['PA_CUR'] ?? maxArmor,
+        'PS_CUR': poolCur('PS') ?? tempStats['PS_CUR'] ?? maxShell,
+        // Chakra: pool CHA in risorse_consumabili; legacy CHK_CUR / CHA_CUR in temp
+        'CHA_CUR': poolCur('CHA') ?? tempStats['CHA_CUR'] ?? tempStats['CHK_CUR'] ?? maxChakra,
     };
     const comaState = char?.impostazioni_ui?.coma_state || null;
     const isDead = !!char?.data_morte || comaState?.status === 'dead';
@@ -638,9 +667,15 @@ const GameTab = ({ onNavigate }) => {
                 </div>
                 <div className="flex flex-col gap-4">
                     <DamageControlPanel stats={tacticalStats} maxHp={maxHP} maxArmor={maxArmor} maxShell={maxShell} onChange={handleStatChange} />
-                    {(maxChakra > 0) && <ChakraWidget current={tacticalStats['CHK_CUR']} max={maxChakra} onChange={handleStatChange} />}
-                    <RigenerazioneTimerWidget rows={char.rigenerazioni_auto_ui || []} />
-                    {(char.risorse_pool_ui || []).filter((p) => p.valore_max > 0).map((pool) => (
+                    {(maxChakra > 0) && <ChakraWidget current={tacticalStats['CHA_CUR']} max={maxChakra} onChange={handleStatChange} />}
+                    <RigenerazioneTimerWidget
+                        key={char.id}
+                        rows={char.rigenerazioni_auto_ui || []}
+                        onAfterTick={refreshCharacterData}
+                    />
+                    {(char.risorse_pool_ui || [])
+                        .filter((p) => p.valore_max > 0 && !['PV', 'PA', 'PS', 'CHA'].includes(p.sigla))
+                        .map((pool) => (
                         <RisorsaPoolWidget
                             key={pool.sigla}
                             pool={pool}

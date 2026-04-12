@@ -4,7 +4,7 @@ SHELL := /bin/bash
 ENV ?= dev-home
 CLEANUP_LEGACY ?= 0
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic sync-db sync-media cleanup-legacy
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic restart restart-fe restart-be sync-db sync-media cleanup-legacy
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -24,6 +24,11 @@ help:
 	@echo "  make down                    # stop stack"
 	@echo "  make down-volumes            # stop + rimozione volumi"
 	@echo "  make cleanup-legacy          # rimuove vecchi container kor35_wsl_*"
+	@echo ""
+	@echo "Dopo modifiche al codice (stack già avviato):"
+	@echo "  make restart-fe ENV=dev-home # rebuild React + riavvio container nginx (frontend)"
+	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
+	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
 	@echo ""
 	@echo "Sync:"
 	@echo "  make sync-db                 # pull-only DB (backend container)"
@@ -62,6 +67,17 @@ status:
 collectstatic:
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
 	cd config/docker && KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py collectstatic --noinput
+
+# Build React → react_build, poi riavvio del servizio nginx (frontend) così gli statici sono serviti freschi.
+restart-fe:
+	./scripts/setup_wsl_pi_like.sh
+	cd config/docker && KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml restart frontend
+
+# Riavvia backend + daphne così Gunicorn/Daphne carica le modifiche ai file Python (bind-mount backend).
+restart-be:
+	cd config/docker && KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml restart backend daphne
+
+restart: restart-fe restart-be
 
 sync-db:
 	cd config/docker && KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py sync_edge_node --pull-only

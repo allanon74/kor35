@@ -308,48 +308,75 @@ export const useOptimisticStatChange = () => {
             });
         },
         (oldData, { stat_sigla, mode, max_override }) => {
-            // Aggiorniamo statistiche_temporanee (la fonte di verità per i dati dinamici)
+            const s = (stat_sigla || '').toUpperCase();
+            const poolBase =
+                s === 'CHK_CUR'
+                    ? 'CHA'
+                    : s.endsWith('_CUR') && ['PV', 'PA', 'PS', 'CHA'].includes(s.split('_')[0])
+                      ? s.split('_')[0]
+                      : null;
+
+            if (poolBase) {
+                const poolUi = oldData.risorse_pool_ui || [];
+                const row = poolUi.find((p) => p.sigla === poolBase);
+                const primary = oldData.statistiche_primarie?.find((st) => st.sigla === poolBase);
+                let val =
+                    row?.valore_corrente ??
+                    primary?.valore_corrente ??
+                    primary?.valore_max ??
+                    max_override ??
+                    0;
+                let maxVal = max_override ?? primary?.valore_max ?? 999;
+                if (mode === 'consuma') val = Math.max(0, val - 1);
+                else if (mode === 'reset') val = maxVal;
+                else if (mode === 'add') val = Math.min(maxVal, val + 1);
+
+                const newPools = poolUi.some((p) => p.sigla === poolBase)
+                    ? poolUi.map((p) => (p.sigla === poolBase ? { ...p, valore_corrente: val } : p))
+                    : [...poolUi, { sigla: poolBase, valore_corrente: val, valore_max: maxVal, nome: poolBase, descrizione: '', recupero_auto: {} }];
+                const rc = { ...(oldData.risorse_consumabili || {}) };
+                rc[poolBase] = val;
+                const updatedPrimaries = oldData.statistiche_primarie?.map((stat) =>
+                    stat.sigla === poolBase ? { ...stat, valore_corrente: val } : stat
+                );
+                const tempStats = { ...(oldData.statistiche_temporanee || {}) };
+                delete tempStats[`${poolBase}_CUR`];
+                if (poolBase === 'CHA') delete tempStats.CHK_CUR;
+
+                return {
+                    ...oldData,
+                    risorse_pool_ui: newPools,
+                    risorse_consumabili: rc,
+                    statistiche_primarie: updatedPrimaries,
+                    statistiche_temporanee: tempStats,
+                };
+            }
+
             const tempStats = { ...oldData.statistiche_temporanee };
-            
-            // Trova il valore corrente
             let val = tempStats[stat_sigla];
-            
-            // Se non esiste nel temp, cerchiamo il default nei primari o usiamo il max_override passato
             if (val === undefined) {
                 if (max_override !== undefined) val = max_override;
                 else {
-                    const primaryStat = oldData.statistiche_primarie?.find(s => s.sigla === stat_sigla);
+                    const primaryStat = oldData.statistiche_primarie?.find((s) => s.sigla === stat_sigla);
                     val = primaryStat ? primaryStat.valore_max : 0;
                 }
             }
-
-            // Determina il massimale per il clamp
             let maxVal = max_override;
             if (maxVal === undefined) {
-                 const primaryStat = oldData.statistiche_primarie?.find(s => s.sigla === stat_sigla);
-                 maxVal = primaryStat ? primaryStat.valore_max : 999;
+                const primaryStat = oldData.statistiche_primarie?.find((s) => s.sigla === stat_sigla);
+                maxVal = primaryStat ? primaryStat.valore_max : 999;
             }
-
-            // Calcolo
             if (mode === 'consuma') val = Math.max(0, val - 1);
             else if (mode === 'reset') val = maxVal;
             else if (mode === 'add') val = Math.min(maxVal, val + 1);
-
-            // Scrittura aggiornata
             tempStats[stat_sigla] = val;
-
-            // Aggiorna anche l'array statistiche_primarie per coerenza visuale se la stat è lì
-            const updatedPrimaries = oldData.statistiche_primarie?.map(stat => {
-                if (stat.sigla === stat_sigla) {
-                    return { ...stat, valore_corrente: val };
-                }
-                return stat;
-            });
-
+            const updatedPrimaries = oldData.statistiche_primarie?.map((stat) =>
+                stat.sigla === stat_sigla ? { ...stat, valore_corrente: val } : stat
+            );
             return {
                 ...oldData,
                 statistiche_temporanee: tempStats,
-                statistiche_primarie: updatedPrimaries
+                statistiche_primarie: updatedPrimaries,
             };
         }
     );

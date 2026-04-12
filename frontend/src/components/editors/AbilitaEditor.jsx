@@ -593,7 +593,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                         <textarea
                             className="w-full min-h-[140px] bg-gray-950 border border-gray-700 rounded p-3 text-sm font-mono text-gray-200"
                             spellCheck={false}
-                            placeholder={`{\n  "rigenerazioni": [\n    { "stat_sigla": "PV", "ogni_minuti": 5, "step": 1 },\n    { "stat_sigla": "CHK", "ogni_minuti": 10, "step": 1 }\n  ]\n}`}
+                            placeholder={`{\n  "rigenerazioni": [\n    { "stat_sigla": "PV", "ogni_minuti": 5, "step": 1 },\n    { "stat_sigla": "CHA", "ogni_minuti": 10, "step": 1 }\n  ]\n}`}
                             value={formData.recupero_risorsa_str}
                             onChange={(e) => setFormData({ ...formData, recupero_risorsa_str: e.target.value })}
                         />

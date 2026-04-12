@@ -842,6 +842,16 @@ class Statistica(Punteggio):
         verbose_name="Step recupero",
         help_text="Quanti punti recuperare ad ogni tick.",
     )
+    massimo_pool_sigla = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        verbose_name="Massimo pool da altra statistica",
+        help_text="Opzionale (legacy / risorse non is_risorsa_pool). Es. CHK: imposta CHA se il tetto del "
+        "pool chakra è la statistica primaria CHA mentre il contatore runtime è CHK_CUR in "
+        "statistiche_temporanee. Se vuoto, il massimo è calcolato sulla stessa sigla.",
+    )
+
     def save(self, *args, **kwargs): self.tipo = STATISTICA; super().save(*args, **kwargs)
     class Meta: verbose_name = "Statistica"; verbose_name_plural = "Statistiche"
     @classmethod
@@ -1145,13 +1155,14 @@ class Abilita(A_modello):
         null=True,
         blank=True,
         verbose_name="Effetto all'uso risorsa",
-        help_text='Opzionale. Es.: {"stat_sigla":"FRT","durata":"O1H","modifiche":[{"stat_sigla":"PV","valore":1,"tipo_modificatore":"ADD"}]}',
+        help_text='Opzionale. stat_sigla = sigla pool (es. FRT; per chakra CHA). Alias legacy CHK viene mappato su CHA.',
     )
     recupero_risorsa = models.JSONField(
         null=True,
         blank=True,
         verbose_name="Recupero risorsa",
-        help_text='Opzionale. Es.: {"stat_sigla":"FRT","quando":"FINE_EVENTO"} oppure FINE_ANNO_GIOCO (gestione manuale/automatismi futuri).',
+        help_text='Opzionale. Es. {"rigenerazioni":[{"stat_sigla":"CHA","ogni_minuti":10,"step":1}]} — '
+        'stat_sigla = risorsa pool (PV, PA, PS, CHA, FRT, …). CHK in JSON è accettato come alias di CHA.',
     )
 
     class Meta: 
@@ -2159,13 +2170,28 @@ class Personaggio(Inventario):
         self.save(update_fields=["era", "prefettura", "prefettura_esterna", "updated_at"])
         self._sync_abilita_default_era()
 
+    def get_valore_massimo_risorsa_runtime(self, sigla):
+        """
+        Tetto massimo per rigenerazioni e consumi pool (risorse_consumabili).
+        Se su Statistica è impostato massimo_pool_sigla, il massimo viene letto da quella sigla.
+        """
+        sigla = (sigla or '').strip().upper()
+        if not sigla:
+            return 0
+        st = Statistica.objects.filter(sigla=sigla).first()
+        ref = ''
+        if st and getattr(st, 'massimo_pool_sigla', None):
+            ref = (st.massimo_pool_sigla or '').strip().upper()
+        if ref:
+            return self.get_valore_statistica(ref)
+        return self.get_valore_statistica(sigla)
 
     def get_risorsa_corrente(self, sigla):
         """Punti correnti nel pool per una statistica contrassegnata come risorsa (es. FRT)."""
         stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
         if not stat:
             return 0
-        max_v = self.get_valore_statistica(sigla)
+        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
         if max_v <= 0:
             return 0
         raw = (self.risorse_consumabili or {}).get(sigla)
@@ -2236,6 +2262,8 @@ class Personaggio(Inventario):
                 if not item:
                     continue
                 sigla = item['stat_sigla']
+                if sigla == 'CHK':
+                    sigla = 'CHA'
                 row = out.get(sigla)
                 if not row:
                     out[sigla] = {
@@ -2263,7 +2291,7 @@ class Personaggio(Inventario):
         stat = Statistica.objects.filter(sigla=sigla).first()
         if not stat:
             return 0
-        max_v = self.get_valore_statistica(sigla)
+        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
         if max_v <= 0:
             return 0
         if stat.is_risorsa_pool:
@@ -2320,7 +2348,7 @@ class Personaggio(Inventario):
         for sigla in all_sigle:
             cfg = cfg_map.get(sigla)
             rec = existing_map.get(sigla)
-            max_v = self.get_valore_statistica(sigla)
+            max_v = self.get_valore_massimo_risorsa_runtime(sigla)
             cur = self.get_risorsa_corrente_runtime(sigla)
             has_cfg = bool(cfg and max_v > 0 and cur < max_v)
 
@@ -2379,7 +2407,7 @@ class Personaggio(Inventario):
         now_ts = now_ts or timezone.now()
         cfg = self._get_cfg_recupero_risorsa(sigla)
         existing = RecuperoRisorsaAttivo.objects.filter(personaggio=self, statistica_sigla=sigla).first()
-        max_v = self.get_valore_statistica(sigla)
+        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
         cur = self.get_risorsa_corrente(sigla)
 
         if not cfg or max_v <= 0 or cur >= max_v:
@@ -2440,7 +2468,7 @@ class Personaggio(Inventario):
 
         for rec in recs:
             sigla = rec.statistica_sigla
-            max_v = self.get_valore_statistica(sigla)
+            max_v = self.get_valore_massimo_risorsa_runtime(sigla)
             cur = self.get_risorsa_corrente_runtime(sigla)
             if max_v <= 0 or cur >= max_v:
                 rec.is_active = False
@@ -2545,7 +2573,7 @@ class Personaggio(Inventario):
         stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
         if not stat:
             raise ValueError('Statistica non configurata come risorsa a pool.')
-        max_v = self.get_valore_statistica(sigla)
+        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
         if max_v <= 0:
             raise ValueError('Pool non disponibile (massimo 0).')
         cur = self.get_risorsa_corrente(sigla)
@@ -2584,7 +2612,7 @@ class Personaggio(Inventario):
         stat = Statistica.objects.filter(sigla=sigla, is_risorsa_pool=True).first()
         if not stat:
             raise ValueError('Statistica non configurata come risorsa a pool.')
-        max_v = self.get_valore_statistica(sigla)
+        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
         if max_v <= 0:
             raise ValueError('Pool non disponibile (massimo 0).')
         cur = self.get_risorsa_corrente(sigla)
@@ -2623,11 +2651,34 @@ class Personaggio(Inventario):
         rc[sigla] = valore
         self.risorse_consumabili = rc
 
+    def imposta_risorsa_pool_tattica(self, sigla, valore):
+        """
+        Scrive il contatore pool per PV/PA/PS/CHA in risorse_consumabili e rimuove chiavi legacy in
+        statistiche_temporanee (*_CUR, CHK_CUR per chakra).
+        """
+        sigla = (sigla or '').strip().upper()
+        try:
+            v = int(valore)
+        except (TypeError, ValueError):
+            return
+        self._set_risorsa_corrente(sigla, v)
+        temp = dict(self.statistiche_temporanee or {})
+        temp.pop(f'{sigla}_CUR', None)
+        if sigla == 'CHA':
+            temp.pop('CHK_CUR', None)
+        self.statistiche_temporanee = temp
+
     def _crea_effetti_temporanei_da_abilita(self, sigla):
         """Crea EffettoRisorsaTemporaneo per ogni abilità posseduta con effetto_uso_risorsa compatibile."""
+        sigla = (sigla or '').strip().upper()
         for ab in self.abilita_possedute.all():
             spec = ab.effetto_uso_risorsa
-            if not spec or spec.get('stat_sigla') != sigla:
+            if not spec:
+                continue
+            spec_sigla = (spec.get('stat_sigla') or '').strip().upper()
+            if spec_sigla == 'CHK':
+                spec_sigla = 'CHA'
+            if spec_sigla != sigla:
                 continue
             durata = spec.get('durata') or RISORSA_DURATA_ORA_1
             if durata not in (RISORSA_DURATA_ORA_1, RISORSA_DURATA_GIORNO, RISORSA_DURATA_EVENTO):
@@ -2636,7 +2687,7 @@ class Personaggio(Inventario):
             modifiche = spec.get('modifiche') or []
             EffettoRisorsaTemporaneo.objects.create(
                 personaggio=self,
-                statistica_risorsa_sigla=sigla,
+                statistica_risorsa_sigla=spec_sigla,
                 abilita=ab,
                 durata_tipo=durata,
                 scadenza=scad,
@@ -2659,6 +2710,15 @@ class Personaggio(Inventario):
             for row in extra_links.values('punteggio__nome').annotate(valore_totale=Sum('valore')):
                 nome = row['punteggio__nome']
                 p[nome] = (p.get(nome, 0) or 0) + (row['valore_totale'] or 0)
+
+        # Valori base da scheda (PersonaggioStatisticaBase / default statistica): senza questo,
+        # punteggi_dipendenti usa solo abilita_punteggio e sorgenti come Chakra restano sempre 0.
+        for stat in Statistica.objects.filter(parametro__isnull=False).exclude(parametro__exact=''):
+            base_pg = int(self.get_valore_statistica_base(stat) or 0)
+            nome = stat.nome
+            from_links = int(p.get(nome, 0) or 0)
+            p[nome] = base_pg + from_links
+
         return p
 
     def _get_abilita_data_acquisizione_map(self, include_camaleonte=True):
@@ -2716,6 +2776,26 @@ class Personaggio(Inventario):
                     queue.append(next_sid)
                     queue.sort()
         return ordine if len(ordine) == len(scc_ids) else sorted(list(scc_ids))
+
+    def _valore_sorgente_per_punteggio_dipendente(self, punteggi_per_nome, source_nome):
+        """
+        Valore effettivo della sorgente (come get_valore_statistica) per Statistica,
+        così contano anche AbilitaStatistica / oggetti / effetti. Per altri Punteggi,
+        usa solo la somma in punteggi_per_nome.
+        """
+        stat = Statistica.objects.filter(nome=source_nome).first()
+        if not stat or not stat.parametro:
+            return int(punteggi_per_nome.get(source_nome, 0) or 0)
+        self._punteggi_base_partial_for_mods = punteggi_per_nome
+        try:
+            if hasattr(self, '_modificatori_calcolati_cache'):
+                delattr(self, '_modificatori_calcolati_cache')
+            return int(self.get_valore_statistica(stat.sigla))
+        finally:
+            if hasattr(self, '_punteggi_base_partial_for_mods'):
+                delattr(self, '_punteggi_base_partial_for_mods')
+            if hasattr(self, '_modificatori_calcolati_cache'):
+                delattr(self, '_modificatori_calcolati_cache')
 
     def _applica_punteggi_dipendenti(self, punteggi_per_nome, regole):
         if not regole:
@@ -2811,7 +2891,9 @@ class Personaggio(Inventario):
                 )
             )
             for r in incoming:
-                source_val = int(punteggi_per_nome.get(r["source_nome"], 0) or 0)
+                source_val = self._valore_sorgente_per_punteggio_dipendente(
+                    punteggi_per_nome, r["source_nome"]
+                )
                 blocchi = source_val // r["ogni_x"]
                 bonus = blocchi * r["incremento"]
                 if bonus:
@@ -2834,7 +2916,9 @@ class Personaggio(Inventario):
                 internal.sort(key=lambda r: (r["abilita_id"], r["id"]))
 
             for r in internal:
-                source_val = int(punteggi_per_nome.get(r["source_nome"], 0) or 0)
+                source_val = self._valore_sorgente_per_punteggio_dipendente(
+                    punteggi_per_nome, r["source_nome"]
+                )
                 blocchi = source_val // r["ogni_x"]
                 bonus = blocchi * r["incremento"]
                 if bonus:
@@ -2955,8 +3039,20 @@ class Personaggio(Inventario):
         """
         Mantiene la compatibilità: restituisce caratteristiche dai punteggi (abilità).
         Per i valori base intrinseci del personaggio, usa statistiche_base_dict.
+        Durante il calcolo dei punteggi dipendenti, usa _punteggi_base_partial_for_mods
+        per evitare ricorsione su punteggi_base completo.
         """
-        return {k:v for k,v in self.punteggi_base.items() if Punteggio.objects.filter(nome=k, tipo=CARATTERISTICA).exists()}
+        if hasattr(self, '_punteggi_base_partial_for_mods'):
+            p = self._punteggi_base_partial_for_mods
+            nomi_ca = set(
+                Punteggio.objects.filter(tipo=CARATTERISTICA).values_list('nome', flat=True)
+            )
+            return {k: v for k, v in p.items() if k in nomi_ca}
+        return {
+            k: v
+            for k, v in self.punteggi_base.items()
+            if Punteggio.objects.filter(nome=k, tipo=CARATTERISTICA).exists()
+        }
     
     def get_valore_aura_effettivo(self, aura):
         pb = self.punteggi_base
@@ -3672,12 +3768,23 @@ class Personaggio(Inventario):
         
     
     def get_valore_statistica(self, sigla):
+        """
+        Valore effettivo della statistica per sigla: base da punteggi_base (scheda, abilità,
+        punteggi dipendenti) più modificatori globali. Allineato a ciò che mostra la scheda/game.
+        Con _punteggi_base_partial_for_mods (uso interno) la base viene letta dal dict parziale.
+        """
         try:
             stat_obj = Statistica.objects.filter(sigla=sigla).first()
-            if not stat_obj or not stat_obj.parametro: return 0
+            if not stat_obj or not stat_obj.parametro:
+                return 0
             mods = self.modificatori_calcolati.get(stat_obj.parametro, {'add': 0, 'mol': 1.0})
-            return int(round((stat_obj.valore_base_predefinito + mods['add']) * mods['mol']))
-        except Exception: return 0
+            if hasattr(self, '_punteggi_base_partial_for_mods'):
+                base = int(self._punteggi_base_partial_for_mods.get(stat_obj.nome, 0) or 0)
+            else:
+                base = int(self.punteggi_base.get(stat_obj.nome, 0) or 0)
+            return int(round((base + mods['add']) * mods['mol']))
+        except Exception:
+            return 0
 
     def get_costo_item_scontato(self, item):
         costo_base = 0

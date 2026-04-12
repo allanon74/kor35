@@ -3278,7 +3278,7 @@ class StaffRisorsaPoolListView(APIView):
         for pg in qs:
             pools = []
             for st in stats:
-                max_v = pg.get_valore_statistica(st.sigla)
+                max_v = pg.get_valore_massimo_risorsa_runtime(st.sigla)
                 if max_v <= 0:
                     continue
                 pools.append({
@@ -3317,7 +3317,7 @@ class StaffRisorsaIncrementView(APIView):
                 nuovo = pg.regola_risorsa_staff(stat_sigla, delta, staff_user=request.user, motivo=motivo)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        max_v = pg.get_valore_statistica(stat_sigla)
+        max_v = pg.get_valore_massimo_risorsa_runtime(stat_sigla)
         return Response({
             'status': 'ok',
             'personaggio_id': pg.id,
@@ -3394,14 +3394,12 @@ def _sync_coma_state(personaggio):
         elif r_end_at and now >= r_end_at:
             # Fine rianimazione: ripristina PV al massimo e riabilita la webapp
             pv_max = max(0, int(personaggio.get_valore_statistica("PV") or 0))
-            temp_stats = dict(personaggio.statistiche_temporanee or {})
-            temp_stats["PV_CUR"] = pv_max
-            personaggio.statistiche_temporanee = temp_stats
+            personaggio.imposta_risorsa_pool_tattica("PV", pv_max)
             ui.pop("rianimazione_state", None)
             rianimazione = {}
             personaggio.aggiungi_log("Rianimazione completata: PV ripristinati al massimo.")
             personaggio.impostazioni_ui = ui
-            personaggio.save(update_fields=["statistiche_temporanee", "impostazioni_ui", "updated_at"])
+            personaggio.save(update_fields=["risorse_consumabili", "statistiche_temporanee", "impostazioni_ui", "updated_at"])
         elif r_end_at:
             rianimazione["remaining_seconds"] = max(0, int((r_end_at - now).total_seconds()))
             ui["rianimazione_state"] = rianimazione
@@ -3467,6 +3465,18 @@ def _sync_coma_state(personaggio):
     return {"coma_state": coma, "rianimazione_state": rianimazione}
 
 
+def _game_key_to_pool_base(stat_sigla):
+    """Mappa chiavi game (PV_CUR, CHA_CUR, CHK_CUR legacy) sulla sigla pool in risorse_consumabili."""
+    s = (stat_sigla or '').strip().upper()
+    if s == 'CHK_CUR':
+        return 'CHA'
+    if s.endswith('_CUR'):
+        base = s.split('_')[0]
+        if base in ('PV', 'PA', 'PS', 'CHA'):
+            return base
+    return None
+
+
 class GameActionsViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
@@ -3475,47 +3485,115 @@ class GameActionsViewSet(viewsets.ViewSet):
         char_id = request.data.get('char_id')
         stat_sigla = request.data.get('stat_sigla')
         mode = request.data.get('mode')
-        # Leggiamo il max_value passato dal frontend (fondamentale per le zone del corpo)
-        max_val_param = request.data.get('max_value') 
-        
+        max_val_param = request.data.get('max_value')
+
         pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
         if pg.data_morte:
             return Response({'error': 'Personaggio morto: operazione non consentita.'}, status=status.HTTP_409_CONFLICT)
-        
-        # 1. Determina il Valore Massimo
+
+        pool_base = _game_key_to_pool_base(stat_sigla)
+        pool_stat = (
+            Statistica.objects.filter(sigla=pool_base, is_risorsa_pool=True).first()
+            if pool_base
+            else None
+        )
+
+        base_sigla = (stat_sigla or '').split('_')[0]
+
+        if pool_stat:
+            if max_val_param is not None:
+                val_max = int(max_val_param)
+            else:
+                val_max = pg.get_valore_massimo_risorsa_runtime(pool_base)
+                if val_max == 0 and pool_base not in ('PV', 'PA', 'PS'):
+                    val_max = 999
+            current = int(pg.get_risorsa_corrente(pool_base))
+            nuovo_valore = current
+            if mode == 'consuma':
+                nuovo_valore = max(0, current - 1)
+            elif mode == 'add':
+                nuovo_valore = min(val_max, current + 1)
+            elif mode == 'reset':
+                nuovo_valore = val_max
+            pg.imposta_risorsa_pool_tattica(pool_base, nuovo_valore)
+            base_sigla_for_regen = pool_base
+
+            if pool_base == 'PV':
+                ui = dict(pg.impostazioni_ui or {})
+                coma = dict(ui.get('coma_state') or {})
+                tco_seconds = max(0, int(pg.get_valore_statistica('TCO') or 0))
+                now = timezone.now()
+
+                if nuovo_valore <= 0:
+                    is_active = coma.get('status') in {'counting', 'paused'}
+                    if not is_active and not pg.data_morte:
+                        end_at = now + timedelta(seconds=tco_seconds)
+                        coma = {
+                            'status': 'counting',
+                            'started_at': _to_iso(now),
+                            'end_at': _to_iso(end_at),
+                            'is_paused': False,
+                            'paused_at': None,
+                            'remaining_seconds': tco_seconds,
+                            'tco_seconds': tco_seconds,
+                            'death_mode': 'none',
+                        }
+                else:
+                    coma = {}
+                    ui.pop('rianimazione_state', None)
+
+                if coma:
+                    ui['coma_state'] = coma
+                else:
+                    ui.pop('coma_state', None)
+                pg.impostazioni_ui = ui
+
+            pg.save(update_fields=['risorse_consumabili', 'statistiche_temporanee', 'impostazioni_ui', 'updated_at'])
+            if mode == 'consuma':
+                pg._crea_effetti_temporanei_da_abilita(base_sigla_for_regen)
+            pg.sync_recuperi_automatici(only_sigla=base_sigla_for_regen)
+            pg.advance_recuperi_risorse(only_sigla=base_sigla_for_regen)
+            timers_state = _sync_coma_state(pg)
+
+            ser = PersonaggioDetailSerializer()
+            return Response({
+                'status': 'ok',
+                'stat_sigla': stat_sigla,
+                'current': nuovo_valore,
+                'max': val_max,
+                'statistiche_temporanee': pg.statistiche_temporanee,
+                'risorse_consumabili': pg.risorse_consumabili,
+                'risorse_pool_ui': ser.get_risorse_pool_ui(pg),
+                'statistiche_primarie': ser.get_statistiche_primarie(pg),
+                'coma_state': timers_state.get('coma_state', {}),
+                'rianimazione_state': timers_state.get('rianimazione_state', {}),
+                'data_morte': pg.data_morte,
+            })
+
         val_max = 0
         if max_val_param is not None:
-            # Se il frontend ci dice qual è il massimo (es. PV totali), usiamo quello
             val_max = int(max_val_param)
         else:
-            # Altrimenti cerchiamo nel DB. 
-            # Gestiamo il caso di sigle composte (es. PV_TR -> cerca PV)
-            base_sigla = stat_sigla.split('_')[0] 
-            val_max = pg.get_valore_statistica(base_sigla)
-            # Se fallisce anche questo, fallback di sicurezza
-            if val_max == 0 and stat_sigla not in ['PG', 'PA', 'PV']: 
-                val_max = 999 
-        
-        # 2. Inizializza la statistica nel JSON se non esiste
-        # Se è la prima volta che colpiamo "Tronco", lo settiamo al massimo
+            val_max = pg.get_valore_massimo_risorsa_runtime(base_sigla)
+            if val_max == 0 and stat_sigla not in ['PG', 'PA', 'PV']:
+                val_max = 999
+
         if stat_sigla not in pg.statistiche_temporanee:
             pg.statistiche_temporanee[stat_sigla] = val_max
 
         current = int(pg.statistiche_temporanee[stat_sigla])
-        
-        # 3. Applica la logica
+
         nuovo_valore = current
-        
+
         if mode == 'consuma':
             nuovo_valore = max(0, current - 1)
-        elif mode == 'add':  # <--- MANCAVA QUESTO!
+        elif mode == 'add':
             nuovo_valore = min(val_max, current + 1)
         elif mode == 'reset':
             nuovo_valore = val_max
-            
-        # 4. Salva nel DB
+
         pg.statistiche_temporanee[stat_sigla] = nuovo_valore
-        base_sigla_for_regen = stat_sigla.split('_')[0]
+        base_sigla_for_regen = base_sigla
 
         if stat_sigla == 'PV_CUR':
             ui = dict(pg.impostazioni_ui or {})
@@ -3548,17 +3626,22 @@ class GameActionsViewSet(viewsets.ViewSet):
             pg.impostazioni_ui = ui
 
         pg.save(update_fields=['statistiche_temporanee', 'impostazioni_ui', 'updated_at'])
+        if mode == 'consuma':
+            pg._crea_effetti_temporanei_da_abilita(base_sigla_for_regen)
         pg.sync_recuperi_automatici(only_sigla=base_sigla_for_regen)
         pg.advance_recuperi_risorse(only_sigla=base_sigla_for_regen)
         timers_state = _sync_coma_state(pg)
-        
+
+        ser = PersonaggioDetailSerializer()
         return Response({
             'status': 'ok',
             'stat_sigla': stat_sigla,
-            'current': nuovo_valore, 
+            'current': nuovo_valore,
             'max': val_max,
-            # Ritorniamo tutto l'oggetto aggiornato per sicurezza
             'statistiche_temporanee': pg.statistiche_temporanee,
+            'risorse_consumabili': pg.risorse_consumabili,
+            'risorse_pool_ui': ser.get_risorse_pool_ui(pg),
+            'statistiche_primarie': ser.get_statistiche_primarie(pg),
             'coma_state': timers_state.get('coma_state', {}),
             'rianimazione_state': timers_state.get('rianimazione_state', {}),
             'data_morte': pg.data_morte,
@@ -3580,7 +3663,7 @@ class GameActionsViewSet(viewsets.ViewSet):
                 pg.advance_recuperi_risorse(only_sigla=stat_sigla)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        max_v = pg.get_valore_statistica(stat_sigla)
+        max_v = pg.get_valore_massimo_risorsa_runtime(stat_sigla)
         rec_map = pg.get_recuperi_risorsa_stato()
         rec = rec_map.get(stat_sigla) or {}
         return Response({
@@ -3985,11 +4068,9 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         ui.pop('coma_state', None)
         ui.pop('rianimazione_state', None)
         pv_max = max(0, int(personaggio.get_valore_statistica('PV') or 0))
-        temp_stats = dict(personaggio.statistiche_temporanee or {})
-        temp_stats['PV_CUR'] = pv_max
+        personaggio.imposta_risorsa_pool_tattica('PV', pv_max)
         personaggio.impostazioni_ui = ui
-        personaggio.statistiche_temporanee = temp_stats
-        personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'statistiche_temporanee', 'updated_at'])
+        personaggio.save(update_fields=['data_morte', 'impostazioni_ui', 'risorse_consumabili', 'statistiche_temporanee', 'updated_at'])
         personaggio.aggiungi_log(f'Personaggio rivissuto manualmente dallo staff. PV ripristinati a {pv_max}.')
         return Response({'status': 'ok', 'message': 'Personaggio rivissuto.'}, status=status.HTTP_200_OK)
     

@@ -16,7 +16,11 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from kor35.syncing import serialize_for_sync
+from kor35.syncing import (
+    expand_paginaregolamento_queryset_with_ancestors,
+    serialize_for_sync,
+    try_apply_pagina_regolamento_structure_when_skipped,
+)
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
 
 logger = logging.getLogger(__name__)
@@ -104,6 +108,8 @@ class EdgeSyncView(APIView):
             qs = model.objects.all()
             if last_sync_timestamp:
                 qs = qs.filter(updated_at__gt=last_sync_timestamp)
+                if key == "gestione_plot.paginaregolamento":
+                    qs = expand_paginaregolamento_queryset_with_ancestors(model, qs)
             payload[key] = [serialize_for_sync(obj) for obj in qs.iterator()]
 
         payload["auth.user"] = self._serialize_users(last_sync_timestamp)
@@ -309,7 +315,16 @@ class EdgeSyncView(APIView):
             and remote_updated_at <= local.updated_at
         )
         if skip_scalars:
+            wiki_menu = "noop"
+            if model._meta.label_lower == "gestione_plot.paginaregolamento":
+                wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(local, row)
+                if wiki_menu == "defer":
+                    return "defer"
             if not m2m_raw:
+                if wiki_menu == "applied":
+                    if remote_updated_at:
+                        model.objects.filter(pk=local.pk).update(updated_at=remote_updated_at)
+                    return "applied"
                 return "skipped"
             obj = local
             for field_name, raw_list in m2m_raw.items():

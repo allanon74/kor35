@@ -12,7 +12,11 @@ from django.db.models import ForeignKey, UniqueConstraint
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from kor35.syncing import serialize_for_sync
+from kor35.syncing import (
+    expand_paginaregolamento_queryset_with_ancestors,
+    serialize_for_sync,
+    try_apply_pagina_regolamento_structure_when_skipped,
+)
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
 
 
@@ -110,6 +114,8 @@ class Command(BaseCommand):
             qs = model.objects.all()
             if since and hasattr(model, "updated_at"):
                 qs = qs.filter(updated_at__gt=since)
+                if key == "gestione_plot.paginaregolamento":
+                    qs = expand_paginaregolamento_queryset_with_ancestors(model, qs)
             payload[key] = [serialize_for_sync(obj) for obj in qs.iterator()]
 
         payload["auth.user"] = self._build_users_payload(since)
@@ -232,7 +238,16 @@ class Command(BaseCommand):
             and remote_updated_at <= local_obj.updated_at
         )
         if skip_scalars:
+            wiki_menu = "noop"
+            if model._meta.label_lower == "gestione_plot.paginaregolamento":
+                wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(local_obj, row)
+                if wiki_menu == "defer":
+                    return "defer"
             if not m2m_updates:
+                if wiki_menu == "applied":
+                    if remote_updated_at:
+                        model.objects.filter(pk=local_obj.pk).update(updated_at=remote_updated_at)
+                    return "applied"
                 return "skipped"
             obj = local_obj
             for field_name, raw_values in m2m_updates.items():

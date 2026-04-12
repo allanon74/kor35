@@ -1627,6 +1627,16 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'era', 'prefettura', 'prefettura_esterna',
         )
 
+    def to_representation(self, instance):
+        """
+        Applica i tick di rigenerazione automatica prima di serializzare i campi.
+        `statistiche_primarie` è valutata prima di `risorse_pool_ui` / `rigenerazioni_auto_ui`
+        (che chiamano già sync): senza questo, valori corrente pool e ranghi restano obsoleti
+        dopo il refetch post-timer.
+        """
+        instance.sync_recuperi_automatici()
+        return super().to_representation(instance)
+
     def get_can_edit_razza(self, personaggio):
         """
         Razza (archetipo/forma AIN) modificabile solo finché il personaggio
@@ -1860,8 +1870,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         stats = []
         for stat in Statistica.objects.filter(is_primaria=True):
             val_max = obj.get_valore_statistica(stat.sigla)
-            # Recupera il valore corrente da statistiche_temporanee o usa il max
-            val_current = obj.statistiche_temporanee.get(stat.sigla, val_max)
+            if stat.is_risorsa_pool:
+                val_current = obj.get_risorsa_corrente(stat.sigla)
+            else:
+                val_current = obj.statistiche_temporanee.get(stat.sigla, val_max)
             stats.append({
                 'sigla': stat.sigla,
                 'nome': stat.nome,
@@ -1875,7 +1887,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         out = []
         rec_map = obj.get_recuperi_risorsa_stato()
         for stat in Statistica.objects.filter(is_risorsa_pool=True).order_by('ordine', 'nome'):
-            max_v = obj.get_valore_statistica(stat.sigla)
+            max_v = obj.get_valore_massimo_risorsa_runtime(stat.sigla)
             if max_v <= 0:
                 continue
             cur = obj.get_risorsa_corrente(stat.sigla)
@@ -1916,7 +1928,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         out = []
         for sigla, rec in rec_map.items():
             stat_obj = Statistica.objects.filter(sigla=sigla).first()
-            max_v = obj.get_valore_statistica(sigla)
+            max_v = obj.get_valore_massimo_risorsa_runtime(sigla)
             cur = obj.get_risorsa_corrente_runtime(sigla)
             out.append({
                 'sigla': sigla,

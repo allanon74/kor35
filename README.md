@@ -253,7 +253,7 @@ Per setup completo backend + frontend + Postgres locale + sync pull-only dal Mas
 - stato migrazione monorepo: `docs/MONOREPO_MIGRATION.md`
 - env per ambiente: `config/env_templates/README.md`
 - runbook docker ambienti: `docs/DOCKER_ENVIRONMENTS_RUNBOOK.md`
-- comandi rapidi: `Makefile` (`make help`)
+- comandi rapidi: `Makefile` (`make help`), inclusi `restart-fe`, `restart-be`, `restart` per aggiornare codice con lo stack già avviato (vedi [Setup Ambienti](#setup-ambienti-di-sviluppo-prima-di-make))
 
 ## Setup Da Zero: Deploy Automatico GitHub
 
@@ -491,7 +491,19 @@ make up ENV=dev-home
 make up ENV=dev-home CLEANUP_LEGACY=1
 ```
 
-### 4) Verifica operatività
+### 4) Aggiornare il codice con lo stack già avviato
+
+Con `dev-home` (e profili analoghi) il backend è montato da disco nel container: **non serve** `make down` / `make up` solo per ricaricare i `.py`.
+
+| Comando | Cosa fa |
+|--------|---------|
+| `make restart-fe ENV=dev-home` | Esegue `npm run build`, copia la build in `react_build`, poi **`docker compose restart frontend`** (Nginx che serve gli statici). Usa lo stesso `ENV` dello stack. Se la UI resta vecchia, prova refresh forzato o svuota cache / service worker PWA. |
+| `make restart-be ENV=dev-home` | Riavvia i servizi Docker `backend` e `daphne` così Gunicorn/Daphne caricano i file Python aggiornati. Default: `ENV=dev-home`. |
+| `make restart ENV=dev-home` | Esegue in sequenza **`restart-fe`** e poi **`restart-be`** (utile se hai toccato sia React sia backend). |
+
+Per solo backend, in alternativa: `docker restart kor35_devhome_backend kor35_devhome_daphne` (nomi tipici con profilo `dev-home`).
+
+### 5) Verifica operatività
 
 ```bash
 make status ENV=dev-home
@@ -502,7 +514,7 @@ Frontend:
 - `http://127.0.0.1:8080` (`dev-home`)
 - `http://127.0.0.1:8081` (`dev-office`)
 
-### 5) Sync opzionale da master/pi
+### 6) Sync opzionale da master/pi
 
 ```bash
 make sync-db ENV=dev-home
@@ -520,6 +532,8 @@ cd backend && ln -sf .env.dev-home .env && cd ..
 make setup
 make up ENV=dev-home
 ```
+
+Dopo modifiche a React o Python (stack già su), vedi il punto **4) Aggiornare il codice con lo stack già avviato** nella sezione [Setup Ambienti](#setup-ambienti-di-sviluppo-prima-di-make) (`make restart-fe`, `make restart-be`, `make restart`).
 
 Controllo stato:
 
