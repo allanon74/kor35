@@ -61,6 +61,10 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         reason: 'Intervento staff',
     });
 
+    /** Conferme azioni staff in modale React (window.confirm è soppresso in alcuni browser di test / automazione). */
+    const [staffConfirm, setStaffConfirm] = useState(null);
+    const [staffFeedback, setStaffFeedback] = useState(null);
+
     useEffect(() => {
         // Carica tipologie, gestendo eventuali errori silenziosamente
         getTipologiePersonaggio(onLogout).then(data => {
@@ -71,6 +75,47 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         });
         fetchPersonaggi();
     }, []);
+
+    useEffect(() => {
+        if (!staffFeedback) return undefined;
+        const id = setTimeout(() => setStaffFeedback(null), 7000);
+        return () => clearTimeout(id);
+    }, [staffFeedback]);
+
+    const handleStaffConfirmExecute = async () => {
+        if (!staffConfirm) return;
+        const { kind, char } = staffConfirm;
+        setStaffConfirm(null);
+        try {
+            if (kind === 'reset') {
+                await resetPersonaggio(char.id, 'Reset manuale da interfaccia staff', onLogout);
+                await fetchPersonaggi();
+                if (String(char.id) === String(selectedCharacterId)) {
+                    refreshCharacterData();
+                }
+                setStaffFeedback({ type: 'success', message: 'Reset personaggio completato.' });
+            } else if (kind === 'kill') {
+                await staffKillPersonaggio(char.id, onLogout);
+                await fetchPersonaggi();
+                if (String(char.id) === String(selectedCharacterId)) {
+                    refreshCharacterData();
+                }
+                setStaffFeedback({ type: 'success', message: 'Personaggio segnato come morto.' });
+            } else if (kind === 'revive') {
+                await staffRevivePersonaggio(char.id, onLogout);
+                await fetchPersonaggi();
+                if (String(char.id) === String(selectedCharacterId)) {
+                    refreshCharacterData();
+                }
+                setStaffFeedback({ type: 'success', message: 'Personaggio rivissuto.' });
+            }
+        } catch (error) {
+            setStaffFeedback({
+                type: 'error',
+                message: error?.message || String(error),
+            });
+        }
+    };
 
     // --- GESTIONE MODALE CREATE/EDIT ---
 
@@ -360,36 +405,68 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                 </div>
             </div>
 
+            {staffFeedback && (
+                <div
+                    className={`mb-4 flex shrink-0 items-start justify-between gap-3 rounded-lg border px-4 py-3 text-sm ${
+                        staffFeedback.type === 'success'
+                            ? 'border-emerald-600 bg-emerald-950/80 text-emerald-100'
+                            : 'border-red-600 bg-red-950/80 text-red-100'
+                    }`}
+                    role="status"
+                >
+                    <span className="min-w-0 pt-0.5">{staffFeedback.message}</span>
+                    <button
+                        type="button"
+                        onClick={() => setStaffFeedback(null)}
+                        className="shrink-0 rounded p-1 text-current opacity-80 hover:opacity-100"
+                        aria-label="Chiudi messaggio"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
+            )}
+
             <div className="flex-1 overflow-y-auto space-y-4 pb-20 custom-scrollbar">
                 {/* Controllo di sicurezza: mappa solo se è un array */}
                 {Array.isArray(personaggiList) && personaggiList.map(char => {
                     const isSelected = selectedCharacterId === String(char.id);
+                    const staffToolbar = (isStaff || isAdmin);
+                    /* Grid + overflow-hidden a sinistra: evita che testo lungo copra la toolbar (hit-testing / paint sopra i pulsanti). */
+                    const rowBase = `relative isolate group grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center p-4 rounded-xl border transition-all duration-200 hover:shadow-md active:opacity-95 ${
+                        isSelected
+                            ? 'bg-indigo-900/30 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)] ring-2 ring-indigo-500/20'
+                            : 'bg-gray-800 border-gray-700 hover:border-gray-500 hover:bg-gray-750'
+                    }`;
+
                     return (
-                    <div 
-                        key={char.id} 
-                        onClick={() => handleSelect(char)}
-                        className={`relative group p-4 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-between transform hover:scale-[1.02] active:scale-[0.98]
-                            ${isSelected
-                                ? 'bg-indigo-900/30 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)] ring-2 ring-indigo-500/20' 
-                                : 'bg-gray-800 border-gray-700 hover:border-gray-500 hover:bg-gray-750'
-                            }`}
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl uppercase transition-all ${isSelected ? 'bg-indigo-600 text-white scale-110 shadow-lg shadow-indigo-500/30' : 'bg-gray-700 text-gray-300 group-hover:bg-gray-600'}`}>
+                    <div key={char.id} className={rowBase}>
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => handleSelect(char)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    handleSelect(char);
+                                }
+                            }}
+                            className="flex min-h-[3rem] min-w-0 cursor-pointer items-center gap-4 overflow-hidden rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                        >
+                            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold uppercase transition-all ${isSelected ? 'scale-110 bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-700 text-gray-300 group-hover:bg-gray-600'}`}>
                                 {char.nome ? char.nome.charAt(0) : '?'}
                             </div>
-                            
-                            <div>
-                                <h3 className="font-bold text-lg leading-none">
+
+                            <div className="min-w-0">
+                                <h3 className="truncate text-lg font-bold leading-none">
                                     {char.nome}
                                     {char.data_morte ? (
-                                        <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-red-900/70 border border-red-700 text-red-200 uppercase tracking-wide">
+                                        <span className="ml-2 rounded-full border border-red-700 bg-red-900/70 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200">
                                             Morto
                                         </span>
                                     ) : null}
                                 </h3>
                                 {(char.era_nome || char.prefettura_nome) && (
-                                    <div className="text-[11px] text-indigo-300 mt-1">
+                                    <div className="mt-1 text-[11px] text-indigo-300">
                                         {char.era_nome || 'Era non selezionata'}
                                         {char.prefettura_nome ? ` - ${
                                             (char.prefettura_era_nome && char.era_nome && String(char.prefettura_era_nome) !== String(char.era_nome))
@@ -399,97 +476,132 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                     </div>
                                 )}
                                 {isStaff && (
-                                    <div className="text-[10px] text-gray-400 mt-1 font-mono">
+                                    <div className="mt-1 font-mono text-[10px] text-gray-400">
                                         CR: {char.crediti} | PC: {char.punti_caratteristica}
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        <div className="flex gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                            {(isStaff || isAdmin) && (
-                                <>
-                                    <button 
-                                        onClick={(e) => handleOpenResourceModal(char, e)}
-                                        className="p-2 bg-amber-900/50 border border-amber-700 rounded-full text-amber-400 hover:bg-amber-800 transition-colors"
-                                    >
-                                        <Coins size={16}/>
-                                    </button>
-                                    <button 
-                                        onClick={(e) => handleOpenEdit(char, e)}
-                                        className="p-2 bg-gray-900 rounded-full text-gray-400 hover:text-white hover:bg-indigo-600 transition-colors"
-                                    >
-                                        <Edit size={16}/>
-                                    </button>
-                                    <button
-                                        onClick={async (e) => {
-                                            e.stopPropagation();
-                                            const ok = window.confirm(`Reset completo di ${char.nome}? Verranno rimosse abilità, infusioni, tessiture e cerimoniali, con rimborso costi.`);
-                                            if (!ok) return;
-                                            try {
-                                                await resetPersonaggio(char.id, 'Reset manuale da interfaccia staff', onLogout);
-                                                await fetchPersonaggi();
-                                                if (String(char.id) === String(selectedCharacterId)) {
-                                                    refreshCharacterData();
-                                                }
-                                                alert('Reset personaggio completato.');
-                                            } catch (error) {
-                                                alert('Errore reset: ' + error.message);
-                                            }
-                                        }}
-                                        className="p-2 bg-red-950/60 border border-red-800 rounded-full text-red-300 hover:bg-red-800 hover:text-white transition-colors"
-                                        title="Reset personaggio"
-                                    >
-                                        <RotateCcw size={16}/>
-                                    </button>
-                                    {char.data_morte ? (
-                                        <button
-                                            onClick={async (e) => {
-                                                e.stopPropagation();
-                                                if (!window.confirm(`Rivivere ${char.nome}?`)) return;
-                                                try {
-                                                    await staffRevivePersonaggio(char.id, onLogout);
-                                                    await fetchPersonaggi();
-                                                    if (String(char.id) === String(selectedCharacterId)) {
-                                                        refreshCharacterData();
-                                                    }
-                                                } catch (error) {
-                                                    alert('Errore revive: ' + error.message);
-                                                }
-                                            }}
-                                            className="p-2 bg-emerald-900/50 border border-emerald-700 rounded-full text-emerald-300 hover:bg-emerald-700 hover:text-white transition-colors"
-                                            title="Rivivi personaggio"
-                                        >
-                                            <Heart size={16}/>
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={async (e) => {
-                                                e.stopPropagation();
-                                                if (!window.confirm(`Uccidere ${char.nome}?`)) return;
-                                                try {
-                                                    await staffKillPersonaggio(char.id, onLogout);
-                                                    await fetchPersonaggi();
-                                                    if (String(char.id) === String(selectedCharacterId)) {
-                                                        refreshCharacterData();
-                                                    }
-                                                } catch (error) {
-                                                    alert('Errore kill: ' + error.message);
-                                                }
-                                            }}
-                                            className="p-2 bg-red-950/60 border border-red-800 rounded-full text-red-300 hover:bg-red-800 hover:text-white transition-colors"
-                                            title="Uccidi personaggio"
-                                        >
-                                            <Skull size={16}/>
-                                        </button>
-                                    )}
-                                </>
+                        {staffToolbar && (
+                        <div className="relative z-20 flex shrink-0 flex-wrap touch-manipulation items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={(e) => handleOpenResourceModal(char, e)}
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-amber-700 bg-amber-900/50 text-amber-400 transition-colors hover:bg-amber-800"
+                                title="Gestione risorse"
+                            >
+                                <Coins size={18} aria-hidden />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => handleOpenEdit(char, e)}
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-900 text-gray-400 transition-colors hover:bg-indigo-600 hover:text-white"
+                                title="Modifica personaggio"
+                            >
+                                <Edit size={18} aria-hidden />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setStaffConfirm({ kind: 'reset', char });
+                                }}
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-red-800 bg-red-950/60 text-red-300 transition-colors hover:bg-red-800 hover:text-white"
+                                title="Reset personaggio"
+                            >
+                                <RotateCcw size={18} aria-hidden />
+                            </button>
+                            {char.data_morte ? (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setStaffConfirm({ kind: 'revive', char });
+                                    }}
+                                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-emerald-700 bg-emerald-900/50 text-emerald-300 transition-colors hover:bg-emerald-700 hover:text-white"
+                                    title="Rivivi personaggio"
+                                >
+                                    <Heart size={18} aria-hidden />
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setStaffConfirm({ kind: 'kill', char });
+                                    }}
+                                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-red-800 bg-red-950/60 text-red-300 transition-colors hover:bg-red-800 hover:text-white"
+                                    title="Uccidi personaggio"
+                                >
+                                    <Skull size={18} aria-hidden />
+                                </button>
                             )}
                         </div>
+                        )}
                     </div>
                     );
                 })}
             </div>
+
+            {/* Conferma azioni staff (reset / morte / rivivere) */}
+            {staffConfirm && (
+                <div
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="staff-confirm-title"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) setStaffConfirm(null);
+                    }}
+                >
+                    <div className="w-full max-w-md rounded-2xl border border-gray-600 bg-gray-800 p-6 shadow-2xl">
+                        <h3 id="staff-confirm-title" className="text-lg font-bold text-white">
+                            {staffConfirm.kind === 'reset' && 'Reset personaggio'}
+                            {staffConfirm.kind === 'kill' && 'Segnare come morto'}
+                            {staffConfirm.kind === 'revive' && 'Rivivere personaggio'}
+                        </h3>
+                        <p className="mt-3 text-sm leading-relaxed text-gray-300">
+                            {staffConfirm.kind === 'reset' && (
+                                <>
+                                    Confermi il reset completo di <strong className="text-white">«{staffConfirm.char.nome}»</strong>?
+                                    Verranno rimosse abilità, infusioni, tessiture e cerimoniali, con rimborso costi.
+                                </>
+                            )}
+                            {staffConfirm.kind === 'kill' && (
+                                <>
+                                    Segnare <strong className="text-white">«{staffConfirm.char.nome}»</strong> come morto?
+                                </>
+                            )}
+                            {staffConfirm.kind === 'revive' && (
+                                <>
+                                    Rivivere il personaggio <strong className="text-white">«{staffConfirm.char.nome}»</strong>?
+                                </>
+                            )}
+                        </p>
+                        <div className="mt-6 flex flex-wrap justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setStaffConfirm(null)}
+                                className="rounded-lg border border-gray-600 bg-gray-700 px-4 py-2.5 text-sm font-bold text-gray-200 hover:bg-gray-600"
+                            >
+                                Annulla
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleStaffConfirmExecute()}
+                                className={`rounded-lg px-4 py-2.5 text-sm font-bold text-white ${
+                                    staffConfirm.kind === 'revive'
+                                        ? 'bg-emerald-600 hover:bg-emerald-500'
+                                        : 'bg-red-600 hover:bg-red-500'
+                                }`}
+                            >
+                                Conferma
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* MODALE CREATE/EDIT */}
             {showModal && (

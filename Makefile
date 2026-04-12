@@ -32,7 +32,7 @@ help:
 	@echo ""
 	@echo "Sync:"
 	@echo "  make sync-db                 # pull-only DB (backend container)"
-	@echo "  make sync-media              # pull-only media via rsync"
+	@echo "  make sync-media              # pull-only media via rsync (vedi scripts/sync_media_pull_wsl_pi_like.sh e .env.sync-media)"
 
 setup:
 	./scripts/setup_wsl_pi_like.sh

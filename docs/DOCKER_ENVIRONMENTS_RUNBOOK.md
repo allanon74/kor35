@@ -136,7 +136,7 @@ SYNC_INTERVAL_SECONDS=60 ./scripts/sync_edge_pull_only.sh
 
 ```bash
 cd /home/django/progetti/kor35
-source .env
+# Variabili in shell oppure file `.env.sync-media` nella root repo
 ./scripts/sync_media_pull_wsl_pi_like.sh
 ```
 
@@ -144,6 +144,7 @@ Variabili usate:
 - `WSL_PI_REMOTE_SSH_USER`
 - `WSL_PI_REMOTE_SSH_HOST`
 - `WSL_PI_REMOTE_SSH_PORT`
+- `WSL_PI_REMOTE_SSH_IDENTITY` (opzionale)
 - `WSL_PI_REMOTE_MEDIA_DIR`
 
 ## 5) Comandi docker manuali (senza script)
