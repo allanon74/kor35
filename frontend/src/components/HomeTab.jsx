@@ -203,18 +203,27 @@ const CharacterSheet = memo(({ data, onLogout }) => {
     (punteggio) => {
       if (!punteggio) return 0;
       const parametro = punteggio.parametro || null;
+      const nome = punteggio.nome;
+      // Allineato a Personaggio.get_valore_statistica: base da punteggi_base (scheda, abilità,
+      // punteggi dipendenti), poi modificatori globali. Senza questo, la scheda ignora RPG ecc. e
+      // nascondi_se_uno nasconde valori ancora a 1 prima dei bonus dipendenti.
+      const haPb =
+        punteggi_base &&
+        nome != null &&
+        Object.prototype.hasOwnProperty.call(punteggi_base, nome);
       const valoreBaseDaPersonaggio =
         parametro && statistiche_base_dict ? statistiche_base_dict[parametro] : undefined;
-      const valore_base =
-        valoreBaseDaPersonaggio ??
-        punteggio.valore_base_predefinito ??
-        punteggio.valore_predefinito ??
-        0;
+      const valore_base = haPb
+        ? Number(punteggi_base[nome] ?? 0)
+        : valoreBaseDaPersonaggio ??
+          punteggio.valore_base_predefinito ??
+          punteggio.valore_predefinito ??
+          0;
       const mods =
         (parametro && modificatori_calcolati && modificatori_calcolati[parametro]) || { add: 0, mol: 1.0 };
       return Math.round((valore_base + (mods.add || 0)) * (mods.mol || 1.0));
     },
-    [statistiche_base_dict, modificatori_calcolati]
+    [punteggi_base, statistiche_base_dict, modificatori_calcolati]
   );
 
   const StatisticaContainerTile = ({ container }) => {
