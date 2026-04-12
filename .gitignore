@@ -165,3 +165,7 @@ extra/local-artifacts/
 backend/.env
 backend/.env.*
 !backend/.env.example
+
+# Chiavi SSH generate in locale per CI/deploy (mai nel repo)
+kor35-actions
+kor35-actions.pub
