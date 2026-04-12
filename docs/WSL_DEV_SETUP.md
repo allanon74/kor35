@@ -164,7 +164,10 @@ Variabili usate per rsync:
 - `WSL_PI_REMOTE_SSH_USER`
 - `WSL_PI_REMOTE_SSH_HOST`
 - `WSL_PI_REMOTE_SSH_PORT`
+- `WSL_PI_REMOTE_SSH_IDENTITY` (opzionale: path della chiave privata se non è il default OpenSSH)
 - `WSL_PI_REMOTE_MEDIA_DIR`
+
+Puoi metterle in un file **`.env.sync-media`** nella root del repo (gitignored): lo script le carica automaticamente. Sul master tipico: utente `deploy`, directory media sotto il clone Docker, spesso `.../config/docker/nginx-docker/media_data/` (es. `/srv/kor35/...` se il progetto è in `/srv/kor35`). La chiave privata deve essere leggibile dall’utente locale e con permessi `600` (`chmod 600 ~/.ssh/kor35-actions`). Alla prima connessione verifica l’host key (`ssh-keyscan` o primo `ssh` interattivo).
 
 URL:
 - `http://127.0.0.1:8080`

@@ -101,6 +101,7 @@ celerybeat-schedule.*
 
 # Environments 
 .env 
+.env.sync-media
 .venv 
 env/ 
 venv/ 

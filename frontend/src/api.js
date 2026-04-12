@@ -44,7 +44,8 @@ export const fetchAuthenticated = async (endpoint, options = {}, onLogout) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
 
-    if (response.status === 401 || response.status === 403) {
+    // Solo 401 = sessione non valida. Il 403 è spesso «autenticato ma non autorizzato» (es. non staff): non fare logout.
+    if (response.status === 401) {
       console.error('Token non valido o scaduto, logout in corso.');
       if (onLogout) onLogout();
       throw new Error('Autenticazione fallita.');
