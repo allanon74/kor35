@@ -292,6 +292,14 @@ EDGE_SYNC_STATE_FILE = env(
 # Risposta JSON con messaggio errore DB completo (endpoint protetto da EdgeToken)
 EDGE_SYNC_VERBOSE_ERRORS = env.bool("EDGE_SYNC_VERBOSE_ERRORS", default=True)
 
+# Arcana SSO v2 (OAuth2 + PKCE)
+ARCANA_SSO_ENABLED = env.bool("ARCANA_SSO_ENABLED", default=False)
+ARCANA_SSO_BASE_URL = env("ARCANA_SSO_BASE_URL", default="").strip().rstrip("/")
+ARCANA_SSO_CLIENT_ID = env("ARCANA_SSO_CLIENT_ID", default="").strip()
+ARCANA_SSO_CLIENT_SECRET = env("ARCANA_SSO_CLIENT_SECRET", default="").strip()
+ARCANA_SSO_REDIRECT_URI = env("ARCANA_SSO_REDIRECT_URI", default="").strip()
+ARCANA_SSO_FRONTEND_LOGIN_PATH = env("ARCANA_SSO_FRONTEND_LOGIN_PATH", default="/login").strip()
+
 AUTHENTICATION_BACKENDS = [
 	'django.contrib.auth.backends.ModelBackend',
 	'allauth.account.auth_backends.AuthenticationBackend', #allauth

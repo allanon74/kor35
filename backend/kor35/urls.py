@@ -72,6 +72,7 @@ urlpatterns = [
     # --- API REST BACKEND (Tutte sotto /app/) ---
     path('api/', include([
         path('personaggi/', include('personaggi.urls')),
+        path('auth/arcana/', include('personaggi.sso_urls')),
         path('plot/', include('gestione_plot.urls')),
         path('social/', include('social.urls')),
         path('auth/', csrf_exempt(personaggi_views.MyAuthToken.as_view())),

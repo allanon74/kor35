@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { registerUser, API_BASE_URL } from '../api'; // Assicurati che api.js esporti questa funzione
 
 const LoginPage = ({ onLoginSuccess }) => {
@@ -16,6 +16,44 @@ const LoginPage = ({ onLoginSuccess }) => {
 
   const [message, setMessage] = useState({ text: '', type: '' });
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ticket = params.get('arcana_ticket');
+    const ssoError = params.get('arcana_error');
+
+    if (ssoError) {
+      setMessage({ text: 'Errore login Arcana SSO. Riprova.', type: 'error' });
+      return;
+    }
+
+    if (!ticket) return;
+
+    const exchangeTicket = async () => {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/arcana/exchange-ticket/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticket }),
+        });
+        if (!response.ok) throw new Error('Ticket SSO non valido o scaduto.');
+        const data = await response.json();
+        localStorage.setItem('kor35_token', data.token);
+        localStorage.setItem('kor35_is_staff', data.is_staff);
+        localStorage.setItem('kor35_is_master', data.is_superuser);
+        if (onLoginSuccess && typeof onLoginSuccess === 'function') {
+          onLoginSuccess(data.token);
+        }
+        window.location.href = data.next || '/app';
+      } catch (err) {
+        setMessage({ text: err.message, type: 'error' });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    exchangeTicket();
+  }, [onLoginSuccess]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -184,6 +222,19 @@ const LoginPage = ({ onLoginSuccess }) => {
             {isLoading ? 'Attendere...' : (isRegistering ? 'Registrati' : 'Accedi')}
           </button>
         </form>
+
+        {!isRegistering && (
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = `${API_BASE_URL}/api/auth/arcana/login/?next=${encodeURIComponent('/app')}`;
+            }}
+            disabled={isLoading}
+            className="w-full px-4 py-2 font-bold text-white bg-emerald-700 rounded-md shadow-lg hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-50"
+          >
+            Accedi con Arcana SSO
+          </button>
+        )}
 
         <div className="text-center mt-4 border-t border-gray-700 pt-4">
             <p className="text-sm text-gray-400 mb-2">

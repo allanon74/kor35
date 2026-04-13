@@ -4440,6 +4440,23 @@ class UserSocialPreference(SyncableModel, models.Model):
             return f"{self.user.username} -> {self.preferred_personaggio.nome}"
         return f"{self.user.username} -> Nessun preferito"
 
+
+class ArcanaSSOIdentity(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="arcana_sso_identities")
+    provider_sub = models.CharField(max_length=128, unique=True, db_index=True)
+    email_snapshot = models.EmailField(blank=True, default="")
+    username_snapshot = models.CharField(max_length=150, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Identita Arcana SSO"
+        verbose_name_plural = "Identita Arcana SSO"
+
+    def __str__(self):
+        return f"{self.provider_sub} -> {self.user.username}"
+
 class AbilitaPluginModel(SyncableModel, CMSPlugin):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     def __str__(self): return self.abilita.nome

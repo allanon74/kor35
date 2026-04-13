@@ -87,7 +87,7 @@ export default function App() {
             <Route 
               path="login" 
               element={
-                token ? <Navigate to="/app" replace /> : <LoginPage onLogin={handleLoginSuccess} />
+                token ? <Navigate to="/app" replace /> : <LoginPage onLoginSuccess={handleLoginSuccess} />
               } 
             />
           </Route>
