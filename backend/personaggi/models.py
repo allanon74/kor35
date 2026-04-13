@@ -139,6 +139,73 @@ def get_testo_rango(valore):
     elif valore == 6: return "Cosmico! "
     else: return f"Cosmico {valore - 6}-esimo! "
 
+# Gruppi "esclusivi" riusabili nella formattazione formule.
+# Ogni gruppo attiva una o piu' etichette in base ai parametri attivi (> 0).
+EXCLUSIVE_FORMAT_GROUPS = {
+    "formula_prefix": {
+        "entries": [
+            {"params": ["prefisso_puro", "puro"], "label": "Puro"},
+            {"params": ["prefisso_diretto", "diretto"], "label": "Diretto"},
+            {"params": ["prefisso_ineluttabile", "ineluttabile"], "label": "Ineluttabile"},
+        ],
+        "separator": "/",
+        "suffix": "!",
+        "append_space": True,
+    }
+}
+DEFAULT_EXCLUSIVE_FORMULA_GROUP = "formula_prefix"
+
+
+def _is_truthy_numeric(value):
+    try:
+        return float(value) > 0
+    except (TypeError, ValueError):
+        return bool(value)
+
+
+def build_exclusive_group_text(group_key, value_map, groups_config=None):
+    """
+    Costruisce il testo di un gruppo esclusivo (es. "Puro/Ineluttabile! ").
+    """
+    config = (groups_config or EXCLUSIVE_FORMAT_GROUPS).get(group_key)
+    if not config:
+        return ""
+
+    entries = config.get("entries") or []
+    active_labels = []
+    seen = set()
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        label = (entry.get("label") or "").strip()
+        if not label:
+            continue
+        params = []
+        if entry.get("param"):
+            params.append(entry["param"])
+        params.extend(entry.get("params") or [])
+        if not params:
+            continue
+
+        is_active = any(_is_truthy_numeric(value_map.get(param, 0)) for param in params)
+        if is_active and label not in seen:
+            active_labels.append(label)
+            seen.add(label)
+
+    if not active_labels:
+        return ""
+
+    separator = config.get("separator", "/")
+    suffix = config.get("suffix", "!")
+    append_space = config.get("append_space", True)
+    built = separator.join(active_labels)
+    if suffix:
+        built = f"{built}{suffix}"
+    if append_space:
+        built = f"{built} "
+    return built
+
 def _get_icon_color_from_bg(hex_color):
     try:
         hex_color = hex_color.lstrip('#')
@@ -350,6 +417,11 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         if 'caratteristica_associata_valore' in context:
              eval_context['caratt'] = context['caratteristica_associata_valore']
 
+    # Configurazione gruppi esclusivi (override opzionale da context)
+    exclusive_groups_config = EXCLUSIVE_FORMAT_GROUPS
+    if context and isinstance(context.get('exclusive_groups'), dict):
+        exclusive_groups_config = context['exclusive_groups']
+
     # 4. Calcolo Metatalenti (Logica Aura/Modelli)
     testo_metatalenti = ""
     if personaggio and context and not solo_formula:
@@ -364,7 +436,18 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         expr = match.group(1).strip() # es. "forza + 1"
         formato = match.group(2)      # es. ":R" o "NAME"
 
-        # A. Caso Speciale: Recupero Oggetto per nome ({aura|NAME})
+        # A. Placeholder gruppi esclusivi:
+        # - {formula_prefix}
+        # - {exclusive:formula_prefix}
+        if expr == 'formula_prefix':
+            return build_exclusive_group_text(
+                DEFAULT_EXCLUSIVE_FORMULA_GROUP, eval_context, exclusive_groups_config
+            )
+        if expr.startswith('exclusive:'):
+            group_key = expr.split(':', 1)[1].strip()
+            return build_exclusive_group_text(group_key, eval_context, exclusive_groups_config)
+
+        # B. Caso Speciale: Recupero Oggetto per nome ({aura|NAME})
         if formato == 'NAME':
             if expr in object_context:
                 return formatta_valore_avanzato(object_context[expr], 'NAME')
@@ -372,7 +455,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
             if expr in eval_context:
                  return str(eval_context[expr])
 
-        # B. Valutazione Matematica
+        # C. Valutazione Matematica
         val_math = evaluate_expression(expr, eval_context)
         
         # Fallback: parser +/- semplice se eval fallisce o torna 0 su stringa non nulla
@@ -393,7 +476,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 val_math = total
              except: pass
 
-        # C. Formattazione Finale
+        # D. Formattazione Finale
         return formatta_valore_avanzato(val_math, formato)
 
     # Regex aggiornata: cerca {contenuto} con opzionale |formato
@@ -431,6 +514,17 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     
     formula_finale = pattern_if.sub(replace_conditional_block, formula_out)
     formula_finale = pattern_placeholder.sub(resolve_placeholder, formula_finale)
+
+    # Prepend automatico del gruppo esclusivo standard sulle formule
+    # (evita duplicazioni se la formula lo contiene gia')
+    if formula_finale:
+        default_exclusive_prefix = build_exclusive_group_text(
+            DEFAULT_EXCLUSIVE_FORMULA_GROUP, eval_context, exclusive_groups_config
+        )
+        if default_exclusive_prefix:
+            normalized_prefix = default_exclusive_prefix.strip()
+            if not formula_finale.strip().startswith(normalized_prefix):
+                formula_finale = f"{default_exclusive_prefix}{formula_finale}"
     
     # Costruzione Output HTML
     parts = []
