@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Arcana SSO v2 - Guida Operativa</title>
+    <style>
+        :root {
+            --bg: #f6f3ee;
+            --panel: #fffdf9;
+            --text: #22201c;
+            --muted: #6a635b;
+            --line: #ddd4c8;
+            --accent: #7a2917;
+            --accent-soft: #f4e6dd;
+            --code: #f3efe9;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            color: var(--text);
+            background: linear-gradient(180deg, #f9f7f3 0%, var(--bg) 100%);
+            line-height: 1.55;
+        }
+
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 32px 20px 64px;
+        }
+
+        .hero {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            padding: 28px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+            margin-bottom: 24px;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            line-height: 1.2;
+            margin: 0 0 14px;
+        }
+
+        h1 {
+            font-size: 2.4rem;
+            letter-spacing: -0.03em;
+        }
+
+        h2 {
+            font-size: 1.55rem;
+            margin-top: 34px;
+            padding-top: 10px;
+            border-top: 1px solid var(--line);
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            margin-top: 24px;
+        }
+
+        p {
+            margin: 0 0 14px;
+        }
+
+        .lede {
+            color: var(--muted);
+            font-size: 1.05rem;
+            max-width: 850px;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 280px minmax(0, 1fr);
+            gap: 24px;
+            align-items: start;
+        }
+
+        .toc, .content {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+        }
+
+        .toc {
+            position: sticky;
+            top: 20px;
+            padding: 20px;
+        }
+
+        .toc h2 {
+            border-top: 0;
+            margin-top: 0;
+            padding-top: 0;
+            font-size: 1.05rem;
+        }
+
+        .toc ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .toc li {
+            margin: 8px 0;
+        }
+
+        .toc a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .content {
+            padding: 28px;
+        }
+
+        ol, ul {
+            margin: 0 0 16px 22px;
+        }
+
+        li {
+            margin: 6px 0;
+        }
+
+        code {
+            background: var(--code);
+            border: 1px solid #e3ddd4;
+            border-radius: 6px;
+            padding: 2px 6px;
+            font-family: Menlo, Monaco, Consolas, monospace;
+            font-size: 0.92em;
+        }
+
+        pre {
+            background: var(--code);
+            border: 1px solid #e3ddd4;
+            border-radius: 12px;
+            padding: 16px;
+            overflow: auto;
+            margin: 0 0 18px;
+        }
+
+        pre code {
+            background: transparent;
+            border: 0;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0 0 18px;
+            font-size: 0.96rem;
+        }
+
+        th, td {
+            border: 1px solid var(--line);
+            padding: 10px 12px;
+            vertical-align: top;
+            text-align: left;
+        }
+
+        th {
+            background: var(--accent-soft);
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        }
+
+        .note {
+            background: var(--accent-soft);
+            border-left: 4px solid var(--accent);
+            padding: 14px 16px;
+            border-radius: 10px;
+            margin: 0 0 18px;
+        }
+
+        .mono-list li {
+            font-family: Menlo, Monaco, Consolas, monospace;
+        }
+
+        @media (max-width: 920px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .toc {
+                position: static;
+            }
+
+            .page {
+                padding: 18px 14px 42px;
+            }
+
+            .hero,
+            .content,
+            .toc {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <section class="hero">
+            <h1>Arcana SSO v2 - Guida Operativa</h1>
+            <p class="lede">Questa guida descrive il funzionamento del mu-plugin <code>arcana-sso-v2</code>, i flussi di autenticazione supportati, l'ordine corretto delle chiamate e i parametri necessari per integrare un sito esterno o un sottodominio con il sistema SSO di Arcana Domine.</p>
+            <p class="lede">Il plugin implementa un flusso OAuth2 Authorization Code con PKCE e usa JWT firmati HS256 per l'access token.</p>
+        </section>
+
+        <div class="layout">
+            <aside class="toc">
+                <h2>Indice</h2>
+                <ul>
+                    <li><a href="#obiettivo">1. Obiettivo del sistema</a></li>
+                    <li><a href="#concetti">2. Concetti chiave</a></li>
+                    <li><a href="#architettura">3. Architettura del flusso</a></li>
+                    <li><a href="#flussi">4. Flussi supportati</a></li>
+                    <li><a href="#endpoints">5. Endpoints disponibili</a></li>
+                    <li><a href="#ordine">6. Ordine corretto delle chiamate</a></li>
+                    <li><a href="#dettaglio-endpoint">7. Dettaglio endpoint</a></li>
+                    <li><a href="#pkce">8. PKCE</a></li>
+                    <li><a href="#sessione-client">9. Sessione locale sul client</a></li>
+                    <li><a href="#durata-token">10. Durata token</a></li>
+                    <li><a href="#sicurezza">11. Sicurezza implementata</a></li>
+                    <li><a href="#errori-comuni">12. Errori comuni di integrazione</a></li>
+                    <li><a href="#checklist">13. Flusso completo consigliato</a></li>
+                    <li><a href="#esempio-minimo">14. Esempio minimo lato client</a></li>
+                    <li><a href="#sottodomini">15. Note finali per i sottodomini</a></li>
+                </ul>
+            </aside>
+
+            <main class="content">
+                <h2 id="obiettivo">1. Obiettivo del sistema</h2>
+                <p>Il mu-plugin <code>arcana-sso-v2</code> serve a:</p>
+                <ol>
+                    <li>autenticare un utente su Arcana Domine come identity provider;</li>
+                    <li>trasferire in modo sicuro l'identita' dell'utente a un sito client;</li>
+                    <li>permettere al sito client di creare la propria sessione locale;</li>
+                    <li>evitare di condividere cookie WordPress tra domini diversi;</li>
+                    <li>evitare di usare gli ID locali dei database client come identita' globale.</li>
+                </ol>
+                <p>Il sistema e' adatto a:</p>
+                <ol>
+                    <li>siti campagna custom PHP;</li>
+                    <li>siti WordPress separati;</li>
+                    <li>sottodomini Arcana Domine con database diversi;</li>
+                    <li>applicazioni custom non WordPress.</li>
+                </ol>
+
+                <h2 id="concetti">2. Concetti chiave</h2>
+                <h3>2.1 Identity provider</h3>
+                <p>Arcana Domine e' il provider centrale dell'identita'.</p>
+                <p>L'identita' globale dell'utente e' rappresentata principalmente da:</p>
+                <ol>
+                    <li><code>sub</code></li>
+                    <li><code>arcanadomine_id</code></li>
+                </ol>
+                <p>Nel sistema attuale questi due valori coincidono con l'ID utente WordPress del sito principale Arcana Domine.</p>
+
+                <h3>2.2 Client</h3>
+                <p>Il sito esterno o sottodominio che vuole autenticare l'utente tramite Arcana Domine viene registrato come <code>client OAuth2</code>.</p>
+                <p>Ogni client ha:</p>
+                <ol>
+                    <li><code>client_id</code></li>
+                    <li><code>client_secret</code></li>
+                    <li>una o piu' <code>redirect_uri</code></li>
+                </ol>
+
+                <h3>2.3 Mapping locale degli utenti</h3>
+                <p>Il sito client non deve mai considerare l'ID numerico di Arcana Domine come ID locale del proprio database.</p>
+                <p>Approccio corretto:</p>
+                <ol>
+                    <li>ricevere <code>sub</code> o <code>arcanadomine_id</code> da <code>/userinfo</code>;</li>
+                    <li>cercare nel database locale un mapping verso l'utente locale;</li>
+                    <li>se il mapping non esiste, creare o collegare l'utente locale;</li>
+                    <li>usare da quel momento l'ID locale del sito client.</li>
+                </ol>
+                <div class="note">Questo evita l'errore tipico dei sottodomini legacy in cui lo stesso ID numerico viene riutilizzato su database diversi per utenti diversi.</div>
+
+                <h2 id="architettura">3. Architettura del flusso</h2>
+                <p>Il sistema usa:</p>
+                <ol>
+                    <li>OAuth2 Authorization Code Flow;</li>
+                    <li>PKCE obbligatorio con metodo <code>S256</code>;</li>
+                    <li>Access Token JWT HS256;</li>
+                    <li>Refresh Token persistito lato server;</li>
+                    <li>endpoint <code>userinfo</code> per il recupero del profilo.</li>
+                </ol>
+
+                <h2 id="flussi">4. Flussi supportati</h2>
+                <h3>4.1 Flow A - utente gia' loggato su Arcana Domine</h3>
+                <ol>
+                    <li>l'utente e' gia' autenticato su Arcana Domine;</li>
+                    <li>clicca un link verso il sito campagna;</li>
+                    <li>il sito campagna avvia il flusso OAuth2;</li>
+                    <li>Arcana Domine vede che l'utente e' gia' loggato;</li>
+                    <li>genera un <code>authorization code</code>;</li>
+                    <li>reindirizza il browser al client con <code>code</code> e <code>state</code>;</li>
+                    <li>il client scambia il code per <code>access_token</code> e <code>refresh_token</code>;</li>
+                    <li>il client chiama <code>/userinfo</code>;</li>
+                    <li>il client crea la propria sessione locale.</li>
+                </ol>
+
+                <h3>4.2 Flow B - utente parte dal sito client e non e' loggato su AD</h3>
+                <ol>
+                    <li>il client reindirizza l'utente a <code>/authorize</code>;</li>
+                    <li>Arcana Domine rileva che l'utente non e' loggato;</li>
+                    <li>AD reindirizza l'utente alla pagina di login WordPress;</li>
+                    <li>dopo il login, AD riprende il flusso;</li>
+                    <li>AD genera <code>authorization code</code>;</li>
+                    <li>AD reindirizza il browser al client con <code>code</code> e <code>state</code>;</li>
+                    <li>il client chiama <code>/token</code>;</li>
+                    <li>il client chiama <code>/userinfo</code>;</li>
+                    <li>il client crea la sessione locale.</li>
+                </ol>
+
+                <h2 id="endpoints">5. Endpoints disponibili</h2>
+                <p>Base URL:</p>
+                <pre><code>https://DOMINIO-AD/wp-json/ad-sso/v2</code></pre>
+                <p>Endpoint disponibili:</p>
+                <ol class="mono-list">
+                    <li>GET /authorize</li>
+                    <li>POST /token</li>
+                    <li>GET /userinfo</li>
+                    <li>POST /revoke</li>
+                </ol>
+                <p>Esiste anche un logout front-channel su dominio Arcana Domine:</p>
+                <ol class="mono-list">
+                    <li>GET /?ad_sso_logout=1&amp;client_id=...&amp;return_to=...</li>
+                </ol>
+
+                <h2 id="ordine">6. Ordine corretto delle chiamate</h2>
+                <ol>
+                    <li>il client genera <code>state</code>, <code>code_verifier</code>, <code>code_challenge</code>;</li>
+                    <li>il browser viene mandato a <code>GET /authorize</code>;</li>
+                    <li>Arcana Domine reindirizza il browser verso la callback del client con <code>code</code> e <code>state</code>;</li>
+                    <li>il client verifica <code>state</code>;</li>
+                    <li>il client fa <code>POST /token</code>;</li>
+                    <li>il client riceve <code>access_token</code> e <code>refresh_token</code>;</li>
+                    <li>il client fa <code>GET /userinfo</code> con Bearer token;</li>
+                    <li>il client crea o aggiorna la sessione locale;</li>
+                    <li>opzionalmente, al logout, il client chiama <code>POST /revoke</code>;</li>
+                    <li>opzionalmente, il client effettua logout front-channel su Arcana Domine.</li>
+                </ol>
+
+                <h2 id="dettaglio-endpoint">7. Dettaglio endpoint</h2>
+                <h3>7.1 Authorize</h3>
+                <p>Endpoint:</p>
+                <pre><code>GET /wp-json/ad-sso/v2/authorize</code></pre>
+                <p>Scopo:</p>
+                <ol>
+                    <li>avviare il flusso OAuth2;</li>
+                    <li>autenticare l'utente su AD se necessario;</li>
+                    <li>generare un authorization code monouso;</li>
+                    <li>reindirizzare il browser alla callback del client.</li>
+                </ol>
+                <h4>Parametri richiesti</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parametro</th>
+                            <th>Obbligatorio</th>
+                            <th>Descrizione</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>response_type</code></td><td>si</td><td>Deve essere sempre <code>code</code></td></tr>
+                        <tr><td><code>client_id</code></td><td>si</td><td>Identificativo del client registrato</td></tr>
+                        <tr><td><code>redirect_uri</code></td><td>si</td><td>Deve corrispondere esattamente a una URI registrata per il client</td></tr>
+                        <tr><td><code>state</code></td><td>si</td><td>Valore casuale generato dal client per protezione CSRF</td></tr>
+                        <tr><td><code>code_challenge</code></td><td>si</td><td>PKCE challenge derivata dal code_verifier</td></tr>
+                        <tr><td><code>code_challenge_method</code></td><td>si</td><td>Deve essere sempre <code>S256</code></td></tr>
+                        <tr><td><code>scope</code></td><td>no</td><td>Attualmente <code>openid profile</code></td></tr>
+                    </tbody>
+                </table>
+                <h4>Esempio richiesta</h4>
+                <pre><code>GET https://arcanadomine.local/wp-json/ad-sso/v2/authorize?response_type=code&amp;client_id=client_123&amp;redirect_uri=https%3A%2F%2Fcampagna.local%2Fcallback.php&amp;state=abc123&amp;code_challenge=XYZ&amp;code_challenge_method=S256&amp;scope=openid%20profile</code></pre>
+                <h4>Risultato atteso</h4>
+                <pre><code>https://campagna.local/callback.php?code=AUTH_CODE&amp;state=abc123</code></pre>
+                <h4>Errori possibili</h4>
+                <table>
+                    <thead>
+                        <tr><th>Errore</th><th>Significato</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>invalid_request</code></td><td>Parametri mancanti o non validi</td></tr>
+                        <tr><td><code>unsupported_response_type</code></td><td><code>response_type</code> diverso da <code>code</code></td></tr>
+                        <tr><td><code>unknown_client</code></td><td><code>client_id</code> non registrato</td></tr>
+                        <tr><td><code>invalid_redirect_uri</code></td><td><code>redirect_uri</code> non ammessa per quel client</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>7.2 Token</h3>
+                <p>Endpoint:</p>
+                <pre><code>POST /wp-json/ad-sso/v2/token</code></pre>
+                <p>Scopo:</p>
+                <ol>
+                    <li>scambiare un authorization code con token validi;</li>
+                    <li>rinnovare l'access token tramite refresh token.</li>
+                </ol>
+                <h4>Modalita' 1 - grant_type <code>authorization_code</code></h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parametro</th>
+                            <th>Obbligatorio</th>
+                            <th>Descrizione</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>grant_type</code></td><td>si</td><td>Deve essere <code>authorization_code</code></td></tr>
+                        <tr><td><code>code</code></td><td>si</td><td>Authorization code ricevuto da <code>/authorize</code></td></tr>
+                        <tr><td><code>redirect_uri</code></td><td>si</td><td>Deve essere identica a quella usata in <code>/authorize</code></td></tr>
+                        <tr><td><code>client_id</code></td><td>si</td><td>Client registrato</td></tr>
+                        <tr><td><code>client_secret</code></td><td>si</td><td>Segreto del client</td></tr>
+                        <tr><td><code>code_verifier</code></td><td>si</td><td>Valore PKCE originario usato per generare il challenge</td></tr>
+                    </tbody>
+                </table>
+                <pre><code>curl -X POST https://arcanadomine.local/wp-json/ad-sso/v2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code" \
+  -d "code=AUTH_CODE" \
+  -d "redirect_uri=https://campagna.local/callback.php" \
+  -d "client_id=client_123" \
+  -d "client_secret=CLIENT_SECRET" \
+  -d "code_verifier=ORIGINAL_CODE_VERIFIER"</code></pre>
+                <p>Risposta di successo:</p>
+                <pre><code>{
+  "access_token": "JWT_TOKEN",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "refresh_token": "REFRESH_TOKEN",
+  "scope": "openid profile"
+}</code></pre>
+
+                <h4>Modalita' 2 - grant_type <code>refresh_token</code></h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parametro</th>
+                            <th>Obbligatorio</th>
+                            <th>Descrizione</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>grant_type</code></td><td>si</td><td>Deve essere <code>refresh_token</code></td></tr>
+                        <tr><td><code>refresh_token</code></td><td>si</td><td>Refresh token valido</td></tr>
+                        <tr><td><code>client_id</code></td><td>si</td><td>Client registrato</td></tr>
+                        <tr><td><code>client_secret</code></td><td>si</td><td>Segreto del client</td></tr>
+                    </tbody>
+                </table>
+                <pre><code>curl -X POST https://arcanadomine.local/wp-json/ad-sso/v2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=refresh_token" \
+  -d "refresh_token=REFRESH_TOKEN" \
+  -d "client_id=client_123" \
+  -d "client_secret=CLIENT_SECRET"</code></pre>
+                <h4>Errori possibili</h4>
+                <table>
+                    <thead>
+                        <tr><th>Errore</th><th>Significato</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>invalid_request</code></td><td>Parametri mancanti</td></tr>
+                        <tr><td><code>invalid_client</code></td><td><code>client_id</code> o <code>client_secret</code> non validi</td></tr>
+                        <tr><td><code>invalid_grant</code></td><td><code>code</code> o <code>refresh_token</code> non validi, scaduti o gia' usati</td></tr>
+                        <tr><td><code>unsupported_grant_type</code></td><td><code>grant_type</code> non supportato</td></tr>
+                        <tr><td><code>server_error</code></td><td>errore interno lato AD</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>7.3 UserInfo</h3>
+                <p>Endpoint:</p>
+                <pre><code>GET /wp-json/ad-sso/v2/userinfo</code></pre>
+                <p>Scopo:</p>
+                <ol>
+                    <li>restituire il profilo dell'utente associato all'access token;</li>
+                    <li>permettere al client di creare il mapping locale utente.</li>
+                </ol>
+                <h4>Header richiesto</h4>
+                <pre><code>Authorization: Bearer ACCESS_TOKEN</code></pre>
+                <h4>Esempio richiesta</h4>
+                <pre><code>curl https://arcanadomine.local/wp-json/ad-sso/v2/userinfo \
+  -H "Authorization: Bearer JWT_TOKEN"</code></pre>
+                <h4>Esempio risposta</h4>
+                <pre><code>{
+  "sub": 40,
+  "iss": "https://arcanadomine.local",
+  "aud": "client_123",
+  "arcanadomine_id": 40,
+  "username": "nico.moro",
+  "nome": "Nico",
+  "cognome": "Moro",
+  "email": "nico@example.com",
+  "tipologia": "pg",
+  "codice_fiscale": "ABCDEF00A00A000A",
+  "ruoli": ["registrato"],
+  "stato": "inattivo"
+}</code></pre>
+                <h4>Campi rilevanti per il mapping locale</h4>
+                <table>
+                    <thead>
+                        <tr><th>Campo</th><th>Uso consigliato</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>sub</code></td><td>Chiave globale primaria dell'identita' AD</td></tr>
+                        <tr><td><code>arcanadomine_id</code></td><td>Alias attuale dell'identita' AD</td></tr>
+                        <tr><td><code>email</code></td><td>Supporto per lookup o sync dati</td></tr>
+                        <tr><td><code>username</code></td><td>Supporto per sincronizzazione profilo</td></tr>
+                    </tbody>
+                </table>
+                <h4>Errori possibili</h4>
+                <table>
+                    <thead>
+                        <tr><th>Errore</th><th>Significato</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>invalid_token</code></td><td>Token assente, non valido o scaduto</td></tr>
+                    </tbody>
+                </table>
+
+                <h3>7.4 Revoke</h3>
+                <p>Endpoint:</p>
+                <pre><code>POST /wp-json/ad-sso/v2/revoke</code></pre>
+                <p>Scopo:</p>
+                <ol>
+                    <li>revocare un refresh token;</li>
+                    <li>invalidare futuri rinnovi del token sul client.</li>
+                </ol>
+                <h4>Parametri richiesti</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parametro</th>
+                            <th>Obbligatorio</th>
+                            <th>Descrizione</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>token</code></td><td>si</td><td>Refresh token da revocare</td></tr>
+                        <tr><td><code>client_id</code></td><td>si</td><td>Client registrato</td></tr>
+                        <tr><td><code>client_secret</code></td><td>si</td><td>Segreto del client</td></tr>
+                    </tbody>
+                </table>
+                <pre><code>curl -X POST https://arcanadomine.local/wp-json/ad-sso/v2/revoke \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "token=REFRESH_TOKEN" \
+  -d "client_id=client_123" \
+  -d "client_secret=CLIENT_SECRET"</code></pre>
+                <p>Risposta attesa:</p>
+                <ol>
+                    <li><code>200 OK</code> anche se il token era gia' revocato o inesistente;</li>
+                    <li>comportamento coerente con RFC 7009.</li>
+                </ol>
+
+                <h3>7.5 Logout front-channel su Arcana Domine</h3>
+                <p>Scopo:</p>
+                <ol>
+                    <li>cancellare la sessione WordPress sul dominio Arcana Domine;</li>
+                    <li>evitare che l'utente rimanga loggato su AD dopo il logout dal sito client.</li>
+                </ol>
+                <p>Endpoint:</p>
+                <pre><code>GET https://DOMINIO-AD/?ad_sso_logout=1&amp;client_id=CLIENT_ID&amp;return_to=URL_DI_RITORNO</code></pre>
+                <p>Parametri:</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parametro</th>
+                            <th>Obbligatorio</th>
+                            <th>Descrizione</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>ad_sso_logout</code></td><td>si</td><td>Deve valere <code>1</code></td></tr>
+                        <tr><td><code>client_id</code></td><td>si</td><td>Client registrato</td></tr>
+                        <tr><td><code>return_to</code></td><td>si</td><td>URL a cui AD deve tornare dopo il logout</td></tr>
+                    </tbody>
+                </table>
+                <p>Note:</p>
+                <ol>
+                    <li><code>return_to</code> viene accettato solo se il suo origin appartiene a una <code>redirect_uri</code> registrata per quel client;</li>
+                    <li>questo endpoint esegue <code>wp_logout()</code> e pulisce il cookie WordPress di Arcana Domine;</li>
+                    <li>il browser viene poi reindirizzato al client.</li>
+                </ol>
+
+                <h2 id="pkce">8. PKCE - come generare verifier e challenge</h2>
+                <p>Il client deve generare:</p>
+                <ol>
+                    <li>un <code>code_verifier</code> casuale;</li>
+                    <li>un <code>code_challenge</code> ottenuto con SHA256 e base64url.</li>
+                </ol>
+                <p>Pseudocodice:</p>
+                <pre><code>$codeVerifier = base64url(random_bytes(64));
+$codeChallenge = base64url(hash('sha256', $codeVerifier, true));</code></pre>
+                <p>Regole:</p>
+                <ol>
+                    <li>il <code>code_verifier</code> va tenuto solo dal client;</li>
+                    <li>il <code>code_challenge</code> viene passato a <code>/authorize</code>;</li>
+                    <li>il <code>code_verifier</code> viene passato solo a <code>/token</code>.</li>
+                </ol>
+
+                <h2 id="sessione-client">9. Sessione locale sul client</h2>
+                <p>Il client, dopo aver ottenuto <code>access_token</code> e <code>userinfo</code>, deve creare una propria sessione locale.</p>
+                <p>Passi consigliati:</p>
+                <ol>
+                    <li>cercare l'utente locale tramite <code>sub</code>;</li>
+                    <li>se non esiste, crearlo o associare un account esistente;</li>
+                    <li>salvare in sessione almeno <code>access_token</code>, <code>refresh_token</code>, <code>sub</code>, <code>local_user_id</code> e dati profilo minimi;</li>
+                    <li>considerare l'utente autenticato sul sito client.</li>
+                </ol>
+
+                <h2 id="durata-token">10. Durata token</h2>
+                <p>Configurazione attuale:</p>
+                <ol>
+                    <li>access token: 15 minuti;</li>
+                    <li>refresh token: 30 giorni;</li>
+                    <li>authorization code: 10 minuti, monouso.</li>
+                </ol>
+
+                <h2 id="sicurezza">11. Sicurezza implementata</h2>
+                <p>Il sistema <code>arcana-sso-v2</code> applica queste regole:</p>
+                <ol>
+                    <li>niente password o hash password nelle API;</li>
+                    <li>niente login via query string con password;</li>
+                    <li>PKCE obbligatorio;</li>
+                    <li>redirect URI in whitelist;</li>
+                    <li>authorization code monouso;</li>
+                    <li>JWT firmato HS256;</li>
+                    <li>refresh token revocabile;</li>
+                    <li>refresh token rotation;</li>
+                    <li>logout front-channel sul dominio AD;</li>
+                    <li>separazione tra identita' globale AD e ID locali client.</li>
+                </ol>
+
+                <h2 id="errori-comuni">12. Errori comuni di integrazione</h2>
+                <h3>12.1 <code>invalid_redirect_uri</code></h3>
+                <p>Causa tipica: la <code>redirect_uri</code> passata non e' identica a quella registrata nel client.</p>
+                <p>Verifica:</p>
+                <ol>
+                    <li>schema <code>http/https</code>;</li>
+                    <li>host;</li>
+                    <li>porta;</li>
+                    <li>path esatto.</li>
+                </ol>
+
+                <h3>12.2 <code>invalid_client</code></h3>
+                <p>Causa tipica: <code>client_id</code> o <code>client_secret</code> errati.</p>
+
+                <h3>12.3 <code>invalid_grant</code></h3>
+                <p>Causa tipica:</p>
+                <ol>
+                    <li><code>code</code> gia' usato;</li>
+                    <li><code>code</code> scaduto;</li>
+                    <li><code>redirect_uri</code> diversa da quella usata in <code>/authorize</code>;</li>
+                    <li><code>code_verifier</code> non coerente con il <code>code_challenge</code>.</li>
+                </ol>
+
+                <h3>12.4 <code>invalid_token</code></h3>
+                <p>Causa tipica:</p>
+                <ol>
+                    <li>access token scaduto;</li>
+                    <li>token malformato;</li>
+                    <li>token firmato male o audience non valida.</li>
+                </ol>
+
+                <h3>12.5 HTTP status <code>0</code> nel client locale</h3>
+                <p>Causa tipica:</p>
+                <ol>
+                    <li>certificato TLS self-signed di Local non accettato da cURL;</li>
+                    <li>problema DNS locale;</li>
+                    <li>endpoint non raggiungibile.</li>
+                </ol>
+
+                <h2 id="checklist">13. Flusso completo consigliato per i team esterni</h2>
+                <ol>
+                    <li>registrare il client su Arcana Domine;</li>
+                    <li>ottenere <code>client_id</code> e <code>client_secret</code>;</li>
+                    <li>registrare la <code>redirect_uri</code> esatta;</li>
+                    <li>generare <code>state</code> e PKCE per ogni login;</li>
+                    <li>chiamare <code>/authorize</code> dal browser;</li>
+                    <li>ricevere <code>code</code> e <code>state</code> nella callback;</li>
+                    <li>validare <code>state</code>;</li>
+                    <li>chiamare <code>/token</code> server-to-server;</li>
+                    <li>chiamare <code>/userinfo</code>;</li>
+                    <li>fare mapping <code>sub -&gt; local_user_id</code>;</li>
+                    <li>creare sessione locale;</li>
+                    <li>al logout, revocare il refresh token;</li>
+                    <li>opzionalmente eseguire il logout front-channel su AD.</li>
+                </ol>
+
+                <h2 id="esempio-minimo">14. Esempio minimo lato client</h2>
+                <pre><code>1. Genera state
+2. Genera code_verifier
+3. Deriva code_challenge
+4. Redirect browser a /authorize
+5. Ricevi code e state in callback
+6. Verifica state
+7. POST /token
+8. GET /userinfo
+9. Login locale utente
+10. POST /revoke al logout
+11. Redirect a /?ad_sso_logout=1... per logout globale AD</code></pre>
+
+                <h2 id="sottodomini">15. Note finali per i sottodomini Arcana Domine</h2>
+                <p>Per i sottodomini con database separati, questo sistema e' preferibile al legacy perche':</p>
+                <ol>
+                    <li>evita di condividere direttamente l'ID numerico locale tra DB diversi;</li>
+                    <li>introduce un'identita' globale unica AD (<code>sub</code>);</li>
+                    <li>permette a ogni sito di mantenere il proprio utente locale;</li>
+                    <li>consente di usare siti WordPress o custom PHP con la stessa logica.</li>
+                </ol>
+                <p>Regola fondamentale:</p>
+                <ol>
+                    <li>non usare mai l'ID numerico locale di AD come ID locale del sito client;</li>
+                    <li>usare sempre <code>sub</code> o <code>arcanadomine_id</code> come chiave federata;</li>
+                    <li>risolvere poi il corrispondente <code>local_user_id</code> nel database del client.</li>
+                </ol>
+            </main>
+        </div>
+    </div>
+</body>
+</html>
