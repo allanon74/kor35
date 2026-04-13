@@ -49,6 +49,30 @@ export const RICH_TEXT_SHARED_STYLES = `
   .wiki-content a.wiki-link:hover {
     color: #818cf8;
   }
+
+  .wiki-content a.wiki-glossary-term {
+    color: #b91c1c;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+    cursor: help;
+  }
+  .wiki-content a.wiki-glossary-term:hover {
+    color: #991b1b;
+  }
+  .wiki-content details.wiki-glossary-panel {
+    width: 100%;
+    max-width: 100%;
+    margin-top: 1.5rem;
+  }
+  .wiki-content .wiki-glossary-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .wiki-content .wiki-glossary-def {
+    scroll-margin-top: 0.75rem;
+  }
+
   /* Sezioni collapsible: riquadro grigio chiaro, 90% larghezza, centrato, chiuso di default */
   .ql-editor-view details, .wiki-content details {
     margin: 0.75em auto;

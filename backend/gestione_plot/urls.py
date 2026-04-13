@@ -14,7 +14,7 @@ from .views import(
     PublicWikiTierWidgetViewSet, StaffWikiTierWidgetViewSet,
     PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
     PublicWikiMattoniWidgetViewSet, StaffWikiMattoniWidgetViewSet,
-    PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet,
+    PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet, PublicWikiGlossarioViewSet,
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -67,6 +67,7 @@ router.register(r'public/wiki-mattoni-widgets', PublicWikiMattoniWidgetViewSet, 
 router.register(r'public/eventi', PublicEventiViewSet, basename='public-eventi')
 router.register(r'public/configurazione-sito', PublicConfigurazioneSitoViewSet, basename='public-configurazione-sito')
 router.register(r'public/link-social', PublicLinkSocialViewSet, basename='public-link-social')
+router.register(r'public/wiki-glossario', PublicWikiGlossarioViewSet, basename='public-wiki-glossario')
 
 urlpatterns = [
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),

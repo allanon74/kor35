@@ -4648,6 +4648,7 @@ class Dichiarazione(SyncableModel, models.Model):
         ('PRM_TIP', 'Premessa - Tipologia'),
         ('PRE_FRM', 'Prefisso - Forma'),
         ('EFF_SPC', 'Effetto - Speciale'),
+        ('GLOS', 'Glossario'),
     ]
     nome = models.CharField(max_length=100, unique=True, verbose_name="Nome Dichiarazione")
     # Campi del modello

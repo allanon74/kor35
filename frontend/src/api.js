@@ -2001,6 +2001,11 @@ export const getWikiPage = async (slug) => {
   }
 };
 
+/** Lista glossario dichiarazioni per auto-link nelle pagine wiki (cache HTTP lato server). */
+export const getWikiGlossario = async () => {
+  return fetchPublic('/api/plot/api/public/wiki-glossario/');
+};
+
 
 export const getWikiTable = (id) => {
   return fetchPublic(`/api/plot/api/public/wiki-tabelle/${id}/`);

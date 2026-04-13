@@ -8,7 +8,19 @@ from .models import (
     WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial,
 )
-from personaggi.models import Abilita, Manifesto, Inventario, Punteggio, QrCode, Tabella, Tier, Mattone, ClasseOggetto, ClasseOggettoLimiteMod
+from personaggi.models import (
+    Abilita,
+    ClasseOggetto,
+    ClasseOggettoLimiteMod,
+    Dichiarazione,
+    Inventario,
+    Manifesto,
+    Mattone,
+    Punteggio,
+    QrCode,
+    Tabella,
+    Tier,
+)
 from personaggi.serializers import (
     ManifestoSerializer, InventarioSerializer, PersonaggioSerializer,
     AbilitaSerializer, PunteggioSerializer, TabellaSerializer, ModelloAuraSerializer,
@@ -490,3 +502,11 @@ class LinkSocialSerializer(serializers.ModelSerializer):
         model = LinkSocial
         fields = ['id', 'tipo', 'tipo_display', 'nome_visualizzato', 'url', 'descrizione', 'ordine', 'attivo']
         read_only_fields = ['id']
+
+
+class PublicDichiarazioneGlossarioSerializer(serializers.ModelSerializer):
+    """Sola lettura per auto-link nel regolamento wiki (termini + definizioni)."""
+
+    class Meta:
+        model = Dichiarazione
+        fields = ['sync_id', 'nome', 'dichiarazione', 'descrizione']

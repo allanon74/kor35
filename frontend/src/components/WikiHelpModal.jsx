@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
-import { getWikiPage, getWikiImageUrl, getMediaUrl } from '../api';
+import { getWikiPage, getWikiGlossario, getWikiImageUrl, getMediaUrl } from '../api';
 import WikiRenderer from './WikiRenderer';
 
 /**
@@ -9,6 +9,7 @@ import WikiRenderer from './WikiRenderer';
  */
 export default function WikiHelpModal({ isOpen, onClose, wikiSlug }) {
   const [pageData, setPageData] = useState(null);
+  const [wikiGlossary, setWikiGlossary] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -18,6 +19,7 @@ export default function WikiHelpModal({ isOpen, onClose, wikiSlug }) {
     } else {
       // Reset quando si chiude
       setPageData(null);
+      setWikiGlossary([]);
       setError(null);
     }
   }, [isOpen, wikiSlug]);
@@ -26,8 +28,12 @@ export default function WikiHelpModal({ isOpen, onClose, wikiSlug }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getWikiPage(wikiSlug);
+      const [data, gloss] = await Promise.all([
+        getWikiPage(wikiSlug),
+        getWikiGlossario().catch(() => []),
+      ]);
       setPageData(data);
+      setWikiGlossary(Array.isArray(gloss) ? gloss : []);
     } catch (err) {
       console.error("Errore caricamento pagina wiki:", err);
       setError("Impossibile caricare la pagina di aiuto.");
@@ -101,7 +107,7 @@ export default function WikiHelpModal({ isOpen, onClose, wikiSlug }) {
               )}
 
               {/* Contenuto */}
-              <WikiRenderer content={pageData.contenuto} />
+              <WikiRenderer content={pageData.contenuto} glossaryEntries={wikiGlossary} />
             </div>
           )}
         </div>

@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import mixins, viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
@@ -15,10 +15,22 @@ from PIL import Image
 from django.db.models import Prefetch
 import logging
 from personaggi.models import (
-    Inventario, Manifesto, Personaggio, QrCode,
-    Tabella, ModelloAura, Tier, TierPluginModel,
-    Tessitura, Infusione, Cerimoniale, Oggetto,
-    Punteggio, Mattone, Abilita,
+    Abilita,
+    Cerimoniale,
+    Dichiarazione,
+    Infusione,
+    Inventario,
+    Manifesto,
+    Mattone,
+    ModelloAura,
+    Oggetto,
+    Personaggio,
+    Punteggio,
+    QrCode,
+    Tabella,
+    Tessitura,
+    Tier,
+    TierPluginModel,
 )
 
 from personaggi.serializers import (
@@ -33,7 +45,10 @@ from .serializers import (
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiButtonWidgetSerializer,
     ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer, UserShortSerializer
-    , WikiMattoniWidgetSerializer, MattoneWikiSerializer, PunteggioWikiSerializer
+    ,     WikiMattoniWidgetSerializer,
+    MattoneWikiSerializer,
+    PunteggioWikiSerializer,
+    PublicDichiarazioneGlossarioSerializer,
 )
 
 
@@ -471,6 +486,23 @@ class PublicLinkSocialViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         # Restituisce solo i link attivi, ordinati per 'ordine'
         return LinkSocial.objects.filter(attivo=True).order_by('ordine', 'tipo')
+
+
+class PublicWikiGlossarioViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """
+    Glossario dichiarazioni (termini nel testo wiki → link a definizioni in fondo pagina).
+    Solo lista: nessun dettaglio per id DB.
+    """
+
+    queryset = Dichiarazione.objects.all().order_by('tipo', 'nome')
+    serializer_class = PublicDichiarazioneGlossarioSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        response['Cache-Control'] = 'public, max-age=86400'
+        return response
 
 
 class PublicWikiImmagineViewSet(viewsets.ReadOnlyModelViewSet):

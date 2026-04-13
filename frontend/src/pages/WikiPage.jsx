@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import WikiRenderer from '../components/WikiRenderer';
 import WikiPageEditorModal from '../components/wiki/WikiPageEditorModal'; // Importiamo il modale
 import HomePage from '../components/HomePage'; // Importiamo il componente HomePage speciale
-import { getWikiPage, getWikiImageUrl, getMediaUrl } from '../api';
+import { getWikiPage, getWikiGlossario, getWikiImageUrl, getMediaUrl } from '../api';
 import { useCharacter } from '../components/CharacterContext'; // Per i permessi
 import { EyeOff } from 'lucide-react';
 
@@ -18,6 +18,7 @@ export default function WikiPage({ slug: propSlug }) {
   const canEdit = isStaff || isMaster; // Definisci chi può editare
 
   const [pageData, setPageData] = useState(null);
+  const [wikiGlossary, setWikiGlossary] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -29,8 +30,12 @@ export default function WikiPage({ slug: propSlug }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getWikiPage(currentSlug);
+      const [data, gloss] = await Promise.all([
+        getWikiPage(currentSlug),
+        getWikiGlossario().catch(() => []),
+      ]);
       setPageData(data);
+      setWikiGlossary(Array.isArray(gloss) ? gloss : []);
     } catch (err) {
       console.error("Errore fetch pagina:", err);
       setError("Pagina non trovata.");
@@ -173,7 +178,7 @@ export default function WikiPage({ slug: propSlug }) {
             )}
             
             {/* Contenuto */}
-            <WikiRenderer content={pageData.contenuto} />
+            <WikiRenderer content={pageData.contenuto} glossaryEntries={wikiGlossary} />
         </div>
 
         {/* MODALE EDITOR */}

@@ -2,6 +2,7 @@ import React, { useContext, useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createRoot } from 'react-dom/client';
 import { ensureDetailsClosed } from '../utils/htmlSanitizer';
+import { applyWikiGlossaryToContainer } from '../utils/wikiGlossaryDom';
 import { RICH_TEXT_SHARED_STYLES } from '../styles/richTextSharedStyles';
 import { CharacterContext } from './CharacterContext';
 import WidgetTier from './wg/WidgetTier';
@@ -15,6 +16,9 @@ import { WidgetButtonsSlot } from './wg/WidgetButtons';
 import WidgetMattoni from './wg/WidgetMattoni';
 
 const WIDGET_REGEX = /{{WIDGET_([A-Z_]+):([A-Za-z0-9-]+)}}/g;
+
+/** Riferimento stabile: evita useLayoutEffect a ogni render se il glossario non è passato. */
+const EMPTY_GLOSSARY = [];
 
 function renderWidgetByType(type, id, characterValue, navigate) {
   const widget = (() => {
@@ -63,7 +67,7 @@ function getFinalHtml(content) {
   return ensureDetailsClosed(htmlWithSlots);
 }
 
-export default function WikiRenderer({ content }) {
+export default function WikiRenderer({ content, glossaryEntries = EMPTY_GLOSSARY }) {
   const containerRef = useRef(null);
   const rootsRef = useRef([]);
   const characterValue = useContext(CharacterContext);
@@ -85,6 +89,24 @@ export default function WikiRenderer({ content }) {
     const finalHtml = getFinalHtml(contentStr);
     container.innerHTML = finalHtml;
 
+    if (glossaryEntries && glossaryEntries.length > 0) {
+      applyWikiGlossaryToContainer(container, glossaryEntries);
+    }
+
+    const openGlossaryTarget = (e) => {
+      const a = e.target?.closest?.('a.wiki-glossary-term');
+      if (!a || !container.contains(a)) return;
+      const href = a.getAttribute('href');
+      if (!href || href.charAt(0) !== '#') return;
+      const id = href.slice(1);
+      if (!id.startsWith('wiki-glossario-')) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      const panel = el.closest('details.wiki-glossary-section');
+      if (panel) panel.open = true;
+    };
+    container.addEventListener('click', openGlossaryTarget);
+
     const slots = container.querySelectorAll('.wiki-widget-slot');
     slots.forEach((slot) => {
       const type = slot.getAttribute('data-widget-type');
@@ -95,10 +117,11 @@ export default function WikiRenderer({ content }) {
     });
 
     return () => {
+      container.removeEventListener('click', openGlossaryTarget);
       rootsRef.current.forEach((r) => r.unmount());
       rootsRef.current = [];
     };
-  }, [contentStr, characterValue, navigate]);
+  }, [contentStr, characterValue, navigate, glossaryEntries]);
 
   return (
     <>
