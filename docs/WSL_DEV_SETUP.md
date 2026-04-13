@@ -86,6 +86,14 @@ python manage.py sync_edge_node --pull-only
 
 Questo comando **non invia** modifiche locali al Master.
 
+Per forzare un pull completo (full refresh DB) senza cancellare file:
+
+```bash
+cd /home/django/progetti/kor35/backend
+source .venv/bin/activate
+python manage.py sync_edge_node --pull-only --since "1970-01-01T00:00:00Z"
+```
+
 ## 7) Allineamento continuo pull-only
 
 Per mantenere il DB locale allineato in polling:
@@ -106,7 +114,7 @@ python manage.py sync_edge_node --pull-only
 
 - Mantieni `--pull-only` in locale se vuoi evitare qualsiasi push dati.
 - Lo stato di sync viene salvato in `EDGE_SYNC_STATE_FILE` (default `.edge_sync_state.json`).
-- Se vuoi forzare un pull completo, elimina il file stato o usa `--since` sul comando Django.
+- Se vuoi forzare un pull completo, usa `--since "1970-01-01T00:00:00Z"` oppure `make sync-db-full ENV=dev-home`.
 - Per fermare i container locali:
 
 ```bash

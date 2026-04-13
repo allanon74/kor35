@@ -3,8 +3,9 @@ SHELL := /bin/bash
 # Profili supportati: dev-home, dev-office, mirror, prod
 ENV ?= dev-home
 CLEANUP_LEGACY ?= 0
+SYNC_SINCE ?=
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic restart restart-fe restart-be sync-db sync-media cleanup-legacy
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic restart restart-fe restart-be sync-db sync-db-full sync-media cleanup-legacy
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -31,7 +32,8 @@ help:
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
 	@echo ""
 	@echo "Sync:"
-	@echo "  make sync-db                 # pull-only DB (backend container)"
+	@echo "  make sync-db [SYNC_SINCE=ISO_DATETIME] # pull-only DB (backend container)"
+	@echo "  make sync-db-full            # pull-only completo da 1970-01-01T00:00:00Z"
 	@echo "  make sync-media              # pull-only media via rsync (vedi scripts/sync_media_pull_wsl_pi_like.sh e .env.sync-media)"
 
 setup:
@@ -80,7 +82,10 @@ restart-be:
 restart: restart-fe restart-be
 
 sync-db:
-	cd config/docker && KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py sync_edge_node --pull-only
+	cd config/docker && KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py sync_edge_node --pull-only $(if $(SYNC_SINCE),--since "$(SYNC_SINCE)",)
+
+sync-db-full:
+	$(MAKE) sync-db ENV="$(ENV)" SYNC_SINCE="1970-01-01T00:00:00Z"
 
 sync-media:
 	./scripts/sync_media_pull_wsl_pi_like.sh

@@ -125,6 +125,13 @@ cd /home/django/progetti/kor35/backend
 python manage.py sync_edge_node --pull-only
 ```
 
+Pull completo (da epoch, per riallineare tutto il DB):
+
+```bash
+cd /home/django/progetti/kor35/backend
+python manage.py sync_edge_node --pull-only --since "1970-01-01T00:00:00Z"
+```
+
 Loop continuo:
 
 ```bash
@@ -254,6 +261,12 @@ make logs ENV=dev-home
 
 # 5) sync DB pull-only
 make sync-db ENV=dev-home
+
+# 5b) sync DB pull-only completo (full refresh)
+make sync-db-full ENV=dev-home
+
+# 5c) sync DB pull-only da data custom (ISO datetime)
+make sync-db ENV=dev-home SYNC_SINCE="2024-01-01T00:00:00Z"
 
 # 6) stop stack
 make down ENV=dev-home
