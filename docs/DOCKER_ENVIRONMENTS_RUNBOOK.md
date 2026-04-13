@@ -255,9 +255,27 @@ make up ENV=dev-home
 # opzionale: pulizia automatica vecchi container kor35_wsl_* prima dell'up
 make up ENV=dev-home CLEANUP_LEGACY=1
 
+# 3b) migrazioni
+make makemigrations ENV=dev-home MAKEMIGRATIONS_APP=personaggi
+make migrate ENV=dev-home
+
+# 3c) collectstatic manuale
+make collectstatic ENV=dev-home
+
 # 4) controlla stato e log
 make status ENV=dev-home
 make logs ENV=dev-home
+
+# 4b) restart rapido servizi (stack già avviato)
+make restart-fe ENV=dev-home
+make restart-be ENV=dev-home
+make restart ENV=dev-home
+
+# opzionali su restart-be/restart:
+# - pip install requirements nel container backend
+# - migrate
+# - collectstatic
+make restart ENV=dev-home RUN_PIP_INSTALL=1 RUN_MIGRATIONS=1 RUN_COLLECTSTATIC=1
 
 # 5) sync DB pull-only
 make sync-db ENV=dev-home

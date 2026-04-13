@@ -1797,6 +1797,20 @@ class PunteggiListView(generics.ListAPIView):
     serializer_class = PunteggioDetailSerializer
     queryset = Punteggio.objects.all().order_by('tipo','ordine', 'nome')
 
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        data = response.data
+        if isinstance(data, list):
+            data.sort(
+                key=lambda x: (
+                    x.get("tipo") or "",
+                    -(1 if (x.get("tipo") == "ST" and x.get("formula")) else 0),
+                    x.get("ordine") if x.get("ordine") is not None else 10**9,
+                    x.get("nome") or "",
+                )
+            )
+        return response
+
 
 class StatisticaContainerListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
@@ -3269,7 +3283,7 @@ class StaffRisorsaPoolListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def get(self, request):
-        stats = list(Statistica.objects.filter(is_risorsa_pool=True).order_by('ordine', 'nome'))
+        stats = list(Statistica.objects.filter(is_risorsa_pool=True).order_by('-formula', 'ordine', 'nome'))
         if not stats:
             return Response({'personaggi': [], 'statistiche': []})
         stat_meta = [{'sigla': s.sigla, 'nome': s.nome} for s in stats]

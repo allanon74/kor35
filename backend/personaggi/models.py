@@ -127,17 +127,24 @@ SCELTA_RISULTATO_CHOICES = [
 ]
 
 
+# def get_testo_rango(valore):
+#     try: valore = int(valore)
+#     except (ValueError, TypeError): return ""
+#     if valore <= 0: return "Mondano! "
+#     elif valore == 1: return "" 
+#     elif valore == 2: return "Eroico! "
+#     elif valore == 3: return "Leggendario! "
+#     elif valore == 4: return "Mitologico! "
+#     elif valore == 5: return "Divino! "
+#     elif valore == 6: return "Cosmico! "
+#     else: return f"Cosmico {valore - 6}-esimo! "
+
 def get_testo_rango(valore):
     try: valore = int(valore)
     except (ValueError, TypeError): return ""
-    if valore <= 0: return "Mondano! "
+    if valore <= 0: return "Rango Zero! "
     elif valore == 1: return "" 
-    elif valore == 2: return "Eroico! "
-    elif valore == 3: return "Leggendario! "
-    elif valore == 4: return "Mitologico! "
-    elif valore == 5: return "Divino! "
-    elif valore == 6: return "Cosmico! "
-    else: return f"Cosmico {valore - 6}-esimo! "
+    else: return "Rango {valore|L}! "
 
 # Gruppi "esclusivi" riusabili nella formattazione formule.
 # Ogni gruppo attiva una o piu' etichette in base ai parametri attivi (> 0).
@@ -146,14 +153,85 @@ EXCLUSIVE_FORMAT_GROUPS = {
         "entries": [
             {"params": ["prefisso_puro", "puro"], "label": "Puro"},
             {"params": ["prefisso_diretto", "diretto"], "label": "Diretto"},
-            {"params": ["prefisso_ineluttabile", "ineluttabile"], "label": "Ineluttabile"},
+            {"params": ["prefisso_ineluttabile", "inelutt"], "label": "Ineluttabile"},
         ],
         "separator": "/",
         "suffix": "!",
         "append_space": True,
-    }
+    },
+    "formula_target": {
+        "entries": [
+            {
+                "params": ["flusso", ], 
+                "label": "Flusso",
+                "extra": {
+                    "when": "flusso > 0 and gittata != 3",
+                    "template": " {gittata} metri"
+                }
+                },
+            {
+                "params": ["dardo", ], 
+                "label": "Dardo",
+                "extra": {
+                    "when": "dardo > 0 and gittata == 3",
+                    "template": " {gittata} metri"
+                }
+            },
+            {"params": ["tocco", ], "label": "Tocco"},
+            {"params": ["cono", ], "label": "Cono",
+                "extra": {
+                    "when": "cono > 0 and dcono != 10",
+                    "template": " {dcono} metri"
+                }
+            },
+            {
+                "params": ["esplos", ], 
+                "label": "Esplosione",
+                "extra": {
+                    "when": "esplos > 0 and area != 5",
+                    "template": " {area} metri"
+                }
+            },
+            {"params": ["tutti", ], "label": "Tutti"},
+        ],
+        "separator": "/",
+        "suffix": "!",
+        "append_space": True,
+    },
+    "formula_type": {
+        "entries": [
+            {
+                "params": ["aura", ], 
+                "label": "Aura",
+                "extra": {
+                    "when": "aura > 0",
+                    "template": " {aura|NAME|LASTWORD:'a'} {livello|L}:"
+                }
+                },
+            {
+                "params": ["proiett", ], 
+                "label": "Proiettile",
+                "extra": {
+                    "when": "proiett > 0",
+                    "template": " {aura|NAME|LASTWORD:'o'} {livello|L}:"
+                }
+                },
+            {
+                "params": ["manovra", ], 
+                "label": "Manovra",
+                "extra": {
+                    "when": "manovra > 0",
+                    "template": " {aura|NAME|LASTWORD:'a'} {livello|L}:"
+                }
+                },
+        ],
+        "separator": "/",
+        # "suffix": "{ aura|LASTWORD} {livello|L}:",
+        "append_space": True,
+    },
 }
 DEFAULT_EXCLUSIVE_FORMULA_GROUP = "formula_prefix"
+DEFAULT_FORMULA_TEMPLATE = "{formula_type}{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
 
 
 def _is_truthy_numeric(value):
@@ -163,7 +241,55 @@ def _is_truthy_numeric(value):
         return bool(value)
 
 
-def build_exclusive_group_text(group_key, value_map, groups_config=None):
+def _format_exclusive_value(value):
+    """Formato compatto per valori usati nei template extra."""
+    try:
+        n = float(value)
+        if n.is_integer():
+            return str(int(n))
+        return str(n)
+    except (TypeError, ValueError):
+        return "" if value is None else str(value)
+
+
+def _render_exclusive_template(template, value_map, object_map=None):
+    """
+    Sostituisce placeholder {param} nel template usando value_map.
+    Supporta anche formati: {param|FORMATO} (es. {aura|NAME}, {livello|L}).
+    """
+    if not template:
+        return ""
+
+    def _replace(match):
+        inner = (match.group(1) or "").strip()
+        if not inner:
+            return ""
+
+        parts = [p.strip() for p in inner.split("|")]
+        expr = parts[0] if parts else ""
+        formati = [p for p in parts[1:] if p]
+        if not expr:
+            return ""
+
+        if object_map and expr in object_map:
+            raw_val = object_map.get(expr)
+        elif expr in value_map:
+            raw_val = value_map.get(expr)
+        else:
+            raw_val = evaluate_expression(expr, value_map)
+
+        if not formati:
+            return _format_exclusive_value(raw_val)
+
+        val = raw_val
+        for formato in formati:
+            val = formatta_valore_avanzato(val, formato, context=value_map)
+        return "" if val is None else str(val)
+
+    return re.sub(r"\{([^}]+)\}", _replace, str(template))
+
+
+def build_exclusive_group_text(group_key, value_map, groups_config=None, object_map=None):
     """
     Costruisce il testo di un gruppo esclusivo (es. "Puro/Ineluttabile! ").
     """
@@ -172,7 +298,7 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None):
         return ""
 
     entries = config.get("entries") or []
-    active_labels = []
+    active_parts = []
     seen = set()
 
     for entry in entries:
@@ -190,18 +316,52 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None):
 
         is_active = any(_is_truthy_numeric(value_map.get(param, 0)) for param in params)
         if is_active and label not in seen:
-            active_labels.append(label)
+            part = label
+
+            # Extra opzionale per entry (dict o lista di dict/stringhe).
+            # Esempi supportati:
+            # - "extra": {"when": "cono > 1", "template": " {dcono} metri"}
+            # - "extra": [{"when": "...", "template": " ..."}, " testo fisso"]
+            extras = entry.get("extra")
+            if extras is not None:
+                if not isinstance(extras, list):
+                    extras = [extras]
+                for extra in extras:
+                    if isinstance(extra, str):
+                        part += extra
+                        continue
+                    if not isinstance(extra, dict):
+                        continue
+
+                    when_expr = (extra.get("when") or "").strip()
+                    if when_expr:
+                        # Evita sintassi ambigue tipo "a>1,b<2" (tupla Python truthy).
+                        if "," in when_expr:
+                            continue
+                        if not evaluate_expression(when_expr, value_map):
+                            continue
+
+                    required_params = extra.get("params") or []
+                    if required_params and not any(
+                        _is_truthy_numeric(value_map.get(p, 0)) for p in required_params
+                    ):
+                        continue
+
+                    tmpl = extra.get("template") or ""
+                    part += _render_exclusive_template(tmpl, value_map, object_map)
+
+            active_parts.append(part)
             seen.add(label)
 
-    if not active_labels:
+    if not active_parts:
         return ""
 
     separator = config.get("separator", "/")
     suffix = config.get("suffix", "!")
     append_space = config.get("append_space", True)
-    built = separator.join(active_labels)
+    built = separator.join(active_parts)
     if suffix:
-        built = f"{built}{suffix}"
+        built = f"{built}{_render_exclusive_template(suffix, value_map, object_map)}"
     if append_space:
         built = f"{built} "
     return built
@@ -267,10 +427,14 @@ FORMAT_COLLECTIONS = {
         'DEFAULT' : '{n}ª'
     },
     # Esempio: Rango/Tier (Mapping esplicito)
+    # 'RANGO': {
+    #     0: 'Mondano! ', 1: '', 2: 'Eroico! ', 3: 'Leggendario! ', 
+    #     4: 'Mitologico! ', 5: 'Divino! ', 6: 'Cosmico! ', 
+    #     'DEFAULT' : 'Rango {n}'
+    # },
     'RANGO': {
-        0: 'Mondano! ', 1: '', 2: 'Eroico! ', 3: 'Leggendario! ', 
-        4: 'Mitologico! ', 5: 'Divino! ', 6: 'Cosmico! ', 
-        'DEFAULT' : 'Rango {n}'
+        1: '',
+        'DEFAULT' : 'Rango {n|L}'
     },
     # Esempio: Dadi (D4, D6...)
     'DADI': {
@@ -293,9 +457,33 @@ def formatta_valore_avanzato(valore, formato, context=None):
     - R: Romano Maiuscolo (VII)
     - r: Romano Minuscolo (vii)
     - NAME: Nome dell'oggetto (se disponibile nel context)
+    - LASTWORD: Ultima parola del nome (es. "Aura Magica" -> "Magica")
     - :KEY: Cerca nella collection FORMAT_COLLECTIONS[KEY]
     """
     # A. Gestione Oggetti/Nomi (Es. {aura|NAME})
+    if formato == 'NOME':
+        formato = 'NAME'
+
+    # Variante parametrica: LASTWORD:'x' (anche con spazi, es. LASTWORD :'a')
+    # Sostituisce l'ultima lettera dell'ultima parola con la stringa tra apici.
+    lastword_match = re.match(r"^LASTWORD(?:\s*:\s*'([^']*)')?$", str(formato or "").strip())
+    if lastword_match:
+        replacement = lastword_match.group(1)
+        if hasattr(valore, 'nome'):
+            text = str(valore.nome or "").strip()
+        elif hasattr(valore, 'dichiarazione') and valore.dichiarazione:
+            text = str(valore.dichiarazione).strip()
+        else:
+            text = str(valore or "").strip()
+        if not text:
+            return ""
+        last_word = text.split()[-1]
+        if replacement is None:
+            return last_word
+        if not last_word:
+            return ""
+        return f"{last_word[:-1]}{replacement}" if len(last_word) > 1 else replacement
+
     if formato == 'NAME':
         if hasattr(valore, 'nome'): return valore.nome
         if hasattr(valore, 'dichiarazione') and valore.dichiarazione: return valore.dichiarazione
@@ -441,11 +629,13 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         # - {exclusive:formula_prefix}
         if expr == 'formula_prefix':
             return build_exclusive_group_text(
-                DEFAULT_EXCLUSIVE_FORMULA_GROUP, eval_context, exclusive_groups_config
+                DEFAULT_EXCLUSIVE_FORMULA_GROUP, eval_context, exclusive_groups_config, object_context
             )
+        if not formato and expr in exclusive_groups_config:
+            return build_exclusive_group_text(expr, eval_context, exclusive_groups_config, object_context)
         if expr.startswith('exclusive:'):
             group_key = expr.split(':', 1)[1].strip()
-            return build_exclusive_group_text(group_key, eval_context, exclusive_groups_config)
+            return build_exclusive_group_text(group_key, eval_context, exclusive_groups_config, object_context)
 
         # B. Caso Speciale: Recupero Oggetto per nome ({aura|NAME})
         if formato == 'NAME':
@@ -514,17 +704,6 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     
     formula_finale = pattern_if.sub(replace_conditional_block, formula_out)
     formula_finale = pattern_placeholder.sub(resolve_placeholder, formula_finale)
-
-    # Prepend automatico del gruppo esclusivo standard sulle formule
-    # (evita duplicazioni se la formula lo contiene gia')
-    if formula_finale:
-        default_exclusive_prefix = build_exclusive_group_text(
-            DEFAULT_EXCLUSIVE_FORMULA_GROUP, eval_context, exclusive_groups_config
-        )
-        if default_exclusive_prefix:
-            normalized_prefix = default_exclusive_prefix.strip()
-            if not formula_finale.strip().startswith(normalized_prefix):
-                formula_finale = f"{default_exclusive_prefix}{formula_finale}"
     
     # Costruzione Output HTML
     parts = []
@@ -913,6 +1092,11 @@ class Statistica(Punteggio):
     parametro = models.CharField(max_length=10, unique=True, blank=True, null=True)
     valore_predefinito = models.IntegerField(default=0)
     valore_base_predefinito = models.IntegerField(default=0)
+    formula = models.BooleanField(
+        default=False,
+        verbose_name="Formula",
+        help_text="Indica le statistiche usate soprattutto nelle formule: nei pivot (es. statistiche_base) vengono mostrate prima.",
+    )
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     is_primaria = models.BooleanField(default=False)
     is_risorsa_pool = models.BooleanField(
@@ -947,7 +1131,10 @@ class Statistica(Punteggio):
     )
 
     def save(self, *args, **kwargs): self.tipo = STATISTICA; super().save(*args, **kwargs)
-    class Meta: verbose_name = "Statistica"; verbose_name_plural = "Statistiche"
+    class Meta:
+        verbose_name = "Statistica"
+        verbose_name_plural = "Statistiche"
+        ordering = ['-formula', 'ordine', 'nome']
     @classmethod
     def get_help_text_parametri(cls, extra_params=None):
         stats = cls.objects.filter(parametro__isnull=False).exclude(parametro__exact='').order_by('nome')
@@ -1336,7 +1523,7 @@ class Attivata(A_vista):
     @property
     def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_TESSITURA
     @property
-    def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.attivatastatisticabase_set.select_related('statistica').all())
+    def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.attivatastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all())
 
 class AttivataElemento(SyncableModel, models.Model):
     attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
@@ -1382,7 +1569,13 @@ class InfusioneStatistica(CondizioneStatisticaMixin):
 class Infusione(Tecnica):
     aura_infusione = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': AURA, 'is_soprannaturale': True}, related_name="infusioni_secondarie")
     caratteristiche = models.ManyToManyField(Punteggio, through='InfusioneCaratteristica', related_name="infusioni_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
-    formula_attacco = models.CharField("Formula Attacco", max_length=255, blank=True, null=True)
+    formula_attacco = models.CharField(
+        "Formula Attacco",
+        max_length=255,
+        blank=True,
+        null=True,
+        default=DEFAULT_FORMULA_TEMPLATE,
+    )
     statistiche_base = models.ManyToManyField(Statistica, through='InfusioneStatisticaBase', blank=True, related_name='infusione_statistiche_base')
     # Statistiche MODIFICATORI (Es. +1 Forza) - REINTRODOTTO
     statistiche = models.ManyToManyField(Statistica, through='InfusioneStatistica', blank=True, related_name='infusione_statistiche')
@@ -1422,14 +1615,14 @@ class Infusione(Tecnica):
     def TestoFormattato(self): 
         base_text = formatta_testo_generico(
             self.testo, 
-            statistiche_base=self.infusionestatisticabase_set.select_related('statistica').all(), 
+            statistiche_base=self.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
             context={'livello': self.livello, 'aura': self.aura_richiesta}, 
             formula=self.formula_attacco
         )
         return base_text + genera_html_cariche(self, None)
     
 class Tessitura(Tecnica):
-    formula = models.TextField("Formula", blank=True, null=True)
+    formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_FORMULA_TEMPLATE)
     elemento_principale = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO})
     caratteristiche = models.ManyToManyField(Punteggio, through='TessituraCaratteristica', related_name="tessiture_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     statistiche_base = models.ManyToManyField(Statistica, through='TessituraStatisticaBase', blank=True, related_name='tessitura_statistiche_base')
@@ -1446,7 +1639,7 @@ class Tessitura(Tecnica):
         
     @property
     def TestoFormattato(self): 
-        return formatta_testo_generico(self.testo, formula=self.formula, statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').all(), context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta})
+        return formatta_testo_generico(self.testo, formula=self.formula, statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta})
     
 class Cerimoniale(Tecnica):
     """
@@ -2114,8 +2307,8 @@ class Oggetto(A_vista):
     def TestoFormattato(self): 
         base_text = formatta_testo_generico(
             self.testo, 
-            statistiche_base=self.oggettostatisticabase_set.select_related('statistica').all(), 
-            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': self.oggettostatistica_set.select_related('statistica').all()}
+            statistiche_base=self.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
+            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': self.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()}
         )
         return base_text + genera_html_cariche(self, None)
     
@@ -3673,22 +3866,22 @@ class Personaggio(Inventario):
         testo_finale=""
         
         if isinstance(item, Oggetto):
-            stats = item.oggettostatisticabase_set.select_related('statistica').all()
-            item_mods = item.oggettostatistica_set.select_related('statistica').all()
+            stats = item.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
+            item_mods = item.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             ctx = {'livello': item.livello, 'aura': item.aura, 'item_modifiers': item_mods}
             testo_finale = formatta_testo_generico(item.testo, formula=getattr(item, 'formula', None), statistiche_base=stats, personaggio=self, context=ctx)
             
         elif isinstance(item, Infusione):
-            stats = item.infusionestatisticabase_set.select_related('statistica').all()
+            stats = item.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             ctx = {'livello': item.livello, 'aura': item.aura_richiesta}
             testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
             
         elif isinstance(item, Attivata):
-            stats = item.attivatastatisticabase_set.select_related('statistica').all()
+            stats = item.attivatastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self)
         
         elif isinstance(item, Tessitura):
-            stats = item.tessiturastatisticabase_set.select_related('statistica').all()
+            stats = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             formula_text = item.formula or ""
             if "{elem}" not in formula_text:
                 ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
@@ -3783,7 +3976,7 @@ class Personaggio(Inventario):
         ctx = {}
         if getattr(consumabile, 'tessitura', None):
             item = consumabile.tessitura
-            stats = item.tessiturastatisticabase_set.select_related('statistica').all()
+            stats = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             formula_text = consumabile.formula or ""
             if "{elem}" not in formula_text:
                 ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
@@ -4532,7 +4725,12 @@ class EffettoCasuale(SyncableModel, models.Model):
     )
     nome = models.CharField(max_length=200)
     descrizione = models.TextField(help_text="Usa {parametro} per le statistiche. Inclusi: {aura} (aura tipo), {elemento} (elemento)")
-    formula = models.TextField(blank=True, null=True, help_text="Stesso formato della descrizione. Obbligatorio se tipologia=Tessitura.")
+    formula = models.TextField(
+        blank=True,
+        null=True,
+        default=DEFAULT_FORMULA_TEMPLATE,
+        help_text="Stesso formato della descrizione. Obbligatorio se tipologia=Tessitura.",
+    )
 
     class Meta:
         verbose_name = "Effetto Casuale"
@@ -4566,7 +4764,7 @@ class ConsumabilePersonaggio(SyncableModel, models.Model):
     )
     nome = models.CharField(max_length=200)
     descrizione = models.TextField()
-    formula = models.TextField(blank=True, null=True)
+    formula = models.TextField(blank=True, null=True, default=DEFAULT_FORMULA_TEMPLATE)
     utilizzi_rimanenti = models.PositiveIntegerField(default=1)
     data_scadenza = models.DateField()
     data_creazione = models.DateTimeField(auto_now_add=True)

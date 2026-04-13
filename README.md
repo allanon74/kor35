@@ -498,8 +498,14 @@ Con `dev-home` (e profili analoghi) il backend è montato da disco nel container
 | Comando | Cosa fa |
 |--------|---------|
 | `make restart-fe ENV=dev-home` | Esegue `npm run build`, copia la build in `react_build`, poi **`docker compose restart frontend`** (Nginx che serve gli statici). Usa lo stesso `ENV` dello stack. Se la UI resta vecchia, prova refresh forzato o svuota cache / service worker PWA. |
-| `make restart-be ENV=dev-home` | Riavvia i servizi Docker `backend` e `daphne` così Gunicorn/Daphne caricano i file Python aggiornati. Default: `ENV=dev-home`. |
-| `make restart ENV=dev-home` | Esegue in sequenza **`restart-fe`** e poi **`restart-be`** (utile se hai toccato sia React sia backend). |
+| `make restart-be ENV=dev-home` | Riavvia `backend` e `daphne` così Gunicorn/Daphne caricano i file Python aggiornati. Flag opzionali: `RUN_PIP_INSTALL=1` (esegue `pip install -r requirements.txt`), `RUN_MIGRATIONS=1` (esegue `migrate --noinput`), `RUN_COLLECTSTATIC=1` (esegue `collectstatic --noinput`). |
+| `make restart ENV=dev-home` | Esegue in sequenza **`restart-fe`** e poi **`restart-be`**. Supporta gli stessi flag opzionali di `restart-be` (`RUN_PIP_INSTALL`, `RUN_MIGRATIONS`, `RUN_COLLECTSTATIC`). |
+
+Esempio completo (frontend + backend + step opzionali backend):
+
+```bash
+make restart ENV=dev-home RUN_PIP_INSTALL=1 RUN_MIGRATIONS=1 RUN_COLLECTSTATIC=1
+```
 
 Per solo backend, in alternativa: `docker restart kor35_devhome_backend kor35_devhome_daphne` (nomi tipici con profilo `dev-home`).
 
@@ -533,7 +539,7 @@ make setup
 make up ENV=dev-home
 ```
 
-Dopo modifiche a React o Python (stack già su), vedi il punto **4) Aggiornare il codice con lo stack già avviato** nella sezione [Setup Ambienti](#setup-ambienti-di-sviluppo-prima-di-make) (`make restart-fe`, `make restart-be`, `make restart`).
+Dopo modifiche a React o Python (stack già su), vedi il punto **4) Aggiornare il codice con lo stack già avviato** nella sezione [Setup Ambienti](#setup-ambienti-di-sviluppo-prima-di-make) (`make restart-fe`, `make restart-be`, `make restart` + flag opzionali `RUN_PIP_INSTALL=1`, `RUN_MIGRATIONS=1`, `RUN_COLLECTSTATIC=1`).
 
 Controllo stato:
 

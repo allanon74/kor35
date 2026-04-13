@@ -160,7 +160,7 @@ class TabellaSerializer(serializers.ModelSerializer):
 class StatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Statistica
-        fields = ('id', 'nome', 'sigla', 'parametro', 'valore_base_predefinito', )
+        fields = ('id', 'nome', 'sigla', 'parametro', 'valore_base_predefinito', 'formula')
 
 
 class PunteggioSerializer(serializers.ModelSerializer):
@@ -314,6 +314,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
     produce_mutazioni = serializers.SerializerMethodField()
     configurazione_livelli = ConfigurazioneLivelloAuraSerializer(many=True, read_only=True)
     tratti_disponibili = serializers.SerializerMethodField()
+    formula = serializers.SerializerMethodField()
 
     class Meta:
         model = Punteggio
@@ -321,6 +322,7 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'id', 'nome', 'sigla', 'tipo', 'colore',
             'icona_url', 'icona_nome_originale', 'icona_nome_display',
             'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'parametro', 'ordine', 'has_models',
+            'formula',
             'permette_infusioni', 'permette_tessiture', 'permette_cerimoniali',
             'is_mattone',
             'aura_id', 'caratteristica_associata_nome',
@@ -345,6 +347,12 @@ class PunteggioDetailSerializer(serializers.ModelSerializer):
             'potenziamenti_multi_slot',
             'configurazione_livelli', 'tratti_disponibili',
         )
+
+    def get_formula(self, obj):
+        try:
+            return bool(obj.statistica.formula)
+        except Exception:
+            return False
         
     def get_produce_mod(self, obj):
         # Logica: È un mod se produce potenziamenti ed è tecnologico (es. nome='Mod' o spegne a zero cariche)
@@ -1886,7 +1894,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         """Pool consumabili (Fortuna e future statistiche is_risorsa_pool)."""
         out = []
         rec_map = obj.get_recuperi_risorsa_stato()
-        for stat in Statistica.objects.filter(is_risorsa_pool=True).order_by('ordine', 'nome'):
+        for stat in Statistica.objects.filter(is_risorsa_pool=True).order_by('-formula', 'ordine', 'nome'):
             max_v = obj.get_valore_massimo_risorsa_runtime(stat.sigla)
             if max_v <= 0:
                 continue
