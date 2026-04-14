@@ -36,6 +36,7 @@ const SocialEventReportTab = lazy(() => import('./editors/SocialEventReportTab')
 const StaffRisorsaPoolTab = lazy(() => import('./StaffRisorsaPoolTab'));
 const EraManager = lazy(() => import('./editors/EraManager'));
 const DichiarazioniGlossarioManager = lazy(() => import('./editors/DichiarazioniGlossarioManager'));
+const ArcanaProfilesTab = lazy(() => import('./editors/ArcanaProfilesTab'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -99,6 +100,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: <Gem size={24} />, color: 'bg-amber-800', component: StaffRisorsaPoolTab },
         { id: 'ere-prefetture', label: 'Ere e Prefetture', icon: <Globe2 size={24} />, color: 'bg-violet-700', component: EraManager },
         { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e Glossario', icon: <BookText size={24} />, color: 'bg-emerald-700', component: DichiarazioniGlossarioManager },
+        { id: 'arcana-profiles', label: 'Profili Arcana SSO', icon: <Shield size={24} />, color: 'bg-indigo-800', component: ArcanaProfilesTab },
         { id: 'messaggi', label: 'Messaggi Staff', icon: <MessageSquare size={24} />, color: 'bg-emerald-600', component: AdminMessageTab },        
     ], []);
 

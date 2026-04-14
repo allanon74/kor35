@@ -90,7 +90,6 @@ export const fetchAuthenticated = async (endpoint, options = {}, onLogout) => {
   }
 };
 
-
 /**
  * Revisioni leggere per cache condizionale (max updated_at lato server).
  * @param {string[]} parts - es. ['punteggi_all', 'personaggi_list:0', 'personaggio:42']
@@ -123,6 +122,15 @@ export const fetchPublic = async (endpoint, options = {}) => {
   } catch (error) {
     console.error(`Errore fetch public ${endpoint}:`, error);
     throw error;
+  }
+};
+
+/** Stato Arcana SSO per la pagina login (nessun token richiesto). */
+export const getArcanaSSOStatus = async () => {
+  try {
+    return await fetchPublic('/api/auth/arcana/status/');
+  } catch {
+    return { enabled: false, reachable: false };
   }
 };
 
@@ -1645,11 +1653,10 @@ export const getTipologiePersonaggio = async (onLogout) => {
 
 // --- CRUD PERSONAGGI (Nuovo Endpoint) ---
 
-export const getPersonaggiEditList = (onLogout, viewAll = false) => {
-    // Nota: gestione-personaggi restituisce già la lista filtrata o completa in base all'utente/staff
-    // Se vuoi forzare viewAll lato server potresti dover gestire i permessi, 
-    // ma il get_queryset sopra lo fa già in automatico basandosi su is_staff.
-    return fetchAuthenticated('/api/personaggi/api/gestione-personaggi/', { method: 'GET' }, onLogout);
+export const getPersonaggiEditList = (onLogout, options = {}) => {
+    const mineOnly = options?.mineOnly === true;
+    const qs = mineOnly ? '?mine=1' : '';
+    return fetchAuthenticated(`/api/personaggi/api/gestione-personaggi/${qs}`, { method: 'GET' }, onLogout);
 };
 
 export const getEre = (onLogout) => {
@@ -2325,6 +2332,24 @@ export const changePassword = async (oldPassword, newPassword, onLogout) => {
             new_password: newPassword
         })
     }, onLogout);
+};
+
+export const getArcanaPasswordStatus = async (onLogout) => {
+    return fetchAuthenticated('/api/auth/arcana/password-status/', { method: 'GET' }, onLogout);
+};
+
+export const setArcanaLocalPassword = async (newPassword, confirmPassword, onLogout) => {
+    return fetchAuthenticated('/api/auth/arcana/set-local-password/', {
+        method: 'POST',
+        body: JSON.stringify({
+            new_password: newPassword,
+            confirm_password: confirmPassword,
+        })
+    }, onLogout);
+};
+
+export const staffGetArcanaProfiles = async (onLogout) => {
+    return fetchAuthenticated('/api/auth/arcana/staff/profiles/', { method: 'GET' }, onLogout);
 };
 
 /**

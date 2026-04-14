@@ -5,7 +5,22 @@ from django.conf import settings
 from django.utils.html import format_html
 from django.contrib.auth.models import User
 from django.db import models, transaction
+from django.core.exceptions import ObjectDoesNotExist
 from decimal import Decimal
+
+
+def _personaggio_avatar_url(personaggio, request):
+    """URL assoluto della foto profilo InstaFame (SocialProfile.foto_principale), se presente."""
+    try:
+        sp = personaggio.social_profile
+    except ObjectDoesNotExist:
+        return None
+    if sp.foto_principale:
+        url = sp.foto_principale.url
+        if request:
+            return request.build_absolute_uri(url)
+        return url
+    return None
 
 from .models import ConfigurazioneLivelloAura, formatta_testo_generico, ConsumabilePersonaggio
 # Importa i modelli e le funzioni helper
@@ -1618,6 +1633,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     era = EraSerializer(read_only=True)
     prefettura = PrefetturaSerializer(read_only=True)
     prefettura_esterna = serializers.BooleanField(required=False)
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -1639,7 +1655,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'can_edit_razza',
             'can_edit_era',
             'era', 'prefettura', 'prefettura_esterna',
+            'avatar_url',
         )
+
+    def get_avatar_url(self, obj):
+        return _personaggio_avatar_url(obj, self.context.get("request"))
 
     def to_representation(self, instance):
         """
@@ -2030,6 +2050,9 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
     prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
     prefettura_regione_sigla = serializers.CharField(source="prefettura.regione.sigla", read_only=True)
+    can_edit_razza = serializers.SerializerMethodField()
+    can_edit_era = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -2040,8 +2063,27 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'crediti', 'punti_caratteristica',
             'segno_zodiacale', 'segno_zodiacale_nome',
             'era', 'prefettura', 'prefettura_esterna', 'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
+            'can_edit_razza', 'can_edit_era',
+            'avatar_url',
         )
         read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
+
+    def get_avatar_url(self, obj):
+        return _personaggio_avatar_url(obj, self.context.get("request"))
+
+    def get_can_edit_razza(self, personaggio):
+        try:
+            from django.utils import timezone
+            now = timezone.now()
+            return not personaggio.eventi_partecipati.filter(data_inizio__lte=now).exists()
+        except Exception:
+            return True
+
+    def get_can_edit_era(self, personaggio):
+        try:
+            return personaggio.can_edit_era_prefettura()
+        except Exception:
+            return True
 
 class CreditoMovimentoCreateSerializer(serializers.Serializer):
     importo = serializers.DecimalField(max_digits=10, decimal_places=2)
@@ -2169,6 +2211,7 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
     prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
     prefettura_regione_sigla = serializers.CharField(source="prefettura.regione.sigla", read_only=True)
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -2178,8 +2221,12 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'testo', 'costume', 'crediti', 'punti_caratteristica',
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
+            'avatar_url',
             )
         read_only_fields = ('crediti', 'punti_caratteristica') 
+
+    def get_avatar_url(self, obj):
+        return _personaggio_avatar_url(obj, self.context.get("request"))
 
     def get_proprietario_nome(self, obj):
         user = obj.proprietario

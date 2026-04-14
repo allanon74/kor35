@@ -3,11 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useCharacter } from '../components/CharacterContext';
 import StaffDashboard from '../components/StaffDashboard';
 import MainPage from '../components/MainPage';
+import StartPage from '../components/StartPage';
 
 const AppLayout = ({ token, onLogout }) => {
   const { isStaff } = useCharacter();
   const navigate = useNavigate();
   const location = useLocation();
+  const isStartPagePath = location.pathname === '/app' || location.pathname === '/app/start';
   
   // Stato per gestire quale interfaccia mostrare (solo per lo staff)
   // 'staff' = Dashboard Master | 'player' = Interfaccia Giocatore
@@ -78,6 +80,20 @@ const AppLayout = ({ token, onLogout }) => {
           updateUrlParams('master', tool || 'home');
         }}
         initialTool={dashboardInitialTool}
+      />
+    );
+  }
+
+  if (isStartPagePath) {
+    return (
+      <StartPage
+        onLogout={onLogout}
+        onSwitchToMaster={(tool = 'home') => {
+          setDashboardInitialTool(tool);
+          setViewMode('staff');
+          updateUrlParams('master', tool);
+          navigate('/app/play', { replace: true });
+        }}
       />
     );
   }

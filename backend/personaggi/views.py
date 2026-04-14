@@ -1579,10 +1579,12 @@ class PropostaTransazioneCreateView(APIView):
 class PersonaggioListView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
-        queryset = Personaggio.objects.filter(proprietario=request.user).select_related("era", "prefettura", "prefettura__era")
+        queryset = Personaggio.objects.filter(proprietario=request.user).select_related(
+            "era", "prefettura", "prefettura__era", "social_profile"
+        )
         if (request.user.is_staff or request.user.is_superuser) and request.query_params.get('view_all') == 'true':
-            queryset = Personaggio.objects.all().select_related("era", "prefettura", "prefettura__era")
-        serializer = PersonaggioListSerializer(queryset, many=True)
+            queryset = Personaggio.objects.all().select_related("era", "prefettura", "prefettura__era", "social_profile")
+        serializer = PersonaggioListSerializer(queryset, many=True, context={"request": request})
         data = serializer.data
 
         if queryset and request.user and (request.user.is_authenticated):
@@ -1626,7 +1628,7 @@ class PersonaggioDetailView(APIView):
         # le query su Abilita verrebbero a 500. Deferiamo quelle colonne
         # finché la migrazione non viene eseguita.
         personaggio = get_object_or_404(
-            Personaggio.objects.prefetch_related(
+            Personaggio.objects.select_related("social_profile").prefetch_related(
                 Prefetch(
                     'abilita_possedute',
                     queryset=Abilita.objects.defer('caratteristica_2', 'caratteristica_3').select_related('caratteristica'),
@@ -1639,7 +1641,7 @@ class PersonaggioDetailView(APIView):
             return Response({"error": "Non hai il permesso di visualizzare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
         _sync_coma_state(personaggio)
         personaggio.advance_recuperi_risorse()
-        serializer = PersonaggioDetailSerializer(personaggio)
+        serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     def patch(self, request, pk, format=None):
@@ -3939,9 +3941,15 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        mine = (self.request.query_params.get("mine") or "").lower() in ("1", "true", "yes")
+        qs = Personaggio.objects.select_related(
+            "tipologia", "proprietario", "era", "prefettura", "prefettura__era", "social_profile"
+        ).order_by("nome")
+        if mine:
+            return qs.filter(proprietario=user)
         if user.is_staff or user.is_superuser:
-            return Personaggio.objects.all().select_related('tipologia', 'proprietario', 'era', 'prefettura', 'prefettura__era').order_by('nome')
-        return Personaggio.objects.filter(proprietario=user).select_related('tipologia', 'era', 'prefettura', 'prefettura__era').order_by('nome')
+            return qs
+        return qs.filter(proprietario=user)
 
     def perform_create(self, serializer):
         era = serializer.validated_data.get("era")

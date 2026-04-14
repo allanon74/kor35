@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Dialog } from '@headlessui/react';
-import { changePassword } from '../api'; // Assicurati di avere questa funzione in api.js
+import { changePassword, setArcanaLocalPassword } from '../api'; // Assicurati di avere questa funzione in api.js
 
-export default function PasswordChangeModal({ isOpen, onClose, onLogout }) {
+export default function PasswordChangeModal({ isOpen, onClose, onLogout, forceSetMode = false, onSuccess = null }) {
     const [oldPassword, setOldPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,17 +25,23 @@ export default function PasswordChangeModal({ isOpen, onClose, onLogout }) {
 
         setLoading(true);
         try {
-            await changePassword(oldPassword, newPassword, onLogout);
-            setMessage({ type: 'success', text: 'Password cambiata con successo!' });
+            if (forceSetMode) {
+                await setArcanaLocalPassword(newPassword, confirmPassword, onLogout);
+                setMessage({ type: 'success', text: 'Password locale impostata con successo!' });
+            } else {
+                await changePassword(oldPassword, newPassword, onLogout);
+                setMessage({ type: 'success', text: 'Password cambiata con successo!' });
+            }
             setTimeout(() => {
                 onClose();
                 setOldPassword('');
                 setNewPassword('');
                 setConfirmPassword('');
                 setMessage({ type: '', text: '' });
+                if (onSuccess && typeof onSuccess === 'function') onSuccess();
             }, 1500);
         } catch (err) {
-            setMessage({ type: 'error', text: 'Errore: ' + (err.message || 'Controlla la vecchia password') });
+            setMessage({ type: 'error', text: 'Errore: ' + (err.message || 'Controlla i dati inseriti') });
         } finally {
             setLoading(false);
         }
@@ -47,7 +53,9 @@ export default function PasswordChangeModal({ isOpen, onClose, onLogout }) {
                 <Dialog.Overlay className="fixed inset-0 bg-black opacity-70" />
 
                 <div className="relative bg-gray-800 text-white rounded-lg max-w-sm w-full p-6 shadow-2xl border border-gray-600">
-                    <Dialog.Title className="text-xl font-bold mb-4">Cambia Password</Dialog.Title>
+                    <Dialog.Title className="text-xl font-bold mb-4">
+                        {forceSetMode ? 'Imposta Password Locale' : 'Cambia Password'}
+                    </Dialog.Title>
                     
                     {message.text && (
                         <div className={`p-2 mb-4 text-sm rounded ${message.type === 'success' ? 'bg-green-800 text-green-100' : 'bg-red-800 text-red-100'}`}>
@@ -56,16 +64,18 @@ export default function PasswordChangeModal({ isOpen, onClose, onLogout }) {
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label className="block text-sm text-gray-400 mb-1">Vecchia Password</label>
-                            <input 
-                                type="password" 
-                                className="w-full bg-gray-900 border border-gray-700 rounded p-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-                                value={oldPassword} 
-                                onChange={e => setOldPassword(e.target.value)} 
-                                required
-                            />
-                        </div>
+                        {!forceSetMode && (
+                            <div>
+                                <label className="block text-sm text-gray-400 mb-1">Vecchia Password</label>
+                                <input 
+                                    type="password" 
+                                    className="w-full bg-gray-900 border border-gray-700 rounded p-2 focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    value={oldPassword} 
+                                    onChange={e => setOldPassword(e.target.value)} 
+                                    required
+                                />
+                            </div>
+                        )}
                         <div>
                             <label className="block text-sm text-gray-400 mb-1">Nuova Password</label>
                             <input 

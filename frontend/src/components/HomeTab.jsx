@@ -9,7 +9,7 @@ import StatisticaModificatoriModal from './StatisticaModificatoriModal'; // <---
 import { stripRazzaPrefix } from './RazzaCollapsible';
 import RichTextDisplay from './RichTextDisplay';
 import RichTextEditor from './RichTextEditor';
-import { updatePersonaggio } from '../api';
+import { updatePersonaggio, resolveMediaUrl } from '../api';
 
 // --- NUOVI COMPONENTI ---
 import LogViewer from './LogViewer';
@@ -58,6 +58,7 @@ const CharacterSheet = memo(({ data, onLogout }) => {
   const {
     id: personaggioId,
     nome,
+    avatar_url: avatarUrl,
     crediti,
     punti_caratteristica,
     punteggi_base,
@@ -376,7 +377,20 @@ const CharacterSheet = memo(({ data, onLogout }) => {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      
+      <div className="flex items-center gap-4 mb-6 pb-4 border-b border-gray-700/80">
+        <div className="h-20 w-20 rounded-full border-2 border-indigo-500/35 bg-gray-800 overflow-hidden shrink-0 flex items-center justify-center">
+          {avatarUrl ? (
+            <img src={resolveMediaUrl(avatarUrl)} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-3xl font-black text-indigo-200">{(nome || '?').charAt(0).toUpperCase()}</span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-2xl font-bold text-white truncate">{nome}</h2>
+          <p className="text-xs text-gray-500 mt-1">Scheda personaggio</p>
+        </div>
+      </div>
+
       {/* Banner Notifiche */}
       {'Notification' in window && Notification.permission !== 'granted' && (
          <div className="mb-6 p-4 bg-indigo-900/50 rounded-lg border border-indigo-500 flex flex-col sm:flex-row justify-between items-center gap-3">

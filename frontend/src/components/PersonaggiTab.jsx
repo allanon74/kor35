@@ -12,6 +12,7 @@ import {
     resetPersonaggio,
     staffKillPersonaggio,
     staffRevivePersonaggio,
+    resolveMediaUrl,
 } from '../api';
 import { useCharacter } from './CharacterContext';
 import { 
@@ -452,8 +453,12 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             }}
                             className="flex min-h-[3rem] min-w-0 cursor-pointer items-center gap-4 overflow-hidden rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
                         >
-                            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold uppercase transition-all ${isSelected ? 'scale-110 bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-700 text-gray-300 group-hover:bg-gray-600'}`}>
-                                {char.nome ? char.nome.charAt(0) : '?'}
+                            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold uppercase transition-all overflow-hidden ${isSelected ? 'scale-110 bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-700 text-gray-300 group-hover:bg-gray-600'}`}>
+                                {char.avatar_url ? (
+                                    <img src={resolveMediaUrl(char.avatar_url)} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                    char.nome ? char.nome.charAt(0) : '?'
+                                )}
                             </div>
 
                             <div className="min-w-0">

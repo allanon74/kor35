@@ -4447,6 +4447,7 @@ class ArcanaSSOIdentity(models.Model):
     provider_sub = models.CharField(max_length=128, unique=True, db_index=True)
     email_snapshot = models.EmailField(blank=True, default="")
     username_snapshot = models.CharField(max_length=150, blank=True, default="")
+    ad_profile_json = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -11,6 +11,7 @@ from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.utils.text import slugify
 from rest_framework import permissions, status
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -91,6 +92,7 @@ def _upsert_local_user(profile: dict) -> User:
                 provider_sub=sub,
                 email_snapshot=email,
                 username_snapshot=username_hint,
+                ad_profile_json=profile or {},
             )
 
         dirty_fields = []
@@ -112,6 +114,7 @@ def _upsert_local_user(profile: dict) -> User:
         ArcanaSSOIdentity.objects.filter(provider_sub=sub).update(
             email_snapshot=email,
             username_snapshot=username_hint,
+            ad_profile_json=profile or {},
         )
 
     return user
@@ -241,3 +244,110 @@ class ArcanaSSOExchangeTicketView(APIView):
         if not payload:
             return Response({"error": "ticket non valido o scaduto"}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class ArcanaSSOPasswordStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        is_arcana_user = ArcanaSSOIdentity.objects.filter(user=request.user).exists()
+        has_local_password = request.user.has_usable_password()
+        return Response(
+            {
+                "is_arcana_user": is_arcana_user,
+                "has_local_password": has_local_password,
+                "show_reminder": bool(is_arcana_user and not has_local_password),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ArcanaSSOSetLocalPasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not ArcanaSSOIdentity.objects.filter(user=request.user).exists():
+            return Response({"error": "Utente non associato ad Arcana SSO"}, status=status.HTTP_403_FORBIDDEN)
+
+        new_password = str(request.data.get("new_password") or "").strip()
+        confirm_password = str(request.data.get("confirm_password") or "").strip()
+        if len(new_password) < 8:
+            return Response({"error": "La password deve essere di almeno 8 caratteri."}, status=status.HTTP_400_BAD_REQUEST)
+        if new_password != confirm_password:
+            return Response({"error": "Le password non coincidono."}, status=status.HTTP_400_BAD_REQUEST)
+
+        request.user.set_password(new_password)
+        request.user.save(update_fields=["password"])
+        return Response({"message": "Password locale impostata con successo."}, status=status.HTTP_200_OK)
+
+
+class ArcanaSSOStaffProfilesView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def get(self, request):
+        identities = (
+            ArcanaSSOIdentity.objects.select_related("user")
+            .order_by("user__username", "-updated_at")
+        )
+        results = []
+        for identity in identities:
+            profile = identity.ad_profile_json or {}
+            user = identity.user
+            full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+            results.append(
+                {
+                    "id": str(identity.id),
+                    "provider_sub": identity.provider_sub,
+                    "created_at": identity.created_at,
+                    "updated_at": identity.updated_at,
+                    "email_snapshot": identity.email_snapshot,
+                    "username_snapshot": identity.username_snapshot,
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "full_name": full_name or user.username,
+                        "is_staff": bool(user.is_staff),
+                        "is_superuser": bool(user.is_superuser),
+                        "has_local_password": bool(user.has_usable_password()),
+                    },
+                    "arcana_profile_hr": {
+                        "sub": profile.get("sub"),
+                        "arcanadomine_id": profile.get("arcanadomine_id"),
+                        "username": profile.get("username"),
+                        "nome": profile.get("nome"),
+                        "cognome": profile.get("cognome"),
+                        "email": profile.get("email"),
+                        "ruoli": profile.get("ruoli"),
+                        "tipologia": profile.get("tipologia"),
+                        "stato": profile.get("stato"),
+                    },
+                    "arcana_profile_json": profile,
+                }
+            )
+        return Response(results, status=status.HTTP_200_OK)
+
+
+def _probe_arcana_reachable() -> bool:
+    """Verifica se l'endpoint base Arcana risponde (rete / DNS / TLS)."""
+    base = _normalize_base_url()
+    if not base:
+        return False
+    url = f"{base.rstrip('/')}/"
+    try:
+        r = requests.get(url, timeout=3.5, allow_redirects=True)
+        return r.status_code < 500
+    except Exception:
+        return False
+
+
+class ArcanaSSOStatusView(APIView):
+    """Stato SSO per la UI di login (abilitazione + raggiungibilità rete)."""
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        enabled = bool(getattr(settings, "ARCANA_SSO_ENABLED", False))
+        reachable = _probe_arcana_reachable() if enabled else False
+        return Response({"enabled": enabled, "reachable": reachable}, status=status.HTTP_200_OK)

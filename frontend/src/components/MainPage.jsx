@@ -7,7 +7,7 @@ import QrTab from './QrTab.jsx';
 import QrResultModal from './QrResultModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
+import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
 import packageInfo from '../../package.json';
 
 import { 
@@ -89,6 +89,8 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
   
   // --- [MODIFICA] Stato per Modale Password e Notifiche Staff ---
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [forceSetLocalPassword, setForceSetLocalPassword] = useState(false);
+  const [showLocalPasswordReminder, setShowLocalPasswordReminder] = useState(false);
   const [staffUnreadCount, setStaffUnreadCount] = useState(0);
   const [socialUnreadCount, setSocialUnreadCount] = useState(0);
   
@@ -302,6 +304,28 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
     interval = setInterval(checkSocialNotifications, 60000);
     return () => clearInterval(interval);
   }, [selectedCharacterId, onLogout]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadArcanaPasswordStatus = async () => {
+      try {
+        const status = await getArcanaPasswordStatus(onLogout);
+        if (!mounted) return;
+        const shouldShow = !!status?.show_reminder;
+        setShowLocalPasswordReminder(shouldShow);
+        setForceSetLocalPassword(shouldShow);
+      } catch (_err) {
+        if (mounted) {
+          setShowLocalPasswordReminder(false);
+          setForceSetLocalPassword(false);
+        }
+      }
+    };
+    loadArcanaPasswordStatus();
+    return () => {
+      mounted = false;
+    };
+  }, [token, onLogout]);
 
   // Nota: non forziamo piu il tab "personaggi" quando manca selectedCharacterId.
   // Il rendering dei tab gestisce gia il fallback "Nessun Personaggio Selezionato"
@@ -689,6 +713,7 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
             {/* --- [MODIFICA] PULSANTE CAMBIO PASSWORD (NEL MENU) --- */}
             <button 
                 onClick={() => {
+                    setForceSetLocalPassword(false);
                     setIsPasswordModalOpen(true);
                     setIsMenuOpen(false);
                 }}
@@ -853,6 +878,25 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
 
           {/* --- CONTENT --- */}
           <main className="flex-1 overflow-y-auto relative bg-gray-900 scrollbar-hide">
+            {showLocalPasswordReminder && (
+              <div className="sticky top-0 z-20 px-3 pt-2">
+                <div className="rounded-xl border border-amber-400/60 bg-amber-950/80 backdrop-blur p-3 text-amber-100 shadow-lg flex items-center justify-between gap-3">
+                  <div className="text-xs sm:text-sm">
+                    Password locale non configurata, per inserirla cliccare qui.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForceSetLocalPassword(true);
+                      setIsPasswordModalOpen(true);
+                    }}
+                    className="shrink-0 px-3 py-1.5 text-xs font-bold rounded bg-amber-400 text-gray-900 hover:bg-amber-300"
+                  >
+                    Configura
+                  </button>
+                </div>
+              </div>
+            )}
             {isComaLocked && (
               <div className="sticky top-0 z-20 px-3 pt-2">
                 <div className="rounded-xl border border-red-500/60 bg-red-950/80 backdrop-blur p-3 text-red-100 shadow-lg">
@@ -921,6 +965,11 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
           isOpen={isPasswordModalOpen} 
           onClose={() => setIsPasswordModalOpen(false)} 
           onLogout={onLogout}
+          forceSetMode={forceSetLocalPassword}
+          onSuccess={() => {
+            setShowLocalPasswordReminder(false);
+            setForceSetLocalPassword(false);
+          }}
       />
 
       {/* --- [MODIFICA] MODALE WIKI HELP --- */}
