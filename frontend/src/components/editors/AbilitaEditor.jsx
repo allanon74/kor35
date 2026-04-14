@@ -79,6 +79,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
     const initialKey = initialData?.id ?? 'new';
     const [formData, setFormData] = useState(() => mergeAbilitaFormState(initialData));
     const [saving, setSaving] = useState(false);
+    const [status, setStatus] = useState({ type: 'success', message: '' });
 
     useEffect(() => {
         setFormData(mergeAbilitaFormState(initialData));
@@ -125,6 +126,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 const t = (formData.effetto_uso_risorsa_str || '').trim();
                 if (t) effetto_uso_risorsa = JSON.parse(t);
             } catch {
+                setStatus({ type: 'warning', message: 'JSON non valido in "Effetto all\'uso risorsa".' });
                 alert('JSON non valido in «Effetto all\'uso risorsa» (pool Fortuna / …).');
                 return;
             }
@@ -132,6 +134,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 const t = (formData.recupero_risorsa_str || '').trim();
                 if (t) recupero_risorsa = JSON.parse(t);
             } catch {
+                setStatus({ type: 'warning', message: 'JSON non valido in "Recupero risorsa".' });
                 alert('JSON non valido in «Recupero risorsa».');
                 return;
             }
@@ -177,11 +180,19 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
             const saved = isExisting
                 ? await staffUpdateAbilita(formData.id, payload, onLogout)
                 : await staffCreateAbilita(payload, onLogout);
+            const recordName = saved?.nome || payload.nome || 'Record';
+            if (mode === 'save_as_new') setStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+            if (mode === 'save_continue') setStatus({ type: 'success', message: `"${recordName}" salvato.` });
+            if (mode === 'save_new_blank') {
+                setFormData({ ...EMPTY_ABILITA_FORM });
+                setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+            }
             if (mode === 'save_close') onBack();
-            if (mode !== 'save_close' && saved?.id) {
+            if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
                 setFormData((prev) => ({ ...prev, ...saved }));
             }
         } catch (error) {
+            setStatus({ type: 'error', message: `Errore salvataggio: ${error.message || 'Errore sconosciuto'}` });
             alert("Errore durante il salvataggio: " + error.message);
         } finally {
             setSaving(false);
@@ -253,9 +264,12 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     onSave={() => handleSave('save_close')}
                     onSaveAndContinue={() => handleSave('save_continue')}
                     onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+                    onSaveAndNew={() => handleSave('save_new_blank')}
                     onCancel={onBack}
                     saving={saving}
                     saveLabel="Salva"
+                    statusMessage={status.message}
+                    statusType={status.type}
                 />
             </div>
 

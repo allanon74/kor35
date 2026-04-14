@@ -22,6 +22,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
 
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
   const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState({ type: 'success', message: '' });
 
   // Gestione alias per chiusura
   const handleClose = onCancel || onBack;
@@ -51,14 +52,21 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
         const saved = isExisting
           ? await staffUpdateCerimoniale(formData.id, dataToSend, onLogout)
           : await staffCreateCerimoniale(dataToSend, onLogout);
-        alert("Cerimoniale salvato!");
+        const recordName = saved?.nome || dataToSend.nome || 'Record';
+        if (mode === 'save_as_new') setStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+        if (mode === 'save_continue') setStatus({ type: 'success', message: `"${recordName}" salvato.` });
+        if (mode === 'save_new_blank') {
+          setFormData({ ...defaultData });
+          setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+        }
         if (mode === 'save_close' && handleClose) handleClose();
-        if (mode !== 'save_close' && saved?.id) {
+        if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
           setFormData((prev) => ({ ...prev, ...saved }));
         }
       }
     } catch (e) { 
         console.error(e);
+        setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Errore sconosciuto'}` });
         alert("Errore: " + (e.message || "Errore sconosciuto")); 
     } finally {
         setSaving(false);
@@ -75,9 +83,12 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
           onSave={() => handleSave('save_close')}
           onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
           onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+          onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
           onCancel={handleClose}
           saving={saving}
           saveLabel={onSave ? 'Approva e crea' : 'Salva'}
+          statusMessage={status.message}
+          statusType={status.type}
         />
       </div>
 

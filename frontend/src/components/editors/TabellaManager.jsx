@@ -9,6 +9,7 @@ const TabellaManager = ({ onLogout }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [currentTier, setCurrentTier] = useState(null);
+    const [editorStatus, setEditorStatus] = useState({ type: 'success', message: '' });
     
     // RIMOSSO: const token = localStorage.getItem('access_token'); 
     // fetchAuthenticated gestisce il token internamente ('kor35_token')
@@ -68,14 +69,23 @@ const TabellaManager = ({ onLogout }) => {
             }
 
             await fetchTiers(); // Ricarica per avere i dati aggiornati
+            const recordName = savedTier?.nome || formData.nome || 'Record';
+            if (mode === 'save_as_new') setEditorStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+            if (mode === 'save_continue') setEditorStatus({ type: 'success', message: `"${recordName}" salvato.` });
+            if (mode === 'save_new_blank') {
+                setCurrentTier(null);
+                setEditorStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+            }
             if (mode === 'save_close') {
                 setIsEditing(false);
                 setCurrentTier(null);
+                setEditorStatus({ type: 'success', message: '' });
             } else if (savedTier?.id) {
                 setCurrentTier(savedTier);
             }
         } catch (error) {
             console.error("Errore salvataggio", error);
+            setEditorStatus({ type: 'error', message: `Errore salvataggio: ${error.message || 'Errore sconosciuto'}` });
             alert("Errore durante il salvataggio: " + error.message);
         }
     }, [currentTier, onLogout, fetchTiers]);
@@ -83,6 +93,7 @@ const TabellaManager = ({ onLogout }) => {
     const handleCancel = useCallback(() => {
         setIsEditing(false);
         setCurrentTier(null);
+        setEditorStatus({ type: 'success', message: '' });
     }, []);
 
     if (isEditing) {
@@ -93,6 +104,8 @@ const TabellaManager = ({ onLogout }) => {
                     onSave={handleSave} 
                     onCancel={handleCancel} 
                     onLogout={onLogout} // Passiamo onLogout anche all'editor
+                    statusMessage={editorStatus.message}
+                    statusType={editorStatus.type}
                 />
             </div>
         );

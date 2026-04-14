@@ -28,6 +28,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
   const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState({ type: 'success', message: '' });
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
@@ -103,14 +104,22 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         const saved = isExisting
           ? await staffUpdateInfusione(formData.id, dataToSend, onLogout)
           : await staffCreateInfusione(dataToSend, onLogout);
-        alert("Infusione salvata correttamente!");
+        const recordName = saved?.nome || dataToSend.nome || 'Record';
+        if (mode === 'save_as_new') setStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+        if (mode === 'save_continue') setStatus({ type: 'success', message: `"${recordName}" salvato.` });
+        if (mode === 'save_new_blank') {
+          setFormData({ ...defaultData });
+          setIsChargesOpen(false);
+          setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+        }
         if (mode === 'save_close' && handleClose) handleClose();
-        if (mode !== 'save_close' && saved?.id) {
+        if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
           setFormData((prev) => ({ ...prev, ...saved }));
         }
       }
     } catch (e) {
       console.error(e);
+      setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Controlla i dati.'}` });
       alert("Errore salvataggio: " + (e.message || "Controlla i dati."));
     } finally {
       setSaving(false);
@@ -131,9 +140,12 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
           onSave={() => handleSave('save_close')}
           onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
           onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+          onSaveAndNew={onSave ? null : () => handleSave('save_new_blank')}
           onCancel={handleClose}
           saving={saving}
           saveLabel={onSave ? 'Approva e crea' : 'Salva tecnica'}
+          statusMessage={status.message}
+          statusType={status.type}
         />
       </div>
 

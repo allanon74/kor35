@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-    Save, X, Plus, Trash2, Search, Layers, 
+    X, Plus, Trash2, Search, Layers, 
     ChevronDown, LayoutList, Type, AlignLeft 
 } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor'; 
@@ -18,7 +18,7 @@ const TIER_TYPES = [
     // { value: 'AL', label: 'Altro' },
 ];
 
-const TabellaEditor = ({ tier, onSave, onCancel, onLogout }) => {
+const TabellaEditor = ({ tier, onSave, onCancel, onLogout, statusMessage = '', statusType = 'success' }) => {
     // Stato form principale
     const [formData, setFormData] = useState({
         nome: tier?.nome || '',
@@ -272,18 +272,15 @@ const TabellaEditor = ({ tier, onSave, onCancel, onLogout }) => {
 
             {/* === FOOTER === */}
             <div className="p-4 border-t border-gray-800 bg-gray-900 flex justify-end gap-3 shrink-0 z-10">
-                <button 
-                    onClick={onCancel}
-                    className="px-6 py-2.5 text-sm font-bold text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-                >
-                    Annulla
-                </button>
                 <EditorSaveActions
                     onSave={() => handleSubmit('save_close')}
                     onSaveAndContinue={() => handleSubmit('save_continue')}
                     onSaveAsNew={tier?.id ? () => handleSubmit('save_as_new') : null}
+                    onSaveAndNew={() => handleSubmit('save_new_blank')}
                     onCancel={onCancel}
                     saveLabel={tier ? 'Salva modifiche' : 'Crea tabella'}
+                    statusMessage={statusMessage}
+                    statusType={statusType}
                 />
             </div>
         </div>

@@ -15,6 +15,7 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
   const [loadingSenzaPosizione, setLoadingSenzaPosizione] = useState(false);
   const [saving, setSaving] = useState(false);
   const [manualOggettoId, setManualOggettoId] = useState('');
+  const [status, setStatus] = useState({ type: 'success', message: '' });
 
   useEffect(() => {
     if (initialData) {
@@ -66,15 +67,23 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
       const saved = isExisting
         ? await staffUpdateInventario(currentId, formData, onLogout)
         : await staffCreateInventario(formData, onLogout);
-      
-      alert("Salvato correttamente!"); 
+      const recordName = saved?.nome || formData.nome || 'Record';
+      if (mode === 'save_as_new') setStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+      if (mode === 'save_continue') setStatus({ type: 'success', message: `"${recordName}" salvato.` });
+      if (mode === 'save_new_blank') {
+        setCurrentId(null);
+        setFormData({ nome: '', testo: '' });
+        setOggettiInventario([]);
+        setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+      }
       if (mode === 'save_close') onBack();
-      if (mode !== 'save_close' && saved?.id) {
+      if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
         setCurrentId(saved.id);
         setFormData((prev) => ({ ...prev, nome: saved.nome ?? prev.nome, testo: saved.testo ?? prev.testo }));
       }
     } catch (e) { 
       console.error(e);
+      setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Errore sconosciuto'}` });
       alert("Errore: " + e.message); 
     } finally {
       setSaving(false);
@@ -141,9 +150,12 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
           onSave={() => handleSave('save_close')}
           onSaveAndContinue={() => handleSave('save_continue')}
           onSaveAsNew={currentId ? () => handleSave('save_as_new') : null}
+          onSaveAndNew={() => handleSave('save_new_blank')}
           onCancel={onBack}
           saving={saving}
           saveLabel="Salva"
+          statusMessage={status.message}
+          statusType={status.type}
         />
       </div>
 

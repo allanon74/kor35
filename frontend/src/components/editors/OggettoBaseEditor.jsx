@@ -15,6 +15,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
   const [classi, setClassi] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState({ type: 'success', message: '' });
   
   const [formData, setFormData] = useState(initialData || {
     nome: '', 
@@ -89,14 +90,24 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
         const saved = isExisting
             ? await staffUpdateOggettoBase(formData.id, data, onLogout)
             : await staffCreateOggettoBase(data, onLogout);
-        
-        alert("Salvato correttamente!");
+        const recordName = saved?.nome || data.nome || 'Record';
+        if (mode === 'save_as_new') setStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+        if (mode === 'save_continue') setStatus({ type: 'success', message: `"${recordName}" salvato.` });
+        if (mode === 'save_new_blank') {
+            setFormData({
+                nome: '', descrizione: '', tipo_oggetto: 'FIS', classe_oggetto: null, costo: 0,
+                is_tecnologico: false, is_pesante: false, attacco_base: '', in_vendita: true,
+                statistiche_base: [], statistiche_modificatori: [],
+            });
+            setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+        }
         if (mode === 'save_close') onBack();
-        if (mode !== 'save_close' && saved?.id) {
+        if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
             setFormData((prev) => ({ ...prev, ...saved }));
         }
     } catch (e) { 
         console.error("Errore Salvataggio:", e);
+        setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Controlla i dati.'}` });
         alert("Errore salvataggio: " + (e.message || "Controlla i dati.")); 
     } finally {
         setSaving(false);
@@ -126,9 +137,12 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
           onSave={() => handleSave('save_close')}
           onSaveAndContinue={() => handleSave('save_continue')}
           onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+          onSaveAndNew={() => handleSave('save_new_blank')}
           onCancel={onBack}
           saving={saving}
           saveLabel="Salva"
+          statusMessage={status.message}
+          statusType={status.type}
         />
       </div>
 

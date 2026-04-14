@@ -17,6 +17,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
   const [classi, setClassi] = useState([]);
   const [personaggi, setPersonaggi] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState({ type: 'success', message: '' });
 
   const [formData, setFormData] = useState(initialData || {
     nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
@@ -94,14 +95,24 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       const saved = isExisting
         ? await staffUpdateOggetto(formData.id, data, onLogout)
         : await staffCreateOggetto(data, onLogout);
-      
-      alert("Salvato correttamente!"); 
+      const recordName = saved?.nome || data.nome || 'Record';
+      if (mode === 'save_as_new') setStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+      if (mode === 'save_continue') setStatus({ type: 'success', message: `"${recordName}" salvato.` });
+      if (mode === 'save_new_blank') {
+        setFormData({
+          nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
+          is_tecnologico: false, is_equipaggiato: false, is_pesante: false,
+          inventario_corrente: null, attacco_base: '', componenti: [], statistiche_base: [], statistiche: [],
+        });
+        setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+      }
       if (mode === 'save_close') onBack();
-      if (mode !== 'save_close' && saved?.id) {
+      if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
         setFormData((prev) => ({ ...prev, ...saved }));
       }
     } catch (e) { 
         console.error(e);
+        setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Errore sconosciuto'}` });
         alert("Errore: " + e.message); 
     } finally {
       setSaving(false);
@@ -127,9 +138,12 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
           onSave={() => handleSave('save_close')}
           onSaveAndContinue={() => handleSave('save_continue')}
           onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+          onSaveAndNew={() => handleSave('save_new_blank')}
           onCancel={onBack}
           saving={saving}
           saveLabel="Salva"
+          statusMessage={status.message}
+          statusType={status.type}
         />
       </div>
 
