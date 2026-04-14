@@ -1,6 +1,6 @@
 /**
  * Auto-link dei termini glossario nel DOM wiki (dopo innerHTML, prima dei widget React).
- * Definizioni solo testo (textContent) per evitare XSS da descrizioni admin.
+ * Le definizioni supportano HTML base formattato.
  */
 
 const SKIP_ANCESTOR_TAGS = new Set(['A', 'CODE', 'PRE', 'SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'KBD', 'SAMP']);
@@ -41,6 +41,31 @@ function normalizeEntries(entries) {
 
 function sortTermsForMatching(entries) {
   return [...entries].sort((a, b) => b.dichiarazione.length - a.dichiarazione.length);
+}
+
+function appendSanitizedHtml(targetEl, html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(html || '');
+
+  // Rimuove elementi attivi/pericolosi, mantenendo la normale formattazione.
+  tpl.content.querySelectorAll('script, style, iframe, object, embed').forEach((el) => el.remove());
+
+  // Rimuove event handlers inline e URL javascript:
+  tpl.content.querySelectorAll('*').forEach((el) => {
+    [...el.attributes].forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      const value = String(attr.value || '').trim().toLowerCase();
+      if (name.startsWith('on')) {
+        el.removeAttribute(attr.name);
+        return;
+      }
+      if ((name === 'href' || name === 'src') && value.startsWith('javascript:')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+  });
+
+  targetEl.appendChild(tpl.content);
 }
 
 function replaceTextNodeWithGlossaryLinks(textNode, termsSorted) {
@@ -134,8 +159,7 @@ function buildGlossaryPanel(matchedById) {
 
     const desc = document.createElement('span');
     desc.className = 'wiki-glossary-desc';
-    desc.style.whiteSpace = 'pre-wrap';
-    desc.textContent = entry.descrizione || '';
+    appendSanitizedHtml(desc, entry.descrizione || '');
     row.appendChild(desc);
 
     body.appendChild(row);
