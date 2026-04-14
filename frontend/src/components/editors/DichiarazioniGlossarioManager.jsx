@@ -36,6 +36,16 @@ const EMPTY_FORM = { nome: '', tipo: 'GLOS', dichiarazione: '', descrizione: '' 
 const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMessage = '', statusType = 'success' }) => {
   const [form, setForm] = useState(value || {});
   useEffect(() => setForm(value || {}), [value]);
+  const actionProps = {
+    onSave: () => onSave(form, 'save_close'),
+    onSaveAndContinue: () => onSave(form, 'save_continue'),
+    onSaveAsNew: form?.id ? () => onSave(form, 'save_as_new') : null,
+    onSaveAndNew: () => onSave(form, 'save_new_blank'),
+    onCancel: onClose,
+    saveLabel: 'Salva',
+    statusMessage,
+    statusType,
+  };
 
   return (
     <div className="h-full p-4 space-y-4 animate-in fade-in slide-in-from-bottom-4">
@@ -45,11 +55,14 @@ const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMes
       >
         <ArrowLeft size={16} /> Annulla e Torna alla Lista
       </button>
-      <div className="h-full bg-gray-900 border border-gray-700 rounded-xl flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-gray-700">
-          <h3 className="text-lg font-bold text-white">
-            {form?.id ? `Modifica ${isGlossario ? 'voce glossario' : 'dichiarazione'}` : `Nuova ${isGlossario ? 'voce glossario' : 'dichiarazione'}`}
-          </h3>
+      <div className="h-full bg-gray-900 border border-gray-700 rounded-xl flex flex-col overflow-visible">
+        <div className="p-4 border-b border-gray-700 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg font-bold text-white">
+              {form?.id ? `Modifica ${isGlossario ? 'voce glossario' : 'dichiarazione'}` : `Nuova ${isGlossario ? 'voce glossario' : 'dichiarazione'}`}
+            </h3>
+          </div>
+          <EditorSaveActions {...actionProps} />
         </div>
         <div className="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-1">
           <input
@@ -87,16 +100,7 @@ const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMes
           />
         </div>
         <div className="p-4 border-t border-gray-700 flex gap-2">
-          <EditorSaveActions
-            onSave={() => onSave(form, 'save_close')}
-            onSaveAndContinue={() => onSave(form, 'save_continue')}
-            onSaveAsNew={form?.id ? () => onSave(form, 'save_as_new') : null}
-            onSaveAndNew={() => onSave(form, 'save_new_blank')}
-            onCancel={onClose}
-            saveLabel="Salva"
-            statusMessage={statusMessage}
-            statusType={statusType}
-          />
+          <EditorSaveActions {...actionProps} />
         </div>
       </div>
     </div>
