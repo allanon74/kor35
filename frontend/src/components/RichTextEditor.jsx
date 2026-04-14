@@ -268,7 +268,7 @@ const SmallActionButton = ({ label, onClick, title, className = '' }) => (
     </button>
 );
 
-const RichTextEditor = ({ value, onChange, placeholder, label }) => {
+const RichTextEditor = ({ value, onChange, placeholder, label, editorHeightClass = 'min-h-[120px] max-h-[300px]' }) => {
     const editorRef = useRef(null);
     const colorInputRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState('p');
@@ -877,7 +877,7 @@ const RichTextEditor = ({ value, onChange, placeholder, label }) => {
                     <textarea
                         value={value || ''}
                         onChange={(e) => onChange(e.target.value)}
-                        className="w-full p-3 text-sm text-gray-200 bg-gray-900 outline-none overflow-y-auto min-h-[120px] max-h-[300px] font-mono leading-relaxed custom-scrollbar"
+                        className={`w-full p-3 text-sm text-gray-200 bg-gray-900 outline-none overflow-y-auto font-mono leading-relaxed custom-scrollbar ${editorHeightClass}`}
                         placeholder="Inserisci o modifica HTML..."
                         spellCheck={false}
                     />
@@ -887,7 +887,7 @@ const RichTextEditor = ({ value, onChange, placeholder, label }) => {
                         contentEditable
                         onInput={handleInput}
                         onPaste={handlePaste}
-                        className="p-3 text-sm text-gray-200 outline-none overflow-y-auto min-h-[120px] max-h-[300px] leading-relaxed custom-scrollbar"
+                        className={`p-3 text-sm text-gray-200 outline-none overflow-y-auto leading-relaxed custom-scrollbar ${editorHeightClass}`}
                         style={{ whiteSpace: 'pre-wrap' }}
                         data-placeholder={placeholder}
                     />

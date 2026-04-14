@@ -83,6 +83,7 @@ const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMes
             label="Descrizione"
             value={form.descrizione || ''}
             onChange={(value) => setForm({ ...form, descrizione: value })}
+            editorHeightClass="min-h-[260px] max-h-[60vh]"
           />
         </div>
         <div className="p-4 border-t border-gray-700 flex gap-2">
