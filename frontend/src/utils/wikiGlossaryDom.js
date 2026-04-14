@@ -99,6 +99,7 @@ function replaceTextNodeWithGlossaryLinks(textNode, termsSorted) {
   let buf = '';
   const frag = document.createDocumentFragment();
   let anyMatch = false;
+  let hasEscapes = false;
 
   const flushBuf = () => {
     if (buf) {
@@ -112,6 +113,7 @@ function replaceTextNodeWithGlossaryLinks(textNode, termsSorted) {
     if (currentDisable && pos === currentDisable.start) {
       // Mantieni il testo interno, ma rimuovi le parentesi quadre.
       buf += currentDisable.inner;
+      hasEscapes = true;
       pos = currentDisable.end;
       disableIdx += 1;
       continue;
@@ -144,7 +146,7 @@ function replaceTextNodeWithGlossaryLinks(textNode, termsSorted) {
   }
   flushBuf();
 
-  if (!anyMatch) return new Set();
+  if (!anyMatch && !hasEscapes) return new Set();
   textNode.parentNode.replaceChild(frag, textNode);
   return matchedIds;
 }
