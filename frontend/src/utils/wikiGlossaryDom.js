@@ -150,11 +150,20 @@ function buildGlossaryPanel(matchedById) {
     row.className = 'wiki-glossary-def';
     row.id = `wiki-glossario-${entry.sync_id}`;
 
+    const nome = String(entry.nome || '').trim();
+    const termine = String(entry.dichiarazione || '').trim();
+    const showTermine = Boolean(
+      nome
+      && termine
+      && nome.localeCompare(termine, 'it', { sensitivity: 'base' }) !== 0,
+    );
+    const displayTitle = nome || termine;
+
     const title = document.createElement('strong');
-    title.textContent = entry.nome || entry.dichiarazione;
+    title.textContent = showTermine ? `${displayTitle} (${termine})` : displayTitle;
     row.appendChild(title);
 
-    const sep = document.createTextNode(' · ');
+    const sep = document.createTextNode(': ');
     row.appendChild(sep);
 
     const desc = document.createElement('span');
