@@ -120,7 +120,6 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     } catch (e) {
       console.error(e);
       setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Controlla i dati.'}` });
-      alert("Errore salvataggio: " + (e.message || "Controlla i dati."));
     } finally {
       setSaving(false);
     }

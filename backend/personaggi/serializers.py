@@ -2545,6 +2545,16 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         model = Oggetto
         fields = '__all__'
 
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['aura'] = PunteggioSmallSerializer(instance.aura).data if instance.aura else None
+        rep['classe_oggetto'] = {
+            'id': instance.classe_oggetto.id,
+            'nome': instance.classe_oggetto.nome,
+        } if instance.classe_oggetto else None
+        rep['classe_oggetto_nome'] = instance.classe_oggetto.nome if instance.classe_oggetto else ''
+        return rep
+
     @transaction.atomic
     def create(self, validated_data):
         comp = validated_data.pop('componenti', [])
@@ -2573,6 +2583,15 @@ class OggettoBaseFullEditorSerializer(serializers.ModelSerializer, MasterOggetto
     class Meta:
         model = OggettoBase
         fields = '__all__'
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['classe_oggetto'] = {
+            'id': instance.classe_oggetto.id,
+            'nome': instance.classe_oggetto.nome,
+        } if instance.classe_oggetto else None
+        rep['classe_oggetto_nome'] = instance.classe_oggetto.nome if instance.classe_oggetto else ''
+        return rep
 
     @transaction.atomic
     def create(self, validated_data):
@@ -2646,6 +2665,11 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Abilita
         fields = '__all__'
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['aura_riferimento'] = PunteggioSmallSerializer(instance.aura_riferimento).data if instance.aura_riferimento else None
+        return rep
 
     @transaction.atomic
     def create(self, validated_data):

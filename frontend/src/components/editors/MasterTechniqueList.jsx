@@ -46,7 +46,7 @@ const MasterTechniqueList = ({
       // Matcher per gestire ID o oggetti nidificati per l'aura
       match: (item, values) => {
         const itemAuraId = item.aura_richiesta?.id || item.aura_richiesta;
-        return values.includes(itemAuraId);
+        return values.some((v) => String(v) === String(itemAuraId));
       }
     }
   ];
@@ -68,7 +68,10 @@ const MasterTechniqueList = ({
       width: '50px', 
       align: 'center',
       render: (item) => {
-        const aura = item.aura_richiesta;
+        const auraId = item.aura_richiesta?.id || item.aura_richiesta;
+        const aura = item.aura_richiesta?.id
+          ? item.aura_richiesta
+          : punteggiList.find((p) => String(p.id) === String(auraId));
         return aura ? (
           <div className="flex justify-center" title={aura.nome}>
             <IconaPunteggio 
@@ -94,8 +97,16 @@ const MasterTechniqueList = ({
   // 3. Logica di Ordinamento: Aura -> Livello -> Nome
   const sortLogic = (a, b) => {
     // Ordine Aura
-    const auraA = a.aura_richiesta?.ordine ?? 999;
-    const auraB = b.aura_richiesta?.ordine ?? 999;
+    const auraAId = a.aura_richiesta?.id || a.aura_richiesta;
+    const auraBId = b.aura_richiesta?.id || b.aura_richiesta;
+    const auraAObj = a.aura_richiesta?.id
+      ? a.aura_richiesta
+      : punteggiList.find((p) => String(p.id) === String(auraAId));
+    const auraBObj = b.aura_richiesta?.id
+      ? b.aura_richiesta
+      : punteggiList.find((p) => String(p.id) === String(auraBId));
+    const auraA = auraAObj?.ordine ?? 999;
+    const auraB = auraBObj?.ordine ?? 999;
     if (auraA !== auraB) return auraA - auraB;
 
     // Ordine Livello

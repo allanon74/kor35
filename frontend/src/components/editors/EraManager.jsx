@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, memo } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import MasterGenericList from './MasterGenericList';
+import EditorSaveActions from './EditorSaveActions';
 import {
   staffGetEre,
   staffCreateEra,
@@ -16,7 +17,7 @@ import {
   staffDeletePrefettura,
 } from '../../api';
 
-const EraFormModal = ({ isOpen, onClose, onSave, value }) => {
+const EraFormModal = ({ isOpen, onClose, onSave, value, statusMessage = '', statusType = 'success' }) => {
   const [form, setForm] = useState(value || {});
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
@@ -41,14 +42,23 @@ const EraFormModal = ({ isOpen, onClose, onSave, value }) => {
           </div>
         </div>
         <div className="p-4 border-t border-gray-700">
-          <button onClick={() => onSave(form)} className="w-full bg-indigo-600 hover:bg-indigo-500 rounded p-2 text-white font-bold">Salva</button>
+          <EditorSaveActions
+            onSave={() => onSave(form, 'save_close')}
+            onSaveAndContinue={() => onSave(form, 'save_continue')}
+            onSaveAsNew={form?.id ? () => onSave(form, 'save_as_new') : null}
+            onSaveAndNew={() => onSave(form, 'save_new_blank')}
+            onCancel={onClose}
+            saveLabel="Salva"
+            statusMessage={statusMessage}
+            statusType={statusType}
+          />
         </div>
       </div>
     </div>
   );
 };
 
-const RegioneFormModal = ({ isOpen, onClose, onSave, value }) => {
+const RegioneFormModal = ({ isOpen, onClose, onSave, value, statusMessage = '', statusType = 'success' }) => {
   const [form, setForm] = useState(value || {});
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
@@ -72,14 +82,23 @@ const RegioneFormModal = ({ isOpen, onClose, onSave, value }) => {
           </div>
         </div>
         <div className="p-4 border-t border-gray-700">
-          <button onClick={() => onSave(form)} className="w-full bg-indigo-600 hover:bg-indigo-500 rounded p-2 text-white font-bold">Salva</button>
+          <EditorSaveActions
+            onSave={() => onSave(form, 'save_close')}
+            onSaveAndContinue={() => onSave(form, 'save_continue')}
+            onSaveAsNew={form?.id ? () => onSave(form, 'save_as_new') : null}
+            onSaveAndNew={() => onSave(form, 'save_new_blank')}
+            onCancel={onClose}
+            saveLabel="Salva"
+            statusMessage={statusMessage}
+            statusType={statusType}
+          />
         </div>
       </div>
     </div>
   );
 };
 
-const PrefetturaFormModal = ({ isOpen, onClose, onSave, value, ere, regioni }) => {
+const PrefetturaFormModal = ({ isOpen, onClose, onSave, value, ere, regioni, statusMessage = '', statusType = 'success' }) => {
   const [form, setForm] = useState(value || {});
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
@@ -104,7 +123,16 @@ const PrefetturaFormModal = ({ isOpen, onClose, onSave, value, ere, regioni }) =
           <input type="number" className="w-32 bg-gray-800 border border-gray-700 rounded p-2 text-white" value={form.ordine ?? 0} onChange={(e) => setForm({ ...form, ordine: parseInt(e.target.value || '0', 10) })} />
         </div>
         <div className="p-4 border-t border-gray-700">
-          <button onClick={() => onSave(form)} className="w-full bg-indigo-600 hover:bg-indigo-500 rounded p-2 text-white font-bold">Salva</button>
+          <EditorSaveActions
+            onSave={() => onSave(form, 'save_close')}
+            onSaveAndContinue={() => onSave(form, 'save_continue')}
+            onSaveAsNew={form?.id ? () => onSave(form, 'save_as_new') : null}
+            onSaveAndNew={() => onSave(form, 'save_new_blank')}
+            onCancel={onClose}
+            saveLabel="Salva"
+            statusMessage={statusMessage}
+            statusType={statusType}
+          />
         </div>
       </div>
     </div>
@@ -119,6 +147,9 @@ const EraManager = ({ onLogout, onBack }) => {
   const [editingEra, setEditingEra] = useState(null);
   const [editingRegione, setEditingRegione] = useState(null);
   const [editingPref, setEditingPref] = useState(null);
+  const [eraStatus, setEraStatus] = useState({ type: 'success', message: '' });
+  const [regioneStatus, setRegioneStatus] = useState({ type: 'success', message: '' });
+  const [prefStatus, setPrefStatus] = useState({ type: 'success', message: '' });
 
   const load = async () => {
     const [ereData, prefData, regioniData] = await Promise.all([
@@ -248,13 +279,33 @@ const EraManager = ({ onLogout, onBack }) => {
       <EraFormModal
         isOpen={!!editingEra}
         value={editingEra}
-        onClose={() => setEditingEra(null)}
-        onSave={async (form) => {
-          if (!form.nome?.trim()) return alert('Il nome era è obbligatorio');
-          if (form.id) await staffUpdateEra(form.id, form, onLogout);
-          else await staffCreateEra(form, onLogout);
+        statusMessage={eraStatus.message}
+        statusType={eraStatus.type}
+        onClose={() => {
           setEditingEra(null);
+          setEraStatus({ type: 'success', message: '' });
+        }}
+        onSave={async (form, mode = 'save_close') => {
+          if (!form.nome?.trim()) {
+            setEraStatus({ type: 'warning', message: 'Il nome era e obbligatorio.' });
+            return;
+          }
+          const isSaveAsNew = mode === 'save_as_new';
+          const isExisting = !!form.id && !isSaveAsNew;
+          const saved = isExisting ? await staffUpdateEra(form.id, form, onLogout) : await staffCreateEra(form, onLogout);
+          const recordName = saved?.nome || form.nome || 'Record';
+          if (mode === 'save_as_new') setEraStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+          if (mode === 'save_continue') setEraStatus({ type: 'success', message: `"${recordName}" salvato.` });
+          if (mode === 'save_new_blank') setEraStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
           await load();
+          if (mode === 'save_close') {
+            setEditingEra(null);
+            setEraStatus({ type: 'success', message: '' });
+          } else if (mode === 'save_new_blank') {
+            setEditingEra({ nome: '', abbreviazione: '', descrizione_breve: '', descrizione: '', ordine: 0, attiva: true });
+          } else if (saved?.id) {
+            setEditingEra(saved);
+          }
         }}
       />
 
@@ -263,32 +314,75 @@ const EraManager = ({ onLogout, onBack }) => {
         value={editingPref}
         ere={ere}
         regioni={regioni}
-        onClose={() => setEditingPref(null)}
-        onSave={async (form) => {
-          if (!form.era) return alert("Seleziona un'era");
-          if (!form.nome?.trim()) return alert('Il nome prefettura è obbligatorio');
+        statusMessage={prefStatus.message}
+        statusType={prefStatus.type}
+        onClose={() => {
+          setEditingPref(null);
+          setPrefStatus({ type: 'success', message: '' });
+        }}
+        onSave={async (form, mode = 'save_close') => {
+          if (!form.era) {
+            setPrefStatus({ type: 'warning', message: "Seleziona un'era." });
+            return;
+          }
+          if (!form.nome?.trim()) {
+            setPrefStatus({ type: 'warning', message: 'Il nome prefettura e obbligatorio.' });
+            return;
+          }
           const payload = {
             ...form,
             era: parseInt(form.era, 10),
             regione: form.regione ? parseInt(form.regione, 10) : null,
           };
-          if (form.id) await staffUpdatePrefettura(form.id, payload, onLogout);
-          else await staffCreatePrefettura(payload, onLogout);
-          setEditingPref(null);
+          const isSaveAsNew = mode === 'save_as_new';
+          const isExisting = !!form.id && !isSaveAsNew;
+          const saved = isExisting ? await staffUpdatePrefettura(form.id, payload, onLogout) : await staffCreatePrefettura(payload, onLogout);
+          const recordName = saved?.nome || payload.nome || 'Record';
+          if (mode === 'save_as_new') setPrefStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+          if (mode === 'save_continue') setPrefStatus({ type: 'success', message: `"${recordName}" salvato.` });
+          if (mode === 'save_new_blank') setPrefStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
           await load();
+          if (mode === 'save_close') {
+            setEditingPref(null);
+            setPrefStatus({ type: 'success', message: '' });
+          } else if (mode === 'save_new_blank') {
+            setEditingPref({ era: '', regione: '', nome: '', descrizione: '', ordine: 0 });
+          } else if (saved?.id) {
+            setEditingPref(saved);
+          }
         }}
       />
 
       <RegioneFormModal
         isOpen={!!editingRegione}
         value={editingRegione}
-        onClose={() => setEditingRegione(null)}
-        onSave={async (form) => {
-          if (!form.nome?.trim()) return alert('Il nome regione è obbligatorio');
-          if (form.id) await staffUpdateRegione(form.id, form, onLogout);
-          else await staffCreateRegione(form, onLogout);
+        statusMessage={regioneStatus.message}
+        statusType={regioneStatus.type}
+        onClose={() => {
           setEditingRegione(null);
+          setRegioneStatus({ type: 'success', message: '' });
+        }}
+        onSave={async (form, mode = 'save_close') => {
+          if (!form.nome?.trim()) {
+            setRegioneStatus({ type: 'warning', message: 'Il nome regione e obbligatorio.' });
+            return;
+          }
+          const isSaveAsNew = mode === 'save_as_new';
+          const isExisting = !!form.id && !isSaveAsNew;
+          const saved = isExisting ? await staffUpdateRegione(form.id, form, onLogout) : await staffCreateRegione(form, onLogout);
+          const recordName = saved?.nome || form.nome || 'Record';
+          if (mode === 'save_as_new') setRegioneStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+          if (mode === 'save_continue') setRegioneStatus({ type: 'success', message: `"${recordName}" salvato.` });
+          if (mode === 'save_new_blank') setRegioneStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
           await load();
+          if (mode === 'save_close') {
+            setEditingRegione(null);
+            setRegioneStatus({ type: 'success', message: '' });
+          } else if (mode === 'save_new_blank') {
+            setEditingRegione({ nome: '', sigla: '', descrizione: '', ordine: 0, attiva: true });
+          } else if (saved?.id) {
+            setEditingRegione(saved);
+          }
         }}
       />
     </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Tab } from '@headlessui/react';
 import { fetchAuthenticated, getPersonaggiList } from '../../api';
 import { Loader2, Plus, Pencil, Trash2, X } from 'lucide-react';
+import ConfirmDialog from './ConfirmDialog';
 
 const API_BASE = '/api/personaggi/api/staff';
 const AURA_TIPO = 'AU'; // tipo Punteggio per Aura
@@ -35,6 +36,8 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
     elemento_principale: '',
   });
   const [savingEffetto, setSavingEffetto] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [status, setStatus] = useState({ type: '', message: '' });
 
   const loadTipologie = useCallback(async () => {
     try {
@@ -101,7 +104,7 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
 
   const handleSelezionaEffetto = async () => {
     if (!selezionaTipologia) {
-      alert('Seleziona una tipologia');
+      setStatus({ type: 'warning', message: 'Seleziona una tipologia.' });
       return;
     }
     try {
@@ -118,8 +121,9 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
         onLogout
       );
       setRisultato(res);
+      setStatus({ type: 'success', message: 'Effetto casuale estratto correttamente.' });
     } catch (e) {
-      alert('Errore: ' + e.message);
+      setStatus({ type: 'error', message: `Errore: ${e.message}` });
     }
   };
 
@@ -141,7 +145,7 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
 
   const saveTipologia = async () => {
     if (!formTipologia.nome.trim()) {
-      alert('Inserisci un nome');
+      setStatus({ type: 'warning', message: 'Inserisci un nome.' });
       return;
     }
     setSavingTipologia(true);
@@ -166,15 +170,15 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
       }
       setShowFormTipologia(false);
       await loadTipologie();
+      setStatus({ type: 'success', message: 'Tipologia salvata correttamente.' });
     } catch (e) {
-      alert('Errore: ' + (e.message || 'Salvataggio tipologia'));
+      setStatus({ type: 'error', message: `Errore: ${e.message || 'Salvataggio tipologia'}` });
     } finally {
       setSavingTipologia(false);
     }
   };
 
   const deleteTipologia = async (t) => {
-    if (!window.confirm(`Eliminare la tipologia "${t.nome}"? Verranno eliminati anche tutti gli effetti collegati.`)) return;
     try {
       await fetchAuthenticated(
         `${API_BASE}/tipologie-effetto/${t.id}/`,
@@ -183,8 +187,9 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
       );
       await loadTipologie();
       await loadEffetti();
+      setStatus({ type: 'success', message: 'Tipologia eliminata correttamente.' });
     } catch (e) {
-      alert('Errore: ' + e.message);
+      setStatus({ type: 'error', message: `Errore: ${e.message}` });
     }
   };
 
@@ -216,12 +221,12 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
 
   const saveEffetto = async () => {
     if (!formEffetto.tipologia || !formEffetto.nome.trim()) {
-      alert('Inserisci tipologia e nome');
+      setStatus({ type: 'warning', message: 'Inserisci tipologia e nome.' });
       return;
     }
     const tipologia = tipologie.find((x) => x.id === parseInt(formEffetto.tipologia, 10));
     if (tipologia?.tipo === 'TES' && !formEffetto.formula?.trim()) {
-      alert('Per tipologia Tessitura la formula è obbligatoria');
+      setStatus({ type: 'warning', message: 'Per tipologia Tessitura la formula è obbligatoria.' });
       return;
     }
     setSavingEffetto(true);
@@ -248,16 +253,16 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
       }
       setShowFormEffetto(false);
       await loadEffetti();
+      setStatus({ type: 'success', message: 'Effetto salvato correttamente.' });
     } catch (err) {
       const msg = err?.response?.data || err.message;
-      alert('Errore: ' + (typeof msg === 'object' ? JSON.stringify(msg) : msg));
+      setStatus({ type: 'error', message: `Errore: ${typeof msg === 'object' ? JSON.stringify(msg) : msg}` });
     } finally {
       setSavingEffetto(false);
     }
   };
 
   const deleteEffetto = async (e) => {
-    if (!window.confirm(`Eliminare l'effetto "${e.nome}"?`)) return;
     try {
       await fetchAuthenticated(
         `${API_BASE}/effetti-casuali/${e.id}/`,
@@ -265,8 +270,9 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
         onLogout
       );
       await loadEffetti();
+      setStatus({ type: 'success', message: 'Effetto eliminato correttamente.' });
     } catch (err) {
-      alert('Errore: ' + err.message);
+      setStatus({ type: 'error', message: `Errore: ${err.message}` });
     }
   };
 
@@ -288,6 +294,17 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
       </button>
 
       <h2 className="text-xl font-bold text-white">Effetti Casuali</h2>
+      {status.message && (
+        <div className={`text-xs border rounded-md px-3 py-1 inline-block ${
+          status.type === 'error'
+            ? 'text-red-200 bg-red-900/20 border-red-700/40'
+            : status.type === 'warning'
+              ? 'text-amber-200 bg-amber-900/20 border-amber-700/40'
+              : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
+        }`}>
+          {status.message}
+        </div>
+      )}
 
       <Tab.Group>
         <Tab.List className="flex gap-2 p-1 bg-gray-800 rounded-lg">
@@ -397,7 +414,11 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => deleteTipologia(t)}
+                        onClick={() => setPendingDelete({
+                          title: 'Eliminare tipologia?',
+                          message: `Eliminare la tipologia "${t.nome}"? Verranno eliminati anche tutti gli effetti collegati.`,
+                          action: () => deleteTipologia(t),
+                        })}
                         className="p-2 text-red-400 hover:bg-red-900/30 rounded"
                         title="Elimina"
                       >
@@ -520,7 +541,11 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => deleteEffetto(e)}
+                        onClick={() => setPendingDelete({
+                          title: 'Eliminare effetto?',
+                          message: `Eliminare l'effetto "${e.nome}"?`,
+                          action: () => deleteEffetto(e),
+                        })}
                         className="p-2 text-red-400 hover:bg-red-900/30 rounded"
                         title="Elimina"
                       >
@@ -598,6 +623,18 @@ const EffettiCasualiManager = ({ onBack, onLogout }) => {
           </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title={pendingDelete?.title || 'Conferma eliminazione'}
+        message={pendingDelete?.message || ''}
+        confirmLabel="Elimina"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={async () => {
+          const action = pendingDelete?.action;
+          setPendingDelete(null);
+          if (action) await action();
+        }}
+      />
     </div>
   );
 };

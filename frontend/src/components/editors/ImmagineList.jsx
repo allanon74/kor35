@@ -22,7 +22,7 @@ const ImmagineList = ({ onAdd, onEdit, onLogout }) => {
             })
             .catch(err => {
                 console.error("Errore caricamento immagini:", err);
-                alert("Errore durante il caricamento delle immagini: " + err.message);
+                console.error("Errore durante il caricamento delle immagini:", err);
             })
             .finally(() => setLoading(false));
     };
@@ -99,16 +99,14 @@ const ImmagineList = ({ onAdd, onEdit, onLogout }) => {
     };
 
     const handleDelete = (id) => {
-        if (window.confirm("Sei sicuro di voler eliminare definitivamente questa immagine?")) {
-            deleteWikiImage(id, onLogout)
-                .then(() => {
-                    loadData();
-                })
-                .catch(err => {
-                    console.error("Errore eliminazione immagine:", err);
-                    alert("Errore durante l'eliminazione: " + err.message);
-                });
-        }
+        deleteWikiImage(id, onLogout)
+            .then(() => {
+                loadData();
+            })
+            .catch(err => {
+                console.error("Errore eliminazione immagine:", err);
+                    console.error("Errore durante l'eliminazione:", err);
+            });
     };
 
     return (

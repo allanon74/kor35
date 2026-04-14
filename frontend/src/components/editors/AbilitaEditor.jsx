@@ -127,7 +127,6 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 if (t) effetto_uso_risorsa = JSON.parse(t);
             } catch {
                 setStatus({ type: 'warning', message: 'JSON non valido in "Effetto all\'uso risorsa".' });
-                alert('JSON non valido in «Effetto all\'uso risorsa» (pool Fortuna / …).');
                 return;
             }
             try {
@@ -135,7 +134,6 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 if (t) recupero_risorsa = JSON.parse(t);
             } catch {
                 setStatus({ type: 'warning', message: 'JSON non valido in "Recupero risorsa".' });
-                alert('JSON non valido in «Recupero risorsa».');
                 return;
             }
 
@@ -193,7 +191,6 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
             }
         } catch (error) {
             setStatus({ type: 'error', message: `Errore salvataggio: ${error.message || 'Errore sconosciuto'}` });
-            alert("Errore durante il salvataggio: " + error.message);
         } finally {
             setSaving(false);
         }

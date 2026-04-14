@@ -51,9 +51,15 @@ const OggettoList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
             header: 'Au', 
             width: '50px', 
             align: 'center',
-            render: (item) => item.aura ? (
-                <IconaPunteggio url={item.aura.icona_url} color={item.aura.colore} size="xs" mode="cerchio_inv" />
-            ) : <span className="text-gray-600">—</span>
+            render: (item) => {
+                const auraId = item?.aura?.id ?? item?.aura ?? null;
+                const auraObj = item?.aura?.id
+                    ? item.aura
+                    : punteggiList.find((p) => String(p.id) === String(auraId));
+                return auraObj ? (
+                    <IconaPunteggio url={auraObj.icona_url} color={auraObj.colore} size="xs" mode="cerchio_inv" />
+                ) : <span className="text-gray-600">—</span>;
+            }
         },
         { 
             header: 'Tipo', 
@@ -68,9 +74,19 @@ const OggettoList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
             header: 'Nome', 
             render: (item) => (
                 <div className="flex flex-col">
-                    <span className="font-bold text-cyan-50">{item.nome}</span>
-                    {item.classe_oggetto_nome && (
-                        <span className="text-[9px] text-gray-500 uppercase tracking-tighter">{item.classe_oggetto_nome}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="font-bold text-cyan-50">{item.nome}</span>
+                        {item.is_pesante && (
+                            <span className="bg-red-900/30 text-red-500 text-[8px] px-1 border border-red-900 rounded font-black">PESANTE</span>
+                        )}
+                        {item.is_tecnologico && (
+                            <span className="bg-amber-900/30 text-amber-300 text-[8px] px-1 border border-amber-700/60 rounded font-black">TECNOLOGICO</span>
+                        )}
+                    </div>
+                    {(item.classe_oggetto_nome || item.classe_oggetto?.nome) && (
+                        <span className="text-[9px] text-gray-500 uppercase tracking-tighter">
+                            {item.classe_oggetto_nome || item.classe_oggetto?.nome}
+                        </span>
                     )}
                 </div>
             )
@@ -78,17 +94,19 @@ const OggettoList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
     ];
 
     const sortLogic = (a, b) => {
-        const auraA = a.aura?.ordine ?? 999;
-        const auraB = b.aura?.ordine ?? 999;
+        const auraAId = a?.aura?.id ?? a?.aura ?? null;
+        const auraBId = b?.aura?.id ?? b?.aura ?? null;
+        const auraAObj = a?.aura?.id ? a.aura : punteggiList.find((p) => String(p.id) === String(auraAId));
+        const auraBObj = b?.aura?.id ? b.aura : punteggiList.find((p) => String(p.id) === String(auraBId));
+        const auraA = auraAObj?.ordine ?? 999;
+        const auraB = auraBObj?.ordine ?? 999;
         if (auraA !== auraB) return auraA - auraB;
         if (a.tipo_oggetto !== b.tipo_oggetto) return a.tipo_oggetto.localeCompare(b.tipo_oggetto);
         return a.nome.localeCompare(b.nome);
     };
 
     const handleDelete = (id) => {
-        if (window.confirm("Sei sicuro di voler eliminare definitivamente questo oggetto?")) {
-            staffDeleteOggetto(id, onLogout).then(loadData);
-        }
+        staffDeleteOggetto(id, onLogout).then(loadData);
     };
 
     return (

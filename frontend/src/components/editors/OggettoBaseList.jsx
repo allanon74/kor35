@@ -45,7 +45,13 @@ const OggettoBaseList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
         { 
             header: 'Classe', 
             width: '120px',
-            render: (item) => <span className="font-bold text-blue-400 text-xs">{item.classe_oggetto_nome || '—'}</span>
+            render: (item) => {
+                const classeNome = item.classe_oggetto_nome
+                    || item?.classe_oggetto?.nome
+                    || classi.find((c) => String(c.id) === String(item.classe_oggetto))?.nome
+                    || '—';
+                return <span className="font-bold text-blue-400 text-xs">{classeNome}</span>;
+            }
         },
         { 
             header: 'Tipo', 
@@ -64,6 +70,9 @@ const OggettoBaseList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
                     {item.is_pesante && (
                         <span className="bg-red-900/30 text-red-500 text-[8px] px-1 border border-red-900 rounded font-black">PESANTE</span>
                     )}
+                    {item.is_tecnologico && (
+                        <span className="bg-amber-900/30 text-amber-300 text-[8px] px-1 border border-amber-700/60 rounded font-black">TECNOLOGICO</span>
+                    )}
                     {!item.in_vendita && (
                         <span className="bg-gray-700 text-gray-400 text-[8px] px-1 rounded font-black italic uppercase">Off-List</span>
                     )}
@@ -80,16 +89,22 @@ const OggettoBaseList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
 
     const sortLogic = (a, b) => {
         // Ordiniamo prima per Classe e poi per Nome
-        if (a.classe_oggetto_nome !== b.classe_oggetto_nome) {
-            return (a.classe_oggetto_nome || "").localeCompare(b.classe_oggetto_nome || "");
+        const classA = a.classe_oggetto_nome
+            || a?.classe_oggetto?.nome
+            || classi.find((c) => String(c.id) === String(a.classe_oggetto))?.nome
+            || "";
+        const classB = b.classe_oggetto_nome
+            || b?.classe_oggetto?.nome
+            || classi.find((c) => String(c.id) === String(b.classe_oggetto))?.nome
+            || "";
+        if (classA !== classB) {
+            return classA.localeCompare(classB);
         }
         return a.nome.localeCompare(b.nome);
     };
 
     const handleDelete = (id) => {
-        if (window.confirm("Attenzione: l'eliminazione di un Oggetto Base non influisce sulle istanze già possedute dai PG, ma lo rimuoverà dal listino. Procedere?")) {
-            staffDeleteOggettoBase(id, onLogout).then(loadData);
-        }
+        staffDeleteOggettoBase(id, onLogout).then(loadData);
     };
 
     return (

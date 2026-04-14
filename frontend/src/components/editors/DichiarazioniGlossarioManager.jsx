@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import MasterGenericList from './MasterGenericList';
+import EditorSaveActions from './EditorSaveActions';
 import {
   staffGetDichiarazioni,
   staffCreateDichiarazione,
@@ -29,7 +30,9 @@ const TIPO_OPZIONI = [
 
 const TIPO_DICHIARAZIONI = TIPO_OPZIONI.filter((opt) => opt.value !== 'GLOS');
 
-const DichiarazioneFormModal = ({ isOpen, value, onClose, onSave, isGlossario }) => {
+const EMPTY_FORM = { nome: '', tipo: 'GLOS', dichiarazione: '', descrizione: '' };
+
+const DichiarazioneFormModal = ({ isOpen, value, onClose, onSave, isGlossario, statusMessage = '', statusType = 'success' }) => {
   const [form, setForm] = useState(value || {});
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
@@ -79,12 +82,16 @@ const DichiarazioneFormModal = ({ isOpen, value, onClose, onSave, isGlossario })
           />
         </div>
         <div className="p-4 border-t border-gray-700 flex gap-2">
-          <button onClick={() => onSave(form)} className="flex-1 bg-indigo-600 hover:bg-indigo-500 rounded p-2 text-white font-bold">
-            Salva
-          </button>
-          <button onClick={onClose} className="px-4 bg-gray-700 hover:bg-gray-600 rounded p-2 text-gray-100 font-bold">
-            Annulla
-          </button>
+          <EditorSaveActions
+            onSave={() => onSave(form, 'save_close')}
+            onSaveAndContinue={() => onSave(form, 'save_continue')}
+            onSaveAsNew={form?.id ? () => onSave(form, 'save_as_new') : null}
+            onSaveAndNew={() => onSave(form, 'save_new_blank')}
+            onCancel={onClose}
+            saveLabel="Salva"
+            statusMessage={statusMessage}
+            statusType={statusType}
+          />
         </div>
       </div>
     </div>
@@ -95,6 +102,7 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
   const [items, setItems] = useState([]);
   const [editingItem, setEditingItem] = useState(null);
   const [activeTab, setActiveTab] = useState('glossario');
+  const [editorStatus, setEditorStatus] = useState({ type: 'success', message: '' });
 
   const loadItems = async () => {
     try {
@@ -170,19 +178,44 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
         value={editingItem}
         isGlossario={isGlossarioTab}
         onClose={() => setEditingItem(null)}
-        onSave={async (form) => {
-          if (!form.nome?.trim()) return alert('Il nome e obbligatorio');
-          if (!form.dichiarazione?.trim()) return alert('Il termine/dichiarazione e obbligatorio');
-          if (!form.descrizione?.trim()) return alert('La descrizione e obbligatoria');
+        statusMessage={editorStatus.message}
+        statusType={editorStatus.type}
+        onSave={async (form, mode = 'save_close') => {
+          if (!form.nome?.trim()) {
+            setEditorStatus({ type: 'warning', message: 'Il nome e obbligatorio.' });
+            return;
+          }
+          if (!form.dichiarazione?.trim()) {
+            setEditorStatus({ type: 'warning', message: 'Il termine/dichiarazione e obbligatorio.' });
+            return;
+          }
+          if (!form.descrizione?.trim()) {
+            setEditorStatus({ type: 'warning', message: 'La descrizione e obbligatoria.' });
+            return;
+          }
           const payload = {
             nome: form.nome.trim(),
             tipo: isGlossarioTab ? 'GLOS' : (form.tipo || TIPO_DICHIARAZIONI[0].value),
             dichiarazione: form.dichiarazione.trim(),
             descrizione: form.descrizione.trim(),
           };
-          if (form.id) await staffUpdateDichiarazione(form.id, payload, onLogout);
-          else await staffCreateDichiarazione(payload, onLogout);
-          setEditingItem(null);
+          const isSaveAsNew = mode === 'save_as_new';
+          const isExisting = !!form.id && !isSaveAsNew;
+          const saved = isExisting
+            ? await staffUpdateDichiarazione(form.id, payload, onLogout)
+            : await staffCreateDichiarazione(payload, onLogout);
+          const recordName = saved?.nome || payload.nome || 'Record';
+          if (mode === 'save_as_new') setEditorStatus({ type: 'success', message: `Nuovo record "${recordName}" inserito.` });
+          if (mode === 'save_continue') setEditorStatus({ type: 'success', message: `"${recordName}" salvato.` });
+          if (mode === 'save_new_blank') setEditorStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
+          if (mode === 'save_close') {
+            setEditingItem(null);
+            setEditorStatus({ type: 'success', message: '' });
+          } else if (mode === 'save_new_blank') {
+            setEditingItem({ ...EMPTY_FORM, tipo: isGlossarioTab ? 'GLOS' : TIPO_DICHIARAZIONI[0].value });
+          } else if (saved?.id) {
+            setEditingItem(saved);
+          }
           await loadItems();
         }}
       />

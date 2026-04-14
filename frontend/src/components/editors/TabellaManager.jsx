@@ -47,7 +47,7 @@ const TabellaManager = ({ onLogout }) => {
             await deleteTier(id, onLogout);
             setTiers(prev => prev.filter(t => t.id !== id));
         } catch (error) {
-            alert("Errore durante l'eliminazione");
+            setEditorStatus({ type: 'error', message: "Errore durante l'eliminazione." });
         }
     }, [onLogout]);
 
@@ -86,7 +86,6 @@ const TabellaManager = ({ onLogout }) => {
         } catch (error) {
             console.error("Errore salvataggio", error);
             setEditorStatus({ type: 'error', message: `Errore salvataggio: ${error.message || 'Errore sconosciuto'}` });
-            alert("Errore durante il salvataggio: " + error.message);
         }
     }, [currentTier, onLogout, fetchTiers]);
 

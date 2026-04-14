@@ -91,7 +91,6 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
     } catch (e) { 
       console.error(e);
       setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Errore sconosciuto'}` });
-      alert("Errore: " + e.message); 
     } finally {
       setSaving(false);
     }

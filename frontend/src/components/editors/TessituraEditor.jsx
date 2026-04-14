@@ -82,7 +82,6 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     } catch (e) { 
         console.error(e);
         setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Errore sconosciuto'}` });
-        alert("Errore: " + (e.message || "Errore sconosciuto")); 
     } finally {
         setSaving(false);
     }

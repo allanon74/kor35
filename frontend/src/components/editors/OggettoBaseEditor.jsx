@@ -108,7 +108,6 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
     } catch (e) { 
         console.error("Errore Salvataggio:", e);
         setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Controlla i dati.'}` });
-        alert("Errore salvataggio: " + (e.message || "Controlla i dati.")); 
     } finally {
         setSaving(false);
     }

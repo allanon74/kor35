@@ -3,6 +3,7 @@ import { staffGetProposteInValutazione, staffRifiutaProposta, staffApprovaPropos
 import GenericHeader from '../GenericHeader';
 import { Eye, X, Check, ClipboardCheck, AlertCircle } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
+import ConfirmDialog from './ConfirmDialog';
 
 // Importazione degli Editor per la fase di approvazione/creazione finale
 import InfusioneEditor from './InfusioneEditor';
@@ -15,6 +16,8 @@ const StaffProposalTab = ({ onLogout }) => {
     const [viewMode, setViewMode] = useState('list'); // 'list', 'detail', 'approve_edit'
     const [staffNotes, setStaffNotes] = useState("");
     const [loading, setLoading] = useState(false);
+    const [feedback, setFeedback] = useState({ type: '', message: '' });
+    const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
 
     const loadProposals = useCallback(async () => {
         setLoading(true);
@@ -44,14 +47,14 @@ const StaffProposalTab = ({ onLogout }) => {
     }, []);
 
     const handleRifiuta = async () => {
-        if (!confirm("Confermi il rifiuto? La proposta tornerà in Bozza al giocatore.")) return;
         try {
             await staffRifiutaProposta(selectedProposal.id, staffNotes, onLogout);
-            alert("Proposta rifiutata e rimandata al giocatore.");
+            setFeedback({ type: 'success', message: 'Proposta rifiutata e rimandata al giocatore.' });
+            setConfirmRejectOpen(false);
             handleBack();
             loadProposals();
         } catch (err) {
-            alert("Errore: " + err.message);
+            setFeedback({ type: 'error', message: `Errore: ${err.message}` });
         }
     };
 
@@ -103,7 +106,7 @@ const StaffProposalTab = ({ onLogout }) => {
             await staffApprovaProposta(selectedProposal.id, finalData, onLogout);
             
             // Feedback Utente
-            alert("Tecnica approvata e creata con successo!");
+            setFeedback({ type: 'success', message: 'Tecnica approvata e creata con successo.' });
             
             // Chiudi e Aggiorna
             // IMPORTANTE: Eseguiamo queste azioni in ordine sicuro
@@ -116,7 +119,7 @@ const StaffProposalTab = ({ onLogout }) => {
             console.error("Errore Approvazione:", err);
             // Gestione sicura dell'errore (evita variabili non definite come 't')
             const errorMsg = err.response?.data?.error || err.message || "Errore sconosciuto";
-            alert("Errore durante l'approvazione: " + errorMsg);
+            setFeedback({ type: 'error', message: `Errore durante l'approvazione: ${errorMsg}` });
         }
     };
 
@@ -147,6 +150,15 @@ const StaffProposalTab = ({ onLogout }) => {
                     </h2>
                     <button onClick={loadProposals} className="text-sm underline text-gray-400 hover:text-white">Aggiorna</button>
                 </div>
+                {feedback.message && (
+                    <div className={`mb-4 text-xs border rounded-md px-3 py-2 inline-block ${
+                        feedback.type === 'error'
+                            ? 'text-red-200 bg-red-900/20 border-red-700/40'
+                            : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
+                    }`}>
+                        {feedback.message}
+                    </div>
+                )}
                 
                 <div className="flex-1 overflow-auto rounded-xl border border-gray-700 bg-gray-800/50 shadow-inner">
                     <table className="w-full text-left text-gray-300">
@@ -333,7 +345,7 @@ const StaffProposalTab = ({ onLogout }) => {
                 {/* Footer Azioni */}
                 <div className="p-5 border-t border-gray-700 bg-gray-800 rounded-b-2xl flex justify-end gap-4 shadow-lg z-20">
                     <button 
-                        onClick={handleRifiuta}
+                        onClick={() => setConfirmRejectOpen(true)}
                         className="bg-red-900/30 border border-red-700 text-red-300 hover:bg-red-900/50 px-6 py-3 rounded-xl flex items-center gap-2 text-sm font-bold uppercase transition-all"
                     >
                         <X size={18} /> Rifiuta (Torna in Bozza)
@@ -347,6 +359,14 @@ const StaffProposalTab = ({ onLogout }) => {
                     </button>
                 </div>
             </div>
+            <ConfirmDialog
+                open={confirmRejectOpen}
+                title="Confermi il rifiuto?"
+                message="La proposta tornera in bozza al giocatore."
+                confirmLabel="Rifiuta"
+                onCancel={() => setConfirmRejectOpen(false)}
+                onConfirm={handleRifiuta}
+            />
         </div>
     );
 };

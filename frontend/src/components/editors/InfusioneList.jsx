@@ -36,13 +36,11 @@ const InfusioneList = ({ onSelect, onNew, onScanQr, onLogout }) => {
   }, []);
 
   const handleDelete = async (id) => {
-    if (window.confirm("Sei sicuro di voler eliminare questa Infusione? Questa operazione è irreversibile.")) {
-      try {
-        await staffDeleteInfusione(id, onLogout);
-        loadData();
-      } catch (e) {
-        alert("Errore durante la cancellazione: " + e.message);
-      }
+    try {
+      await staffDeleteInfusione(id, onLogout);
+      loadData();
+    } catch (e) {
+      console.error("Errore durante la cancellazione:", e);
     }
   };
 

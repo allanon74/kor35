@@ -12,7 +12,7 @@ const InventarioList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
             .then(data => setItems(data || []))
             .catch(err => {
                 console.error("Errore caricamento inventari:", err);
-                alert("Errore durante il caricamento degli inventari: " + err.message);
+                console.error("Errore durante il caricamento degli inventari:", err);
             })
             .finally(() => setLoading(false));
     };
@@ -60,16 +60,14 @@ const InventarioList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
     };
 
     const handleDelete = (id) => {
-        if (window.confirm("Sei sicuro di voler eliminare definitivamente questo inventario? Gli oggetti verranno messi senza posizione.")) {
-            staffDeleteInventario(id, onLogout)
-                .then(() => {
-                    loadData();
-                })
-                .catch(err => {
-                    console.error("Errore eliminazione inventario:", err);
-                    alert("Errore durante l'eliminazione: " + err.message);
-                });
-        }
+        staffDeleteInventario(id, onLogout)
+            .then(() => {
+                loadData();
+            })
+            .catch(err => {
+                console.error("Errore eliminazione inventario:", err);
+                console.error("Errore durante l'eliminazione:", err);
+            });
     };
 
     return (

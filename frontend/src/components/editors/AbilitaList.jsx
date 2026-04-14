@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { staffGetAbilitaList, staffDeleteAbilita, prefetchAbilitaEditorResources } from '../../api';
 import MasterGenericList from './MasterGenericList';
+import { useCharacter } from '../CharacterContext';
 
 const AbilitaList = ({ onAdd, onEdit, onLogout }) => {
+    const { punteggiList } = useCharacter();
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -74,13 +76,12 @@ const AbilitaList = ({ onAdd, onEdit, onLogout }) => {
     }, [onLogout, page, pageSize, query.search, query.isTrattoAura]);
 
     const handleDelete = async (id) => {
-        if (!window.confirm("Sei sicuro di voler eliminare questa abilità?")) return;
         try {
             await staffDeleteAbilita(id, onLogout);
             setItems((prev) => prev.filter((item) => item.id !== id));
             setTotalCount((prev) => Math.max(0, prev - 1));
         } catch (error) {
-            alert("Errore durante l'eliminazione: " + error.message);
+            console.error("Errore durante l'eliminazione:", error);
         }
     };
 
@@ -93,11 +94,17 @@ const AbilitaList = ({ onAdd, onEdit, onLogout }) => {
             header: 'Tipo',
             width: '20%',
             align: 'center',
-            render: (row) => row.is_tratto_aura ?
+            render: (row) => {
+                const auraId = row?.aura_riferimento?.id ?? row?.aura_riferimento ?? null;
+                const auraObj = row?.aura_riferimento?.id
+                    ? row.aura_riferimento
+                    : punteggiList.find((p) => String(p.id) === String(auraId));
+                return row.is_tratto_aura ?
                 <span className="text-purple-400 text-[10px] font-bold px-2 py-0.5 bg-purple-900/50 rounded border border-purple-500/30 uppercase tracking-wide">
-                    AURA {row.aura_riferimento?.nome} (Lv.{row.livello_riferimento})
+                    AURA {auraObj?.nome || '-'} (Lv.{row.livello_riferimento})
                 </span> :
                 <span className="text-gray-500 text-xs">-</span>
+            }
         }
     ];
 

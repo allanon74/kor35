@@ -3,11 +3,14 @@ import TessituraList from './TessituraList';
 import TessituraEditor from './TessituraEditor';
 import StaffQrTab from '../StaffQrTab';
 import { associaQrDiretto } from '../../api';
+import ConfirmDialog from './ConfirmDialog';
 
 const TessituraManager = ({ onBack, onLogout }) => {
   const [view, setView] = useState('list'); // 'list' o 'edit'
   const [editingItem, setEditingItem] = useState(null);
   const [scanningForElement, setScanningForElement] = useState(null);
+  const [pendingQrConflict, setPendingQrConflict] = useState(null);
+  const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
 
   const handleAdd = useCallback(() => {
     setEditingItem(null);
@@ -40,12 +43,23 @@ const TessituraManager = ({ onBack, onLogout }) => {
 
   return (
     <div className="space-y-6">
-      <button 
-        onClick={onBack}
-        className="text-gray-400 hover:text-white flex items-center gap-2 mb-4 transition-colors"
-      >
-        ← Torna agli Strumenti Master
-      </button>
+      <div>
+        <button 
+          onClick={onBack}
+          className="text-gray-400 hover:text-white flex items-center gap-2 mb-4 transition-colors"
+        >
+          ← Torna agli Strumenti Master
+        </button>
+        {qrStatus.message && (
+          <div className={`text-xs border rounded-md px-3 py-1 inline-block ${
+            qrStatus.type === 'error'
+              ? 'text-red-200 bg-red-900/20 border-red-700/40'
+              : 'text-emerald-300 bg-emerald-900/20 border-emerald-700/40'
+          }`}>
+            {qrStatus.message}
+          </div>
+        )}
+      </div>
       
       <TessituraList 
         onAdd={handleAdd} 
@@ -71,19 +85,15 @@ const TessituraManager = ({ onBack, onLogout }) => {
                 try {
                   await associaQrDiretto(scanningForElement, qr_id, onLogout);
                   setScanningForElement(null);
-                  alert('QR associato con successo!');
+                  setQrStatus({ type: 'success', message: 'QR associato con successo.' });
                 } catch (error) {
                   if (error.status === 409 && error.data?.already_associated) {
-                    const conferma = window.confirm(
-                      `⚠️ ATTENZIONE!\n\n${error.data.message}\n\nVuoi procedere comunque e spostare il QR su questo elemento?`
-                    );
-                    if (conferma) {
-                      await associaQrDiretto(scanningForElement, qr_id, onLogout, true);
-                      setScanningForElement(null);
-                      alert('QR riassociato con successo!');
-                    }
+                    setPendingQrConflict({
+                      qrId: qr_id,
+                      message: error.data.message,
+                    });
                   } else {
-                    alert('Errore: ' + (error.message || 'Errore sconosciuto'));
+                    setQrStatus({ type: 'error', message: `Errore: ${error.message || 'Errore sconosciuto'}` });
                   }
                 }
               }} 
@@ -92,6 +102,25 @@ const TessituraManager = ({ onBack, onLogout }) => {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingQrConflict)}
+        title="QR gia associato"
+        message={`${pendingQrConflict?.message || ''} Vuoi procedere comunque e spostare il QR su questo elemento?`}
+        confirmLabel="Sposta QR"
+        confirmTone="warning"
+        onCancel={() => setPendingQrConflict(null)}
+        onConfirm={async () => {
+          if (!pendingQrConflict?.qrId || !scanningForElement) return;
+          try {
+            await associaQrDiretto(scanningForElement, pendingQrConflict.qrId, onLogout, true);
+            setScanningForElement(null);
+            setPendingQrConflict(null);
+            setQrStatus({ type: 'success', message: 'QR riassociato con successo.' });
+          } catch (error) {
+            setQrStatus({ type: 'error', message: `Errore: ${error.message || 'Errore sconosciuto'}` });
+          }
+        }}
+      />
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { staffCreateInventario, staffUpdateInventario, staffGetInventarioOggetti, staffAggiungiOggettoInventario, staffRimuoviOggettoInventario, staffGetOggettiSenzaPosizione, getOggettoDetail } from '../../api';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import ConfirmDialog from './ConfirmDialog';
 
 const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
   const [currentId, setCurrentId] = useState(initialData?.id || null);
@@ -16,6 +17,7 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
   const [saving, setSaving] = useState(false);
   const [manualOggettoId, setManualOggettoId] = useState('');
   const [status, setStatus] = useState({ type: 'success', message: '' });
+  const [pendingRemoveOggettoId, setPendingRemoveOggettoId] = useState(null);
 
   useEffect(() => {
     if (initialData) {
@@ -84,7 +86,6 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
     } catch (e) { 
       console.error(e);
       setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Errore sconosciuto'}` });
-      alert("Errore: " + e.message); 
     } finally {
       setSaving(false);
     }
@@ -92,30 +93,29 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
 
   const handleAggiungiOggetto = async (oggettoId) => {
     if (!currentId) {
-      alert("Salva prima l'inventario per aggiungere oggetti!");
+      setStatus({ type: 'warning', message: "Salva prima l'inventario per aggiungere oggetti." });
       return;
     }
     try {
       await staffAggiungiOggettoInventario(currentId, oggettoId, onLogout);
       await loadOggettiInventario();
       await loadOggettiSenzaPosizione();
-      alert("Oggetto aggiunto all'inventario!");
+      setStatus({ type: 'success', message: "Oggetto aggiunto all'inventario." });
     } catch (error) {
-      alert("Errore: " + error.message);
+      setStatus({ type: 'error', message: `Errore: ${error.message}` });
     }
   };
 
   const handleRimuoviOggetto = async (oggettoId) => {
     if (!currentId) return;
-    if (!window.confirm("Rimuovere questo oggetto dall'inventario? Verrà messo senza posizione.")) return;
-    
+
     try {
       await staffRimuoviOggettoInventario(currentId, oggettoId, onLogout);
       await loadOggettiInventario();
       await loadOggettiSenzaPosizione();
-      alert("Oggetto rimosso dall'inventario!");
+      setStatus({ type: 'success', message: "Oggetto rimosso dall'inventario." });
     } catch (error) {
-      alert("Errore: " + error.message);
+      setStatus({ type: 'error', message: `Errore: ${error.message}` });
     }
   };
 
@@ -123,7 +123,7 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
     if (!manualOggettoId.trim()) return;
     const id = parseInt(manualOggettoId.trim());
     if (isNaN(id)) {
-      alert("ID oggetto non valido!");
+      setStatus({ type: 'warning', message: 'ID oggetto non valido.' });
       return;
     }
 
@@ -136,7 +136,7 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
         setManualOggettoId('');
       }
     } catch (error) {
-      alert("Impossibile recuperare l'oggetto. Verifica che l'ID sia corretto.");
+      setStatus({ type: 'error', message: "Impossibile recuperare l'oggetto. Verifica che l'ID sia corretto." });
     }
   };
 
@@ -193,7 +193,7 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
                   <div key={oggetto.id} className="flex justify-between items-center p-2 bg-gray-800 rounded border border-gray-700">
                     <span className="text-sm text-white">{oggetto.nome}</span>
                     <button
-                      onClick={() => handleRimuoviOggetto(oggetto.id)}
+                      onClick={() => setPendingRemoveOggettoId(oggetto.id)}
                       className="p-1 bg-red-600/20 text-red-400 hover:bg-red-600/40 rounded text-xs"
                     >
                       Rimuovi
@@ -248,6 +248,20 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingRemoveOggettoId !== null}
+        title="Rimuovere oggetto dall'inventario?"
+        message="L'oggetto verrà spostato tra quelli senza posizione."
+        confirmLabel="Rimuovi"
+        onCancel={() => setPendingRemoveOggettoId(null)}
+        onConfirm={async () => {
+          const toRemove = pendingRemoveOggettoId;
+          setPendingRemoveOggettoId(null);
+          if (toRemove !== null) {
+            await handleRimuoviOggetto(toRemove);
+          }
+        }}
+      />
     </div>
   );
 };

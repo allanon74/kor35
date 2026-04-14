@@ -66,10 +66,8 @@ const MostroList = ({ onAdd, onEdit, onLogout }) => {
     const sortLogic = (a, b) => a.nome.localeCompare(b.nome);
 
     const handleDelete = (id) => {
-        if (window.confirm("Sei sicuro di voler eliminare definitivamente questo template di mostro?")) {
-            if (typeof staffDeleteMostroTemplate === 'function') {
-                staffDeleteMostroTemplate(id, onLogout).then(loadData);
-            }
+        if (typeof staffDeleteMostroTemplate === 'function') {
+            staffDeleteMostroTemplate(id, onLogout).then(loadData);
         }
     };
 

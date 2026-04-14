@@ -16,10 +16,8 @@ const TessituraList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
   useEffect(() => { loadData(); }, []);
 
   const handleDelete = async (id) => {
-    if (window.confirm("Sei sicuro di voler eliminare questa Tessitura?")) {
-      await staffDeleteTessitura(id, onLogout);
-      loadData();
-    }
+    await staffDeleteTessitura(id, onLogout);
+    loadData();
   };
 
   return (

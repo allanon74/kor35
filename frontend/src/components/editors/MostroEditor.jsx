@@ -71,7 +71,6 @@ const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
     } catch (e) { 
         console.error(e);
         setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Errore sconosciuto'}` });
-        alert("Errore durante il salvataggio: " + e.message); 
     } finally {
       setSaving(false);
     }

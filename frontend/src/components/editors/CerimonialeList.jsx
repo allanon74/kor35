@@ -16,10 +16,8 @@ const CerimonialeList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
   useEffect(() => { loadData(); }, []);
 
   const handleDelete = async (id) => {
-    if (window.confirm("Eliminare questo Cerimoniale?")) {
-      await staffDeleteCerimoniale(id, onLogout);
-      loadData();
-    }
+    await staffDeleteCerimoniale(id, onLogout);
+    loadData();
   };
 
   return (
