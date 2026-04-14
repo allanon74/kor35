@@ -2,6 +2,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import MasterGenericList from './MasterGenericList';
 import EditorSaveActions from './EditorSaveActions';
+import RichTextEditor from '../RichTextEditor';
 import {
   staffGetDichiarazioni,
   staffCreateDichiarazione,
@@ -74,11 +75,10 @@ const DichiarazioneFormModal = ({ isOpen, value, onClose, onSave, isGlossario, s
             value={form.dichiarazione || ''}
             onChange={(e) => setForm({ ...form, dichiarazione: e.target.value })}
           />
-          <textarea
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white min-h-[150px]"
-            placeholder="Descrizione"
+          <RichTextEditor
+            label="Descrizione"
             value={form.descrizione || ''}
-            onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
+            onChange={(value) => setForm({ ...form, descrizione: value })}
           />
         </div>
         <div className="p-4 border-t border-gray-700 flex gap-2">
