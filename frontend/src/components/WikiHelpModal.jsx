@@ -89,6 +89,10 @@ export default function WikiHelpModal({ isOpen, onClose, wikiSlug }) {
 
           {pageData && !loading && !error && (
             <div className="animate-fadeIn">
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <strong>Suggerimento glossario:</strong> per evitare il richiamo automatico di una parola al glossario,
+                racchiudila tra parentesi quadre, ad esempio <code>[ombra]</code> (oppure <code>[[ombra]]</code>).
+              </div>
               {/* Immagine copertina se presente */}
               {pageData.immagine && (
                 <div className="relative w-full h-48 md:h-64 mb-6 rounded-lg overflow-hidden shadow-lg">

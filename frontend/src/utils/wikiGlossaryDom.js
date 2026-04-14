@@ -43,6 +43,25 @@ function sortTermsForMatching(entries) {
   return [...entries].sort((a, b) => b.dichiarazione.length - a.dichiarazione.length);
 }
 
+function parseGlossaryDisableRanges(text) {
+  // Sintassi supportata per disabilitare l'auto-link:
+  // [termine] oppure [[termine]]
+  const ranges = [];
+  const re = /\[\[([^\]]+)\]\]|\[([^\]]+)\]/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const whole = m[0] || '';
+    const inner = (m[1] ?? m[2] ?? '').trim();
+    if (!inner) continue;
+    ranges.push({
+      start: m.index,
+      end: m.index + whole.length,
+      inner,
+    });
+  }
+  return ranges;
+}
+
 function appendSanitizedHtml(targetEl, html) {
   const tpl = document.createElement('template');
   tpl.innerHTML = String(html || '');
@@ -72,6 +91,9 @@ function replaceTextNodeWithGlossaryLinks(textNode, termsSorted) {
   const text = textNode.textContent;
   if (!text) return new Set();
 
+  const disableRanges = parseGlossaryDisableRanges(text);
+  let disableIdx = 0;
+
   const matchedIds = new Set();
   let pos = 0;
   let buf = '';
@@ -86,6 +108,15 @@ function replaceTextNodeWithGlossaryLinks(textNode, termsSorted) {
   };
 
   while (pos < text.length) {
+    const currentDisable = disableRanges[disableIdx];
+    if (currentDisable && pos === currentDisable.start) {
+      // Mantieni il testo interno, ma rimuovi le parentesi quadre.
+      buf += currentDisable.inner;
+      pos = currentDisable.end;
+      disableIdx += 1;
+      continue;
+    }
+
     let found = null;
     for (const entry of termsSorted) {
       const t = entry.dichiarazione;
