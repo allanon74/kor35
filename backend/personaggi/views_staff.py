@@ -19,6 +19,7 @@ from .models import (
     abilita_tier,
     TipologiaEffetto, EffettoCasuale,
     Era, Prefettura, Regione,
+    Dichiarazione,
 )
 
 from .serializers import (
@@ -41,6 +42,7 @@ from .serializers import (
     InventarioStaffSerializer,
     TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
     EraStaffSerializer, PrefetturaStaffSerializer, RegioneStaffSerializer,
+    DichiarazioneStaffSerializer,
 )
 
 
@@ -498,6 +500,15 @@ class EffettoCasualeViewSet(viewsets.ModelViewSet):
     serializer_class = EffettoCasualeStaffSerializer
     permission_classes = [IsStaffOrMaster]
     filterset_fields = ['tipologia']
+
+
+class DichiarazioneStaffViewSet(viewsets.ModelViewSet):
+    """CRUD per Dichiarazioni e voci di Glossario (Staff)."""
+    queryset = Dichiarazione.objects.all().order_by('tipo', 'nome')
+    serializer_class = DichiarazioneStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    filterset_fields = ['tipo']
+    search_fields = ['nome', 'dichiarazione', 'descrizione']
 
 
 class EraStaffViewSet(viewsets.ModelViewSet):

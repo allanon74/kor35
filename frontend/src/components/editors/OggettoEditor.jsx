@@ -5,6 +5,7 @@ import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor';
+import EditorSaveActions from './EditorSaveActions';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -15,6 +16,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
   const [classi, setClassi] = useState([]);
   const [personaggi, setPersonaggi] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState(initialData || {
     nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
@@ -59,8 +61,9 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
     setFormData({ ...formData, [key]: newList });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save_close') => {
     try {
+      setSaving(true);
       const getId = (item) => item?.id || item || null;
       
       const cleanAndDeduplicate = (list, keyField) => {
@@ -86,14 +89,22 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
           componenti: cleanAndDeduplicate(formData.componenti, 'caratteristica')
       };
 
-      if (formData.id) await staffUpdateOggetto(formData.id, data, onLogout);
-      else await staffCreateOggetto(data, onLogout);
+      const isSaveAsNew = mode === 'save_as_new';
+      const isExisting = !!formData.id && !isSaveAsNew;
+      const saved = isExisting
+        ? await staffUpdateOggetto(formData.id, data, onLogout)
+        : await staffCreateOggetto(data, onLogout);
       
       alert("Salvato correttamente!"); 
-      onBack();
+      if (mode === 'save_close') onBack();
+      if (mode !== 'save_close' && saved?.id) {
+        setFormData((prev) => ({ ...prev, ...saved }));
+      }
     } catch (e) { 
         console.error(e);
         alert("Errore: " + e.message); 
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -112,10 +123,14 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
     <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] border border-gray-700 shadow-2xl text-white">
       <div className="flex justify-between items-center border-b border-gray-700 pb-4">
         <h2 className="text-xl font-bold text-emerald-400 uppercase tracking-tighter">{formData.id ? `Edit: ${formData.nome}` : 'Nuovo Oggetto'}</h2>
-        <div className="flex gap-3">
-           <button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-2 rounded-lg font-black text-sm">SALVA</button>
-           <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-bold text-sm">ANNULLA</button>
-        </div>
+        <EditorSaveActions
+          onSave={() => handleSave('save_close')}
+          onSaveAndContinue={() => handleSave('save_continue')}
+          onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+          onCancel={onBack}
+          saving={saving}
+          saveLabel="Salva"
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-900/40 p-4 rounded-xl">

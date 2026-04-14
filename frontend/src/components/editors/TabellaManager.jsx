@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
-import { Plus, Loader2, RefreshCw } from 'lucide-react';
-import TabellaList from './TabellaList';
+import React, { useState, useEffect, useCallback, memo, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
+import MasterGenericList from './MasterGenericList';
 import TabellaEditor from './TabellaEditor';
 import { getTiers, createTier, updateTier, deleteTier, updateTierAbilita } from '../../api';
 
@@ -42,7 +42,6 @@ const TabellaManager = ({ onLogout }) => {
     }, []);
 
     const handleDelete = useCallback(async (id) => {
-        if (!window.confirm("Sei sicuro di voler eliminare questa tabella?")) return;
         try {
             await deleteTier(id, onLogout);
             setTiers(prev => prev.filter(t => t.id !== id));
@@ -51,10 +50,12 @@ const TabellaManager = ({ onLogout }) => {
         }
     }, [onLogout]);
 
-    const handleSave = useCallback(async (formData, connectedSkills) => {
+    const handleSave = useCallback(async (formData, connectedSkills, mode = 'save_close') => {
         try {
             let savedTier;
-            if (currentTier) {
+            const isSaveAsNew = mode === 'save_as_new';
+            const isExisting = !!currentTier?.id && !isSaveAsNew;
+            if (isExisting) {
                 // Update Base Info
                 savedTier = await updateTier(currentTier.id, formData, onLogout);
                 // Update Skills Relation
@@ -65,16 +66,24 @@ const TabellaManager = ({ onLogout }) => {
                 // Update Skills Relation (ora che abbiamo l'ID)
                 await updateTierAbilita(savedTier.id, connectedSkills, onLogout);
             }
-            
-            setIsEditing(false);
-            fetchTiers(); // Ricarica per avere i dati aggiornati
+
+            await fetchTiers(); // Ricarica per avere i dati aggiornati
+            if (mode === 'save_close') {
+                setIsEditing(false);
+                setCurrentTier(null);
+            } else if (savedTier?.id) {
+                setCurrentTier(savedTier);
+            }
         } catch (error) {
             console.error("Errore salvataggio", error);
             alert("Errore durante il salvataggio: " + error.message);
         }
     }, [currentTier, onLogout, fetchTiers]);
 
-    const handleCancel = useCallback(() => setIsEditing(false), []);
+    const handleCancel = useCallback(() => {
+        setIsEditing(false);
+        setCurrentTier(null);
+    }, []);
 
     if (isEditing) {
         return (
@@ -89,43 +98,58 @@ const TabellaManager = ({ onLogout }) => {
         );
     }
 
+    const tierTypeLabels = {
+        G0: 'Tabelle Generali',
+        T1: 'Tier 1',
+        T2: 'Tier 2',
+        T3: 'Tier 3',
+        T4: 'Tier 4',
+    };
+
+    const columns = useMemo(() => [
+        { header: 'Nome', render: (t) => <span className="font-bold">{t.nome}</span> },
+        { header: 'Tipo', render: (t) => tierTypeLabels[t.tipo] || t.tipo, width: 180 },
+        { header: 'Abilita', render: (t) => t.abilita_count || 0, align: 'center', width: 100 },
+        { header: 'Descrizione', render: (t) => <span className="text-gray-300">{(t.descrizione || '').replace(/<[^>]+>/g, '').slice(0, 90)}{(t.descrizione || '').length > 90 ? '...' : ''}</span> },
+    ], []);
+
+    const filterConfig = useMemo(() => ([
+        {
+            key: 'tipo',
+            label: 'Tipo',
+            options: [
+                { id: 'G0', label: 'Tabelle Generali' },
+                { id: 'T1', label: 'Tier 1' },
+                { id: 'T2', label: 'Tier 2' },
+                { id: 'T3', label: 'Tier 3' },
+                { id: 'T4', label: 'Tier 4' },
+            ],
+        },
+    ]), []);
+
     return (
         <div className="flex flex-col h-full bg-gray-900">
-            {/* Toolbar */}
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-950 shadow-sm z-10">
-                <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-black text-gray-100 uppercase tracking-wide">Gestione Tabelle (Tier)</h2>
-                    <span className="bg-gray-800 text-gray-400 text-xs px-2 py-1 rounded-full font-mono">{tiers?.length || 0}</span>
-                </div>
-                <div className="flex gap-2">
-                    <button 
-                        onClick={fetchTiers} 
-                        className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-                        title="Aggiorna"
-                    >
-                        <RefreshCw size={20} className={isLoading ? "animate-spin" : ""} />
-                    </button>
-                    <button 
-                        onClick={handleCreate} 
-                        className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-indigo-900/30 transition-all hover:scale-105"
-                    >
-                        <Plus size={20} /> Nuova Tabella
-                    </button>
-                </div>
-            </div>
-
-            {/* Content */}
             <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                 {isLoading ? (
                     <div className="absolute inset-0 flex items-center justify-center">
                         <Loader2 size={40} className="text-indigo-500 animate-spin" />
                     </div>
                 ) : (
-                    <TabellaList 
-                        tiers={tiers} 
-                        onEdit={handleEdit} 
-                        onDelete={handleDelete} 
-                    />
+                    <div className="h-full p-4">
+                        <MasterGenericList
+                            title="Gestione Tabelle (Tier)"
+                            items={tiers}
+                            columns={columns}
+                            onAdd={handleCreate}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            addLabel="Nuova Tabella"
+                            filterConfig={filterConfig}
+                            emptyMessage="Nessuna tabella presente."
+                            persistKey="gestione-tabelle"
+                            loading={isLoading}
+                        />
+                    </div>
                 )}
             </div>
         </div>

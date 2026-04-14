@@ -13,6 +13,7 @@ from .views_staff import (
     TierStaffViewSet, InventarioStaffViewSet, OggettiSenzaPosizioneView,
     TipologiaEffettoViewSet, EffettoCasualeViewSet, SelezionaEffettoCasualeView,
     MattoniMagiciListView,
+    DichiarazioneStaffViewSet,
 )
 
 
@@ -73,6 +74,7 @@ router.register(r'staff/tiers', TierStaffViewSet, basename='staff-tiers')
 router.register(r'staff/inventari', views_staff.InventarioStaffViewSet, basename='staff-inventari')
 router.register(r'staff/tipologie-effetto', views_staff.TipologiaEffettoViewSet, basename='staff-tipologie-effetto')
 router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, basename='staff-effetti-casuali')
+router.register(r'staff/dichiarazioni', views_staff.DichiarazioneStaffViewSet, basename='staff-dichiarazioni')
 router.register(r'staff/ere', views_staff.EraStaffViewSet, basename='staff-ere')
 router.register(r'staff/regioni', views_staff.RegioneStaffViewSet, basename='staff-regioni')
 router.register(r'staff/prefetture', views_staff.PrefetturaStaffViewSet, basename='staff-prefetture')

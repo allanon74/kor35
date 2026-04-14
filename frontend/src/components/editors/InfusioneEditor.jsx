@@ -6,6 +6,7 @@ import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import MultiSelectBodySlots from './MultiSelectBodySlots';
 import RichTextEditor from '../RichTextEditor';
+import EditorSaveActions from './EditorSaveActions';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -26,6 +27,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   };
 
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
+  const [saving, setSaving] = useState(false);
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
@@ -53,8 +55,9 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     setFormData({ ...formData, [key]: newList });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save_close') => {
     try {
+      setSaving(true);
       // 1. DEDUPLICAZIONE MODIFICATORI
       const modsMap = new Map();
       (formData.modificatori || []).forEach(mod => {
@@ -95,14 +98,22 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         await onSave(dataToSend);
       } else {
         // STANDARD MODE
-        if (formData.id) await staffUpdateInfusione(formData.id, dataToSend, onLogout);
-        else await staffCreateInfusione(dataToSend, onLogout);
+        const isSaveAsNew = mode === 'save_as_new';
+        const isExisting = !!formData.id && !isSaveAsNew;
+        const saved = isExisting
+          ? await staffUpdateInfusione(formData.id, dataToSend, onLogout)
+          : await staffCreateInfusione(dataToSend, onLogout);
         alert("Infusione salvata correttamente!");
-        if (handleClose) handleClose();
+        if (mode === 'save_close' && handleClose) handleClose();
+        if (mode !== 'save_close' && saved?.id) {
+          setFormData((prev) => ({ ...prev, ...saved }));
+        }
       }
     } catch (e) {
       console.error(e);
       alert("Errore salvataggio: " + (e.message || "Controlla i dati."));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -116,14 +127,14 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         <h2 className="text-xl font-bold text-indigo-400 uppercase tracking-tighter">
           {formData.id ? `Editing: ${formData.nome}` : 'Nuova Infusione'}
         </h2>
-        <div className="flex gap-3">
-           <button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-2 rounded-lg font-black text-sm transition-all shadow-lg text-white">
-             {onSave ? 'APPROVA & CREA' : 'SALVA TECNICA'}
-           </button>
-           {handleClose && (
-             <button onClick={handleClose} className="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-bold text-sm transition-all text-white">ANNULLA</button>
-           )}
-        </div>
+        <EditorSaveActions
+          onSave={() => handleSave('save_close')}
+          onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
+          onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+          onCancel={handleClose}
+          saving={saving}
+          saveLabel={onSave ? 'Approva e crea' : 'Salva tecnica'}
+        />
       </div>
 
       {/* 2. IDENTITÀ, AURE E FORMULA */}

@@ -4,6 +4,7 @@ import { getStatisticheList, staffUpdateTessitura, staffCreateTessitura } from '
 import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import RichTextEditor from '../RichTextEditor';
+import EditorSaveActions from './EditorSaveActions';
 
 const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -19,6 +20,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   };
 
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
+  const [saving, setSaving] = useState(false);
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
@@ -41,8 +43,9 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     setFormData({ ...formData, [key]: newList });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save_close') => {
     try {
+      setSaving(true);
       const dataToSend = { 
         ...formData,
         aura_richiesta: formData.aura_richiesta?.id || formData.aura_richiesta || null,
@@ -58,14 +61,22 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         await onSave(dataToSend);
       } else {
         // STANDARD MODE
-        if (formData.id) await staffUpdateTessitura(formData.id, dataToSend, onLogout);
-        else await staffCreateTessitura(dataToSend, onLogout);
+        const isSaveAsNew = mode === 'save_as_new';
+        const isExisting = !!formData.id && !isSaveAsNew;
+        const saved = isExisting
+          ? await staffUpdateTessitura(formData.id, dataToSend, onLogout)
+          : await staffCreateTessitura(dataToSend, onLogout);
         alert("Tessitura salvata!");
-        if (handleClose) handleClose();
+        if (mode === 'save_close' && handleClose) handleClose();
+        if (mode !== 'save_close' && saved?.id) {
+          setFormData((prev) => ({ ...prev, ...saved }));
+        }
       }
     } catch (e) { 
         console.error(e);
         alert("Errore: " + (e.message || "Errore sconosciuto")); 
+    } finally {
+        setSaving(false);
     }
   };
 
@@ -75,14 +86,14 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         <h2 className="text-xl font-bold text-cyan-400 uppercase tracking-tighter">
           {formData.id ? `Edit: ${formData.nome}` : 'Nuova Tessitura'}
         </h2>
-        <div className="flex gap-3">
-           <button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-2 rounded-lg font-black text-sm text-white">
-             {onSave ? 'APPROVA & CREA' : 'SALVA'}
-           </button>
-           {handleClose && (
-             <button onClick={handleClose} className="bg-gray-700 px-6 py-2 rounded-lg font-bold text-sm text-white">ANNULLA</button>
-           )}
-        </div>
+        <EditorSaveActions
+          onSave={() => handleSave('save_close')}
+          onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
+          onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+          onCancel={handleClose}
+          saving={saving}
+          saveLabel={onSave ? 'Approva e crea' : 'Salva'}
+        />
       </div>
 
       <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 space-y-5 shadow-inner">

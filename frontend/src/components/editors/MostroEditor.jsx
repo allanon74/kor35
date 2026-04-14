@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { staffUpdateMostroTemplate, staffCreateMostroTemplate } from '../../api'; // Assicurati di creare queste funzioni
 import RichTextEditor from '../RichTextEditor';
 import { Trash, Plus, GripVertical } from 'lucide-react';
+import EditorSaveActions from './EditorSaveActions';
 
 const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
   const [formData, setFormData] = useState(initialData || {
@@ -13,6 +14,7 @@ const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
     costume: '',
     attacchi: [] 
   });
+  const [saving, setSaving] = useState(false);
 
   // Gestione Attacchi Inline
   const addAttacco = () => {
@@ -33,20 +35,29 @@ const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
     setFormData({ ...formData, attacchi: newAttacchi });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save_close') => {
     try {
+      setSaving(true);
       // Se l'API richiede serializzatori nested scrivibili, invia tutto l'oggetto.
       // Altrimenti dovrai gestire il salvataggio degli attacchi separatamente.
       // Qui assumo che il backend accetti la lista "attacchi" nested nel JSON.
       
-      if (formData.id) await staffUpdateMostroTemplate(formData.id, formData, onLogout);
-      else await staffCreateMostroTemplate(formData, onLogout);
+      const isSaveAsNew = mode === 'save_as_new';
+      const isExisting = !!formData.id && !isSaveAsNew;
+      const saved = isExisting
+        ? await staffUpdateMostroTemplate(formData.id, formData, onLogout)
+        : await staffCreateMostroTemplate(formData, onLogout);
       
       alert("Salvato correttamente!"); 
-      onBack();
+      if (mode === 'save_close') onBack();
+      if (mode !== 'save_close' && saved?.id) {
+        setFormData((prev) => ({ ...prev, ...saved }));
+      }
     } catch (e) { 
         console.error(e);
         alert("Errore durante il salvataggio: " + e.message); 
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -57,10 +68,14 @@ const MostroEditor = ({ onBack, onLogout, initialData = null }) => {
         <h2 className="text-xl font-bold text-red-400 uppercase tracking-tighter">
             {formData.id ? `Edit: ${formData.nome}` : 'Nuovo Template Mostro'}
         </h2>
-        <div className="flex gap-3">
-           <button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-2 rounded-lg font-black text-sm shadow-lg">SALVA</button>
-           <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-bold text-sm">ANNULLA</button>
-        </div>
+        <EditorSaveActions
+          onSave={() => handleSave('save_close')}
+          onSaveAndContinue={() => handleSave('save_continue')}
+          onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+          onCancel={onBack}
+          saving={saving}
+          saveLabel="Salva"
+        />
       </div>
 
       {/* Dati Base */}

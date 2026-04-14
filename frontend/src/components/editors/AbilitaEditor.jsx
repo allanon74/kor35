@@ -4,6 +4,7 @@ import RichTextEditor from '../RichTextEditor';
 import StatModInline from './inlines/StatModInline';
 import GenericRelationInline from './inlines/GenericRelationInline';
 import SearchableSelect from './SearchableSelect';
+import EditorSaveActions from './EditorSaveActions';
 
 const DURATA_OPTIONS = ['O1H', 'DAY', 'EVT'];
 const TIPO_MOD_OPTIONS = ['ADD', 'MOL'];
@@ -77,6 +78,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
 
     const initialKey = initialData?.id ?? 'new';
     const [formData, setFormData] = useState(() => mergeAbilitaFormState(initialData));
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         setFormData(mergeAbilitaFormState(initialData));
@@ -114,8 +116,9 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
         loadResources();
     }, [onLogout]);
 
-    const handleSave = async () => {
+    const handleSave = async (mode = 'save_close') => {
         try {
+            setSaving(true);
             let effetto_uso_risorsa = null;
             let recupero_risorsa = null;
             try {
@@ -169,14 +172,19 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 // Statistiche è già gestito come array di oggetti da StatModInline
             };
 
-            if (formData.id) {
-                await staffUpdateAbilita(formData.id, payload, onLogout);
-            } else {
-                await staffCreateAbilita(payload, onLogout);
+            const isSaveAsNew = mode === 'save_as_new';
+            const isExisting = !!formData.id && !isSaveAsNew;
+            const saved = isExisting
+                ? await staffUpdateAbilita(formData.id, payload, onLogout)
+                : await staffCreateAbilita(payload, onLogout);
+            if (mode === 'save_close') onBack();
+            if (mode !== 'save_close' && saved?.id) {
+                setFormData((prev) => ({ ...prev, ...saved }));
             }
-            onBack(); 
         } catch (error) {
             alert("Errore durante il salvataggio: " + error.message);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -241,10 +249,14 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 <h2 className="text-xl font-bold text-emerald-400 uppercase tracking-tighter">
                     {formData.id ? `Modifica: ${formData.nome}` : 'Nuova Abilità'}
                 </h2>
-                <div className="flex gap-3">
-                    <button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-lg font-black text-sm shadow-lg">SALVA</button>
-                    <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-bold text-sm">ANNULLA</button>
-                </div>
+                <EditorSaveActions
+                    onSave={() => handleSave('save_close')}
+                    onSaveAndContinue={() => handleSave('save_continue')}
+                    onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+                    onCancel={onBack}
+                    saving={saving}
+                    saveLabel="Salva"
+                />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

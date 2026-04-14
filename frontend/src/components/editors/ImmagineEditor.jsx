@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createWikiImage, updateWikiImage, getMediaUrl } from '../../api';
 import RichTextEditor from '../RichTextEditor';
+import EditorSaveActions from './EditorSaveActions';
 
 const ALLINEAMENTO_CHOICES = [
     { id: 'left', nome: 'Sinistra' },
@@ -10,6 +11,7 @@ const ALLINEAMENTO_CHOICES = [
 ];
 
 const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
+  const [currentId, setCurrentId] = useState(initialData?.id || null);
   const [formData, setFormData] = useState(initialData || {
     titolo: '',
     descrizione: '',
@@ -23,6 +25,7 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
 
   useEffect(() => {
     if (initialData) {
+      setCurrentId(initialData.id || null);
       setFormData({
         titolo: initialData.titolo || '',
         descrizione: initialData.descrizione || '',
@@ -33,6 +36,8 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
       if (initialData.immagine) {
         setPreviewUrl(getMediaUrl(initialData.immagine));
       }
+    } else {
+      setCurrentId(null);
     }
   }, [initialData]);
 
@@ -44,7 +49,7 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save_close') => {
     try {
       setSaving(true);
       
@@ -59,14 +64,19 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
         formDataToSend.append('immagine', imageFile);
       }
 
-      if (initialData?.id) {
-        await updateWikiImage(initialData.id, formDataToSend, onLogout);
+      const isSaveAsNew = mode === 'save_as_new';
+      const isExisting = !!currentId && !isSaveAsNew;
+      if (isExisting) {
+        await updateWikiImage(currentId, formDataToSend, onLogout);
       } else {
-        await createWikiImage(formDataToSend, onLogout);
+        const created = await createWikiImage(formDataToSend, onLogout);
+        if (mode !== 'save_close' && created?.id) {
+          setCurrentId(created.id);
+        }
       }
       
       alert("Salvato correttamente!"); 
-      onBack();
+      if (mode === 'save_close') onBack();
     } catch (e) { 
       console.error(e);
       alert("Errore: " + e.message); 
@@ -94,23 +104,16 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
     <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] border border-gray-700 shadow-2xl text-white">
       <div className="flex justify-between items-center border-b border-gray-700 pb-4">
         <h2 className="text-xl font-bold text-emerald-400 uppercase tracking-tighter">
-          {initialData?.id ? `Modifica: ${initialData.titolo || 'Immagine'}` : 'Nuova Immagine Wiki'}
+          {currentId ? `Modifica: ${formData.titolo || 'Immagine'}` : 'Nuova Immagine Wiki'}
         </h2>
-        <div className="flex gap-3">
-          <button 
-            onClick={handleSave} 
-            disabled={saving}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-700 disabled:cursor-not-allowed px-8 py-2 rounded-lg font-black text-sm"
-          >
-            {saving ? 'SALVATAGGIO...' : 'SALVA'}
-          </button>
-          <button 
-            onClick={onBack} 
-            className="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-bold text-sm"
-          >
-            ANNULLA
-          </button>
-        </div>
+        <EditorSaveActions
+          onSave={() => handleSave('save_close')}
+          onSaveAndContinue={() => handleSave('save_continue')}
+          onSaveAsNew={currentId ? () => handleSave('save_as_new') : null}
+          onCancel={onBack}
+          saving={saving}
+          saveLabel="Salva"
+        />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -156,7 +159,7 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
 
           <div>
             <label className="text-[10px] text-gray-500 uppercase font-black block mb-1">
-              {initialData?.id ? 'Nuova Immagine (lascia vuoto per mantenere quella esistente)' : 'Immagine'}
+              {currentId ? 'Nuova Immagine (lascia vuoto per mantenere quella esistente)' : 'Immagine'}
             </label>
             <input 
               type="file"
@@ -164,7 +167,7 @@ const ImmagineEditor = ({ onBack, onLogout, initialData = null }) => {
               className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-cyan-600 file:text-white hover:file:bg-cyan-500 cursor-pointer" 
               onChange={handleImageChange}
             />
-            {!imageFile && initialData?.id && (
+            {!imageFile && currentId && (
               <p className="text-[9px] text-gray-600 mt-1">L'immagine attuale verrà mantenuta se non selezioni un nuovo file.</p>
             )}
           </div>

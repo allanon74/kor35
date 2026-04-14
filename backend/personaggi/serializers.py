@@ -33,7 +33,7 @@ from .models import (
     LetturaMessaggio, Oggetto, ClasseOggetto,
     RichiestaAssemblaggio, OggettoCaratteristica, 
     Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
-    TipologiaEffetto, EffettoCasuale,
+    TipologiaEffetto, EffettoCasuale, Dichiarazione,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     StatisticaContainer, StatisticaContainerItem,
@@ -1539,6 +1539,12 @@ class TipologiaEffettoStaffSerializer(serializers.ModelSerializer):
 class EffettoCasualeStaffSerializer(serializers.ModelSerializer):
     class Meta:
         model = EffettoCasuale
+        fields = '__all__'
+
+
+class DichiarazioneStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Dichiarazione
         fields = '__all__'
 
 

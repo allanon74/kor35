@@ -195,7 +195,6 @@ const EraManager = ({ onLogout, onBack }) => {
             onAdd={() => setEditingEra({ nome: '', abbreviazione: '', descrizione_breve: '', descrizione: '', ordine: 0, attiva: true })}
             onEdit={(item) => setEditingEra(item)}
             onDelete={async (id) => {
-              if (!window.confirm('Eliminare questa era?')) return;
               await staffDeleteEra(id, onLogout);
               await load();
             }}
@@ -211,7 +210,6 @@ const EraManager = ({ onLogout, onBack }) => {
             onAdd={() => setEditingRegione({ nome: '', sigla: '', descrizione: '', ordine: 0, attiva: true })}
             onEdit={(item) => setEditingRegione(item)}
             onDelete={async (id) => {
-              if (!window.confirm('Eliminare questa regione?')) return;
               await staffDeleteRegione(id, onLogout);
               await load();
             }}
@@ -227,7 +225,6 @@ const EraManager = ({ onLogout, onBack }) => {
             onAdd={() => setEditingPref({ era: '', regione: '', nome: '', descrizione: '', ordine: 0 })}
             onEdit={(item) => setEditingPref(item)}
             onDelete={async (id) => {
-              if (!window.confirm('Eliminare questa prefettura?')) return;
               await staffDeletePrefettura(id, onLogout);
               await load();
             }}

@@ -3,6 +3,7 @@ import { useCharacter } from '../CharacterContext';
 import { staffUpdateCerimoniale, staffCreateCerimoniale } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import RichTextEditor from '../RichTextEditor';
+import EditorSaveActions from './EditorSaveActions';
 
 // Aggiunto onCancel e onSave ai props
 const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
@@ -20,6 +21,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
   };
 
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
+  const [saving, setSaving] = useState(false);
 
   // Gestione alias per chiusura
   const handleClose = onCancel || onBack;
@@ -30,8 +32,9 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
     setFormData({ ...formData, [key]: newList });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save_close') => {
     try {
+      setSaving(true);
       const dataToSend = { 
         ...formData,
         aura_richiesta: formData.aura_richiesta?.id || formData.aura_richiesta || null
@@ -43,14 +46,22 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
         await onSave(dataToSend);
       } else {
         // MODALITÀ EDITOR STANDARD
-        if (formData.id) await staffUpdateCerimoniale(formData.id, dataToSend, onLogout);
-        else await staffCreateCerimoniale(dataToSend, onLogout);
+        const isSaveAsNew = mode === 'save_as_new';
+        const isExisting = !!formData.id && !isSaveAsNew;
+        const saved = isExisting
+          ? await staffUpdateCerimoniale(formData.id, dataToSend, onLogout)
+          : await staffCreateCerimoniale(dataToSend, onLogout);
         alert("Cerimoniale salvato!");
-        if (handleClose) handleClose();
+        if (mode === 'save_close' && handleClose) handleClose();
+        if (mode !== 'save_close' && saved?.id) {
+          setFormData((prev) => ({ ...prev, ...saved }));
+        }
       }
     } catch (e) { 
         console.error(e);
         alert("Errore: " + (e.message || "Errore sconosciuto")); 
+    } finally {
+        setSaving(false);
     }
   };
 
@@ -60,14 +71,14 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
         <h2 className="text-xl font-bold text-amber-400 uppercase tracking-tighter">
           {formData.id ? `Edit Cerimoniale: ${formData.nome}` : 'Nuovo Cerimoniale'}
         </h2>
-        <div className="flex gap-3">
-           <button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-500 px-8 py-2 rounded-lg font-black text-sm text-white">
-             {onSave ? 'APPROVA & CREA' : 'SALVA'}
-           </button>
-           {handleClose && (
-               <button onClick={handleClose} className="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-bold text-sm text-white">ANNULLA</button>
-           )}
-        </div>
+        <EditorSaveActions
+          onSave={() => handleSave('save_close')}
+          onSaveAndContinue={onSave ? null : () => handleSave('save_continue')}
+          onSaveAsNew={onSave || !formData.id ? null : () => handleSave('save_as_new')}
+          onCancel={handleClose}
+          saving={saving}
+          saveLabel={onSave ? 'Approva e crea' : 'Salva'}
+        />
       </div>
 
       <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 space-y-5">

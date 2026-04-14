@@ -1728,6 +1728,30 @@ export const staffDeletePrefettura = (id, onLogout) => {
     }, onLogout);
 };
 
+export const staffGetDichiarazioni = (onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/dichiarazioni/', { method: 'GET' }, onLogout);
+};
+
+export const staffCreateDichiarazione = (data, onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/staff/dichiarazioni/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffUpdateDichiarazione = (id, data, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/dichiarazioni/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffDeleteDichiarazione = (id, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/staff/dichiarazioni/${id}/`, {
+        method: 'DELETE',
+    }, onLogout);
+};
+
 export const createPersonaggio = (data, onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/gestione-personaggi/', {
         method: 'POST',

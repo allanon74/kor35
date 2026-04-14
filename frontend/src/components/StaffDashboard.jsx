@@ -9,6 +9,7 @@ import {
     LayoutGrid, LogOut, ClipboardCheck,
     Skull, BookOpen, Menu, ChevronRight, Globe, // Aggiunto Globe
     Layers, Globe2, Image, Package, QrCode, Sparkles, Gem,
+    BookText,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BuildVersions from './BuildVersions';
@@ -34,6 +35,7 @@ const EffettiCasualiManager = lazy(() => import('./editors/EffettiCasualiManager
 const SocialEventReportTab = lazy(() => import('./editors/SocialEventReportTab'));
 const StaffRisorsaPoolTab = lazy(() => import('./StaffRisorsaPoolTab'));
 const EraManager = lazy(() => import('./editors/EraManager'));
+const DichiarazioniGlossarioManager = lazy(() => import('./editors/DichiarazioniGlossarioManager'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -96,6 +98,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'social-report', label: 'Report Social Eventi', icon: <Sparkles size={24} />, color: 'bg-fuchsia-700', component: SocialEventReportTab },
         { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: <Gem size={24} />, color: 'bg-amber-800', component: StaffRisorsaPoolTab },
         { id: 'ere-prefetture', label: 'Ere e Prefetture', icon: <Globe2 size={24} />, color: 'bg-violet-700', component: EraManager },
+        { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e Glossario', icon: <BookText size={24} />, color: 'bg-emerald-700', component: DichiarazioniGlossarioManager },
         { id: 'messaggi', label: 'Messaggi Staff', icon: <MessageSquare size={24} />, color: 'bg-emerald-600', component: AdminMessageTab },        
     ], []);
 

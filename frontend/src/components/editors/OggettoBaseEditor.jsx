@@ -4,7 +4,7 @@ import { staffUpdateOggettoBase, staffCreateOggettoBase, staffGetClassiOggetto }
 import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor'; // Importazione corretta
-import { ArrowLeft, Save } from 'lucide-react';
+import EditorSaveActions from './EditorSaveActions';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -14,6 +14,7 @@ const TIPO_CHOICES = [
 const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
   const [classi, setClassi] = useState([]);
+  const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState(initialData || {
     nome: '', 
@@ -54,8 +55,9 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
     setFormData({ ...formData, [key]: newList });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (mode = 'save_close') => {
     try {
+        setSaving(true);
         const getId = (item) => item?.id || item || null;
         
         // Funzione robusta per pulire le statistiche prima dell'invio
@@ -82,14 +84,22 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
             statistiche_modificatori: prepareStats(formData.statistiche_modificatori, true)
         };
 
-        if (formData.id) await staffUpdateOggettoBase(formData.id, data, onLogout);
-        else await staffCreateOggettoBase(data, onLogout);
+        const isSaveAsNew = mode === 'save_as_new';
+        const isExisting = !!formData.id && !isSaveAsNew;
+        const saved = isExisting
+            ? await staffUpdateOggettoBase(formData.id, data, onLogout)
+            : await staffCreateOggettoBase(data, onLogout);
         
         alert("Salvato correttamente!");
-        onBack();
+        if (mode === 'save_close') onBack();
+        if (mode !== 'save_close' && saved?.id) {
+            setFormData((prev) => ({ ...prev, ...saved }));
+        }
     } catch (e) { 
         console.error("Errore Salvataggio:", e);
         alert("Errore salvataggio: " + (e.message || "Controlla i dati.")); 
+    } finally {
+        setSaving(false);
     }
   };
 
@@ -112,14 +122,14 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
         <h2 className="text-xl font-bold text-blue-400 uppercase tracking-tighter">
             {formData.id ? `Edit Template: ${formData.nome}` : 'Nuovo Oggetto Base'}
         </h2>
-        <div className="flex gap-3">
-           <button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-lg font-black text-xs uppercase shadow-lg transition-all flex items-center gap-2">
-                <Save size={16}/> Salva
-           </button>
-           <button onClick={onBack} className="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-bold text-xs uppercase transition-all flex items-center gap-2">
-                <ArrowLeft size={16}/> Indietro
-           </button>
-        </div>
+        <EditorSaveActions
+          onSave={() => handleSave('save_close')}
+          onSaveAndContinue={() => handleSave('save_continue')}
+          onSaveAsNew={formData.id ? () => handleSave('save_as_new') : null}
+          onCancel={onBack}
+          saving={saving}
+          saveLabel="Salva"
+        />
       </div>
 
       {/* Dati Principali */}

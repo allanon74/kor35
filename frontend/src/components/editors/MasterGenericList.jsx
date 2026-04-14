@@ -19,9 +19,29 @@ const MasterGenericList = ({
   serverDrivenFiltering = false,
   /** Chiamato quando cambiano termine di ricerca (debounced) o filtri attivi. */
   onServerQueryChange = null,
+  persistKey = null,
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilters, setActiveFilters] = useState({});
+  const normalizedKey = (persistKey || title || '').toString().trim().toLowerCase().replace(/\s+/g, '-');
+  const storageKey = normalizedKey ? `staff_master_list_filters:${normalizedKey}` : null;
+  const readPersisted = () => {
+    if (!storageKey) return { searchTerm: '', activeFilters: {} };
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return { searchTerm: '', activeFilters: {} };
+      const parsed = JSON.parse(raw);
+      return {
+        searchTerm: typeof parsed?.searchTerm === 'string' ? parsed.searchTerm : '',
+        activeFilters: parsed?.activeFilters && typeof parsed.activeFilters === 'object' ? parsed.activeFilters : {},
+      };
+    } catch {
+      return { searchTerm: '', activeFilters: {} };
+    }
+  };
+  const persisted = readPersisted();
+  const [searchTerm, setSearchTerm] = useState(persisted.searchTerm);
+  const [activeFilters, setActiveFilters] = useState(persisted.activeFilters);
+  const [pendingDeleteItem, setPendingDeleteItem] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Debounce del search term per migliorare le performance
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -30,6 +50,15 @@ const MasterGenericList = ({
     if (!serverDrivenFiltering || !onServerQueryChange) return;
     onServerQueryChange({ search: debouncedSearchTerm, activeFilters });
   }, [serverDrivenFiltering, onServerQueryChange, debouncedSearchTerm, activeFilters]);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ searchTerm, activeFilters }));
+    } catch {
+      // ignore localStorage quota/availability issues
+    }
+  }, [storageKey, searchTerm, activeFilters]);
 
   const toggleFilter = useCallback((key, val) => {
     setActiveFilters(prev => {
@@ -43,6 +72,22 @@ const MasterGenericList = ({
     setActiveFilters({});
     setSearchTerm('');
   }, []);
+
+  const getItemLabel = useCallback((item) => {
+    if (!item) return '';
+    return item.nome || item.titolo || item.dichiarazione || item.label || `ID ${item.id}`;
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDeleteItem || !onDelete) return;
+    try {
+      setIsDeleting(true);
+      await onDelete(pendingDeleteItem.id);
+      setPendingDeleteItem(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [pendingDeleteItem, onDelete]);
 
   const filteredItems = useMemo(() => {
     if (serverDrivenFiltering) {
@@ -189,7 +234,7 @@ const MasterGenericList = ({
                           <Pencil size={14} />
                         </button>
                         <button 
-                          onClick={() => onDelete(item.id)} 
+                          onClick={() => setPendingDeleteItem(item)} 
                           className="p-2 bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white rounded-lg transition-all"
                         >
                           <Trash2 size={14} />
@@ -217,6 +262,35 @@ const MasterGenericList = ({
           )}
         </div>
       </div>
+
+      {pendingDeleteItem && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-xl shadow-2xl">
+            <div className="p-4 border-b border-gray-700">
+              <h3 className="text-white font-bold text-lg">Conferma eliminazione</h3>
+              <p className="text-sm text-gray-400 mt-1">
+                Stai per eliminare: <span className="text-gray-200 font-semibold">{getItemLabel(pendingDeleteItem)}</span>
+              </p>
+            </div>
+            <div className="p-4 flex justify-end gap-2">
+              <button
+                onClick={() => setPendingDeleteItem(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold text-white disabled:opacity-60"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-bold text-white disabled:opacity-60"
+              >
+                {isDeleting ? 'Eliminazione...' : 'Elimina'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

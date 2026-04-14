@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor'; 
 import { getAllAbilitaSimple } from '../../api';
+import EditorSaveActions from './EditorSaveActions';
 
 // Mappatura delle tipologie (da allineare con personaggi/models.py)
 const TIER_TYPES = [
@@ -89,9 +90,8 @@ const TabellaEditor = ({ tier, onSave, onCancel, onLogout }) => {
         setConnectedSkills(newSkills);
     };
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSave(formData, connectedSkills);
+    const handleSubmit = (mode = 'save_close') => {
+        onSave(formData, connectedSkills, mode);
     };
 
     return (
@@ -278,13 +278,13 @@ const TabellaEditor = ({ tier, onSave, onCancel, onLogout }) => {
                 >
                     Annulla
                 </button>
-                <button 
-                    onClick={handleSubmit}
-                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg shadow-lg shadow-indigo-900/30 flex items-center gap-2 transition-all hover:scale-[1.02]"
-                >
-                    <Save size={18} />
-                    <span>{tier ? 'Salva Modifiche' : 'Crea Tabella'}</span>
-                </button>
+                <EditorSaveActions
+                    onSave={() => handleSubmit('save_close')}
+                    onSaveAndContinue={() => handleSubmit('save_continue')}
+                    onSaveAsNew={tier?.id ? () => handleSubmit('save_as_new') : null}
+                    onCancel={onCancel}
+                    saveLabel={tier ? 'Salva modifiche' : 'Crea tabella'}
+                />
             </div>
         </div>
     );
