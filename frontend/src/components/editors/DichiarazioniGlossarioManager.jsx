@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import MasterGenericList from './MasterGenericList';
 import EditorSaveActions from './EditorSaveActions';
 import RichTextEditor from '../RichTextEditor';
@@ -33,21 +33,25 @@ const TIPO_DICHIARAZIONI = TIPO_OPZIONI.filter((opt) => opt.value !== 'GLOS');
 
 const EMPTY_FORM = { nome: '', tipo: 'GLOS', dichiarazione: '', descrizione: '' };
 
-const DichiarazioneFormModal = ({ isOpen, value, onClose, onSave, isGlossario, statusMessage = '', statusType = 'success' }) => {
+const DichiarazioneFormPanel = ({ value, onClose, onSave, isGlossario, statusMessage = '', statusType = 'success' }) => {
   const [form, setForm] = useState(value || {});
   useEffect(() => setForm(value || {}), [value]);
-  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-xl">
-        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+    <div className="h-full p-4 space-y-4 animate-in fade-in slide-in-from-bottom-4">
+      <button
+        onClick={onClose}
+        className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
+      >
+        <ArrowLeft size={16} /> Annulla e Torna alla Lista
+      </button>
+      <div className="h-full bg-gray-900 border border-gray-700 rounded-xl flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-gray-700">
           <h3 className="text-lg font-bold text-white">
             {form?.id ? `Modifica ${isGlossario ? 'voce glossario' : 'dichiarazione'}` : `Nuova ${isGlossario ? 'voce glossario' : 'dichiarazione'}`}
           </h3>
-          <button onClick={onClose}><X className="text-gray-400" size={18} /></button>
         </div>
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-3 overflow-y-auto custom-scrollbar flex-1">
           <input
             className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
             placeholder="Nome interno"
@@ -129,55 +133,15 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
     [items, isGlossarioTab],
   );
 
-  return (
-    <div className="h-full p-4 space-y-4">
-      <button onClick={onBack} className="px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-start">
-        <ArrowLeft size={16} /> Indietro
-      </button>
-
-      <div className="bg-gray-900/70 border border-gray-700 rounded-xl p-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            onClick={() => setActiveTab('glossario')}
-            className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${isGlossarioTab ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
-          >
-            Glossario
-          </button>
-          <button
-            onClick={() => setActiveTab('dichiarazioni')}
-            className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${!isGlossarioTab ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
-          >
-            Dichiarazioni
-          </button>
-        </div>
-      </div>
-
-      <div className="h-[calc(100%-122px)]">
-        <MasterGenericList
-          title={isGlossarioTab ? 'Glossario' : 'Dichiarazioni'}
-          items={filteredItems}
-          columns={columns}
-          onAdd={() => setEditingItem({ nome: '', tipo: isGlossarioTab ? 'GLOS' : TIPO_DICHIARAZIONI[0].value, dichiarazione: '', descrizione: '' })}
-          onEdit={(item) => setEditingItem(item)}
-          onDelete={async (id) => {
-            await staffDeleteDichiarazione(id, onLogout);
-            await loadItems();
-          }}
-          addLabel="Nuova Voce"
-          filterConfig={isGlossarioTab ? [] : [{
-            key: 'tipo',
-            label: 'Tipo',
-            options: TIPO_DICHIARAZIONI.map((opt) => ({ id: opt.value, label: opt.label })),
-          }]}
-          emptyMessage="Nessuna voce presente."
-        />
-      </div>
-
-      <DichiarazioneFormModal
-        isOpen={!!editingItem}
+  if (editingItem) {
+    return (
+      <DichiarazioneFormPanel
         value={editingItem}
         isGlossario={isGlossarioTab}
-        onClose={() => setEditingItem(null)}
+        onClose={() => {
+          setEditingItem(null);
+          setEditorStatus({ type: 'success', message: '' });
+        }}
         statusMessage={editorStatus.message}
         statusType={editorStatus.type}
         onSave={async (form, mode = 'save_close') => {
@@ -219,6 +183,55 @@ const DichiarazioniGlossarioManager = ({ onBack, onLogout }) => {
           await loadItems();
         }}
       />
+    );
+  }
+
+  return (
+    <div className="h-full p-4 space-y-4">
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-bold uppercase"
+      >
+        <ArrowLeft size={16} /> Torna agli Strumenti
+      </button>
+
+      <div className="bg-gray-900/70 border border-gray-700 rounded-xl p-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={() => setActiveTab('glossario')}
+            className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${isGlossarioTab ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+          >
+            Glossario
+          </button>
+          <button
+            onClick={() => setActiveTab('dichiarazioni')}
+            className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${!isGlossarioTab ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+          >
+            Dichiarazioni
+          </button>
+        </div>
+      </div>
+
+      <div className="h-[calc(100%-122px)]">
+        <MasterGenericList
+          title={isGlossarioTab ? 'Glossario' : 'Dichiarazioni'}
+          items={filteredItems}
+          columns={columns}
+          onAdd={() => setEditingItem({ nome: '', tipo: isGlossarioTab ? 'GLOS' : TIPO_DICHIARAZIONI[0].value, dichiarazione: '', descrizione: '' })}
+          onEdit={(item) => setEditingItem(item)}
+          onDelete={async (id) => {
+            await staffDeleteDichiarazione(id, onLogout);
+            await loadItems();
+          }}
+          addLabel="Nuova Voce"
+          filterConfig={isGlossarioTab ? [] : [{
+            key: 'tipo',
+            label: 'Tipo',
+            options: TIPO_DICHIARAZIONI.map((opt) => ({ id: opt.value, label: opt.label })),
+          }]}
+          emptyMessage="Nessuna voce presente."
+        />
+      </div>
     </div>
   );
 };
