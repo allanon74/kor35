@@ -46,7 +46,7 @@ const TabellaManager = ({ onLogout }) => {
         try {
             await deleteTier(id, onLogout);
             setTiers(prev => prev.filter(t => t.id !== id));
-        } catch (error) {
+        } catch {
             setEditorStatus({ type: 'error', message: "Errore durante l'eliminazione." });
         }
     }, [onLogout]);
@@ -95,35 +95,20 @@ const TabellaManager = ({ onLogout }) => {
         setEditorStatus({ type: 'success', message: '' });
     }, []);
 
-    if (isEditing) {
-        return (
-            <div className="h-full p-4 animate-in fade-in slide-in-from-bottom-4">
-                <TabellaEditor 
-                    tier={currentTier} 
-                    onSave={handleSave} 
-                    onCancel={handleCancel} 
-                    onLogout={onLogout} // Passiamo onLogout anche all'editor
-                    statusMessage={editorStatus.message}
-                    statusType={editorStatus.type}
-                />
-            </div>
-        );
-    }
-
-    const tierTypeLabels = {
+    const tierTypeLabels = useMemo(() => ({
         G0: 'Tabelle Generali',
         T1: 'Tier 1',
         T2: 'Tier 2',
         T3: 'Tier 3',
         T4: 'Tier 4',
-    };
+    }), []);
 
     const columns = useMemo(() => [
         { header: 'Nome', render: (t) => <span className="font-bold">{t.nome}</span> },
         { header: 'Tipo', render: (t) => tierTypeLabels[t.tipo] || t.tipo, width: 180 },
         { header: 'Abilita', render: (t) => t.abilita_count || 0, align: 'center', width: 100 },
         { header: 'Descrizione', render: (t) => <span className="text-gray-300">{(t.descrizione || '').replace(/<[^>]+>/g, '').slice(0, 90)}{(t.descrizione || '').length > 90 ? '...' : ''}</span> },
-    ], []);
+    ], [tierTypeLabels]);
 
     const filterConfig = useMemo(() => ([
         {
@@ -138,6 +123,21 @@ const TabellaManager = ({ onLogout }) => {
             ],
         },
     ]), []);
+
+    if (isEditing) {
+        return (
+            <div className="h-full p-4 animate-in fade-in slide-in-from-bottom-4">
+                <TabellaEditor 
+                    tier={currentTier} 
+                    onSave={handleSave} 
+                    onCancel={handleCancel} 
+                    onLogout={onLogout} // Passiamo onLogout anche all'editor
+                    statusMessage={editorStatus.message}
+                    statusType={editorStatus.type}
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-full bg-gray-900">
