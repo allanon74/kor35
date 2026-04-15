@@ -299,6 +299,8 @@ ARCANA_SSO_CLIENT_ID = env("ARCANA_SSO_CLIENT_ID", default="").strip()
 ARCANA_SSO_CLIENT_SECRET = env("ARCANA_SSO_CLIENT_SECRET", default="").strip()
 ARCANA_SSO_REDIRECT_URI = env("ARCANA_SSO_REDIRECT_URI", default="").strip()
 ARCANA_SSO_FRONTEND_LOGIN_PATH = env("ARCANA_SSO_FRONTEND_LOGIN_PATH", default="/login").strip()
+# OIDC max_age (secondi). Default "0" = richiedi autenticazione fresca. Valore vuoto = non inviare il parametro.
+ARCANA_SSO_AUTHORIZE_MAX_AGE = env("ARCANA_SSO_AUTHORIZE_MAX_AGE", default="0").strip()
 
 AUTHENTICATION_BACKENDS = [
 	'django.contrib.auth.backends.ModelBackend',

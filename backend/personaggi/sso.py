@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import logging
 import secrets
 from urllib.parse import urlencode
@@ -26,6 +27,67 @@ from personaggi.models import ArcanaSSOIdentity
 STATE_CACHE_PREFIX = "arcana:sso:state:"
 TICKET_CACHE_PREFIX = "arcana:sso:ticket:"
 logger = logging.getLogger(__name__)
+
+
+def _jwt_payload_unverified(token: str) -> dict:
+    """
+    Decodifica il payload di un JWT senza verificare la firma.
+    Usato solo per confrontare sub/claim con /userinfo (stesso token appena emesso da /token).
+    """
+    token = (token or "").strip()
+    if not token or token.count(".") < 2:
+        return {}
+    try:
+        _, payload_b64, *_ = token.split(".")
+        pad = "=" * ((4 - len(payload_b64) % 4) % 4)
+        raw = base64.urlsafe_b64decode(payload_b64 + pad)
+        data = json.loads(raw.decode("utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _norm_arcana_sub(value) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _merge_arcana_profile_with_jwt(profile: dict, token_data: dict, access_token: str) -> dict:
+    """
+    Se access_token o id_token (JWT) contengono un sub diverso da /userinfo,
+    si assume che i claim del token riflettano il grant OAuth e hanno precedenza sul mapping locale.
+    (Mitigazione se /userinfo lato AD è incoerente col token.)
+    """
+    id_tok = (token_data.get("id_token") or "").strip()
+    claims = _jwt_payload_unverified(id_tok) if id_tok else {}
+    if not claims.get("sub"):
+        claims = _jwt_payload_unverified(access_token or "")
+    if not claims:
+        return profile
+
+    jwt_sub = _norm_arcana_sub(claims.get("sub"))
+    info_sub = _norm_arcana_sub(profile.get("sub")) or _norm_arcana_sub(profile.get("arcanadomine_id"))
+    if not jwt_sub:
+        return profile
+    if info_sub and jwt_sub == info_sub:
+        return profile
+
+    merged = dict(profile)
+    if info_sub and jwt_sub != info_sub:
+        logger.error(
+            "Arcana SSO: sub da /userinfo (%s) diverso da sub nei claim JWT (%s). "
+            "Uso il sub del token per il mapping locale.",
+            info_sub,
+            jwt_sub,
+        )
+    merged["sub"] = jwt_sub
+    if claims.get("arcanadomine_id") is not None:
+        merged["arcanadomine_id"] = claims["arcanadomine_id"]
+    for key in ("email", "username", "nome", "cognome", "preferred_username"):
+        if claims.get(key) not in (None, ""):
+            merged[key] = claims[key]
+    return merged
 
 
 def _base64url(data: bytes) -> str:
@@ -227,20 +289,22 @@ class ArcanaSSOLoginStartView(APIView):
             timeout=600,
         )
 
-        params = urlencode(
-            {
-                "response_type": "code",
-                "client_id": client_id,
-                "redirect_uri": redirect_uri,
-                "state": state,
-                "code_challenge": challenge,
-                "code_challenge_method": "S256",
-                "scope": "openid profile",
-                # Forza la schermata di login Arcana per evitare riuso silenzioso
-                # di una sessione già aperta con un altro account.
-                "prompt": "login",
-            }
-        )
+        auth_params = {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "scope": "openid profile",
+            # Forza la schermata di login Arcana per evitare riuso silenzioso
+            # di una sessione già aperta con un altro account.
+            "prompt": "login",
+        }
+        max_age = str(getattr(settings, "ARCANA_SSO_AUTHORIZE_MAX_AGE", "") or "").strip()
+        if max_age:
+            auth_params["max_age"] = max_age
+        params = urlencode(auth_params)
         return HttpResponseRedirect(f"{base_url}/authorize?{params}")
 
 
@@ -287,16 +351,22 @@ class ArcanaSSOCallbackView(APIView):
 
             userinfo_res = requests.get(
                 f"{base_url}/userinfo",
-                headers={"Authorization": f"Bearer {access_token}"},
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Cache-Control": "no-cache",
+                },
                 timeout=12,
             )
             userinfo_res.raise_for_status()
             profile = userinfo_res.json()
+            profile = _merge_arcana_profile_with_jwt(profile, token_data, access_token)
+            jwt_dbg = _jwt_payload_unverified((token_data.get("id_token") or "").strip() or access_token)
             logger.warning(
-                "Arcana callback userinfo: sub=%s email=%s username=%s",
+                "Arcana callback userinfo: sub=%s email=%s username=%s | jwt_sub=%s",
                 profile.get("sub") or profile.get("arcanadomine_id"),
                 profile.get("email"),
                 profile.get("username"),
+                _norm_arcana_sub(jwt_dbg.get("sub")) or None,
             )
             user = _upsert_local_user(profile)
             logger.warning(
