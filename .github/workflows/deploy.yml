@@ -194,6 +194,15 @@ jobs:
 
             cd "${PROJECT_PATH}/config/docker"
             export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}"
+            # Guard rail: pulizia preventiva contro container orfani con nome fisso
+            # (es. kor35_prod_redis) creati da run manuali precedenti.
+            docker compose -f compose.base.yml -f compose.prod.yml down --remove-orphans || true
+            for cname in kor35_prod_db kor35_prod_redis kor35_prod_backend kor35_prod_daphne kor35_prod_frontend; do
+              if docker ps -a --format '{{.Names}}' | grep -Fxq "${cname}"; then
+                echo "Rimuovo container orfano in conflitto: ${cname}"
+                docker rm -f "${cname}" || true
+              fi
+            done
             docker compose -f compose.base.yml -f compose.prod.yml up -d --build
 
             if [ "${RUN_MIGRATIONS}" = "true" ]; then
