@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.db import transaction
 from django.http import HttpResponseRedirect
+from django.urls import reverse
 from django.utils.text import slugify
 from rest_framework import permissions, status
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -66,6 +67,22 @@ def _client_registered_origin() -> str:
     if not parsed.scheme or not parsed.netloc:
         return ""
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
+
+
+def _arcana_sso_login_fresh_url(request, next_path: str) -> str:
+    """
+    URL assoluto di /api/auth/arcana/login/?fresh=1&next=... con host della redirect_uri registrata.
+    Così l'origin di return_to coincide con la whitelist AD anche dietro proxy (Host senza www, IP interno, ecc.).
+    """
+    qs = urlencode({"fresh": "1", "next": next_path})
+    try:
+        path = reverse("arcana-sso-login")
+    except Exception:
+        path = request.path
+    client_origin = _client_registered_origin()
+    if client_origin:
+        return f"{client_origin}{path}?{qs}"
+    return request.build_absolute_uri(f"{path}?{qs}")
 
 
 def _frontend_login_url(request) -> str:
@@ -190,9 +207,7 @@ class ArcanaSSOLoginStartView(APIView):
         if not force_fresh:
             arcana_root = _arcana_site_root()
             if arcana_root and client_id:
-                return_to = request.build_absolute_uri(
-                    f"{request.path}?{urlencode({'fresh': '1', 'next': next_path})}"
-                )
+                return_to = _arcana_sso_login_fresh_url(request, next_path)
                 logout_params = urlencode(
                     {
                         "ad_sso_logout": "1",
