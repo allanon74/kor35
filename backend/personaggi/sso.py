@@ -3,6 +3,7 @@ import hashlib
 import secrets
 from urllib.parse import urlencode
 from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin
 
 import requests
 from django.conf import settings
@@ -46,6 +47,20 @@ def _arcana_site_root() -> str:
     if not base:
         return ""
     parsed = urlparse(base)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
+
+
+def _client_registered_origin() -> str:
+    """
+    Origin della redirect_uri registrata su Arcana per questo client.
+    Serve per costruire return_to compatibile con la whitelist AD.
+    """
+    redirect_uri = str(getattr(settings, "ARCANA_SSO_REDIRECT_URI", "") or "").strip()
+    if not redirect_uri:
+        return ""
+    parsed = urlparse(redirect_uri)
     if not parsed.scheme or not parsed.netloc:
         return ""
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
@@ -417,9 +432,15 @@ class ArcanaSSOFrontChannelLogoutView(APIView):
     def get(self, request):
         client_id = str(getattr(settings, "ARCANA_SSO_CLIENT_ID", "") or "").strip()
         arcana_root = _arcana_site_root()
-        return_to = (request.GET.get("return_to") or _frontend_login_url(request)).strip()
-        if return_to.startswith("/"):
-            return_to = request.build_absolute_uri(return_to)
+        return_to_raw = (request.GET.get("return_to") or "/login").strip() or "/login"
+        client_origin = _client_registered_origin()
+        if return_to_raw.startswith("/"):
+            if client_origin:
+                return_to = urljoin(f"{client_origin}/", return_to_raw.lstrip("/"))
+            else:
+                return_to = request.build_absolute_uri(return_to_raw)
+        else:
+            return_to = return_to_raw
         if not (client_id and arcana_root):
             return HttpResponseRedirect(return_to)
         params = urlencode(
