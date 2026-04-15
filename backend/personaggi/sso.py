@@ -182,6 +182,25 @@ class ArcanaSSOLoginStartView(APIView):
         next_path = (request.GET.get("next") or "/app").strip() or "/app"
         if not next_path.startswith("/"):
             next_path = "/app"
+        force_fresh = str(request.GET.get("fresh") or "").strip() == "1"
+
+        # Hard guard contro sessioni AD "sticky":
+        # al primo passaggio eseguiamo sempre logout front-channel su Arcana,
+        # poi torniamo qui con fresh=1 per avviare /authorize.
+        if not force_fresh:
+            arcana_root = _arcana_site_root()
+            if arcana_root and client_id:
+                return_to = request.build_absolute_uri(
+                    f"{request.path}?{urlencode({'fresh': '1', 'next': next_path})}"
+                )
+                logout_params = urlencode(
+                    {
+                        "ad_sso_logout": "1",
+                        "client_id": client_id,
+                        "return_to": return_to,
+                    }
+                )
+                return HttpResponseRedirect(f"{arcana_root}/?{logout_params}")
 
         verifier = _base64url(secrets.token_bytes(64))
         state = _base64url(secrets.token_bytes(24))
