@@ -117,6 +117,11 @@ const LoginPage = ({ onLoginSuccess }) => {
   };
 
   const goArcana = () => {
+    // Evita che un vecchio token locale impedisca lo scambio ticket SSO al ritorno su /login.
+    localStorage.removeItem('kor35_token');
+    localStorage.removeItem('kor35_is_staff');
+    localStorage.removeItem('kor35_is_master');
+    localStorage.removeItem('kor35_login_method');
     window.location.href = `${API_BASE_URL}/api/auth/arcana/login/?next=${encodeURIComponent('/app')}`;
   };
 

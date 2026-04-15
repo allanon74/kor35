@@ -16,6 +16,8 @@ import SocialPage from './pages/SocialPage';
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('kor35_token'));
   const [isLoading, setIsLoading] = useState(true);
+  const searchParams = new URLSearchParams(window.location.search);
+  const hasArcanaFlowParams = searchParams.has('arcana_ticket') || searchParams.has('arcana_error');
 
   useEffect(() => {
     const storedToken = localStorage.getItem('kor35_token');
@@ -88,7 +90,9 @@ export default function App() {
             <Route 
               path="login" 
               element={
-                token ? <Navigate to="/app" replace /> : <LoginPage onLoginSuccess={handleLoginSuccess} />
+                token && !hasArcanaFlowParams
+                  ? <Navigate to="/app" replace />
+                  : <LoginPage onLoginSuccess={handleLoginSuccess} />
               } 
             />
           </Route>
