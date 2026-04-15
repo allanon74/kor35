@@ -230,10 +230,10 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlTab = params.get('tab');
-    if (isValidTabId(urlTab) && urlTab !== activeTab) {
+    if (isValidTabId(urlTab)) {
       setActiveTab(urlTab);
     }
-  }, [location.search, activeTab, isValidTabId]);
+  }, [location.search, isValidTabId]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
