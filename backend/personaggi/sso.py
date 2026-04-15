@@ -157,6 +157,9 @@ class ArcanaSSOLoginStartView(APIView):
                 "code_challenge": challenge,
                 "code_challenge_method": "S256",
                 "scope": "openid profile",
+                # Forza la schermata di login Arcana per evitare riuso silenzioso
+                # di una sessione già aperta con un altro account.
+                "prompt": "login",
             }
         )
         return HttpResponseRedirect(f"{base_url}/authorize?{params}")
