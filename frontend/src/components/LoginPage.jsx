@@ -54,6 +54,7 @@ const LoginPage = ({ onLoginSuccess }) => {
         localStorage.setItem('kor35_token', data.token);
         localStorage.setItem('kor35_is_staff', data.is_staff);
         localStorage.setItem('kor35_is_master', data.is_superuser);
+        localStorage.setItem('kor35_login_method', 'arcana');
         if (onLoginSuccess && typeof onLoginSuccess === 'function') {
           onLoginSuccess(data.token);
         }
@@ -98,6 +99,7 @@ const LoginPage = ({ onLoginSuccess }) => {
         localStorage.setItem('kor35_token', data.token);
         localStorage.setItem('kor35_is_staff', data.is_staff);
         localStorage.setItem('kor35_is_master', data.is_superuser);
+        localStorage.setItem('kor35_login_method', 'local');
 
         if (onLoginSuccess && typeof onLoginSuccess === 'function') {
           onLoginSuccess(data.token);

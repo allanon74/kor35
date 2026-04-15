@@ -250,16 +250,49 @@ class ArcanaSSOPasswordStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        is_arcana_user = ArcanaSSOIdentity.objects.filter(user=request.user).exists()
+        identity = ArcanaSSOIdentity.objects.filter(user=request.user).first()
+        is_arcana_user = bool(identity)
         has_local_password = request.user.has_usable_password()
+        ad_status = self._compute_ad_status(identity)
         return Response(
             {
                 "is_arcana_user": is_arcana_user,
                 "has_local_password": has_local_password,
                 "show_reminder": bool(is_arcana_user and not has_local_password),
+                "ad_status": ad_status,
             },
             status=status.HTTP_200_OK,
         )
+
+    @staticmethod
+    def _compute_ad_status(identity):
+        if not identity:
+            return {
+                "code": "not_logged",
+                "label": "Non loggato con AD",
+                "color": "red",
+                "raw_ruoli": None,
+            }
+
+        profile = identity.ad_profile_json or {}
+        raw_ruoli = profile.get("Ruoli", profile.get("ruoli"))
+        ruoli_norm = str(raw_ruoli or "").strip()
+        ruoli_lc = ruoli_norm.lower()
+        not_compliant = (not ruoli_norm) or (ruoli_lc == "registrato")
+        if not_compliant:
+            return {
+                "code": "not_compliant",
+                "label": "Non in regola con AD",
+                "color": "yellow",
+                "raw_ruoli": raw_ruoli,
+            }
+
+        return {
+            "code": "compliant",
+            "label": "In regola con AD",
+            "color": "green",
+            "raw_ruoli": raw_ruoli,
+        }
 
 
 class ArcanaSSOSetLocalPasswordView(APIView):

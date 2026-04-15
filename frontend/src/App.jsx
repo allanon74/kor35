@@ -35,6 +35,7 @@ export default function App() {
     localStorage.removeItem('kor35_is_staff');
     localStorage.removeItem('kor35_is_master');
     localStorage.removeItem('kor35_last_char_id');
+    localStorage.removeItem('kor35_login_method');
     setToken(null);
     window.location.href = '/login'; 
   };

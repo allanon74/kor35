@@ -28,6 +28,11 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [playerName, setPlayerName] = useState('Giocatore');
   const [lastCharacterId, setLastCharacterId] = useState(() => localStorage.getItem('kor35_last_char_id') || '');
+  const [adStatus, setAdStatus] = useState({
+    code: 'not_logged',
+    label: 'Non loggato con AD',
+    color: 'red',
+  });
 
   const [showEditor, setShowEditor] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(true);
@@ -74,10 +79,22 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         setEre(Array.isArray(ereList) ? ereList : []);
         setSegni(Array.isArray(segniList) ? segniList : []);
         setShowReminder(!!pwdStatus?.show_reminder);
+        setAdStatus(
+          pwdStatus?.ad_status || {
+            code: 'not_logged',
+            label: 'Non loggato con AD',
+            color: 'red',
+          }
+        );
         const fullName = `${me?.first_name || ''} ${me?.last_name || ''}`.trim();
         setPlayerName(fullName || me?.username || 'Giocatore');
       } catch (_err) {
         if (mounted) setCharacters([]);
+        setAdStatus({
+          code: 'not_logged',
+          label: 'Non loggato con AD',
+          color: 'red',
+        });
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -192,6 +209,21 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   };
 
   const modalAvatarSrc = avatarPreviewBlob || (avatarRemoteUrl ? resolveMediaUrl(avatarRemoteUrl) : null);
+  const loginMethod = String(localStorage.getItem('kor35_login_method') || 'local').toLowerCase();
+  const effectiveAdStatus =
+    loginMethod === 'arcana'
+      ? adStatus
+      : {
+          code: 'not_logged',
+          label: 'Non loggato con AD',
+          color: 'red',
+        };
+  const adBadgeClass =
+    effectiveAdStatus.color === 'green'
+      ? 'border-emerald-700 bg-emerald-900/60 text-emerald-200'
+      : effectiveAdStatus.color === 'yellow'
+      ? 'border-amber-700 bg-amber-950/70 text-amber-200'
+      : 'border-red-700 bg-red-950/70 text-red-200';
 
   return (
     <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-gray-900 text-white">
@@ -202,13 +234,16 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
           <p className="text-sm text-gray-300 mt-1">
             Scegli un personaggio, crea un nuovo PG o entra nelle sezioni di gioco.
           </p>
+          <div className="mt-3">
+            <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${adBadgeClass}`}>
+              {effectiveAdStatus.label}
+            </span>
+          </div>
         </div>
 
-        <div className="rounded-xl border border-gray-700 bg-gray-800 p-4 md:p-5">
-          <h2 className="text-lg font-bold mb-3">Avvisi</h2>
-          {!showReminder ? (
-            <div className="text-sm text-gray-400">Nessun avviso attivo.</div>
-          ) : (
+        {showReminder && (
+          <div className="rounded-xl border border-gray-700 bg-gray-800 p-4 md:p-5">
+            <h2 className="text-lg font-bold mb-3">Avvisi</h2>
             <div className="rounded-lg border border-amber-500/60 bg-amber-950/70 p-3 text-amber-100 flex items-center justify-between gap-3">
               <span>Password locale non configurata, per inserirla cliccare qui.</span>
               <button
@@ -218,8 +253,8 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                 Configura
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <button
