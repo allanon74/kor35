@@ -156,6 +156,23 @@ def _frontend_login_url(request) -> str:
     return request.build_absolute_uri(configured)
 
 
+def _arcana_ruoli_tokens(raw) -> list[str]:
+    """
+    Normalizza il campo ruoli del profilo AD (stringa, lista JSON tipo ["registrato"], ecc.)
+    in token minuscoli per i controlli di conformità.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, (list, tuple, set)):
+        return [str(x).strip().lower() for x in raw if str(x).strip()]
+    s = str(raw).strip()
+    if not s:
+        return []
+    if "," in s:
+        return [p.strip().lower() for p in s.split(",") if p.strip()]
+    return [s.lower()]
+
+
 def _build_unique_username(raw: str) -> str:
     base = slugify(raw or "", allow_unicode=False).replace("-", ".").strip(".")
     if not base:
@@ -416,7 +433,9 @@ class ArcanaSSOPasswordStatusView(APIView):
     def get(self, request):
         identity = ArcanaSSOIdentity.objects.filter(user=request.user).first()
         is_arcana_user = bool(identity)
-        has_local_password = request.user.has_usable_password()
+        has_local_password = ArcanaSSOIdentity.objects.filter(
+            user=request.user, local_password_configured=True
+        ).exists()
         ad_status = self._compute_ad_status(identity)
         return Response(
             {
@@ -440,9 +459,9 @@ class ArcanaSSOPasswordStatusView(APIView):
 
         profile = identity.ad_profile_json or {}
         raw_ruoli = profile.get("Ruoli", profile.get("ruoli"))
-        ruoli_norm = str(raw_ruoli or "").strip()
-        ruoli_lc = ruoli_norm.lower()
-        not_compliant = (not ruoli_norm) or (ruoli_lc == "registrato")
+        tokens = _arcana_ruoli_tokens(raw_ruoli)
+        # Solo "registrato" (anche come unico elemento di lista, es. ["registrato"]) = non in regola.
+        not_compliant = (not tokens) or all(t == "registrato" for t in tokens)
         if not_compliant:
             return {
                 "code": "not_compliant",
@@ -475,6 +494,7 @@ class ArcanaSSOSetLocalPasswordView(APIView):
 
         request.user.set_password(new_password)
         request.user.save(update_fields=["password"])
+        ArcanaSSOIdentity.objects.filter(user=request.user).update(local_password_configured=True)
         return Response({"message": "Password locale impostata con successo."}, status=status.HTTP_200_OK)
 
 
@@ -506,7 +526,7 @@ class ArcanaSSOStaffProfilesView(APIView):
                         "full_name": full_name or user.username,
                         "is_staff": bool(user.is_staff),
                         "is_superuser": bool(user.is_superuser),
-                        "has_local_password": bool(user.has_usable_password()),
+                        "has_local_password": bool(identity.local_password_configured),
                     },
                     "arcana_profile_hr": {
                         "sub": profile.get("sub"),

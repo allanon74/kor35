@@ -4448,6 +4448,11 @@ class ArcanaSSOIdentity(models.Model):
     email_snapshot = models.EmailField(blank=True, default="")
     username_snapshot = models.CharField(max_length=150, blank=True, default="")
     ad_profile_json = models.JSONField(default=dict, blank=True)
+    # Non usare User.has_usable_password(): un account può avere password legacy pre-SSO o altro collegamento email.
+    local_password_configured = models.BooleanField(
+        default=False,
+        help_text="Impostata a True solo dopo POST /api/auth/arcana/set-local-password/.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
