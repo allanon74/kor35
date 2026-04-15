@@ -12,6 +12,7 @@ import PublicLayout from './layouts/PublicLayout';
 import WikiPage from './pages/WikiPage';
 import SocialPublicPostPage from './pages/SocialPublicPostPage';
 import SocialPage from './pages/SocialPage';
+import { API_BASE_URL } from './api';
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('kor35_token'));
@@ -33,12 +34,17 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    const loginMethod = String(localStorage.getItem('kor35_login_method') || '').toLowerCase();
     localStorage.removeItem('kor35_token');
     localStorage.removeItem('kor35_is_staff');
     localStorage.removeItem('kor35_is_master');
     localStorage.removeItem('kor35_last_char_id');
     localStorage.removeItem('kor35_login_method');
     setToken(null);
+    if (loginMethod === 'arcana') {
+      window.location.href = `${API_BASE_URL}/api/auth/arcana/frontchannel-logout/?return_to=${encodeURIComponent('/login')}`;
+      return;
+    }
     window.location.href = '/login'; 
   };
 

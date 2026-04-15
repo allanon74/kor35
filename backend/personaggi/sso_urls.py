@@ -3,6 +3,7 @@ from django.urls import path
 from personaggi.sso import (
     ArcanaSSOCallbackView,
     ArcanaSSOExchangeTicketView,
+    ArcanaSSOFrontChannelLogoutView,
     ArcanaSSOLoginStartView,
     ArcanaSSOPasswordStatusView,
     ArcanaSSOSetLocalPasswordView,
@@ -13,6 +14,7 @@ from personaggi.sso import (
 
 urlpatterns = [
     path("status/", ArcanaSSOStatusView.as_view(), name="arcana-sso-status"),
+    path("frontchannel-logout/", ArcanaSSOFrontChannelLogoutView.as_view(), name="arcana-sso-frontchannel-logout"),
     path("login/", ArcanaSSOLoginStartView.as_view(), name="arcana-sso-login"),
     path("callback/", ArcanaSSOCallbackView.as_view(), name="arcana-sso-callback"),
     path("exchange-ticket/", ArcanaSSOExchangeTicketView.as_view(), name="arcana-sso-exchange-ticket"),

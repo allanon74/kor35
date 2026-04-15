@@ -2,6 +2,7 @@ import base64
 import hashlib
 import secrets
 from urllib.parse import urlencode
+from urllib.parse import urlparse, urlunparse
 
 import requests
 from django.conf import settings
@@ -34,6 +35,20 @@ def _pkce_challenge(verifier: str) -> str:
 
 def _normalize_base_url() -> str:
     return str(getattr(settings, "ARCANA_SSO_BASE_URL", "") or "").strip().rstrip("/")
+
+
+def _arcana_site_root() -> str:
+    """
+    Ritorna la root del sito Arcana partendo da ARCANA_SSO_BASE_URL
+    (es. https://www.arcanadomine.it/wp-json/ad-sso/v2 -> https://www.arcanadomine.it).
+    """
+    base = _normalize_base_url()
+    if not base:
+        return ""
+    parsed = urlparse(base)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return urlunparse((parsed.scheme, parsed.netloc, "", "", "", "")).rstrip("/")
 
 
 def _frontend_login_url(request) -> str:
@@ -387,3 +402,31 @@ class ArcanaSSOStatusView(APIView):
         enabled = bool(getattr(settings, "ARCANA_SSO_ENABLED", False))
         reachable = _probe_arcana_reachable() if enabled else False
         return Response({"enabled": enabled, "reachable": reachable}, status=status.HTTP_200_OK)
+
+
+class ArcanaSSOFrontChannelLogoutView(APIView):
+    """
+    Logout federato su Arcana Domine:
+    - invalida la sessione WP Arcana nel browser
+    - ritorna alla pagina richiesta (default login frontend KOR35)
+    """
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        client_id = str(getattr(settings, "ARCANA_SSO_CLIENT_ID", "") or "").strip()
+        arcana_root = _arcana_site_root()
+        return_to = (request.GET.get("return_to") or _frontend_login_url(request)).strip()
+        if return_to.startswith("/"):
+            return_to = request.build_absolute_uri(return_to)
+        if not (client_id and arcana_root):
+            return HttpResponseRedirect(return_to)
+        params = urlencode(
+            {
+                "ad_sso_logout": "1",
+                "client_id": client_id,
+                "return_to": return_to,
+            }
+        )
+        return HttpResponseRedirect(f"{arcana_root}/?{params}")
