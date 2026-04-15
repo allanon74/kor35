@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import logging
 import secrets
 from urllib.parse import urlencode
 from urllib.parse import urlparse, urlunparse
@@ -23,6 +24,7 @@ from personaggi.models import ArcanaSSOIdentity
 
 STATE_CACHE_PREFIX = "arcana:sso:state:"
 TICKET_CACHE_PREFIX = "arcana:sso:ticket:"
+logger = logging.getLogger(__name__)
 
 
 def _base64url(data: bytes) -> str:
@@ -105,7 +107,20 @@ def _upsert_local_user(profile: dict) -> User:
         else:
             user = None
             if email:
-                user = User.objects.filter(email__iexact=email).first()
+                candidate = User.objects.filter(email__iexact=email).first()
+                if candidate:
+                    # Safety: non collegare automaticamente via email se l'utente
+                    # è già associato a un altro provider_sub Arcana.
+                    has_other_identity = ArcanaSSOIdentity.objects.filter(user=candidate).exclude(provider_sub=sub).exists()
+                    if has_other_identity:
+                        logger.warning(
+                            "Arcana SSO email collision: email=%s already linked to another Arcana identity. "
+                            "Creating a fresh local user for sub=%s.",
+                            email,
+                            sub,
+                        )
+                    else:
+                        user = candidate
             if user is None:
                 user = User.objects.create(
                     username=_build_unique_username(username_hint),
@@ -243,7 +258,19 @@ class ArcanaSSOCallbackView(APIView):
             )
             userinfo_res.raise_for_status()
             profile = userinfo_res.json()
+            logger.warning(
+                "Arcana callback userinfo: sub=%s email=%s username=%s",
+                profile.get("sub") or profile.get("arcanadomine_id"),
+                profile.get("email"),
+                profile.get("username"),
+            )
             user = _upsert_local_user(profile)
+            logger.warning(
+                "Arcana callback mapped local user: username=%s email=%s id=%s",
+                user.username,
+                user.email,
+                user.id,
+            )
             local_token, _ = Token.objects.get_or_create(user=user)
         except Exception:
             return HttpResponseRedirect(f"{login_url}?arcana_error=callback_failed")
