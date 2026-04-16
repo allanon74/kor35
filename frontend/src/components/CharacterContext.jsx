@@ -225,10 +225,39 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, [onLogout]);
 
   // --- AZIONI CONTEXT ---
-  const handleSelectCharacter = useCallback((id) => {
-    setSelectedCharacterId(id);
-    if(id) localStorage.setItem('kor35_last_char_id', id);
-  }, []);
+  const handleSelectCharacter = useCallback(async (id) => {
+    const normalizedId = id ? String(id) : '';
+    if (!normalizedId) {
+      setSelectedCharacterId('');
+      localStorage.removeItem('kor35_last_char_id');
+      return;
+    }
+
+    const target = personaggiList.find((p) => String(p.id) === normalizedId);
+    const targetCampaignId = target?.campagna ? String(target.campagna) : null;
+    const targetCampaign = targetCampaignId
+      ? campaigns.find((c) => String(c.id) === targetCampaignId)
+      : null;
+
+    if (targetCampaign?.slug && targetCampaign.slug !== activeCampaign) {
+      try {
+        const previousCampaign = campaigns.find((c) => c.slug === activeCampaign);
+        await validateActiveCampaign(targetCampaign.slug, onLogout);
+        setActiveCampaign(setActiveCampaignSlug(targetCampaign.slug));
+        await queryClient.invalidateQueries();
+        setNotification({
+          titolo: 'Campagna aggiornata',
+          testo: `Cambio automatico da <strong>${previousCampaign?.nome || activeCampaign}</strong> a <strong>${targetCampaign.nome}</strong> per aprire ${target?.nome || 'il personaggio'} in contesto corretto.`,
+          mittente: 'Sistema',
+        });
+      } catch {
+        // Se la campagna non è valida/accessibile, lasciamo la campagna corrente.
+      }
+    }
+
+    setSelectedCharacterId(normalizedId);
+    localStorage.setItem('kor35_last_char_id', normalizedId);
+  }, [personaggiList, campaigns, activeCampaign, onLogout, queryClient]);
 
   const setPreferredCharacter = useCallback((id) => {
     const persist = async (value) => {

@@ -864,6 +864,10 @@ class AvviaCreazioneConsumabileView(APIView):
             tessitura = Tessitura.objects.get(id=tessitura_id)
         except (Personaggio.DoesNotExist, Tessitura.DoesNotExist):
             return Response({"error": "Non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if not _campaign_feature_filter(request, Tessitura.objects.filter(id=tessitura.id), FEATURE_TESSITURE).exists():
+            return Response({"error": "Tessitura non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
+        if personaggio.campagna_id != tessitura.campagna_id:
+            return Response({"error": "Personaggio e tessitura devono appartenere alla stessa campagna."}, status=status.HTTP_403_FORBIDDEN)
         if not personaggio.tessiture_possedute.filter(id=tessitura_id).exists():
             return Response({"error": "Non possiedi questa tessitura."}, status=status.HTTP_400_BAD_REQUEST)
         ok, result = CreazioneConsumabileService.avvia_creazione(personaggio, tessitura)
@@ -2915,6 +2919,10 @@ class CraftingViewSet(viewsets.ViewSet):
         
         personaggio = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
         infusione = get_object_or_404(Infusione, pk=inf_id)
+        if not _campaign_feature_filter(request, Infusione.objects.filter(id=infusione.id), FEATURE_INFUSIONI).exists():
+            return Response({"error": "Infusione non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
+        if personaggio.campagna_id != infusione.campagna_id:
+            return Response({"error": "Personaggio e infusione devono appartenere alla stessa campagna."}, status=status.HTTP_403_FORBIDDEN)
         
         try:
             forgiatura = GestioneCraftingService.avvia_forgiatura(personaggio, infusione, slot)

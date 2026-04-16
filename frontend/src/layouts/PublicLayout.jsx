@@ -306,7 +306,7 @@ export default function PublicLayout({ token }) {
             {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
           
-          <Link to="/" className="text-xl font-bold tracking-wider flex items-center gap-2">
+          <Link to={token ? "/app/start" : "/"} className="text-xl font-bold tracking-wider flex items-center gap-2" title={token ? "Torna alla splash page" : "Vai alla home wiki"}>
             <img src="/Logo Kor-AD_Trasp.png" alt="Logo" className="h-8" />
             <span className="hidden xs:inline">KOR35 WIKI</span>
           </Link>

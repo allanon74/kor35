@@ -165,6 +165,9 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return _campaign_feature_filter(self.request, Infusione.objects.all(), FEATURE_INFUSIONI)
 
+    def perform_create(self, serializer):
+        serializer.save(campagna=_get_active_campaign(self.request))
+
 class TessituraMasterViewSet(viewsets.ModelViewSet):
     """
     CRUD completo per le Tessiture, usato dai Master.
@@ -176,6 +179,9 @@ class TessituraMasterViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return _campaign_feature_filter(self.request, Tessitura.objects.all(), FEATURE_TESSITURE)
 
+    def perform_create(self, serializer):
+        serializer.save(campagna=_get_active_campaign(self.request))
+
 class CerimonialeMasterViewSet(viewsets.ModelViewSet):
     """
     CRUD completo per i Cerimoniali, usato dai Master.
@@ -186,6 +192,9 @@ class CerimonialeMasterViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return _campaign_feature_filter(self.request, Cerimoniale.objects.all(), FEATURE_CERIMONIALI)
+
+    def perform_create(self, serializer):
+        serializer.save(campagna=_get_active_campaign(self.request))
     
 class OggettoStaffViewSet(viewsets.ModelViewSet):
     queryset = Oggetto.objects.all().select_related('aura', 'classe_oggetto')
@@ -200,6 +209,9 @@ class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = OggettoBase.objects.all().select_related('classe_oggetto')
         return _campaign_feature_filter(self.request, qs, FEATURE_OGGETTI_BASE)
+
+    def perform_create(self, serializer):
+        serializer.save(campagna=_get_active_campaign(self.request))
 
 class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ClasseOggetto.objects.all()

@@ -14,10 +14,14 @@ const SocialLayout = ({ children }) => {
           <ArrowLeft size={16} />
           Area personaggio
         </Link>
-        <div className="inline-flex items-center gap-2 text-amber-200 font-bold tracking-wide">
+        <Link
+          to="/app/start"
+          className="inline-flex items-center gap-2 text-amber-200 font-bold tracking-wide hover:text-amber-100"
+          title="Torna alla splash page"
+        >
           <Sparkles size={16} />
           InstaFame
-        </div>
+        </Link>
         <Link
           to="/"
           className="inline-flex items-center gap-1 text-xs text-amber-100/80 hover:text-amber-100"

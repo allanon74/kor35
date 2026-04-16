@@ -5,6 +5,7 @@ import {
   createPersonaggio,
   getArcanaPasswordStatus,
   getEre,
+  getTipologiePersonaggio,
   getPersonaggiEditList,
   updatePersonaggio,
   fetchAuthenticated,
@@ -17,11 +18,22 @@ import RichTextEditor from './RichTextEditor';
 
 export default function StartPage({ onLogout, onSwitchToMaster }) {
   const navigate = useNavigate();
-  const { selectCharacter, fetchPersonaggi, isStaff, isMaster, isCampaignMaster, preferredCharacterId, setPreferredCharacter } = useCharacter();
+  const {
+    selectCharacter,
+    fetchPersonaggi,
+    isMaster,
+    isCampaignMaster,
+    isAdmin,
+    campaigns,
+    activeCampaign,
+    preferredCharacterId,
+    setPreferredCharacter,
+  } = useCharacter();
 
   const [characters, setCharacters] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [ere, setEre] = useState([]);
+  const [tipologie, setTipologie] = useState([]);
   const [segni, setSegni] = useState([]);
 
   const [showReminder, setShowReminder] = useState(false);
@@ -43,6 +55,9 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     era: '',
     prefettura: '',
     prefettura_esterna: false,
+    tipologia: 1,
+    costume: '',
+    campagna: '',
   });
   const [editPermissions, setEditPermissions] = useState({ can_edit_era: true, can_edit_razza: true });
   const [avatarFile, setAvatarFile] = useState(null);
@@ -64,10 +79,11 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     const load = async () => {
       setIsLoading(true);
       try {
-        const [pgs, ereList, segniList, pwdStatus, me] = await Promise.all([
+        const [pgs, ereList, segniList, tipologieList, pwdStatus, me] = await Promise.all([
           getPersonaggiEditList(onLogout, { mineOnly: true }),
           getEre(onLogout),
           fetchAuthenticated('/api/personaggi/api/segni-zodiacali/', { method: 'GET' }, onLogout),
+          getTipologiePersonaggio(onLogout),
           getArcanaPasswordStatus(onLogout),
           fetchAuthenticated('/api/personaggi/api/user/me/', { method: 'GET' }, onLogout),
         ]);
@@ -78,6 +94,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         setCharacters(ordered);
         setEre(Array.isArray(ereList) ? ereList : []);
         setSegni(Array.isArray(segniList) ? segniList : []);
+        setTipologie(Array.isArray(tipologieList) ? tipologieList : []);
         setShowReminder(!!pwdStatus?.show_reminder);
         setAdStatus(
           pwdStatus?.ad_status || {
@@ -129,6 +146,9 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       era: '',
       prefettura: '',
       prefettura_esterna: false,
+      tipologia: 1,
+      costume: '',
+      campagna: campaigns.find((c) => c.slug === activeCampaign)?.id || '',
     });
     setShowEditor(true);
     setEditPermissions({ can_edit_era: true, can_edit_razza: true });
@@ -145,6 +165,9 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       era: char.era || '',
       prefettura: char.prefettura || '',
       prefettura_esterna: !!char.prefettura_esterna,
+      tipologia: typeof char.tipologia === 'object' ? (char.tipologia?.id || 1) : (char.tipologia || 1),
+      costume: char.costume || '',
+      campagna: char.campagna || '',
     });
     setShowEditor(true);
     setEditPermissions({
@@ -158,6 +181,14 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     if (!payload.era) payload.era = null;
     if (!payload.prefettura) payload.prefettura = null;
     payload.prefettura_esterna = !!payload.prefettura_esterna;
+    if (payload.tipologia !== undefined) {
+      const parsedTipologia = parseInt(payload.tipologia, 10);
+      if (!Number.isNaN(parsedTipologia)) payload.tipologia = parsedTipologia;
+      else delete payload.tipologia;
+    }
+    if (!(isCampaignMaster || isAdmin)) {
+      delete payload.campagna;
+    }
     if (!isCreateMode) {
       if (!editPermissions.can_edit_era) {
         delete payload.era;
@@ -224,6 +255,31 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       : effectiveAdStatus.color === 'yellow'
       ? 'border-amber-700 bg-amber-950/70 text-amber-200'
       : 'border-red-700 bg-red-950/70 text-red-200';
+
+  const charactersGrouped = useMemo(() => {
+    const byCampaign = new Map();
+    (characters || []).forEach((char) => {
+      const key = String(char.campagna || char.campagna_nome || 'kor35');
+      if (!byCampaign.has(key)) {
+        byCampaign.set(key, {
+          key,
+          campaignId: char.campagna || null,
+          campaignName: char.campagna_nome || 'Kor35',
+          rows: [],
+        });
+      }
+      byCampaign.get(key).rows.push(char);
+    });
+
+    return Array.from(byCampaign.values()).sort((a, b) => {
+      const aSlug = (campaigns.find((c) => String(c.id) === String(a.campaignId))?.slug || '').toLowerCase();
+      const bSlug = (campaigns.find((c) => String(c.id) === String(b.campaignId))?.slug || '').toLowerCase();
+      const aIsBase = aSlug === 'kor35' || String(a.campaignName || '').toLowerCase() === 'kor35';
+      const bIsBase = bSlug === 'kor35' || String(b.campaignName || '').toLowerCase() === 'kor35';
+      if (aIsBase !== bIsBase) return aIsBase ? -1 : 1;
+      return String(a.campaignName || '').localeCompare(String(b.campaignName || ''));
+    });
+  }, [characters, campaigns]);
 
   return (
     <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-gray-900 text-white">
@@ -311,8 +367,13 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
           {isLoading ? (
             <div className="text-gray-400 text-sm">Caricamento personaggi...</div>
           ) : (
-            <div className="space-y-3">
-              {characters.map((char) => (
+            <div className="space-y-4">
+              {charactersGrouped.map((group) => (
+                <div key={group.key} className="space-y-2">
+                  <div className="text-xs font-black uppercase tracking-widest text-indigo-300 border-b border-gray-700 pb-1">
+                    {group.campaignName}
+                  </div>
+                  {group.rows.map((char) => (
                 <div
                   key={char.id}
                   className="rounded-lg border border-gray-700 bg-gray-900/40 p-3 flex items-center justify-between gap-3"
@@ -331,6 +392,9 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                     </div>
                     <div className="min-w-0">
                       <div className="font-bold text-white truncate">{char.nome}</div>
+                      <div className="text-[10px] inline-flex px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-200 border border-indigo-700 mt-1">
+                        Campagna: {char.campagna_nome || 'Kor35'}
+                      </div>
                       <div className="flex gap-1 mt-1">
                         {String(preferredCharacterId || '') === String(char.id) && (
                           <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900/70 text-amber-200 border border-amber-700 inline-flex items-center gap-1">
@@ -397,6 +461,8 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                       Entra <ArrowRight size={14} />
                     </button>
                   </div>
+                </div>
+                  ))}
                 </div>
               ))}
               {characters.length === 0 && (
@@ -501,6 +567,54 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                   </select>
                 </div>
               </div>
+              {(isCampaignMaster || isAdmin) && (
+                <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Sezione staff/master</div>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 uppercase">Tipologia</label>
+                      <select
+                        className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2"
+                        value={formData.tipologia}
+                        onChange={(e) => setFormData({ ...formData, tipologia: parseInt(e.target.value, 10) || 1 })}
+                      >
+                        {tipologie.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.nome || t.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {!isCreateMode && (
+                      <div>
+                        <label className="text-xs text-gray-400 uppercase">Campagna personaggio</label>
+                        <select
+                          className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2"
+                          value={formData.campagna || ''}
+                          onChange={(e) => setFormData({ ...formData, campagna: e.target.value || '' })}
+                        >
+                          <option value="">Seleziona campagna</option>
+                          {(campaigns || [])
+                            .filter((c) => c.ruolo === 'MASTER' || isAdmin)
+                            .map((c) => (
+                              <option key={c.id || c.slug} value={c.id}>
+                                {c.nome}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 uppercase">Note costume</label>
+                    <textarea
+                      className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2 min-h-24"
+                      value={formData.costume || ''}
+                      onChange={(e) => setFormData({ ...formData, costume: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
               <label className="inline-flex items-center gap-2 text-sm text-gray-300">
                 <input
                   type="checkbox"

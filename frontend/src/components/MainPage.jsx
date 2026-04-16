@@ -31,6 +31,7 @@ import TransazioniViewer from './TransazioniViewer.jsx';
 import GameTab from './GameTab.jsx';
 import JobRequestsWidget from './JobRequestsWidget.jsx'; 
 import PersonaggiTab from './PersonaggiTab.jsx';
+import StartPage from './StartPage.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
 
 // --- [MODIFICA] Import Modale Password ---
@@ -488,7 +489,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     if (tabDef) {
         const Component = tabDef.component;
         if (tabDef.id === 'personaggi') {
-            return <PersonaggiTab onLogout={onLogout} onSelectChar={() => setActiveTab('home')} />;
+            return <StartPage onLogout={onLogout} onSwitchToMaster={onSwitchToMaster} />;
         }
         
         if (!selectedCharacterId && tabDef.id !== 'personaggi') {
@@ -556,7 +557,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                 >
                     {personaggiList.map(p => (
                         <option key={p.id} value={p.id}>
-                            {p.nome} {String(preferredCharacterId || '') === String(p.id) ? '★ Preferito' : ''}
+                            {p.nome} [{p.campagna_nome || 'Kor35'}] {String(preferredCharacterId || '') === String(p.id) ? '★ Preferito' : ''}
                         </option>
                     ))}
                 </select>

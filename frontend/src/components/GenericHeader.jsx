@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 
 const GenericHeader = ({ 
@@ -10,7 +11,7 @@ const GenericHeader = ({
         <header className="h-16 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-4 z-40 shadow-2xl shrink-0 w-full">
             {/* LEFT: Logo e Titoli (NESSUN MENU QUI) */}
             <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
+                <Link to="/app/start" className="flex items-center gap-2" title="Torna alla splash page">
                     <img src="/Logo Kor-AD_Trasp.png" alt="Logo" className="h-8 w-8 object-contain" />
                     <div className="flex flex-col leading-tight">
                         <span className="font-black text-lg uppercase italic tracking-tighter">
@@ -18,7 +19,7 @@ const GenericHeader = ({
                         </span>
                         <span className="text-[8px] font-bold text-gray-500 uppercase tracking-[0.2em]">{subtitle}</span>
                     </div>
-                </div>
+                </Link>
             </div>
 
             {/* RIGHT: Slot (dove va il Menu) + Notifiche */}

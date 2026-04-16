@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -357,6 +357,30 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         return miaEraBreve ? `${baseName} (${miaEraBreve})` : baseName;
     };
 
+    const groupedPersonaggi = useMemo(() => {
+        const byCampaign = new Map();
+        (personaggiList || []).forEach((char) => {
+            const key = String(char.campagna || char.campagna_nome || 'kor35');
+            if (!byCampaign.has(key)) {
+                byCampaign.set(key, {
+                    key,
+                    campaignId: char.campagna || null,
+                    campaignName: char.campagna_nome || 'Kor35',
+                    rows: [],
+                });
+            }
+            byCampaign.get(key).rows.push(char);
+        });
+        return Array.from(byCampaign.values()).sort((a, b) => {
+            const aSlug = (campaigns.find((c) => String(c.id) === String(a.campaignId))?.slug || '').toLowerCase();
+            const bSlug = (campaigns.find((c) => String(c.id) === String(b.campaignId))?.slug || '').toLowerCase();
+            const aIsBase = aSlug === 'kor35' || String(a.campaignName || '').toLowerCase() === 'kor35';
+            const bIsBase = bSlug === 'kor35' || String(b.campaignName || '').toLowerCase() === 'kor35';
+            if (aIsBase !== bIsBase) return aIsBase ? -1 : 1;
+            return String(a.campaignName || '').localeCompare(String(b.campaignName || ''));
+        });
+    }, [personaggiList, campaigns]);
+
     return (
         <div className="h-full flex flex-col bg-gray-900 text-white p-4 overflow-hidden">
             <div className="flex justify-between items-center mb-6 shrink-0">
@@ -417,7 +441,12 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
 
             <div className="flex-1 overflow-y-auto space-y-4 pb-20 custom-scrollbar">
                 {/* Controllo di sicurezza: mappa solo se è un array */}
-                {Array.isArray(personaggiList) && personaggiList.map(char => {
+                {groupedPersonaggi.map(group => (
+                  <div key={group.key} className="space-y-2">
+                    <div className="text-xs font-black uppercase tracking-widest text-indigo-300 border-b border-gray-700 pb-1">
+                        {group.campaignName}
+                    </div>
+                    {group.rows.map(char => {
                     const isSelected = selectedCharacterId === String(char.id);
                     const staffToolbar = (isCampaignMaster || isAdmin);
                     /* Grid + overflow-hidden a sinistra: evita che testo lungo copra la toolbar (hit-testing / paint sopra i pulsanti). */
@@ -468,6 +497,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         }` : ''}
                                     </div>
                                 )}
+                                <div className="mt-1 text-[10px] inline-flex px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-200 border border-indigo-700">
+                                    Campagna: {char.campagna_nome || 'Kor35'}
+                                </div>
                                 {isCampaignMaster && (
                                     <div className="mt-1 font-mono text-[10px] text-gray-400">
                                         CR: {char.crediti} | PC: {char.punti_caratteristica}
@@ -534,7 +566,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                         )}
                     </div>
                     );
-                })}
+                    })}
+                  </div>
+                ))}
             </div>
 
             {/* Conferma azioni staff (reset / morte / rivivere) */}

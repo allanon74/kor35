@@ -2138,7 +2138,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
     prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
     prefettura_regione_sigla = serializers.CharField(source="prefettura.regione.sigla", read_only=True)
-    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+    campagna = serializers.PrimaryKeyRelatedField(queryset=Campagna.objects.filter(attiva=True), required=False)
     campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
     can_edit_razza = serializers.SerializerMethodField()
     can_edit_era = serializers.SerializerMethodField()
