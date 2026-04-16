@@ -1,0 +1,19 @@
+[
+Unit
+]
+Description=KOR35 - Backup giornaliero PostgreSQL (dump)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+
+# Adatta questi path al tuo server:
+WorkingDirectory=/srv/kor35
+
+# Directory backup (permessi 700 consigliati)
+Environment=KOR35_DB_BACKUP_DIR=/var/backups/kor35/db
+Environment=KOR35_DB_BACKUP_RETENTION_DAYS=14
+
+ExecStart=/srv/kor35/scripts/backup_db_daily.sh --env prod
+

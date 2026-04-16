@@ -94,6 +94,65 @@ Fa:
 - prepara runtime dirs in `config/docker/nginx-docker/`
 - build frontend e copia in `react_build`
 
+### Backup DB (dump giornaliero + rotazione)
+
+Script: `scripts/backup_db_daily.sh`
+
+Caratteristiche:
+- esegue `pg_dump` dal container `db` (quindi usa `POSTGRES_DB/POSTGRES_USER` del servizio)
+- salva dump su file in formato **custom** (`.dump`) + checksum `.sha256`
+- rotazione basata su `mtime`: elimina dump più vecchi di **14 giorni** (default)
+
+Esecuzione manuale (esempio produzione):
+
+```bash
+cd /srv/kor35
+make backup-db ENV=prod
+```
+
+Variabili opzionali:
+- `KOR35_DB_BACKUP_DIR` (default: `/var/backups/kor35/db`)
+- `KOR35_DB_BACKUP_RETENTION_DAYS` (default: `14`)
+
+Esempio custom:
+
+```bash
+cd /srv/kor35
+KOR35_DB_BACKUP_DIR=/var/backups/kor35/db \
+KOR35_DB_BACKUP_RETENTION_DAYS=14 \
+make backup-db ENV=prod
+```
+
+Schedulazione consigliata in produzione: **systemd timer**
+
+File nel repo:
+- `config/systemd/kor35-db-backup.service`
+- `config/systemd/kor35-db-backup.timer`
+
+Installazione (sul server):
+
+```bash
+sudo mkdir -p /var/backups/kor35/db
+sudo chmod 700 /var/backups/kor35/db
+
+sudo cp /srv/kor35/config/systemd/kor35-db-backup.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kor35-db-backup.timer
+```
+
+Test e log:
+
+```bash
+sudo systemctl start kor35-db-backup.service
+sudo journalctl -u kor35-db-backup.service -n 200 --no-pager
+```
+
+Alternativa (se preferisci): cron
+
+```cron
+30 3 * * * cd /srv/kor35 && KOR35_DB_BACKUP_DIR=/var/backups/kor35/db KOR35_DB_BACKUP_RETENTION_DAYS=14 make backup-db ENV=prod >> /var/log/kor35-db-backup.log 2>&1
+```
+
 ### Avvio stack
 
 ```bash

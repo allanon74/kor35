@@ -6,6 +6,7 @@ sito kor35
 - [Panoramica rapida](#panoramica-rapida)
 - [Struttura repository](#struttura-repository)
 - [Deploy sicuro (GitHub Actions)](#deploy-sicuro-github-actions)
+- [Backup DB (produzione)](#backup-db-produzione)
 - [Sviluppo locale in WSL](#sviluppo-locale-in-wsl)
 - [Setup Da Zero: Deploy Automatico GitHub](#setup-da-zero-deploy-automatico-github)
 - [Setup Ambienti Di Sviluppo (prima di `make`)](#setup-ambienti-di-sviluppo-prima-di-make)
@@ -126,6 +127,42 @@ Altri accorgimenti:
 ### Nota importante
 
 Il deploy è intenzionalmente **main-only**: anche da `workflow_dispatch` viene rifiutato qualsiasi `ref` diverso da `main`.
+
+## Backup DB (produzione)
+
+Nel monorepo è disponibile un dump giornaliero PostgreSQL su file con rotazione **bisettimanale** (14 giorni).
+
+- **Script**: `scripts/backup_db_daily.sh`
+- **Make target**: `make backup-db ENV=prod`
+- **systemd**: `config/systemd/kor35-db-backup.service` + `config/systemd/kor35-db-backup.timer`
+
+Esecuzione manuale:
+
+```bash
+cd /srv/kor35
+make backup-db ENV=prod
+```
+
+Directory e retention configurabili:
+- `KOR35_DB_BACKUP_DIR` (default: `/var/backups/kor35/db`)
+- `KOR35_DB_BACKUP_RETENTION_DAYS` (default: `14`)
+
+Installazione timer systemd (sul server):
+
+```bash
+sudo mkdir -p /var/backups/kor35/db
+sudo chmod 700 /var/backups/kor35/db
+
+sudo cp /srv/kor35/config/systemd/kor35-db-backup.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kor35-db-backup.timer
+```
+
+Log ultimo run:
+
+```bash
+sudo journalctl -u kor35-db-backup.service -n 200 --no-pager
+```
 
 ## Transizione post-merge (docker → main)
 

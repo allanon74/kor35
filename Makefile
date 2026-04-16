@@ -9,7 +9,7 @@ RUN_PIP_INSTALL ?= 0
 RUN_COLLECTSTATIC ?= 0
 MAKEMIGRATIONS_APP ?=
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-be sync-db sync-db-full sync-media cleanup-legacy
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-be sync-db sync-db-full sync-media cleanup-legacy backup-db
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -46,6 +46,9 @@ help:
 	@echo "  make sync-db [SYNC_SINCE=ISO_DATETIME] # pull-only DB (backend container)"
 	@echo "  make sync-db-full            # pull-only completo da 1970-01-01T00:00:00Z"
 	@echo "  make sync-media              # pull-only media via rsync (vedi scripts/sync_media_pull_wsl_pi_like.sh e .env.sync-media)"
+	@echo ""
+	@echo "Backup:"
+	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
 
 setup:
 	./scripts/setup_wsl_pi_like.sh
@@ -120,3 +123,6 @@ sync-media:
 
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh
+
+backup-db:
+	./scripts/backup_db_daily.sh --env "$(ENV)"
