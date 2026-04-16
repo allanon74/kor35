@@ -1,4 +1,5 @@
 from django.db.models.signals import m2m_changed, post_save
+from django.db import transaction
 from django.dispatch import receiver
 from django.utils import timezone
 from channels.layers import get_channel_layer
@@ -6,7 +7,44 @@ from asgiref.sync import async_to_sync
 from django.contrib.auth.models import User
 from webpush import send_user_notification
 
-from .models import ClasseOggetto, Infusione, Messaggio
+from .models import (
+    ClasseOggetto,
+    Infusione,
+    Messaggio,
+    Campagna,
+    CampagnaUtente,
+    CAMPAGNA_ROLE_PLAYER,
+)
+
+
+@receiver(post_save, sender=User)
+def assegna_campagna_base_ai_nuovi_utenti(sender, instance, created, **kwargs):
+    """
+    Vincolo di default: ogni nuovo utente appartiene solo alla campagna base.
+    Le campagne aggiuntive devono essere assegnate esplicitamente dallo staff.
+    """
+    if not created:
+        return
+    with transaction.atomic():
+        campagna_base = (
+            Campagna.objects.filter(is_base=True, attiva=True).order_by("-is_default", "nome").first()
+            or Campagna.objects.filter(is_base=True).order_by("-is_default", "nome").first()
+            or Campagna.objects.filter(is_default=True, attiva=True).order_by("nome").first()
+            or Campagna.objects.filter(is_default=True).order_by("nome").first()
+            or Campagna.objects.filter(slug="kor35").first()
+            or Campagna.objects.create(
+                slug="kor35",
+                nome="Kor35",
+                is_default=True,
+                is_base=True,
+                attiva=True,
+            )
+        )
+        CampagnaUtente.objects.get_or_create(
+            campagna=campagna_base,
+            user=instance,
+            defaults={"ruolo": CAMPAGNA_ROLE_PLAYER, "attivo": True},
+        )
 
 @receiver(post_save, sender=Messaggio)
 def invia_notifica_messaggio(sender, instance, created, **kwargs):

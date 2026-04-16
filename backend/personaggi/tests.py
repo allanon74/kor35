@@ -101,3 +101,35 @@ class ActiveCampaignValidationTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data.get("slug"), "alt-camp")
+
+
+class UserDefaultCampaignMembershipTests(APITestCase):
+    def setUp(self):
+        self.kor35 = Campagna.objects.create(
+            slug="kor35",
+            nome="Kor35",
+            is_default=True,
+            is_base=True,
+            attiva=True,
+        )
+
+    def test_new_user_is_auto_assigned_to_base_campaign(self):
+        user = User.objects.create_user(username="newbie", password="x")
+        memberships = CampagnaUtente.objects.filter(user=user)
+        self.assertEqual(memberships.count(), 1)
+        self.assertEqual(memberships.first().campagna_id, self.kor35.id)
+        self.assertEqual(memberships.first().ruolo, "PLAYER")
+
+    def test_new_user_does_not_get_other_campaigns_by_default(self):
+        Campagna.objects.create(
+            slug="side-quest",
+            nome="Side Quest",
+            is_default=False,
+            is_base=False,
+            attiva=True,
+        )
+        user = User.objects.create_user(username="newbie2", password="x")
+        campaign_slugs = set(
+            CampagnaUtente.objects.filter(user=user).select_related("campagna").values_list("campagna__slug", flat=True)
+        )
+        self.assertEqual(campaign_slugs, {"kor35"})

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ArrowRight, Lock, Star } from 'lucide-react';
+import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ArrowRight, Lock, Star, Globe, X } from 'lucide-react';
 import {
   createPersonaggio,
   getArcanaPasswordStatus,
@@ -26,6 +26,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     isAdmin,
     campaigns,
     activeCampaign,
+    changeActiveCampaign,
     preferredCharacterId,
     setPreferredCharacter,
   } = useCharacter();
@@ -47,6 +48,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   });
 
   const [showEditor, setShowEditor] = useState(false);
+  const [showCampaignModal, setShowCampaignModal] = useState(false);
   const [isCreateMode, setIsCreateMode] = useState(true);
   const [formData, setFormData] = useState({
     id: null,
@@ -177,6 +179,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   };
 
   const saveCharacter = async () => {
+    const previousCampaignId = formData.campagna ? String(formData.campagna) : null;
     const payload = { ...formData };
     if (!payload.era) payload.era = null;
     if (!payload.prefettura) payload.prefettura = null;
@@ -202,12 +205,15 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     }
     try {
       let charId = formData.id;
+      let savedCampaignId = previousCampaignId;
       if (isCreateMode) {
         delete payload.id;
         const created = await createPersonaggio(payload, onLogout);
         charId = created?.id;
+        savedCampaignId = created?.campagna ? String(created.campagna) : savedCampaignId;
       } else {
-        await updatePersonaggio(payload.id, payload, onLogout);
+        const updatedChar = await updatePersonaggio(payload.id, payload, onLogout);
+        savedCampaignId = updatedChar?.campagna ? String(updatedChar.campagna) : savedCampaignId;
       }
       if (avatarFile && charId) {
         const fd = new FormData();
@@ -220,6 +226,12 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         : [];
       setCharacters(ordered);
       await fetchPersonaggi();
+      if (!isCreateMode && savedCampaignId) {
+        const targetCampaign = (campaigns || []).find((c) => String(c.id) === String(savedCampaignId));
+        if (targetCampaign?.slug && targetCampaign.slug !== activeCampaign) {
+          await changeActiveCampaign(targetCampaign.slug);
+        }
+      }
       setAvatarFile(null);
       setShowEditor(false);
     } catch (err) {
@@ -294,6 +306,17 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
             <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${adBadgeClass}`}>
               {effectiveAdStatus.label}
             </span>
+            {Array.isArray(campaigns) && campaigns.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setShowCampaignModal(true)}
+                className="ml-2 inline-flex items-center gap-1 rounded-full border border-indigo-600/60 bg-indigo-950/60 px-3 py-1 text-xs font-bold text-indigo-200 hover:bg-indigo-900/80"
+                title="Cambia campagna attiva"
+              >
+                <Globe size={12} />
+                Campagna: {(campaigns.find((c) => c.slug === activeCampaign)?.nome) || 'Kor35'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -656,6 +679,51 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         forceSetMode={true}
         onSuccess={() => setShowReminder(false)}
       />
+
+      {showCampaignModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-gray-800 border border-gray-700 rounded-xl">
+            <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-indigo-300">Cambia campagna</h3>
+              <button
+                type="button"
+                onClick={() => setShowCampaignModal(false)}
+                className="p-1 rounded hover:bg-gray-700 text-gray-300"
+                aria-label="Chiudi"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 space-y-2">
+              {(campaigns || []).map((c) => {
+                const isCurrent = c.slug === activeCampaign;
+                return (
+                  <button
+                    key={c.id || c.slug}
+                    type="button"
+                    disabled={isCurrent}
+                    onClick={async () => {
+                      try {
+                        await changeActiveCampaign(c.slug);
+                        setShowCampaignModal(false);
+                      } catch (e) {
+                        alert(e?.message || 'Impossibile cambiare campagna');
+                      }
+                    }}
+                    className={`w-full text-left px-3 py-2 rounded border text-sm ${
+                      isCurrent
+                        ? 'border-emerald-700 bg-emerald-900/40 text-emerald-200'
+                        : 'border-gray-700 bg-gray-900 hover:bg-gray-700 text-gray-200'
+                    }`}
+                  >
+                    {c.nome} {c.ruolo === 'MASTER' ? '(Master)' : '(Player)'}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
