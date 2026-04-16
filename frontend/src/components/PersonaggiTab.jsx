@@ -28,12 +28,13 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         personaggiList, 
         fetchPersonaggi, 
         refreshCharacterData, 
-        isStaff, 
+        isCampaignMaster,
         isAdmin, 
         viewAll, 
         toggleViewAll, 
         selectCharacter,
-        selectedCharacterId 
+        selectedCharacterId,
+        campaigns,
     } = useCharacter();
 
     const queryClient = useQueryClient();
@@ -120,20 +121,6 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
 
     // --- GESTIONE MODALE CREATE/EDIT ---
 
-    const handleOpenCreate = () => {
-        setEditMode(false);
-        setFormData({ 
-            nome: '', 
-            tipologia: 1, 
-            testo: '', 
-            costume: '',
-            era: '',
-            prefettura: '',
-            prefettura_esterna: false,
-        });
-        setShowModal(true);
-    };
-
     const handleOpenEdit = (char, e) => {
         e.stopPropagation(); 
         setEditMode(true);
@@ -158,6 +145,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             tipologia: tipoId,
             testo: char.testo || '',
             costume: char.costume || '',
+            campagna: char.campagna || '',
             era: typeof char.era === 'object' ? (char.era?.id || '') : (char.era || ''),
             prefettura: typeof char.prefettura === 'object' ? (char.prefettura?.id || '') : (char.prefettura || ''),
             prefettura_esterna: !!char.prefettura_esterna,
@@ -347,7 +335,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const handleSelect = (char) => {
         const charId = char?.id;
         if (String(charId).startsWith('temp-')) return;
-        if (char?.data_morte && !(isStaff || isAdmin)) {
+        if (char?.data_morte && !(isCampaignMaster || isAdmin)) {
             alert('Questo personaggio e morto e non e utilizzabile. Contatta lo staff.');
             return;
         }
@@ -387,7 +375,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                     >
                         ✨ InstaFame
                     </button>
-                    {(isAdmin || isStaff) && (
+                    {(isAdmin || isCampaignMaster) && (
                         <button 
                             onClick={toggleViewAll} 
                             className={`p-2 rounded-lg border ${viewAll ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-transparent border-gray-600 text-gray-400'}`}
@@ -397,9 +385,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                         </button>
                     )}
                     
-                    <button 
-                        onClick={handleOpenCreate} 
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 rounded-lg font-bold uppercase text-xs tracking-widest hover:bg-emerald-500 transition-colors shadow-lg"
+                    <button
+                        onClick={() => navigate('/app/start')}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-700 rounded-lg font-bold uppercase text-xs tracking-widest hover:bg-indigo-600 transition-colors shadow-lg"
                     >
                         <Plus size={16}/> Nuovo PG
                     </button>
@@ -431,7 +419,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                 {/* Controllo di sicurezza: mappa solo se è un array */}
                 {Array.isArray(personaggiList) && personaggiList.map(char => {
                     const isSelected = selectedCharacterId === String(char.id);
-                    const staffToolbar = (isStaff || isAdmin);
+                    const staffToolbar = (isCampaignMaster || isAdmin);
                     /* Grid + overflow-hidden a sinistra: evita che testo lungo copra la toolbar (hit-testing / paint sopra i pulsanti). */
                     const rowBase = `relative isolate group grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center p-4 rounded-xl border transition-all duration-200 hover:shadow-md active:opacity-95 ${
                         isSelected
@@ -480,7 +468,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         }` : ''}
                                     </div>
                                 )}
-                                {isStaff && (
+                                {isCampaignMaster && (
                                     <div className="mt-1 font-mono text-[10px] text-gray-400">
                                         CR: {char.crediti} | PC: {char.punti_caratteristica}
                                     </div>
@@ -678,7 +666,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                 )}
                             </div>
 
-                            {isStaff && (
+                            {(isCampaignMaster || isAdmin) && (
                                 <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-4 mt-4">
                                     <div className="flex items-center gap-2 text-amber-500 font-bold text-xs uppercase tracking-widest">
                                         <ShieldAlert size={14}/> Area Staff
@@ -698,6 +686,21 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         value={formData.costume} 
                                         onChange={val => setFormData({...formData, costume: val})}
                                     />
+                                    {(isCampaignMaster || isAdmin) && editMode && (
+                                        <div>
+                                            <label className="block text-xs text-gray-500 mb-1">Campagna personaggio</label>
+                                            <select
+                                                className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                                                value={formData.campagna || ''}
+                                                onChange={e => setFormData({ ...formData, campagna: e.target.value || '' })}
+                                            >
+                                                <option value="">Seleziona campagna</option>
+                                                {(campaigns || [])
+                                                    .filter(c => c.ruolo === 'MASTER' || isAdmin)
+                                                    .map(c => <option key={c.id || c.slug} value={c.id}>{c.nome}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

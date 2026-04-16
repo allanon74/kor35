@@ -1,7 +1,14 @@
 from django.db.models import Count, Q
 from rest_framework import serializers
 
-from personaggi.models import Personaggio, PersonaggioKorpMembership
+from personaggi.models import (
+    Personaggio,
+    PersonaggioKorpMembership,
+    Campagna,
+    CampagnaFeaturePolicy,
+    FEATURE_SOCIAL,
+    FEATURE_MODE_SHARED,
+)
 
 from .models import (
     SOCIAL_GROUP_STATUS_ACTIVE,
@@ -355,8 +362,30 @@ class SocialStoryHighlightSerializer(serializers.ModelSerializer):
         return SocialStoryHighlightItemSerializer(qs, many=True, context={"personaggio": personaggio}).data
 
 
-def resolve_active_personaggio(user, explicit_personaggio_id=None):
-    owned = Personaggio.objects.filter(proprietario=user).order_by("id")
+def _get_default_campaign():
+    return Campagna.objects.filter(slug="kor35").first() or Campagna.objects.filter(is_default=True).first()
+
+
+def _get_active_campaign_from_request(request):
+    if not request:
+        return _get_default_campaign()
+    slug = (request.headers.get("X-Campagna") or request.query_params.get("campagna") or "kor35").strip().lower()
+    return Campagna.objects.filter(slug=slug, attiva=True).first() or _get_default_campaign()
+
+
+def _social_mode_for_campaign(campagna):
+    if not campagna or campagna.slug == "kor35":
+        return FEATURE_MODE_SHARED
+    row = CampagnaFeaturePolicy.objects.filter(campagna=campagna, feature_key=FEATURE_SOCIAL).first()
+    return row.mode if row else FEATURE_MODE_SHARED
+
+
+def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None):
+    active_campaign = _get_active_campaign_from_request(request)
+    owned = Personaggio.objects.filter(proprietario=user)
+    if active_campaign:
+        owned = owned.filter(campagna=active_campaign)
+    owned = owned.order_by("id")
     if explicit_personaggio_id:
         pg = owned.filter(id=explicit_personaggio_id).first()
         if pg:
@@ -375,11 +404,23 @@ def get_active_korp(personaggio):
     return membership.korp if membership else None
 
 
-def visible_posts_queryset_for_personaggio(personaggio):
+def visible_posts_queryset_for_personaggio(personaggio, request=None):
     base = SocialPost.objects.select_related("autore", "evento", "korp_visibilita").annotate(
         likes_count=Count("likes", distinct=True),
         comments_count=Count("comments", distinct=True),
     )
+    active_campaign = _get_active_campaign_from_request(request)
+    default_campaign = _get_default_campaign()
+    mode = _social_mode_for_campaign(active_campaign)
+    if active_campaign:
+        png_kor35_q = Q(
+            autore__campagna=default_campaign,
+            autore__tipologia__giocante=False,
+        )
+        if mode == FEATURE_MODE_SHARED and default_campaign:
+            base = base.filter(Q(autore__campagna=active_campaign) | Q(autore__campagna=default_campaign) | png_kor35_q)
+        else:
+            base = base.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
     if not personaggio:
         return base.filter(visibilita="PUB")
     active_korp = get_active_korp(personaggio)

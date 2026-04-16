@@ -22,6 +22,7 @@ from django.utils.html import format_html
 from icon_widget.fields import CustomIconField
 from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 import uuid
+from django.apps import apps
 
 # --- COSTANTI DI SISTEMA (FALLBACK) ---
 # COSTANTI DI FALLBACK (usate quando stat_costo_* non è configurato sull'aura)
@@ -841,6 +842,45 @@ RISORSA_MOV_CHOICES = [
 META_NESSUN_EFFETTO = 'NE'; META_VALORE_PUNTEGGIO = 'VP'; META_SOLO_TESTO = 'TX'; META_LIVELLO_INFERIORE = 'LV'
 METATALENTO_CHOICES = [(META_NESSUN_EFFETTO, 'Nessun Effetto'), (META_VALORE_PUNTEGGIO, 'Valore per Punteggio'), (META_SOLO_TESTO, 'Solo Testo Addizionale'), (META_LIVELLO_INFERIORE, 'Solo abilità con livello pari o inferiore')]
 
+FEATURE_ABILITA = "abilita"
+FEATURE_TESSITURE = "tessiture"
+FEATURE_INFUSIONI = "infusioni"
+FEATURE_OGGETTI_BASE = "oggetti_base"
+FEATURE_CERIMONIALI = "cerimoniali"
+FEATURE_SOCIAL = "social"
+
+FEATURE_KEY_CHOICES = [
+    (FEATURE_ABILITA, "Abilita"),
+    (FEATURE_TESSITURE, "Tessiture"),
+    (FEATURE_INFUSIONI, "Infusioni"),
+    (FEATURE_OGGETTI_BASE, "Oggetti Base"),
+    (FEATURE_CERIMONIALI, "Cerimoniali"),
+    (FEATURE_SOCIAL, "Social"),
+]
+
+FEATURE_MODE_SHARED = "SHARED"
+FEATURE_MODE_EXCLUSIVE = "EXCLUSIVE"
+FEATURE_MODE_CHOICES = [
+    (FEATURE_MODE_SHARED, "Condivisa con Kor35"),
+    (FEATURE_MODE_EXCLUSIVE, "Esclusiva campagna"),
+]
+
+CAMPAGNA_ROLE_PLAYER = "PLAYER"
+CAMPAGNA_ROLE_MASTER = "MASTER"
+CAMPAGNA_ROLE_CHOICES = [
+    (CAMPAGNA_ROLE_PLAYER, "Giocatore"),
+    (CAMPAGNA_ROLE_MASTER, "Master"),
+]
+
+
+def get_default_campagna_id():
+    Campagna = apps.get_model("personaggi", "Campagna")
+    campagna, _ = Campagna.objects.get_or_create(
+        slug="kor35",
+        defaults={"nome": "Kor35", "is_default": True, "is_base": True, "attiva": True},
+    )
+    return campagna.id
+
 class A_modello(SyncableModel, models.Model):
     id = models.AutoField("Codice Identificativo", primary_key=True)
     class Meta: abstract = True
@@ -861,6 +901,70 @@ class CondizioneStatisticaMixin(SyncableModel, models.Model):
     usa_condizione_text = models.BooleanField("Usa Condizione Testuale", default=False)
     condizione_text = models.CharField("Condizione", max_length=255, blank=True, null=True, help_text="Es. caratt>6")
     class Meta: abstract = True
+
+
+class Campagna(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    slug = models.SlugField(max_length=64, unique=True, db_index=True)
+    nome = models.CharField(max_length=120, unique=True)
+    descrizione = models.TextField(blank=True, default="")
+    is_default = models.BooleanField(default=False, db_index=True)
+    is_base = models.BooleanField(default=False, db_index=True)
+    attiva = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_default", "nome"]
+        verbose_name = "Campagna"
+        verbose_name_plural = "Campagne"
+
+    def __str__(self):
+        return self.nome
+
+
+class CampagnaUtente(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campagna = models.ForeignKey("Campagna", on_delete=models.CASCADE, related_name="membri", db_index=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="campagne_associazioni", db_index=True)
+    ruolo = models.CharField(max_length=16, choices=CAMPAGNA_ROLE_CHOICES, default=CAMPAGNA_ROLE_PLAYER, db_index=True)
+    attivo = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("campagna", "user")]
+        indexes = [
+            models.Index(fields=["campagna", "user"]),
+            models.Index(fields=["user", "ruolo"]),
+            models.Index(fields=["campagna", "ruolo"]),
+        ]
+        verbose_name = "Assegnazione Utente Campagna"
+        verbose_name_plural = "Assegnazioni Utente Campagna"
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.campagna.nome} ({self.ruolo})"
+
+
+class CampagnaFeaturePolicy(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campagna = models.ForeignKey("Campagna", on_delete=models.CASCADE, related_name="feature_policies", db_index=True)
+    feature_key = models.CharField(max_length=32, choices=FEATURE_KEY_CHOICES, db_index=True)
+    mode = models.CharField(max_length=16, choices=FEATURE_MODE_CHOICES, default=FEATURE_MODE_SHARED, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [("campagna", "feature_key")]
+        indexes = [
+            models.Index(fields=["campagna", "feature_key"]),
+            models.Index(fields=["campagna", "mode"]),
+        ]
+        verbose_name = "Policy Feature Campagna"
+        verbose_name_plural = "Policy Feature Campagna"
+
+    def __str__(self):
+        return f"{self.campagna.nome} - {self.feature_key}: {self.mode}"
 
 class Tabella(A_modello):
     nome = models.CharField(max_length=90)
@@ -1445,6 +1549,7 @@ class Abilita(A_modello):
         help_text='Opzionale. Es. {"rigenerazioni":[{"stat_sigla":"CHA","ogni_minuti":10,"step":1}]} — '
         'stat_sigla = risorsa pool (PV, PA, PS, CHA, FRT, …). CHK in JSON è accettato come alias di CHA.',
     )
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="abilita", default=get_default_campagna_id, db_index=True)
 
     class Meta: 
         verbose_name = "Abilità" 
@@ -1600,6 +1705,7 @@ class Infusione(Tecnica):
         verbose_name="Genera un oggetto Pesante?", 
         help_text="Se attivo, L'oggetto generato conta per il limite OGP (Oggetti Pesanti)."
     )
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="infusioni", default=get_default_campagna_id, db_index=True)
 
     class Meta: verbose_name = "Infusione"; verbose_name_plural = "Infusioni"
     
@@ -1627,6 +1733,7 @@ class Tessitura(Tecnica):
     caratteristiche = models.ManyToManyField(Punteggio, through='TessituraCaratteristica', related_name="tessiture_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     statistiche_base = models.ManyToManyField(Statistica, through='TessituraStatisticaBase', blank=True, related_name='tessitura_statistiche_base')
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='tessitura_generata', verbose_name="Proposta Originale")
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="tessiture", default=get_default_campagna_id, db_index=True)
     class Meta: verbose_name = "Tessitura"; verbose_name_plural = "Tessiture"
     
     @property
@@ -1654,6 +1761,7 @@ class Cerimoniale(Tecnica):
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='cerimoniale_generato', verbose_name="Proposta Originale")
     
     liv = models.IntegerField(default=1, verbose_name="Livello")
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="cerimoniali", default=get_default_campagna_id, db_index=True)
     
     class Meta: 
         verbose_name = "Cerimoniale"
@@ -2177,6 +2285,7 @@ class OggettoBase(SyncableModel, models.Model):
         verbose_name="È un oggetto Pesante?", 
         help_text="Se attivo, questo oggetto conta per il limite OGP (Oggetti Pesanti)."
     )
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="oggetti_base", default=get_default_campagna_id, db_index=True)
     
     class Meta: 
         verbose_name = "Oggetto Base (Listino)"
@@ -2343,6 +2452,7 @@ class Personaggio(Inventario):
     era = models.ForeignKey("Era", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     prefettura = models.ForeignKey("Prefettura", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     prefettura_esterna = models.BooleanField(default=False)
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="personaggi", default=get_default_campagna_id, db_index=True)
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
@@ -4379,6 +4489,7 @@ class Messaggio(SyncableModel, models.Model):
     letto_staff = models.BooleanField(default=False)  # Per messaggi staff
     cancellato_staff = models.BooleanField(default=False)  # Per messaggi staff
     in_risposta_a = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='risposte')  # Thread conversazione
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="messaggi", default=get_default_campagna_id, db_index=True)
     
     class Meta: 
         ordering=['-data_invio']

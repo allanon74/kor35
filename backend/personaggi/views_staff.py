@@ -20,6 +20,9 @@ from .models import (
     TipologiaEffetto, EffettoCasuale,
     Era, Prefettura, Regione,
     Dichiarazione,
+    Campagna, CampagnaFeaturePolicy,
+    FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI,
+    FEATURE_MODE_SHARED,
 )
 
 from .serializers import (
@@ -50,6 +53,34 @@ class AbilitaStaffPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = 'page_size'
     max_page_size = 200
+
+
+def _get_default_campaign():
+    return Campagna.objects.filter(slug="kor35").first() or Campagna.objects.filter(is_default=True).first()
+
+
+def _get_active_campaign(request):
+    slug = (request.headers.get("X-Campagna") or request.query_params.get("campagna") or "kor35").strip().lower()
+    campagna = Campagna.objects.filter(slug=slug, attiva=True).first()
+    return campagna or _get_default_campaign()
+
+
+def _feature_mode_for_campaign(campagna, feature_key):
+    if not campagna or campagna.slug == "kor35":
+        return FEATURE_MODE_SHARED
+    row = CampagnaFeaturePolicy.objects.filter(campagna=campagna, feature_key=feature_key).first()
+    return row.mode if row else FEATURE_MODE_SHARED
+
+
+def _campaign_feature_filter(request, qs, feature_key):
+    active = _get_active_campaign(request)
+    base = _get_default_campaign()
+    if not active:
+        return qs
+    mode = _feature_mode_for_campaign(active, feature_key)
+    if mode == FEATURE_MODE_SHARED and base:
+        return qs.filter(Q(campagna=active) | Q(campagna=base))
+    return qs.filter(campagna=active)
 
 class QrInspectorView(APIView):
     """
@@ -131,6 +162,9 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
     serializer_class = InfusioneFullEditorSerializer
     permission_classes = [IsAdminUser]
 
+    def get_queryset(self):
+        return _campaign_feature_filter(self.request, Infusione.objects.all(), FEATURE_INFUSIONI)
+
 class TessituraMasterViewSet(viewsets.ModelViewSet):
     """
     CRUD completo per le Tessiture, usato dai Master.
@@ -139,6 +173,9 @@ class TessituraMasterViewSet(viewsets.ModelViewSet):
     serializer_class = TessituraFullEditorSerializer
     permission_classes = [IsAdminUser]
 
+    def get_queryset(self):
+        return _campaign_feature_filter(self.request, Tessitura.objects.all(), FEATURE_TESSITURE)
+
 class CerimonialeMasterViewSet(viewsets.ModelViewSet):
     """
     CRUD completo per i Cerimoniali, usato dai Master.
@@ -146,6 +183,9 @@ class CerimonialeMasterViewSet(viewsets.ModelViewSet):
     queryset = Cerimoniale.objects.all()
     serializer_class = CerimonialeFullEditorSerializer
     permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return _campaign_feature_filter(self.request, Cerimoniale.objects.all(), FEATURE_CERIMONIALI)
     
 class OggettoStaffViewSet(viewsets.ModelViewSet):
     queryset = Oggetto.objects.all().select_related('aura', 'classe_oggetto')
@@ -156,6 +196,10 @@ class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
     queryset = OggettoBase.objects.all().select_related('classe_oggetto')
     serializer_class = OggettoBaseFullEditorSerializer
     permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = OggettoBase.objects.all().select_related('classe_oggetto')
+        return _campaign_feature_filter(self.request, qs, FEATURE_OGGETTI_BASE)
 
 class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ClasseOggetto.objects.all()
@@ -189,7 +233,11 @@ class ProposteValutazioneList(generics.ListAPIView):
     serializer_class = PropostaTecnicaSerializer
 
     def get_queryset(self):
-        return PropostaTecnica.objects.filter(stato=STATO_PROPOSTA_IN_VALUTAZIONE).order_by('data_invio')
+        campagna = _get_active_campaign(self.request)
+        return PropostaTecnica.objects.filter(
+            stato=STATO_PROPOSTA_IN_VALUTAZIONE,
+            personaggio__campagna=campagna,
+        ).order_by('data_invio')
 
 class ApprovaPropostaView(APIView):
     permission_classes = [permissions.IsAdminUser]
@@ -238,6 +286,7 @@ class ApprovaPropostaView(APIView):
                 # Iniettiamo gli ID nei dati che passeremo al serializer
                 data['proposta_creazione'] = proposta.id
                 data['aura_richiesta'] = aura.id
+                data['campagna'] = proposta.personaggio.campagna_id
                 
                 # Serializer Selection (Usiamo i FullEditor per abilitare la scrittura)
                 serializer = None
@@ -337,6 +386,7 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
                 )
                 .order_by('nome')
             )
+            queryset = _campaign_feature_filter(self.request, queryset, FEATURE_ABILITA)
             search = self.request.query_params.get('search')
             if search:
                 queryset = queryset.filter(nome__icontains=search)
@@ -349,12 +399,12 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
                     queryset = queryset.filter(is_tratto_aura=False)
             return queryset
 
-        return Abilita.objects.select_related(
+        return _campaign_feature_filter(self.request, Abilita.objects.select_related(
             'caratteristica',
             'caratteristica_2',
             'caratteristica_3',
             'aura_riferimento',
-        )
+        ), FEATURE_ABILITA)
 
 
 class TierStaffViewSet(viewsets.ModelViewSet):

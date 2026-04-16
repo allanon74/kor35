@@ -91,6 +91,9 @@ router.register(r'staff/cariche-korp', CaricaKorpViewSet, basename='staff-carich
 router.register(r'staff/cariche-carriera', CaricaCarrieraViewSet, basename='staff-cariche-carriera')
 router.register(r'staff/personaggi-korp-membership', PersonaggioKorpMembershipViewSet, basename='staff-personaggi-korp-membership')
 router.register(r'staff/personaggi-carriera-membership', PersonaggioCarrieraMembershipViewSet, basename='staff-personaggi-carriera-membership')
+router.register(r'staff/campagne', views.CampagnaAdminViewSet, basename='staff-campagne')
+router.register(r'staff/campagne-utenti', views.CampagnaUtenteAdminViewSet, basename='staff-campagne-utenti')
+router.register(r'staff/campagne-feature-policy', views.CampagnaFeaturePolicyAdminViewSet, basename='staff-campagne-feature-policy')
 
 urlpatterns = [
     
@@ -182,6 +185,8 @@ urlpatterns = [
     
     path('api/personaggi/search/', views.PersonaggioAutocompleteView.as_view(), name='personaggio-search'),
     path('api/personaggi/preferred/', views.PreferredPersonaggioView.as_view(), name='personaggio-preferred'),
+    path('api/campagne/', views.CampagnaListView.as_view(), name='campagne-list'),
+    path('api/campagne/active/', views.ActiveCampagnaValidateView.as_view(), name='campagne-active-validate'),
     path('api/messaggi/send/', views.MessaggioPrivateCreateView.as_view(), name='messaggio-send'),
     
     path('api/oggetti/equipaggia/', views.equipaggia_item_view, name='api_equipaggia_item'),

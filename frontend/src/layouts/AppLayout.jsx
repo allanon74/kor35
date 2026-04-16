@@ -6,7 +6,7 @@ import MainPage from '../components/MainPage';
 import StartPage from '../components/StartPage';
 
 const AppLayout = ({ token, onLogout }) => {
-  const { isStaff } = useCharacter();
+  const { isStaff, isCampaignMaster } = useCharacter();
   const navigate = useNavigate();
   const location = useLocation();
   const isStartPagePath = location.pathname === '/app' || location.pathname === '/app/start';
@@ -23,7 +23,7 @@ const AppLayout = ({ token, onLogout }) => {
     const mode = params.get('mode');
     const tool = params.get('tool');
 
-    if (!isStaff) {
+    if (!isStaff || !isCampaignMaster) {
       setViewMode('player');
       return;
     }
@@ -41,14 +41,14 @@ const AppLayout = ({ token, onLogout }) => {
 
     // Default staff senza mode esplicito: resta/entra in vista player.
     setViewMode('player');
-  }, [isStaff, location.search]);
+  }, [isStaff, isCampaignMaster, location.search]);
 
   // Effetto: Se l'utente non è staff, forziamo sempre la vista player
   useEffect(() => {
-    if (!isStaff) {
+    if (!isStaff || !isCampaignMaster) {
       setViewMode('player');
     }
-  }, [isStaff]);
+  }, [isStaff, isCampaignMaster]);
 
   const updateUrlParams = (nextMode, nextTool = null) => {
     const params = new URLSearchParams(location.search);
@@ -65,7 +65,7 @@ const AppLayout = ({ token, onLogout }) => {
   };
 
   // Render: Vista Master (Solo se è staff E siamo in modalità staff)
-  if (isStaff && viewMode === 'staff') {
+  if (isStaff && isCampaignMaster && viewMode === 'staff') {
     return (
       <StaffDashboard 
         token={token}
@@ -103,7 +103,6 @@ const AppLayout = ({ token, onLogout }) => {
     <MainPage 
       token={token}
       onLogout={onLogout}
-      isStaff={isStaff} 
       onSwitchToMaster={(tool = 'home') => {
           setDashboardInitialTool(tool);
           setViewMode('staff');

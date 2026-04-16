@@ -80,7 +80,7 @@ const TAB_TO_WIKI_SLUG = {
     'game': 'navigazione-app',
 };
 
-const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
+const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('game'); 
@@ -180,6 +180,10 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
     toggleViewAll,
     adminPendingCount,
     unreadCount, 
+    campaigns,
+    activeCampaign,
+    changeActiveCampaign,
+    isCampaignMaster,
   } = useCharacter();
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
@@ -258,7 +262,7 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
 
   useEffect(() => {
     let interval;
-    if (isStaff) {
+    if (isCampaignMaster) {
         const checkStaffMessages = async () => {
             try {
                 // Recupera messaggi staff e conta quelli non letti (assumendo che l'API restituisca una lista)
@@ -278,7 +282,7 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
         interval = setInterval(checkStaffMessages, 60000);
     }
     return () => clearInterval(interval);
-  }, [isStaff, onLogout]);
+  }, [isCampaignMaster, onLogout]);
 
   useEffect(() => {
     let interval;
@@ -412,10 +416,10 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
     const hasMsgNotif = unreadCount > 0;
     const jobsCount = selectedCharacterData?.lavori_pendenti_count || 0; 
     const hasJobNotif = jobsCount > 0; 
-    const hasStaffMsgNotif = isStaff && staffUnreadCount > 0;
+    const hasStaffMsgNotif = isCampaignMaster && staffUnreadCount > 0;
     
     return { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif, jobsCount };
-  }, [isAdmin, adminPendingCount, unreadCount, selectedCharacterData?.lavori_pendenti_count, isStaff, staffUnreadCount]);
+  }, [isAdmin, adminPendingCount, unreadCount, selectedCharacterData?.lavori_pendenti_count, isCampaignMaster, staffUnreadCount]);
   
   const { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif } = notificationState;
   const comaState = selectedCharacterData?.impostazioni_ui?.coma_state || null;
@@ -439,6 +443,12 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
       setActiveTab('personaggi');
     }
   }, [selectedCharacterId, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'admin_msg' && !isCampaignMaster) {
+      setActiveTab('home');
+    }
+  }, [activeTab, isCampaignMaster]);
 
   useEffect(() => {
     if (!selectedCharacterId) return undefined;
@@ -520,6 +530,21 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
             
             {/* 1. SELETTORE PERSONAGGIO */}
             <div className="bg-gray-700/30 p-3 rounded-lg border border-gray-700">
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Campagna attiva</label>
+                <select
+                    className="w-full bg-gray-900 text-white p-2 rounded border border-gray-600 focus:border-indigo-500 outline-none text-sm mb-3"
+                    value={activeCampaign || 'kor35'}
+                    onChange={(e) => {
+                        changeActiveCampaign(e.target.value);
+                        setIsMenuOpen(false);
+                    }}
+                >
+                    {(campaigns || []).map(c => (
+                        <option key={c.slug} value={c.slug}>
+                            {c.nome} {c.ruolo === 'MASTER' ? '(Master)' : ''}
+                        </option>
+                    ))}
+                </select>
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Cambia Personaggio</label>
                 <select 
                     className="w-full bg-gray-900 text-white p-2 rounded border border-gray-600 focus:border-indigo-500 outline-none text-sm"
@@ -680,7 +705,7 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
             </div>
             
             {/* PULSANTE PROPOSTE PENDENTI (STAFF) */}
-            {isStaff && adminPendingCount > 0 && (
+            {isCampaignMaster && adminPendingCount > 0 && (
                     <button
                     onClick={() => {
                         onSwitchToMaster('proposte'); 
@@ -697,7 +722,7 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
             )}
 
             {/* PULSANTE VAI A STAFF DASHBOARD */}
-            {isStaff && (
+            {isCampaignMaster && (
                 <button
                     onClick={() => {
                         onSwitchToMaster(); 
@@ -783,8 +808,15 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
           {/* --- HEADER --- */}
           <header className="relative flex justify-between items-center p-3 shadow-md shrink-0 border-b border-gray-700 z-10 h-16 backdrop-blur-sm bg-gray-800/95">
               <div className="flex items-center gap-3 z-20">
-                  <img src="/pwa-512x512.png" alt="Logo" className="w-9 h-9 object-contain drop-shadow-lg" />
-                  <h1 className="text-xl font-black italic hidden sm:block text-blue-400">KOR-35</h1>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/app/start')}
+                    className="flex items-center gap-3"
+                    title="Torna alla pagina iniziale"
+                  >
+                    <img src="/pwa-512x512.png" alt="Logo" className="w-9 h-9 object-contain drop-shadow-lg" />
+                    <h1 className="text-xl font-black italic hidden sm:block text-blue-400">KOR-35</h1>
+                  </button>
               </div>
 
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full text-center pointer-events-none z-10">
@@ -826,6 +858,15 @@ const MainPage = ({ token, onLogout, isStaff, onSwitchToMaster }) => {
               </div>
 
               <div className="flex items-center gap-3 z-20">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/app/start')}
+                    className="hidden sm:flex items-center gap-2 px-2 py-1 rounded-lg border border-indigo-500/30 hover:bg-indigo-600/10"
+                    title="Torna alla splash page"
+                  >
+                    <img src="/pwa-512x512.png" alt="Logo" className="w-5 h-5 object-contain" />
+                    <span className="text-xs font-black italic text-blue-300">KOR35</span>
+                  </button>
                   {isLoading && <Loader2 size={20} className="text-indigo-400 animate-spin" />}
                   
                   {/* --- [MODIFICA] PULSANTE AIUTO (?) --- */}

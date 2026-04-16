@@ -17,7 +17,7 @@ import RichTextEditor from './RichTextEditor';
 
 export default function StartPage({ onLogout, onSwitchToMaster }) {
   const navigate = useNavigate();
-  const { selectCharacter, fetchPersonaggi, isStaff, isMaster, preferredCharacterId, setPreferredCharacter } = useCharacter();
+  const { selectCharacter, fetchPersonaggi, isStaff, isMaster, isCampaignMaster, preferredCharacterId, setPreferredCharacter } = useCharacter();
 
   const [characters, setCharacters] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -271,7 +271,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
             <Sparkles size={20} className="text-pink-300 mb-2" />
             <div className="font-bold">InstaFame</div>
           </button>
-          {(isStaff || isMaster) && (
+          {(isCampaignMaster || isMaster) && (
             <button
               onClick={() => onSwitchToMaster('home')}
               className="rounded-xl border border-gray-700 bg-gray-800 p-4 text-left hover:bg-gray-750"

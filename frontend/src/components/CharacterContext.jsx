@@ -14,6 +14,10 @@ import {
   getAcquirableInfusioni,
   getAcquirableTessiture,
   getAcquirableCerimoniali,
+  getCampaigns,
+  validateActiveCampaign,
+  getActiveCampaignSlug,
+  setActiveCampaignSlug,
 } from '../api'; 
 import NotificationPopup from './NotificationPopup';
 
@@ -64,6 +68,11 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [isMaster] = useState(() => localStorage.getItem('kor35_is_master') === 'true');
   const [isAdmin] = useState(() => localStorage.getItem('kor35_is_master') === 'true');
   const [staffWorkMode, setStaffWorkMode] = useState('dashboard');
+  const [campaigns, setCampaigns] = useState([]);
+  const [activeCampaign, setActiveCampaign] = useState(() => getActiveCampaignSlug());
+  const activeCampaignMeta = campaigns.find((c) => c.slug === activeCampaign) || null;
+  const activeCampaignRole = activeCampaignMeta?.ruolo || 'PLAYER';
+  const isCampaignMaster = isAdmin || activeCampaignRole === 'MASTER';
 
   const [viewAll, setViewAll] = useState(false);
   
@@ -89,6 +98,31 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, []);
 
   // --- FETCH INIZIALE TIMER ATTIVI ---
+  useEffect(() => {
+    const syncCampaign = async () => {
+      try {
+        const valid = await validateActiveCampaign(activeCampaign, onLogout);
+        const normalized = setActiveCampaignSlug(valid?.slug || activeCampaign);
+        setActiveCampaign(normalized);
+      } catch {
+        setActiveCampaign(setActiveCampaignSlug('kor35'));
+      }
+    };
+    syncCampaign();
+  }, [activeCampaign, onLogout]);
+
+  useEffect(() => {
+    const loadCampaigns = async () => {
+      try {
+        const list = await getCampaigns(onLogout);
+        setCampaigns(Array.isArray(list) ? list : []);
+      } catch {
+        setCampaigns([]);
+      }
+    };
+    loadCampaigns();
+  }, [onLogout, activeCampaign]);
+
   useEffect(() => {
     const loadInitialTimers = async () => {
       try {
@@ -216,6 +250,17 @@ export const CharacterProvider = ({ children, onLogout }) => {
     localStorage.setItem('kor35_preferred_char_id', normalized);
     persist(Number(normalized));
   }, [onLogout]);
+
+  const changeActiveCampaign = useCallback(async (slug) => {
+    const normalized = setActiveCampaignSlug(slug);
+    await validateActiveCampaign(normalized, onLogout);
+    setActiveCampaign(normalized);
+    setSelectedCharacterId('');
+    setPreferredCharacterId('');
+    localStorage.removeItem('kor35_last_char_id');
+    localStorage.removeItem('kor35_preferred_char_id');
+    await queryClient.invalidateQueries();
+  }, [onLogout, queryClient]);
 
   // *** CORREZIONE CRUCIALE ***
   // Invalidazione + refetch esplicito della query personaggio così la UI (timer creazioni
@@ -447,8 +492,13 @@ export const CharacterProvider = ({ children, onLogout }) => {
 
     isStaff,
     isMaster,
+    isCampaignMaster,
+    activeCampaignRole,
     staffWorkMode,
     setStaffWorkMode,
+    campaigns,
+    activeCampaign,
+    changeActiveCampaign,
     isAdmin,
     viewAll,
     toggleViewAll,

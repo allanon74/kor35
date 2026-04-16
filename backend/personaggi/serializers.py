@@ -53,6 +53,9 @@ from .models import (
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, Regione,
+    Campagna,
+    CampagnaUtente,
+    CampagnaFeaturePolicy,
 )
 
 # -----------------------------------------------------------------------------
@@ -69,6 +72,88 @@ class UserSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
         user.is_active = False
         return user
+
+
+class CampagnaSerializer(serializers.ModelSerializer):
+    def validate(self, attrs):
+        instance = getattr(self, "instance", None)
+        next_default = attrs.get("is_default", instance.is_default if instance else False)
+        next_base = attrs.get("is_base", instance.is_base if instance else False)
+
+        if instance and "is_default" in attrs and not next_default:
+            others_default = Campagna.objects.exclude(id=instance.id).filter(is_default=True).exists()
+            if not others_default:
+                raise serializers.ValidationError({"is_default": "Deve esistere almeno una campagna default."})
+
+        if instance and "is_base" in attrs and not next_base:
+            others_base = Campagna.objects.exclude(id=instance.id).filter(is_base=True).exists()
+            if not others_base:
+                raise serializers.ValidationError({"is_base": "Deve esistere almeno una campagna base."})
+
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        if instance.is_default:
+            Campagna.objects.exclude(id=instance.id).filter(is_default=True).update(is_default=False)
+        if instance.is_base:
+            Campagna.objects.exclude(id=instance.id).filter(is_base=True).update(is_base=False)
+        return instance
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        next_default = validated_data.get("is_default", instance.is_default)
+        next_base = validated_data.get("is_base", instance.is_base)
+        instance = super().update(instance, validated_data)
+        if next_default:
+            Campagna.objects.exclude(id=instance.id).filter(is_default=True).update(is_default=False)
+        if next_base:
+            Campagna.objects.exclude(id=instance.id).filter(is_base=True).update(is_base=False)
+        return instance
+
+    class Meta:
+        model = Campagna
+        fields = (
+            "id",
+            "slug",
+            "nome",
+            "descrizione",
+            "is_default",
+            "is_base",
+            "attiva",
+        )
+
+
+class CampagnaUtenteSerializer(serializers.ModelSerializer):
+    user_username = serializers.CharField(source="user.username", read_only=True)
+    campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
+
+    class Meta:
+        model = CampagnaUtente
+        fields = (
+            "id",
+            "campagna",
+            "campagna_nome",
+            "user",
+            "user_username",
+            "ruolo",
+            "attivo",
+        )
+
+
+class CampagnaFeaturePolicySerializer(serializers.ModelSerializer):
+    campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
+
+    class Meta:
+        model = CampagnaFeaturePolicy
+        fields = (
+            "id",
+            "campagna",
+            "campagna_nome",
+            "feature_key",
+            "mode",
+        )
 
 
 class TierSerializer(serializers.ModelSerializer):
@@ -2007,6 +2092,8 @@ class PersonaggioSerializer(serializers.ModelSerializer):
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
     prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
     prefettura_regione_sigla = serializers.CharField(source="prefettura.regione.sigla", read_only=True)
+    campagna = serializers.PrimaryKeyRelatedField(queryset=Campagna.objects.filter(attiva=True), required=False)
+    campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
     
     class Meta:
         model = Personaggio
@@ -2017,6 +2104,7 @@ class PersonaggioSerializer(serializers.ModelSerializer):
             'crediti', 'punti_caratteristica',
             'giocante', 'proprietario_id', 'is_staff',
             'segno_zodiacale', 'segno_zodiacale_nome',
+            'campagna', 'campagna_nome',
             'era', 'prefettura', 'prefettura_esterna', 'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
         )
         read_only_fields = ('crediti', 'punti_caratteristica') 
@@ -2050,6 +2138,8 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
     prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
     prefettura_regione_sigla = serializers.CharField(source="prefettura.regione.sigla", read_only=True)
+    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+    campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
     can_edit_razza = serializers.SerializerMethodField()
     can_edit_era = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
@@ -2062,6 +2152,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
             'segno_zodiacale', 'segno_zodiacale_nome',
+            'campagna', 'campagna_nome',
             'era', 'prefettura', 'prefettura_esterna', 'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
             'can_edit_razza', 'can_edit_era',
             'avatar_url',
@@ -2211,6 +2302,8 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
     prefettura_nome = serializers.CharField(source="prefettura.nome", read_only=True)
     prefettura_era_nome = serializers.CharField(source="prefettura.era.nome", read_only=True)
     prefettura_regione_sigla = serializers.CharField(source="prefettura.regione.sigla", read_only=True)
+    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+    campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
     avatar_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -2219,6 +2312,7 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'id', 'nome', 'proprietario', 'tipologia', 
             'proprietario_nome', 'data_nascita', 'data_morte',
             'testo', 'costume', 'crediti', 'punti_caratteristica',
+            'campagna', 'campagna_nome',
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
             'avatar_url',
@@ -2446,6 +2540,17 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         validated_data.pop('crediti_da_inviare', None)
         validated_data.pop('oggetti_ids', None)
         validated_data['mittente'] = self.context['request'].user
+        campagna = None
+        mittente_pg = validated_data.get('mittente_personaggio')
+        destinatario_pg = validated_data.get('destinatario_personaggio')
+        if mittente_pg:
+            campagna = mittente_pg.campagna
+        elif destinatario_pg:
+            campagna = destinatario_pg.campagna
+        if not campagna:
+            campagna = Campagna.objects.filter(slug="kor35").first() or Campagna.objects.filter(is_default=True).first()
+        if campagna:
+            validated_data['campagna'] = campagna
         
         # Se è un messaggio staff, imposta tipo_messaggio a STAFF
         if validated_data.get('is_staff_message'):

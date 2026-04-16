@@ -37,6 +37,7 @@ const StaffRisorsaPoolTab = lazy(() => import('./StaffRisorsaPoolTab'));
 const EraManager = lazy(() => import('./editors/EraManager'));
 const DichiarazioniGlossarioManager = lazy(() => import('./editors/DichiarazioniGlossarioManager'));
 const ArcanaProfilesTab = lazy(() => import('./editors/ArcanaProfilesTab'));
+const CampaignManager = lazy(() => import('./editors/CampaignManager'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -101,6 +102,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'ere-prefetture', label: 'Ere e Prefetture', icon: <Globe2 size={24} />, color: 'bg-violet-700', component: EraManager },
         { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e Glossario', icon: <BookText size={24} />, color: 'bg-emerald-700', component: DichiarazioniGlossarioManager },
         { id: 'arcana-profiles', label: 'Profili Arcana SSO', icon: <Shield size={24} />, color: 'bg-indigo-800', component: ArcanaProfilesTab },
+        { id: 'campagne', label: 'Campagne', icon: <Globe2 size={24} />, color: 'bg-emerald-800', component: CampaignManager },
         { id: 'messaggi', label: 'Messaggi Staff', icon: <MessageSquare size={24} />, color: 'bg-emerald-600', component: AdminMessageTab },        
     ], []);
 

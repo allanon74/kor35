@@ -113,6 +113,16 @@ def visible_stories_queryset_for_personaggio(personaggio):
             reactions_count=Count("reactions", distinct=True),
         )
     )
+    from .serializers import _get_active_campaign_from_request, _get_default_campaign, _social_mode_for_campaign
+    active_campaign = _get_active_campaign_from_request(getattr(personaggio, "_social_request", None))
+    default_campaign = _get_default_campaign()
+    mode = _social_mode_for_campaign(active_campaign)
+    if active_campaign:
+        png_kor35_q = Q(autore__campagna=default_campaign, autore__tipologia__giocante=False)
+        if mode == "SHARED" and default_campaign:
+            base = base.filter(Q(autore__campagna=active_campaign) | Q(autore__campagna=default_campaign) | png_kor35_q)
+        else:
+            base = base.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
     if not personaggio:
         return base.filter(visibilita="PUB")
     active_korp = None
@@ -162,7 +172,10 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated:
             return None
         requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
-        return resolve_active_personaggio(self.request.user, requested)
+        personaggio = resolve_active_personaggio(self.request.user, requested, request=self.request)
+        if personaggio:
+            setattr(personaggio, "_social_request", self.request)
+        return personaggio
 
     def get_queryset(self):
         personaggio = self.get_personaggio()
@@ -330,6 +343,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
                 titolo=f"Risposta alla tua story",
                 testo=reply.testo,
                 salva_in_cronologia=True,
+                campagna=personaggio.campagna,
             )
         return Response(SocialStoryReplySerializer(reply).data, status=status.HTTP_201_CREATED)
 
@@ -523,11 +537,11 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated:
             return None
         requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
-        return resolve_active_personaggio(self.request.user, requested)
+        return resolve_active_personaggio(self.request.user, requested, request=self.request)
 
     def get_queryset(self):
         personaggio = self.get_personaggio()
-        qs = visible_posts_queryset_for_personaggio(personaggio)
+        qs = visible_posts_queryset_for_personaggio(personaggio, request=self.request)
         hashtag = (self.request.query_params.get("hashtag") or "").strip().lstrip("#")
         if hashtag:
             token = f"#{hashtag}"
@@ -639,7 +653,7 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
 
     def get_personaggio(self):
         requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
-        return resolve_active_personaggio(self.request.user, requested)
+        return resolve_active_personaggio(self.request.user, requested, request=self.request)
 
     def _membership(self, group, personaggio):
         if not personaggio:
@@ -924,7 +938,7 @@ class SocialProfileMeView(APIView):
 
     def _get_or_create_profile(self, request):
         requested = request.query_params.get("personaggio_id") or request.data.get("personaggio_id")
-        personaggio = resolve_active_personaggio(request.user, requested)
+        personaggio = resolve_active_personaggio(request.user, requested, request=request)
         if not personaggio:
             return None
         profile, _ = SocialProfile.objects.get_or_create(personaggio=personaggio)
@@ -1055,7 +1069,7 @@ class SocialNotificationsView(APIView):
 
     def get(self, request):
         requested = request.query_params.get("personaggio_id")
-        personaggio = resolve_active_personaggio(request.user, requested)
+        personaggio = resolve_active_personaggio(request.user, requested, request=request)
         if not personaggio:
             return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
 

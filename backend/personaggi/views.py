@@ -47,6 +47,9 @@ from .models import (
     StatisticaContainer,
     PersonaggioInfusione, PersonaggioCerimoniale,
     PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
+    Campagna, CampagnaUtente, CampagnaFeaturePolicy,
+    FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI, FEATURE_SOCIAL,
+    FEATURE_MODE_SHARED, CAMPAGNA_ROLE_MASTER,
 )
 
 import uuid 
@@ -112,9 +115,132 @@ from .serializers import (
     CaricaKorpSerializer, CaricaCarrieraSerializer,
     PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
     StatisticaContainerSerializer,
+    CampagnaSerializer, CampagnaUtenteSerializer, CampagnaFeaturePolicySerializer,
 )
 
 PARAMETRO_SCONTO_ABILITA = 'rid_cos_ab'
+
+
+def _get_default_campaign():
+    return Campagna.objects.filter(slug="kor35").first() or Campagna.objects.filter(is_default=True).first()
+
+
+def _get_active_campaign(request):
+    slug = (request.headers.get("X-Campagna") or request.query_params.get("campagna") or "kor35").strip().lower()
+    campagna = Campagna.objects.filter(slug=slug, attiva=True).first()
+    if campagna:
+        return campagna
+    return _get_default_campaign()
+
+
+def _feature_mode_for_campaign(campagna, feature_key):
+    if not campagna:
+        return FEATURE_MODE_SHARED
+    if campagna.slug == "kor35":
+        return FEATURE_MODE_SHARED
+    row = CampagnaFeaturePolicy.objects.filter(campagna=campagna, feature_key=feature_key).first()
+    if not row:
+        return FEATURE_MODE_SHARED
+    return row.mode
+
+
+def _campaign_feature_filter(request, qs, feature_key):
+    active = _get_active_campaign(request)
+    base = _get_default_campaign()
+    if not active:
+        return qs
+    mode = _feature_mode_for_campaign(active, feature_key)
+    if mode == FEATURE_MODE_SHARED and base:
+        return qs.filter(Q(campagna=active) | Q(campagna=base))
+    return qs.filter(campagna=active)
+
+
+def _user_campaign_role(user, campagna):
+    if not user or not campagna:
+        return None
+    row = CampagnaUtente.objects.filter(user=user, campagna=campagna, attivo=True).first()
+    return row.ruolo if row else None
+
+
+def _can_operate_in_campaign(user, campagna, *, needs_master=False):
+    if not user or not campagna:
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+    role = _user_campaign_role(user, campagna)
+    if not role:
+        return campagna.slug == "kor35" and not needs_master
+    if needs_master:
+        return role == CAMPAGNA_ROLE_MASTER
+    return role in (CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_MASTER)
+
+
+class CampagnaListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        active = _get_active_campaign(request)
+        rows = []
+        base_qs = Campagna.objects.filter(attiva=True).order_by("-is_default", "nome")
+        for campagna in base_qs:
+            membership = CampagnaUtente.objects.filter(
+                campagna=campagna, user=request.user, attivo=True
+            ).first()
+            if not membership and campagna.slug != "kor35":
+                continue
+            rows.append(
+                {
+                    "id": str(campagna.id),
+                    "slug": campagna.slug,
+                    "nome": campagna.nome,
+                    "is_default": bool(campagna.is_default),
+                    "is_active": bool(active and campagna.id == active.id),
+                    "ruolo": membership.ruolo if membership else "PLAYER",
+                }
+            )
+        return Response(rows, status=status.HTTP_200_OK)
+
+
+class ActiveCampagnaValidateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        slug = str(request.data.get("slug") or "").strip().lower() or "kor35"
+        campagna = Campagna.objects.filter(slug=slug, attiva=True).first()
+        if not campagna:
+            return Response({"error": "Campagna non valida."}, status=status.HTTP_400_BAD_REQUEST)
+        membership = CampagnaUtente.objects.filter(
+            campagna=campagna, user=request.user, attivo=True
+        ).first()
+        if not membership and campagna.slug != "kor35":
+            return Response({"error": "Non sei associato a questa campagna."}, status=status.HTTP_403_FORBIDDEN)
+        return Response(
+            {
+                "id": str(campagna.id),
+                "slug": campagna.slug,
+                "nome": campagna.nome,
+                "ruolo": membership.ruolo if membership else "PLAYER",
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class CampagnaAdminViewSet(viewsets.ModelViewSet):
+    queryset = Campagna.objects.all().order_by("-is_default", "nome")
+    serializer_class = CampagnaSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class CampagnaUtenteAdminViewSet(viewsets.ModelViewSet):
+    queryset = CampagnaUtente.objects.select_related("campagna", "user").all().order_by("campagna__nome", "user__username")
+    serializer_class = CampagnaUtenteSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+
+class CampagnaFeaturePolicyAdminViewSet(viewsets.ModelViewSet):
+    queryset = CampagnaFeaturePolicy.objects.select_related("campagna").all().order_by("campagna__nome", "feature_key")
+    serializer_class = CampagnaFeaturePolicySerializer
+    permission_classes = [permissions.IsAdminUser]
 
 @ensure_csrf_cookie
 def get_csrf_token(request):
@@ -143,9 +269,14 @@ class AbilitaViewSet(viewsets.ModelViewSet):
     authentication_classes = (TokenAuthentication,)
     serializer_class = AbilitaSerializer
 
+    def get_queryset(self):
+        return _campaign_feature_filter(self.request, Abilita.objects.all(), FEATURE_ABILITA)
+
 class AbilViewSet(viewsets.ModelViewSet):
     queryset = Abilita.objects.all()
     authentication_classes = (TokenAuthentication,)
+    def get_queryset(self):
+        return _campaign_feature_filter(self.request, Abilita.objects.all(), FEATURE_ABILITA)
     def get_serializer_class(self):
         if self.action in ['update', 'partial_update']: return AbilitaUpdateSerializer
         return AbilSerializer
@@ -273,6 +404,8 @@ class AcquisisciAbilitaView(APIView):
             personaggio = Personaggio.objects.select_related('tipologia').get(id=personaggio_id, proprietario=request.user)
         except Personaggio.DoesNotExist: return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
         except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
         try:
             abilita = (
                 Abilita.objects.select_related('aura_riferimento', 'caratteristica', 'caratteristica_2')
@@ -280,6 +413,9 @@ class AcquisisciAbilitaView(APIView):
                 .get(id=abilita_id)
             )
         except Abilita.DoesNotExist: return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
+        abilita_qs = _campaign_feature_filter(request, Abilita.objects.filter(id=abilita_id), FEATURE_ABILITA)
+        if not abilita_qs.exists():
+            return Response({"error": "Abilità non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
 
         era_ids_abilita = set(EraAbilita.objects.filter(abilita_id=abilita.id).values_list("era_id", flat=True))
         if era_ids_abilita:
@@ -415,6 +551,8 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
             return Response({"error": "Personaggio non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
 
         cache_key = f"acquirable_skills_{character_id}"
         cached_data = cache.get(cache_key)
@@ -430,7 +568,7 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         moltiplicatore_costo = Decimal(1) - sconto_percent
 
         master_skills_list = (
-            Abilita.objects.exclude(id__in=possessed_skill_ids)
+            _campaign_feature_filter(request, Abilita.objects.exclude(id__in=possessed_skill_ids), FEATURE_ABILITA)
             .defer('caratteristica_2', 'caratteristica_3')
             .select_related('caratteristica')
             .prefetch_related(
@@ -492,11 +630,13 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
         
         if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
             return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
 
         possedute_ids = personaggio.infusioni_possedute.values_list('id', flat=True)
         
         # MODIFICA: Uso Sum('componenti__valore') per calcolare il livello
-        tutte_infusioni = Infusione.objects.exclude(id__in=possedute_ids).annotate(
+        tutte_infusioni = _campaign_feature_filter(request, Infusione.objects.exclude(id__in=possedute_ids), FEATURE_INFUSIONI).annotate(
             livello_calc=Sum('componenti__valore')
         ).select_related(
             'aura_richiesta', 'aura_infusione'
@@ -534,6 +674,10 @@ class AcquisisciInfusioneView(APIView):
             # MODIFICA: Prefetch su componenti
             infusione = Infusione.objects.prefetch_related('componenti').get(id=infusione_id)
         except (Personaggio.DoesNotExist, Infusione.DoesNotExist): return Response({"error": "Personaggio o Infusione non trovati."}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
+        if not _campaign_feature_filter(request, Infusione.objects.filter(id=infusione.id), FEATURE_INFUSIONI).exists():
+            return Response({"error": "Infusione non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(infusione)
         if not is_valid: return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -573,11 +717,13 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
         
         if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
             return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
 
         possedute_ids = personaggio.tessiture_possedute.values_list('id', flat=True)
         
         # MODIFICA: Uso Sum('componenti__valore') per calcolare il livello
-        tutte_tessiture = Tessitura.objects.exclude(id__in=possedute_ids).annotate(
+        tutte_tessiture = _campaign_feature_filter(request, Tessitura.objects.exclude(id__in=possedute_ids), FEATURE_TESSITURE).annotate(
             livello_calc=Sum('componenti__valore')
         ).select_related(
             'aura_richiesta', 'elemento_principale'
@@ -616,6 +762,10 @@ class AcquisisciTessituraView(APIView):
             # MODIFICA: Prefetch su componenti
             tessitura = Tessitura.objects.prefetch_related('componenti').get(id=tessitura_id)
         except (Personaggio.DoesNotExist, Tessitura.DoesNotExist): return Response({"error": "Oggetto non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
+        if not _campaign_feature_filter(request, Tessitura.objects.filter(id=tessitura.id), FEATURE_TESSITURE).exists():
+            return Response({"error": "Tessitura non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(tessitura)
         if not is_valid: return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -757,11 +907,13 @@ class CerimonialiAcquistabiliView(generics.GenericAPIView):
         
         if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
             return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
 
         # Escludi quelli già posseduti
         possedute_ids = personaggio.cerimoniali_posseduti.values_list('id', flat=True)
         
-        tutti_cerimoniali = Cerimoniale.objects.exclude(id__in=possedute_ids).select_related(
+        tutti_cerimoniali = _campaign_feature_filter(request, Cerimoniale.objects.exclude(id__in=possedute_ids), FEATURE_CERIMONIALI).select_related(
             'aura_richiesta'
         ).prefetch_related(
             'componenti__caratteristica'
@@ -794,6 +946,10 @@ class AcquisisciCerimonialeView(APIView):
             cerimoniale = Cerimoniale.objects.prefetch_related('componenti').get(id=cerimoniale_id)
         except (Personaggio.DoesNotExist, Cerimoniale.DoesNotExist): 
             return Response({"error": "Oggetto non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
+        if not _campaign_feature_filter(request, Cerimoniale.objects.filter(id=cerimoniale.id), FEATURE_CERIMONIALI).exists():
+            return Response({"error": "Cerimoniale non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
 
         # Verifica requisiti
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(cerimoniale)
@@ -1339,6 +1495,7 @@ class PersonaggioMeView(APIView):
     def get(self, request, format=None):
         try:
             # MODIFICA: Prefetch aggiornati per usare componenti__caratteristica
+            active_campaign = _get_active_campaign(request)
             personaggio = Personaggio.objects.select_related(
                 'tipologia', 'inventario_ptr'
             ).prefetch_related(
@@ -1363,7 +1520,18 @@ class PersonaggioMeView(APIView):
                 'abilita_possedute__statistiche__statistica', 
                 'abilita_possedute__punteggio_acquisito__modifica_statistiche__statistica_modificata', 
                 'inventario_ptr__tracciamento_oggetti__oggetto__statistiche__statistica',
-            ).get(proprietario=request.user)
+            ).filter(proprietario=request.user, campagna=active_campaign).first()
+            if not personaggio:
+                personaggio = Personaggio.objects.select_related(
+                    'tipologia', 'inventario_ptr'
+                ).prefetch_related(
+                    'movimenti_credito', 'movimenti_pc',
+                    'abilita_possedute', 'attivate_possedute__statistiche_base__statistica', 'attivate_possedute__elementi__elemento',
+                    'infusioni_possedute__statistiche_base__statistica', 'infusioni_possedute__componenti__caratteristica',
+                    'tessiture_possedute__statistiche_base__statistica', 'tessiture_possedute__componenti__caratteristica',
+                ).filter(proprietario=request.user).first()
+            if not personaggio:
+                raise Personaggio.DoesNotExist
         
         except Personaggio.DoesNotExist: 
             return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
@@ -1579,11 +1747,23 @@ class PropostaTransazioneCreateView(APIView):
 class PersonaggioListView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request, format=None):
-        queryset = Personaggio.objects.filter(proprietario=request.user).select_related(
+        active_campaign = _get_active_campaign(request)
+        default_campaign = _get_default_campaign()
+        queryset = Personaggio.objects.filter(proprietario=request.user, campagna=active_campaign).select_related(
             "era", "prefettura", "prefettura__era", "social_profile"
         )
+        if active_campaign and default_campaign and active_campaign.id != default_campaign.id:
+            queryset = Personaggio.objects.filter(
+                proprietario=request.user
+            ).filter(
+                Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)
+            ).select_related("era", "prefettura", "prefettura__era", "social_profile")
         if (request.user.is_staff or request.user.is_superuser) and request.query_params.get('view_all') == 'true':
-            queryset = Personaggio.objects.all().select_related("era", "prefettura", "prefettura__era", "social_profile")
+            queryset = Personaggio.objects.filter(campagna=active_campaign).select_related("era", "prefettura", "prefettura__era", "social_profile")
+            if active_campaign and default_campaign and active_campaign.id != default_campaign.id:
+                queryset = Personaggio.objects.filter(
+                    Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)
+                ).select_related("era", "prefettura", "prefettura__era", "social_profile")
         serializer = PersonaggioListSerializer(queryset, many=True, context={"request": request})
         data = serializer.data
 
@@ -1623,6 +1803,8 @@ class PersonaggioDetailView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request, pk, format=None):
+        active_campaign = _get_active_campaign(request)
+        default_campaign = _get_default_campaign()
         # Workaround temporaneo: se la migrazione DB con i nuovi campi
         # `caratteristica_2` / `caratteristica_3` non è ancora applicata,
         # le query su Abilita verrebbero a 500. Deferiamo quelle colonne
@@ -1636,6 +1818,15 @@ class PersonaggioDetailView(APIView):
             ),
             pk=pk,
         )
+        if active_campaign and personaggio.campagna_id != getattr(active_campaign, "id", None):
+            is_png_kor35 = bool(
+                default_campaign
+                and personaggio.campagna_id == default_campaign.id
+                and personaggio.tipologia_id
+                and not personaggio.tipologia.giocante
+            )
+            if not is_png_kor35:
+                return Response({"error": "Personaggio non visibile nella campagna selezionata."}, status=status.HTTP_403_FORBIDDEN)
         user = request.user
         if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
             return Response({"error": "Non hai il permesso di visualizzare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
@@ -1842,6 +2033,7 @@ class MessaggioListView(generics.ListAPIView):
     
     def get_queryset(self):
         personaggio_id = self.request.query_params.get('personaggio_id')
+        active_campaign = _get_active_campaign(self.request)
         user = self.request.user
         if not personaggio_id: return Messaggio.objects.none()
         try:
@@ -1852,7 +2044,7 @@ class MessaggioListView(generics.ListAPIView):
         q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
         gruppi_id = target_pg.gruppi_appartenenza.values_list('id', flat=True)
         q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
-        messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo).order_by('-data_invio')
+        messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo, campagna=active_campaign).order_by('-data_invio')
 
         ids_cancellati = LetturaMessaggio.objects.filter(
             personaggio=target_pg, 
@@ -2132,7 +2324,8 @@ class RispondiMessaggioView(APIView):
             titolo=titolo or f"Re: {messaggio_originale.titolo}",
             testo=testo,
             in_risposta_a=messaggio_originale,
-            is_staff_message=False  # È una risposta del giocatore
+            is_staff_message=False,  # È una risposta del giocatore
+            campagna=personaggio.campagna,
         )
         
         serializer = MessaggioSerializer(risposta, context={'request': request})
@@ -2148,7 +2341,11 @@ class MessaggioBroadcastCreateView(generics.CreateAPIView):
     serializer_class = MessaggioBroadcastCreateSerializer
     permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser] 
     def perform_create(self, serializer):
-        serializer.save(mittente=self.request.user, tipo_messaggio=Messaggio.TIPO_BROADCAST)
+        serializer.save(
+            mittente=self.request.user,
+            tipo_messaggio=Messaggio.TIPO_BROADCAST,
+            campagna=_get_active_campaign(self.request),
+        )
         
 class WebPushSubscribeView(APIView):
     authentication_classes = [TokenAuthentication]
@@ -2893,7 +3090,8 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
             destinatario_personaggio=artigiano,
             titolo="Richiesta di Lavoro",
-            testo=f"{committente.nome} richiede il tuo intervento per assemblare {comp.nome} su {host.nome}. Offerta: {offerta} CR."
+            testo=f"{committente.nome} richiede il tuo intervento per assemblare {comp.nome} su {host.nome}. Offerta: {offerta} CR.",
+            campagna=committente.campagna,
         )
 
         return Response({"status": "created", "id": richiesta.id}, status=201)
@@ -3079,7 +3277,8 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
             destinatario_personaggio=destinatario_msg,
             titolo="Proposta Operazione" if tipo_op == 'GRAF' else "Richiesta Lavoro",
-            testo=messaggio_testo
+            testo=messaggio_testo,
+            campagna=db_committente.campagna,
         )
 
         return Response({"status": "created", "id": richiesta.id}, status=201)
@@ -3384,6 +3583,7 @@ def _send_staff_death_message(personaggio, reason_text="Morte personaggio"):
         testo=testo_msg,
         tipo_messaggio=Messaggio.TIPO_STAFF,
         is_staff_message=True,
+        campagna=personaggio.campagna,
     )
 
 
@@ -3941,10 +4141,16 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        active_campaign = _get_active_campaign(self.request)
+        default_campaign = _get_default_campaign()
         mine = (self.request.query_params.get("mine") or "").lower() in ("1", "true", "yes")
         qs = Personaggio.objects.select_related(
             "tipologia", "proprietario", "era", "prefettura", "prefettura__era", "social_profile"
-        ).order_by("nome")
+        ).filter(campagna=active_campaign).order_by("nome")
+        if active_campaign and default_campaign and active_campaign.id != default_campaign.id:
+            qs = Personaggio.objects.select_related(
+                "tipologia", "proprietario", "era", "prefettura", "prefettura__era", "social_profile"
+            ).filter(Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)).order_by("nome")
         if mine:
             return qs.filter(proprietario=user)
         if user.is_staff or user.is_superuser:
@@ -3952,10 +4158,19 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         return qs.filter(proprietario=user)
 
     def perform_create(self, serializer):
+        active_campaign = _get_active_campaign(self.request)
+        if not active_campaign:
+            raise serializers.ValidationError("Campagna attiva non valida.")
+        associazione = CampagnaUtente.objects.filter(campagna=active_campaign, user=self.request.user, attivo=True).first()
+        if not associazione:
+            raise serializers.ValidationError("Non sei associato alla campagna selezionata.")
+        tipologia = serializer.validated_data.get("tipologia")
+        if tipologia and (not tipologia.giocante) and associazione.ruolo != CAMPAGNA_ROLE_MASTER:
+            raise serializers.ValidationError("Solo i master possono creare PNG nella campagna selezionata.")
         era = serializer.validated_data.get("era")
         prefettura = serializer.validated_data.get("prefettura")
         prefettura_esterna = bool(serializer.validated_data.get("prefettura_esterna", False))
-        personaggio = serializer.save(proprietario=self.request.user, prefettura=None)
+        personaggio = serializer.save(proprietario=self.request.user, prefettura=None, campagna=active_campaign)
         personaggio.assegna_era_e_prefettura(
             era=era,
             prefettura=prefettura,
@@ -3966,6 +4181,10 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = serializer.instance
         user = self.request.user
+        next_campaign = serializer.validated_data.get("campagna", instance.campagna)
+        if next_campaign and next_campaign.id != instance.campagna_id:
+            if not _can_operate_in_campaign(user, next_campaign, needs_master=True):
+                raise serializers.ValidationError("Solo i master della campagna di destinazione possono spostare il personaggio.")
         era = serializer.validated_data.get("era", instance.era)
         if "prefettura" in serializer.validated_data:
             prefettura = serializer.validated_data.get("prefettura")
@@ -4134,7 +4353,8 @@ class RegisterView(APIView):
                 titolo=f"Nuovo Utente: {user.username}",
                 testo=testo_msg,
                 tipo_messaggio='STAFF',
-                is_staff_message=True # <--- Questo lo rende visibile nella Tab Staff
+                is_staff_message=True, # <--- Questo lo rende visibile nella Tab Staff
+                campagna=_get_default_campaign(),
             )
 
             return Response(

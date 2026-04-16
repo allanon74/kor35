@@ -9,6 +9,17 @@ export const API_BASE_URL =
     ? String(_viteApi).replace(/\/$/, '')
     : '';
 
+export const getActiveCampaignSlug = () => {
+  const saved = String(localStorage.getItem('kor35_active_campaign') || '').trim().toLowerCase();
+  return saved || 'kor35';
+};
+
+export const setActiveCampaignSlug = (slug) => {
+  const normalized = String(slug || '').trim().toLowerCase() || 'kor35';
+  localStorage.setItem('kor35_active_campaign', normalized);
+  return normalized;
+};
+
 /**
  * Helper generico per le chiamate API autenticate.
  * Gestisce l'header Authorization e il caso di token non valido.
@@ -29,6 +40,7 @@ export const fetchAuthenticated = async (endpoint, options = {}, onLogout) => {
   const headers = {
     // 'Content-Type': 'application/json', // Rimosso: vedi nota sotto
     'Authorization': `Token ${token}`,
+    'X-Campagna': getActiveCampaignSlug(),
     ...options.headers,
   };
 
@@ -104,6 +116,16 @@ export const fetchCacheRevision = async (parts, onLogout) => {
     onLogout
   );
 };
+
+export const getCampaigns = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/campagne/', { method: 'GET' }, onLogout);
+
+export const validateActiveCampaign = (slug, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/campagne/active/',
+    { method: 'POST', body: JSON.stringify({ slug }) },
+    onLogout
+  );
 
 export const fetchPublic = async (endpoint, options = {}) => {
   const headers = {
@@ -2369,6 +2391,64 @@ export const deleteUser = async (userIdToDelete, onLogout) => {
         method: 'DELETE'
     }, onLogout);
 };
+
+// --- STAFF: GESTIONE CAMPAGNE ---
+export const staffGetCampagne = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/campagne/', { method: 'GET' }, onLogout);
+
+export const staffCreateCampagna = (data, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/campagne/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCampagna = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/campagne/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCampagna = (id, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/campagne/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCampagnaUtenti = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/campagne-utenti/', { method: 'GET' }, onLogout);
+
+export const staffCreateCampagnaUtente = (data, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/campagne-utenti/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCampagnaUtente = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/campagne-utenti/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCampagnaUtente = (id, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/campagne-utenti/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCampagnaFeaturePolicy = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/campagne-feature-policy/', { method: 'GET' }, onLogout);
+
+export const staffCreateCampagnaFeaturePolicy = (data, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/campagne-feature-policy/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCampagnaFeaturePolicy = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/campagne-feature-policy/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCampagnaFeaturePolicy = (id, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/campagne-feature-policy/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetUsers = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/users/', { method: 'GET' }, onLogout);
 
 /**
  * Recupera i messaggi indirizzati allo staff (is_staff_message=True)
