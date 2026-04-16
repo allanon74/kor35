@@ -239,8 +239,18 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     }
   };
 
-  const enterCharacter = (char) => {
-    selectCharacter(char.id);
+  const enterCharacter = async (char) => {
+    const targetCampaignId = String(char?.campagna || '');
+    const targetCampaign = (campaigns || []).find((c) => String(c.id) === targetCampaignId);
+    if (targetCampaign?.slug && targetCampaign.slug !== activeCampaign) {
+      try {
+        await changeActiveCampaign(targetCampaign.slug);
+      } catch (_err) {
+        alert("Impossibile cambiare campagna prima dell'accesso al personaggio.");
+        return;
+      }
+    }
+    await selectCharacter(char.id);
     setLastCharacterId(String(char.id));
     navigate('/app/play?tab=home');
   };
@@ -269,8 +279,13 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       : 'border-red-700 bg-red-950/70 text-red-200';
 
   const charactersGrouped = useMemo(() => {
+    const activeCampaignId = campaigns.find((c) => c.slug === activeCampaign)?.id || null;
+    const visibleCharacters = (characters || []).filter((char) => {
+      if (!activeCampaignId) return true;
+      return String(char.campagna || "") === String(activeCampaignId);
+    });
     const byCampaign = new Map();
-    (characters || []).forEach((char) => {
+    visibleCharacters.forEach((char) => {
       const key = String(char.campagna || char.campagna_nome || 'kor35');
       if (!byCampaign.has(key)) {
         byCampaign.set(key, {
@@ -291,7 +306,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       if (aIsBase !== bIsBase) return aIsBase ? -1 : 1;
       return String(a.campaignName || '').localeCompare(String(b.campaignName || ''));
     });
-  }, [characters, campaigns]);
+  }, [characters, campaigns, activeCampaign]);
 
   return (
     <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-gray-900 text-white">
@@ -478,7 +493,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                       <Edit3 size={16} />
                     </button>
                     <button
-                      onClick={() => enterCharacter(char)}
+                      onClick={() => void enterCharacter(char)}
                       className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold rounded bg-indigo-700 hover:bg-indigo-600"
                     >
                       Entra <ArrowRight size={14} />
