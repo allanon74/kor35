@@ -166,7 +166,7 @@ def _user_campaign_role(user, campagna):
 def _can_operate_in_campaign(user, campagna, *, needs_master=False):
     if not user or not campagna:
         return False
-    if user.is_staff or user.is_superuser:
+    if user.is_superuser:
         return True
     role = _user_campaign_role(user, campagna)
     if not role:
@@ -257,7 +257,7 @@ class CampagnaUtenteAdminViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if user.is_staff or user.is_superuser:
+        if user.is_superuser:
             return qs
         manageable_campaign_ids = CampagnaUtente.objects.filter(
             user=user,
@@ -267,7 +267,7 @@ class CampagnaUtenteAdminViewSet(viewsets.ModelViewSet):
         return qs.filter(campagna_id__in=manageable_campaign_ids)
 
     def _assert_can_manage_campaign_membership(self, request, campagna):
-        if request.user.is_staff or request.user.is_superuser:
+        if request.user.is_superuser:
             return
         if not _can_operate_in_campaign(request.user, campagna, needs_master=True):
             raise permissions.PermissionDenied("Solo Head Master/Master della campagna possono gestire le membership.")
@@ -321,7 +321,7 @@ class MyAuthToken(ObtainAuthToken):
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
         # Regola: se un giocatore non ha campagne attive, riattivalo sulla campagna base.
-        if not user.is_staff and not user.is_superuser:
+        if not user.is_superuser:
             has_active_membership = CampagnaUtente.objects.filter(user=user, attivo=True).exists()
             if not has_active_membership:
                 ensure_user_in_base_campaign(user)
@@ -621,7 +621,10 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
             personaggio = Personaggio.objects.select_related('tipologia').get(id=character_id)
         except Personaggio.DoesNotExist: return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
         except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+        if personaggio.proprietario != request.user and not (
+            request.user.is_superuser
+            or _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=True)
+        ):
             return Response({"error": "Personaggio non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
         if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
@@ -700,7 +703,10 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
             personaggio = Personaggio.objects.select_related('tipologia').get(id=character_id)
         except Personaggio.DoesNotExist: return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
         
-        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+        if personaggio.proprietario != request.user and not (
+            request.user.is_superuser
+            or _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=True)
+        ):
             return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
         if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
@@ -787,7 +793,10 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
             personaggio = Personaggio.objects.select_related('tipologia').get(id=character_id)
         except Personaggio.DoesNotExist: return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
         
-        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+        if personaggio.proprietario != request.user and not (
+            request.user.is_superuser
+            or _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=True)
+        ):
             return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
         if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
@@ -981,7 +990,10 @@ class CerimonialiAcquistabiliView(generics.GenericAPIView):
         except Personaggio.DoesNotExist: 
             return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
         
-        if personaggio.proprietario != request.user and not (request.user.is_staff or request.user.is_superuser):
+        if personaggio.proprietario != request.user and not (
+            request.user.is_superuser
+            or _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=True)
+        ):
             return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
         if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
@@ -1834,7 +1846,7 @@ class PersonaggioListView(APIView):
             ).filter(
                 Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)
             ).select_related("era", "prefettura", "prefettura__era", "social_profile")
-        if (request.user.is_staff or request.user.is_superuser) and request.query_params.get('view_all') == 'true':
+        if _can_operate_in_campaign(request.user, active_campaign, needs_master=True) and request.query_params.get('view_all') == 'true':
             queryset = Personaggio.objects.filter(campagna=active_campaign).select_related("era", "prefettura", "prefettura__era", "social_profile")
             if active_campaign and default_campaign and active_campaign.id != default_campaign.id:
                 queryset = Personaggio.objects.filter(
@@ -1904,7 +1916,9 @@ class PersonaggioDetailView(APIView):
             if not is_png_kor35:
                 return Response({"error": "Personaggio non visibile nella campagna selezionata."}, status=status.HTTP_403_FORBIDDEN)
         user = request.user
-        if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
+        if personaggio.proprietario != user and not (
+            user.is_superuser or _can_operate_in_campaign(user, personaggio.campagna, needs_master=True)
+        ):
             return Response({"error": "Non hai il permesso di visualizzare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
         _sync_coma_state(personaggio)
         personaggio.advance_recuperi_risorse()
@@ -1915,7 +1929,10 @@ class PersonaggioDetailView(APIView):
         personaggio = get_object_or_404(Personaggio, pk=pk)
         
         # Controllo permessi (solo il proprietario o admin)
-        if not (request.user.is_staff or request.user.is_superuser) and personaggio.proprietario != request.user:
+        if personaggio.proprietario != request.user and not (
+            request.user.is_superuser
+            or _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=True)
+        ):
             return Response({"error": "Non hai il permesso di modificare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
         
         # Usiamo il serializer esistente con partial=True per l'update parziale
@@ -1939,7 +1956,9 @@ class PersonaggioModificatoriDettagliatiView(APIView):
         user = request.user
         
         # Controllo permessi
-        if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
+        if personaggio.proprietario != user and not (
+            user.is_superuser or _can_operate_in_campaign(user, personaggio.campagna, needs_master=True)
+        ):
             return Response(
                 {"error": "Non hai il permesso di visualizzare questo personaggio."}, 
                 status=status.HTTP_403_FORBIDDEN
@@ -2051,7 +2070,9 @@ class CacheRevisionView(APIView):
                     out[part] = None
                     continue
                 user = request.user
-                if not (user.is_staff or user.is_superuser) and personaggio.proprietario != user:
+                if personaggio.proprietario != user and not (
+                    user.is_superuser or _can_operate_in_campaign(user, personaggio.campagna, needs_master=True)
+                ):
                     out[part] = None
                     continue
                 dt = api_cache_revision.revision_personaggio_detail(pk)
@@ -2115,7 +2136,10 @@ class MessaggioListView(generics.ListAPIView):
         try:
             target_pg = Personaggio.objects.get(id=personaggio_id)
         except Personaggio.DoesNotExist: return Messaggio.objects.none()
-        if target_pg.proprietario != user and not user.is_staff: return Messaggio.objects.none()
+        if target_pg.proprietario != user and not (
+            user.is_superuser or _can_operate_in_campaign(user, target_pg.campagna, needs_master=True)
+        ):
+            return Messaggio.objects.none()
         q_broadcast = Q(tipo_messaggio=Messaggio.TIPO_BROADCAST)
         q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
         gruppi_id = target_pg.gruppi_appartenenza.values_list('id', flat=True)
@@ -2599,7 +2623,12 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
 class AdminPendingProposalsView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
-        if not (request.user.is_staff or request.user.is_superuser): return Response({"count": 0})
+        active_campaign = _get_active_campaign(request)
+        if not (
+            request.user.is_superuser
+            or _can_operate_in_campaign(request.user, active_campaign, needs_master=True)
+        ):
+            return Response({"count": 0})
         count = PropostaTecnica.objects.filter(stato=STATO_PROPOSTA_IN_VALUTAZIONE).count()
         return Response({"count": count})
     
@@ -2844,8 +2873,11 @@ class OggettoViewSet(viewsets.ModelViewSet):
 def equipaggia_item_view(request):
     char_id = request.data.get('char_id')
     item_id = request.data.get('item_id')
-    if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
-    else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    pg = get_object_or_404(Personaggio, id=char_id)
+    if pg.proprietario != request.user and not (
+        request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+    ):
+        return Response({"error": "Non autorizzato."}, status=403)
     oggetto = get_object_or_404(Oggetto, pk=item_id)
     try:
         stato = GestioneOggettiService.equipaggia_oggetto(pg, oggetto)
@@ -2863,10 +2895,11 @@ def assembla_item_view(request):
     mod_id = request.data.get('mod_id')
     use_academy = request.data.get('use_academy', False) # NUOVO PARAMETRO
 
-    if request.user.is_staff: 
-        pg = get_object_or_404(Personaggio, id=char_id)
-    else: 
-        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    pg = get_object_or_404(Personaggio, id=char_id)
+    if pg.proprietario != request.user and not (
+        request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+    ):
+        return Response({"error": "Non autorizzato."}, status=403)
 
     host = get_object_or_404(Oggetto, pk=host_id)
     mod = get_object_or_404(Oggetto, pk=mod_id)
@@ -2907,10 +2940,11 @@ def smonta_item_view(request):
     mod_id = request.data.get('mod_id')
     use_academy = request.data.get('use_academy', False)
 
-    if request.user.is_staff: 
-        pg = get_object_or_404(Personaggio, id=char_id)
-    else: 
-        pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    pg = get_object_or_404(Personaggio, id=char_id)
+    if pg.proprietario != request.user and not (
+        request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+    ):
+        return Response({"error": "Non autorizzato."}, status=403)
 
     host = get_object_or_404(Oggetto, pk=host_id)
     mod = get_object_or_404(Oggetto, pk=mod_id)
@@ -3038,8 +3072,11 @@ class CraftingViewSet(viewsets.ViewSet):
     def coda_forgiatura(self, request):
         # ... (recupero pg come prima) ...
         char_id = request.query_params.get('char_id')
-        if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
-        else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+        pg = get_object_or_404(Personaggio, id=char_id)
+        if pg.proprietario != request.user and not (
+            request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+        ):
+            return Response({"error": "Non autorizzato."}, status=403)
 
         coda = ForgiaturaInCorso.objects.filter(
             Q(personaggio=pg) | Q(destinatario_finale=pg)
@@ -3373,7 +3410,9 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         user = request.user
         is_owner_artigiano = richiesta.artigiano.proprietario == user
         is_owner_committente = richiesta.committente.proprietario == user
-        is_admin = user.is_staff or user.is_superuser
+        is_admin = user.is_superuser or _can_operate_in_campaign(
+            user, richiesta.committente.campagna, needs_master=True
+        )
         
         # Controllo permessi preliminare (coerente col service)
         if richiesta.tipo_operazione == 'GRAF':
@@ -3461,8 +3500,11 @@ def forgia_item_view(request):
     infusione_id = request.data.get('infusione_id')
     use_academy = request.data.get('use_academy', False)
 
-    if request.user.is_staff: pg = get_object_or_404(Personaggio, id=char_id)
-    else: pg = get_object_or_404(Personaggio, id=char_id, proprietario=request.user)
+    pg = get_object_or_404(Personaggio, id=char_id)
+    if pg.proprietario != request.user and not (
+        request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+    ):
+        return Response({"error": "Non autorizzato."}, status=403)
 
     infusione = get_object_or_404(Infusione, pk=infusione_id)
 
@@ -4233,7 +4275,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             ).filter(Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)).order_by("nome")
         if mine:
             return qs.filter(proprietario=user)
-        if user.is_staff or user.is_superuser:
+        if _can_operate_in_campaign(user, active_campaign, needs_master=True):
             return qs
         return qs.filter(proprietario=user)
 
@@ -4280,7 +4322,8 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             or ("prefettura" in serializer.validated_data)
             or ("prefettura_esterna" in serializer.validated_data)
         )
-        if changing_era_data and not (user.is_staff or user.is_superuser):
+        can_override_era_lock = user.is_superuser or _is_master_in_campaign(user, instance.campagna)
+        if changing_era_data and not can_override_era_lock:
             if not instance.can_edit_era_prefettura():
                 raise serializers.ValidationError("Non puoi più modificare Era/Prefettura dopo l'inizio del primo evento.")
         personaggio = serializer.save(prefettura=None if changing_era_data else instance.prefettura)
@@ -4288,7 +4331,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             era=era,
             prefettura=prefettura,
             prefettura_esterna=prefettura_esterna,
-            force=bool(user.is_staff or user.is_superuser),
+            force=bool(can_override_era_lock),
         )
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
