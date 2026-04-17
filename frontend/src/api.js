@@ -134,7 +134,15 @@ export const fetchPublic = async (endpoint, options = {}) => {
   };
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+    // IMPORTANTE:
+    // Le route "public" non devono ereditare la sessione Django (cookie admin)
+    // altrimenti un utente apparentemente "non loggato" nella web app
+    // potrebbe vedere contenuti staff/bozza.
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'omit',
+    });
     
     if (!response.ok) {
         const errorText = await response.text();

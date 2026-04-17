@@ -58,7 +58,7 @@ from .serializers import (
 )
 
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 
 from .permissions import IsStaffOrMaster
 
@@ -671,8 +671,8 @@ def _get_active_campaign_for_request(request):
     return Campagna.objects.filter(attiva=True, is_default=True).first() or Campagna.objects.filter(slug="kor35").first()
 
 
-def _campaign_role_for_request(request):
-    user = request.user
+def _campaign_role_for_request(request, user_override=None):
+    user = user_override if user_override is not None else request.user
     if not (user and user.is_authenticated):
         return None
     campagna = _get_active_campaign_for_request(request)
@@ -689,25 +689,41 @@ def _is_global_admin(user):
     return bool(user and user.is_authenticated and user.is_superuser)
 
 
-def _is_campaign_staff_plus(request):
-    if _is_global_admin(request.user):
+def _is_campaign_staff_plus(request, user_override=None):
+    user = user_override if user_override is not None else request.user
+    if _is_global_admin(user):
         return True
-    role = _campaign_role_for_request(request)
+    role = _campaign_role_for_request(request, user_override=user)
     return role in (CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
 
 
-def _is_campaign_master_plus(request):
-    if _is_global_admin(request.user):
+def _is_campaign_master_plus(request, user_override=None):
+    user = user_override if user_override is not None else request.user
+    if _is_global_admin(user):
         return True
-    role = _campaign_role_for_request(request)
+    role = _campaign_role_for_request(request, user_override=user)
     return role in (CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
 
 
-def _can_view_unpublished_non_staff_wiki(request):
-    if _is_global_admin(request.user):
+def _can_view_unpublished_non_staff_wiki(request, user_override=None):
+    user = user_override if user_override is not None else request.user
+    if _is_global_admin(user):
         return True
-    role = _campaign_role_for_request(request)
+    role = _campaign_role_for_request(request, user_override=user)
     return role in (CAMPAGNA_ROLE_REDACTOR, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
+
+
+def _public_wiki_effective_user(request):
+    """
+    Hardening endpoint pubblici wiki:
+    considera privilegi staff solo con token API esplicito.
+    Le sessioni cookie implicite (es. admin Django aperto) non elevano i permessi.
+    """
+    auth_header = (request.headers.get("Authorization") or "").strip()
+    has_token_header = auth_header.lower().startswith("token ")
+    if has_token_header and request.user and request.user.is_authenticated:
+        return request.user
+    return AnonymousUser()
 
 def _resolve_by_pk_or_sync_id(qs, raw_key):
     """
@@ -919,11 +935,12 @@ def public_wiki_punteggi(request):
 def get_wiki_menu(request):
     # Base: prendi tutto
     queryset = PaginaRegolamento.objects.all().order_by('parent', 'ordine', 'titolo')
+    effective_user = _public_wiki_effective_user(request)
 
-    if _is_campaign_master_plus(request):
+    if _is_campaign_master_plus(request, user_override=effective_user):
         # Master/Head Master/Admin: visione completa inclusa staff-only.
         pass
-    elif _can_view_unpublished_non_staff_wiki(request):
+    elif _can_view_unpublished_non_staff_wiki(request, user_override=effective_user):
         # Redactor/Staffer: vedono anche bozze, ma non staff-only.
         queryset = queryset.filter(visibile_solo_staff=False)
     else:
@@ -937,10 +954,11 @@ def get_wiki_menu(request):
 @permission_classes([AllowAny])
 def get_wiki_page(request, slug):
     queryset = PaginaRegolamento.objects.all()
+    effective_user = _public_wiki_effective_user(request)
 
-    if _is_campaign_master_plus(request):
+    if _is_campaign_master_plus(request, user_override=effective_user):
         pass
-    elif _can_view_unpublished_non_staff_wiki(request):
+    elif _can_view_unpublished_non_staff_wiki(request, user_override=effective_user):
         queryset = queryset.filter(visibile_solo_staff=False)
     else:
         queryset = queryset.filter(public=True, visibile_solo_staff=False)
