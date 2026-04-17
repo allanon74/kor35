@@ -543,7 +543,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     >
                         {(campaigns || []).map(c => (
                             <option key={c.slug} value={c.slug}>
-                                {c.nome} {c.ruolo === 'MASTER' ? '(Master)' : ''}
+                                {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : ''}
                             </option>
                         ))}
                     </select>

@@ -316,6 +316,11 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     });
   }, [characters, campaigns, activeCampaign]);
 
+  const manageableCampaigns = useMemo(
+    () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER' || isAdmin),
+    [campaigns, isAdmin]
+  );
+
   return (
     <div className="h-dvh max-h-dvh flex flex-col overflow-hidden bg-gray-900 text-white">
       <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
@@ -637,7 +642,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                         ))}
                       </select>
                     </div>
-                    {!isCreateMode && (
+                    {!isCreateMode && manageableCampaigns.length > 1 && (
                       <div>
                         <label className="text-xs text-gray-400 uppercase">Campagna personaggio</label>
                         <select
@@ -646,9 +651,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                           onChange={(e) => setFormData({ ...formData, campagna: e.target.value || '' })}
                         >
                           <option value="">Seleziona campagna</option>
-                          {(campaigns || [])
-                            .filter((c) => c.ruolo === 'MASTER' || isAdmin)
-                            .map((c) => (
+                          {manageableCampaigns.map((c) => (
                               <option key={c.id || c.slug} value={c.id}>
                                 {c.nome}
                               </option>
@@ -745,7 +748,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                         : 'border-gray-700 bg-gray-900 hover:bg-gray-700 text-gray-200'
                     }`}
                   >
-                    {c.nome} {c.ruolo === 'MASTER' ? '(Master)' : '(Player)'}
+                    {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : '(Player)'}
                   </button>
                 );
               })}

@@ -49,7 +49,7 @@ from .models import (
     PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
     Campagna, CampagnaUtente, CampagnaFeaturePolicy,
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI, FEATURE_SOCIAL,
-    FEATURE_MODE_SHARED, CAMPAGNA_ROLE_MASTER,
+    FEATURE_MODE_SHARED, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER, CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_STAFFER,
 )
 
 import uuid 
@@ -172,8 +172,8 @@ def _can_operate_in_campaign(user, campagna, *, needs_master=False):
     if not role:
         return campagna.slug == "kor35" and not needs_master
     if needs_master:
-        return role == CAMPAGNA_ROLE_MASTER
-    return role in (CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_MASTER)
+        return role in (CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
+    return role in (CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
 
 
 class CampagnaListView(APIView):
@@ -229,13 +229,68 @@ class ActiveCampagnaValidateView(APIView):
 class CampagnaAdminViewSet(viewsets.ModelViewSet):
     queryset = Campagna.objects.all().order_by("-is_default", "nome")
     serializer_class = CampagnaSerializer
-    permission_classes = [permissions.IsAdminUser]
+
+    def get_permissions(self):
+        # Creazione campagna aperta agli utenti autenticati:
+        # il creatore diventa automaticamente Head Master della nuova campagna.
+        if self.action == "create":
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAdminUser()]
 
 
 class CampagnaUtenteAdminViewSet(viewsets.ModelViewSet):
     queryset = CampagnaUtente.objects.select_related("campagna", "user").all().order_by("campagna__nome", "user__username")
     serializer_class = CampagnaUtenteSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return qs
+        manageable_campaign_ids = CampagnaUtente.objects.filter(
+            user=user,
+            attivo=True,
+            ruolo__in=[CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER],
+        ).values_list("campagna_id", flat=True)
+        return qs.filter(campagna_id__in=manageable_campaign_ids)
+
+    def _assert_can_manage_campaign_membership(self, request, campagna):
+        if request.user.is_staff or request.user.is_superuser:
+            return
+        if not _can_operate_in_campaign(request.user, campagna, needs_master=True):
+            raise permissions.PermissionDenied("Solo Head Master/Master della campagna possono gestire le membership.")
+
+    def create(self, request, *args, **kwargs):
+        campagna_id = request.data.get("campagna")
+        campagna = Campagna.objects.filter(id=campagna_id).first() if campagna_id else None
+        if not campagna:
+            raise serializers.ValidationError({"campagna": "Campagna non valida."})
+        self._assert_can_manage_campaign_membership(request, campagna)
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        target_campaign = instance.campagna
+        new_campaign_id = request.data.get("campagna")
+        if new_campaign_id:
+            target_campaign = Campagna.objects.filter(id=new_campaign_id).first() or target_campaign
+        self._assert_can_manage_campaign_membership(request, target_campaign)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        target_campaign = instance.campagna
+        new_campaign_id = request.data.get("campagna")
+        if new_campaign_id:
+            target_campaign = Campagna.objects.filter(id=new_campaign_id).first() or target_campaign
+        self._assert_can_manage_campaign_membership(request, target_campaign)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        self._assert_can_manage_campaign_membership(request, instance.campagna)
+        return super().destroy(request, *args, **kwargs)
 
 
 class CampagnaFeaturePolicyAdminViewSet(viewsets.ModelViewSet):
@@ -4179,7 +4234,7 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         if not associazione:
             raise serializers.ValidationError("Non sei associato alla campagna selezionata.")
         tipologia = serializer.validated_data.get("tipologia")
-        if tipologia and (not tipologia.giocante) and associazione.ruolo != CAMPAGNA_ROLE_MASTER:
+        if tipologia and (not tipologia.giocante) and associazione.ruolo not in (CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER):
             raise serializers.ValidationError("Solo i master possono creare PNG nella campagna selezionata.")
         era = serializer.validated_data.get("era")
         prefettura = serializer.validated_data.get("prefettura")

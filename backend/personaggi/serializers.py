@@ -56,6 +56,7 @@ from .models import (
     Campagna,
     CampagnaUtente,
     CampagnaFeaturePolicy,
+    CAMPAGNA_ROLE_HEAD_MASTER,
 )
 
 # -----------------------------------------------------------------------------
@@ -99,6 +100,17 @@ class CampagnaSerializer(serializers.ModelSerializer):
             Campagna.objects.exclude(id=instance.id).filter(is_default=True).update(is_default=False)
         if instance.is_base:
             Campagna.objects.exclude(id=instance.id).filter(is_base=True).update(is_base=False)
+        request = self.context.get("request")
+        creator = getattr(request, "user", None)
+        if creator and getattr(creator, "is_authenticated", False):
+            CampagnaUtente.objects.update_or_create(
+                campagna=instance,
+                user=creator,
+                defaults={
+                    "ruolo": CAMPAGNA_ROLE_HEAD_MASTER,
+                    "attivo": True,
+                },
+            )
         return instance
 
     @transaction.atomic

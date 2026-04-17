@@ -72,7 +72,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [activeCampaign, setActiveCampaign] = useState(() => getActiveCampaignSlug());
   const activeCampaignMeta = campaigns.find((c) => c.slug === activeCampaign) || null;
   const activeCampaignRole = activeCampaignMeta?.ruolo || 'PLAYER';
-  const isCampaignMaster = isAdmin || activeCampaignRole === 'MASTER';
+  const isCampaignMaster = isAdmin || activeCampaignRole === 'MASTER' || activeCampaignRole === 'HEAD_MASTER';
 
   const [viewAll, setViewAll] = useState(false);
   

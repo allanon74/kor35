@@ -382,6 +382,11 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         });
     }, [personaggiList, campaigns]);
 
+    const manageableCampaigns = useMemo(
+        () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER' || isAdmin),
+        [campaigns, isAdmin]
+    );
+
     useEffect(() => {
         if (hasMultipleEre || ere.length !== 1) return;
         const onlyEraId = String(ere[0].id);
@@ -736,7 +741,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         value={formData.costume} 
                                         onChange={val => setFormData({...formData, costume: val})}
                                     />
-                                    {(isCampaignMaster || isAdmin) && editMode && (
+                                    {(isCampaignMaster || isAdmin) && editMode && manageableCampaigns.length > 1 && (
                                         <div>
                                             <label className="block text-xs text-gray-500 mb-1">Campagna personaggio</label>
                                             <select
@@ -745,9 +750,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                                 onChange={e => setFormData({ ...formData, campagna: e.target.value || '' })}
                                             >
                                                 <option value="">Seleziona campagna</option>
-                                                {(campaigns || [])
-                                                    .filter(c => c.ruolo === 'MASTER' || isAdmin)
-                                                    .map(c => <option key={c.id || c.slug} value={c.id}>{c.nome}</option>)}
+                                                {manageableCampaigns.map(c => <option key={c.id || c.slug} value={c.id}>{c.nome}</option>)}
                                             </select>
                                         </div>
                                     )}
