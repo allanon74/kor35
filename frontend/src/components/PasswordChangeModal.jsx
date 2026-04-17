@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog } from '@headlessui/react';
+import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { changePassword, setArcanaLocalPassword } from '../api'; // Assicurati di avere questa funzione in api.js
 
 export default function PasswordChangeModal({ isOpen, onClose, onLogout, forceSetMode = false, onSuccess = null }) {
@@ -48,14 +48,14 @@ export default function PasswordChangeModal({ isOpen, onClose, onLogout, forceSe
     };
 
     return (
-        <Dialog open={isOpen} onClose={onClose} className="fixed z-50 inset-0 overflow-y-auto">
-            <div className="flex items-center justify-center min-h-screen px-4">
-                <Dialog.Overlay className="fixed inset-0 bg-black opacity-70" />
-
-                <div className="relative bg-gray-800 text-white rounded-lg max-w-sm w-full p-6 shadow-2xl border border-gray-600">
-                    <Dialog.Title className="text-xl font-bold mb-4">
+        <Dialog open={isOpen} onClose={onClose} className="relative z-50">
+            <div className="fixed inset-0 bg-black/70" aria-hidden="true" />
+            <div className="fixed inset-0 overflow-y-auto">
+                <div className="flex min-h-full items-center justify-center px-4">
+                <DialogPanel className="relative bg-gray-800 text-white rounded-lg max-w-sm w-full p-6 shadow-2xl border border-gray-600">
+                    <DialogTitle className="text-xl font-bold mb-4">
                         {forceSetMode ? 'Imposta Password Locale' : 'Cambia Password'}
-                    </Dialog.Title>
+                    </DialogTitle>
                     
                     {message.text && (
                         <div className={`p-2 mb-4 text-sm rounded ${message.type === 'success' ? 'bg-green-800 text-green-100' : 'bg-red-800 text-red-100'}`}>
@@ -108,6 +108,7 @@ export default function PasswordChangeModal({ isOpen, onClose, onLogout, forceSe
                             </button>
                         </div>
                     </form>
+                </DialogPanel>
                 </div>
             </div>
         </Dialog>
