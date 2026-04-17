@@ -136,6 +136,14 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     if (formData.prefettura_esterna) return allPrefetture;
     return selectedEra?.prefetture || [];
   }, [formData.prefettura_esterna, allPrefetture, selectedEra]);
+  const hasMultipleEre = ere.length > 1;
+
+  useEffect(() => {
+    if (hasMultipleEre || ere.length !== 1) return;
+    const onlyEraId = String(ere[0].id);
+    if (String(formData.era || '') === onlyEraId) return;
+    setFormData((prev) => ({ ...prev, era: onlyEraId, prefettura: '' }));
+  }, [hasMultipleEre, ere, formData.era]);
 
   const openCreate = () => {
     setIsCreateMode(true);
@@ -572,21 +580,27 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
               <div className="grid md:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-400 uppercase">Era</label>
-                  <select
-                    className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2"
-                    value={formData.era || ''}
-                    onChange={(e) =>
-                      setFormData({ ...formData, era: e.target.value || '', prefettura: '' })
-                    }
-                    disabled={!isCreateMode && !editPermissions.can_edit_era}
-                  >
-                    <option value="">Seleziona era</option>
-                    {ere.map((era) => (
-                      <option key={era.id} value={era.id}>
-                        {era.nome}
-                      </option>
-                    ))}
-                  </select>
+                  {hasMultipleEre ? (
+                    <select
+                      className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2"
+                      value={formData.era || ''}
+                      onChange={(e) =>
+                        setFormData({ ...formData, era: e.target.value || '', prefettura: '' })
+                      }
+                      disabled={!isCreateMode && !editPermissions.can_edit_era}
+                    >
+                      <option value="">Seleziona era</option>
+                      {ere.map((era) => (
+                        <option key={era.id} value={era.id}>
+                          {era.nome}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-200">
+                      {ere[0]?.nome || 'Campagna base'}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-gray-400 uppercase">Prefettura</label>
