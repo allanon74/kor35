@@ -28,6 +28,9 @@ Poiché i database Master ed Edge operano separatamente e si sincronizzano a pos
 ## 4. Regole Docker & Nginx
 - Se devi modificare configurazioni di Nginx, ricorda che usiamo il resolver interno di Docker per evitare l'errore 502 Bad Gateway: `resolver 127.0.0.11 valid=10s;`.
 - I proxy_pass in Nginx devono puntare al nome del servizio usando variabili (es. `set $upstream_backend backend:8000; proxy_pass http://$upstream_backend;`).
+- Questo progetto è Docker-first in OGNI ambiente: sviluppo, test, mirror e produzione.
+- Qualsiasi comando operativo (Django manage.py, test, migrazioni, shell, npm build/dev, collectstatic, ecc.) va eseguito tramite container (`docker compose exec/run ...`) e non direttamente sull'host, salvo esplicita richiesta contraria dell'utente.
+- Quando proponi procedure o runbook, fornisci sempre prima la versione Docker.
 
 ## 5. Stile e Sicurezza
 - Le credenziali e gli URL di sync non devono mai essere hardcodati nel `settings.py`. Usa sempre la libreria `django-environ`.

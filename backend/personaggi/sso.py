@@ -21,6 +21,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from personaggi.campaigns import ensure_user_in_base_campaign
 from personaggi.models import ArcanaSSOIdentity
 
 
@@ -258,6 +259,9 @@ def _upsert_local_user(profile: dict) -> User:
             ad_profile_json=profile or {},
         )
 
+    # Safety net: garantisce membership base anche per utenti legacy creati in percorsi
+    # che in passato potevano non attivare correttamente il signal post_save(User).
+    ensure_user_in_base_campaign(user)
     return user
 
 

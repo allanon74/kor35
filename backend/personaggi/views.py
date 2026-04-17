@@ -87,6 +87,7 @@ from .services import (
     # monta_potenziamento, crea_oggetto_da_infusione, 
     GestioneOggettiService, GestioneCraftingService, CreazioneConsumabileService,
 )
+from .campaigns import ensure_user_in_base_campaign
 
 # --- IMPORT SERIALIZERS ---
 from .serializers import (
@@ -253,6 +254,11 @@ class MyAuthToken(ObtainAuthToken):
         serializer = self.serializer_class(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
+        # Regola: se un giocatore non ha campagne attive, riattivalo sulla campagna base.
+        if not user.is_staff and not user.is_superuser:
+            has_active_membership = CampagnaUtente.objects.filter(user=user, attivo=True).exists()
+            if not has_active_membership:
+                ensure_user_in_base_campaign(user)
         token, created = Token.objects.get_or_create(user=user)
         return Response({
             'token': token.key,

@@ -51,6 +51,9 @@ from .models import (
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
     PersonaggioKorpMembership, PersonaggioCarrieraMembership,
     UserSocialPreference,
+    Campagna,
+    CampagnaUtente,
+    CampagnaFeaturePolicy,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, EraAbilita, Regione, RegioneAbilita,
 )
@@ -965,6 +968,49 @@ class UserSocialPreferenceAdmin(admin.ModelAdmin):
     list_display = ("user", "preferred_personaggio", "updated_at")
     search_fields = ("user__username", "preferred_personaggio__nome")
     autocomplete_fields = ("user", "preferred_personaggio")
+
+
+@admin.register(Campagna)
+class CampagnaAdmin(admin.ModelAdmin):
+    class CampagnaUtenteInline(admin.TabularInline):
+        model = CampagnaUtente
+        extra = 0
+        autocomplete_fields = ("user",)
+        fields = ("user", "ruolo", "attivo")
+        ordering = ("user__username",)
+
+    class CampagnaFeaturePolicyInline(admin.TabularInline):
+        model = CampagnaFeaturePolicy
+        extra = 0
+        fields = ("feature_key", "mode")
+        ordering = ("feature_key",)
+
+    list_display = ("nome", "slug", "is_default", "is_base", "attiva", "updated_at")
+    list_editable = ("is_default", "is_base", "attiva")
+    search_fields = ("nome", "slug", "descrizione")
+    list_filter = ("is_default", "is_base", "attiva")
+    ordering = ("-is_default", "nome")
+    inlines = [CampagnaUtenteInline, CampagnaFeaturePolicyInline]
+
+
+@admin.register(CampagnaUtente)
+class CampagnaUtenteAdmin(admin.ModelAdmin):
+    list_display = ("campagna", "user", "ruolo", "attivo", "updated_at")
+    list_editable = ("ruolo", "attivo")
+    list_filter = ("campagna", "ruolo", "attivo")
+    search_fields = ("campagna__nome", "campagna__slug", "user__username", "user__email")
+    autocomplete_fields = ("campagna", "user")
+    ordering = ("campagna__nome", "user__username")
+
+
+@admin.register(CampagnaFeaturePolicy)
+class CampagnaFeaturePolicyAdmin(admin.ModelAdmin):
+    list_display = ("campagna", "feature_key", "mode", "updated_at")
+    list_editable = ("mode",)
+    list_filter = ("campagna", "feature_key", "mode")
+    search_fields = ("campagna__nome", "campagna__slug", "feature_key")
+    autocomplete_fields = ("campagna",)
+    ordering = ("campagna__nome", "feature_key")
 
 class LetturaMessaggioInline(admin.TabularInline):
     model = LetturaMessaggio
