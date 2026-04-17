@@ -19,10 +19,8 @@ function classNames(...classes) {
 }
 
 const AdminMessageTab = ({ onLogout }) => {
-    const { selectedCharacterData } = useCharacter();
-    
-    // Controllo permessi (usa localStorage per sicurezza se il PG non è ancora caricato o non è staff nel context)
-    const isStaff = selectedCharacterData?.is_staff || localStorage.getItem('kor35_is_staff') === 'true' || localStorage.getItem('kor35_is_master') === 'true';
+    const { isCampaignStaffer, isAdmin } = useCharacter();
+    const canAccessStaffInbox = isCampaignStaffer || isAdmin;
 
     // Gestione tab attiva
     const [selectedTab, setSelectedTab] = useState(0);
@@ -51,12 +49,12 @@ const AdminMessageTab = ({ onLogout }) => {
 
     // --- EFFETTI ---
     useEffect(() => {
-        if (isStaff) {
+        if (canAccessStaffInbox) {
             loadInbox();
             loadHistory();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isStaff]);
+    }, [canAccessStaffInbox]);
 
     // Carica Inbox Staff
     const loadInbox = async () => {
@@ -218,7 +216,7 @@ const AdminMessageTab = ({ onLogout }) => {
         }
     };
 
-    if (!isStaff) {
+    if (!canAccessStaffInbox) {
         return (
             <div className="flex flex-col items-center justify-center h-64 text-red-400 p-4">
                 <Shield size={48} className="mb-2" />

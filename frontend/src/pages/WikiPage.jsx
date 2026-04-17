@@ -12,10 +12,9 @@ export default function WikiPage({ slug: propSlug }) {
   const navigate = useNavigate();
   const currentSlug = propSlug || slug || 'home'; 
   
-  // Recuperiamo i permessi
-  // Nota: controlliamo isStaff all'interno del token/context
-  const { isStaff, isMaster } = useCharacter(); 
-  const canEdit = isStaff || isMaster; // Definisci chi può editare
+  // Permessi wiki basati su ruoli campagna (+ admin generale).
+  const { isCampaignRedactor, isCampaignMaster, isAdmin } = useCharacter();
+  const canEdit = isCampaignRedactor || isCampaignMaster || isAdmin;
 
   const [pageData, setPageData] = useState(null);
   const [wikiGlossary, setWikiGlossary] = useState([]);

@@ -21,7 +21,6 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   const {
     selectCharacter,
     fetchPersonaggi,
-    isMaster,
     isCampaignMaster,
     isCampaignStaffer,
     isAdmin,
@@ -379,7 +378,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
             <Sparkles size={20} className="text-pink-300 mb-2" />
             <div className="font-bold">InstaFame</div>
           </button>
-          {(isCampaignStaffer || isMaster || isAdmin) && (
+          {(isCampaignStaffer || isAdmin) && (
             <button
               onClick={() => onSwitchToMaster('home')}
               className="rounded-xl border border-gray-700 bg-gray-800 p-4 text-left hover:bg-gray-750"

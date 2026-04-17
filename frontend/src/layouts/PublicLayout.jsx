@@ -30,8 +30,8 @@ export default function PublicLayout({ token }) {
     return localStorage.getItem('wiki_hide_admin_content') === 'true';
   });
 
-  const { character, isStaff, isMaster } = useCharacter();
-  const canEdit = isStaff || isMaster;
+  const { character, isCampaignRedactor, isCampaignMaster, isAdmin } = useCharacter();
+  const canEdit = isCampaignRedactor || isCampaignMaster || isAdmin;
   const location = useLocation();
 
   // --- HELPER: COSTRUZIONE ALBERO E ORDINAMENTO ---
@@ -317,7 +317,7 @@ export default function PublicLayout({ token }) {
             <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block leading-tight">
                     <div className="font-bold text-sm">{character?.nome}</div>
-                    <div className="text-xs text-red-200">{isStaff ? 'Staff' : 'Giocatore'}</div>
+                    <div className="text-xs text-red-200">{canEdit ? 'Staff' : 'Giocatore'}</div>
                 </div>
                 <Link to="/app" className="bg-white text-red-900 px-3 py-1.5 rounded font-bold hover:bg-gray-100 transition text-sm flex items-center gap-2 shadow-sm">
                   <span>🎮</span> <span className="hidden sm:inline">Entra nel Gioco</span>

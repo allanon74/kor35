@@ -36,6 +36,7 @@ export default function App() {
   const handleLogout = () => {
     const loginMethod = String(localStorage.getItem('kor35_login_method') || '').toLowerCase();
     localStorage.removeItem('kor35_token');
+    localStorage.removeItem('kor35_is_admin');
     localStorage.removeItem('kor35_is_staff');
     localStorage.removeItem('kor35_is_master');
     localStorage.removeItem('kor35_last_char_id');
@@ -66,8 +67,11 @@ export default function App() {
     } else {
       // Context per Ospiti: tutto spento/falso
       const guestValue = {
-        isStaff: false,
-        isMaster: false,
+        isCampaignStaffer: false,
+        isCampaignMaster: false,
+        isCampaignHeadMaster: false,
+        isCampaignRedactor: false,
+        isAdmin: false,
         character: null,
         notifiche: [],
         punteggiList: [], // Evita crash se qualche componente cerca liste

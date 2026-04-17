@@ -52,8 +52,10 @@ const LoginPage = ({ onLoginSuccess }) => {
         if (!response.ok) throw new Error('Ticket SSO non valido o scaduto.');
         const data = await response.json();
         localStorage.setItem('kor35_token', data.token);
-        localStorage.setItem('kor35_is_staff', data.is_staff);
-        localStorage.setItem('kor35_is_master', data.is_superuser);
+        localStorage.setItem('kor35_is_admin', String(!!data.is_superuser));
+        // Cleanup chiavi legacy non piu' usate dal frontend.
+        localStorage.removeItem('kor35_is_staff');
+        localStorage.removeItem('kor35_is_master');
         localStorage.setItem('kor35_login_method', 'arcana');
         if (onLoginSuccess && typeof onLoginSuccess === 'function') {
           onLoginSuccess(data.token);
@@ -97,8 +99,10 @@ const LoginPage = ({ onLoginSuccess }) => {
 
       if (data.token) {
         localStorage.setItem('kor35_token', data.token);
-        localStorage.setItem('kor35_is_staff', data.is_staff);
-        localStorage.setItem('kor35_is_master', data.is_superuser);
+        localStorage.setItem('kor35_is_admin', String(!!data.is_superuser));
+        // Cleanup chiavi legacy non piu' usate dal frontend.
+        localStorage.removeItem('kor35_is_staff');
+        localStorage.removeItem('kor35_is_master');
         localStorage.setItem('kor35_login_method', 'local');
 
         if (onLoginSuccess && typeof onLoginSuccess === 'function') {
@@ -119,6 +123,7 @@ const LoginPage = ({ onLoginSuccess }) => {
   const goArcana = () => {
     // Evita che un vecchio token locale impedisca lo scambio ticket SSO al ritorno su /login.
     localStorage.removeItem('kor35_token');
+    localStorage.removeItem('kor35_is_admin');
     localStorage.removeItem('kor35_is_staff');
     localStorage.removeItem('kor35_is_master');
     localStorage.removeItem('kor35_login_method');

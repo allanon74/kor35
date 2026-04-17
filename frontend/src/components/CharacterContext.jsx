@@ -63,10 +63,12 @@ export const CharacterProvider = ({ children, onLogout }) => {
   // --- STATI GLOBALI UI ---
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem('kor35_last_char_id') || '');
   const [preferredCharacterId, setPreferredCharacterId] = useState(() => localStorage.getItem('kor35_preferred_char_id') || '');
-  const [isStaff] = useState(() => localStorage.getItem('kor35_is_staff') === 'true');
-// Riconosciamo se è un Master (Admin di Django) o uno Staffer semplice
-  const [isMaster] = useState(() => localStorage.getItem('kor35_is_master') === 'true');
-  const [isAdmin] = useState(() => localStorage.getItem('kor35_is_master') === 'true');
+  const [isAdmin] = useState(() => {
+    const stored = localStorage.getItem('kor35_is_admin');
+    if (stored !== null) return stored === 'true';
+    // Backward compatibility con sessioni precedenti.
+    return localStorage.getItem('kor35_is_master') === 'true';
+  });
   const [staffWorkMode, setStaffWorkMode] = useState('dashboard');
   const [campaigns, setCampaigns] = useState([]);
   const [activeCampaign, setActiveCampaign] = useState(() => getActiveCampaignSlug());
@@ -522,8 +524,6 @@ export const CharacterProvider = ({ children, onLogout }) => {
     loadInfusioniOnDemand: () => {},
     loadTessitureOnDemand: () => {},
 
-    isStaff,
-    isMaster,
     isCampaignMaster,
     isCampaignHeadMaster,
     isCampaignStaffer,

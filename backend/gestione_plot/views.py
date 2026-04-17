@@ -77,6 +77,47 @@ class IsMasterOrReadOnly(permissions.BasePermission):
         # Scrittura solo a Master/Head Master/Admin
         return _is_campaign_master_plus(request)
 
+
+def _is_campaign_wiki_editor_plus(request):
+    if _is_global_admin(request.user):
+        return True
+    role = _campaign_role_for_request(request)
+    return role in (
+        CAMPAGNA_ROLE_REDACTOR,
+        CAMPAGNA_ROLE_STAFFER,
+        CAMPAGNA_ROLE_MASTER,
+        CAMPAGNA_ROLE_HEAD_MASTER,
+    )
+
+
+class IsWikiEditorOrMasterForStaffOnly(permissions.BasePermission):
+    """
+    Regole wiki:
+    - Player: nessun accesso ai CRUD staff wiki.
+    - Redactor/Staffer/Master/Head Master/Admin: CRUD su pagine non staff-only.
+    - Staff-only: CRUD solo Master/Head Master/Admin.
+    """
+
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return _is_campaign_wiki_editor_plus(request)
+
+        # Create: valuta il flag staff-only nel payload.
+        raw_staff_only = request.data.get("visibile_solo_staff", False)
+        is_staff_only = str(raw_staff_only).strip().lower() in ("1", "true", "yes", "on")
+        if is_staff_only:
+            return _is_campaign_master_plus(request)
+        return _is_campaign_wiki_editor_plus(request)
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return _is_campaign_wiki_editor_plus(request)
+
+        # Update/Delete su pagina staff-only riservati ai master-plus.
+        if getattr(obj, "visibile_solo_staff", False):
+            return _is_campaign_master_plus(request)
+        return _is_campaign_wiki_editor_plus(request)
+
 class EventoViewSet(viewsets.ModelViewSet):
     serializer_class = EventoSerializer
     permission_classes = [IsMasterOrReadOnly]
@@ -405,7 +446,7 @@ class QuestTaskViewSet(viewsets.ModelViewSet):
 class PaginaRegolamentoViewSet(viewsets.ModelViewSet):
     queryset = PaginaRegolamento.objects.all()
     serializer_class = PaginaRegolamentoSerializer
-    permission_classes = [IsMasterOrReadOnly]
+    permission_classes = [IsWikiEditorOrMasterForStaffOnly]
     
 class PaginaRegolamentoSmallViewSet(viewsets.ModelViewSet):
     queryset = PaginaRegolamento.objects.all()
