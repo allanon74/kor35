@@ -309,6 +309,8 @@ class Command(BaseCommand):
             ):
                 obj = model.objects.filter(sync_id=sync_id).first()
                 if obj is None:
+                    obj = self._find_existing_after_merge(model, row, update_data)
+                if obj is None:
                     msg = str(exc).strip().replace("\n", " ")
                     err_key = f"{model._meta.label_lower}: {exc.__class__.__name__}: {msg}"
                     self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
@@ -325,6 +327,8 @@ class Command(BaseCommand):
                 model, sync_id, update_data, remote_updated_at
             ):
                 obj = model.objects.filter(sync_id=sync_id).first()
+                if obj is None:
+                    obj = self._find_existing_after_merge(model, row, update_data)
                 if obj is None:
                     msg = str(exc).strip().replace("\n", " ")
                     if len(msg) > 120:
@@ -359,6 +363,42 @@ class Command(BaseCommand):
             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
 
         return "applied"
+
+    def _find_existing_after_merge(self, model, row, update_data):
+        """
+        Dopo un merge per chiave naturale/unique_together, il sync_id remoto può
+        non essere stato allineato (scelta intenzionale su alcuni modelli complessi).
+        In quel caso cerchiamo il record locale equivalente per evitare defer falsi.
+        """
+        # 1) Prova unique_together / UniqueConstraint(fields=...)
+        for group in self._iter_unique_field_groups(model):
+            kwargs = {}
+            for fname in group:
+                if fname in update_data:
+                    kwargs[fname] = update_data[fname]
+                else:
+                    break
+            else:
+                obj = model.objects.filter(**kwargs).first()
+                if obj is not None:
+                    return obj
+
+        # 2) Prova unique scalari (es. slug, dichiarazione, nome...)
+        for field in model._meta.concrete_fields:
+            if field.name in ("id", "sync_id"):
+                continue
+            if not getattr(field, "unique", False):
+                continue
+            if isinstance(field, ForeignKey):
+                continue
+            val = row.get(field.name)
+            if val in (None, ""):
+                continue
+            obj = model.objects.filter(**{field.name: val}).first()
+            if obj is not None:
+                return obj
+
+        return None
 
     def _iter_unique_field_groups(self, model):
         """Tuple di nomi campo per vincoli UNIQUE (legacy + UniqueConstraint)."""
