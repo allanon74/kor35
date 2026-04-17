@@ -198,7 +198,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       if (!Number.isNaN(parsedTipologia)) payload.tipologia = parsedTipologia;
       else delete payload.tipologia;
     }
-    if (!(isCampaignMaster || isAdmin)) {
+    if (!isCampaignMaster || isCreateMode) {
       delete payload.campagna;
     }
     if (!isCreateMode) {
@@ -318,8 +318,8 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   }, [characters, campaigns, activeCampaign]);
 
   const manageableCampaigns = useMemo(
-    () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER' || isAdmin),
-    [campaigns, isAdmin]
+    () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER'),
+    [campaigns]
   );
 
   return (

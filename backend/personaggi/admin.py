@@ -852,16 +852,17 @@ class PrefetturaInline(admin.TabularInline):
 
 @admin.register(Personaggio)
 class PersonaggioAdmin(A_Admin):
-    list_display = ('nome', 'proprietario', 'tipologia', 'era', 'prefettura', 'prefettura_esterna', 'segno_zodiacale', 'crediti', 'punti_caratteristica')
+    list_display = ('nome', 'proprietario', 'campagna', 'tipologia', 'era', 'prefettura', 'prefettura_esterna', 'segno_zodiacale', 'crediti', 'punti_caratteristica')
     readonly_fields = ('id', 'data_creazione', 'crediti', 'punti_caratteristica')
-    list_filter = ('tipologia', 'era', 'prefettura', 'prefettura_esterna', 'segno_zodiacale'); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
+    list_filter = ('campagna', 'tipologia', 'era', 'prefettura', 'prefettura_esterna', 'segno_zodiacale'); search_fields = ('nome', 'proprietario__username'); summernote_fields = ('testo',)
+    autocomplete_fields = ('proprietario', 'campagna', 'era', 'prefettura', 'segno_zodiacale')
     inlines = [
         PersonaggioStatisticaBaseInline,
         PersonaggioKorpMembershipInline, PersonaggioCarrieraMembershipInline,
         PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, 
         CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline
     ]
-    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'tipologia', ('era', 'prefettura', 'prefettura_esterna'), 'segno_zodiacale', 'testo', 'impostazioni_ui', ('data_nascita', 'data_morte'))}),
+    fieldsets = (('Info', {'fields': ('nome', 'proprietario', 'campagna', 'tipologia', ('era', 'prefettura', 'prefettura_esterna'), 'segno_zodiacale', 'testo', 'impostazioni_ui', ('data_nascita', 'data_morte'))}),
                  ('Valori', {'classes': ('collapse',), 'fields': (('id', 'data_creazione'), ('crediti', 'punti_caratteristica'))}))
 
 

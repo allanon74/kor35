@@ -176,6 +176,15 @@ def _can_operate_in_campaign(user, campagna, *, needs_master=False):
     return role in (CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_REDACTOR, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
 
 
+def _is_master_in_campaign(user, campagna):
+    """
+    Regola web app: lo spostamento PG/PNG tra campagne e' consentito
+    solo a MASTER/HEAD_MASTER della campagna coinvolta (senza bypass admin globale).
+    """
+    role = _user_campaign_role(user, campagna)
+    return role in (CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
+
+
 class CampagnaListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4254,7 +4263,9 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         user = self.request.user
         next_campaign = serializer.validated_data.get("campagna", instance.campagna)
         if next_campaign and next_campaign.id != instance.campagna_id:
-            if not _can_operate_in_campaign(user, next_campaign, needs_master=True):
+            if not _is_master_in_campaign(user, instance.campagna):
+                raise serializers.ValidationError("Solo i master della campagna corrente possono spostare il personaggio.")
+            if not _is_master_in_campaign(user, next_campaign):
                 raise serializers.ValidationError("Solo i master della campagna di destinazione possono spostare il personaggio.")
         era = serializer.validated_data.get("era", instance.era)
         if "prefettura" in serializer.validated_data:

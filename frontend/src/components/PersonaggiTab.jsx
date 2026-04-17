@@ -383,9 +383,10 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     }, [personaggiList, campaigns]);
 
     const manageableCampaigns = useMemo(
-        () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER' || isAdmin),
-        [campaigns, isAdmin]
+        () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER'),
+        [campaigns]
     );
+    const canMoveCharacterCampaign = editMode && manageableCampaigns.length > 1;
 
     useEffect(() => {
         if (hasMultipleEre || ere.length !== 1) return;
@@ -741,19 +742,19 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         value={formData.costume} 
                                         onChange={val => setFormData({...formData, costume: val})}
                                     />
-                                    {(isCampaignMaster || isAdmin) && editMode && manageableCampaigns.length > 1 && (
-                                        <div>
-                                            <label className="block text-xs text-gray-500 mb-1">Campagna personaggio</label>
-                                            <select
-                                                className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
-                                                value={formData.campagna || ''}
-                                                onChange={e => setFormData({ ...formData, campagna: e.target.value || '' })}
-                                            >
-                                                <option value="">Seleziona campagna</option>
-                                                {manageableCampaigns.map(c => <option key={c.id || c.slug} value={c.id}>{c.nome}</option>)}
-                                            </select>
-                                        </div>
-                                    )}
+                                </div>
+                            )}
+                            {canMoveCharacterCampaign && (
+                                <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-2 mt-4">
+                                    <label className="block text-xs text-gray-500 mb-1">Campagna personaggio</label>
+                                    <select
+                                        className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                                        value={formData.campagna || ''}
+                                        onChange={e => setFormData({ ...formData, campagna: e.target.value || '' })}
+                                    >
+                                        <option value="">Seleziona campagna</option>
+                                        {manageableCampaigns.map(c => <option key={c.id || c.slug} value={c.id}>{c.nome}</option>)}
+                                    </select>
                                 </div>
                             )}
                         </div>
