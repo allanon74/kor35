@@ -542,30 +542,28 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
             
             {/* 1. SELETTORE PERSONAGGIO */}
             <div className="bg-gray-700/30 p-3 rounded-lg border border-gray-700">
-                <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Campagna attiva</label>
-                {campaignsWithMembership.length > 1 ? (
-                    <select
-                        className="w-full bg-gray-900 text-white p-2 rounded border border-gray-600 focus:border-indigo-500 outline-none text-sm mb-3"
-                        value={
-                            campaignsWithMembership.some((c) => c.slug === activeCampaign)
-                                ? activeCampaign
-                                : (campaignsWithMembership[0]?.slug || 'kor35')
-                        }
-                        onChange={(e) => {
-                            changeActiveCampaign(e.target.value);
-                            setIsMenuOpen(false);
-                        }}
-                    >
-                        {campaignsWithMembership.map(c => (
-                            <option key={c.slug} value={c.slug}>
-                                {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : c.ruolo === 'REDACTOR' ? '(Redactor)' : ''}
-                            </option>
-                        ))}
-                    </select>
-                ) : (
-                    <div className="w-full bg-gray-900 text-gray-200 p-2 rounded border border-gray-700 text-sm mb-3">
-                        {singleCampaignLabel}
-                    </div>
+                {campaignsWithMembership.length > 1 && (
+                    <>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Campagna attiva</label>
+                        <select
+                            className="w-full bg-gray-900 text-white p-2 rounded border border-gray-600 focus:border-indigo-500 outline-none text-sm mb-3"
+                            value={
+                                campaignsWithMembership.some((c) => c.slug === activeCampaign)
+                                    ? activeCampaign
+                                    : (campaignsWithMembership[0]?.slug || 'kor35')
+                            }
+                            onChange={(e) => {
+                                changeActiveCampaign(e.target.value);
+                                setIsMenuOpen(false);
+                            }}
+                        >
+                            {campaignsWithMembership.map(c => (
+                                <option key={c.slug} value={c.slug}>
+                                    {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : c.ruolo === 'REDACTOR' ? '(Redactor)' : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </>
                 )}
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Cambia Personaggio</label>
                 <select 
