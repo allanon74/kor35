@@ -356,6 +356,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     };
 
     const selectedEra = ere.find((e) => String(e.id) === String(formData.era));
+    const hasMultipleEre = ere.length > 1;
     const allPrefetture = ere.flatMap((era) => (era.prefetture || []).map((p) => ({ ...p, era_ref: era })));
     const prefettureDisponibili = formData.prefettura_esterna ? allPrefetture : (selectedEra?.prefetture || []);
     const selectedPrefettura = allPrefetture.find((p) => String(p.id) === String(formData.prefettura));
@@ -368,6 +369,13 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         const miaEraBreve = selectedEra?.abbreviazione || selectedEra?.nome || '';
         return miaEraBreve ? `${baseName} (${miaEraBreve})` : baseName;
     };
+
+    useEffect(() => {
+        if (hasMultipleEre || ere.length !== 1) return;
+        const onlyEraId = String(ere[0].id);
+        if (String(formData.era || '') === onlyEraId) return;
+        setFormData((prev) => ({ ...prev, era: onlyEraId, prefettura: '' }));
+    }, [hasMultipleEre, ere, formData.era]);
 
     return (
         <div className="h-full flex flex-col bg-gray-900 text-white p-4 overflow-hidden">
@@ -633,15 +641,23 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             />
 
                             <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-3">
-                                <label className="block text-xs text-gray-400 uppercase tracking-widest">Era di provenienza</label>
-                                <select
-                                    className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
-                                    value={formData.era ?? ''}
-                                    onChange={e => setFormData({...formData, era: e.target.value || '', prefettura: ''})}
-                                >
-                                    <option value="">Seleziona un'era</option>
-                                    {ere.map(era => <option key={era.id} value={era.id}>{era.nome}</option>)}
-                                </select>
+                                {hasMultipleEre ? (
+                                    <>
+                                        <label className="block text-xs text-gray-400 uppercase tracking-widest">Era di provenienza</label>
+                                        <select
+                                            className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                                            value={formData.era ?? ''}
+                                            onChange={e => setFormData({...formData, era: e.target.value || '', prefettura: ''})}
+                                        >
+                                            <option value="">Seleziona un'era</option>
+                                            {ere.map(era => <option key={era.id} value={era.id}>{era.nome}</option>)}
+                                        </select>
+                                    </>
+                                ) : (
+                                    <div className="text-xs text-gray-400">
+                                        Campagna: <span className="font-semibold text-gray-200">{ere[0]?.nome || 'Base'}</span>
+                                    </div>
+                                )}
                                 {selectedEra?.descrizione_breve && (
                                     <p className="text-xs text-gray-300">{selectedEra.descrizione_breve}</p>
                                 )}
