@@ -168,7 +168,14 @@ class QuestTaskSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class QuestFaseSerializer(serializers.ModelSerializer):
-    tasks = QuestTaskSerializer(many=True, read_only=True)
+    tasks = serializers.SerializerMethodField()
+
+    def get_tasks(self, obj):
+        tasks_qs = obj.tasks.all()
+        if self.context.get("plot_staffer_limited"):
+            staff_user_id = self.context.get("plot_staff_user_id")
+            tasks_qs = tasks_qs.filter(staffer_id=staff_user_id)
+        return QuestTaskSerializer(tasks_qs, many=True, context=self.context).data
 
     class Meta:
         model = QuestFase
@@ -180,20 +187,33 @@ class QuestSerializer(serializers.ModelSerializer):
     viste_previste = QuestVistaSerializer(many=True, read_only=True)
     staff_offgame = StaffOffGameSerializer(many=True, read_only=True)
     # Aggiungi qui il campo fasi
-    fasi = QuestFaseSerializer(many=True, read_only=True)
+    fasi = serializers.SerializerMethodField()
+
+    def get_fasi(self, obj):
+        fasi_data = QuestFaseSerializer(obj.fasi.all(), many=True, context=self.context).data
+        if self.context.get("plot_staffer_limited"):
+            return [fase for fase in fasi_data if (fase.get("tasks") or [])]
+        return fasi_data
 
     class Meta:
         model = Quest
         fields = '__all__'
 
 class GiornoEventoSerializer(serializers.ModelSerializer):
-    quests = QuestSerializer(many=True, read_only=True)
+    quests = serializers.SerializerMethodField()
+
+    def get_quests(self, obj):
+        quests_data = QuestSerializer(obj.quests.all(), many=True, context=self.context).data
+        if self.context.get("plot_staffer_limited"):
+            return [quest for quest in quests_data if (quest.get("fasi") or [])]
+        return quests_data
+
     class Meta:
         model = GiornoEvento
         fields = '__all__'
 
 class EventoSerializer(serializers.ModelSerializer):
-    giorni = GiornoEventoSerializer(many=True, read_only=True)
+    giorni = serializers.SerializerMethodField()
     
     # Questi campi permettono al frontend di vedere i nomi (UserCheck e Users icone)
     staff_details = UserShortSerializer(source='staff_assegnato', many=True, read_only=True)
@@ -206,6 +226,12 @@ class EventoSerializer(serializers.ModelSerializer):
             'luogo', 'pc_guadagnati', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details'
         ]
+
+    def get_giorni(self, obj):
+        giorni_data = GiornoEventoSerializer(obj.giorni.all(), many=True, context=self.context).data
+        if self.context.get("plot_staffer_limited"):
+            return [giorno for giorno in giorni_data if (giorno.get("quests") or [])]
+        return giorni_data
 
 class EventoPubblicoSerializer(serializers.ModelSerializer):
     """

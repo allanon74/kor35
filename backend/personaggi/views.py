@@ -49,7 +49,7 @@ from .models import (
     PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
     Campagna, CampagnaUtente, CampagnaFeaturePolicy,
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI, FEATURE_SOCIAL,
-    FEATURE_MODE_SHARED, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER, CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_STAFFER,
+    FEATURE_MODE_SHARED, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER, CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_REDACTOR,
 )
 
 import uuid 
@@ -173,7 +173,7 @@ def _can_operate_in_campaign(user, campagna, *, needs_master=False):
         return campagna.slug == "kor35" and not needs_master
     if needs_master:
         return role in (CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
-    return role in (CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
+    return role in (CAMPAGNA_ROLE_PLAYER, CAMPAGNA_ROLE_REDACTOR, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
 
 
 class CampagnaListView(APIView):
@@ -197,6 +197,7 @@ class CampagnaListView(APIView):
                     "is_default": bool(campagna.is_default),
                     "is_active": bool(active and campagna.id == active.id),
                     "ruolo": membership.ruolo if membership else "PLAYER",
+                    "is_member": bool(membership),
                 }
             )
         return Response(rows, status=status.HTTP_200_OK)
@@ -221,6 +222,7 @@ class ActiveCampagnaValidateView(APIView):
                 "slug": campagna.slug,
                 "nome": campagna.nome,
                 "ruolo": membership.ruolo if membership else "PLAYER",
+                "is_member": bool(membership),
             },
             status=status.HTTP_200_OK,
         )
@@ -4234,8 +4236,8 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         if not associazione:
             raise serializers.ValidationError("Non sei associato alla campagna selezionata.")
         tipologia = serializer.validated_data.get("tipologia")
-        if tipologia and (not tipologia.giocante) and associazione.ruolo not in (CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER):
-            raise serializers.ValidationError("Solo i master possono creare PNG nella campagna selezionata.")
+        if tipologia and (not tipologia.giocante) and associazione.ruolo not in (CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER):
+            raise serializers.ValidationError("Solo staffer/master/head master possono creare PNG nella campagna selezionata.")
         era = serializer.validated_data.get("era")
         prefettura = serializer.validated_data.get("prefettura")
         prefettura_esterna = bool(serializer.validated_data.get("prefettura_esterna", False))

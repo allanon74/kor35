@@ -72,7 +72,10 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [activeCampaign, setActiveCampaign] = useState(() => getActiveCampaignSlug());
   const activeCampaignMeta = campaigns.find((c) => c.slug === activeCampaign) || null;
   const activeCampaignRole = activeCampaignMeta?.ruolo || 'PLAYER';
+  const isCampaignHeadMaster = isAdmin || activeCampaignRole === 'HEAD_MASTER';
   const isCampaignMaster = isAdmin || activeCampaignRole === 'MASTER' || activeCampaignRole === 'HEAD_MASTER';
+  const isCampaignStaffer = isAdmin || activeCampaignRole === 'STAFFER' || activeCampaignRole === 'MASTER' || activeCampaignRole === 'HEAD_MASTER';
+  const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
 
   const [viewAll, setViewAll] = useState(false);
   
@@ -522,6 +525,9 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isStaff,
     isMaster,
     isCampaignMaster,
+    isCampaignHeadMaster,
+    isCampaignStaffer,
+    isCampaignRedactor,
     activeCampaignRole,
     staffWorkMode,
     setStaffWorkMode,

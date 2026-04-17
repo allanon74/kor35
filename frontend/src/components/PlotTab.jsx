@@ -24,7 +24,8 @@ const RISORSE_CACHE_KEY = 'plot_risorse_cache';
 const RISORSE_CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minuti
 
 const PlotTab = ({ onLogout }) => {
-    const { isMaster } = useCharacter();
+    const { isAdmin, isCampaignMaster } = useCharacter();
+    const canManagePlot = isAdmin || isCampaignMaster;
     const [eventi, setEventi] = useState([]);
     const [selectedEvento, setSelectedEvento] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -478,7 +479,7 @@ const PlotTab = ({ onLogout }) => {
                         eventi.map(ev => <option key={ev.id} value={ev.id}>{ev.titolo?.toUpperCase() || 'Senza titolo'}</option>)
                     )}
                 </select>
-                {isMaster && (
+                {canManagePlot && (
                     <button onClick={() => startEdit('evento')} className="p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg"><Plus size={24}/></button>
                 )}
                 <button 
@@ -584,11 +585,11 @@ const PlotTab = ({ onLogout }) => {
                     <div className="h-full flex flex-col items-center justify-center p-8 text-center">
                         <p className="text-xl font-bold text-gray-400 mb-4">Nessun evento disponibile</p>
                         <p className="text-sm text-gray-500 mb-6">
-                            {isMaster 
+                            {canManagePlot 
                                 ? "Crea un nuovo evento utilizzando il pulsante + sopra" 
                                 : "Non hai eventi assegnati. Contatta un Master per essere assegnato a un evento."}
                         </p>
-                        {isMaster && (
+                        {canManagePlot && (
                             <button 
                                 onClick={() => startEdit('evento')} 
                                 className="px-6 py-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg font-bold uppercase"
@@ -602,7 +603,7 @@ const PlotTab = ({ onLogout }) => {
                         {selectedEvento && (
                             <EventoSection 
                                 evento={selectedEvento} 
-                                isMaster={isMaster} 
+                                    isMaster={canManagePlot} 
                                 risorse={risorse}
                                 onEdit={startEdit} 
                                 onDelete={handleDeleteEvento}
@@ -616,7 +617,7 @@ const PlotTab = ({ onLogout }) => {
                                     key={giorno.id} 
                                     giorno={giorno} 
                                     gIdx={gIdx} 
-                                    isMaster={isMaster} 
+                                    isMaster={canManagePlot} 
                                     risorse={risorse}
                                     onEdit={startEdit} 
                                     onDelete={handleDeleteGiorno} 

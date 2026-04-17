@@ -23,6 +23,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     fetchPersonaggi,
     isMaster,
     isCampaignMaster,
+    isCampaignStaffer,
     isAdmin,
     campaigns,
     activeCampaign,
@@ -378,7 +379,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
             <Sparkles size={20} className="text-pink-300 mb-2" />
             <div className="font-bold">InstaFame</div>
           </button>
-          {(isCampaignMaster || isMaster) && (
+          {(isCampaignStaffer || isMaster || isAdmin) && (
             <button
               onClick={() => onSwitchToMaster('home')}
               className="rounded-xl border border-gray-700 bg-gray-800 p-4 text-left hover:bg-gray-750"
@@ -748,7 +749,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                         : 'border-gray-700 bg-gray-900 hover:bg-gray-700 text-gray-200'
                     }`}
                   >
-                    {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : '(Player)'}
+                    {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : c.ruolo === 'REDACTOR' ? '(Redactor)' : '(Player)'}
                   </button>
                 );
               })}

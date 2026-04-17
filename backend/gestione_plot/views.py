@@ -31,6 +31,12 @@ from personaggi.models import (
     Tessitura,
     Tier,
     TierPluginModel,
+    Campagna,
+    CampagnaUtente,
+    CAMPAGNA_ROLE_REDACTOR,
+    CAMPAGNA_ROLE_STAFFER,
+    CAMPAGNA_ROLE_MASTER,
+    CAMPAGNA_ROLE_HEAD_MASTER,
 )
 
 from personaggi.serializers import (
@@ -63,14 +69,13 @@ class IsMasterOrReadOnly(permissions.BasePermission):
     Gli Staffer leggono e scrivono, gli utenti non staff non vedono nulla.
     """
     def has_permission(self, request, view):
-        # Deve essere almeno staff per accedere
-        if not (request.user and request.user.is_authenticated and request.user.is_staff):
+        if not _is_campaign_staff_plus(request):
             return False
         # Permetti GET/HEAD/OPTIONS a tutto lo staff
         if request.method in permissions.SAFE_METHODS:
             return True
-        # CORREZIONE: Permetti POST/PUT/DELETE sia a Superuser che a Staff
-        return request.user.is_staff or request.user.is_superuser
+        # Scrittura solo a Master/Head Master/Admin
+        return _is_campaign_master_plus(request)
 
 class EventoViewSet(viewsets.ModelViewSet):
     serializer_class = EventoSerializer
@@ -96,6 +101,14 @@ class EventoViewSet(viewsets.ModelViewSet):
         if user.is_superuser:
             return base_queryset
         return base_queryset.filter(staff_assegnato=user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        role = _campaign_role_for_request(self.request)
+        is_staffer_only = role == CAMPAGNA_ROLE_STAFFER and not _is_global_admin(self.request.user)
+        context["plot_staffer_limited"] = bool(is_staffer_only)
+        context["plot_staff_user_id"] = self.request.user.id if is_staffer_only else None
+        return context
     
     @action(detail=False, methods=['get'])
     def a_vista_disponibili(self, request):
@@ -609,8 +622,51 @@ class StaffWikiButtonWidgetViewSet(viewsets.ModelViewSet):
         serializer.save()
     
     
-def is_staff_user(user):
-    return user.is_authenticated and (user.is_staff or user.is_superuser)
+def _get_active_campaign_for_request(request):
+    slug = (request.headers.get("X-Campagna") or request.query_params.get("campagna") or "kor35").strip().lower()
+    campagna = Campagna.objects.filter(slug=slug, attiva=True).first()
+    if campagna:
+        return campagna
+    return Campagna.objects.filter(attiva=True, is_default=True).first() or Campagna.objects.filter(slug="kor35").first()
+
+
+def _campaign_role_for_request(request):
+    user = request.user
+    if not (user and user.is_authenticated):
+        return None
+    campagna = _get_active_campaign_for_request(request)
+    if not campagna:
+        return None
+    return (
+        CampagnaUtente.objects.filter(user=user, campagna=campagna, attivo=True)
+        .values_list("ruolo", flat=True)
+        .first()
+    )
+
+
+def _is_global_admin(user):
+    return bool(user and user.is_authenticated and user.is_superuser)
+
+
+def _is_campaign_staff_plus(request):
+    if _is_global_admin(request.user):
+        return True
+    role = _campaign_role_for_request(request)
+    return role in (CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
+
+
+def _is_campaign_master_plus(request):
+    if _is_global_admin(request.user):
+        return True
+    role = _campaign_role_for_request(request)
+    return role in (CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
+
+
+def _can_view_unpublished_non_staff_wiki(request):
+    if _is_global_admin(request.user):
+        return True
+    role = _campaign_role_for_request(request)
+    return role in (CAMPAGNA_ROLE_REDACTOR, CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
 
 def _resolve_by_pk_or_sync_id(qs, raw_key):
     """
@@ -822,11 +878,17 @@ def public_wiki_punteggi(request):
 def get_wiki_menu(request):
     # Base: prendi tutto
     queryset = PaginaRegolamento.objects.all().order_by('parent', 'ordine', 'titolo')
-    
-    # Se NON è staff, nascondi bozze e pagine riservate
-    if not is_staff_user(request.user):
+
+    if _is_campaign_master_plus(request):
+        # Master/Head Master/Admin: visione completa inclusa staff-only.
+        pass
+    elif _can_view_unpublished_non_staff_wiki(request):
+        # Redactor/Staffer: vedono anche bozze, ma non staff-only.
+        queryset = queryset.filter(visibile_solo_staff=False)
+    else:
+        # Player/non autenticati: solo pubblico non staff-only.
         queryset = queryset.filter(public=True, visibile_solo_staff=False)
-    
+
     serializer = PaginaRegolamentoSmallSerializer(queryset, many=True)
     return Response(serializer.data)
 
@@ -834,11 +896,14 @@ def get_wiki_menu(request):
 @permission_classes([AllowAny])
 def get_wiki_page(request, slug):
     queryset = PaginaRegolamento.objects.all()
-    
-    # Stesso filtro: se non sei staff, non puoi vedere cose private anche se indovini lo slug
-    if not is_staff_user(request.user):
+
+    if _is_campaign_master_plus(request):
+        pass
+    elif _can_view_unpublished_non_staff_wiki(request):
+        queryset = queryset.filter(visibile_solo_staff=False)
+    else:
         queryset = queryset.filter(public=True, visibile_solo_staff=False)
-        
+
     page = get_object_or_404(queryset, slug=slug)
     serializer = PaginaRegolamentoSerializer(page)
     return Response(serializer.data)

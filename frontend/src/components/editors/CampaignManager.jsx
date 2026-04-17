@@ -15,7 +15,7 @@ import {
   staffUpdateCampagnaUtente,
 } from '../../api';
 
-const ROLE_OPTIONS = ['PLAYER', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
+const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
 const FEATURE_KEYS = ['abilita', 'tessiture', 'infusioni', 'oggetti_base', 'cerimoniali', 'social'];
 const MODE_OPTIONS = ['SHARED', 'EXCLUSIVE'];
 

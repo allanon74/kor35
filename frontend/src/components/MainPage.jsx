@@ -185,6 +185,8 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     activeCampaign,
     changeActiveCampaign,
     isCampaignMaster,
+    isCampaignStaffer,
+    isCampaignHeadMaster,
   } = useCharacter();
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
@@ -263,7 +265,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
   useEffect(() => {
     let interval;
-    if (isCampaignMaster) {
+    if (isCampaignStaffer) {
         const checkStaffMessages = async () => {
             try {
                 // Recupera messaggi staff e conta quelli non letti (assumendo che l'API restituisca una lista)
@@ -283,7 +285,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
         interval = setInterval(checkStaffMessages, 60000);
     }
     return () => clearInterval(interval);
-  }, [isCampaignMaster, onLogout]);
+  }, [isCampaignStaffer, onLogout]);
 
   useEffect(() => {
     let interval;
@@ -417,12 +419,21 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     const hasMsgNotif = unreadCount > 0;
     const jobsCount = selectedCharacterData?.lavori_pendenti_count || 0; 
     const hasJobNotif = jobsCount > 0; 
-    const hasStaffMsgNotif = isCampaignMaster && staffUnreadCount > 0;
+    const hasStaffMsgNotif = isCampaignStaffer && staffUnreadCount > 0;
     
     return { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif, jobsCount };
-  }, [isAdmin, adminPendingCount, unreadCount, selectedCharacterData?.lavori_pendenti_count, isCampaignMaster, staffUnreadCount]);
+  }, [isAdmin, adminPendingCount, unreadCount, selectedCharacterData?.lavori_pendenti_count, isCampaignStaffer, staffUnreadCount]);
   
   const { hasAdminNotif, hasMsgNotif, hasJobNotif, hasStaffMsgNotif } = notificationState;
+  const campaignsWithMembership = useMemo(
+    () => (campaigns || []).filter((c) => c?.is_member === true),
+    [campaigns]
+  );
+  const singleCampaignLabel = useMemo(() => {
+    const activeInMembership = campaignsWithMembership.find((c) => c.slug === activeCampaign);
+    if (activeInMembership) return activeInMembership.nome;
+    return campaignsWithMembership[0]?.nome || 'Kor35';
+  }, [campaignsWithMembership, activeCampaign]);
   const comaState = selectedCharacterData?.impostazioni_ui?.coma_state || null;
   const rianimazioneState = selectedCharacterData?.impostazioni_ui?.rianimazione_state || null;
   const isComaLocked = !!selectedCharacterData && ['counting', 'paused'].includes(String(comaState?.status || '').toLowerCase());
@@ -446,10 +457,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, [selectedCharacterId, activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'admin_msg' && !isCampaignMaster) {
+    if (activeTab === 'admin_msg' && !isCampaignStaffer) {
       setActiveTab('home');
     }
-  }, [activeTab, isCampaignMaster]);
+  }, [activeTab, isCampaignStaffer]);
 
   useEffect(() => {
     if (!selectedCharacterId) return undefined;
@@ -532,24 +543,28 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
             {/* 1. SELETTORE PERSONAGGIO */}
             <div className="bg-gray-700/30 p-3 rounded-lg border border-gray-700">
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Campagna attiva</label>
-                {(campaigns || []).length > 1 ? (
+                {campaignsWithMembership.length > 1 ? (
                     <select
                         className="w-full bg-gray-900 text-white p-2 rounded border border-gray-600 focus:border-indigo-500 outline-none text-sm mb-3"
-                        value={activeCampaign || 'kor35'}
+                        value={
+                            campaignsWithMembership.some((c) => c.slug === activeCampaign)
+                                ? activeCampaign
+                                : (campaignsWithMembership[0]?.slug || 'kor35')
+                        }
                         onChange={(e) => {
                             changeActiveCampaign(e.target.value);
                             setIsMenuOpen(false);
                         }}
                     >
-                        {(campaigns || []).map(c => (
+                        {campaignsWithMembership.map(c => (
                             <option key={c.slug} value={c.slug}>
-                                {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : ''}
+                                {c.nome} {c.ruolo === 'HEAD_MASTER' ? '(Head Master)' : c.ruolo === 'MASTER' ? '(Master)' : c.ruolo === 'STAFFER' ? '(Staffer)' : c.ruolo === 'REDACTOR' ? '(Redactor)' : ''}
                             </option>
                         ))}
                     </select>
                 ) : (
                     <div className="w-full bg-gray-900 text-gray-200 p-2 rounded border border-gray-700 text-sm mb-3">
-                        {(campaigns && campaigns[0]?.nome) || 'Kor35'}
+                        {singleCampaignLabel}
                     </div>
                 )}
                 <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Cambia Personaggio</label>
@@ -712,7 +727,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
             </div>
             
             {/* PULSANTE PROPOSTE PENDENTI (STAFF) */}
-            {isCampaignMaster && adminPendingCount > 0 && (
+            {isCampaignStaffer && adminPendingCount > 0 && (
                     <button
                     onClick={() => {
                         onSwitchToMaster('proposte'); 
@@ -729,7 +744,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
             )}
 
             {/* PULSANTE VAI A STAFF DASHBOARD */}
-            {isCampaignMaster && (
+            {(isCampaignStaffer || isAdmin) && (
                 <button
                     onClick={() => {
                         onSwitchToMaster(); 

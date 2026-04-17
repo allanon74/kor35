@@ -50,7 +50,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     const [activeTool, setActiveTool] = useState(initialTool); 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [socialUnreadCount, setSocialUnreadCount] = useState(0);
-    const { selectedCharacterId } = useCharacter();
+    const { selectedCharacterId, isAdmin, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster } = useCharacter();
 
     React.useEffect(() => {
         setActiveTool(initialTool);
@@ -106,6 +106,31 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'messaggi', label: 'Messaggi Staff', icon: <MessageSquare size={24} />, color: 'bg-emerald-600', component: AdminMessageTab },        
     ], []);
 
+    const visibleTools = useMemo(() => {
+        // Admin globale senza ruolo campagna: solo strumenti globali.
+        if (isAdmin && !isCampaignStaffer) {
+            return toolsConfig.filter((t) => ['arcana-profiles', 'campagne'].includes(t.id));
+        }
+
+        // Staffer: solo Messaggi Staff + Plot.
+        if (isCampaignStaffer && !isCampaignMaster && !isCampaignHeadMaster) {
+            return toolsConfig.filter((t) => ['messaggi', 'plot'].includes(t.id));
+        }
+
+        // Master: tutte le schede eccetto Campagne e Arcana SSO.
+        if (isCampaignMaster && !isCampaignHeadMaster && !isAdmin) {
+            return toolsConfig.filter((t) => !['campagne', 'arcana-profiles'].includes(t.id));
+        }
+
+        // Head Master: tutte tranne Arcana SSO.
+        if (isCampaignHeadMaster && !isAdmin) {
+            return toolsConfig.filter((t) => t.id !== 'arcana-profiles');
+        }
+
+        // Admin con ruolo campagna o fallback: tutto.
+        return toolsConfig;
+    }, [toolsConfig, isAdmin, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster]);
+
     const handleToolSelect = useCallback((id) => {
         setActiveTool(id);
         if (onToolChange) onToolChange(id);
@@ -115,7 +140,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     // Configurazione unificata degli elementi della sidebar (Memoized)
     const sidebarItems = useMemo(() => [
         { label: 'Master Hub', icon: <LayoutGrid size={18}/>, active: activeTool === 'home', action: () => handleToolSelect('home') },
-        ...toolsConfig.map(t => ({
+        ...visibleTools.map(t => ({
             label: t.label,
             icon: React.cloneElement(t.icon, { size: 18 }),
             active: activeTool === t.id,
@@ -132,7 +157,13 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
             badgeCount: socialUnreadCount,
         },
         { label: 'Vai a Personaggi', icon: <Users size={18}/>, action: onSwitchToPlayer, active: false }
-    ], [activeTool, toolsConfig, handleToolSelect, onSwitchToPlayer, socialUnreadCount]);
+    ], [activeTool, visibleTools, handleToolSelect, onSwitchToPlayer, socialUnreadCount]);
+
+    React.useEffect(() => {
+        if (activeTool === 'home') return;
+        const stillVisible = visibleTools.some((t) => t.id === activeTool);
+        if (!stillVisible) setActiveTool('home');
+    }, [activeTool, visibleTools]);
 
     // Funzione helper per renderizzare un singolo item della sidebar (Memoized)
     const renderSidebarItem = useCallback((item, idx) => {
@@ -217,7 +248,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-gray-900">
                 <GenericHeader 
                     title="KOR 35"
-                    subtitle={activeTool === 'home' ? "Dashboard" : toolsConfig.find(t => t.id === activeTool)?.label}
+                    subtitle={activeTool === 'home' ? "Dashboard" : visibleTools.find(t => t.id === activeTool)?.label}
                     rightSlot={
                         <div className="flex items-center gap-2">
                             {/* Tasto Home Rapido */}
@@ -243,7 +274,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                         <div className="min-h-full p-6 animate-fadeIn">
                             <h2 className="text-2xl font-black text-gray-700 uppercase italic mb-6 tracking-widest text-center md:text-left">Strumenti Staff</h2>
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                                {toolsConfig.map(tool => (
+                                {visibleTools.map(tool => (
                                     <button 
                                         key={tool.id}
                                         onClick={() => setActiveTool(tool.id)}
@@ -285,7 +316,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                     )}
 
                     {activeTool !== 'home' && (() => {
-                        const tool = toolsConfig.find(t => t.id === activeTool);
+                        const tool = visibleTools.find(t => t.id === activeTool);
                         if (!tool) return null;
                         const Component = tool.component;
                         // PlotTab e QrDebugTab sono importati direttamente, non hanno bisogno di Suspense

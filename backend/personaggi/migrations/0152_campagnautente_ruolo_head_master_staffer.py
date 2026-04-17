@@ -14,6 +14,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 choices=[
                     ("PLAYER", "Giocatore"),
+                    ("REDACTOR", "Redactor"),
                     ("STAFFER", "Staffer"),
                     ("MASTER", "Master"),
                     ("HEAD_MASTER", "Head Master"),
