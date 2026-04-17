@@ -129,6 +129,7 @@ class Command(BaseCommand):
         for segno in SegnoZodiacale.objects.all().order_by("numero").iterator():
             rows.append(
                 {
+                    "sync_id": str(segno.sync_id) if getattr(segno, "sync_id", None) else None,
                     "numero": segno.numero,
                     "nome": segno.nome,
                     "descrizione": segno.descrizione,
@@ -201,6 +202,7 @@ class Command(BaseCommand):
             numero = row.get("numero")
             if numero in (None, ""):
                 continue
+            remote_sync_id = row.get("sync_id")
             defaults = {
                 "nome": row.get("nome") or f"Segno {numero}",
                 "descrizione": row.get("descrizione"),
@@ -209,8 +211,12 @@ class Command(BaseCommand):
             }
             obj = SegnoZodiacale.objects.filter(numero=numero).first()
             if obj:
+                if remote_sync_id:
+                    defaults["sync_id"] = remote_sync_id
                 SegnoZodiacale.objects.filter(pk=obj.pk).update(**defaults)
             else:
+                if remote_sync_id:
+                    defaults["sync_id"] = remote_sync_id
                 SegnoZodiacale.objects.create(numero=numero, tipo=fallback_tipo, **defaults)
 
     def _try_apply_one(self, model, row):
@@ -566,6 +572,10 @@ class Command(BaseCommand):
             # With multi-table inheritance (Tabella/Tier/*) sync_id uniqueness lives on parent
             # tables too, and forcing sync_id can trigger cross-table collisions.
             patch = dict(update_data)
+            # Campagna e' radice di moltissime FK: quando coincide la natural key (slug),
+            # riallineiamo esplicitamente il sync_id al master per sbloccare la cascata.
+            if model._meta.label_lower == "personaggi.campagna":
+                patch["sync_id"] = sync_id
             # Never patch parent-link fields on existing rows.
             for f in model._meta.concrete_fields:
                 if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
