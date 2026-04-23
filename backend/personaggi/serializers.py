@@ -982,7 +982,9 @@ class OggettoSerializer(serializers.ModelSerializer):
     
     attacco_formattato = serializers.SerializerMethodField()
     spegne_a_zero_cariche = serializers.SerializerMethodField()
+    deve_essere_attivato = serializers.SerializerMethodField()
     aura_dettagli = serializers.SerializerMethodField()
+    slot_fisici_possibili = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -1012,7 +1014,10 @@ class OggettoSerializer(serializers.ModelSerializer):
             'classe_oggetto_nome',
             'is_tecnologico',
             'is_equipaggiato',
+            'is_danneggiato',
             'slot_corpo',
+            'slot_equip',
+            'slot_fisici_possibili',
             'attacco_base',
             'attacco_formattato',
 
@@ -1028,6 +1033,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'is_active',
             'cariche_massime', 'durata_totale', 'testo_ricarica', 'costo_ricarica', 
             'spegne_a_zero_cariche',
+            'deve_essere_attivato',
             'is_pesante',
             'aura_dettagli',  
         )
@@ -1040,6 +1046,15 @@ class OggettoSerializer(serializers.ModelSerializer):
     def get_spegne_a_zero_cariche(self, obj):
     # Recupera il flag dall'aura (Punteggio) associata all'oggetto
         return obj.aura.spegne_a_zero_cariche if obj.aura else False
+
+    def get_deve_essere_attivato(self, obj):
+        return self.get_spegne_a_zero_cariche(obj)
+
+    def get_slot_fisici_possibili(self, obj):
+        from .services import GestioneOggettiService
+        if obj.tipo_oggetto != 'FIS':
+            return []
+        return GestioneOggettiService._infer_physical_slots(obj)
 
     def get_attacco_formattato(self, obj):
         if not obj.attacco_base:

@@ -2873,6 +2873,7 @@ class OggettoViewSet(viewsets.ModelViewSet):
 def equipaggia_item_view(request):
     char_id = request.data.get('char_id')
     item_id = request.data.get('item_id')
+    slot_key = request.data.get('slot_key')
     pg = get_object_or_404(Personaggio, id=char_id)
     if pg.proprietario != request.user and not (
         request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
@@ -2880,11 +2881,49 @@ def equipaggia_item_view(request):
         return Response({"error": "Non autorizzato."}, status=403)
     oggetto = get_object_or_404(Oggetto, pk=item_id)
     try:
-        stato = GestioneOggettiService.equipaggia_oggetto(pg, oggetto)
-        return Response({"status": "success", "nuovo_stato": stato})
+        stato = GestioneOggettiService.equipaggia_oggetto(pg, oggetto, slot_key=slot_key)
+        return Response({"status": "success", "nuovo_stato": stato, "slot_equip": oggetto.slot_equip})
     except ValidationError as e:
         msg = e.message if hasattr(e, 'message') else str(e)
         return Response({"error": msg}, status=400)
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def danneggia_item_view(request):
+    char_id = request.data.get('char_id')
+    item_id = request.data.get('item_id')
+    pg = get_object_or_404(Personaggio, id=char_id)
+    if pg.proprietario != request.user and not (
+        request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+    ):
+        return Response({"error": "Non autorizzato."}, status=403)
+    oggetto = get_object_or_404(Oggetto, pk=item_id)
+    if oggetto.inventario_corrente_id != pg.id:
+        return Response({"error": "Oggetto non presente nell'inventario del personaggio."}, status=400)
+    oggetto.is_danneggiato = True
+    oggetto.save(update_fields=['is_danneggiato', 'updated_at'])
+    return Response({"status": "success", "is_danneggiato": True})
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def ripara_item_view(request):
+    char_id = request.data.get('char_id')
+    item_id = request.data.get('item_id')
+    pg = get_object_or_404(Personaggio, id=char_id)
+    if pg.proprietario != request.user and not (
+        request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+    ):
+        return Response({"error": "Non autorizzato."}, status=403)
+    oggetto = get_object_or_404(Oggetto, pk=item_id)
+    if oggetto.inventario_corrente_id != pg.id:
+        return Response({"error": "Oggetto non presente nell'inventario del personaggio."}, status=400)
+    oggetto.is_danneggiato = False
+    oggetto.save(update_fields=['is_danneggiato', 'updated_at'])
+    return Response({"status": "success", "is_danneggiato": False})
 
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication]) 

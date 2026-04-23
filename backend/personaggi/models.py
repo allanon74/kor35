@@ -119,6 +119,36 @@ SLOT_CORPO_CHOICES = [
     (SLOT_GAMBA_SX, 'Gamba Sx'),
 ]
 
+SLOT_FISICO_TESTA = 'head'
+SLOT_FISICO_COLLO = 'neck'
+SLOT_FISICO_VESTE = 'vest'
+SLOT_FISICO_SPALLE = 'shoulders'
+SLOT_FISICO_BRACCIA = 'arms'
+SLOT_FISICO_DITA = 'fingers'
+SLOT_FISICO_PIEDI = 'feet'
+SLOT_FISICO_CINTURA = 'belt'
+SLOT_FISICO_ARMATURA = 'armor'
+SLOT_FISICO_ARMI_MISCHIA = 'melee'
+SLOT_FISICO_ARMI_DISTANZA = 'ranged'
+SLOT_FISICO_FOCUS = 'focus'
+SLOT_FISICO_SCUDO = 'shield'
+
+SLOT_FISICO_CHOICES = [
+    (SLOT_FISICO_TESTA, 'Testa'),
+    (SLOT_FISICO_COLLO, 'Collo'),
+    (SLOT_FISICO_VESTE, 'Veste'),
+    (SLOT_FISICO_SPALLE, 'Spalle'),
+    (SLOT_FISICO_BRACCIA, 'Braccia'),
+    (SLOT_FISICO_DITA, 'Dita'),
+    (SLOT_FISICO_PIEDI, 'Piedi'),
+    (SLOT_FISICO_CINTURA, 'Cintura'),
+    (SLOT_FISICO_ARMATURA, 'Armatura'),
+    (SLOT_FISICO_ARMI_MISCHIA, 'Armi in mischia'),
+    (SLOT_FISICO_ARMI_DISTANZA, 'Armi a distanza'),
+    (SLOT_FISICO_FOCUS, 'Focus'),
+    (SLOT_FISICO_SCUDO, 'Scudo'),
+]
+
 SCELTA_RISULTATO_POTENZIAMENTO = 'POT'      # Crea un oggetto Potenziamento (Tecnologico) / Materia (Mondano)
 SCELTA_RISULTATO_AUMENTO = 'AUM'  # Crea un Innesto (Tecnologico) / Mutazione (Innata)
 
@@ -2336,6 +2366,13 @@ class Oggetto(A_vista):
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")
     ospitato_su = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='potenziamenti_installati', help_text="L'oggetto su cui questo potenziamento è montato.")
     slot_corpo = models.CharField(max_length=3, choices=SLOT_CORPO_CHOICES, blank=True, null=True, help_text="Solo per Innesti e Mutazioni")
+    slot_equip = models.CharField(
+        max_length=20,
+        choices=SLOT_FISICO_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Slot corporeo reale usato dagli oggetti fisici equipaggiati."
+    )
     cariche_attuali = models.IntegerField(default=0)
     oggetto_base_generatore = models.ForeignKey(OggettoBase, on_delete=models.SET_NULL, null=True, blank=True, related_name='istanze_generate', help_text="Se creato dal negozio, punta al template originale.")
     data_fine_attivazione = models.DateTimeField(null=True, blank=True, help_text="Se impostato, l'oggetto è attivo fino a questa data.")
@@ -2344,6 +2381,7 @@ class Oggetto(A_vista):
         verbose_name="È un oggetto Pesante?", 
         help_text="Se attivo, questo oggetto conta per il limite OGP (Oggetti Pesanti)."
     )
+    is_danneggiato = models.BooleanField(default=False, verbose_name="Oggetto danneggiato")
     
     def is_active(self):
         """
@@ -2351,6 +2389,10 @@ class Oggetto(A_vista):
         """
         now = timezone.now()
         infusione = self.infusione_generatrice
+
+        # Oggetto danneggiato: sempre non attivo.
+        if self.is_danneggiato:
+            return False
         
         # --- DEFINIZIONE VARIABILI DI STATO ---
         # Ha una durata prevista?

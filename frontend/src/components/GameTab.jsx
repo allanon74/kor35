@@ -403,14 +403,6 @@ const GameTab = ({ onNavigate }) => {
         return end >= now;
     };
 
-    const isActiveByCharges = (item) => {
-        if (item.spegne_a_zero_cariche) {
-             const hasCharges = (item.cariche_attuali || 0) > 0;
-             if (!hasCharges && !isActiveByTime(item)) return false;
-        }
-        return true;
-    };
-
     // --- FILTRO OGGETTI ATTIVI (LOGICA GAME TAB) ---
     const activeItems = useMemo(() => {
         // Protezione anti-crash: se char non è ancora caricato, ritorna array vuoto
@@ -427,15 +419,15 @@ const GameTab = ({ onNavigate }) => {
 
         // 2. Estrai tutto ciò che è attivabile (Host e le loro Mod)
         activeHosts.forEach(host => {
-             // A. Aggiungi l'Host se ha meccaniche proprie (cariche/durata)
-             if (host.cariche_massime > 0 || host.durata_totale > 0) {
+             // A. Aggiungi l'Host se ha meccaniche attivabili o flag esplicito
+             if (host.cariche_massime > 0 || host.durata_totale > 0 || host.spegne_a_zero_cariche) {
                  activatables.push(host);
              }
 
              // B. Aggiungi i Potenziamenti (Mod/Materia) installati nell'Host
              if (host.potenziamenti_installati && host.potenziamenti_installati.length > 0) {
                  host.potenziamenti_installati.forEach(mod => {
-                     if (mod.cariche_massime > 0 || mod.durata_totale > 0) {
+                     if (mod.cariche_massime > 0 || mod.durata_totale > 0 || mod.spegne_a_zero_cariche) {
                          activatables.push(mod);
                      }
                  });
@@ -447,12 +439,9 @@ const GameTab = ({ onNavigate }) => {
 
     // --- NUOVA LOGICA: Verifica se un oggetto è attivo secondo le regole specificate ---
     const isObjectActive = (item) => {
-        // Un oggetto è attivo se non ha cariche_massime (non si spegne mai)
-        // OPPURE se ha cariche_massime ma la data_fine_attivazione non è passata (o non è impostata)
-        if (!item.cariche_massime || item.cariche_massime === 0) {
-            return true; // Nessun limite di cariche, sempre attivo
-        }
-        // Ha cariche_massime, controlla la data
+        // Usa il campo backend (fonte di verita), fallback su regola temporale.
+        if (item.is_active !== undefined) return !!item.is_active;
+        if (!item.cariche_massime || item.cariche_massime === 0) return true;
         return isActiveByTime(item);
     };
 
@@ -583,7 +572,9 @@ const GameTab = ({ onNavigate }) => {
     // Logica Capacità
     const statCog = primary.find((s) => s.sigla === 'COG');
     const capacityMax = statCog ? statCog.valore_max : 10;
-    const capacityConsumers = char.oggetti.filter(i => i.is_equipaggiato && i.tipo_oggetto === 'FIS');
+    const capacityConsumers = char.oggetti.filter(
+        (i) => i.is_equipaggiato && i.tipo_oggetto === 'FIS' && ((i.potenziamenti_installati?.length || 0) > 0 || !i.oggetto_base_generatore)
+    );
     const capacityUsed = capacityConsumers.length;
     
     const statOgp = primary.find((s) => s.sigla === 'OGP');

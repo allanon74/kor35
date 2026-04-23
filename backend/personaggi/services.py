@@ -1,7 +1,7 @@
 # personaggi/services.py
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.shortcuts import get_list_or_404
@@ -26,15 +26,97 @@ from .models import (
 )
 
 class GestioneOggettiService:
+    PHYSICAL_SLOT_DEFAULTS = {
+        'head': 1,
+        'neck': 1,
+        'vest': 1,
+        'shoulders': 1,
+        'arms': 2,
+        'fingers': 2,
+        'feet': 1,
+        'belt': 1,
+        'armor': 1,
+        'melee': 1,
+        'ranged': 1,
+        'focus': 1,
+        'shield': 1,
+    }
+
+    PHYSICAL_SLOT_STAT_SIGLE = {
+        'head': 'SLOT_HEAD',
+        'neck': 'SLOT_NECK',
+        'vest': 'SLOT_VEST',
+        'shoulders': 'SLOT_SHOULDERS',
+        'arms': 'SLOT_ARMS',
+        'fingers': 'SLOT_FINGERS',
+        'feet': 'SLOT_FEET',
+        'belt': 'SLOT_BELT',
+        'armor': 'SLOT_ARMOR',
+        'melee': 'SLOT_MELEE',
+        'ranged': 'SLOT_RANGED',
+        'focus': 'SLOT_FOCUS',
+        'shield': 'SLOT_SHIELD',
+    }
+
+    PHYSICAL_SLOT_ALIASES = {
+        'head': ['testa', 'elmo', 'helm', 'head'],
+        'neck': ['collo', 'neck', 'collana', 'amulet'],
+        'vest': ['veste', 'vest', 'robe', 'abito'],
+        'shoulders': ['spalle', 'shoulder'],
+        'arms': ['braccia', 'bracciale', 'arm'],
+        'fingers': ['dita', 'anello', 'ring', 'finger'],
+        'feet': ['piedi', 'stivali', 'feet', 'boots'],
+        'belt': ['cintura', 'belt'],
+        'armor': ['armatura', 'armor'],
+        'melee': ['mischia', 'melee', 'spada', 'arma'],
+        'ranged': ['distanza', 'ranged', 'arco', 'fucile'],
+        'focus': ['focus'],
+        'shield': ['scudo', 'shield'],
+    }
+
+    @staticmethod
+    def _infer_physical_slots(oggetto: Oggetto):
+        raw = getattr(oggetto, 'slot_fisici_possibili', None)
+        if raw:
+            vals = [v.strip() for v in str(raw).split(',') if v.strip()]
+            if vals:
+                if 'focus' in vals or 'shield' in vals:
+                    return list(dict.fromkeys([*vals, 'melee', 'ranged']))
+                return vals
+        haystack = f"{(oggetto.classe_oggetto.nome if oggetto.classe_oggetto else '')} {oggetto.nome} {oggetto.get_tipo_oggetto_display()}".lower()
+        out = []
+        for key, aliases in GestioneOggettiService.PHYSICAL_SLOT_ALIASES.items():
+            if any(alias in haystack for alias in aliases):
+                out.append(key)
+        if 'focus' in out or 'shield' in out:
+            return list(dict.fromkeys([*out, 'melee', 'ranged']))
+        return out or ['vest']
+
+    @staticmethod
+    def _get_slot_capacity(personaggio: Personaggio, slot_key: str):
+        default_value = GestioneOggettiService.PHYSICAL_SLOT_DEFAULTS.get(slot_key, 1)
+        stat_sigla = GestioneOggettiService.PHYSICAL_SLOT_STAT_SIGLE.get(slot_key)
+        if not stat_sigla:
+            return default_value
+        dyn_value = personaggio.get_valore_statistica(stat_sigla)
+        if dyn_value and dyn_value > 0:
+            return dyn_value
+        return default_value
     
     @staticmethod
     def calcola_cog_utilizzata(pg: Personaggio):
         """Calcola la Capacità Oggetti (COG) occupata.
-        Include: oggetti fisici equipaggiati + 1 slot se il personaggio ha almeno un consumabile valido.
+        Include solo oggetti fisici equipaggiati di tipo "speciale o modificato":
+        - modificato: ha almeno un potenziamento installato
+        - speciale: non derivato da template base (oggetto_base_generatore nullo)
+        + 1 slot se il personaggio ha almeno un consumabile valido (regola legacy).
         """
-        cog_oggetti = pg.get_oggetti().filter(
+        cog_qs = pg.get_oggetti().filter(
             tipo_oggetto=TIPO_OGGETTO_FISICO, 
             is_equipaggiato=True
+        ).annotate(mods_count=Count('potenziamenti_installati', distinct=True))
+        cog_oggetti = cog_qs.filter(
+            Q(mods_count__gt=0) | Q(oggetto_base_generatore__isnull=True)
         ).count()
         oggi = timezone.now().date()
         has_consumabili = ConsumabilePersonaggio.objects.filter(
@@ -63,7 +145,7 @@ class GestioneOggettiService:
             return False
 
     @staticmethod
-    def equipaggia_oggetto(personaggio: Personaggio, oggetto: Oggetto):
+    def equipaggia_oggetto(personaggio: Personaggio, oggetto: Oggetto, slot_key: str = None):
         """Gestisce l'azione Equipaggia/Disequipaggia con controlli OGP e COG."""
         inv_corrente = oggetto.inventario_corrente
         if not inv_corrente or inv_corrente.id != personaggio.id:
@@ -71,15 +153,27 @@ class GestioneOggettiService:
         
         if oggetto.is_equipaggiato:
             oggetto.is_equipaggiato = False
+            oggetto.slot_equip = None
             oggetto.save()
             return "Disequipaggiato"
+
+        if oggetto.is_danneggiato:
+            raise ValidationError("Non puoi equipaggiare un oggetto danneggiato.")
         
-        # 1. Controllo COG (Esistente)
+        # 0. Controllo tecnologia: oggetti tecnologici richiedono Aura Tecnologica >= 1.
+        if oggetto.is_tecnologico and personaggio.get_valore_statistica('ATE') < 1:
+            raise ValidationError(
+                "Oggetto tecnologico non equipaggiabile: serve Aura Tecnologica (ATE) almeno a 1."
+            )
+
+        # 1. Controllo COG
         cog_used = GestioneOggettiService.calcola_cog_utilizzata(personaggio)
         cog_max = personaggio.get_valore_statistica('COG')
-        
-        if cog_used >= cog_max:
-             raise ValidationError(f"Capacità Oggetti raggiunta ({cog_used}/{cog_max}).")
+        item_consuma_cog = oggetto.tipo_oggetto == TIPO_OGGETTO_FISICO and (
+            oggetto.potenziamenti_installati.exists() or oggetto.oggetto_base_generatore_id is None
+        )
+        if item_consuma_cog and cog_used >= cog_max:
+            raise ValidationError(f"Capacità Oggetti raggiunta ({cog_used}/{cog_max}).")
         
         # 2. Controllo OGP (NUOVO - Oggetti Pesanti)
         if oggetto.is_pesante:
@@ -89,6 +183,34 @@ class GestioneOggettiService:
             if ogp_used >= ogp_max:
                 raise ValidationError(f"Limite Carico Pesante raggiunto ({ogp_used}/{ogp_max}). Non puoi equipaggiare altri oggetti pesanti.")
 
+        candidate_slots = GestioneOggettiService._infer_physical_slots(oggetto)
+        if slot_key:
+            if slot_key not in candidate_slots:
+                raise ValidationError("Slot selezionato non compatibile con questo oggetto.")
+            selected_slot = slot_key
+        else:
+            selected_slot = None
+            for possible_slot in candidate_slots:
+                occupied = personaggio.get_oggetti().filter(
+                    tipo_oggetto=TIPO_OGGETTO_FISICO,
+                    is_equipaggiato=True,
+                    slot_equip=possible_slot
+                ).count()
+                if occupied < GestioneOggettiService._get_slot_capacity(personaggio, possible_slot):
+                    selected_slot = possible_slot
+                    break
+            if not selected_slot:
+                raise ValidationError("Nessuno slot corporeo disponibile per questo oggetto.")
+
+        occupied_selected = personaggio.get_oggetti().filter(
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            is_equipaggiato=True,
+            slot_equip=selected_slot
+        ).count()
+        if occupied_selected >= GestioneOggettiService._get_slot_capacity(personaggio, selected_slot):
+            raise ValidationError("Lo slot selezionato ha raggiunto la capienza massima.")
+
+        oggetto.slot_equip = selected_slot
         oggetto.is_equipaggiato = True
         oggetto.save()
         return "Equipaggiato"

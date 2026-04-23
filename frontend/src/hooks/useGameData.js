@@ -15,6 +15,8 @@ import {
   fetchCacheRevision,
   gameConsumaRisorsa,
   equipaggiaOggetto,
+  danneggiaOggetto,
+  riparaOggetto,
   assemblaOggetto,
   smontaOggetto,
   completeForging,
@@ -406,16 +408,52 @@ export const useConsumaRisorsa = () => {
 export const useOptimisticEquip = () => {
     return useOptimisticAction(
         ['personaggio'],
-        ({ itemId, charId }) => equipaggiaOggetto(itemId, charId),
-        (oldData, { itemId }) => {
+        ({ itemId, charId, slotKey }) => equipaggiaOggetto(itemId, charId, slotKey),
+        (oldData, { itemId, slotKey }) => {
             if (!oldData.oggetti) return oldData;
             return {
                 ...oldData,
                 oggetti: oldData.oggetti.map(obj => 
                     obj.id === itemId 
-                    ? { ...obj, is_equipaggiato: !obj.is_equipaggiato } 
+                    ? {
+                        ...obj,
+                        is_equipaggiato: !obj.is_equipaggiato,
+                        slot_equip: obj.is_equipaggiato ? null : (slotKey || obj.slot_equip),
+                    }
                     : obj
                 )
+            };
+        }
+    );
+};
+
+export const useOptimisticDamage = () => {
+    return useOptimisticAction(
+        ['personaggio'],
+        ({ itemId, charId }) => danneggiaOggetto(itemId, charId),
+        (oldData, { itemId }) => {
+            if (!oldData.oggetti) return oldData;
+            return {
+                ...oldData,
+                oggetti: oldData.oggetti.map((obj) =>
+                    obj.id === itemId ? { ...obj, is_danneggiato: true, is_active: false } : obj
+                ),
+            };
+        }
+    );
+};
+
+export const useOptimisticRepair = () => {
+    return useOptimisticAction(
+        ['personaggio'],
+        ({ itemId, charId }) => riparaOggetto(itemId, charId),
+        (oldData, { itemId }) => {
+            if (!oldData.oggetti) return oldData;
+            return {
+                ...oldData,
+                oggetti: oldData.oggetti.map((obj) =>
+                    obj.id === itemId ? { ...obj, is_danneggiato: false } : obj
+                ),
             };
         }
     );

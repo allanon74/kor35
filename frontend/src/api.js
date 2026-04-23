@@ -1125,7 +1125,7 @@ export const getOggettoDetail = (oggettoId, onLogout) => {
  * Equipaggia o disequipaggia un oggetto fisico.
  * POST /api/personaggi/api/oggetti/equipaggia/
  */
-export const equipaggiaOggetto = (itemId, characterId, onLogout) => {
+export const equipaggiaOggetto = (itemId, characterId, slotKey = null, onLogout) => {
   return fetchAuthenticated(
     '/api/personaggi/api/oggetti/equipaggia/', 
     {
@@ -1133,8 +1133,37 @@ export const equipaggiaOggetto = (itemId, characterId, onLogout) => {
       // Invia anche char_id nel JSON
       body: JSON.stringify({ 
           item_id: itemId,
-          char_id: characterId 
+          char_id: characterId,
+          slot_key: slotKey,
       })
+    },
+    onLogout
+  );
+};
+
+export const danneggiaOggetto = (itemId, characterId, onLogout) => {
+  return fetchAuthenticated(
+    '/api/personaggi/api/oggetti/danneggia/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        item_id: itemId,
+        char_id: characterId,
+      }),
+    },
+    onLogout
+  );
+};
+
+export const riparaOggetto = (itemId, characterId, onLogout) => {
+  return fetchAuthenticated(
+    '/api/personaggi/api/oggetti/ripara/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        item_id: itemId,
+        char_id: characterId,
+      }),
     },
     onLogout
   );
