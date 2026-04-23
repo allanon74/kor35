@@ -75,19 +75,44 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
 
     // Logica di stato visuale
     const isWorking = timeLeft > 0;
+    const isBackendActive = item.is_active !== false;
+    const isDamaged = !!item.is_danneggiato;
+    const needsActivation = !!item.deve_essere_attivato;
     const hasCharges = item.cariche_attuali > 0;
     const maxCharges = item.cariche_massime || 0;
     const isDepleted = !hasCharges && !isWorking;
+    const isReallyActive = isBackendActive && !isDamaged;
 
     return (
-        <div className={`p-3 rounded-lg border shadow-sm w-full sm:w-[calc(50%-0.5rem)] flex flex-col gap-2 transition-all duration-300 ${isWorking ? 'bg-emerald-900/20 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'bg-gray-800 border-gray-700'}`}>
+        <div className={`p-3 rounded-lg border shadow-sm w-full sm:w-[calc(50%-0.5rem)] flex flex-col gap-2 transition-all duration-300 ${
+            isDamaged
+                ? 'bg-red-950/30 border-red-700/70'
+                : isReallyActive
+                    ? 'bg-emerald-900/20 border-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+                    : 'bg-gray-800 border-gray-700'
+        }`}>
             
             {/* Header */}
             <div className="flex justify-between items-start">
-                <span className={`font-bold text-sm leading-tight ${isWorking ? 'text-emerald-400' : 'text-gray-300'}`}>
+                <span className={`font-bold text-sm leading-tight ${isReallyActive ? 'text-emerald-400' : 'text-gray-300'}`}>
                     {item.nome}
                 </span>
                 {isWorking && <span className="animate-pulse text-emerald-500 shrink-0 ml-2"><Activity size={16}/></span>}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap text-[9px] uppercase font-bold tracking-wider">
+                <span className={`px-1.5 py-0.5 rounded border ${isReallyActive ? 'text-emerald-300 border-emerald-700/60 bg-emerald-900/20' : 'text-gray-400 border-gray-600 bg-gray-900/30'}`}>
+                    {isReallyActive ? 'Attivo' : 'Inattivo'}
+                </span>
+                {isDamaged && (
+                    <span className="px-1.5 py-0.5 rounded border text-red-300 border-red-700/60 bg-red-900/20">
+                        Danneggiato
+                    </span>
+                )}
+                {needsActivation && (
+                    <span className="px-1.5 py-0.5 rounded border text-yellow-300 border-yellow-700/60 bg-yellow-900/20">
+                        Richiede attivazione
+                    </span>
+                )}
             </div>
 
             {/* Barra Cariche */}
@@ -102,7 +127,7 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
                     
                     <button 
                         onClick={handleUseCharge}
-                        disabled={!hasCharges || isWorking}
+                        disabled={!hasCharges || isWorking || isDamaged}
                         className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider transition-all active:scale-95 ${
                             isWorking
                             ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600/50 cursor-default'
@@ -133,7 +158,8 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
                 {item.costo_ricarica > 0 && item.cariche_attuali < maxCharges && (
                     <button 
                         onClick={handleRecharge}
-                        className="flex items-center gap-1 bg-yellow-900/10 hover:bg-yellow-900/30 text-yellow-500 hover:text-yellow-200 px-2 py-0.5 rounded border border-transparent hover:border-yellow-700/50 transition-all text-[10px]"
+                        disabled={isDamaged}
+                        className="flex items-center gap-1 bg-yellow-900/10 hover:bg-yellow-900/30 text-yellow-500 hover:text-yellow-200 px-2 py-0.5 rounded border border-transparent hover:border-yellow-700/50 transition-all text-[10px] disabled:opacity-40 disabled:cursor-not-allowed"
                         title={item.testo_ricarica}
                     >
                         <RefreshCw size={10} /> {item.costo_ricarica} CR

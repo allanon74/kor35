@@ -421,21 +421,48 @@ const GameTab = ({ onNavigate }) => {
         activeHosts.forEach(host => {
              // A. Aggiungi l'Host se ha meccaniche attivabili o flag esplicito
              if (host.cariche_massime > 0 || host.durata_totale > 0 || host.spegne_a_zero_cariche) {
-                 activatables.push(host);
+                 activatables.push({
+                    ...host,
+                    __hostId: host.id,
+                    __hostName: host.nome,
+                    __isHost: true,
+                 });
              }
 
              // B. Aggiungi i Potenziamenti (Mod/Materia) installati nell'Host
              if (host.potenziamenti_installati && host.potenziamenti_installati.length > 0) {
                  host.potenziamenti_installati.forEach(mod => {
                      if (mod.cariche_massime > 0 || mod.durata_totale > 0 || mod.spegne_a_zero_cariche) {
-                         activatables.push(mod);
+                         activatables.push({
+                            ...mod,
+                            __hostId: host.id,
+                            __hostName: host.nome,
+                            __isHost: false,
+                         });
                      }
                  });
              }
         });
 
-        return activatables;
+        return activatables.sort((a, b) => {
+            const aSec = Number(a.seconds_remaining || 0);
+            const bSec = Number(b.seconds_remaining || 0);
+            const aScore = aSec > 0 ? aSec : Number.MAX_SAFE_INTEGER;
+            const bScore = bSec > 0 ? bSec : Number.MAX_SAFE_INTEGER;
+            return aScore - bScore;
+        });
     }, [char]); // Dipendenza da 'char' completa
+
+    const groupedActiveItems = useMemo(() => {
+        const grouped = {};
+        activeItems.forEach((it) => {
+            const key = it.__hostId || it.id;
+            if (!grouped[key]) grouped[key] = { hostName: it.__hostName || it.nome, host: null, modules: [] };
+            if (it.__isHost) grouped[key].host = it;
+            else grouped[key].modules.push(it);
+        });
+        return Object.values(grouped);
+    }, [activeItems]);
 
     // --- NUOVA LOGICA: Verifica se un oggetto è attivo secondo le regole specificate ---
     const isObjectActive = (item) => {
@@ -504,6 +531,8 @@ const GameTab = ({ onNavigate }) => {
 
         return attacks;
     }, [char]);
+    const tessituraAttacks = useMemo(() => allAttacks.filter((a) => a.type === 'tessitura'), [allAttacks]);
+    const objectAttacks = useMemo(() => allAttacks.filter((a) => a.type === 'oggetto' || a.type === 'modulo'), [allAttacks]);
 
     // --- COMPATIBILITÀ: Mantieni la variabile weapons per il vecchio codice (deprecata) ---
     const weapons = allAttacks.filter(a => a.isHost).map(a => a.source);
@@ -698,40 +727,12 @@ const GameTab = ({ onNavigate }) => {
                         <Crosshair size={12} /> Attacchi
                     </h3>
                     <div className="grid grid-cols-1 gap-2">
-                        {allAttacks.map((attack, idx) => {
-                            // Render Tessitura
-                            if (attack.type === 'tessitura') {
-                                const tessitura = attack.source;
-                                return (
-                                    <div key={`tessitura-${tessitura.id}`} className="bg-linear-to-r from-purple-900/20 to-gray-900/20 border border-purple-500/30 p-3 rounded-lg shadow-sm">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <div className="font-bold text-purple-100 text-sm flex items-center gap-2">
-                                                    <Star size={14} className="text-yellow-400" fill="currentColor" />
-                                                    {tessitura.nome}
-                                                </div>
-                                                <div className="text-[10px] text-purple-300/60 uppercase">Tessitura • Lv.{tessitura.livello}</div>
-                                            </div>
-                                        </div>
-                                        <div className="bg-black/30 rounded p-2 mt-2 border-l-2 border-purple-500">
-                                            <div 
-                                                className="text-xs text-purple-200 prose prose-invert prose-sm max-w-none"
-                                                dangerouslySetInnerHTML={{ 
-                                                    __html: tessitura.testo_formattato_personaggio || tessitura.TestoFormattato || tessitura.formula || 'Formula non disponibile' 
-                                                }} 
-                                            />
-                                        </div>
-                                    </div>
-                                );
-                            }
-
-                            // Render Oggetti raggruppati per host
-                            return null; // Gli oggetti vengono renderizzati dopo, raggruppati
-                        })}
+                        {objectAttacks.length > 0 && (
+                            <div className="text-[10px] uppercase tracking-wider text-red-300/70 font-bold ml-1">Da oggetti equipaggiati</div>
+                        )}
 
                         {/* Raggruppa gli attacchi da oggetti per host */}
                         {(() => {
-                            const objectAttacks = allAttacks.filter(a => a.type === 'oggetto' || a.type === 'modulo');
                             const hostGroups = {};
                             
                             objectAttacks.forEach(attack => {
@@ -791,6 +792,34 @@ const GameTab = ({ onNavigate }) => {
                                 </div>
                             ));
                         })()}
+
+                        {tessituraAttacks.length > 0 && (
+                            <div className="text-[10px] uppercase tracking-wider text-purple-300/70 font-bold ml-1 mt-1">Da tessiture</div>
+                        )}
+                        {tessituraAttacks.map((attack) => {
+                            const tessitura = attack.source;
+                            return (
+                                <div key={`tessitura-${tessitura.id}`} className="bg-linear-to-r from-purple-900/20 to-gray-900/20 border border-purple-500/30 p-3 rounded-lg shadow-sm">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-bold text-purple-100 text-sm flex items-center gap-2">
+                                                <Star size={14} className="text-yellow-400" fill="currentColor" />
+                                                {tessitura.nome}
+                                            </div>
+                                            <div className="text-[10px] text-purple-300/60 uppercase">Tessitura • Lv.{tessitura.livello}</div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-black/30 rounded p-2 mt-2 border-l-2 border-purple-500">
+                                        <div
+                                            className="text-xs text-purple-200 prose prose-invert prose-sm max-w-none"
+                                            dangerouslySetInnerHTML={{
+                                                __html: tessitura.testo_formattato_personaggio || tessitura.TestoFormattato || tessitura.formula || 'Formula non disponibile'
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </section>
             )}
@@ -800,14 +829,29 @@ const GameTab = ({ onNavigate }) => {
                 <h3 className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold flex items-center gap-2 mb-2 ml-1">
                     <Zap size={12} /> Dispositivi Attivi
                 </h3>
-                <div className="flex flex-wrap gap-3">
-                    {activeItems.map(item => (
-                        <ActiveItemWidget 
-                            key={item.id} 
-                            item={item} 
-                            // IMPORTANTE: Assicura il refresh dei dati al click
-                            onUpdate={refreshCharacterData} 
-                        />
+                <div className="space-y-3">
+                    {groupedActiveItems.map((group) => (
+                        <div key={`act-host-${group.host?.id || group.hostName}`} className="p-2 rounded-lg border border-gray-700/70 bg-gray-900/40">
+                            <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-2">
+                                Host: <span className="text-gray-300">{group.hostName}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                                {group.host && (
+                                    <ActiveItemWidget
+                                        key={group.host.id}
+                                        item={group.host}
+                                        onUpdate={refreshCharacterData}
+                                    />
+                                )}
+                                {group.modules.map((item) => (
+                                    <ActiveItemWidget
+                                        key={item.id}
+                                        item={item}
+                                        onUpdate={refreshCharacterData}
+                                    />
+                                ))}
+                            </div>
+                        </div>
                     ))}
                     {activeItems.length === 0 && <p className="text-gray-600 text-xs italic w-full text-center py-4">Nessun dispositivo attivo.</p>}
                 </div>

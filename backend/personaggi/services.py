@@ -1107,18 +1107,28 @@ class GestioneCraftingService:
                 is_pesante = template.is_pesante,
             )
             for stat_link in template.oggettobasestatisticabase_set.all():
-                OggettoStatisticaBase.objects.create(
+                base_obj, created = OggettoStatisticaBase.objects.get_or_create(
                     oggetto=nuovo_oggetto,
                     statistica=stat_link.statistica,
-                    valore_base=stat_link.valore_base
+                    defaults={'valore_base': stat_link.valore_base}
                 )
+                if not created:
+                    base_obj.valore_base = (base_obj.valore_base or 0) + (stat_link.valore_base or 0)
+                    base_obj.save(update_fields=['valore_base'])
             for mod_link in template.oggettobasemodificatore_set.all():
-                OggettoStatistica.objects.create(
+                mod_obj, created = OggettoStatistica.objects.get_or_create(
                     oggetto=nuovo_oggetto,
                     statistica=mod_link.statistica,
-                    valore=mod_link.valore,
-                    tipo_modificatore=mod_link.tipo_modificatore
+                    defaults={
+                        'valore': mod_link.valore,
+                        'tipo_modificatore': mod_link.tipo_modificatore
+                    }
                 )
+                if not created:
+                    mod_obj.valore = (mod_obj.valore or 0) + (mod_link.valore or 0)
+                    if not mod_obj.tipo_modificatore and mod_link.tipo_modificatore:
+                        mod_obj.tipo_modificatore = mod_link.tipo_modificatore
+                    mod_obj.save(update_fields=['valore', 'tipo_modificatore'])
             
             nuovo_oggetto.sposta_in_inventario(personaggio)
             

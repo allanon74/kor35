@@ -414,12 +414,18 @@ export const useOptimisticEquip = () => {
             return {
                 ...oldData,
                 oggetti: oldData.oggetti.map(obj => 
-                    obj.id === itemId 
-                    ? {
-                        ...obj,
-                        is_equipaggiato: !obj.is_equipaggiato,
-                        slot_equip: obj.is_equipaggiato ? null : (slotKey || obj.slot_equip),
-                    }
+                    obj.id === itemId
+                    ? (() => {
+                        const inferredSlot = Array.isArray(obj.slot_fisici_possibili) && obj.slot_fisici_possibili.length > 0
+                            ? obj.slot_fisici_possibili[0]
+                            : null;
+                        return {
+                            ...obj,
+                            is_equipaggiato: !obj.is_equipaggiato,
+                            // Se non viene passato slot esplicito, usa un fallback compatibile per evitare stato "equipaggiato senza slot" in UI.
+                            slot_equip: obj.is_equipaggiato ? null : (slotKey || obj.slot_equip || inferredSlot),
+                        };
+                    })()
                     : obj
                 )
             };
