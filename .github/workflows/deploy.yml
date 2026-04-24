@@ -311,6 +311,14 @@ jobs:
               exit 1
             fi
 
+            # Abilita vhost DDNS solo su mirror (kor35.ddns.net):
+            # ddns.conf è escluso dalla produzione e viene derivato dal template versionato.
+            if [ -f "${MIRROR_REPO_PATH}/config/docker/nginx-docker/nginx_conf/ddns.conf.example" ]; then
+              cp -f \
+                "${MIRROR_REPO_PATH}/config/docker/nginx-docker/nginx_conf/ddns.conf.example" \
+                "${MIRROR_REPO_PATH}/config/docker/nginx-docker/nginx_conf/ddns.conf"
+            fi
+
             cd "${MIRROR_REPO_PATH}/config/docker"
             export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}"
             docker compose -f compose.base.yml -f compose.mirror.yml up -d --build
