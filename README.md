@@ -561,8 +561,19 @@ Frontend:
 
 ```bash
 make sync-db ENV=dev-home
+make sync-db-full ENV=dev-home
+# diagnostica conflitti catalogo SegnoZodiacale (numero/sync_id)
+make sync-db-diagnose ENV=dev-home
+make sync-db-full-diagnose ENV=dev-home
 make sync-media
 ```
+
+### Troubleshooting `sync-db`
+
+- `service "backend" is not running`: verifica stack attivo con `make status ENV=<profilo>`; su mirror usa i target `make` aggiornati (impostano `COMPOSE_PROJECT_NAME` corretto).
+- `duplicate key value ... sync_id`: esegui diagnostica con `make sync-db-diagnose ENV=<profilo>` (o `sync-db-full-diagnose`) e risolvi i duplicati `SegnoZodiacale` seguendo l'output.
+- Sync completa ma con warning `catalog.segnozodiacale: salto ...`: è un conflitto storico non bloccante; pianifica bonifica dati e rilancia `sync-db-full-diagnose`.
+- Errori di rete/HTTP verso master: controlla `EDGE_SYNC_URL`, token e raggiungibilità (`curl` verso endpoint `/api/sync/edge/` dal nodo locale).
 
 ## Appendice: Comandi rapidi quotidiani
 

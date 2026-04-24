@@ -30,6 +30,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Scarica e applica solo dati dal Master, senza inviare modifiche locali.",
         )
+        parser.add_argument(
+            "--diagnose-zodiac",
+            action="store_true",
+            help="Stampa diagnostica conflitti catalog.segnozodiacale (numero/sync_id).",
+        )
 
     def handle(self, *args, **options):
         sync_url = getattr(settings, "EDGE_SYNC_URL", "").strip()
@@ -42,8 +47,10 @@ class Command(BaseCommand):
 
         model_registry = self._model_registry()
         self._defer_errors = {}
+        self._zodiac_conflicts = []
         since = self._load_since(state_path, options.get("since"))
         pull_only = bool(options.get("pull_only"))
+        diagnose_zodiac = bool(options.get("diagnose_zodiac"))
         outgoing = {} if pull_only else self._build_outgoing_payload(model_registry, since)
 
         headers = {"Content-Type": "application/json"}
@@ -76,6 +83,8 @@ class Command(BaseCommand):
             raise
 
         self._apply_incoming_payload(model_registry, incoming_payload)
+        if diagnose_zodiac:
+            self._print_zodiac_diagnostics()
         self._save_state(state_path, timezone.now())
         self.stdout.write(self.style.SUCCESS("Sync completata."))
 
@@ -203,21 +212,84 @@ class Command(BaseCommand):
             if numero in (None, ""):
                 continue
             remote_sync_id = row.get("sync_id")
-            defaults = {
+            base_defaults = {
                 "nome": row.get("nome") or f"Segno {numero}",
                 "descrizione": row.get("descrizione"),
                 "testo_pubblico": row.get("testo_pubblico"),
                 "testo_privato": row.get("testo_privato"),
             }
-            obj = SegnoZodiacale.objects.filter(numero=numero).first()
-            if obj:
-                if remote_sync_id:
+            by_numero = SegnoZodiacale.objects.filter(numero=numero).first()
+            by_sync = SegnoZodiacale.objects.filter(sync_id=remote_sync_id).first() if remote_sync_id else None
+
+            # In alcuni dump storici possono coesistere due record locali:
+            # uno agganciato dal catalogo (numero) e uno agganciato dalle FK (sync_id).
+            # In quel caso aggiorniamo il record per sync_id (coerente con il resto del payload)
+            # senza tentare riallineamenti distruttivi che romperebbero vincoli unici.
+            if by_numero and by_sync and by_numero.pk != by_sync.pk:
+                self._zodiac_conflicts.append(
+                    {
+                        "numero": numero,
+                        "remote_sync_id": remote_sync_id,
+                        "by_numero_id": by_numero.pk,
+                        "by_numero_sync_id": str(by_numero.sync_id) if by_numero.sync_id else None,
+                        "by_sync_id": by_sync.pk,
+                        "by_sync_numero": by_sync.numero,
+                    }
+                )
+            target = by_sync or by_numero
+            if target:
+                defaults = dict(base_defaults)
+                if by_sync is None and remote_sync_id:
                     defaults["sync_id"] = remote_sync_id
-                SegnoZodiacale.objects.filter(pk=obj.pk).update(**defaults)
-            else:
-                if remote_sync_id:
-                    defaults["sync_id"] = remote_sync_id
+                try:
+                    SegnoZodiacale.objects.filter(pk=target.pk).update(**defaults)
+                except IntegrityError as exc:
+                    msg = str(exc).strip().replace("\n", " ")
+                    if len(msg) > 160:
+                        msg = msg[:160] + "..."
+                    self.stderr.write(
+                        self.style.WARNING(
+                            f"catalog.segnozodiacale: salto update numero={numero} sync_id={remote_sync_id} ({msg})"
+                        )
+                    )
+                continue
+
+            defaults = dict(base_defaults)
+            if remote_sync_id:
+                defaults["sync_id"] = remote_sync_id
+            try:
                 SegnoZodiacale.objects.create(numero=numero, tipo=fallback_tipo, **defaults)
+            except IntegrityError as exc:
+                msg = str(exc).strip().replace("\n", " ")
+                if len(msg) > 160:
+                    msg = msg[:160] + "..."
+                self.stderr.write(
+                    self.style.WARNING(
+                        f"catalog.segnozodiacale: salto create numero={numero} sync_id={remote_sync_id} ({msg})"
+                    )
+                )
+
+    def _print_zodiac_diagnostics(self):
+        if not self._zodiac_conflicts:
+            self.stdout.write(self.style.SUCCESS("Diagnostica SegnoZodiacale: nessun conflitto numero/sync_id rilevato."))
+            return
+        self.stderr.write(
+            self.style.WARNING(
+                f"Diagnostica SegnoZodiacale: trovati {len(self._zodiac_conflicts)} conflitti numero/sync_id."
+            )
+        )
+        for idx, item in enumerate(self._zodiac_conflicts[:20], start=1):
+            self.stderr.write(
+                " - #{idx} numero={numero} remote_sync_id={remote_sync_id} "
+                "row_numero(id={by_numero_id}, sync_id={by_numero_sync_id}) "
+                "row_sync(id={by_sync_id}, numero={by_sync_numero})".format(idx=idx, **item)
+            )
+        if len(self._zodiac_conflicts) > 20:
+            self.stderr.write(f" - ... altri {len(self._zodiac_conflicts) - 20} conflitti omessi")
+        self.stderr.write(
+            "Fix consigliato: mantenere la riga con sync_id usato dalle FK, migrare eventuali riferimenti "
+            "della riga per numero su quella riga e poi eliminare il duplicato."
+        )
 
     def _try_apply_one(self, model, row):
         sync_id = row.get("sync_id")

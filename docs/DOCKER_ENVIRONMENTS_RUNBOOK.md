@@ -345,12 +345,30 @@ make sync-db-full ENV=dev-home
 # 5c) sync DB pull-only da data custom (ISO datetime)
 make sync-db ENV=dev-home SYNC_SINCE="2024-01-01T00:00:00Z"
 
+# 5d) sync DB pull-only con diagnostica conflitti SegnoZodiacale
+make sync-db-diagnose ENV=dev-home
+
+# 5e) sync DB full pull-only con diagnostica SegnoZodiacale
+make sync-db-full-diagnose ENV=dev-home
+
 # 6) stop stack
 make down ENV=dev-home
 
 # 7) cleanup manuale container legacy
 make cleanup-legacy
 ```
+
+### Troubleshooting sync DB (rapido)
+
+- `service "backend" is not running`:
+  - verifica `make status ENV=<profilo>`;
+  - se `ENV=mirror`, usa i target `make` del repo aggiornato (gestiscono `COMPOSE_PROJECT_NAME=kor35-replica`).
+- `duplicate key value ... sync_id` su `sync_edge_node`:
+  - esegui `make sync-db-diagnose ENV=<profilo>` o `make sync-db-full-diagnose ENV=<profilo>`;
+  - identifica e bonifica i conflitti `SegnoZodiacale` (numero/sync_id) prima di ripetere il full pull.
+- Warning `catalog.segnozodiacale: salto ...`:
+  - sync non bloccata ma presenza di conflitti storici;
+  - mantieni la riga con `sync_id` referenziato dalle FK, migra riferimenti e rimuovi il duplicato.
 
 Altri profili:
 

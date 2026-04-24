@@ -115,6 +115,7 @@ python manage.py sync_edge_node --pull-only
 - Mantieni `--pull-only` in locale se vuoi evitare qualsiasi push dati.
 - Lo stato di sync viene salvato in `EDGE_SYNC_STATE_FILE` (default `.edge_sync_state.json`).
 - Se vuoi forzare un pull completo, usa `--since "1970-01-01T00:00:00Z"` oppure `make sync-db-full ENV=dev-home`.
+- Per diagnosticare conflitti storici del catalogo `SegnoZodiacale` (numero/sync_id), usa `make sync-db-diagnose ENV=dev-home` oppure `make sync-db-full-diagnose ENV=dev-home`.
 - Per fermare i container locali:
 
 ```bash

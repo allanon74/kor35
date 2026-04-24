@@ -10,7 +10,7 @@ RUN_COLLECTSTATIC ?= 0
 MAKEMIGRATIONS_APP ?=
 COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor35-replica,)
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-be sync-db sync-db-full sync-media cleanup-legacy backup-db
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media cleanup-legacy backup-db
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -46,6 +46,8 @@ help:
 	@echo "Sync:"
 	@echo "  make sync-db [SYNC_SINCE=ISO_DATETIME] # pull-only DB (backend container)"
 	@echo "  make sync-db-full            # pull-only completo da 1970-01-01T00:00:00Z"
+	@echo "  make sync-db-diagnose        # pull-only con diagnostica conflitti SegnoZodiacale"
+	@echo "  make sync-db-full-diagnose   # full pull + diagnostica conflitti SegnoZodiacale"
 	@echo "  make sync-media              # pull-only media via rsync (vedi scripts/sync_media_pull_wsl_pi_like.sh e .env.sync-media)"
 	@echo ""
 	@echo "Backup:"
@@ -118,6 +120,12 @@ sync-db:
 
 sync-db-full:
 	$(MAKE) sync-db ENV="$(ENV)" SYNC_SINCE="1970-01-01T00:00:00Z"
+
+sync-db-diagnose:
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py sync_edge_node --pull-only --diagnose-zodiac $(if $(SYNC_SINCE),--since "$(SYNC_SINCE)",)
+
+sync-db-full-diagnose:
+	$(MAKE) sync-db-diagnose ENV="$(ENV)" SYNC_SINCE="1970-01-01T00:00:00Z"
 
 sync-media:
 	./scripts/sync_media_pull_wsl_pi_like.sh
