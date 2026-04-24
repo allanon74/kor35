@@ -8,6 +8,7 @@ WSL_PI_COMPOSE_BASE_FILE="${WSL_PI_COMPOSE_BASE_FILE:-compose.base.yml}"
 WSL_PI_COMPOSE_FILE="${WSL_PI_COMPOSE_FILE:-compose.dev-home.yml}"
 WSL_PI_ENV_PROFILE="${WSL_PI_ENV_PROFILE:-dev-home}"
 KOR35_BACKEND_ENV_FILE="${KOR35_BACKEND_ENV_FILE:-$KOR35_ROOT/backend/.env}"
+WSL_PI_COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 
 wsl_pi_require_docker() {
   if ! command -v docker >/dev/null 2>&1; then
@@ -23,6 +24,9 @@ wsl_pi_require_docker() {
 wsl_pi_compose() {
   (
     export KOR35_BACKEND_ENV_FILE
+    if [ -n "${WSL_PI_COMPOSE_PROJECT_NAME:-}" ]; then
+      export COMPOSE_PROJECT_NAME="$WSL_PI_COMPOSE_PROJECT_NAME"
+    fi
     cd "$WSL_PI_STACK_DIR" &&
     docker compose -f "$WSL_PI_COMPOSE_BASE_FILE" -f "$WSL_PI_COMPOSE_FILE" "$@"
   )
@@ -60,6 +64,9 @@ wsl_pi_set_env_profile() {
       WSL_PI_ENV_PROFILE="mirror"
       WSL_PI_COMPOSE_FILE="compose.mirror.yml"
       KOR35_BACKEND_ENV_FILE="$KOR35_ROOT/backend/.env.mirror"
+      # Il deploy mirror usa COMPOSE_PROJECT_NAME=kor35-replica:
+      # allineiamo anche i comandi CLI (status/logs/up/down) se non già impostato.
+      WSL_PI_COMPOSE_PROJECT_NAME="${WSL_PI_COMPOSE_PROJECT_NAME:-kor35-replica}"
       ;;
     prod)
       WSL_PI_ENV_PROFILE="prod"

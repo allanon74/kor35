@@ -33,7 +33,9 @@ services:
       - ./nginx-docker/certs_ddns:/etc/nginx/certs_ddns:ro
 
   omada-controller:
-    image: mbentley/omada-controller:latest
+    # Pin versione: evita downgrade involontari (es. latest -> 5.x) che bloccano l'avvio
+    # quando i dati sono già stati aperti da una 6.x (guard rail LAST_RAN_OMADA_VER.txt).
+    image: mbentley/omada-controller:6.1.0.19
     container_name: omada_controller
     restart: unless-stopped
     network_mode: host
