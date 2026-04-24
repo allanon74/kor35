@@ -1,0 +1,20 @@
+[Unit]
+Description=KOR35 Mirror - Sync DB bidirezionale (Docker)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+
+# Adatta se il path repo sul Pi e' diverso
+WorkingDirectory=/home/pi/kor35-replica/config/docker
+Environment=COMPOSE_PROJECT_NAME=kor35-replica
+Environment=KOR35_BACKEND_ENV_FILE=/home/pi/kor35-replica/backend/.env.mirror
+
+ExecStart=/usr/bin/docker compose -f compose.base.yml -f compose.mirror.yml exec -T backend python manage.py sync_edge_node
+
+# Hardening minimale
+NoNewPrivileges=true
+PrivateTmp=true

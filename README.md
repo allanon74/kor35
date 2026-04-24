@@ -566,6 +566,9 @@ make sync-db-full ENV=dev-home
 make sync-db-diagnose ENV=dev-home
 make sync-db-full-diagnose ENV=dev-home
 make sync-media
+make sync-media-push
+# solo mirror: full DB diagnose + media push + media pull
+make mirror-resync-after-event ENV=mirror
 ```
 
 ### Troubleshooting `sync-db`

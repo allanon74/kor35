@@ -351,6 +351,12 @@ make sync-db-diagnose ENV=dev-home
 # 5e) sync DB full pull-only con diagnostica SegnoZodiacale
 make sync-db-full-diagnose ENV=dev-home
 
+# 5f) sync media push-only verso master (senza delete remoto)
+make sync-media-push
+
+# 5g) solo mirror: riallineamento post-evento (DB full diagnose + media push + media pull)
+make mirror-resync-after-event ENV=mirror
+
 # 6) stop stack
 make down ENV=dev-home
 
@@ -377,3 +383,14 @@ make up ENV=dev-office
 make up ENV=mirror
 make up ENV=prod
 ```
+
+### Mirror Pi: sync continuo + rientro da offline
+
+File systemd nel repo:
+- `config/systemd/kor35-mirror-db-sync.service`
+- `config/systemd/kor35-mirror-db-sync.timer`
+- `config/systemd/kor35-mirror-resync.service`
+
+Flusso consigliato:
+- durante connettivita' online: timer DB bidirezionale (`sync_edge_node`) ogni 2 minuti;
+- post-evento (quando il Pi torna online): esegui una volta `kor35-mirror-resync.service` (equivale a `make mirror-resync-after-event ENV=mirror`).

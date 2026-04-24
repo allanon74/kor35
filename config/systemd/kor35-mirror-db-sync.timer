@@ -1,0 +1,12 @@
+[Unit]
+Description=KOR35 Mirror - Scheduler sync DB bidirezionale
+
+[Timer]
+# Ogni 2 minuti (riduci a 60s se vuoi piu' frequenza)
+OnBootSec=2m
+OnUnitActiveSec=2m
+Persistent=true
+RandomizedDelaySec=20s
+
+[Install]
+WantedBy=timers.target

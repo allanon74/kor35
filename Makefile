@@ -10,7 +10,7 @@ RUN_COLLECTSTATIC ?= 0
 MAKEMIGRATIONS_APP ?=
 COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor35-replica,)
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media cleanup-legacy backup-db
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event cleanup-legacy backup-db
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -49,6 +49,8 @@ help:
 	@echo "  make sync-db-diagnose        # pull-only con diagnostica conflitti SegnoZodiacale"
 	@echo "  make sync-db-full-diagnose   # full pull + diagnostica conflitti SegnoZodiacale"
 	@echo "  make sync-media              # pull-only media via rsync (vedi scripts/sync_media_pull_wsl_pi_like.sh e .env.sync-media)"
+	@echo "  make sync-media-push         # push-only media verso master (senza delete)"
+	@echo "  make mirror-resync-after-event # full DB diagnose + media push + media pull"
 	@echo ""
 	@echo "Backup:"
 	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
@@ -129,6 +131,12 @@ sync-db-full-diagnose:
 
 sync-media:
 	./scripts/sync_media_pull_wsl_pi_like.sh
+
+sync-media-push:
+	./scripts/sync_media_push_wsl_pi_like.sh
+
+mirror-resync-after-event:
+	./scripts/mirror_resync_after_event.sh --env "$(ENV)"
 
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh
