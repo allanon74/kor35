@@ -13,9 +13,8 @@ TimeoutStartSec=20min
 WorkingDirectory=/home/pi/kor35-replica/config/docker
 Environment=COMPOSE_PROJECT_NAME=kor35-replica
 Environment=KOR35_BACKEND_ENV_FILE=/home/pi/kor35-replica/backend/.env.mirror
-Environment=EDGE_SYNC_HTTP_TIMEOUT=600
 
-ExecStart=/usr/bin/docker compose -f compose.base.yml -f compose.mirror.yml exec -T backend python manage.py sync_edge_node
+ExecStart=/usr/bin/docker compose -f compose.base.yml -f compose.mirror.yml exec -T backend sh -lc 'EDGE_SYNC_HTTP_TIMEOUT=900 python manage.py sync_edge_node'
 
 # Hardening minimale
 NoNewPrivileges=true
