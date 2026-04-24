@@ -396,3 +396,4 @@ Flusso consigliato:
 - post-evento (quando il Pi torna online): esegui una volta `kor35-mirror-resync.service` (equivale a `make mirror-resync-after-event ENV=mirror`).
 - per il catch-up iniziale, il service mirror esegue `sync_edge_node` con `EDGE_SYNC_HTTP_TIMEOUT=900` e `TimeoutStartSec=20min`.
 - lato master/prod, Nginx API usa timeout proxy lunghi (`proxy_send_timeout`/`proxy_read_timeout` a 900s) per evitare `504` durante le sync corpose.
+- lato backend Gunicorn (compose.base) il timeout worker è aumentato a 900s (`graceful-timeout` 120s) per evitare `WORKER TIMEOUT` su `/api/sync/edge/` durante il riallineamento iniziale.
