@@ -464,7 +464,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                     const isSelected = selectedCharacterId === String(char.id);
                     const staffToolbar = (isCampaignMaster || isAdmin);
                     /* Grid + overflow-hidden a sinistra: evita che testo lungo copra la toolbar (hit-testing / paint sopra i pulsanti). */
-                    const rowBase = `relative isolate group grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center p-4 rounded-xl border transition-all duration-200 hover:shadow-md active:opacity-95 ${
+                    const rowBase = `relative isolate group flex flex-col gap-3 p-3 sm:p-4 rounded-xl border transition-all duration-200 hover:shadow-md active:opacity-95 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center ${
                         isSelected
                             ? 'bg-indigo-900/30 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.3)] ring-2 ring-indigo-500/20'
                             : 'bg-gray-800 border-gray-700 hover:border-gray-500 hover:bg-gray-750'
@@ -482,9 +482,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                     handleSelect(char);
                                 }
                             }}
-                            className="flex min-h-[3rem] min-w-0 cursor-pointer items-center gap-4 overflow-hidden rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
+                            className="flex min-h-[3rem] min-w-0 cursor-pointer items-center gap-3 sm:gap-4 overflow-hidden rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/60"
                         >
-                            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold uppercase transition-all overflow-hidden ${isSelected ? 'scale-110 bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-700 text-gray-300 group-hover:bg-gray-600'}`}>
+                            <div className={`flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-full text-xl font-bold uppercase transition-all overflow-hidden ${isSelected ? 'scale-110 bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-gray-700 text-gray-300 group-hover:bg-gray-600'}`}>
                                 {char.avatar_url ? (
                                     <img src={resolveMediaUrl(char.avatar_url)} alt="" className="h-full w-full object-cover" />
                                 ) : (
@@ -493,10 +493,10 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             </div>
 
                             <div className="min-w-0">
-                                <h3 className="truncate text-lg font-bold leading-none">
+                                <h3 className="break-words text-base sm:text-lg font-bold leading-tight">
                                     {char.nome}
                                     {char.data_morte ? (
-                                        <span className="ml-2 rounded-full border border-red-700 bg-red-900/70 px-2 py-0.5 text-[10px] uppercase tracking-wide text-red-200">
+                                        <span className="ml-2 inline-flex rounded-full border border-red-700 bg-red-900/70 px-2 py-0.5 align-middle text-[10px] uppercase tracking-wide text-red-200">
                                             Morto
                                         </span>
                                     ) : null}
@@ -523,7 +523,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                         </div>
 
                         {staffToolbar && (
-                        <div className="relative z-20 flex shrink-0 flex-wrap touch-manipulation items-center justify-end gap-2">
+                        <div className="relative z-20 flex w-full shrink-0 flex-wrap touch-manipulation items-center justify-start gap-2 md:w-auto md:justify-end">
                             <button
                                 type="button"
                                 onClick={(e) => handleOpenResourceModal(char, e)}

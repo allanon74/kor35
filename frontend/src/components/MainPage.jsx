@@ -36,6 +36,8 @@ import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
 
 // --- [MODIFICA] Import Modale Password ---
 import PasswordChangeModal from './PasswordChangeModal.jsx';
+import AppToastStack from './AppToastStack.jsx';
+import { emitToast, onToast } from '../utils/toastBus';
 
 // --- [MODIFICA] Import Modale Wiki Help ---
 import WikiHelpModal from './WikiHelpModal.jsx';
@@ -100,9 +102,30 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [currentWikiSlug, setCurrentWikiSlug] = useState(null);
   const [messageComposeTarget, setMessageComposeTarget] = useState(null);
   const [nowTs, setNowTs] = useState(Date.now());
+  const [toasts, setToasts] = useState([]);
   
   // STATO SHORTCUTS (Default salvagente)
   const [userShortcuts, setUserShortcuts] = useState(DEFAULT_SHORTCUTS);
+
+  useEffect(() => {
+    const unsubscribe = onToast((toast) => {
+      setToasts((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          type: toast.type || 'info',
+          title: toast.title || '',
+          message: toast.message || '',
+          durationMs: toast.durationMs || 3000,
+        },
+      ]);
+    });
+    return unsubscribe;
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // --- LOGICA PWA (temporaneamente disattivata per stabilità runtime) ---
   const needRefresh = false;
@@ -360,7 +383,11 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
           newShortcuts = userShortcuts.filter(id => id !== tabId);
       } else {
           if (userShortcuts.length >= 4) {
-              alert("Puoi fissare al massimo 4 schede nella barra inferiore.");
+              emitToast({
+                type: 'warning',
+                title: 'Limite shortcut',
+                message: 'Puoi fissare al massimo 4 schede nella barra inferiore.',
+              });
               return;
           }
           newShortcuts = [...userShortcuts, tabId];
@@ -387,7 +414,11 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       } catch (error) {
           console.error("Errore salvataggio shortcuts", error);
           setUserShortcuts(oldShortcuts);
-          alert("Impossibile salvare le preferenze sul server.");
+          emitToast({
+            type: 'error',
+            title: 'Salvataggio fallito',
+            message: 'Impossibile salvare le preferenze sul server.',
+          });
       }
   };
 
@@ -1039,6 +1070,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
           onClose={closeWikiHelp}
           wikiSlug={currentWikiSlug}
       />
+      <AppToastStack toasts={toasts} onClose={dismissToast} />
     </div>
   );
 };

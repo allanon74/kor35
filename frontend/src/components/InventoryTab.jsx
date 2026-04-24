@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo, useCallback } from 'react';
+import React, { useState, useEffect, memo, useCallback, useRef } from 'react';
 import { useCharacter } from './CharacterContext';
 import { 
     ShoppingBag, Box, Shield, Zap, Loader2, Wrench, 
@@ -9,7 +9,8 @@ import ShopModal from './ShopModal';
 import ItemAssemblyModal from './ItemAssemblyModal';
 import ModuloDetailModal from './ModuloDetailModal';
 import PunteggioDisplay from './PunteggioDisplay';
-import { useOptimisticEquip, useOptimisticRecharge } from '../hooks/useGameData';
+import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair } from '../hooks/useGameData';
+import { emitToast } from '../utils/toastBus';
 
 // --- UTILS ---
 const formatDuration = (seconds) => {
@@ -24,6 +25,294 @@ const formatDuration = (seconds) => {
     if (s > 0 || parts.length === 0) parts.push(`${s}s`);
     
     return parts.join(' ');
+};
+
+const PHYSICAL_SLOT_CONFIG = [
+    { key: 'head', label: 'Testa', shortLabel: 'TES', capacity: 1, aliases: ['testa', 'elmo', 'helm', 'head'] },
+    { key: 'neck', label: 'Collo', shortLabel: 'COL', capacity: 1, aliases: ['collo', 'neck', 'collana', 'amulet'] },
+    { key: 'vest', label: 'Veste', shortLabel: 'VES', capacity: 1, aliases: ['veste', 'vest', 'robe', 'abito'] },
+    { key: 'shoulders', label: 'Spalle', shortLabel: 'SPA', capacity: 1, aliases: ['spalle', 'shoulder'] },
+    { key: 'arms', label: 'Braccia', shortLabel: 'BRA', capacity: 2, aliases: ['braccia', 'bracciale', 'arm'] },
+    { key: 'fingers', label: 'Dita', shortLabel: 'DIT', capacity: 2, aliases: ['dita', 'anello', 'ring', 'finger'] },
+    { key: 'feet', label: 'Piedi', shortLabel: 'PIE', capacity: 1, aliases: ['piedi', 'stivali', 'feet', 'boots'] },
+    { key: 'belt', label: 'Cintura', shortLabel: 'CIN', capacity: 1, aliases: ['cintura', 'belt'] },
+    { key: 'armor', label: 'Armatura', shortLabel: 'ARM', capacity: 1, aliases: ['armatura', 'armor'] },
+    { key: 'melee', label: 'Armi Mischia', shortLabel: 'MIS', capacity: 1, aliases: ['mischia', 'melee', 'spada', 'arma'] },
+    { key: 'ranged', label: 'Armi Distanza', shortLabel: 'DIS', capacity: 1, aliases: ['distanza', 'ranged', 'arco', 'fucile'] },
+    { key: 'focus', label: 'Focus', shortLabel: 'FOC', capacity: 1, aliases: ['focus'] },
+    { key: 'shield', label: 'Scudo', shortLabel: 'SCD', capacity: 1, aliases: ['scudo', 'shield'] },
+];
+
+const SLOT_STAT_SIGLE = {
+    head: 'SLOT_HEAD',
+    neck: 'SLOT_NECK',
+    vest: 'SLOT_VEST',
+    shoulders: 'SLOT_SHOULDERS',
+    arms: 'SLOT_ARMS',
+    fingers: 'SLOT_FINGERS',
+    feet: 'SLOT_FEET',
+    belt: 'SLOT_BELT',
+    armor: 'SLOT_ARMOR',
+    melee: 'SLOT_MELEE',
+    ranged: 'SLOT_RANGED',
+    focus: 'SLOT_FOCUS',
+    shield: 'SLOT_SHIELD',
+};
+
+const SLOT_ICON = {
+    head: '🪖',
+    neck: '📿',
+    vest: '🧥',
+    shoulders: '🛡️',
+    arms: '💪',
+    fingers: '💍',
+    feet: '🥾',
+    belt: '🧷',
+    armor: '🛡',
+    melee: '🗡️',
+    ranged: '🏹',
+    focus: '✨',
+    shield: '🛡️',
+};
+
+const normalizeText = (value) => (value || '').toString().toLowerCase();
+
+const inferPhysicalSlots = (item) => {
+    const explicit = Array.isArray(item?.slot_fisici_possibili) ? item.slot_fisici_possibili : [];
+    if (explicit.length > 0) {
+        if (explicit.includes('focus') || explicit.includes('shield')) {
+            return Array.from(new Set([...explicit, 'melee', 'ranged']));
+        }
+        return explicit;
+    }
+
+    const haystack = `${normalizeText(item?.classe_oggetto_nome)} ${normalizeText(item?.nome)} ${normalizeText(item?.tipo_oggetto_display)}`;
+    const matched = PHYSICAL_SLOT_CONFIG.filter((slot) => slot.aliases.some((alias) => haystack.includes(alias))).map((slot) => slot.key);
+    if (matched.includes('focus') || matched.includes('shield')) {
+        return Array.from(new Set([...matched, 'melee', 'ranged']));
+    }
+    if (matched.length > 0) return matched;
+    return ['vest'];
+};
+
+const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotDrop, onSlotDragOver, dragHintBySlot, isDragging, onTouchSlotSelect }) => {
+    const CANVAS_W = 520;
+    const CANVAS_H = 430;
+    const bodySlots = slots.filter((s) => !['melee', 'ranged', 'focus', 'shield'].includes(s.key));
+    const weaponSlots = slots.filter((s) => ['melee', 'ranged', 'focus', 'shield'].includes(s.key));
+    const bodyCellSlots = bodySlots.filter((s) => ['arms', 'fingers'].includes(s.key));
+    const bodySingleSlots = bodySlots.filter((s) => !['arms', 'fingers'].includes(s.key));
+    const bodyCells = bodyCellSlots.flatMap((slot) => {
+        const total = Math.max(1, Number(slot.capacity || 1));
+        return Array.from({ length: total }, (_, idx) => ({
+            slot,
+            index: idx,
+            key: `${slot.key}#${idx + 1}`,
+            item: slot.equippedInSlot[idx] || null,
+        }));
+    });
+    const weaponCells = weaponSlots.flatMap((slot) => {
+        const total = Math.max(1, Number(slot.capacity || 1));
+        return Array.from({ length: total }, (_, idx) => ({
+            slot,
+            index: idx,
+            key: `${slot.key}#${idx + 1}`,
+            item: slot.equippedInSlot[idx] || null,
+        }));
+    });
+
+    // Coordinate centro slot nel canvas virtuale 520x430
+    const slotCoords = {
+        head: { x: 260, y: 40 },
+        neck: { x: 338, y: 94 },
+        shoulders: { x: 338, y: 168 },
+        vest: { x: 338, y: 240 },
+        armor: { x: 182, y: 240 },
+        belt: { x: 182, y: 312 },
+        arms: { x: 98, y: 160 }, // non usato direttamente nelle celle multi
+        fingers: { x: 418, y: 286 }, // non usato direttamente nelle celle multi
+        feet: { x: 260, y: 382 },
+    };
+    const bodyCellCoords = {
+        arms: [
+            { x: 78, y: 136 },
+            { x: 78, y: 208 },
+            { x: 78, y: 280 },
+            { x: 78, y: 352 },
+        ],
+        fingers: [
+            { x: 442, y: 136 },
+            { x: 442, y: 208 },
+            { x: 442, y: 280 },
+            { x: 442, y: 352 },
+        ],
+    };
+
+    // Punto anatomico target per le linee
+    const anchorCoords = {
+        head: { x: 260, y: 74 },
+        neck: { x: 274, y: 116 },
+        shoulders: { x: 300, y: 148 },
+        vest: { x: 280, y: 196 },
+        armor: { x: 240, y: 222 },
+        belt: { x: 258, y: 252 },
+        arms: { x: 214, y: 190 },
+        fingers: { x: 308, y: 236 },
+        feet: { x: 260, y: 332 },
+    };
+
+    return (
+        <div className="mx-auto w-full max-w-[560px] rounded-xl border border-gray-700 bg-gray-950/60 overflow-hidden p-2">
+            <div className="relative w-full h-[430px]">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <User size={210} className="text-gray-800" />
+                </div>
+
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} preserveAspectRatio="xMidYMid meet">
+                    {bodySingleSlots.map((slot) => {
+                        const s = slotCoords[slot.key];
+                        const a = anchorCoords[slot.key];
+                        if (!s || !a) return null;
+                        return (
+                            <line
+                                key={`line-${slot.key}`}
+                                x1={s.x}
+                                y1={s.y}
+                                x2={a.x}
+                                y2={a.y}
+                                stroke="rgba(148,163,184,0.55)"
+                                strokeWidth="1.5"
+                                strokeDasharray="4 3"
+                            />
+                        );
+                    })}
+                </svg>
+
+                {bodySingleSlots.map((slot) => {
+                    const occupied = slot.equippedInSlot.length;
+                    const isSelected = selectedSlotKey === slot.key;
+                    const isFull = occupied >= slot.capacity;
+                    const dragHint = dragHintBySlot?.[slot.key] || null;
+                    const canDrop = dragHint?.canDrop === true;
+                    const isBlockedByDrag = dragHint && !dragHint.canDrop;
+                    const coords = slotCoords[slot.key] || { x: 228, y: 180 };
+                    return (
+                        <button
+                            key={slot.key}
+                            type="button"
+                            onClick={() => {
+                                if (onTouchSlotSelect && onTouchSlotSelect(slot) === true) return;
+                                onSelectSlot(slot);
+                            }}
+                            onDrop={(e) => onSlotDrop(e, slot)}
+                            onDragOver={(e) => onSlotDragOver(e, slot)}
+                            className={`absolute -translate-x-1/2 -translate-y-1/2 w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 px-1 py-1 rounded-lg border text-center text-[10px] font-bold transition-colors ${
+                                canDrop ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
+                                isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
+                                isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                                occupied > 0 ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
+                                'border-gray-700 bg-gray-900/80 text-gray-300'
+                            }`}
+                            style={{ left: `${(coords.x / CANVAS_W) * 100}%`, top: `${(coords.y / CANVAS_H) * 100}%` }}
+                            title={dragHint?.reason || "Clicca o trascina un oggetto compatibile"}
+                        >
+                            <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
+                                <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
+                                <span>{slot.shortLabel || slot.label}</span>
+                            </div>
+                            <div className={`font-mono ${isFull ? 'text-emerald-300' : 'text-gray-500'}`}>{occupied}/{slot.capacity}</div>
+                        </button>
+                    );
+                })}
+
+                {bodyCells.map((cell) => {
+                    const { slot, index, key, item } = cell;
+                    const coords = (bodyCellCoords[slot.key] || [])[index] || { x: 72, y: 120 + (index * 68) };
+                    const occupied = slot.equippedInSlot.length;
+                    const isSelected = selectedSlotKey === slot.key;
+                    const dragHint = dragHintBySlot?.[slot.key] || null;
+                    const canDropInSlot = dragHint?.canDrop === true;
+                    const cellIsFilled = !!item;
+                    const canDropInThisCell = canDropInSlot && !cellIsFilled && index >= occupied;
+                    const isBlockedByDrag = dragHint && !canDropInThisCell;
+                    return (
+                        <button
+                            key={key}
+                            type="button"
+                            onClick={() => onSelectSlot(slot)}
+                            onDrop={(e) => onSlotDrop(e, slot)}
+                            onDragOver={(e) => {
+                                if (canDropInThisCell) onSlotDragOver(e, slot);
+                            }}
+                            className={`absolute -translate-x-1/2 -translate-y-1/2 w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 px-1 py-1 rounded-lg border text-center text-[10px] font-bold transition-colors ${
+                                canDropInThisCell ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
+                                isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
+                                isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                                cellIsFilled ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
+                                'border-gray-700 bg-gray-900/80 text-gray-300'
+                            }`}
+                            style={{ left: `${(coords.x / CANVAS_W) * 100}%`, top: `${(coords.y / CANVAS_H) * 100}%` }}
+                            title={dragHint?.reason || "Clicca o trascina un oggetto compatibile"}
+                        >
+                            <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
+                                <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
+                                <span>{slot.shortLabel || slot.label} #{index + 1}</span>
+                            </div>
+                            <div className={`font-mono ${cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
+                                {cellIsFilled ? 'OK' : 'VUOTO'}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+
+            <div className="mt-2">
+                <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 text-center">Slot armi / mano</div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {weaponCells.map((cell) => {
+                        const { slot, index, key, item } = cell;
+                        const occupied = slot.equippedInSlot.length;
+                        const isSelected = selectedSlotKey === slot.key;
+                        const dragHint = dragHintBySlot?.[slot.key] || null;
+                        const canDropInSlot = dragHint?.canDrop === true;
+                        const cellIsFilled = !!item;
+                        const canDropInThisCell = canDropInSlot && !cellIsFilled && index >= occupied;
+                        const isBlockedByDrag = dragHint && !canDropInThisCell;
+                        return (
+                            <button
+                                key={key}
+                                type="button"
+                                onClick={() => {
+                                    if (onTouchSlotSelect && onTouchSlotSelect(slot) === true) return;
+                                    onSelectSlot(slot);
+                                }}
+                                onDrop={(e) => onSlotDrop(e, slot)}
+                                onDragOver={(e) => {
+                                    if (canDropInThisCell) onSlotDragOver(e, slot);
+                                }}
+                                className={`w-full h-16 px-1 py-1 rounded-lg border text-center text-[10px] font-bold transition-colors ${
+                                    canDropInThisCell ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
+                                    isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
+                                    isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                                    cellIsFilled ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
+                                    'border-gray-700 bg-gray-900/80 text-gray-300'
+                                }`}
+                                title={dragHint?.reason || "Clicca o trascina un oggetto compatibile"}
+                            >
+                                <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
+                                    <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
+                                    <span>{slot.shortLabel || slot.label} #{index + 1}</span>
+                                </div>
+                                <div className={`font-mono ${cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
+                                    {cellIsFilled ? 'OK' : 'VUOTO'}
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const LazyList = ({ items, renderItem, batchSize = 10 }) => {
@@ -122,10 +411,12 @@ const InventoryBodyWidget = ({ slots, onSlotClick, selectedItemId }) => {
 
 // --- COMPONENTE CARD INVENTARIO (MEMOIZED PER PERFORMANCE) ---
 // Usa memo per evitare re-render dell'intera lista quando cambia lo stato di un solo elemento
-const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onRecharge, onAssembly, onModuloClick }) => {
+const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onRecharge, onAssembly, onModuloClick, onDamage, onRepair, preferredSlotKey = null, isDraggable = false, onDragStartCard = null, onDragEndCard = null, onTouchPickCard = null, onTouchReleaseCard = null }) => {
     const isPhysical = item.tipo_oggetto === 'FIS';
     const canBeModified = (isPhysical || ['INN', 'MUT'].includes(item.tipo_oggetto)) && (item.classe_oggetto_nome || item.tipo_oggetto === 'INN');
     const isActive = item.is_active;
+    const installedModsCount = item.potenziamenti_installati?.length || 0;
+    const isModifiedObject = isPhysical && installedModsCount > 0;
 
     // Render Statistiche (Solo != 0)
     const renderStats = (statistiche) => {
@@ -219,12 +510,21 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
 
     const getStatusStyle = () => {
         if (isActive) return 'border-2 border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.2)] bg-green-900/10';
-        if (item.is_equipaggiato) return 'border-2 border-yellow-600/60 bg-yellow-900/10'; 
+        if (item.is_danneggiato) return 'border-2 border-red-700/80 bg-red-900/20';
+        if (item.is_equipaggiato) return 'border-2 border-yellow-600/60 bg-yellow-900/10';
         return 'border border-gray-700 bg-gray-800 hover:border-gray-600'; 
     };
 
     return (
-        <div className={`relative p-3 mb-3 rounded-lg flex flex-col transition-all ${getStatusStyle()}`}>
+        <div
+            className={`relative p-3 mb-3 rounded-lg flex flex-col transition-all ${getStatusStyle()}`}
+            draggable={isDraggable}
+            onDragStart={(e) => onDragStartCard && onDragStartCard(e, item)}
+            onDragEnd={() => onDragEndCard && onDragEndCard()}
+            onTouchStart={() => onTouchPickCard && onTouchPickCard(item)}
+            onTouchEnd={() => onTouchReleaseCard && onTouchReleaseCard()}
+            onTouchCancel={() => onTouchReleaseCard && onTouchReleaseCard()}
+        >
             
             {/* HEADER CARD */}
             <div className="flex items-start justify-between cursor-pointer" onClick={() => onToggleExpand(item.id)}>
@@ -244,6 +544,11 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
                     ) : (
                         <div className="w-10 h-10 rounded bg-gray-900 border border-gray-600 flex items-center justify-center shrink-0 overflow-hidden shadow-inner" title="Oggetto">
                             <Sparkles size={20} color="#888"/>
+                        </div>
+                    )}
+                    {isModifiedObject && (
+                        <div className="ml-1 text-[10px] text-indigo-300 font-bold" title={`Oggetto modificato (${Math.min(4, installedModsCount)} mod)`}>
+                            {'\u2699'.repeat(Math.min(4, installedModsCount))}
                         </div>
                     )}
                     
@@ -269,6 +574,8 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
                             <div className="text-[10px] text-gray-500 uppercase tracking-wider flex gap-2">
                                 <span>{item.tipo_oggetto_display}</span>
                                 {item.classe_oggetto_nome && <span>• {item.classe_oggetto_nome}</span>}
+                                {item.slot_equip && <span>• slot {item.slot_equip}</span>}
+                                {item.is_danneggiato && <span className="text-red-400">• DANNEGGIATO</span>}
                             </div>
                             
                             {/* Icona Espandi */}
@@ -351,14 +658,33 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
                         )}
                         {isPhysical && (
                             <button 
-                                onClick={(e) => { e.stopPropagation(); onEquip(item.id); }}
+                                onClick={(e) => { e.stopPropagation(); onEquip(item.id, preferredSlotKey); }}
+                                disabled={item.is_danneggiato && !item.is_equipaggiato}
                                 className={`flex-1 py-2 rounded text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm ${
                                     item.is_equipaggiato
                                     ? 'bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-700'
-                                    : 'bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-600'
+                                    : 'bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed'
                                 }`}
                             >
                                 {item.is_equipaggiato ? <><Power size={14}/> Rimuovi</> : <><Shield size={14}/> Equipaggia</>}
+                            </button>
+                        )}
+                        {isPhysical && !item.is_danneggiato && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDamage(item.id); }}
+                                className="py-2 px-2 rounded text-xs font-bold bg-red-950 hover:bg-red-900 text-red-200 border border-red-700"
+                                title="Danneggia"
+                            >
+                                D
+                            </button>
+                        )}
+                        {isPhysical && item.is_danneggiato && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onRepair(item.id); }}
+                                className="py-2 px-2 rounded text-xs font-bold bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-700"
+                                title="Ripara"
+                            >
+                                R
                             </button>
                         )}
                     </div>
@@ -411,19 +737,40 @@ const InventoryTab = ({ onLogout }) => {
   const [showAssembly, setShowAssembly] = useState(false);
   const [assemblyHost, setAssemblyHost] = useState(null);
   const [selectedBodyItem, setSelectedBodyItem] = useState(null);
+  const [bodyViewTab, setBodyViewTab] = useState('physical');
+  const [selectedPhysicalSlot, setSelectedPhysicalSlot] = useState(null);
+  const [draggingItemId, setDraggingItemId] = useState(null);
+  const [dragHintBySlot, setDragHintBySlot] = useState({});
+  const touchPickTimerRef = useRef(null);
+  const [touchDragMode, setTouchDragMode] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
   const [showModuloDetail, setShowModuloDetail] = useState(false);
   const [selectedModuloId, setSelectedModuloId] = useState(null);
 
   const equipMutation = useOptimisticEquip();
   const rechargeMutation = useOptimisticRecharge();
+  const damageMutation = useOptimisticDamage();
+  const repairMutation = useOptimisticRepair();
 
   useEffect(() => {
     if (characterData?.oggetti) setItems(characterData.oggetti);
     else setItems([]);
   }, [characterData]);
 
-  const handleToggleEquip = (itemId) => equipMutation.mutate({ itemId, charId: characterData.id });
+  const handleToggleEquip = (itemId, slotKey = null) => equipMutation.mutate(
+      { itemId, slotKey, charId: characterData.id },
+      {
+          onError: (err) => {
+              emitToast({
+                  type: 'error',
+                  title: 'Equip fallito',
+                  message: err?.message || 'Verifica limiti slot/capacita/tecnologia.',
+              });
+          },
+      }
+  );
+  const handleDamage = (itemId) => damageMutation.mutate({ itemId, charId: characterData.id });
+  const handleRepair = (itemId) => repairMutation.mutate({ itemId, charId: characterData.id });
 
   const handleRecharge = (item) => {
       const costo = item.costo_ricarica || 0;
@@ -446,9 +793,6 @@ const InventoryTab = ({ onLogout }) => {
       setExpandedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   }, []);
 
-  if (isContextLoading) return <div className="p-8 text-center text-gray-500 flex justify-center"><Loader2 className="animate-spin" /></div>;
-  if (!characterData) return <div className="p-4 text-center text-red-400">Nessun personaggio selezionato.</div>;
-
   const corpoItems = items.filter(i => ['INN', 'MUT'].includes(i.tipo_oggetto));
   const equipItems = items.filter(i => i.is_equipaggiato && i.tipo_oggetto === 'FIS');
   const zainoItems = items.filter(i => !i.is_equipaggiato && !['INN', 'MUT'].includes(i.tipo_oggetto));
@@ -456,7 +800,7 @@ const InventoryTab = ({ onLogout }) => {
   // Calcolo Capacità Oggetti
   const statCog = characterData?.statistiche_primarie?.find(s => s.sigla === 'COG');
   const capacityMax = statCog ? statCog.valore_max : 10;
-  const capacityConsumers = items.filter(i => i.is_equipaggiato && i.tipo_oggetto === 'FIS');
+  const capacityConsumers = items.filter(i => i.is_equipaggiato && i.tipo_oggetto === 'FIS' && ((i.potenziamenti_installati?.length || 0) > 0 || !i.oggetto_base_generatore));
   const capacityUsed = capacityConsumers.length;
   
   const statOgp = characterData?.statistiche_primarie?.find(s => s.sigla === 'OGP');
@@ -464,8 +808,17 @@ const InventoryTab = ({ onLogout }) => {
   const heavyConsumers = items.filter(i => i.is_equipaggiato && i.is_pesante);
   const heavyUsed = heavyConsumers.length;
 
+  const getSlotCapacity = (slotKey, defaultCap) => {
+      const statSigla = SLOT_STAT_SIGLE[slotKey];
+      if (!statSigla) return defaultCap;
+      const stat = characterData?.statistiche_primarie?.find((s) => s.sigla === statSigla);
+      const val = stat ? (stat.valore_corrente ?? stat.valore_max) : null;
+      if (val && val > 0) return val;
+      return defaultCap;
+  };
+
   // Render Helper per liste (utilizza il componente Memoizzato)
-    const renderList = (list) => (
+    const renderList = (list, preferredSlotKey = null) => (
         <LazyList 
             items={list} 
             batchSize={10} // Carica 10 elementi alla volta per fluidità immediata
@@ -479,6 +832,35 @@ const InventoryTab = ({ onLogout }) => {
                     onRecharge={handleRecharge}
                     onAssembly={handleOpenAssembly}
                     onModuloClick={handleModuloClick}
+                    onDamage={handleDamage}
+                    onRepair={handleRepair}
+                    preferredSlotKey={preferredSlotKey}
+                    isDraggable={item.tipo_oggetto === 'FIS' && !item.is_equipaggiato}
+                    onDragStartCard={(e, draggedItem) => {
+                        e.dataTransfer.setData('application/x-kor35-item-id', draggedItem.id);
+                        setDraggingItemId(draggedItem.id);
+                    }}
+                    onDragEndCard={() => setDraggingItemId(null)}
+                    onTouchPickCard={(pickedItem) => {
+                        if (pickedItem.tipo_oggetto !== 'FIS' || pickedItem.is_equipaggiato || pickedItem.is_danneggiato) return;
+                        if (touchPickTimerRef.current) window.clearTimeout(touchPickTimerRef.current);
+                        touchPickTimerRef.current = window.setTimeout(() => {
+                            setTouchDragMode(true);
+                            setDraggingItemId(pickedItem.id);
+                            emitToast({
+                                type: 'info',
+                                title: 'Oggetto selezionato',
+                                message: `Tocca uno slot compatibile per equipaggiare ${pickedItem.nome}.`,
+                                durationMs: 1800,
+                            });
+                        }, 320);
+                    }}
+                    onTouchReleaseCard={() => {
+                        if (touchPickTimerRef.current) {
+                            window.clearTimeout(touchPickTimerRef.current);
+                            touchPickTimerRef.current = null;
+                        }
+                    }}
                 />
             )}
         />
@@ -492,6 +874,103 @@ const InventoryTab = ({ onLogout }) => {
           slots[item.slot_corpo].push(item);
       } else genericItems.push(item);
   });
+
+  const physicalSlots = PHYSICAL_SLOT_CONFIG.map((slot) => {
+      const equippedInSlot = equipItems.filter((item) => item.slot_equip === slot.key);
+      const compatibleFromBackpack = zainoItems.filter((item) => item.tipo_oggetto === 'FIS' && inferPhysicalSlots(item).includes(slot.key));
+      return { ...slot, capacity: getSlotCapacity(slot.key, slot.capacity), equippedInSlot, compatibleFromBackpack };
+  });
+
+  useEffect(() => {
+      if (!selectedPhysicalSlot?.key) return;
+      const refreshed = physicalSlots.find((s) => s.key === selectedPhysicalSlot.key) || null;
+      setSelectedPhysicalSlot(refreshed);
+  }, [selectedPhysicalSlot?.key, equipItems.length, zainoItems.length]);
+
+  const handleSlotDragOver = (event, slot) => {
+      // Permetti sempre il dragOver: il controllo reale viene fatto in drop.
+      // Alcuni browser non espongono correttamente il payload custom durante il drag.
+      event.preventDefault();
+  };
+
+  const handleSlotDrop = (event, slot) => {
+      event.preventDefault();
+      const droppedId = event.dataTransfer.getData('application/x-kor35-item-id') || draggingItemId;
+      const dragged = zainoItems.find((i) => i.id === droppedId && i.tipo_oggetto === 'FIS' && !i.is_danneggiato);
+      if (!dragged) return;
+      if (!inferPhysicalSlots(dragged).includes(slot.key)) return;
+      if (slot.equippedInSlot.length >= slot.capacity) return;
+      handleToggleEquip(dragged.id, slot.key);
+      setDraggingItemId(null);
+      setTouchDragMode(false);
+  };
+
+  const handleTouchSlotSelect = (slot) => {
+      if (!touchDragMode || !draggingItemId) return false;
+      const dragged = zainoItems.find((i) => i.id === draggingItemId && i.tipo_oggetto === 'FIS' && !i.is_danneggiato);
+      if (!dragged) {
+          setTouchDragMode(false);
+          setDraggingItemId(null);
+          return true;
+      }
+      if (!inferPhysicalSlots(dragged).includes(slot.key) || slot.equippedInSlot.length >= slot.capacity) {
+          emitToast({
+              type: 'warning',
+              title: 'Slot non valido',
+              message: 'Seleziona uno slot compatibile e disponibile.',
+              durationMs: 1400,
+          });
+          return true;
+      }
+      handleToggleEquip(dragged.id, slot.key);
+      setTouchDragMode(false);
+      setDraggingItemId(null);
+      return true;
+  };
+
+  const cancelTouchSelection = () => {
+      if (touchPickTimerRef.current) {
+          window.clearTimeout(touchPickTimerRef.current);
+          touchPickTimerRef.current = null;
+      }
+      setTouchDragMode(false);
+      setDraggingItemId(null);
+      setDragHintBySlot({});
+  };
+
+  useEffect(() => {
+      if (!draggingItemId) {
+          setDragHintBySlot({});
+          setTouchDragMode(false);
+          return;
+      }
+      const dragged = zainoItems.find((i) => i.id === draggingItemId && i.tipo_oggetto === 'FIS');
+      if (!dragged) {
+          setDragHintBySlot({});
+          return;
+      }
+      const allowed = inferPhysicalSlots(dragged);
+      const nextHints = {};
+      for (const slot of physicalSlots) {
+          if (dragged.is_danneggiato) {
+              nextHints[slot.key] = { canDrop: false, reason: 'Oggetto danneggiato: ripara prima di equipaggiare.' };
+              continue;
+          }
+          if (!allowed.includes(slot.key)) {
+              nextHints[slot.key] = { canDrop: false, reason: 'Slot non compatibile con questo oggetto.' };
+              continue;
+          }
+          if (slot.equippedInSlot.length >= slot.capacity) {
+              nextHints[slot.key] = { canDrop: false, reason: `Slot pieno (${slot.equippedInSlot.length}/${slot.capacity}).` };
+              continue;
+          }
+          nextHints[slot.key] = { canDrop: true, reason: 'Drop per equipaggiare in questo slot.' };
+      }
+      setDragHintBySlot(nextHints);
+  }, [draggingItemId, zainoItems, equipItems.length]);
+
+  if (isContextLoading) return <div className="p-8 text-center text-gray-500 flex justify-center"><Loader2 className="animate-spin" /></div>;
+  if (!characterData) return <div className="p-4 text-center text-red-400">Nessun personaggio selezionato.</div>;
 
   return (
     <div className="pb-24 px-1 space-y-6 animate-fadeIn">
@@ -513,7 +992,23 @@ const InventoryTab = ({ onLogout }) => {
 
       <section>
         <h3 className="text-sm font-bold text-indigo-300 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1"><Activity size={16} /> Diagnostica Corporea</h3>
-        {corpoItems.length > 0 ? (
+        <div className="flex gap-2 mb-3">
+            <button
+                type="button"
+                onClick={() => setBodyViewTab('physical')}
+                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${bodyViewTab === 'physical' ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
+            >
+                Slot Oggetti Fisici
+            </button>
+            <button
+                type="button"
+                onClick={() => setBodyViewTab('grafts')}
+                className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${bodyViewTab === 'grafts' ? 'bg-indigo-700 border-indigo-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'}`}
+            >
+                Innesti e Mutazioni
+            </button>
+        </div>
+        {bodyViewTab === 'grafts' && corpoItems.length > 0 ? (
             <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700 mb-6 flex flex-col md:flex-row items-center md:items-start gap-6">
                 <div className="w-full md:w-1/3 flex flex-col items-center">
                     <InventoryBodyWidget slots={slots} onSlotClick={setSelectedBodyItem} selectedItemId={selectedBodyItem?.id} />
@@ -535,6 +1030,8 @@ const InventoryTab = ({ onLogout }) => {
                                     onRecharge={handleRecharge}
                                     onAssembly={handleOpenAssembly}
                                     onModuloClick={handleModuloClick}
+                                    onDamage={handleDamage}
+                                    onRepair={handleRepair}
                                 />
                             </div>
                         )}
@@ -548,7 +1045,61 @@ const InventoryTab = ({ onLogout }) => {
                     )}
                 </div>
             </div>
-        ) : <p className="text-gray-600 italic text-sm p-4 text-center border border-dashed border-gray-700 rounded-lg bg-gray-800/30">Sistemi organici standard.</p>}
+        ) : null}
+        {bodyViewTab === 'grafts' && corpoItems.length === 0 ? <p className="text-gray-600 italic text-sm p-4 text-center border border-dashed border-gray-700 rounded-lg bg-gray-800/30">Sistemi organici standard.</p> : null}
+        {bodyViewTab === 'physical' && (
+            <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700 space-y-3">
+                <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                    <span className="px-2 py-1 rounded border border-emerald-500/70 bg-emerald-900/30 text-emerald-200">Drop valido</span>
+                    <span className="px-2 py-1 rounded border border-red-500/70 bg-red-900/25 text-red-200">Drop bloccato</span>
+                    <span className="px-2 py-1 rounded border border-indigo-500/70 bg-indigo-900/25 text-indigo-200">Slot selezionato</span>
+                </div>
+                <p className="text-xs text-gray-500">Trascina dallo zaino verso uno slot compatibile oppure clicca lo slot e usa “Equipaggia”.</p>
+                {touchDragMode && (
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-indigo-300 font-semibold">
+                            Modalita touch attiva: tocca uno slot evidenziato per completare l'equip.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={cancelTouchSelection}
+                            className="text-[10px] px-2 py-1 rounded border border-gray-600 bg-gray-800 hover:bg-gray-700 text-gray-200 font-bold uppercase"
+                        >
+                            Annulla
+                        </button>
+                    </div>
+                )}
+                <PhysicalBodySlotsWidget
+                    slots={physicalSlots}
+                    selectedSlotKey={selectedPhysicalSlot?.key}
+                    onSelectSlot={setSelectedPhysicalSlot}
+                    onSlotDrop={handleSlotDrop}
+                    onSlotDragOver={handleSlotDragOver}
+                    dragHintBySlot={dragHintBySlot}
+                    isDragging={!!draggingItemId}
+                    onTouchSlotSelect={handleTouchSlotSelect}
+                />
+                {selectedPhysicalSlot && (
+                    <div className="border-t border-gray-700 pt-3">
+                        <div className="text-xs uppercase tracking-wider text-indigo-300 font-bold mb-2">
+                            Slot: {selectedPhysicalSlot.label}
+                        </div>
+                        {selectedPhysicalSlot.equippedInSlot.length > 0 ? (
+                            renderList(selectedPhysicalSlot.equippedInSlot, selectedPhysicalSlot.key)
+                        ) : (
+                            <div className="space-y-2">
+                                <p className="text-xs text-gray-500">Slot vuoto. Oggetti compatibili nello zaino:</p>
+                                {selectedPhysicalSlot.compatibleFromBackpack.length > 0 ? (
+                                    renderList(selectedPhysicalSlot.compatibleFromBackpack, selectedPhysicalSlot.key)
+                                ) : (
+                                    <p className="text-xs text-gray-600 italic">Nessun oggetto fisico compatibile.</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        )}
       </section>
 
       <section>
