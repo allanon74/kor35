@@ -1,0 +1,18 @@
+[Unit]
+Description=KOR35 Mirror - Sync media serale (push+pull)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+
+# Adatta se il path repo sul Pi e' diverso
+WorkingDirectory=/home/pi/kor35-replica
+
+# Richiede .env.sync-media configurato con credenziali/host/path master.
+ExecStart=/bin/bash -lc 'make sync-media-push && make sync-media'
+
+NoNewPrivileges=true
+PrivateTmp=true

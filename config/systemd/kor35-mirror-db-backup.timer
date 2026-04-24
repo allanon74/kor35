@@ -1,0 +1,11 @@
+[Unit]
+Description=KOR35 Mirror - Scheduler backup DB giornaliero (05:00)
+
+[Timer]
+# Ogni giorno alle 05:00 ora locale del server
+OnCalendar=*-*-* 05:00:00
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

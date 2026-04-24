@@ -1,0 +1,23 @@
+[Unit]
+Description=KOR35 Mirror - Backup giornaliero PostgreSQL (dump)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+
+# Adatta se il path repo sul Pi e' diverso
+WorkingDirectory=/home/pi/kor35-replica
+
+# Backup giornalieri + archivio mensile persistente
+Environment=KOR35_DB_BACKUP_DIR=/home/pi/backups/kor35/db
+Environment=KOR35_DB_BACKUP_RETENTION_DAYS=15
+Environment=KOR35_DB_BACKUP_ENABLE_MONTHLY_ARCHIVE=1
+Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=/home/pi/backups/kor35/db/monthly
+
+ExecStart=/home/pi/kor35-replica/scripts/backup_db_daily.sh --env mirror
+
+NoNewPrivileges=true
+PrivateTmp=true

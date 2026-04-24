@@ -578,6 +578,114 @@ make mirror-resync-after-event ENV=mirror
 - Sync completa ma con warning `catalog.segnozodiacale: salto ...`: è un conflitto storico non bloccante; pianifica bonifica dati e rilancia `sync-db-full-diagnose`.
 - Errori di rete/HTTP verso master: controlla `EDGE_SYNC_URL`, token e raggiungibilità (`curl` verso endpoint `/api/sync/edge/` dal nodo locale).
 
+### Mirror Pi: automazione sync (DB + media)
+
+Script principali:
+
+- `scripts/sync_media_pull_wsl_pi_like.sh`: pull-only media da master verso nodo locale.
+- `scripts/sync_media_push_wsl_pi_like.sh`: push-only media dal nodo locale verso master (senza delete remoto).
+- `scripts/mirror_resync_after_event.sh`: sequenza post-evento (`sync-db-full-diagnose` + `sync-media-push` + `sync-media`).
+- `scripts/install_mirror_sync_services.sh`: installa/configura/abilita i servizi systemd mirror.
+
+Unit systemd versionate nel repo:
+
+- `config/systemd/kor35-mirror-db-sync.service`
+- `config/systemd/kor35-mirror-db-sync.timer`
+- `config/systemd/kor35-mirror-resync.service`
+- `config/systemd/kor35-mirror-media-sync.service`
+- `config/systemd/kor35-mirror-media-sync.timer`
+- `config/systemd/kor35-mirror-db-backup.service`
+- `config/systemd/kor35-mirror-db-backup.timer`
+
+Prerequisiti su Pi:
+
+- repo in `/home/pi/kor35-replica` (o path custom passato allo script)
+- file `.env.sync-media` configurato nella root repo
+- accesso SSH al master funzionante (chiave privata + host key)
+
+Installazione servizi mirror con script unico:
+
+```bash
+cd /home/pi/kor35-replica
+sudo ./scripts/install_mirror_sync_services.sh \
+  --repo-path /home/pi/kor35-replica \
+  --user pi \
+  --group pi \
+  --db-interval 2m \
+  --media-calendar "*-*-* 22:30:00" \
+  --backup-calendar "*-*-* 05:00:00" \
+  --backup-retention-days 15 \
+  --backup-dir /home/pi/backups/kor35/db
+```
+
+Lo script:
+
+- copia le unit in `/etc/systemd/system`
+- sostituisce path repo / user / group
+- imposta intervallo timer DB e calendario timer media
+- imposta backup DB giornaliero (default 05:00), retention (default 15 giorni) e directory backup
+- esegue `systemctl daemon-reload`
+- abilita/avvia i timer `kor35-mirror-db-sync.timer`, `kor35-mirror-media-sync.timer`, `kor35-mirror-db-backup.timer`
+
+Verifica:
+
+```bash
+systemctl list-timers | grep -E 'kor35-mirror-(db-sync|media-sync)'
+systemctl status kor35-mirror-db-sync.timer --no-pager
+systemctl status kor35-mirror-media-sync.timer --no-pager
+systemctl status kor35-mirror-db-backup.timer --no-pager
+```
+
+Modalità operative consigliate:
+
+- **Modalità Evento (offline/instabile, sync aggressivo)**  
+  DB ogni 1 minuto, media ogni notte:
+
+  ```bash
+  cd /home/pi/kor35-replica
+  sudo ./scripts/install_mirror_sync_services.sh \
+    --repo-path /home/pi/kor35-replica \
+    --user pi \
+    --group pi \
+    --db-interval 1m \
+    --media-calendar "*-*-* 22:30:00" \
+    --backup-calendar "*-*-* 05:00:00" \
+    --backup-retention-days 15 \
+    --backup-dir /home/pi/backups/kor35/db
+  ```
+
+- **Modalità Normale (regime stabile, carico ridotto)**  
+  DB ogni 5 minuti, media ogni notte:
+
+  ```bash
+  cd /home/pi/kor35-replica
+  sudo ./scripts/install_mirror_sync_services.sh \
+    --repo-path /home/pi/kor35-replica \
+    --user pi \
+    --group pi \
+    --db-interval 5m \
+    --media-calendar "*-*-* 22:30:00" \
+    --backup-calendar "*-*-* 05:00:00" \
+    --backup-retention-days 15 \
+    --backup-dir /home/pi/backups/kor35/db
+  ```
+
+Esecuzioni manuali utili:
+
+```bash
+# sync DB one-shot (systemd)
+sudo systemctl restart kor35-mirror-db-sync.service
+sudo journalctl -u kor35-mirror-db-sync.service -n 120 --no-pager
+
+# riallineamento completo post-evento
+sudo systemctl start kor35-mirror-resync.service
+sudo journalctl -u kor35-mirror-resync.service -n 200 --no-pager
+
+# backup DB one-shot
+sudo systemctl start kor35-mirror-db-backup.service
+sudo journalctl -u kor35-mirror-db-backup.service -n 120 --no-pager
+```
+
 ## Appendice: Comandi rapidi quotidiani
 
 Bootstrap ambiente dev-home:

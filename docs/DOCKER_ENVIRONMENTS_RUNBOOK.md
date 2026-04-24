@@ -390,6 +390,27 @@ File systemd nel repo:
 - `config/systemd/kor35-mirror-db-sync.service`
 - `config/systemd/kor35-mirror-db-sync.timer`
 - `config/systemd/kor35-mirror-resync.service`
+- `config/systemd/kor35-mirror-media-sync.service`
+- `config/systemd/kor35-mirror-media-sync.timer`
+- `config/systemd/kor35-mirror-db-backup.service`
+- `config/systemd/kor35-mirror-db-backup.timer`
+
+Installazione rapida sul Pi (DB sync continuo + media sync serale):
+
+```bash
+cd /home/pi/kor35-replica
+sudo ./scripts/install_mirror_sync_services.sh \
+  --repo-path /home/pi/kor35-replica \
+  --user pi \
+  --group pi \
+  --db-interval 2m \
+  --media-calendar "*-*-* 22:30:00" \
+  --backup-calendar "*-*-* 05:00:00" \
+  --backup-retention-days 15 \
+  --backup-dir /home/pi/backups/kor35/db
+```
+
+Il comando copia le unit in `/etc/systemd/system`, aggiorna path/utente, ricarica systemd e abilita i timer.
 
 Flusso consigliato:
 - durante connettivita' online: timer DB bidirezionale (`sync_edge_node`) ogni 2 minuti;

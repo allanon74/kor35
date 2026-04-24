@@ -1,0 +1,11 @@
+[Unit]
+Description=KOR35 Mirror - Scheduler sync media serale
+
+[Timer]
+# Ogni sera alle 22:30 (ora locale del server)
+OnCalendar=*-*-* 22:30:00
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

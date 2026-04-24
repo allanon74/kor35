@@ -15,6 +15,8 @@ set -euo pipefail
 # Variabili opzionali:
 #   KOR35_DB_BACKUP_DIR=/var/backups/kor35/db
 #   KOR35_DB_BACKUP_RETENTION_DAYS=14
+#   KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=/var/backups/kor35/db/monthly
+#   KOR35_DB_BACKUP_ENABLE_MONTHLY_ARCHIVE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib_wsl_pi_like.sh
@@ -23,6 +25,8 @@ source "$SCRIPT_DIR/lib_wsl_pi_like.sh"
 ENV_PROFILE="prod"
 BACKUP_DIR="${KOR35_DB_BACKUP_DIR:-/var/backups/kor35/db}"
 RETENTION_DAYS="${KOR35_DB_BACKUP_RETENTION_DAYS:-14}"
+MONTHLY_ARCHIVE_DIR="${KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR:-$BACKUP_DIR/monthly}"
+ENABLE_MONTHLY_ARCHIVE="${KOR35_DB_BACKUP_ENABLE_MONTHLY_ARCHIVE:-1}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -71,4 +75,18 @@ echo "OK: $(basename "$dump_file")"
 echo "Rotazione: mantengo ultimi $RETENTION_DAYS giorni in $BACKUP_DIR"
 find "$BACKUP_DIR" -type f -name "kor35_${WSL_PI_ENV_PROFILE}_*.dump" -mtime "+$RETENTION_DAYS" -print -delete || true
 find "$BACKUP_DIR" -type f -name "kor35_${WSL_PI_ENV_PROFILE}_*.dump.sha256" -mtime "+$RETENTION_DAYS" -print -delete || true
+
+if [ "$ENABLE_MONTHLY_ARCHIVE" = "1" ]; then
+  mkdir -p "$MONTHLY_ARCHIVE_DIR"
+  month_tag="$(date -u +'%Y%m')"
+  monthly_file="$MONTHLY_ARCHIVE_DIR/kor35_${WSL_PI_ENV_PROFILE}_${month_tag}.dump.gz"
+  monthly_sha="$MONTHLY_ARCHIVE_DIR/kor35_${WSL_PI_ENV_PROFILE}_${month_tag}.dump.gz.sha256"
+  if [ ! -f "$monthly_file" ]; then
+    echo "Archivio mensile: creo snapshot persistente $monthly_file"
+    gzip -c "$dump_file" >"$monthly_file"
+    sha256sum "$monthly_file" >"$monthly_sha"
+  else
+    echo "Archivio mensile: già presente per $month_tag, skip."
+  fi
+fi
 
