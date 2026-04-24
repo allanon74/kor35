@@ -394,3 +394,4 @@ File systemd nel repo:
 Flusso consigliato:
 - durante connettivita' online: timer DB bidirezionale (`sync_edge_node`) ogni 2 minuti;
 - post-evento (quando il Pi torna online): esegui una volta `kor35-mirror-resync.service` (equivale a `make mirror-resync-after-event ENV=mirror`).
+- per il catch-up iniziale, il service mirror imposta `EDGE_SYNC_HTTP_TIMEOUT=600` e `TimeoutStartSec=20min` per evitare timeout su payload grandi.

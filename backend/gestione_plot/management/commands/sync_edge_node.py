@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import requests
@@ -64,12 +65,33 @@ class Command(BaseCommand):
         }
 
         try:
-            response = requests.post(sync_url, headers=headers, json=payload, timeout=120)
+            read_timeout_seconds = int(os.getenv("EDGE_SYNC_HTTP_TIMEOUT", "120"))
+        except ValueError:
+            read_timeout_seconds = 120
+        read_timeout_seconds = max(read_timeout_seconds, 30)
+
+        try:
+            response = requests.post(
+                sync_url,
+                headers=headers,
+                json=payload,
+                timeout=(10, read_timeout_seconds),
+            )
             response.raise_for_status()
         except requests.HTTPError as exc:
             body = getattr(exc.response, "text", "") or ""
             self.stderr.write(self.style.ERROR(f"HTTP {exc.response.status_code} da Master"))
             self.stderr.write(body[:12000] if body else "(nessun body)")
+            raise
+        except requests.ReadTimeout as exc:
+            self.stderr.write(
+                self.style.ERROR(
+                    f"Timeout HTTP verso Master dopo {read_timeout_seconds}s: {exc}"
+                )
+            )
+            self.stderr.write(
+                "Suggerimento: aumenta EDGE_SYNC_HTTP_TIMEOUT (es. 600) durante il catch-up iniziale."
+            )
             raise
         except requests.RequestException as exc:
             self.stderr.write(self.style.ERROR(f"Errore di rete: {exc}"))
