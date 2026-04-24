@@ -41,6 +41,9 @@
     }
 
     location ~ ^/(admin|api|summernote|icon_picker|icons|webpush|o)(/|$) {
+        # Sync edge può inviare payload JSON corposi (post-evento / primo riallineamento).
+        # Alziamo il limite oltre il default Nginx (1M) per evitare 413.
+        client_max_body_size 64m;
         set $upstream_backend backend:8000;
         proxy_pass http://$upstream_backend;
         proxy_set_header Host $host;
