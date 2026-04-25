@@ -1011,7 +1011,32 @@ class Tabella(A_modello):
 class Tier(Tabella):
     tipo = models.CharField(choices=tabelle_tipo, max_length=2)
     foto = models.ImageField(upload_to='tiers/', null=True, blank=True)
+    caratteristiche_visibili = models.ManyToManyField(
+        "Punteggio",
+        blank=True,
+        related_name="tiers_caratteristiche",
+        limit_choices_to={"tipo": CARATTERISTICA},
+        help_text="Caratteristiche associate al Tier per visualizzazione/filtri.",
+    )
     class Meta: verbose_name = "Tier"; verbose_name_plural = "Tiers"
+
+    def clean(self):
+        """
+        Vincoli soft sulle caratteristiche in base al tipo:
+        - T1/T2: massimo 1
+        - T3: massimo 2
+        - T4: massimo 4
+        """
+        super().clean()
+        if not self.pk:
+            return
+        count = self.caratteristiche_visibili.count()
+        if self.tipo in (TIER_1, TIER_2) and count > 1:
+            raise ValidationError("I Tier 1/2 possono avere al massimo 1 caratteristica associata.")
+        if self.tipo == TIER_3 and count > 2:
+            raise ValidationError("I Tier 3 possono avere al massimo 2 caratteristiche associate.")
+        if self.tipo == TIER_4 and count > 4:
+            raise ValidationError("I Tier 4 possono avere al massimo 4 caratteristiche associate.")
 
 
 class Korp(Tier):

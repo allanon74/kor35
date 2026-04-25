@@ -45,11 +45,11 @@ from personaggi.serializers import (
     TabellaSerializer, AbilitaSerializer, ModelloAuraSerializer,
     TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
-from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget, ConfigurazioneSito, LinkSocial
+from .models import Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate, PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget, ConfigurazioneSito, LinkSocial
 from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
-    MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiButtonWidgetSerializer,
+    MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiTierCollectionWidgetSerializer, WikiButtonWidgetSerializer,
     ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer, UserShortSerializer
     ,     WikiMattoniWidgetSerializer,
     MattoneWikiSerializer,
@@ -598,7 +598,8 @@ class StaffWikiImmagineViewSet(viewsets.ModelViewSet):
 class PublicWikiTierWidgetViewSet(viewsets.ReadOnlyModelViewSet):
     """Espone i widget Tier per l'uso nelle pagine wiki (lettura)."""
     _abilita_prefetch = Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
-    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related(_abilita_prefetch)
+    _caratt_prefetch = Prefetch('tier__caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA'))
+    queryset = WikiTierWidget.objects.all().select_related('tier').prefetch_related(_abilita_prefetch, _caratt_prefetch)
     serializer_class = WikiTierWidgetSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -611,6 +612,27 @@ class StaffWikiTierWidgetViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(creatore=self.request.user)
+
+
+class PublicWikiTierCollectionWidgetViewSet(viewsets.ReadOnlyModelViewSet):
+    """Espone i widget collezione tier per l'uso nelle pagine wiki (lettura)."""
+    queryset = WikiTierCollectionWidget.objects.all().prefetch_related('widgets__tier')
+    serializer_class = WikiTierCollectionWidgetSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+
+class StaffWikiTierCollectionWidgetViewSet(viewsets.ModelViewSet):
+    """CRUD widget collezione tier (solo staff)."""
+    queryset = WikiTierCollectionWidget.objects.all().prefetch_related('widgets__tier')
+    serializer_class = WikiTierCollectionWidgetSerializer
+    permission_classes = [IsMasterOrReadOnly]
+
+    def perform_create(self, serializer):
+        serializer.save(creatore=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save()
 
 
 class PublicWikiMattoniWidgetViewSet(viewsets.ReadOnlyModelViewSet):
@@ -748,8 +770,9 @@ def get_wiki_tier_display(request, key):
     extra = {}
     # 1) WikiTierWidget (widget configurabile)
     _abilita_prefetch = Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+    _caratt_prefetch = Prefetch('tier__caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA'))
     widget = _resolve_by_pk_or_sync_id(
-        WikiTierWidget.objects.select_related('tier').prefetch_related(_abilita_prefetch),
+        WikiTierWidget.objects.select_related('tier').prefetch_related(_abilita_prefetch, _caratt_prefetch),
         key,
     )
     if widget:
@@ -764,8 +787,9 @@ def get_wiki_tier_display(request, key):
         }
     if not tier:
         _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+        _pf_car = Prefetch('caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA'))
         tier = _resolve_by_pk_or_sync_id(
-            Tier.objects.prefetch_related(_pf),
+            Tier.objects.prefetch_related(_pf, _pf_car),
             key,
         )
         if tier:
@@ -784,7 +808,8 @@ def get_wiki_tier_display(request, key):
         )
         if plugin:
             _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
-            tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
+            _pf_car = Prefetch('caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA'))
+            tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf, _pf_car).first()
             if tier:
                 extra = {
                     'abilities_collapsible': True,
@@ -803,7 +828,8 @@ def get_wiki_tier_display(request, key):
             )
             if plugin:
                 _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
-                tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf).first()
+                _pf_car = Prefetch('caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA'))
+                tier = Tier.objects.filter(pk=plugin.tier_id).prefetch_related(_pf, _pf_car).first()
                 if tier:
                     extra = {
                         'abilities_collapsible': True,
@@ -825,10 +851,11 @@ def get_wiki_tier_display(request, key):
             if cms_plugin:
                 instance, _ = cms_plugin.get_plugin_instance()
                 _pf = Prefetch('abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3'))
+                _pf_car = Prefetch('caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA'))
                 if instance and getattr(instance, 'tier_id', None):
-                    tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related(_pf).first()
+                    tier = Tier.objects.filter(pk=instance.tier_id).prefetch_related(_pf, _pf_car).first()
                 elif instance and getattr(instance, 'tier', None):
-                    tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related(_pf).first()
+                    tier = Tier.objects.filter(pk=instance.tier.pk).prefetch_related(_pf, _pf_car).first()
                 if tier:
                     extra = {
                         'abilities_collapsible': True,
@@ -845,6 +872,92 @@ def get_wiki_tier_display(request, key):
     data["sync_id"] = str(getattr(tier, "sync_id", "") or "")
     data.update(extra)
     return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_tier_collection_display(request, key):
+    """
+    Restituisce una collezione di widget tier pronta per il rendering in wiki.
+    Supporta filtri/sort persistenti da configurazione widget.
+    """
+    widget = _resolve_by_pk_or_sync_id(
+        WikiTierCollectionWidget.objects.prefetch_related('widgets__tier', 'widgets__tier__caratteristiche_visibili', 'caratteristiche'),
+        key,
+    )
+    if not widget:
+        raise Http404("No WikiTierCollectionWidget matches the given query.")
+
+    if widget.source_mode == WikiTierCollectionWidget.SOURCE_SELECTED:
+        qs = widget.widgets.all().select_related('tier').prefetch_related('tier__caratteristiche_visibili')
+    else:
+        qs = WikiTierWidget.objects.all().select_related('tier').prefetch_related('tier__caratteristiche_visibili')
+
+    tier_type_filter = (widget.tier_type_filter or WikiTierCollectionWidget.TIER_TYPE_ALL).strip().lower()
+    if tier_type_filter and tier_type_filter != WikiTierCollectionWidget.TIER_TYPE_ALL:
+        qs = qs.filter(tier__tipo=tier_type_filter.upper())
+
+    car_ids = list(widget.caratteristiche.values_list('id', flat=True))
+    car_mode = widget.caratteristiche_filter_mode or WikiTierCollectionWidget.CAR_FILTER_ANY
+    if car_ids:
+        if car_mode == WikiTierCollectionWidget.CAR_FILTER_ALL:
+            for car_id in car_ids:
+                qs = qs.filter(tier__caratteristiche_visibili__id=car_id)
+        else:
+            qs = qs.filter(tier__caratteristiche_visibili__id__in=car_ids)
+        qs = qs.distinct()
+
+    sort_by = widget.sort_by or WikiTierCollectionWidget.SORT_TIER_NAME
+    sort_dir = widget.sort_dir or WikiTierCollectionWidget.SORT_ASC
+    is_desc = sort_dir == WikiTierCollectionWidget.SORT_DESC
+    if sort_by == WikiTierCollectionWidget.SORT_WIDGET_CREATED:
+        order_expr = '-data_creazione' if is_desc else 'data_creazione'
+    else:
+        order_expr = '-tier__nome' if is_desc else 'tier__nome'
+    qs = qs.order_by(order_expr, 'id')
+
+    items = [
+        {
+            'id': w.id,
+            'sync_id': str(w.sync_id) if getattr(w, 'sync_id', None) else None,
+            'tier_id': w.tier_id,
+            'tier_nome': w.tier.nome if w.tier_id else '',
+            'tier_tipo': getattr(w.tier, 'tipo', ''),
+            'tier_caratteristiche': list(
+                w.tier.caratteristiche_visibili.all()
+                .order_by('ordine', 'nome')
+                .values('id', 'nome', 'sigla', 'colore', 'ordine')
+            ),
+            'token': str(w.sync_id) if getattr(w, 'sync_id', None) else str(w.id),
+        }
+        for w in qs
+    ]
+    available_char_ids = {c['id'] for item in items for c in item.get('tier_caratteristiche', [])}
+    caratteristiche_available = list(
+        Punteggio.objects.filter(tipo='CA', id__in=available_char_ids)
+        .order_by('ordine', 'nome')
+        .values('id', 'nome', 'sigla', 'colore', 'ordine')
+    )
+    payload = {
+        'id': widget.id,
+        'sync_id': str(widget.sync_id) if getattr(widget, 'sync_id', None) else None,
+        'title': widget.title or '',
+        'source_mode': widget.source_mode,
+        'tier_type_filter': widget.tier_type_filter,
+        'sort_by': widget.sort_by,
+        'sort_dir': widget.sort_dir,
+        'caratteristiche_filter_mode': widget.caratteristiche_filter_mode,
+        'show_runtime_filters': bool(widget.show_runtime_filters),
+        'badge_mode': widget.badge_mode or 'compact',
+        'caratteristiche': list(
+            widget.caratteristiche.all()
+            .order_by('ordine', 'nome')
+            .values('id', 'nome', 'sigla', 'colore', 'ordine')
+        ),
+        'caratteristiche_available': caratteristiche_available,
+        'items': items,
+    }
+    return Response(payload)
 
 
 @api_view(['GET'])

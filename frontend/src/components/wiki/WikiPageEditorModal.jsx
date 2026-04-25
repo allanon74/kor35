@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getWikiTierList, getWikiImageList, getWidgetButtonsList, getWikiTierWidgetList, getWikiMattoniWidgetList, createWikiImage, updateWikiImage, createWidgetButtons, updateWidgetButtons, createWikiTierWidget, updateWikiTierWidget, createWikiMattoniWidget, updateWikiMattoniWidget, createWikiPage, updateWikiPage, getWikiImageUrl } from '../../api';
+import { getWikiTierList, getWikiImageList, getWidgetButtonsList, getWikiTierWidgetList, getWikiTierCollectionWidgetList, getWikiMattoniWidgetList, createWikiImage, updateWikiImage, createWidgetButtons, updateWidgetButtons, createWikiTierWidget, updateWikiTierWidget, createWikiTierCollectionWidget, updateWikiTierCollectionWidget, createWikiMattoniWidget, updateWikiMattoniWidget, createWikiPage, updateWikiPage, getWikiImageUrl } from '../../api';
 import RichTextEditor from '../RichTextEditor';
 import { Lock, Eye, GripVertical, Image as ImageIcon, Upload, X, MousePointerClick, Edit } from 'lucide-react';
 import ButtonWidgetEditorModal from './ButtonWidgetEditorModal';
 import TierWidgetEditorModal from './TierWidgetEditorModal'; 
+import TierCollectionWidgetEditorModal from './TierCollectionWidgetEditorModal';
 import MattoniWidgetEditorModal from './MattoniWidgetEditorModal';
 
 export default function WikiPageEditorModal({ onClose, onSuccess, initialData = null }) {
@@ -33,14 +34,17 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
   const [availableTiers, setAvailableTiers] = useState([]);
   const [tierSearch, setTierSearch] = useState('');
   const [availableTierWidgets, setAvailableTierWidgets] = useState([]);
+  const [availableTierCollectionWidgets, setAvailableTierCollectionWidgets] = useState([]);
   const [availableImages, setAvailableImages] = useState([]);
   const [availableButtonWidgets, setAvailableButtonWidgets] = useState([]);
   const [availableMattoniWidgets, setAvailableMattoniWidgets] = useState([]);
-  const [widgetHelperTab, setWidgetHelperTab] = useState('tier'); // 'tier', 'image', 'buttons', 'mattoni'
+  const [widgetHelperTab, setWidgetHelperTab] = useState('tier'); // 'tier', 'tierCollection', 'image', 'buttons', 'mattoni'
 
   // State per il modal widget tier (crea/modifica)
   const [showTierWidgetEditor, setShowTierWidgetEditor] = useState(false);
   const [editingTierWidget, setEditingTierWidget] = useState(null);
+  const [showTierCollectionWidgetEditor, setShowTierCollectionWidgetEditor] = useState(false);
+  const [editingTierCollectionWidget, setEditingTierCollectionWidget] = useState(null);
 
   // State per il modal del widget buttons
   const [showButtonWidgetEditor, setShowButtonWidgetEditor] = useState(false);
@@ -80,6 +84,7 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
     const content = formData.contenuto || '';
     const usedIds = {
       tiers: [],
+      tierCollections: [],
       images: [],
       buttons: [],
       mattoni: [],
@@ -89,6 +94,11 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
     const tierMatches = content.matchAll(/\{\{WIDGET_TIER:([A-Za-z0-9-]+)\}\}/g);
     for (const match of tierMatches) {
       usedIds.tiers.push(String(match[1]));
+    }
+
+    const tierCollectionMatches = content.matchAll(/\{\{WIDGET_TIER_COLLECTION:([A-Za-z0-9-]+)\}\}/g);
+    for (const match of tierCollectionMatches) {
+      usedIds.tierCollections.push(String(match[1]));
     }
 
     // Cerca pattern {{WIDGET_IMAGE:TOKEN}} o {{WIDGET_IMMAGINE:TOKEN}}
@@ -132,6 +142,9 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
         getWikiTierWidgetList()
             .then(data => setAvailableTierWidgets(data || []))
             .catch(err => console.error("Err loading tier widgets", err));
+        getWikiTierCollectionWidgetList()
+            .then(data => setAvailableTierCollectionWidgets(data || []))
+            .catch(err => console.error("Err loading tier collection widgets", err));
 
         // Carica Immagini
         getWikiImageList()
@@ -511,6 +524,17 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
                                 </button>
                                 <button
                                     type="button"
+                                    onClick={() => setWidgetHelperTab('tierCollection')}
+                                    className={`flex-1 px-3 py-2 text-xs font-bold transition-colors ${
+                                        widgetHelperTab === 'tierCollection'
+                                            ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-600'
+                                            : 'text-gray-600 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    🗂️ Collezioni
+                                </button>
+                                <button
+                                    type="button"
                                     onClick={() => setWidgetHelperTab('image')}
                                     className={`flex-1 px-3 py-2 text-xs font-bold transition-colors ${
                                         widgetHelperTab === 'image'
@@ -677,6 +701,75 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
                                                             ID:{tier.id}
                                                         </span>
                                                     </button>
+                                                );
+                                            });
+                                        })()}
+                                    </>
+                                )}
+
+                                {widgetHelperTab === 'tierCollection' && (
+                                    <>
+                                        <div className="p-2 border-b border-gray-200 bg-indigo-50">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setEditingTierCollectionWidget(null);
+                                                    setShowTierCollectionWidgetEditor(true);
+                                                }}
+                                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                                            >
+                                                <MousePointerClick size={14} />
+                                                Crea / Configura Collezione Tier
+                                            </button>
+                                        </div>
+
+                                        {availableTierCollectionWidgets.length === 0 && (
+                                            <p className="p-2 text-xs text-gray-500">Nessuna collezione tier disponibile</p>
+                                        )}
+
+                                        {(() => {
+                                            const usedIds = getUsedWidgetIds();
+                                            const sorted = sortByUsage(availableTierCollectionWidgets, usedIds.tierCollections);
+                                            return sorted.map(w => {
+                                                const isUsed = usedIds.tierCollections.includes(w.id);
+                                                return (
+                                                    <div
+                                                        key={w.id}
+                                                        className={`w-full text-left text-xs p-2 border-b hover:bg-blue-50 flex justify-between items-center group transition-colors ${
+                                                            isUsed ? 'bg-green-50 border-l-4 border-green-500' : ''
+                                                        }`}
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => insertWidget(`{{WIDGET_TIER_COLLECTION:${getWidgetToken(w)}}}`)}
+                                                            className="flex-1 flex items-center gap-2 truncate"
+                                                        >
+                                                            <span className={`font-bold group-hover:text-blue-800 truncate ${
+                                                                isUsed ? 'text-green-700' : 'text-gray-700'
+                                                            }`}>
+                                                                {isUsed && <span className="text-green-600">✓ </span>}
+                                                                {w.title || `Collezione #${w.id}`}
+                                                            </span>
+                                                        </button>
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setEditingTierCollectionWidget(w);
+                                                                    setShowTierCollectionWidgetEditor(true);
+                                                                }}
+                                                                className="p-1 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
+                                                                title="Modifica collezione"
+                                                            >
+                                                                <Edit size={12} />
+                                                            </button>
+                                                            <span className={`text-[10px] px-1 rounded ${
+                                                                isUsed ? 'bg-green-200 text-green-800' : 'bg-gray-100 text-gray-500'
+                                                            }`}>
+                                                                ID:{w.id}
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 );
                                             });
                                         })()}
@@ -1177,6 +1270,35 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
               setEditingTierWidget(null);
             } catch (error) {
               console.error("Errore salvataggio widget tier:", error);
+              throw error;
+            }
+          }}
+        />
+      )}
+
+      {/* MODAL EDITOR WIDGET COLLEZIONE TIER */}
+      {showTierCollectionWidgetEditor && (
+        <TierCollectionWidgetEditorModal
+          initialData={editingTierCollectionWidget}
+          onClose={() => {
+            setShowTierCollectionWidgetEditor(false);
+            setEditingTierCollectionWidget(null);
+          }}
+          onSave={async (payload, existingId) => {
+            try {
+              let response;
+              if (existingId) {
+                response = await updateWikiTierCollectionWidget(existingId, payload);
+              } else {
+                response = await createWikiTierCollectionWidget(payload);
+                insertWidget(`{{WIDGET_TIER_COLLECTION:${getWidgetToken(response)}}}`);
+              }
+              const list = await getWikiTierCollectionWidgetList();
+              setAvailableTierCollectionWidgets(list || []);
+              setShowTierCollectionWidgetEditor(false);
+              setEditingTierCollectionWidget(null);
+            } catch (error) {
+              console.error("Errore salvataggio widget collezione tier:", error);
               throw error;
             }
           }}

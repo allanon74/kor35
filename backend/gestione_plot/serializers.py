@@ -4,7 +4,7 @@ from .models import (
     Evento, GiornoEvento, PaginaRegolamento, Quest, 
     MostroTemplate, AttaccoTemplate, 
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
-    QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton,
+    QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton,
     WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial,
 )
@@ -315,10 +315,11 @@ class AbilitaTierSerializer(serializers.ModelSerializer):
 class WikiTierSerializer(serializers.ModelSerializer):
     # FONDAMENTALE: Recuperiamo le abilità figlie di questo Tier
     abilita = AbilitaTierSerializer(many=True, read_only=True)
+    caratteristiche_visibili = PunteggioWikiSerializer(many=True, read_only=True)
 
     class Meta:
         model = Tier
-        fields = ['id', 'nome', 'descrizione', 'tipo', 'abilita']
+        fields = ['id', 'nome', 'descrizione', 'tipo', 'abilita', 'caratteristiche_visibili']
 
 
 class MattoneWikiSerializer(serializers.ModelSerializer):
@@ -418,6 +419,48 @@ class WikiTierWidgetSerializer(serializers.ModelSerializer):
             'id', 'sync_id', 'tier', 'tier_nome', 'abilities_collapsible', 'abilities_collapsed_by_default',
             'show_description', 'abilities_solo_list', 'color_style', 'gradient_colors',
             'data_creazione', 'data_modifica', 'creatore'
+        ]
+        read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
+
+
+class WikiTierCollectionWidgetSerializer(serializers.ModelSerializer):
+    widgets = WikiTierWidgetSerializer(many=True, read_only=True)
+    caratteristiche = PunteggioWikiSerializer(many=True, read_only=True)
+    widget_ids = serializers.PrimaryKeyRelatedField(
+        source='widgets',
+        many=True,
+        queryset=WikiTierWidget.objects.select_related('tier'),
+        required=False,
+        write_only=True,
+    )
+    caratteristiche_ids = serializers.PrimaryKeyRelatedField(
+        source='caratteristiche',
+        many=True,
+        queryset=Punteggio.objects.filter(tipo='CA'),
+        required=False,
+        write_only=True,
+    )
+
+    class Meta:
+        model = WikiTierCollectionWidget
+        fields = [
+            'id',
+            'sync_id',
+            'title',
+            'source_mode',
+            'tier_type_filter',
+            'sort_by',
+            'sort_dir',
+            'caratteristiche_filter_mode',
+            'show_runtime_filters',
+            'badge_mode',
+            'caratteristiche',
+            'caratteristiche_ids',
+            'widgets',
+            'widget_ids',
+            'data_creazione',
+            'data_modifica',
+            'creatore',
         ]
         read_only_fields = ['data_creazione', 'data_modifica', 'creatore']
 

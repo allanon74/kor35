@@ -4,7 +4,7 @@ import {
     ChevronDown, LayoutList, Type, AlignLeft 
 } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor'; 
-import { getAllAbilitaSimple } from '../../api';
+import { getAllAbilitaSimple, getWikiPunteggi } from '../../api';
 import EditorSaveActions from './EditorSaveActions';
 
 // Mappatura delle tipologie (da allineare con personaggi/models.py)
@@ -26,6 +26,9 @@ const TabellaEditor = ({ tier, onSave, onCancel, onLogout, statusMessage = '', s
         // Usiamo 'G0' (Tabelle Generali) come default quando si crea una nuova tabella.
         tipo: tier?.tipo || 'G0',
         descrizione: tier?.descrizione || '',
+        caratteristiche_visibili: Array.isArray(tier?.caratteristiche_visibili)
+            ? tier.caratteristiche_visibili
+            : [],
     });
 
     // Stato gestione abilità collegate
@@ -39,6 +42,7 @@ const TabellaEditor = ({ tier, onSave, onCancel, onLogout, statusMessage = '', s
 
     // Stato gestione ricerca/aggiunta abilità
     const [allAbilities, setAllAbilities] = useState([]);
+    const [allCaratteristiche, setAllCaratteristiche] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedAbilityId, setSelectedAbilityId] = useState('');
     const [newOrder, setNewOrder] = useState(0);
@@ -49,6 +53,8 @@ const TabellaEditor = ({ tier, onSave, onCancel, onLogout, statusMessage = '', s
             try {
                 const data = await getAllAbilitaSimple(onLogout);
                 setAllAbilities(data);
+                const carData = await getWikiPunteggi('CA');
+                setAllCaratteristiche(carData || []);
                 const maxOrder = connectedSkills.length > 0 ? Math.max(...connectedSkills.map(s => s.ordine)) : 0;
                 setNewOrder(maxOrder + 1);
             } catch (error) {
@@ -166,6 +172,33 @@ const TabellaEditor = ({ tier, onSave, onCancel, onLogout, statusMessage = '', s
                             onChange={(val) => setFormData({...formData, descrizione: val})} 
                         />
                     </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                        <Layers size={14}/> Caratteristiche Associate (visualizzazione)
+                    </label>
+                    <select
+                        multiple
+                        value={(formData.caratteristiche_visibili || []).map(String)}
+                        onChange={(e) =>
+                            setFormData({
+                                ...formData,
+                                caratteristiche_visibili: Array.from(e.target.selectedOptions).map((o) => Number(o.value)),
+                            })
+                        }
+                        className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none transition-all font-medium text-sm h-28"
+                    >
+                        {allCaratteristiche
+                            .slice()
+                            .sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+                            .map((c) => (
+                                <option key={c.id} value={c.id}>{c.nome}</option>
+                            ))}
+                    </select>
+                    <p className="text-[11px] text-gray-500">
+                        Regole consigliate: T1/T2 max 1, T3 max 2, T4 max 4.
+                    </p>
                 </div>
 
                 <div className="border-t border-gray-800 my-2"></div>

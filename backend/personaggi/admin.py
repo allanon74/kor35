@@ -621,6 +621,7 @@ class TierAdmin(A_Admin):
     ordering = ['tipo', 'nome',]
     summernote_fields = ["descrizione"] 
     inlines = [abilita_tier_inline]
+    filter_horizontal = ['caratteristiche_visibili']
     save_as = True
 
 @admin.register(Statistica)

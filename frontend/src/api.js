@@ -2110,6 +2110,33 @@ export const getWikiTier = (id) => {
   return fetchPublic(`/api/plot/api/wiki/tier-display/${encodeURIComponent(String(id))}/`);
 };
 
+// --- WIDGET COLLEZIONE TIER ---
+export const getWikiTierCollectionDisplay = (id) => {
+  return fetchPublic(`/api/plot/api/wiki/tier-collection-display/${encodeURIComponent(String(id))}/`);
+};
+
+export const getWikiTierCollectionWidgetList = () => {
+  return fetchPublic('/api/plot/api/public/wiki-tier-collections/');
+};
+
+export const getWikiTierCollectionWidget = (id) => {
+  return fetchPublic(`/api/plot/api/public/wiki-tier-collections/${id}/`);
+};
+
+export const createWikiTierCollectionWidget = (data, onLogout) => {
+  return fetchAuthenticated('/api/plot/api/staff/wiki-tier-collections/', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  }, onLogout);
+};
+
+export const updateWikiTierCollectionWidget = (id, data, onLogout) => {
+  return fetchAuthenticated(`/api/plot/api/staff/wiki-tier-collections/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data)
+  }, onLogout);
+};
+
 // --- WIDGET MATTONI ---
 export const getWikiMattoniWidgetDisplay = (id) => {
   return fetchPublic(`/api/plot/api/wiki/mattoni-display/${encodeURIComponent(String(id))}/`);

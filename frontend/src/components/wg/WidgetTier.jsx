@@ -37,7 +37,7 @@ function isGradientDark(colors) {
   return darkCount >= valid.length / 2;
 }
 
-export default function WidgetTier({ id }) {
+export default function WidgetTier({ id, badgeMode = 'compact' }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [isAbilitiesOpen, setIsAbilitiesOpen] = useState(false);
@@ -62,6 +62,9 @@ export default function WidgetTier({ id }) {
   const sortedList = [...(data.abilita || [])].sort((a, b) => 
     (a.nome || '').localeCompare(b.nome || '')
   );
+  const caratteristicheTier = Array.isArray(data?.caratteristiche_visibili)
+    ? [...data.caratteristiche_visibili].sort((a, b) => (a?.ordine ?? 0) - (b?.ordine ?? 0) || String(a?.nome || '').localeCompare(String(b?.nome || '')))
+    : [];
 
   const soloLista = data?.abilities_solo_list === true;
 
@@ -95,6 +98,28 @@ export default function WidgetTier({ id }) {
         <div className={`wiki-widget-tier__header ${headerClass}`} style={headerStyle}>
             <div className="flex flex-col">
                 <h3 className="text-base md:text-xl font-bold uppercase tracking-wider leading-tight">{data.nome}</h3>
+                {caratteristicheTier.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {caratteristicheTier.map((c) => {
+                      const raw = String(c?.colore || '').trim();
+                      const bg = raw ? (raw.startsWith('#') ? raw : `#${raw}`) : '#6b7280';
+                      const isExtended = badgeMode === 'extended';
+                      const label = isExtended
+                        ? (c.nome || c.sigla || '')
+                        : (c.sigla || c.nome || '');
+                      return (
+                        <span
+                          key={c.id || `${c.sigla}-${c.nome}`}
+                          className="text-[10px] md:text-xs px-2 py-0.5 rounded-full border border-black/20 bg-white/15 flex items-center gap-1"
+                          title={c.nome || ''}
+                        >
+                          <span className="h-2 w-2 rounded-full border border-black/20 shrink-0" style={{ background: bg }} />
+                          <span className="font-semibold">{label}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 {data.costo && (
                   <span className="text-[10px] md:text-xs opacity-80 px-2 py-0.5 rounded mt-1 self-start bg-black/20">
                     Costo Base: {data.costo}

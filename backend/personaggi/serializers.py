@@ -2964,10 +2964,25 @@ class AbilitaTierSerializer(serializers.ModelSerializer):
 class TierStaffSerializer(serializers.ModelSerializer):
     abilita_collegate = serializers.SerializerMethodField()
     abilita_count = serializers.IntegerField(read_only=True)
+    caratteristiche_visibili = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Punteggio.objects.filter(tipo='CA'),
+        required=False,
+    )
+    caratteristiche_visibili_dettaglio = serializers.SerializerMethodField()
 
     class Meta:
         model = Tier
-        fields = ['id', 'nome', 'tipo', 'descrizione', 'abilita_collegate', 'abilita_count']
+        fields = [
+            'id',
+            'nome',
+            'tipo',
+            'descrizione',
+            'caratteristiche_visibili',
+            'caratteristiche_visibili_dettaglio',
+            'abilita_collegate',
+            'abilita_count',
+        ]
 
     def get_abilita_collegate(self, obj):
         # CORRETTO: Filtra su 'tabella' (il nome del campo FK in abilita_tier)
@@ -2979,10 +2994,37 @@ class TierStaffSerializer(serializers.ModelSerializer):
         # ma spesso è più facile gestire le relazioni in un secondo step o con logica separata.
         # Qui salvo solo il tier base, le abilità le gestiremo separatamente o nel frontend
         # inviando una lista. Per semplicità, qui creo il Tier.
-        return super().create(validated_data)
+        caratteristiche = validated_data.pop('caratteristiche_visibili', [])
+        self._validate_characteristics_count(validated_data.get('tipo'), len(caratteristiche))
+        tier = super().create(validated_data)
+        if caratteristiche:
+            tier.caratteristiche_visibili.set(caratteristiche)
+        return tier
 
     def update(self, instance, validated_data):
-        return super().update(instance, validated_data)
+        caratteristiche = validated_data.pop('caratteristiche_visibili', None)
+        tipo = validated_data.get('tipo', instance.tipo)
+        if caratteristiche is not None:
+            self._validate_characteristics_count(tipo, len(caratteristiche))
+        tier = super().update(instance, validated_data)
+        if caratteristiche is not None:
+            tier.caratteristiche_visibili.set(caratteristiche)
+        return tier
+
+    def get_caratteristiche_visibili_dettaglio(self, obj):
+        return list(
+            obj.caratteristiche_visibili.all()
+            .order_by('ordine', 'nome')
+            .values('id', 'nome', 'sigla', 'colore', 'ordine')
+        )
+
+    def _validate_characteristics_count(self, tipo, count):
+        if tipo in ('T1', 'T2') and count > 1:
+            raise serializers.ValidationError({'caratteristiche_visibili': 'I Tier 1/2 possono avere al massimo 1 caratteristica.'})
+        if tipo == 'T3' and count > 2:
+            raise serializers.ValidationError({'caratteristiche_visibili': 'I Tier 3 possono avere al massimo 2 caratteristiche.'})
+        if tipo == 'T4' and count > 4:
+            raise serializers.ValidationError({'caratteristiche_visibili': 'I Tier 4 possono avere al massimo 4 caratteristiche.'})
     
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)

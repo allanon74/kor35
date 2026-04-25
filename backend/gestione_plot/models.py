@@ -367,6 +367,96 @@ class WikiTierWidget(SyncableModel, models.Model):
         return f"Widget Tier #{self.id} ({self.tier.nome})"
 
 
+class WikiTierCollectionWidget(SyncableModel, models.Model):
+    """
+    Widget che aggrega più Widget Tier con filtri e ordinamento.
+    Usato in {{WIDGET_TIER_COLLECTION:id}} dove id è questo widget.
+    """
+    SOURCE_ALL = 'all'
+    SOURCE_SELECTED = 'selected'
+    SOURCE_CHOICES = [
+        (SOURCE_ALL, 'Tutti i widget tier'),
+        (SOURCE_SELECTED, 'Solo widget selezionati'),
+    ]
+
+    TIER_TYPE_ALL = 'all'
+    TIER_TYPE_CHOICES = [
+        (TIER_TYPE_ALL, 'Tutti i tipi'),
+        ('G0', 'Tabelle Generali'),
+        ('T1', 'Tier 1'),
+        ('T2', 'Tier 2'),
+        ('T3', 'Tier 3'),
+        ('T4', 'Tier 4'),
+    ]
+
+    SORT_TIER_NAME = 'tier_name'
+    SORT_WIDGET_CREATED = 'widget_created'
+    SORT_CHOICES = [
+        (SORT_TIER_NAME, 'Nome Tier'),
+        (SORT_WIDGET_CREATED, 'Data creazione widget'),
+    ]
+
+    SORT_ASC = 'asc'
+    SORT_DESC = 'desc'
+    SORT_DIR_CHOICES = [
+        (SORT_ASC, 'Crescente'),
+        (SORT_DESC, 'Decrescente'),
+    ]
+    BADGE_COMPACT = 'compact'
+    BADGE_EXTENDED = 'extended'
+    BADGE_MODE_CHOICES = [
+        (BADGE_COMPACT, 'Compatto (sigla)'),
+        (BADGE_EXTENDED, 'Esteso (nome)'),
+    ]
+
+    CAR_FILTER_ANY = 'any'
+    CAR_FILTER_ALL = 'all'
+    CAR_FILTER_MODE_CHOICES = [
+        (CAR_FILTER_ANY, 'Qualsiasi caratteristica selezionata'),
+        (CAR_FILTER_ALL, 'Tutte le caratteristiche selezionate'),
+    ]
+
+    title = models.CharField(max_length=200, blank=True, help_text="Titolo opzionale del widget (per identificazione interna)")
+    source_mode = models.CharField(max_length=20, choices=SOURCE_CHOICES, default=SOURCE_ALL)
+    tier_type_filter = models.CharField(max_length=8, choices=TIER_TYPE_CHOICES, default=TIER_TYPE_ALL)
+    sort_by = models.CharField(max_length=32, choices=SORT_CHOICES, default=SORT_TIER_NAME)
+    sort_dir = models.CharField(max_length=8, choices=SORT_DIR_CHOICES, default=SORT_ASC)
+    caratteristiche_filter_mode = models.CharField(max_length=8, choices=CAR_FILTER_MODE_CHOICES, default=CAR_FILTER_ANY)
+    show_runtime_filters = models.BooleanField(default=True, help_text="Mostra ricerca/filtro/ordinamento direttamente nel widget.")
+    badge_mode = models.CharField(max_length=16, choices=BADGE_MODE_CHOICES, default=BADGE_COMPACT, help_text="Modalita di visualizzazione badge caratteristiche sui Tier.")
+    caratteristiche = models.ManyToManyField(
+        Punteggio,
+        blank=True,
+        related_name='wiki_tier_collection_widgets_caratteristiche',
+        limit_choices_to={'tipo': 'CA'},
+        help_text="Filtra i Tier in base alle caratteristiche associate (se valorizzate).",
+    )
+    widgets = models.ManyToManyField(
+        WikiTierWidget,
+        blank=True,
+        related_name='collections',
+        help_text="Widget Tier inclusi (usati quando source_mode = solo selezionati).",
+    )
+
+    data_creazione = models.DateTimeField(auto_now_add=True)
+    data_modifica = models.DateTimeField(auto_now=True)
+    creatore = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='wiki_tier_collection_widgets_creati'
+    )
+
+    class Meta:
+        ordering = ['-data_creazione']
+        verbose_name = "Widget Collezione Tier"
+        verbose_name_plural = "Widget Collezione Tier"
+
+    def __str__(self):
+        return f"Widget Collezione Tier #{self.id} ({self.title or 'senza titolo'})"
+
+
 class WikiMattoniWidget(SyncableModel, models.Model):
     """
     Widget Mattoni configurabile per la wiki.

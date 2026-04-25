@@ -427,7 +427,7 @@ class TierStaffViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         # CORRETTO: Usa 'abilita' (il related_name definito nel model Abilita)
-        return Tier.objects.annotate(
+        return Tier.objects.prefetch_related('caratteristiche_visibili').annotate(
             abilita_count=Count('abilita') 
         ).order_by('tipo', 'nome')
 

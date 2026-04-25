@@ -3,7 +3,7 @@ from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
     MostroTemplate, AttaccoTemplate, PngAssegnato, 
     StaffOffGame, QuestFase, QuestTask,
-    PaginaRegolamento, WikiImmagine, WikiTierWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
+    PaginaRegolamento, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
@@ -250,6 +250,33 @@ class WikiTierWidgetAdmin(admin.ModelAdmin):
     )
     search_fields = ('tier__nome', 'tier__descrizione')
     autocomplete_fields = ('tier',)
+    readonly_fields = ('data_creazione', 'data_modifica')
+    ordering = ('-data_creazione',)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.creatore = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(WikiTierCollectionWidget)
+class WikiTierCollectionWidgetAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'title',
+        'source_mode',
+        'tier_type_filter',
+        'sort_by',
+        'sort_dir',
+        'caratteristiche_filter_mode',
+        'show_runtime_filters',
+        'badge_mode',
+        'creatore',
+        'data_creazione',
+    )
+    list_filter = ('source_mode', 'tier_type_filter', 'sort_by', 'sort_dir', 'caratteristiche_filter_mode', 'show_runtime_filters', 'badge_mode', 'data_creazione', 'creatore')
+    search_fields = ('title',)
+    filter_horizontal = ('widgets', 'caratteristiche')
     readonly_fields = ('data_creazione', 'data_modifica')
     ordering = ('-data_creazione',)
 

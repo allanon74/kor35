@@ -106,6 +106,7 @@ const TabellaManager = ({ onLogout }) => {
     const columns = useMemo(() => [
         { header: 'Nome', render: (t) => <span className="font-bold">{t.nome}</span> },
         { header: 'Tipo', render: (t) => tierTypeLabels[t.tipo] || t.tipo, width: 180 },
+        { header: 'Caratt.', render: (t) => (t.caratteristiche_visibili_dettaglio || []).length, align: 'center', width: 90 },
         { header: 'Abilita', render: (t) => t.abilita_count || 0, align: 'center', width: 100 },
         { header: 'Descrizione', render: (t) => <span className="text-gray-300">{(t.descrizione || '').replace(/<[^>]+>/g, '').slice(0, 90)}{(t.descrizione || '').length > 90 ? '...' : ''}</span> },
     ], [tierTypeLabels]);
