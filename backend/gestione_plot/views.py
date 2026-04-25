@@ -948,7 +948,12 @@ def get_wiki_tier_collection_display(request, key):
         'sort_dir': widget.sort_dir,
         'caratteristiche_filter_mode': widget.caratteristiche_filter_mode,
         'show_runtime_filters': bool(widget.show_runtime_filters),
+        'show_search_control': bool(widget.show_search_control),
+        'show_tier_type_control': bool(widget.show_tier_type_control),
+        'show_characteristics_control': bool(widget.show_characteristics_control),
+        'show_sort_controls': bool(widget.show_sort_controls),
         'badge_mode': widget.badge_mode or 'compact',
+        'can_manage_runtime_controls': bool(_is_campaign_wiki_editor_plus(request)),
         'caratteristiche': list(
             widget.caratteristiche.all()
             .order_by('ordine', 'nome')

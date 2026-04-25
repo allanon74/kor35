@@ -270,11 +270,15 @@ class WikiTierCollectionWidgetAdmin(admin.ModelAdmin):
         'sort_dir',
         'caratteristiche_filter_mode',
         'show_runtime_filters',
+        'show_search_control',
+        'show_tier_type_control',
+        'show_characteristics_control',
+        'show_sort_controls',
         'badge_mode',
         'creatore',
         'data_creazione',
     )
-    list_filter = ('source_mode', 'tier_type_filter', 'sort_by', 'sort_dir', 'caratteristiche_filter_mode', 'show_runtime_filters', 'badge_mode', 'data_creazione', 'creatore')
+    list_filter = ('source_mode', 'tier_type_filter', 'sort_by', 'sort_dir', 'caratteristiche_filter_mode', 'show_runtime_filters', 'show_search_control', 'show_tier_type_control', 'show_characteristics_control', 'show_sort_controls', 'badge_mode', 'data_creazione', 'creatore')
     search_fields = ('title',)
     filter_horizontal = ('widgets', 'caratteristiche')
     readonly_fields = ('data_creazione', 'data_modifica')

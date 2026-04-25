@@ -37,6 +37,10 @@ export default function WidgetTierCollection({ id }) {
   const [caratteristicheFilterMode, setCaratteristicheFilterMode] = useState('any');
   const [selectedCaratteristiche, setSelectedCaratteristiche] = useState([]);
   const [badgeMode, setBadgeMode] = useState('compact');
+  const [showSearchControl, setShowSearchControl] = useState(true);
+  const [showTierTypeControl, setShowTierTypeControl] = useState(true);
+  const [showCharacteristicsControl, setShowCharacteristicsControl] = useState(true);
+  const [showSortControls, setShowSortControls] = useState(true);
 
   useEffect(() => {
     setError(false);
@@ -49,6 +53,10 @@ export default function WidgetTierCollection({ id }) {
         setSortDir(res?.sort_dir || 'asc');
         setCaratteristicheFilterMode(res?.caratteristiche_filter_mode || 'any');
         setBadgeMode(res?.badge_mode || 'compact');
+        setShowSearchControl(res?.show_search_control ?? true);
+        setShowTierTypeControl(res?.show_tier_type_control ?? true);
+        setShowCharacteristicsControl(res?.show_characteristics_control ?? true);
+        setShowSortControls(res?.show_sort_controls ?? true);
         setSelectedCaratteristiche(Array.isArray(res?.caratteristiche) ? res.caratteristiche.map((c) => c.id) : []);
       })
       .catch((err) => {
@@ -82,66 +90,102 @@ export default function WidgetTierCollection({ id }) {
   }
 
   const showControls = data?.show_runtime_filters !== false;
+  const enabledControlsCount = [
+    showSearchControl,
+    showTierTypeControl,
+    showCharacteristicsControl,
+    showSortControls,
+    true, // badge mode selector
+  ].filter(Boolean).length;
+  const canManageRuntimeControls = data?.can_manage_runtime_controls === true;
 
   return (
     <div className="wiki-widget-tier-collection my-6">
       {data.title && <h3 className="text-lg font-bold text-gray-800 mb-2">{data.title}</h3>}
 
       {showControls && (
-        <div className="mb-4 p-3 border border-gray-200 rounded bg-gray-50 flex flex-col md:flex-row gap-2 md:items-center">
-          <input
-            type="text"
-            placeholder="Cerca professione/tier..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-300 px-2 py-1.5 rounded text-sm flex-1"
-          />
-          <select value={tierType} onChange={(e) => setTierType(e.target.value)} className="border border-gray-300 px-2 py-1.5 rounded text-sm">
-            {Object.entries(TIER_TYPE_LABELS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="border border-gray-300 px-2 py-1.5 rounded text-sm">
-            <option value="tier_name">Ordina per nome</option>
-            <option value="widget_created">Ordina per creazione widget</option>
-          </select>
-          <select value={sortDir} onChange={(e) => setSortDir(e.target.value)} className="border border-gray-300 px-2 py-1.5 rounded text-sm">
-            <option value="asc">Crescente</option>
-            <option value="desc">Decrescente</option>
-          </select>
-          <select
-            multiple
-            value={selectedCaratteristiche.map(String)}
-            onChange={(e) => setSelectedCaratteristiche(Array.from(e.target.selectedOptions).map((o) => Number(o.value)))}
-            className="border border-gray-300 px-2 py-1.5 rounded text-sm min-w-[180px] h-[74px]"
-            title="Filtra per caratteristiche Tier"
-          >
-            {(Array.isArray(data?.caratteristiche_available) ? data.caratteristiche_available : []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </select>
-          <select
-            value={caratteristicheFilterMode}
-            onChange={(e) => setCaratteristicheFilterMode(e.target.value)}
-            className="border border-gray-300 px-2 py-1.5 rounded text-sm"
-          >
-            <option value="any">Match qualsiasi</option>
-            <option value="all">Match tutte</option>
-          </select>
-          <select
-            value={badgeMode}
-            onChange={(e) => setBadgeMode(e.target.value)}
-            className="border border-gray-300 px-2 py-1.5 rounded text-sm"
-            title="Visualizzazione badge caratteristiche"
-          >
-            <option value="compact">Badge compatti (sigla)</option>
-            <option value="extended">Badge estesi (nome)</option>
-          </select>
-        </div>
+        <details className="mb-4 border border-gray-200 rounded bg-gray-50">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-gray-800 flex flex-wrap items-center justify-between gap-2">
+            <span>Filtri ed Ordinamenti</span>
+            {canManageRuntimeControls && (
+              <span className="text-[11px] font-medium text-gray-600">
+                Controlli disponibili: {enabledControlsCount}/5
+              </span>
+            )}
+          </summary>
+          <div className="px-3 pb-3 pt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+            {showSearchControl && (
+              <input
+                type="text"
+                placeholder="Cerca professione/tier..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full"
+              />
+            )}
+
+            {showTierTypeControl && (
+              <select value={tierType} onChange={(e) => setTierType(e.target.value)} className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full">
+                {Object.entries(TIER_TYPE_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {showSortControls && (
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full">
+                <option value="tier_name">Ordina per nome</option>
+                <option value="widget_created">Ordina per creazione widget</option>
+              </select>
+            )}
+
+            {showSortControls && (
+              <select value={sortDir} onChange={(e) => setSortDir(e.target.value)} className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full">
+                <option value="asc">Crescente</option>
+                <option value="desc">Decrescente</option>
+              </select>
+            )}
+
+            {showCharacteristicsControl && (
+              <select
+                multiple
+                value={selectedCaratteristiche.map(String)}
+                onChange={(e) => setSelectedCaratteristiche(Array.from(e.target.selectedOptions).map((o) => Number(o.value)))}
+                className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full h-[96px]"
+                title="Filtra per caratteristiche Tier"
+              >
+                {(Array.isArray(data?.caratteristiche_available) ? data.caratteristiche_available : []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {showCharacteristicsControl && (
+              <select
+                value={caratteristicheFilterMode}
+                onChange={(e) => setCaratteristicheFilterMode(e.target.value)}
+                className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full"
+              >
+                <option value="any">Match qualsiasi</option>
+                <option value="all">Match tutte</option>
+              </select>
+            )}
+
+            <select
+              value={badgeMode}
+              onChange={(e) => setBadgeMode(e.target.value)}
+              className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full"
+              title="Visualizzazione badge caratteristiche"
+            >
+              <option value="compact">Badge compatti (sigla)</option>
+              <option value="extended">Badge estesi (nome)</option>
+            </select>
+          </div>
+        </details>
       )}
 
       {filteredItems.length === 0 ? (

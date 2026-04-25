@@ -16,6 +16,10 @@ export default function TierCollectionWidgetEditorModal({ onClose, onSave, initi
   const [sortBy, setSortBy] = useState(initialData?.sort_by || 'tier_name');
   const [sortDir, setSortDir] = useState(initialData?.sort_dir || 'asc');
   const [showRuntimeFilters, setShowRuntimeFilters] = useState(initialData?.show_runtime_filters ?? true);
+  const [showSearchControl, setShowSearchControl] = useState(initialData?.show_search_control ?? true);
+  const [showTierTypeControl, setShowTierTypeControl] = useState(initialData?.show_tier_type_control ?? true);
+  const [showCharacteristicsControl, setShowCharacteristicsControl] = useState(initialData?.show_characteristics_control ?? true);
+  const [showSortControls, setShowSortControls] = useState(initialData?.show_sort_controls ?? true);
   const [badgeMode, setBadgeMode] = useState(initialData?.badge_mode || 'compact');
   const [caratteristicheFilterMode, setCaratteristicheFilterMode] = useState(initialData?.caratteristiche_filter_mode || 'any');
   const [selectedCaratteristicheIds, setSelectedCaratteristicheIds] = useState(normalizeIds(initialData?.caratteristiche));
@@ -40,6 +44,10 @@ export default function TierCollectionWidgetEditorModal({ onClose, onSave, initi
           setSortBy(w.sort_by || 'tier_name');
           setSortDir(w.sort_dir || 'asc');
           setShowRuntimeFilters(w.show_runtime_filters ?? true);
+          setShowSearchControl(w.show_search_control ?? true);
+          setShowTierTypeControl(w.show_tier_type_control ?? true);
+          setShowCharacteristicsControl(w.show_characteristics_control ?? true);
+          setShowSortControls(w.show_sort_controls ?? true);
           setBadgeMode(w.badge_mode || 'compact');
           setCaratteristicheFilterMode(w.caratteristiche_filter_mode || 'any');
           setSelectedCaratteristicheIds(normalizeIds(w.caratteristiche));
@@ -66,6 +74,10 @@ export default function TierCollectionWidgetEditorModal({ onClose, onSave, initi
         badge_mode: badgeMode,
         caratteristiche_filter_mode: caratteristicheFilterMode,
         show_runtime_filters: !!showRuntimeFilters,
+        show_search_control: !!showSearchControl,
+        show_tier_type_control: !!showTierTypeControl,
+        show_characteristics_control: !!showCharacteristicsControl,
+        show_sort_controls: !!showSortControls,
         caratteristiche_ids: selectedCaratteristicheIds,
         widget_ids: sourceMode === 'selected' ? selectedWidgetIds : [],
       };
@@ -146,6 +158,27 @@ export default function TierCollectionWidgetEditorModal({ onClose, onSave, initi
             <input type="checkbox" checked={showRuntimeFilters} onChange={(e) => setShowRuntimeFilters(e.target.checked)} className="rounded" />
             <span className="text-sm font-medium text-gray-700">Mostra filtri e ordinamento nel widget</span>
           </label>
+
+          {showRuntimeFilters && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 rounded border border-gray-200 bg-gray-50">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={showSearchControl} onChange={(e) => setShowSearchControl(e.target.checked)} className="rounded" />
+                <span className="text-sm text-gray-700">Mostra ricerca testuale</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={showTierTypeControl} onChange={(e) => setShowTierTypeControl(e.target.checked)} className="rounded" />
+                <span className="text-sm text-gray-700">Mostra filtro tipo Tier</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={showCharacteristicsControl} onChange={(e) => setShowCharacteristicsControl(e.target.checked)} className="rounded" />
+                <span className="text-sm text-gray-700">Mostra filtro caratteristiche</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={showSortControls} onChange={(e) => setShowSortControls(e.target.checked)} className="rounded" />
+                <span className="text-sm text-gray-700">Mostra ordinamento</span>
+              </label>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>

@@ -2112,7 +2112,12 @@ export const getWikiTier = (id) => {
 
 // --- WIDGET COLLEZIONE TIER ---
 export const getWikiTierCollectionDisplay = (id) => {
-  return fetchPublic(`/api/plot/api/wiki/tier-collection-display/${encodeURIComponent(String(id))}/`);
+  const token = localStorage.getItem('kor35_token');
+  const endpoint = `/api/plot/api/wiki/tier-collection-display/${encodeURIComponent(String(id))}/`;
+  if (token) {
+    return fetchAuthenticated(endpoint, { method: 'GET' });
+  }
+  return fetchPublic(endpoint);
 };
 
 export const getWikiTierCollectionWidgetList = () => {

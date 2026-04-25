@@ -423,6 +423,10 @@ class WikiTierCollectionWidget(SyncableModel, models.Model):
     sort_dir = models.CharField(max_length=8, choices=SORT_DIR_CHOICES, default=SORT_ASC)
     caratteristiche_filter_mode = models.CharField(max_length=8, choices=CAR_FILTER_MODE_CHOICES, default=CAR_FILTER_ANY)
     show_runtime_filters = models.BooleanField(default=True, help_text="Mostra ricerca/filtro/ordinamento direttamente nel widget.")
+    show_search_control = models.BooleanField(default=True, help_text="Mostra il campo ricerca testuale nei controlli runtime.")
+    show_tier_type_control = models.BooleanField(default=True, help_text="Mostra il filtro per tipo Tier nei controlli runtime.")
+    show_characteristics_control = models.BooleanField(default=True, help_text="Mostra i filtri per caratteristiche nei controlli runtime.")
+    show_sort_controls = models.BooleanField(default=True, help_text="Mostra i controlli di ordinamento nei controlli runtime.")
     badge_mode = models.CharField(max_length=16, choices=BADGE_MODE_CHOICES, default=BADGE_COMPACT, help_text="Modalita di visualizzazione badge caratteristiche sui Tier.")
     caratteristiche = models.ManyToManyField(
         Punteggio,
