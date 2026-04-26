@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Hammer, ShieldAlert, Check, Loader2, Coins, Send, Clock } from 'lucide-react';
+import { X, Hammer, ShieldAlert, Check, Loader2, Send } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { forgiaOggetto, getCapableArtisans, createForgingRequest, validateForging } from '../api';
 
@@ -57,11 +57,7 @@ const ForgingModal = ({ infusione, onClose, onRefresh }) => {
          setMsg({ type: 'success', text: 'Forgiatura avviata! Controlla la coda.' });
       } else {
          // AIUTO ESTERNO
-         if (selectedTarget === 'ACADEMY') {
-             // Accademia
-             await forgiaOggetto(infusione.id, selectedCharacterData.id, true);
-             setMsg({ type: 'success', text: 'Forgiatura Accademia avviata!' });
-         } else if (selectedTarget) {
+         if (selectedTarget) {
              // Artigiano
              const art = capableArtisans.find(a => a.id == selectedTarget);
              const validOffer = parseInt(offerCredits) || 0;
@@ -129,7 +125,6 @@ const ForgingModal = ({ infusione, onClose, onRefresh }) => {
                               onChange={e => setSelectedTarget(e.target.value)}
                           >
                               <option value="">-- Seleziona Chi Esegue --</option>
-                              <option value="ACADEMY">🏛️ Accademia (200 CR)</option>
                               {capableArtisans.length > 0 && (
                                   <optgroup label="Artigiani Disponibili">
                                       {capableArtisans.map(a => (
@@ -174,19 +169,16 @@ const ForgingModal = ({ infusione, onClose, onRefresh }) => {
                       className={`
                           w-full py-2.5 rounded-lg font-bold flex justify-center items-center gap-2 transition-all
                           disabled:opacity-50 disabled:cursor-not-allowed
-                          ${selectedTarget === 'ACADEMY' 
-                              ? 'bg-yellow-600 hover:bg-yellow-500 text-white' 
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white'}
+                          bg-emerald-600 hover:bg-emerald-500 text-white
                       `}
                   >
                       {isProcessing ? <Loader2 className="animate-spin"/> : (
-                          selectedTarget === 'ACADEMY' ? <Coins size={18}/> : 
-                          (canForgeSelf ? <Hammer size={18}/> : <Send size={18}/>)
+                          canForgeSelf ? <Hammer size={18}/> : <Send size={18}/>
                       )}
                       
                       {canForgeSelf 
                           ? 'Inizia Forgiatura (Fai da te)' 
-                          : (selectedTarget === 'ACADEMY' ? 'Paga 200 CR e Avvia' : 'Invia Richiesta')}
+                          : 'Invia Richiesta'}
                   </button>
               </div>
           )}

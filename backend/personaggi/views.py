@@ -3374,6 +3374,28 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             
             db_committente = pg_self   # Il Dottore (Tu)
             db_artigiano = pg_target   # Il Paziente (Lui)
+
+            # Validazioni server-side: slot compatibile e libero sul ricevente.
+            slot_permessi_raw = forgiatura_obj.infusione.slot_corpo_permessi or ""
+            slot_permessi = [s.strip() for s in slot_permessi_raw.split(",") if s.strip()]
+            if slot_permessi and slot_dest not in slot_permessi:
+                return Response({"error": "Slot non compatibile con l'innesto/mutazione."}, status=400)
+
+            slot_occupato = Oggetto.objects.filter(
+                tracciamento_inventario__inventario=db_artigiano,
+                tracciamento_inventario__data_fine__isnull=True,
+                slot_corpo=slot_dest,
+                is_equipaggiato=True
+            ).exists()
+            if slot_occupato:
+                return Response({"error": "Lo slot selezionato è già occupato sul personaggio ricevente."}, status=400)
+
+            # Regola innesto: il ricevente deve avere almeno 1 punto Aura Tecnologica (ATE).
+            tipo_ris = forgiatura_obj.infusione.tipo_risultato
+            aura_oggetto = forgiatura_obj.infusione.aura_infusione or forgiatura_obj.infusione.aura_richiesta
+            if tipo_ris == 'AUM' and getattr(aura_oggetto, 'sigla', None) == 'ATE':
+                if db_artigiano.get_valore_statistica('ATE') < 1:
+                    return Response({"error": "Il ricevente deve avere almeno 1 punto in Aura Tecnologica (ATE)."}, status=400)
             
             messaggio_testo = f"Il Dr. {pg_self.nome} propone l'installazione di {forgiatura_obj.infusione.nome} su {slot_dest}. Costo: {offerta} CR."
             
@@ -3455,7 +3477,7 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
         
         # Controllo permessi preliminare (coerente col service)
         if richiesta.tipo_operazione == 'GRAF':
-            if not is_owner_committente and not is_admin:
+            if not is_owner_artigiano and not is_admin:
                 return Response({"error": "Solo il paziente può accettare questa proposta."}, status=403)
         else:
             if not is_owner_artigiano and not is_admin:
@@ -3531,13 +3553,13 @@ class CapableArtisansView(APIView):
 @permission_classes([IsAuthenticated])
 def forgia_item_view(request):
     """
-    Avvia la forgiatura.
-    - use_academy=True: Paga 200, ignora requisiti, avvia timer.
-    - use_academy=False: Paga materiali, check requisiti, avvia timer.
+    Avvia la forgiatura standard (via Accademia disattivata).
     """
     char_id = request.data.get('char_id')
     infusione_id = request.data.get('infusione_id')
     use_academy = request.data.get('use_academy', False)
+    if use_academy:
+        return Response({"error": "La via Accademia è disattivata."}, status=400)
 
     pg = get_object_or_404(Personaggio, id=char_id)
     if pg.proprietario != request.user and not (
@@ -3555,8 +3577,7 @@ def forgia_item_view(request):
             is_academy=use_academy
         )
         
-        msg = "Lavoro Accademia avviato." if use_academy else "Forgiatura avviata."
-        return Response({"status": "success", "message": f"{msg} Controlla la coda di lavoro."})
+        return Response({"status": "success", "message": "Forgiatura avviata. Controlla la coda di lavoro."})
 
     except ValidationError as e:
         return Response({"error": str(e)}, status=400)

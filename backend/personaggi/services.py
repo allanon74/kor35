@@ -476,11 +476,19 @@ class GestioneOggettiService:
                 is_tecnologico = True 
         
         if scelta == 'AUM':
-            prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
-            tipo_oggetto = TIPO_OGGETTO_AUMENTO
+            if is_tecnologico:
+                prefisso_nome = aura_oggetto.nome_tipo_aumento or "Innesto"
+                tipo_oggetto = TIPO_OGGETTO_INNESTO
+            else:
+                prefisso_nome = aura_oggetto.nome_tipo_aumento or "Mutazione"
+                tipo_oggetto = TIPO_OGGETTO_MUTAZIONE
         else:
-            prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Materia"
-            tipo_oggetto = TIPO_OGGETTO_POTENZIAMENTO
+            if is_tecnologico:
+                prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Mod"
+                tipo_oggetto = TIPO_OGGETTO_MOD
+            else:
+                prefisso_nome = aura_oggetto.nome_tipo_potenziamento or "Materia"
+                tipo_oggetto = TIPO_OGGETTO_MATERIA
                 
         nome_finale = nome_personalizzato or f"{prefisso_nome} di {infusione.nome}"
 
@@ -751,7 +759,9 @@ class GestioneOggettiService:
         1. Livello Aura PG >= Livello Infusione
         2. Caratteristiche PG >= Requisiti Componenti Infusione
         """
-        # 1. Verifica Aura
+        risultato = GestioneCraftingService._classifica_risultato_infusione(infusione)
+
+        # 1. Verifica Aura richiesta dall'infusione (livello minimo)
         aura_req = infusione.aura_richiesta
         if aura_req:
             # Recupera il valore effettivo dell'aura sul personaggio
@@ -761,6 +771,10 @@ class GestioneOggettiService:
             
             if valore_aura_pg < livello_infusione:
                 return False
+
+        # Regola extra innesto: il ricevente deve avere almeno 1 punto ATE.
+        if risultato == 'INNESTO' and personaggio.get_valore_statistica('ATE') < 1:
+            return False
 
         # 2. Verifica Caratteristiche (Componenti)
         punteggi_pg = personaggio.caratteristiche_base
@@ -830,6 +844,20 @@ class GestioneOggettiService:
 class GestioneCraftingService:
 
     @staticmethod
+    def _classifica_risultato_infusione(infusione):
+        """
+        Classifica l'infusione in uno dei 4 risultati logici:
+        MATERIA, MUTAZIONE, MOD, INNESTO.
+        """
+        aura_oggetto = infusione.aura_infusione if infusione.aura_infusione else infusione.aura_richiesta
+        sigla_aura = getattr(aura_oggetto, "sigla", "")
+        tipo_risultato = getattr(infusione, "tipo_risultato", "POT")
+
+        if tipo_risultato == 'AUM':
+            return 'INNESTO' if sigla_aura == 'ATE' else 'MUTAZIONE'
+        return 'MOD' if sigla_aura == 'ATE' else 'MATERIA'
+
+    @staticmethod
     def get_valore_statistica_aura(personaggio, aura, campo_configurazione):
         statistica_ref = getattr(aura, campo_configurazione, None)
         DEFAULT_COSTO = 100
@@ -883,79 +911,50 @@ class GestioneCraftingService:
     @staticmethod
     def verifica_competenza_forgiatura(forgiatore, infusione, aiutante=None):
         """
-        Verifica requisiti:
-        1. INDISPENSABILE: Forgiatore deve avere Aura Primaria >= Livello Infusione.
-        2. DELEGABILE: Aura Secondaria (se esiste) e Somma Caratteristiche.
+        Verifica requisiti di creazione secondo il tipo risultato:
+        - Materia: Aura Mondana >= livello + Aura secondaria >= livello + caratteristiche.
+        - Mutazione: Aura Innata >= livello + caratteristiche.
+        - Mod: Aura Tecnologica >= livello + caratteristiche.
+        - Innesto: Aura Tecnologica >= livello + caratteristiche.
         """
         livello = infusione.livello
-        aura_primaria = infusione.aura_richiesta
-        aura_secondaria = infusione.aura_infusione # Può essere None
+        risultato = GestioneCraftingService._classifica_risultato_infusione(infusione)
 
-        if not aura_primaria: return False, "Infusione non valida (manca aura richiesta)."
+        # Mappatura requisiti aura per tipo risultato.
+        sigla_req = {
+            'MATERIA': 'AMS',   # Aura Mondana
+            'MUTAZIONE': 'AIN', # Aura Innata
+            'MOD': 'ATE',       # Aura Tecnologica
+            'INNESTO': 'ATE',   # Aura Tecnologica
+        }.get(risultato, 'AMS')
 
-        # --- 1. REQUISITO INDISPENSABILE (Forgiatore) ---
-        val_f_primaria = forgiatore.get_valore_aura_effettivo(aura_primaria)
-        if val_f_primaria < livello:
-            return False, f"Requisito Indispensabile mancante: {aura_primaria.nome} insufficiente ({val_f_primaria}/{livello})."
+        aura_principale = Punteggio.objects.filter(tipo=AURA, sigla=sigla_req).first()
+        if not aura_principale:
+            return False, f"Aura richiesta non configurata nel sistema ({sigla_req})."
 
-        # --- RACCOLTA REQUISITI DELEGABILI MANCANTI ---
-        mancanze = []
+        val_aura_principale = forgiatore.get_valore_aura_effettivo(aura_principale)
+        if val_aura_principale < livello:
+            return False, f"Requisito Aura insufficiente: {aura_principale.nome} ({val_aura_principale}/{livello})."
 
-        # Check Aura Secondaria (Delegabile)
-        if aura_secondaria:
-            val_f_secondaria = forgiatore.get_valore_aura_effettivo(aura_secondaria)
-            if val_f_secondaria < livello:
-                mancanze.append({'tipo': 'AURA', 'obj': aura_secondaria, 'val': livello, 'posseduto': val_f_secondaria})
+        # Materia: richiede anche aura secondaria dell'infusione.
+        if risultato == 'MATERIA':
+            aura_secondaria = infusione.aura_infusione
+            if not aura_secondaria:
+                return False, "Materia non valida: manca l'aura secondaria dell'infusione."
+            val_secondaria = forgiatore.get_valore_aura_effettivo(aura_secondaria)
+            if val_secondaria < livello:
+                return False, f"Aura secondaria insufficiente: {aura_secondaria.nome} ({val_secondaria}/{livello})."
 
-        # Check Caratteristiche (Delegabili)
-        # Recuperiamo i punteggi base del forgiatore
+        # Verifica caratteristiche richieste dai componenti/mattoni formula.
         stats_forgiatore = forgiatore.caratteristiche_base
         for comp in infusione.componenti.select_related('caratteristica').all():
             nome_stat = comp.caratteristica.nome
             val_richiesto = comp.valore
             val_posseduto = stats_forgiatore.get(nome_stat, 0)
-            
             if val_posseduto < val_richiesto:
-                diff = val_richiesto - val_posseduto
-                mancanze.append({'tipo': 'STAT', 'obj': comp.caratteristica, 'val': val_richiesto, 'manca': diff})
+                return False, f"Caratteristica insufficiente: {nome_stat} ({val_posseduto}/{val_richiesto})."
 
-        # Se non ci sono mancanze, il forgiatore è autosufficiente
-        if not mancanze:
-            return True, "Autosufficiente"
-
-        # --- SE SERVONO AIUTI ---
-        if not aiutante:
-            return False, "Requisiti delegabili mancanti (Serve Aiuto o Accademia)."
-
-        # Verifica se l'Aiutante può coprire le mancanze
-        # Regola Aiutante: Deve avere Aura Primaria OR Aura Secondaria (se esiste) >= Livello
-        val_a_primaria = aiutante.get_valore_aura_effettivo(aura_primaria)
-        val_a_secondaria = aiutante.get_valore_aura_effettivo(aura_secondaria) if aura_secondaria else 0
-        
-        ha_competenza_base_aiutante = (val_a_primaria >= livello) or (val_a_secondaria >= livello)
-        
-        if not ha_competenza_base_aiutante:
-            return False, f"L'aiutante non ha la competenza d'aura minima richiesta ({aura_primaria.nome} o {aura_secondaria.nome if aura_secondaria else ''})."
-
-        # Verifica se l'Aiutante copre le specifiche mancanze (Stats o Aura Secondaria)
-        stats_aiutante = aiutante.caratteristiche_base
-        
-        for m in mancanze:
-            if m['tipo'] == 'AURA':
-                # Se mancava l'aura secondaria al forgiatore, l'aiutante ce l'ha?
-                if val_a_secondaria < livello:
-                    return False, f"Neanche l'aiutante soddisfa l'Aura Secondaria {m['obj'].nome}."
-            elif m['tipo'] == 'STAT':
-                # Logica Cooperativa: Sommiamo le stats? O l'aiutante deve avere il valore pieno?
-                # Solitamente nella forgiatura cooperativa si usa il valore più alto o si somma.
-                # Qui assumiamo che l'aiutante debba coprire il "buco" o avere il requisito.
-                # Interpretazione: "Unite a quelle del personaggio". Somma dei valori.
-                val_a_stat = stats_aiutante.get(m['obj'].nome, 0)
-                totale = (m['val'] - m['manca']) + val_a_stat # (Quello che ha il forgiatore) + Aiutante
-                if totale < m['val']:
-                     return False, f"Statistica {m['obj'].nome} insufficiente anche combinata ({totale}/{m['val']})."
-
-        return True, "Requisiti soddisfatti con aiuto."
+        return True, "Requisiti soddisfatti."
 
     @staticmethod
     def avvia_forgiatura(personaggio, infusione, slot_target=None, destinatario_finale=None, is_academy=False, aiutante=None):
