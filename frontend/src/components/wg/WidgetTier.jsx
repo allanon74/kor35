@@ -37,10 +37,13 @@ function isGradientDark(colors) {
   return darkCount >= valid.length / 2;
 }
 
-export default function WidgetTier({ id, badgeMode = 'compact' }) {
+export default function WidgetTier({ id, badgeMode = 'compact', forceDisableRuntimeFilters = false }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [isAbilitiesOpen, setIsAbilitiesOpen] = useState(false);
+  const [abilitySearch, setAbilitySearch] = useState('');
+  const [abilitySortDir, setAbilitySortDir] = useState('asc');
+  const [selectedAbilityCaratteristica, setSelectedAbilityCaratteristica] = useState('all');
 
   useEffect(() => {
     getWikiTier(id)
@@ -59,14 +62,34 @@ export default function WidgetTier({ id, badgeMode = 'compact' }) {
   if (error) return <div className="text-red-500 text-xs border border-red-300 p-2 rounded bg-red-50">Tier #{id} non disponibile.</div>;
   if (!data) return <div className="animate-pulse h-20 bg-gray-200 rounded my-4"></div>;
 
-  const sortedList = [...(data.abilita || [])].sort((a, b) => 
-    (a.nome || '').localeCompare(b.nome || '')
-  );
+  const allAbilities = Array.isArray(data.abilita) ? data.abilita : [];
+  const filteredAbilities = allAbilities.filter((a) => {
+    const q = String(abilitySearch || '').trim().toLowerCase();
+    if (q && !String(a?.nome || '').toLowerCase().includes(q)) return false;
+    if (selectedAbilityCaratteristica === 'all') return true;
+    const ids = [a?.caratteristica?.id, a?.caratteristica_2?.id, a?.caratteristica_3?.id]
+      .filter((x) => x != null)
+      .map((x) => String(x));
+    return ids.includes(String(selectedAbilityCaratteristica));
+  });
+  const sortedList = [...filteredAbilities].sort((a, b) => {
+    const cmp = String(a?.nome || '').localeCompare(String(b?.nome || ''));
+    return abilitySortDir === 'desc' ? -cmp : cmp;
+  });
   const caratteristicheTier = Array.isArray(data?.caratteristiche_visibili)
     ? [...data.caratteristiche_visibili].sort((a, b) => (a?.ordine ?? 0) - (b?.ordine ?? 0) || String(a?.nome || '').localeCompare(String(b?.nome || '')))
     : [];
 
   const soloLista = data?.abilities_solo_list === true;
+  const showRuntimeFilters = data?.show_runtime_filters === true && !forceDisableRuntimeFilters;
+  const availableAbilityCaratteristiche = Array.from(
+    new Map(
+      allAbilities
+        .flatMap((a) => [a?.caratteristica, a?.caratteristica_2, a?.caratteristica_3])
+        .filter((c) => c && c.id != null)
+        .map((c) => [c.id, c])
+    ).values()
+  ).sort((a, b) => String(a?.nome || '').localeCompare(String(b?.nome || '')));
 
   const gradientColors = Array.isArray(data.gradient_colors) ? data.gradient_colors : [];
   const useGradient = gradientColors.length > 0;
@@ -136,6 +159,43 @@ export default function WidgetTier({ id, badgeMode = 'compact' }) {
               style={descStyle}
               dangerouslySetInnerHTML={{ __html: data.descrizione }}
             />
+        )}
+
+        {showRuntimeFilters && (
+          <details className="mx-2 my-2 border border-gray-200 rounded bg-gray-50">
+            <summary className="cursor-pointer select-none px-3 py-2 text-xs md:text-sm font-semibold text-gray-800">
+              Filtri abilità
+            </summary>
+            <div className="px-3 pb-3 pt-1 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <input
+                type="text"
+                placeholder="Cerca abilità..."
+                value={abilitySearch}
+                onChange={(e) => setAbilitySearch(e.target.value)}
+                className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full"
+              />
+              <select
+                value={selectedAbilityCaratteristica}
+                onChange={(e) => setSelectedAbilityCaratteristica(e.target.value)}
+                className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full"
+              >
+                <option value="all">Tutte le caratteristiche</option>
+                {availableAbilityCaratteristiche.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={abilitySortDir}
+                onChange={(e) => setAbilitySortDir(e.target.value)}
+                className="border border-gray-300 px-2 py-1.5 rounded text-sm w-full"
+              >
+                <option value="asc">Ordine A-Z</option>
+                <option value="desc">Ordine Z-A</option>
+              </select>
+            </div>
+          </details>
         )}
 
         {/* GRIGLIA ABILITÀ: collapsible se data.abilities_collapsible, aperto/chiuso da data.abilities_collapsed_by_default */}

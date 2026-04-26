@@ -193,7 +193,7 @@ export default function WidgetTierCollection({ id }) {
       ) : (
         <div className="space-y-3">
           {filteredItems.map((item) => (
-            <WidgetTier key={item.token || item.id} id={item.token || item.id} badgeMode={badgeMode} />
+            <WidgetTier key={item.token || item.id} id={item.token || item.id} badgeMode={badgeMode} forceDisableRuntimeFilters={true} />
           ))}
         </div>
       )}

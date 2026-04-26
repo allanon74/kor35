@@ -29,6 +29,7 @@ export default function TierWidgetEditorModal({ onClose, onSave, initialData = n
   const [abilitiesCollapsible, setAbilitiesCollapsible] = useState(initialData?.abilities_collapsible ?? true);
   const [abilitiesCollapsedByDefault, setAbilitiesCollapsedByDefault] = useState(initialData?.abilities_collapsed_by_default ?? false);
   const [abilitiesSoloList, setAbilitiesSoloList] = useState(initialData?.abilities_solo_list ?? false);
+  const [showRuntimeFilters, setShowRuntimeFilters] = useState(initialData?.show_runtime_filters ?? false);
   const [showDescription, setShowDescription] = useState(initialData?.show_description ?? true);
   const [colorStyle, setColorStyle] = useState(initialData?.color_style || 'default');
   const normalizeToPresetHex = (h) => {
@@ -66,6 +67,7 @@ export default function TierWidgetEditorModal({ onClose, onSave, initialData = n
           setAbilitiesCollapsible(w.abilities_collapsible ?? true);
           setAbilitiesCollapsedByDefault(w.abilities_collapsed_by_default ?? false);
           setAbilitiesSoloList(w.abilities_solo_list ?? false);
+          setShowRuntimeFilters(w.show_runtime_filters ?? false);
           setShowDescription(w.show_description ?? true);
           setColorStyle(w.color_style || 'default');
           if (Array.isArray(w.gradient_colors) && w.gradient_colors.length > 0) {
@@ -91,6 +93,7 @@ export default function TierWidgetEditorModal({ onClose, onSave, initialData = n
         abilities_collapsible: abilitiesCollapsible,
         abilities_collapsed_by_default: abilitiesCollapsedByDefault,
         abilities_solo_list: abilitiesSoloList,
+        show_runtime_filters: showRuntimeFilters,
         show_description: showDescription,
         color_style: colorStyle || 'default',
         gradient_colors: gradientColors.filter(c => c && String(c).trim()),
@@ -224,6 +227,15 @@ export default function TierWidgetEditorModal({ onClose, onSave, initialData = n
                 className="rounded"
               />
               <span className="text-sm font-medium text-gray-700">Abilità in sola lista</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showRuntimeFilters}
+                onChange={e => setShowRuntimeFilters(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-sm font-medium text-gray-700">Mostra filtri runtime abilità</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input

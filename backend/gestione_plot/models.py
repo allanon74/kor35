@@ -345,6 +345,7 @@ class WikiTierWidget(SyncableModel, models.Model):
     abilities_collapsed_by_default = models.BooleanField(default=False)
     abilities_solo_list = models.BooleanField(default=False)
     show_description = models.BooleanField(default=True)
+    show_runtime_filters = models.BooleanField(default=False, help_text="Mostra filtri runtime sulle abilita del singolo Tier.")
     color_style = models.CharField(max_length=20, default='default')
     # Lista colori hex per gradiente (es. ["#1976D2", "#7B1FA2"]). Se vuota si usa color_style.
     gradient_colors = models.JSONField(default=list, blank=True)

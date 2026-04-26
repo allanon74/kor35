@@ -781,6 +781,7 @@ def get_wiki_tier_display(request, key):
             'abilities_collapsible': widget.abilities_collapsible,
             'abilities_collapsed_by_default': widget.abilities_collapsed_by_default,
             'abilities_solo_list': getattr(widget, 'abilities_solo_list', False),
+            'show_runtime_filters': getattr(widget, 'show_runtime_filters', False),
             'show_description': widget.show_description,
             'color_style': widget.color_style or 'default',
             'gradient_colors': getattr(widget, 'gradient_colors', []) or [],
@@ -797,6 +798,7 @@ def get_wiki_tier_display(request, key):
                 'abilities_collapsible': True,
                 'abilities_collapsed_by_default': False,
                 'abilities_solo_list': False,
+                'show_runtime_filters': False,
                 'show_description': True,
                 'color_style': 'default',
             }
@@ -815,6 +817,7 @@ def get_wiki_tier_display(request, key):
                     'abilities_collapsible': True,
                     'abilities_collapsed_by_default': False,
                     'abilities_solo_list': False,
+                    'show_runtime_filters': False,
                     'show_description': True,
                     'color_style': 'default',
                 }
@@ -835,6 +838,7 @@ def get_wiki_tier_display(request, key):
                         'abilities_collapsible': True,
                         'abilities_collapsed_by_default': False,
                         'abilities_solo_list': False,
+                        'show_runtime_filters': False,
                         'show_description': True,
                         'color_style': 'default',
                     }
@@ -861,6 +865,7 @@ def get_wiki_tier_display(request, key):
                         'abilities_collapsible': True,
                         'abilities_collapsed_by_default': False,
                         'abilities_solo_list': False,
+                        'show_runtime_filters': False,
                         'show_description': True,
                         'color_style': 'default',
                     }
