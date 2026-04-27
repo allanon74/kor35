@@ -125,16 +125,35 @@ jobs:
           USER: ${{ secrets.SERVER_USER }}
           PORT: ${{ secrets.SERVER_SSH_PORT }}
           PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+          PROD_COMPOSE_PROJECT_NAME: ${{ secrets.PROD_COMPOSE_PROJECT_NAME }}
         run: |
           set -euo pipefail
           REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
           REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
+          CPN="${PROD_COMPOSE_PROJECT_NAME:-kor35-prod}"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          rsync -avz --delete -e "ssh -p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa" \
+          # I file sotto react_build possono essere root/nginx (volume Docker): rsync --delete fallisce senza chown.
+          # Ferma nginx, poi chown uid:gid dell'utente deploy via container root (no sudo su host se l'utente ha docker).
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          RB="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
+          mkdir -p "$RB"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          docker compose -f compose.base.yml -f compose.prod.yml stop frontend 2>/dev/null || true
+          # Se fallisce (es. pull Alpine bloccato), non bloccare il deploy: rsync come prima del fix permessi.
+          if ! docker run --rm -v "${RB}:/mnt:rw" alpine:3.20 chown -R "$(id -u):$(id -g)" /mnt; then
+            echo "WARN: chown react_build via docker fallito; continuo con rsync (può fallire se i file sono root)." >&2
+          fi
+          REMOTE_PREP
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
 
       - name: Backup and deploy on Production via SSH
@@ -242,17 +261,33 @@ jobs:
           PORT: ${{ secrets.MIRROR_SERVER_SSH_PORT }}
           ROOT_PATH: ${{ secrets.MIRROR_ROOT_PATH }}
           BACKEND_PATH: ${{ secrets.MIRROR_BACKEND_PATH }}
+          MIRROR_COMPOSE_PROJECT_NAME: ${{ secrets.MIRROR_COMPOSE_PROJECT_NAME }}
         run: |
           set -euo pipefail
           # Stessa logica dello step SSH: root monorepo = MIRROR_ROOT_PATH se valorizzato, altrimenti MIRROR_BACKEND_PATH, altrimenti default.
           REMOTE_BASE="${ROOT_PATH:-${BACKEND_PATH:-/home/pi/kor35-replica}}"
           REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
+          CPN="${MIRROR_COMPOSE_PROJECT_NAME:-kor35-replica}"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          rsync -avz --delete -e "ssh -p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa" \
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          RB="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
+          mkdir -p "$RB"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          docker compose -f compose.base.yml -f compose.mirror.yml stop frontend 2>/dev/null || true
+          if ! docker run --rm -v "${RB}:/mnt:rw" alpine:3.20 chown -R "$(id -u):$(id -g)" /mnt; then
+            echo "WARN: chown react_build via docker fallito; continuo con rsync (può fallire se i file sono root)." >&2
+          fi
+          REMOTE_PREP
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
 
       - name: Deploy backend to mirror via SSH
