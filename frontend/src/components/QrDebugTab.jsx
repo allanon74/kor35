@@ -128,8 +128,15 @@ const QrDebugTab = ({ onLogout }) => {
               QR Code: {qrData.id}
             </h3>
             <p className="text-gray-400 text-sm">
-              Tipo contenuto: <span className="text-indigo-400 font-semibold">{qrData.tipo_contenuto || 'Vuoto'}</span>
+              Tipo risolto:{' '}
+              <span className="text-indigo-400 font-semibold">{qrData.tipo_contenuto || 'Vuoto'}</span>
+              {qrData.elemento_id != null && qrData.elemento_id !== '' && (
+                <span className="text-gray-500"> · id elemento: {qrData.elemento_id}</span>
+              )}
             </p>
+            {qrData.nota && (
+              <p className="text-amber-400/90 text-sm mt-2">{qrData.nota}</p>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -139,6 +146,11 @@ const QrDebugTab = ({ onLogout }) => {
               <p className="text-gray-400 text-sm">
                 Testo raw: <span className="text-indigo-300">{qrData.testo_raw || '—'}</span>
               </p>
+              {qrData.dati != null && (
+                <p className="text-gray-500 text-xs pt-2 border-t border-gray-800">
+                  Dati dell&apos;elemento collegato (staff) sono nel JSON sotto in <code className="text-gray-400">dati</code>.
+                </p>
+              )}
             </div>
           </div>
 

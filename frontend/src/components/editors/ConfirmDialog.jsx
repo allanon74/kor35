@@ -4,12 +4,14 @@ const ConfirmDialog = ({
   open = false,
   title = 'Conferma',
   message = '',
+  children = null,
   confirmLabel = 'Conferma',
   cancelLabel = 'Annulla',
   confirmTone = 'danger',
   onConfirm,
   onCancel,
   loading = false,
+  zIndexClass = 'z-[130]',
 }) => {
   if (!open) return null;
 
@@ -18,11 +20,14 @@ const ConfirmDialog = ({
     : 'bg-amber-600 hover:bg-amber-500';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+    <div className={`fixed inset-0 ${zIndexClass} bg-black/70 flex items-center justify-center p-4`}>
       <div className="w-full max-w-md bg-gray-900 border border-gray-700 rounded-xl shadow-2xl">
         <div className="p-4 border-b border-gray-700">
           <h3 className="text-white font-bold text-lg">{title}</h3>
-          <p className="text-sm text-gray-400 mt-1">{message}</p>
+          {children ? <div className="mt-1">{children}</div> : null}
+          {!children && message ? (
+            <p className="text-sm text-gray-400 mt-1 whitespace-pre-line">{message}</p>
+          ) : null}
         </div>
         <div className="p-4 flex justify-end gap-2">
           <button

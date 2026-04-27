@@ -5,6 +5,7 @@ import OggettoEditor from './OggettoEditor';
 import StaffQrTab from '../StaffQrTab';
 import { associaQrDiretto } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
+import QrAssociationConflictBody from './QrAssociationConflictBody';
 
 const OggettoManager = ({ onBack, onLogout }) => {
   const [view, setView] = useState('list'); // 'list' | 'editor'
@@ -12,6 +13,7 @@ const OggettoManager = ({ onBack, onLogout }) => {
   const [scanningForElement, setScanningForElement] = useState(null);
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
+  const [listVersion, setListVersion] = useState(0);
 
   const handleAdd = useCallback(() => {
     setSelectedItem(null);
@@ -58,7 +60,8 @@ const OggettoManager = ({ onBack, onLogout }) => {
           onAdd={handleAdd} 
           onEdit={handleEdit} 
           onScanQr={handleScanQr}
-          onLogout={onLogout} 
+          onLogout={onLogout}
+          listVersion={listVersion}
         />
       ) : (
         <OggettoEditor 
@@ -86,11 +89,12 @@ const OggettoManager = ({ onBack, onLogout }) => {
                   await associaQrDiretto(scanningForElement, qr_id, onLogout);
                   setScanningForElement(null);
                   setQrStatus({ type: 'success', message: 'QR associato con successo.' });
+                  setListVersion((v) => v + 1);
                 } catch (error) {
                   if (error.status === 409 && error.data?.already_associated) {
                     setPendingQrConflict({
                       qrId: qr_id,
-                      message: error.data.message,
+                      errorData: error.data,
                     });
                   } else {
                     setQrStatus({ type: 'error', message: `Errore: ${error.message || 'Errore sconosciuto'}` });
@@ -104,9 +108,9 @@ const OggettoManager = ({ onBack, onLogout }) => {
       )}
       <ConfirmDialog
         open={Boolean(pendingQrConflict)}
-        title="QR gia associato"
-        message={`${pendingQrConflict?.message || ''} Vuoi procedere comunque e spostare il QR su questo elemento?`}
-        confirmLabel="Sposta QR"
+        title="QR già associato"
+        message=""
+        confirmLabel="Sostituisci associazione"
         confirmTone="warning"
         onCancel={() => setPendingQrConflict(null)}
         onConfirm={async () => {
@@ -116,11 +120,16 @@ const OggettoManager = ({ onBack, onLogout }) => {
             setScanningForElement(null);
             setPendingQrConflict(null);
             setQrStatus({ type: 'success', message: 'QR riassociato con successo.' });
+            setListVersion((v) => v + 1);
           } catch (error) {
             setQrStatus({ type: 'error', message: `Errore: ${error.message || 'Errore sconosciuto'}` });
           }
         }}
-      />
+      >
+        {pendingQrConflict?.errorData ? (
+          <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo oggetto" />
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 };

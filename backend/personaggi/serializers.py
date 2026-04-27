@@ -1307,12 +1307,18 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         fields = '__all__'
         
     def to_representation(self, instance):
+        from .models import QrCode
+
         rep = super().to_representation(instance)
         # Espande l'aura per permettere al frontend di vedere l'icona
         if instance.aura_richiesta:
             rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data
         if instance.aura_infusione:
             rep['aura_infusione'] = PunteggioSmallSerializer(instance.aura_infusione).data
+        if hasattr(instance, "has_qrcode"):
+            rep["has_qrcode"] = bool(instance.has_qrcode)
+        else:
+            rep["has_qrcode"] = QrCode.objects.filter(vista_id=instance.pk).exists()
         return rep
 
     @transaction.atomic
@@ -1348,10 +1354,16 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         fields = '__all__'
     
     def to_representation(self, instance):
+        from .models import QrCode
+
         rep = super().to_representation(instance)
         # Per la lista nel frontend servono gli oggetti completi, non solo gli ID
         rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data if instance.aura_richiesta else None
         rep['elemento_principale'] = PunteggioSmallSerializer(instance.elemento_principale).data if instance.elemento_principale else None
+        if hasattr(instance, "has_qrcode"):
+            rep["has_qrcode"] = bool(instance.has_qrcode)
+        else:
+            rep["has_qrcode"] = QrCode.objects.filter(vista_id=instance.pk).exists()
         return rep
 
     @transaction.atomic
@@ -1383,8 +1395,14 @@ class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMa
         fields = '__all__'
         
     def to_representation(self, instance):
+        from .models import QrCode
+
         rep = super().to_representation(instance)
         rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data if instance.aura_richiesta else None
+        if hasattr(instance, "has_qrcode"):
+            rep["has_qrcode"] = bool(instance.has_qrcode)
+        else:
+            rep["has_qrcode"] = QrCode.objects.filter(vista_id=instance.pk).exists()
         return rep
 
     @transaction.atomic
@@ -1564,9 +1582,11 @@ class ManifestoSerializer(serializers.ModelSerializer):
 class ManifestoStaffSerializer(serializers.ModelSerializer):
     """CRUD staff manifesti (contenuto HTML in `testo`, requisiti opzionali)."""
 
+    has_qrcode = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = Manifesto
-        fields = ("id", "nome", "testo", "requisiti_lettura")
+        fields = ("id", "nome", "testo", "requisiti_lettura", "has_qrcode")
 
 
 class NodoSerializer(serializers.ModelSerializer):
@@ -1582,6 +1602,7 @@ class NodoSerializer(serializers.ModelSerializer):
 
 class NodoStaffSerializer(serializers.ModelSerializer):
     foto_posizione_url = serializers.SerializerMethodField()
+    has_qrcode = serializers.BooleanField(read_only=True)
 
     def get_foto_posizione_url(self, obj):
         if not obj.foto_posizione:
@@ -1604,6 +1625,7 @@ class NodoStaffSerializer(serializers.ModelSerializer):
             "foto_posizione",
             "foto_posizione_url",
             "campagna",
+            "has_qrcode",
         )
         read_only_fields = ("campagna",)
 
@@ -1615,6 +1637,7 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
     target_regioni_ids = serializers.SerializerMethodField()
     target_korps_ids = serializers.SerializerMethodField()
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+    has_qrcode = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = InnescoTimer
@@ -1631,6 +1654,7 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
             "target_ere_ids",
             "target_regioni_ids",
             "target_korps_ids",
+            "has_qrcode",
         )
         read_only_fields = ("campagna", "target_ere_ids", "target_regioni_ids", "target_korps_ids")
 
@@ -1682,10 +1706,11 @@ class InventarioStaffSerializer(serializers.ModelSerializer):
     """Serializer per gestione inventari nello staff (CRUD completo)"""
     oggetti_count = serializers.SerializerMethodField()
     is_personaggio = serializers.SerializerMethodField()
+    has_qrcode = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Inventario
-        fields = ('id', 'nome', 'testo', 'oggetti_count', 'is_personaggio')
+        fields = ('id', 'nome', 'testo', 'oggetti_count', 'is_personaggio', 'has_qrcode')
     
     def get_oggetti_count(self, obj):
         return obj.get_oggetti().count()
@@ -2841,6 +2866,8 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
         fields = '__all__'
 
     def to_representation(self, instance):
+        from .models import QrCode
+
         rep = super().to_representation(instance)
         rep['aura'] = PunteggioSmallSerializer(instance.aura).data if instance.aura else None
         rep['classe_oggetto'] = {
@@ -2848,6 +2875,10 @@ class OggettoFullEditorSerializer(serializers.ModelSerializer, MasterOggettoMixi
             'nome': instance.classe_oggetto.nome,
         } if instance.classe_oggetto else None
         rep['classe_oggetto_nome'] = instance.classe_oggetto.nome if instance.classe_oggetto else ''
+        if hasattr(instance, "has_qrcode"):
+            rep["has_qrcode"] = bool(instance.has_qrcode)
+        else:
+            rep["has_qrcode"] = QrCode.objects.filter(vista_id=instance.pk).exists()
         return rep
 
     @transaction.atomic

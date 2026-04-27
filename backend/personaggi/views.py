@@ -4863,46 +4863,28 @@ class AssociaQrAVistaView(APIView):
             
             # Se il QR è già associato e force=False, restituisci errore con dettagli
             if qr.vista and qr.vista != a_vista and not force:
-                # Determina il tipo di elemento associato
-                elemento_associato = None
-                tipo_elemento = "Elemento"
-                
-                # Cerca in tutti i modelli che ereditano da A_vista
-                if hasattr(qr.vista, 'tessitura'):
-                    elemento_associato = qr.vista.tessitura
-                    tipo_elemento = "Tessitura"
-                elif hasattr(qr.vista, 'infusione'):
-                    elemento_associato = qr.vista.infusione
-                    tipo_elemento = "Infusione"
-                elif hasattr(qr.vista, 'cerimoniale'):
-                    elemento_associato = qr.vista.cerimoniale
-                    tipo_elemento = "Cerimoniale"
-                elif hasattr(qr.vista, 'oggetto'):
-                    elemento_associato = qr.vista.oggetto
-                    tipo_elemento = "Oggetto"
-                elif hasattr(qr.vista, 'oggettobase'):
-                    elemento_associato = qr.vista.oggettobase
-                    tipo_elemento = "Oggetto Base"
-                elif hasattr(qr.vista, 'inventario'):
-                    elemento_associato = qr.vista.inventario
-                    tipo_elemento = "Inventario"
-                elif hasattr(qr.vista, 'manifesto'):
-                    elemento_associato = qr.vista.manifesto
-                    tipo_elemento = "Manifesto"
-                elif InnescoTimer.objects.filter(pk=qr.vista.pk).exists():
-                    elemento_associato = InnescoTimer.objects.get(pk=qr.vista.pk)
-                    tipo_elemento = "Innesco timer"
-                elif Nodo.objects.filter(pk=qr.vista.pk).exists():
-                    elemento_associato = Nodo.objects.get(pk=qr.vista.pk)
-                    tipo_elemento = "Nodo"
-                
-                nome_associato = elemento_associato.nome if elemento_associato else "Sconosciuto"
-                
-                return Response({
-                    'error': 'QR già associato',
-                    'already_associated': True,
-                    'message': f'Questo QR è già associato a: {nome_associato} ({tipo_elemento}). Confermare per disassociarlo?'
-                }, status=status.HTTP_409_CONFLICT)
+                from .qr_logic import descrivi_avista_per_associazione_qr
+
+                info = descrivi_avista_per_associazione_qr(qr.vista) or {
+                    "tipo": "sconosciuto",
+                    "nome": qr.vista.nome,
+                    "elemento_id": str(qr.vista.pk),
+                }
+                nome_associato = info["nome"]
+                tipo_elemento = info["tipo"]
+                return Response(
+                    {
+                        "error": "QR già associato",
+                        "already_associated": True,
+                        "qr_id": str(qr.id),
+                        "associazione_attuale": info,
+                        "message": (
+                            f'Questo QR è già associato a «{nome_associato}» ({tipo_elemento}). '
+                            "Confermi di volerlo spostare su questo elemento?"
+                        ),
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
             
             # Associa il QR all'elemento A_vista
             qr.vista = a_vista

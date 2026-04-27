@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { staffGetInfusioni, staffDeleteInfusione } from '../../api';
 import MasterTechniqueList from './MasterTechniqueList';
 
-const InfusioneList = ({ onSelect, onNew, onScanQr, onLogout }) => {
+const InfusioneList = ({ onSelect, onNew, onScanQr, onLogout, listVersion = 0 }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -33,7 +33,7 @@ const InfusioneList = ({ onSelect, onNew, onScanQr, onLogout }) => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [listVersion]);
 
   const handleDelete = async (id) => {
     try {

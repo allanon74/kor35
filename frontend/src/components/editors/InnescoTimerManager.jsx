@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, memo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
+import QrAssociationConflictBody from './QrAssociationConflictBody';
+import StaffQrBadge from './StaffQrBadge';
 import {
   associaQrDiretto,
   staffGetInnescoTimers,
@@ -193,14 +195,17 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
           ) : (
             <ul className="divide-y divide-gray-700 border border-gray-700 rounded-lg">
               {items.map((t) => (
-                <li key={t.id} className="flex justify-between items-center p-3 hover:bg-gray-800/50">
-                  <div>
-                    <div className="font-semibold">{t.nome}</div>
-                    <div className="text-[10px] text-gray-500">
-                      {t.durata_secondi}s · {t.modalita_target} · cariche {t.max_cariche}
+                <li key={t.id} className="flex justify-between items-center p-3 hover:bg-gray-800/50 gap-2">
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <StaffQrBadge hasQr={t.has_qrcode} />
+                    <div className="min-w-0">
+                      <div className="font-semibold">{t.nome}</div>
+                      <div className="text-[10px] text-gray-500">
+                        {t.durata_secondi}s · {t.modalita_target} · cariche {t.max_cariche}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     <button type="button" className="text-xs px-2 py-1 bg-gray-700 rounded" onClick={() => setEditing({ ...emptyForm(), ...t })}>
                       Modifica
                     </button>
@@ -337,9 +342,10 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
                   await associaQrDiretto(scanningId, qr_id, onLogout);
                   setScanningId(null);
                   setMsg('QR associato.');
+                  load();
                 } catch (error) {
                   if (error.status === 409 && error.data?.already_associated) {
-                    setPendingQrConflict({ qrId: qr_id, message: error.data.message });
+                    setPendingQrConflict({ qrId: qr_id, errorData: error.data });
                   } else {
                     setMsg(error.message || 'Errore');
                   }
@@ -354,8 +360,8 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
       <ConfirmDialog
         open={Boolean(pendingQrConflict)}
         title="QR già associato"
-        message={`${pendingQrConflict?.message || ''} Vuoi spostare il QR su questo innesco?`}
-        confirmLabel="Sposta QR"
+        message=""
+        confirmLabel="Sostituisci associazione"
         confirmTone="warning"
         onCancel={() => setPendingQrConflict(null)}
         onConfirm={async () => {
@@ -365,11 +371,16 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
             setPendingQrConflict(null);
             setScanningId(null);
             setMsg('QR associato (forzato).');
+            load();
           } catch (e) {
             setMsg(e.message || 'Errore');
           }
         }}
-      />
+      >
+        {pendingQrConflict?.errorData ? (
+          <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo innesco timer" />
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { staffGetOggetti, staffDeleteOggetto } from '../../api';
 import { useCharacter } from '../CharacterContext';
 import MasterGenericList from './MasterGenericList';
 import IconaPunteggio from '../IconaPunteggio';
+import StaffQrBadge from './StaffQrBadge';
 
 const TIPO_OGGETTO_CHOICES = [
     { id: 'FIS', nome: 'Fisico' },
@@ -14,7 +15,7 @@ const TIPO_OGGETTO_CHOICES = [
     { id: 'POT', nome: 'Potenziamento' },
 ];
 
-const OggettoList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
+const OggettoList = ({ onAdd, onEdit, onScanQr, onLogout, listVersion = 0 }) => {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const { punteggiList } = useCharacter();
@@ -26,7 +27,7 @@ const OggettoList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
             .finally(() => setLoading(false));
     };
 
-    useEffect(() => { loadData(); }, []);
+    useEffect(() => { loadData(); }, [listVersion]);
 
     const filterConfig = [
         {
@@ -47,6 +48,12 @@ const OggettoList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
     ];
 
     const columns = [
+        {
+            header: 'QR',
+            width: '44px',
+            align: 'center',
+            render: (item) => <StaffQrBadge hasQr={item.has_qrcode} />,
+        },
         { 
             header: 'Au', 
             width: '50px', 

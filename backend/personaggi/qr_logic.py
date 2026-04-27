@@ -415,3 +415,67 @@ def consuma_pool_speciale(personaggio, stat_sigla: str) -> Dict[str, Any]:
         chance = min(100, cur * 2)
         return {"speciale": "ava", "note": "Regola resurrezione non attiva in questa fase.", "ava_points_left": cur, "resurrect_chance_percent": chance}
     return {}
+
+
+def annotate_has_qrcode_avista(qs):
+    """Annotazione Exists: True se esiste un QrCode con vista_id = pk della riga (sottoclassi A_vista)."""
+    from django.db.models import Exists, OuterRef
+
+    from .models import QrCode
+
+    return qs.annotate(has_qrcode=Exists(QrCode.objects.filter(vista_id=OuterRef("pk"))))
+
+
+def descrivi_avista_per_associazione_qr(vista_obj):
+    """
+    Risolve la sottoclasse reale collegata a QrCode.vista (ORM carica spesso solo A_vista).
+    Usato per messaggi 409 e strumenti staff.
+    Ritorna dict: tipo (slug), nome, elemento_id (str).
+    """
+    from .models import (
+        Attivata,
+        Cerimoniale,
+        Infusione,
+        InnescoTimer,
+        Inventario,
+        Manifesto,
+        Nodo,
+        Oggetto,
+        Personaggio,
+        Tessitura,
+    )
+
+    if vista_obj is None:
+        return None
+
+    pk = vista_obj.pk
+
+    def _out(tipo: str, instance) -> Dict[str, Any]:
+        return {
+            "tipo": tipo,
+            "nome": getattr(instance, "nome", str(instance)),
+            "elemento_id": str(instance.pk),
+        }
+
+    if InnescoTimer.objects.filter(pk=pk).exists():
+        return _out("innesco_timer", InnescoTimer.objects.get(pk=pk))
+    if Nodo.objects.filter(pk=pk).exists():
+        return _out("nodo", Nodo.objects.get(pk=pk))
+    if Personaggio.objects.filter(inventario_ptr_id=pk).exists():
+        return _out("personaggio", Personaggio.objects.get(inventario_ptr_id=pk))
+    if Oggetto.objects.filter(pk=pk).exists():
+        return _out("oggetto", Oggetto.objects.get(pk=pk))
+    if Attivata.objects.filter(pk=pk).exists():
+        return _out("attivata", Attivata.objects.get(pk=pk))
+    if Infusione.objects.filter(pk=pk).exists():
+        return _out("infusione", Infusione.objects.get(pk=pk))
+    if Tessitura.objects.filter(pk=pk).exists():
+        return _out("tessitura", Tessitura.objects.get(pk=pk))
+    if Cerimoniale.objects.filter(pk=pk).exists():
+        return _out("cerimoniale", Cerimoniale.objects.get(pk=pk))
+    if Manifesto.objects.filter(pk=pk).exists():
+        return _out("manifesto", Manifesto.objects.get(pk=pk))
+    inv = Inventario.objects.filter(pk=pk).first()
+    if inv and not Personaggio.objects.filter(inventario_ptr_id=pk).exists():
+        return _out("inventario", inv)
+    return _out("a_vista", vista_obj)

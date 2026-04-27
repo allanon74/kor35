@@ -383,16 +383,31 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
             
             # CONTROLLO: Se il QR è già associato ad un'altra vista, avvisa l'utente
             if qr.vista and not force:
-                return Response({
-                    'error': 'QR già associato',
-                    'already_associated': True,
-                    'current_vista': {
-                        'id': qr.vista.id,
-                        'nome': qr.vista.nome,
-                        'tipo': qr.vista.__class__.__name__
+                from personaggi.qr_logic import descrivi_avista_per_associazione_qr
+
+                info = descrivi_avista_per_associazione_qr(qr.vista) or {
+                    "tipo": "a_vista",
+                    "nome": qr.vista.nome,
+                    "elemento_id": str(qr.vista.pk),
+                }
+                return Response(
+                    {
+                        "error": "QR già associato",
+                        "already_associated": True,
+                        "qr_id": str(qr.id),
+                        "associazione_attuale": info,
+                        "current_vista": {
+                            "id": info.get("elemento_id"),
+                            "nome": info.get("nome"),
+                            "tipo": info.get("tipo"),
+                        },
+                        "message": (
+                            f'Questo QR è già associato a «{info["nome"]}» ({info["tipo"]}). '
+                            "Confermi di volerlo spostare su questa vista di quest?"
+                        ),
                     },
-                    'message': f'Questo QR è già associato a: {qr.vista.nome} ({qr.vista.__class__.__name__}). Confermare per disassociarlo?'
-                }, status=409)  # 409 Conflict
+                    status=409,
+                )
             
             # Colleghiamo il QR alla "Vista" appropriata in base al tipo
             target_vista = (vista_quest.manifesto or vista_quest.inventario or 

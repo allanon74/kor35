@@ -15,6 +15,7 @@ from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, InnescoTimer,
+    A_vista, Attivata,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
@@ -25,6 +26,8 @@ from .models import (
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI,
     FEATURE_MODE_SHARED,
 )
+
+from .qr_logic import annotate_has_qrcode_avista
 
 from .serializers import (
     InfusioneFullEditorSerializer,
@@ -50,6 +53,9 @@ from .serializers import (
     ManifestoStaffSerializer,
     NodoStaffSerializer,
     InnescoTimerStaffSerializer,
+    A_vistaSerializer,
+    AttivataSerializer,
+    PersonaggioPublicSerializer,
 )
 
 
@@ -86,6 +92,149 @@ def _campaign_feature_filter(request, qs, feature_key):
         return qs.filter(Q(campagna=active) | Q(campagna=base))
     return qs.filter(campagna=active)
 
+
+def _staff_qr_inspect_payload(qr, request):
+    """
+    Risolve il contenuto del QR come in QrCodeDetailView: `vista` punta sempre ad A_vista,
+    ma l'oggetto reale è una sottoclasse (Nodo, Manifesto, …); qui non si attiva gameplay.
+    """
+    ctx = {"request": request}
+    base = {"id": qr.id, "testo_raw": qr.testo}
+
+    timer = getattr(qr, "configurazione_timer", None)
+    if timer is not None:
+        tip = getattr(timer.tipologia, "nome", "?")
+        return {
+            **base,
+            "tipo_contenuto": "timer_legacy",
+            "nome_contenuto": f"Timer {tip} ({timer.durata_secondi}s)",
+            "elemento_id": str(qr.id),
+            "dati": {
+                "tipologia_timer_id": str(timer.tipologia_id),
+                "tipologia_nome": tip,
+                "durata_secondi": timer.durata_secondi,
+                "ultima_attivazione": timer.ultima_attivazione.isoformat()
+                if timer.ultima_attivazione
+                else None,
+            },
+        }
+
+    vista_obj = qr.vista
+    if not vista_obj:
+        return {**base, "tipo_contenuto": "Vuoto", "nome_contenuto": "Nessuno", "elemento_id": None, "dati": None}
+
+    pk = vista_obj.pk
+
+    inn = InnescoTimer.objects.filter(pk=pk).first()
+    if inn:
+        return {
+            **base,
+            "tipo_contenuto": "innesco_timer",
+            "nome_contenuto": inn.nome,
+            "elemento_id": str(inn.id),
+            "dati": InnescoTimerStaffSerializer(inn, context=ctx).data,
+        }
+
+    nodo = Nodo.objects.filter(pk=pk).first()
+    if nodo:
+        return {
+            **base,
+            "tipo_contenuto": "nodo",
+            "nome_contenuto": nodo.nome,
+            "elemento_id": str(nodo.id),
+            "dati": NodoStaffSerializer(nodo, context=ctx).data,
+        }
+
+    pg = Personaggio.objects.filter(inventario_ptr_id=pk).select_related("tipologia").first()
+    if pg:
+        return {
+            **base,
+            "tipo_contenuto": "personaggio",
+            "nome_contenuto": pg.nome,
+            "elemento_id": str(pg.id),
+            "dati": PersonaggioPublicSerializer(pg, context=ctx).data,
+        }
+
+    og = Oggetto.objects.filter(pk=pk).first()
+    if og:
+        return {
+            **base,
+            "tipo_contenuto": "oggetto",
+            "nome_contenuto": og.nome,
+            "elemento_id": str(og.id),
+            "dati": OggettoFullEditorSerializer(og, context=ctx).data,
+        }
+
+    att = Attivata.objects.filter(pk=pk).first()
+    if att:
+        return {
+            **base,
+            "tipo_contenuto": "attivata",
+            "nome_contenuto": att.nome,
+            "elemento_id": str(att.id),
+            "dati": AttivataSerializer(att, context=ctx).data,
+        }
+
+    inf = Infusione.objects.filter(pk=pk).first()
+    if inf:
+        return {
+            **base,
+            "tipo_contenuto": "infusione",
+            "nome_contenuto": inf.nome,
+            "elemento_id": str(inf.id),
+            "dati": InfusioneSerializer(inf, context=ctx).data,
+        }
+
+    tes = Tessitura.objects.filter(pk=pk).first()
+    if tes:
+        return {
+            **base,
+            "tipo_contenuto": "tessitura",
+            "nome_contenuto": tes.nome,
+            "elemento_id": str(tes.id),
+            "dati": TessituraSerializer(tes, context=ctx).data,
+        }
+
+    cer = Cerimoniale.objects.filter(pk=pk).first()
+    if cer:
+        return {
+            **base,
+            "tipo_contenuto": "cerimoniale",
+            "nome_contenuto": cer.nome,
+            "elemento_id": str(cer.id),
+            "dati": CerimonialeSerializer(cer, context=ctx).data,
+        }
+
+    man = Manifesto.objects.filter(pk=pk).first()
+    if man:
+        return {
+            **base,
+            "tipo_contenuto": "manifesto",
+            "nome_contenuto": man.nome,
+            "elemento_id": str(man.id),
+            "dati": ManifestoStaffSerializer(man, context=ctx).data,
+        }
+
+    inv = Inventario.objects.filter(pk=pk).first()
+    if inv and not Personaggio.objects.filter(inventario_ptr_id=pk).exists():
+        return {
+            **base,
+            "tipo_contenuto": "inventario",
+            "nome_contenuto": inv.nome,
+            "elemento_id": str(inv.id),
+            "dati": InventarioStaffSerializer(inv, context=ctx).data,
+        }
+
+    return {
+        **base,
+        "tipo_contenuto": "a_vista",
+        "nome_contenuto": vista_obj.nome,
+        "elemento_id": str(vista_obj.id),
+        "dati": A_vistaSerializer(vista_obj, context=ctx).data,
+        "nota": "Record A_vista senza sottoclasse nota (legacy o modello non mappato in ispezione).",
+    }
+
+
 class QrInspectorView(APIView):
     """
     Strumento STAFF: Legge un QR e dice cos'è senza attivare nulla.
@@ -94,14 +243,12 @@ class QrInspectorView(APIView):
 
     def get(self, request, qr_id):
         try:
-            qr = QrCode.objects.get(id=qr_id)
-            data = {
-                'id': qr.id,
-                'tipo_contenuto': qr.vista.__class__.__name__ if qr.vista else "Vuoto",
-                'nome_contenuto': str(qr.vista) if qr.vista else "Nessuno",
-                'testo_raw': qr.testo
-            }
-            return Response(data)
+            qr = QrCode.objects.select_related(
+                "vista",
+                "configurazione_timer",
+                "configurazione_timer__tipologia",
+            ).get(id=qr_id)
+            return Response(_staff_qr_inspect_payload(qr, request))
         except QrCode.DoesNotExist:
             return Response({'error': 'Non trovato'}, status=404)
 
@@ -167,7 +314,8 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        return _campaign_feature_filter(self.request, Infusione.objects.all(), FEATURE_INFUSIONI)
+        qs = _campaign_feature_filter(self.request, Infusione.objects.all(), FEATURE_INFUSIONI)
+        return annotate_has_qrcode_avista(qs)
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
@@ -181,7 +329,8 @@ class TessituraMasterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        return _campaign_feature_filter(self.request, Tessitura.objects.all(), FEATURE_TESSITURE)
+        qs = _campaign_feature_filter(self.request, Tessitura.objects.all(), FEATURE_TESSITURE)
+        return annotate_has_qrcode_avista(qs)
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
@@ -195,15 +344,20 @@ class CerimonialeMasterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        return _campaign_feature_filter(self.request, Cerimoniale.objects.all(), FEATURE_CERIMONIALI)
+        qs = _campaign_feature_filter(self.request, Cerimoniale.objects.all(), FEATURE_CERIMONIALI)
+        return annotate_has_qrcode_avista(qs)
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
     
 class OggettoStaffViewSet(viewsets.ModelViewSet):
-    queryset = Oggetto.objects.all().select_related('aura', 'classe_oggetto')
     serializer_class = OggettoFullEditorSerializer
     permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        return annotate_has_qrcode_avista(
+            Oggetto.objects.all().select_related("aura", "classe_oggetto")
+        )
 
 class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
     queryset = OggettoBase.objects.all().select_related('classe_oggetto')
@@ -480,9 +634,10 @@ class InventarioStaffViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         # Esclude i personaggi (inventari che hanno proprietario)
-        return Inventario.objects.exclude(
+        qs = Inventario.objects.exclude(
             id__in=Personaggio.objects.values_list('inventario_ptr_id', flat=True)
         ).order_by('-id')
+        return annotate_has_qrcode_avista(qs)
     
     @action(detail=True, methods=['get'])
     def oggetti(self, request, pk=None):
@@ -640,9 +795,11 @@ class SelezionaEffettoCasualeView(APIView):
 class ManifestoStaffViewSet(viewsets.ModelViewSet):
     """CRUD manifesti (contenuto in `testo`, requisiti JSON opzionali)."""
 
-    queryset = Manifesto.objects.all().order_by("-id")
     serializer_class = ManifestoStaffSerializer
     permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        return annotate_has_qrcode_avista(Manifesto.objects.all().order_by("-id"))
 
 
 class NodoStaffViewSet(viewsets.ModelViewSet):
@@ -657,10 +814,10 @@ class NodoStaffViewSet(viewsets.ModelViewSet):
         active = _get_active_campaign(self.request)
         base = _get_default_campaign()
         if not active:
-            return qs
+            return annotate_has_qrcode_avista(qs)
         if active == base:
-            return qs.filter(campagna=active)
-        return qs.filter(Q(campagna=active) | Q(campagna=base))
+            return annotate_has_qrcode_avista(qs.filter(campagna=active))
+        return annotate_has_qrcode_avista(qs.filter(Q(campagna=active) | Q(campagna=base)))
 
     def perform_create(self, serializer):
         camp = _get_active_campaign(self.request) or _get_default_campaign()
@@ -680,10 +837,10 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
         active = _get_active_campaign(self.request)
         base = _get_default_campaign()
         if not active:
-            return qs
+            return annotate_has_qrcode_avista(qs)
         if base and active.id != base.id:
-            return qs.filter(Q(campagna=active) | Q(campagna=base))
-        return qs.filter(campagna=active)
+            return annotate_has_qrcode_avista(qs.filter(Q(campagna=active) | Q(campagna=base)))
+        return annotate_has_qrcode_avista(qs.filter(campagna=active))
 
     @staticmethod
     def _apply_target_lists(obj, data):

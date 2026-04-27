@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, memo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
+import QrAssociationConflictBody from './QrAssociationConflictBody';
+import StaffQrBadge from './StaffQrBadge';
 import {
   associaQrDiretto,
   staffGetNodi,
@@ -31,6 +33,7 @@ const NodoManager = ({ onBack, onLogout }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [fotoInputMode, setFotoInputMode] = useState('camera'); // 'camera' | 'gallery'
   const [scanningId, setScanningId] = useState(null);
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [expandedPhotoUrl, setExpandedPhotoUrl] = useState(null);
@@ -70,6 +73,7 @@ const NodoManager = ({ onBack, onLogout }) => {
         await staffCreateNodo(formData, onLogout);
       }
       setEditing(null);
+      setFotoInputMode('camera');
       setMsg('Nodo salvato.');
       load();
     } catch (e) {
@@ -110,7 +114,14 @@ const NodoManager = ({ onBack, onLogout }) => {
         <>
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold">Nodi (QR)</h2>
-            <button type="button" className="px-3 py-2 bg-indigo-600 rounded text-sm" onClick={() => setEditing(emptyForm())}>
+            <button
+              type="button"
+              className="px-3 py-2 bg-indigo-600 rounded text-sm"
+              onClick={() => {
+                setFotoInputMode('camera');
+                setEditing(emptyForm());
+              }}
+            >
               Nuovo
             </button>
           </div>
@@ -119,15 +130,18 @@ const NodoManager = ({ onBack, onLogout }) => {
           ) : (
             <ul className="divide-y divide-gray-700 border border-gray-700 rounded-lg">
               {items.map((n) => (
-                <li key={n.id} className="flex justify-between items-center p-3 hover:bg-gray-800/50">
-                  <div>
+                <li key={n.id} className="flex justify-between items-center p-3 hover:bg-gray-800/50 gap-2">
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <StaffQrBadge hasQr={n.has_qrcode} />
+                    <div className="min-w-0">
                     <div className="font-semibold">{n.nome}</div>
                     <div className="text-[10px] text-gray-500">
                       Tipo: {n.tipo_nodo === 'MAG' ? 'Nodo maggiore' : 'Nodo minore'}
                       {n.disponibile_dal ? ` · disponibile da ${new Date(n.disponibile_dal).toLocaleString()}` : ''}
                     </div>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 shrink-0">
                     {n.foto_posizione_url && (
                       <button
                         type="button"
@@ -140,13 +154,14 @@ const NodoManager = ({ onBack, onLogout }) => {
                     <button
                       type="button"
                       className="text-xs px-2 py-1 bg-gray-700 rounded"
-                      onClick={() =>
+                      onClick={() => {
+                        setFotoInputMode('camera');
                         setEditing({
                           ...n,
                           disponibile_dal: toInputDateTimeLocal(n.disponibile_dal),
                           foto_posizione: null,
-                        })
-                      }
+                        });
+                      }}
                     >
                       Modifica
                     </button>
@@ -167,77 +182,128 @@ const NodoManager = ({ onBack, onLogout }) => {
           )}
         </>
       ) : (
-        <div className="space-y-3 border border-gray-700 rounded-lg p-4 bg-gray-900/40">
-          <h3 className="font-bold">{editing.id ? 'Modifica nodo' : 'Nuovo nodo'}</h3>
-          <label className="block text-sm">
-            Nome
-            <input
-              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
-              value={editing.nome}
-              onChange={(e) => setEditing({ ...editing, nome: e.target.value })}
-            />
-          </label>
-          <label className="block text-sm">
-            Testo (opzionale)
-            <textarea
-              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 min-h-[90px]"
-              value={editing.testo || ''}
-              onChange={(e) => setEditing({ ...editing, testo: e.target.value })}
-            />
-          </label>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <label className="block text-sm">
-              Tipo nodo
-              <select
-                className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
-                value={editing.tipo_nodo || 'MIN'}
-                onChange={(e) => setEditing({ ...editing, tipo_nodo: e.target.value })}
-              >
-                <option value="MIN">Nodo minore</option>
-                <option value="MAG">Nodo maggiore</option>
-              </select>
-            </label>
-            <label className="block text-sm">
-              Disponibile dal (forzatura, opzionale)
-              <input
-                type="datetime-local"
-                className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
-                value={editing.disponibile_dal || ''}
-                onChange={(e) => setEditing({ ...editing, disponibile_dal: e.target.value })}
-              />
-            </label>
+        <div className="border border-gray-700 rounded-lg bg-gray-900/40 flex flex-col max-h-[calc(100dvh-8rem)] md:max-h-none">
+          <div className="px-4 pt-4 pb-2 shrink-0 border-b border-gray-800/80">
+            <h3 className="font-bold">{editing.id ? 'Modifica nodo' : 'Nuovo nodo'}</h3>
           </div>
-          <label className="block text-sm">
-            Foto posizione nodo (solo master, salvata in bassa risoluzione)
-            <input
-              type="file"
-              accept="image/*"
-              className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
-              onChange={(e) => setEditing({ ...editing, foto_posizione: e.target.files?.[0] || null })}
-            />
-          </label>
-          {(editing.foto_posizione_url || editing.foto_posizione) && (
-            <div className="border border-gray-700 rounded p-2 bg-black/20">
-              <div className="text-xs text-gray-400 mb-2">Anteprima posizione</div>
-              <img
-                src={editingPreviewUrl}
-                alt="Posizione nodo"
-                className="max-h-48 rounded border border-gray-700 object-contain"
+
+          <div className="px-4 py-3 space-y-3 overflow-y-auto overscroll-y-contain min-h-0 flex-1">
+            <label className="block text-sm">
+              Nome
+              <input
+                className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
+                value={editing.nome}
+                onChange={(e) => setEditing({ ...editing, nome: e.target.value })}
               />
-              <button
-                type="button"
-                className="mt-2 text-xs px-2 py-1 bg-cyan-800 rounded"
-                onClick={() => setExpandedPhotoUrl(editingPreviewUrl)}
-              >
-                Apri in grande
-              </button>
+            </label>
+            <label className="block text-sm">
+              Testo (opzionale)
+              <textarea
+                className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 min-h-[90px]"
+                value={editing.testo || ''}
+                onChange={(e) => setEditing({ ...editing, testo: e.target.value })}
+              />
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label className="block text-sm">
+                Tipo nodo
+                <select
+                  className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
+                  value={editing.tipo_nodo || 'MIN'}
+                  onChange={(e) => setEditing({ ...editing, tipo_nodo: e.target.value })}
+                >
+                  <option value="MIN">Nodo minore</option>
+                  <option value="MAG">Nodo maggiore</option>
+                </select>
+              </label>
+              <label className="block text-sm">
+                Disponibile dal (forzatura, opzionale)
+                <input
+                  type="datetime-local"
+                  className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
+                  value={editing.disponibile_dal || ''}
+                  onChange={(e) => setEditing({ ...editing, disponibile_dal: e.target.value })}
+                />
+              </label>
             </div>
-          )}
-          <div className="flex gap-2">
-            <button type="button" className="px-4 py-2 bg-indigo-600 rounded" onClick={save}>
+            <div className="block text-sm space-y-2">
+              <div>
+                <span className="block mb-1">Foto posizione nodo (solo master, salvata in bassa risoluzione)</span>
+                <div className="flex flex-wrap gap-3 text-xs text-gray-300">
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="foto_nodo_mode"
+                      checked={fotoInputMode === 'camera'}
+                      onChange={() => setFotoInputMode('camera')}
+                    />
+                    Fotocamera
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="foto_nodo_mode"
+                      checked={fotoInputMode === 'gallery'}
+                      onChange={() => setFotoInputMode('gallery')}
+                    />
+                    Galleria / file
+                  </label>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Su Android senza <code className="text-gray-400">capture</code> spesso si apre il picker (es. Google Foto).
+                  Scegli &quot;Fotocamera&quot; per scattare subito.
+                </p>
+              </div>
+              {fotoInputMode === 'camera' ? (
+                <input
+                  key="foto-camera"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
+                  onChange={(e) => setEditing({ ...editing, foto_posizione: e.target.files?.[0] || null })}
+                />
+              ) : (
+                <input
+                  key="foto-gallery"
+                  type="file"
+                  accept="image/*"
+                  className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
+                  onChange={(e) => setEditing({ ...editing, foto_posizione: e.target.files?.[0] || null })}
+                />
+              )}
+            </div>
+            {(editing.foto_posizione_url || editing.foto_posizione) && (
+              <div className="border border-gray-700 rounded p-2 bg-black/20">
+                <div className="text-xs text-gray-400 mb-2">Anteprima posizione</div>
+                <img
+                  src={editingPreviewUrl}
+                  alt="Posizione nodo"
+                  className="max-h-40 md:max-h-48 w-full rounded border border-gray-700 object-contain bg-black/30"
+                />
+                <button
+                  type="button"
+                  className="mt-2 text-xs px-2 py-1 bg-cyan-800 rounded"
+                  onClick={() => setExpandedPhotoUrl(editingPreviewUrl)}
+                >
+                  Apri in grande
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="px-4 py-3 shrink-0 border-t border-gray-800/80 bg-gray-950/95 backdrop-blur-sm sticky bottom-0 z-10 flex gap-2">
+            <button type="button" className="flex-1 px-4 py-3 bg-indigo-600 rounded font-bold" onClick={save}>
               Salva
             </button>
-            <button type="button" className="px-4 py-2 bg-gray-700 rounded" onClick={() => setEditing(null)}>
+            <button
+              type="button"
+              className="flex-1 px-4 py-3 bg-gray-700 rounded font-bold"
+              onClick={() => {
+                setFotoInputMode('camera');
+                setEditing(null);
+              }}
+            >
               Annulla
             </button>
           </div>
@@ -259,9 +325,10 @@ const NodoManager = ({ onBack, onLogout }) => {
                   await associaQrDiretto(scanningId, qr_id, onLogout);
                   setScanningId(null);
                   setMsg('QR associato.');
+                  load();
                 } catch (error) {
                   if (error.status === 409 && error.data?.already_associated) {
-                    setPendingQrConflict({ qrId: qr_id, message: error.data.message });
+                    setPendingQrConflict({ qrId: qr_id, errorData: error.data });
                   } else {
                     setMsg(error.message || 'Errore associazione QR');
                   }
@@ -276,8 +343,8 @@ const NodoManager = ({ onBack, onLogout }) => {
       <ConfirmDialog
         open={Boolean(pendingQrConflict)}
         title="QR già associato"
-        message={`${pendingQrConflict?.message || ''} Vuoi spostare il QR su questo nodo?`}
-        confirmLabel="Sposta QR"
+        message=""
+        confirmLabel="Sostituisci associazione"
         confirmTone="warning"
         onCancel={() => setPendingQrConflict(null)}
         onConfirm={async () => {
@@ -287,11 +354,16 @@ const NodoManager = ({ onBack, onLogout }) => {
             setPendingQrConflict(null);
             setScanningId(null);
             setMsg('QR associato (forzato).');
+            load();
           } catch (e) {
             setMsg(e.message || 'Errore');
           }
         }}
-      />
+      >
+        {pendingQrConflict?.errorData ? (
+          <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo nodo" />
+        ) : null}
+      </ConfirmDialog>
 
       {expandedPhotoUrl && (
         <div className="fixed inset-0 z-60 bg-black/95 flex flex-col">

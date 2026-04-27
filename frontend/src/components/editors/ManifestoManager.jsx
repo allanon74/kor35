@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, memo } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
+import QrAssociationConflictBody from './QrAssociationConflictBody';
+import StaffQrBadge from './StaffQrBadge';
 import {
   associaQrDiretto,
   staffGetManifesti,
@@ -118,10 +120,13 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           ) : (
             <ul className="divide-y divide-gray-700 border border-gray-700 rounded-lg">
               {items.map((m) => (
-                <li key={m.id} className="flex justify-between items-center p-3 hover:bg-gray-800/50">
-                  <div>
-                    <div className="font-semibold">{m.nome}</div>
-                    <div className="text-[10px] text-gray-500">id {m.id}</div>
+                <li key={m.id} className="flex justify-between items-center p-3 hover:bg-gray-800/50 gap-2">
+                  <div className="flex items-start gap-2 min-w-0 flex-1">
+                    <StaffQrBadge hasQr={m.has_qrcode} />
+                    <div className="min-w-0">
+                      <div className="font-semibold">{m.nome}</div>
+                      <div className="text-[10px] text-gray-500">id {m.id}</div>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -205,9 +210,10 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   await associaQrDiretto(scanningId, qr_id, onLogout);
                   setScanningId(null);
                   setMsg('QR associato.');
+                  load();
                 } catch (error) {
                   if (error.status === 409 && error.data?.already_associated) {
-                    setPendingQrConflict({ qrId: qr_id, message: error.data.message });
+                    setPendingQrConflict({ qrId: qr_id, errorData: error.data });
                   } else {
                     setMsg(error.message || 'Errore associazione QR');
                   }
@@ -222,8 +228,8 @@ const ManifestoManager = ({ onBack, onLogout }) => {
       <ConfirmDialog
         open={Boolean(pendingQrConflict)}
         title="QR già associato"
-        message={`${pendingQrConflict?.message || ''} Vuoi spostare il QR su questo manifesto?`}
-        confirmLabel="Sposta QR"
+        message=""
+        confirmLabel="Sostituisci associazione"
         confirmTone="warning"
         onCancel={() => setPendingQrConflict(null)}
         onConfirm={async () => {
@@ -233,11 +239,16 @@ const ManifestoManager = ({ onBack, onLogout }) => {
             setPendingQrConflict(null);
             setScanningId(null);
             setMsg('QR associato (forzato).');
+            load();
           } catch (e) {
             setMsg(e.message || 'Errore');
           }
         }}
-      />
+      >
+        {pendingQrConflict?.errorData ? (
+          <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo manifesto" />
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 };

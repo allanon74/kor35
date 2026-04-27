@@ -18,6 +18,8 @@ import EventoSection from './EventoSection';
 import GiornoSection from './GiornoSection';
 import QrTab from './QrTab'; 
 import RichTextEditor from './RichTextEditor';
+import ConfirmDialog from './editors/ConfirmDialog';
+import QrAssociationConflictBody from './editors/QrAssociationConflictBody';
 
 // Cache per le risorse (persiste per la sessione)
 const RISORSE_CACHE_KEY = 'plot_risorse_cache';
@@ -62,6 +64,7 @@ const PlotTab = ({ onLogout }) => {
     const [editMode, setEditMode] = useState(null); 
     const [formData, setFormData] = useState({});
     const [scanningForVista, setScanningForVista] = useState(null);
+    const [pendingQrPlotReplace, setPendingQrPlotReplace] = useState(null);
 
     const loadInitialData = useCallback(async () => {
         try {
@@ -643,24 +646,49 @@ const PlotTab = ({ onLogout }) => {
                                 setScanningForVista(null); 
                                 refreshData();
                             } catch (error) {
-                                // Se il QR è già associato (409 Conflict), chiedi conferma
                                 if (error.status === 409 && error.data?.already_associated) {
-                                    const conferma = window.confirm(
-                                        `⚠️ ATTENZIONE!\n\n${error.data.message}\n\nVuoi procedere comunque e spostare il QR su questo elemento?`
-                                    );
-                                    if (conferma) {
-                                        await associaQrAVista(scanningForVista, qr_id, onLogout, true);
-                                        setScanningForVista(null);
-                                        refreshData();
-                                    }
+                                    setPendingQrPlotReplace({
+                                        vistaId: scanningForVista,
+                                        qrId: qr_id,
+                                        errorData: error.data,
+                                    });
                                 } else {
-                                    throw error;
+                                    console.error(error);
+                                    window.alert(error.message || 'Errore associazione QR');
                                 }
                             }
                         }} onLogout={onLogout} />
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                open={Boolean(pendingQrPlotReplace)}
+                title="QR già associato"
+                message=""
+                confirmLabel="Sostituisci associazione"
+                confirmTone="warning"
+                onCancel={() => setPendingQrPlotReplace(null)}
+                onConfirm={async () => {
+                    const p = pendingQrPlotReplace;
+                    if (!p?.vistaId || !p?.qrId) return;
+                    try {
+                        await associaQrAVista(p.vistaId, p.qrId, onLogout, true);
+                        setPendingQrPlotReplace(null);
+                        setScanningForVista(null);
+                        refreshData();
+                    } catch (e) {
+                        window.alert(e.message || 'Errore durante la riassociazione');
+                    }
+                }}
+            >
+                {pendingQrPlotReplace?.errorData ? (
+                    <QrAssociationConflictBody
+                        errorData={pendingQrPlotReplace.errorData}
+                        targetHint="questa vista di quest"
+                    />
+                ) : null}
+            </ConfirmDialog>
         </div>
     );
 };

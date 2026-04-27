@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { staffGetCerimoniali, staffDeleteCerimoniale } from '../../api';
 import MasterTechniqueList from './MasterTechniqueList';
 
-const CerimonialeList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
+const CerimonialeList = ({ onAdd, onEdit, onScanQr, onLogout, listVersion = 0 }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,7 +13,7 @@ const CerimonialeList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [listVersion]);
 
   const handleDelete = async (id) => {
     await staffDeleteCerimoniale(id, onLogout);

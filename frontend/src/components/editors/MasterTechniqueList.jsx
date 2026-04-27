@@ -2,6 +2,7 @@ import React from 'react';
 import { useCharacter } from '../CharacterContext';
 import IconaPunteggio from '../IconaPunteggio';
 import MasterGenericList from './MasterGenericList';
+import StaffQrBadge from './StaffQrBadge';
 
 /**
  * MasterTechniqueList
@@ -53,6 +54,12 @@ const MasterTechniqueList = ({
 
   // 2. Definizione Colonne
   const columns = [
+    {
+      header: 'QR',
+      width: '44px',
+      align: 'center',
+      render: (item) => <StaffQrBadge hasQr={item.has_qrcode} />,
+    },
     { 
       header: 'Lvl', 
       width: '60px', 

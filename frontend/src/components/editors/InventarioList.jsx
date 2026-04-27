@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { staffGetInventari, staffDeleteInventario } from '../../api';
 import MasterGenericList from './MasterGenericList';
+import StaffQrBadge from './StaffQrBadge';
 
-const InventarioList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
+const InventarioList = ({ onAdd, onEdit, onScanQr, onLogout, listVersion = 0 }) => {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -19,9 +20,15 @@ const InventarioList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
 
     useEffect(() => { 
         loadData(); 
-    }, [onLogout]);
+    }, [onLogout, listVersion]);
 
     const columns = [
+        {
+            header: 'QR',
+            width: '44px',
+            align: 'center',
+            render: (item) => <StaffQrBadge hasQr={item.has_qrcode} />,
+        },
         { 
             header: 'Nome', 
             render: (item) => (

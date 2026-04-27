@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { staffGetTessiture, staffDeleteTessitura } from '../../api';
 import MasterTechniqueList from './MasterTechniqueList';
 
-const TessituraList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
+const TessituraList = ({ onAdd, onEdit, onScanQr, onLogout, listVersion = 0 }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -13,7 +13,7 @@ const TessituraList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [listVersion]);
 
   const handleDelete = async (id) => {
     await staffDeleteTessitura(id, onLogout);
