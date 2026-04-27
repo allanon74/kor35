@@ -2,7 +2,8 @@
 # Ripristina la proprietà di react_build all'utente che esegue lo script (es. utente deploy SSH).
 # Utile quando rsync/GitHub Actions fallisce con "Permission denied" sui file creati da Docker/root.
 #
-# Uso (sul server, dalla root del monorepo o passando il path):
+# Uso (sul server):
+#   cd /srv/kor35 && ./scripts/fix_react_build_permissions.sh
 #   ./scripts/fix_react_build_permissions.sh /srv/kor35 prod
 #   ./scripts/fix_react_build_permissions.sh /home/pi/kor35-replica mirror
 #
@@ -10,8 +11,17 @@
 # Opzionale: esporta COMPOSE_PROJECT_NAME se diverso da kor35-prod / kor35-replica.
 set -euo pipefail
 
-BASE="${1:?Path monorepo (es. /srv/kor35)}"
 PROFILE="${2:-prod}"
+if [ -n "${1:-}" ]; then
+  BASE="$1"
+elif [ -f "$(pwd)/config/docker/compose.base.yml" ]; then
+  BASE="$(pwd)"
+else
+  echo "Uso: $0 <path-monorepo> [prod|mirror]" >&2
+  echo "  Esempio: $0 /srv/kor35 prod" >&2
+  echo "  Oppure esegui dalla root del repo: cd /srv/kor35 && $0" >&2
+  exit 1
+fi
 RB="${BASE}/config/docker/nginx-docker/react_build"
 CD="${BASE}/config/docker"
 
