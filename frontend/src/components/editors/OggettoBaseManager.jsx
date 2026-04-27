@@ -90,9 +90,11 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
                 } catch (error) {
                   if (error.status === 409 && error.data?.already_associated) {
                     setPendingQrConflict({
+                      targetId: scanningForElement,
                       qrId: qr_id,
                       errorData: error.data,
                     });
+                    setScanningForElement(null);
                   } else {
                     setQrStatus({ type: 'error', message: `Errore: ${error.message || 'Errore sconosciuto'}` });
                   }
@@ -111,9 +113,10 @@ const OggettoBaseManager = ({ onBack, onLogout }) => {
         confirmTone="warning"
         onCancel={() => setPendingQrConflict(null)}
         onConfirm={async () => {
-          if (!pendingQrConflict?.qrId || !scanningForElement) return;
+          const p = pendingQrConflict;
+          if (!p?.qrId || !p?.targetId) return;
           try {
-            await associaQrDiretto(scanningForElement, pendingQrConflict.qrId, onLogout, true);
+            await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
             setScanningForElement(null);
             setPendingQrConflict(null);
             setQrStatus({ type: 'success', message: 'QR riassociato con successo.' });

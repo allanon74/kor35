@@ -213,7 +213,12 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   load();
                 } catch (error) {
                   if (error.status === 409 && error.data?.already_associated) {
-                    setPendingQrConflict({ qrId: qr_id, errorData: error.data });
+                    setPendingQrConflict({
+                      targetId: scanningId,
+                      qrId: qr_id,
+                      errorData: error.data,
+                    });
+                    setScanningId(null);
                   } else {
                     setMsg(error.message || 'Errore associazione QR');
                   }
@@ -233,9 +238,10 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         confirmTone="warning"
         onCancel={() => setPendingQrConflict(null)}
         onConfirm={async () => {
-          if (!pendingQrConflict?.qrId || !scanningId) return;
+          const p = pendingQrConflict;
+          if (!p?.qrId || !p?.targetId) return;
           try {
-            await associaQrDiretto(scanningId, pendingQrConflict.qrId, onLogout, true);
+            await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
             setPendingQrConflict(null);
             setScanningId(null);
             setMsg('QR associato (forzato).');

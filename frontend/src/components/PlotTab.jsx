@@ -634,10 +634,10 @@ const PlotTab = ({ onLogout }) => {
             </div>
 
             {scanningForVista && (
-                <div className="fixed inset-0 z-110 bg-black flex flex-col">
+                <div className="fixed inset-0 z-50 bg-black flex flex-col">
                     <div className="p-4 flex justify-between items-center bg-gray-900 border-b border-gray-800 shadow-xl">
                         <span className="font-black text-white uppercase italic tracking-widest">Associa QR Fisico</span>
-                        <button onClick={() => setScanningForVista(null)} className="px-4 py-2 bg-red-600 rounded-lg text-xs font-black shadow-lg">X ANNULLA</button>
+                        <button type="button" onClick={() => setScanningForVista(null)} className="px-4 py-2 bg-red-600 rounded-lg text-xs font-black shadow-lg">X ANNULLA</button>
                     </div>
                     <div className="flex-1">
                         <QrTab onScanSuccess={async (qr_id) => {
@@ -652,6 +652,7 @@ const PlotTab = ({ onLogout }) => {
                                         qrId: qr_id,
                                         errorData: error.data,
                                     });
+                                    setScanningForVista(null);
                                 } else {
                                     console.error(error);
                                     window.alert(error.message || 'Errore associazione QR');

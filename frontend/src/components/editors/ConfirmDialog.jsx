@@ -11,7 +11,8 @@ const ConfirmDialog = ({
   onConfirm,
   onCancel,
   loading = false,
-  zIndexClass = 'z-[130]',
+  // Sopra overlay scanner (z-50) e plugin tipo Html5Qrcode
+  zIndexClass = 'z-[10000]',
 }) => {
   if (!open) return null;
 
@@ -31,6 +32,7 @@ const ConfirmDialog = ({
         </div>
         <div className="p-4 flex justify-end gap-2">
           <button
+            type="button"
             onClick={onCancel}
             disabled={loading}
             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold text-white disabled:opacity-60"
@@ -38,6 +40,7 @@ const ConfirmDialog = ({
             {cancelLabel}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             disabled={loading}
             className={`px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-60 ${confirmClass}`}
