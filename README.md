@@ -56,6 +56,7 @@ I workflow sotto `frontend/.github/workflows/` sono stati **rimossi** (non erano
 - Trigger automatico su `push` in `main` + trigger manuale (`workflow_dispatch`) con:
   - `ref`: branch/tag/SHA da rilasciare
   - `run_migrations`: abilita/disabilita migrate
+  - `force_frontend_build`: se `true`, esegue sempre `npm ci` / `npm run build` in CI e lo `rsync` degli statici anche senza commit in `frontend/` (utile se `react_build` sul server è corrotto o disallineato)
 - Fasi:
   - `guard-main-ref`: blocca deploy se `ref != main`
   - `build-frontend`: se in questo deploy sono cambiati file sotto `frontend/`, su **GitHub Actions** esegue `npm ci` e `npm run build` e salva `dist/` come artifact (Node sul runner, **non sul server**)
@@ -63,6 +64,7 @@ I workflow sotto `frontend/.github/workflows/` sono stati **rimossi** (non erano
   - `mirror-deploy`: stesso `rsync` verso il Pi (se il frontend è stato buildato), poi SSH con compose mirror (stesso pre-step permessi).
   - Ripristino manuale permessi sul server (es. dopo un deploy fallito a metà): da `/srv/kor35` eseguire `scripts/fix_react_build_permissions.sh` (rileva la root) oppure `scripts/fix_react_build_permissions.sh <path-monorepo> prod|mirror` (l’utente deve poter usare `docker` o `sudo -n docker`).
   - Se il sito è «bianco» dopo deploy: sul server `scripts/verify_react_build_consistency.sh <path-assoluto-a/nginx-docker/react_build>` controlla che ogni `src`/`href` in `index.html` abbia il file corrispondente; se fallisce, permessi/rsync o cache (browser / CDN).
+  - Su produzione non usare `npm` sul server per servire il sito: `make restart ENV=prod` usa `--skip-frontend-build` e riavvia solo il container frontend. Se serve riparare permessi su `frontend/node_modules` (es. dopo un `npm` lanciato come root): `scripts/fix_frontend_dir_permissions.sh` dalla root del monorepo.
 
 **Scelta deploy frontend (decisione progetto):** il build React avviene **in CI** (runner Ubuntu), poi gli statici vanno sul server con `rsync` **solo quando `frontend/` è cambiato**. Così il server di produzione resta minimale: **Docker + git**, senza installare npm/Node in produzione. Sul server **senza** npm usa `./scripts/setup_wsl_pi_like.sh --skip-frontend-build` (crea le directory; `react_build` la popoli con deploy CI o copiando `dist/` da un PC con Node). In locale (es. WSL) puoi usare lo script senza skip se hai `npm` installato.
 

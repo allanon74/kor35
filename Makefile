@@ -39,6 +39,7 @@ help:
 	@echo ""
 	@echo "Dopo modifiche al codice (stack già avviato):"
 	@echo "  make restart-fe ENV=dev-home # rebuild React + riavvio container nginx (frontend)"
+	@echo "  make restart-fe ENV=prod     # su prod/mirror: niente npm locale; solo dir dati + restart frontend (statici da CI/rsync)"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
 	@echo "  make restart ENV=dev-home RUN_MIGRATIONS=1 RUN_PIP_INSTALL=1 RUN_COLLECTSTATIC=1"
@@ -97,9 +98,14 @@ makemigrations:
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py makemigrations $(MAKEMIGRATIONS_APP)
 
-# Build React → react_build, poi riavvio del servizio nginx (frontend) così gli statici sono serviti freschi.
+# Build React → react_build, poi riavvio del servizio nginx (frontend).
+# ENV=prod|mirror: non esegue npm sul server (statici da GitHub Actions + rsync); evita EACCES su node_modules e allinea al runbook Docker-first.
 restart-fe:
-	./scripts/setup_wsl_pi_like.sh
+	@if [ "$(ENV)" = "prod" ] || [ "$(ENV)" = "mirror" ]; then \
+		./scripts/setup_wsl_pi_like.sh --skip-frontend-build; \
+	else \
+		./scripts/setup_wsl_pi_like.sh; \
+	fi
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml restart frontend
 
 # Riavvia backend + daphne così Gunicorn/Daphne carica le modifiche ai file Python (bind-mount backend).
