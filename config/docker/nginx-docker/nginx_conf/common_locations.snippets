@@ -9,6 +9,27 @@
         try_files $uri $uri/ /index.html;
     }
 
+    # SPA shell: NON deve restare cacheata a lungo sui telefoni/PWA, altrimenti restano
+    # riferimenti a chunk vecchi anche dopo deploy (mentre il PC fa refresh "naturale").
+    location = /index.html {
+        root /usr/share/nginx/html;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        expires -1;
+    }
+
+    # Service worker / manifest: devono aggiornarsi rapidamente dopo deploy.
+    location = /sw.js {
+        root /usr/share/nginx/html;
+        add_header Cache-Control "no-cache, must-revalidate" always;
+        expires -1;
+    }
+
+    location = /manifest.webmanifest {
+        root /usr/share/nginx/html;
+        add_header Cache-Control "no-cache, must-revalidate" always;
+        expires -1;
+    }
+
     # Non fare fallback SPA sui chunk Vite: se manca un asset deve essere 404.
     location ^~ /assets/ {
         root /usr/share/nginx/html;
