@@ -38,7 +38,7 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
       await stopWebcamScan();
 
       // USA LA NUOVA FUNZIONE API
-      const jsonData = await getQrCodeData(decodedText, onLogout);
+      const jsonData = await getQrCodeData(decodedText, onLogout, selectedCharacterId);
       
       onScanSuccess(jsonData); // Passa il JSON alla modale
       

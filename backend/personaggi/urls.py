@@ -72,6 +72,8 @@ router.register(r'staff/classi-oggetto', views_staff.ClasseOggettoViewSet, basen
 router.register(r'staff/abilita', views_staff.AbilitaStaffViewSet, basename='staff-abilita')
 router.register(r'staff/tiers', TierStaffViewSet, basename='staff-tiers')
 router.register(r'staff/inventari', views_staff.InventarioStaffViewSet, basename='staff-inventari')
+router.register(r'staff/manifesti', views_staff.ManifestoStaffViewSet, basename='staff-manifesti')
+router.register(r'staff/innesco-timer', views_staff.InnescoTimerStaffViewSet, basename='staff-innesco-timer')
 router.register(r'staff/tipologie-effetto', views_staff.TipologiaEffettoViewSet, basename='staff-tipologie-effetto')
 router.register(r'staff/effetti-casuali', views_staff.EffettoCasualeViewSet, basename='staff-effetti-casuali')
 router.register(r'staff/dichiarazioni', views_staff.DichiarazioneStaffViewSet, basename='staff-dichiarazioni')

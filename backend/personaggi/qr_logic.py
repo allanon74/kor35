@@ -1,0 +1,310 @@
+"""
+Logica QR lato server: manifesti, inventario a doppia scansione, innesco timer, permessi oggetti.
+"""
+from __future__ import annotations
+
+from datetime import timedelta
+from typing import Any, Dict, List, Optional, Tuple
+
+from django.db import transaction
+from django.utils import timezone
+
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
+
+def personaggio_soddisfa_requisiti_manifesto(personaggio, manifesto) -> Tuple[bool, str]:
+    """Ritorna (ok, messaggio). Lista requisiti vuota = accesso libero."""
+    from .models import Abilita, Statistica
+
+    reqs = manifesto.requisiti_lettura or []
+    if not reqs:
+        return True, ""
+
+    for req in reqs:
+        if not isinstance(req, dict):
+            continue
+        tipo = (req.get("tipo") or "").strip().lower()
+        if tipo == "statistica":
+            sigla = (req.get("sigla") or "").strip().upper()
+            min_v = int(req.get("min", 1) or 1)
+            if not sigla:
+                continue
+            cur = personaggio.get_valore_statistica(sigla)
+            if cur < min_v:
+                st = Statistica.objects.filter(sigla=sigla).first()
+                nome = st.nome if st else sigla
+                return False, f"Richiesto {nome} ({sigla}) ≥ {min_v} (hai {cur})."
+        elif tipo == "abilita":
+            aid = req.get("id")
+            if aid is None:
+                continue
+            if not personaggio.abilita_possedute.filter(pk=aid).exists():
+                ab = Abilita.objects.filter(pk=aid).first()
+                nome = ab.nome if ab else str(aid)
+                return False, f"È richiesta l'abilità: {nome}."
+        elif tipo == "punteggio":
+            # Alias: valore aura per nome punteggio (tipo AURA)
+            from .models import Punteggio, AURA
+
+            nome = (req.get("nome") or "").strip()
+            min_v = int(req.get("min", 1) or 1)
+            if not nome:
+                continue
+            p = Punteggio.objects.filter(nome=nome, tipo=AURA).first()
+            if not p:
+                return False, f"Requisito aura sconosciuto: {nome}."
+            cur = personaggio.get_valore_aura_effettivo(p)
+            if cur < min_v:
+                return False, f"Richiesta aura {nome} ≥ {min_v} (hai {cur})."
+    return True, ""
+
+
+def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
+    """
+    Visibilità e azioni per oggetti in inventario scansionato via QR (non PG).
+    """
+    from .models import (
+        TIPO_OGGETTO_FISICO,
+        TIPO_OGGETTO_MATERIA,
+        TIPO_OGGETTO_MOD,
+        TIPO_OGGETTO_POTENZIAMENTO,
+        TIPO_OGGETTO_INNESTO,
+        TIPO_OGGETTO_MUTAZIONE,
+        TIPO_OGGETTO_AUMENTO,
+    )
+
+    livello = oggetto.livello or 0
+    if oggetto.aura_id:
+        visibile = personaggio.get_valore_aura_effettivo(oggetto.aura) >= 1
+    else:
+        visibile = True
+
+    libero = not oggetto.ospitato_su_id
+
+    is_mat = oggetto.tipo_oggetto == TIPO_OGGETTO_MATERIA or (
+        oggetto.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and not oggetto.is_tecnologico
+    )
+    is_mod = oggetto.tipo_oggetto == TIPO_OGGETTO_MOD or (
+        oggetto.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and oggetto.is_tecnologico
+    )
+
+    ams = personaggio.get_valore_statistica("AMS")
+    ate = personaggio.get_valore_statistica("ATE")
+
+    # Prendi: materia/mod "liberi" (non montati) se visibili; altri tipi se visibili
+    puo_prendere = False
+    if visibile:
+        if is_mat or is_mod:
+            puo_prendere = libero
+        elif oggetto.tipo_oggetto in (
+            TIPO_OGGETTO_FISICO,
+            TIPO_OGGETTO_INNESTO,
+            TIPO_OGGETTO_MUTAZIONE,
+            TIPO_OGGETTO_AUMENTO,
+        ):
+            puo_prendere = True
+
+    puo_smonta_materia = visibile and is_mat and ams >= livello
+    puo_smonta_mod = visibile and is_mod and ate >= livello
+
+    return {
+        "visibile_inventario_qr": visibile,
+        "puo_prendere": puo_prendere,
+        "puo_smonta_materia": puo_smonta_materia,
+        "puo_smonta_mod": puo_smonta_mod,
+    }
+
+
+def personaggio_match_innesco_timer(personaggio, innesco) -> bool:
+    from .models import InnescoTimer, PersonaggioKorpMembership
+
+    if innesco.modalita_target == InnescoTimer.INNESCO_TARGET_GLOBAL:
+        return True
+
+    checks: List[bool] = []
+    if innesco.target_ere.exists():
+        checks.append(bool(personaggio.era_id and innesco.target_ere.filter(pk=personaggio.era_id).exists()))
+    if innesco.target_regioni.exists():
+        reg_id = getattr(getattr(personaggio, "prefettura", None), "regione_id", None)
+        checks.append(bool(reg_id and innesco.target_regioni.filter(pk=reg_id).exists()))
+    if innesco.target_korps.exists():
+        ok_k = PersonaggioKorpMembership.objects.filter(
+            personaggio=personaggio,
+            data_a__isnull=True,
+            korp__in=innesco.target_korps.all(),
+        ).exists()
+        checks.append(ok_k)
+    if not checks:
+        return True
+    return all(checks)
+
+
+def _broadcast_timer_innesco(
+    *,
+    nome: str,
+    data_fine,
+    segnale_luminoso: bool,
+    recipient_personaggio_ids: List[int],
+):
+    channel_layer = get_channel_layer()
+    if not channel_layer:
+        return
+    async_to_sync(channel_layer.group_send)(
+        "kor35_notifications",
+        {
+            "type": "send_notification",
+            "message": {
+                "action": "TIMER_INNESCO_SYNC",
+                "payload": {
+                    "nome": nome,
+                    "data_fine": data_fine.isoformat(),
+                    "segnale_luminoso": segnale_luminoso,
+                    "recipient_personaggio_ids": recipient_personaggio_ids,
+                },
+            },
+        },
+    )
+
+
+def attiva_innesco_timer_per_personaggio(
+    personaggio,
+    innesco,
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """
+    Aggiorna stato cariche, imposta countdown e invia push websocket ai destinatari mirati.
+    Ritorna (payload risposta scan, errore).
+    """
+    from .models import InnescoTimer, Personaggio, StatoInnescoTimerPersonaggio
+
+    if not personaggio_match_innesco_timer(personaggio, innesco):
+        return None, "Il tuo personaggio non rientra nel target di questo innesco timer."
+
+    now = timezone.now()
+    max_c = int(innesco.max_cariche or 0)
+    regen = innesco.rigenera_cariche_ogni_secondi
+
+    with transaction.atomic():
+        stato, _created = StatoInnescoTimerPersonaggio.objects.select_for_update().get_or_create(
+            personaggio=personaggio,
+            innesco_timer=innesco,
+            defaults={
+                "data_fine": now,
+                "cariche_usate_ciclo": 0,
+                "ciclo_iniziato_at": now,
+            },
+        )
+
+        if max_c > 0:
+            # Rigenera cariche dopo intervallo (da fine ultimo ciclo esaurito)
+            if stato.cariche_usate_ciclo >= max_c and regen and stato.ciclo_iniziato_at:
+                prossima = stato.ciclo_iniziato_at + timedelta(seconds=int(regen))
+                if now >= prossima:
+                    stato.cariche_usate_ciclo = 0
+                else:
+                    sec = max(0, int((prossima - now).total_seconds()))
+                    return None, f"Cariche esaurite. Prossima rigenerazione tra ~{sec}s."
+            elif stato.cariche_usate_ciclo >= max_c and not regen:
+                return None, "Cariche esaurite per questo innesco."
+
+        stato.data_fine = now + timedelta(seconds=int(innesco.durata_secondi or 60))
+        if max_c > 0:
+            stato.cariche_usate_ciclo += 1
+            if stato.cariche_usate_ciclo >= max_c:
+                stato.ciclo_iniziato_at = now
+        stato.save()
+
+    # destinatari broadcast
+    if innesco.modalita_target == InnescoTimer.INNESCO_TARGET_GLOBAL:
+        ids = list(Personaggio.objects.filter(tipologia__giocante=True).values_list("id", flat=True)[:5000])
+    else:
+        ids = []
+        for pg in Personaggio.objects.filter(tipologia__giocante=True).select_related(
+            "era", "prefettura", "prefettura__regione"
+        ):
+            if personaggio_match_innesco_timer(pg, innesco):
+                ids.append(pg.id)
+
+    _broadcast_timer_innesco(
+        nome=innesco.nome,
+        data_fine=stato.data_fine,
+        segnale_luminoso=innesco.segnale_luminoso,
+        recipient_personaggio_ids=ids,
+    )
+
+    return {
+        "nome": innesco.nome,
+        "scadenza": stato.data_fine,
+        "segnale_luminoso": innesco.segnale_luminoso,
+        "recipient_personaggio_ids": ids,
+    }, None
+
+
+def gestisci_scansione_inventario_qr(
+    *,
+    user,
+    personaggio,
+    qr_code,
+    inventario,
+) -> Dict[str, Any]:
+    """
+    Gestisce prima scansione (attesa) o seconda scansione (dati completi).
+    """
+    from .models import INVENTARIO_QR_ATTESA_SECONDI, QrInventarioScanSession
+
+    now = timezone.now()
+    with transaction.atomic():
+        sess = (
+            QrInventarioScanSession.objects.select_for_update()
+            .filter(
+                user=user,
+                qr_code=qr_code,
+                inventario=inventario,
+                confermato_at__isnull=True,
+            )
+            .order_by("-first_scan_at")
+            .first()
+        )
+
+        if sess and sess.personaggio_id != personaggio.pk:
+            sess.delete()
+            sess = None
+
+        if not sess:
+            sess = QrInventarioScanSession.objects.create(
+                user=user,
+                personaggio=personaggio,
+                qr_code=qr_code,
+                inventario=inventario,
+            )
+            return {
+                "fase": "attesa",
+                "session_id": str(sess.id),
+                "attesa_secondi": INVENTARIO_QR_ATTESA_SECONDI,
+                "pronto_dopo": (sess.first_scan_at + timedelta(seconds=INVENTARIO_QR_ATTESA_SECONDI)).isoformat(),
+            }
+
+        delta = now - sess.first_scan_at
+        if delta.total_seconds() < INVENTARIO_QR_ATTESA_SECONDI:
+            resta = int(INVENTARIO_QR_ATTESA_SECONDI - delta.total_seconds())
+            return {
+                "fase": "attesa",
+                "session_id": str(sess.id),
+                "attesa_secondi": resta,
+                "pronto_dopo": (sess.first_scan_at + timedelta(seconds=INVENTARIO_QR_ATTESA_SECONDI)).isoformat(),
+            }
+
+        sess.confermato_at = now
+        sess.save(update_fields=["confermato_at", "updated_at"])
+
+    return {"fase": "confermato", "session_id": str(sess.id)}
+
+
+def oggetto_puo_essere_acquisito_da_qr(personaggio, oggetto) -> Tuple[bool, str]:
+    """Regola QR oggetto: almeno 1 nell'aura dell'oggetto, oppure oggetto senza aura."""
+    if not oggetto.aura_id:
+        return True, ""
+    v = personaggio.get_valore_aura_effettivo(oggetto.aura)
+    if v >= 1:
+        return True, ""
+    return False, "Non possiedi un punteggio sufficiente nell'aura richiesta per prendere questo oggetto."

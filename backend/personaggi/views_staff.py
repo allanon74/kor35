@@ -13,7 +13,7 @@ from rest_framework.decorators import action
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
-    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario,
+    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, InnescoTimer,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
@@ -46,6 +46,8 @@ from .serializers import (
     TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
     EraStaffSerializer, PrefetturaStaffSerializer, RegioneStaffSerializer,
     DichiarazioneStaffSerializer,
+    ManifestoStaffSerializer,
+    InnescoTimerStaffSerializer,
 )
 
 
@@ -631,3 +633,53 @@ class SelezionaEffettoCasualeView(APIView):
         if 'consumabile_creato' in risultato:
             out['consumabile_creato_id'] = risultato['consumabile_creato'].id
         return Response(out, status=status.HTTP_200_OK)
+
+
+class ManifestoStaffViewSet(viewsets.ModelViewSet):
+    """CRUD manifesti (contenuto in `testo`, requisiti JSON opzionali)."""
+
+    queryset = Manifesto.objects.all().order_by("-id")
+    serializer_class = ManifestoStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+
+class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
+    """CRUD inneschi timer QR (target globale o per era/regione/KORP)."""
+
+    serializer_class = InnescoTimerStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = InnescoTimer.objects.prefetch_related("target_ere", "target_regioni", "target_korps").order_by(
+            "-id"
+        )
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
+
+    @staticmethod
+    def _apply_target_lists(obj, data):
+        if "target_ere_ids" in data:
+            ids = data.get("target_ere_ids") or []
+            obj.target_ere.set(Era.objects.filter(pk__in=ids))
+        if "target_regioni_ids" in data:
+            ids = data.get("target_regioni_ids") or []
+            obj.target_regioni.set(Regione.objects.filter(pk__in=ids))
+        if "target_korps_ids" in data:
+            ids = data.get("target_korps_ids") or []
+            obj.target_korps.set(Korp.objects.filter(pk__in=ids))
+
+    def perform_create(self, serializer):
+        camp = _get_active_campaign(self.request) or _get_default_campaign()
+        with transaction.atomic():
+            obj = serializer.save(campagna=camp)
+            self._apply_target_lists(obj, self.request.data)
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            obj = serializer.save()
+            self._apply_target_lists(obj, self.request.data)

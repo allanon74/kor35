@@ -23,12 +23,13 @@ def _personaggio_avatar_url(personaggio, request):
     return None
 
 from .models import ConfigurazioneLivelloAura, formatta_testo_generico, ConsumabilePersonaggio
+from . import qr_logic
 # Importa i modelli e le funzioni helper
 from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
-    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, A_vista, Mattone,
+    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, A_vista, Mattone, InnescoTimer,
     AURA, 
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -1546,7 +1547,51 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
 class ManifestoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Manifesto
-        fields = ('id', 'nome', 'testo')
+        fields = ("id", "nome", "testo", "requisiti_lettura")
+
+
+class ManifestoStaffSerializer(serializers.ModelSerializer):
+    """CRUD staff manifesti (contenuto HTML in `testo`, requisiti opzionali)."""
+
+    class Meta:
+        model = Manifesto
+        fields = ("id", "nome", "testo", "requisiti_lettura")
+
+
+class InnescoTimerStaffSerializer(serializers.ModelSerializer):
+    """Lettura include ID target; scrittura liste gestita nel ViewSet (`target_ere_ids` nel body)."""
+
+    target_ere_ids = serializers.SerializerMethodField()
+    target_regioni_ids = serializers.SerializerMethodField()
+    target_korps_ids = serializers.SerializerMethodField()
+    campagna = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = InnescoTimer
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "modalita_target",
+            "durata_secondi",
+            "max_cariche",
+            "rigenera_cariche_ogni_secondi",
+            "segnale_luminoso",
+            "campagna",
+            "target_ere_ids",
+            "target_regioni_ids",
+            "target_korps_ids",
+        )
+        read_only_fields = ("campagna", "target_ere_ids", "target_regioni_ids", "target_korps_ids")
+
+    def get_target_ere_ids(self, obj):
+        return list(obj.target_ere.values_list("id", flat=True))
+
+    def get_target_regioni_ids(self, obj):
+        return list(obj.target_regioni.values_list("id", flat=True))
+
+    def get_target_korps_ids(self, obj):
+        return list(obj.target_korps.values_list("id", flat=True))
 
 
 class A_vistaSerializer(serializers.ModelSerializer):
@@ -2386,34 +2431,55 @@ class AcquisisciSerializer(serializers.Serializer):
 
     def validate(self, data):
         try:
-            qr = QrCode.objects.select_related('vista').get(id=str(data.get('qrcode_id')))
+            qr = QrCode.objects.select_related("vista").get(id=str(data.get("qrcode_id")))
             if not qr.vista:
                 raise serializers.ValidationError("QrCode vuoto.")
-            self.context['qr_code'] = qr
-            self.context['item'] = (
-                qr.vista.oggetto if hasattr(qr.vista, 'oggetto') else (
-                    qr.vista.attivata if hasattr(qr.vista, 'attivata') else (
-                        qr.vista.infusione if hasattr(qr.vista, 'infusione') else qr.vista.tessitura
-                    )
+            self.context["qr_code"] = qr
+            v = qr.vista
+            if hasattr(v, "oggetto"):
+                item = v.oggetto
+            elif hasattr(v, "attivata"):
+                item = v.attivata
+            elif hasattr(v, "infusione"):
+                item = v.infusione
+            elif hasattr(v, "tessitura"):
+                item = v.tessitura
+            elif hasattr(v, "cerimoniale"):
+                item = v.cerimoniale
+            else:
+                raise serializers.ValidationError(
+                    "Questo QR non supporta l'acquisizione da questa azione (es. manifesto, inventario, innesco timer)."
                 )
-            )
+            self.context["item"] = item
+            if isinstance(item, Oggetto):
+                ok, msg = qr_logic.oggetto_puo_essere_acquisito_da_qr(self.context["richiedente"], item)
+                if not ok:
+                    raise serializers.ValidationError(msg)
+        except serializers.ValidationError:
+            raise
+        except QrCode.DoesNotExist:
+            raise serializers.ValidationError("QrCode non valido.")
         except Exception:
             raise serializers.ValidationError("QrCode non valido.")
         return data
 
     def save(self):
-        item = self.context['item']
-        pg = self.context['richiedente']
-        if isinstance(item, Oggetto):
-            item.sposta_in_inventario(pg)
-        elif isinstance(item, Attivata):
-            pg.attivate_possedute.add(item)
-        elif isinstance(item, Infusione):
-            pg.infusioni_possedute.add(item)
-        elif isinstance(item, Tessitura):
-            pg.tessiture_possedute.add(item)
-        self.context['qr_code'].vista = None
-        self.context['qr_code'].save()
+        item = self.context["item"]
+        pg = self.context["richiedente"]
+        qr = self.context["qr_code"]
+        with transaction.atomic():
+            if isinstance(item, Oggetto):
+                item.sposta_in_inventario(pg)
+            elif isinstance(item, Attivata):
+                pg.attivate_possedute.add(item)
+            elif isinstance(item, Infusione):
+                pg.infusioni_possedute.add(item)
+            elif isinstance(item, Tessitura):
+                pg.tessiture_possedute.add(item)
+            elif isinstance(item, Cerimoniale):
+                pg.cerimoniali_posseduti.add(item)
+            qr.vista = None
+            qr.save()
         return item
 
 

@@ -496,8 +496,12 @@ export const getPersonaggioDetail = (id, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/personaggi/${id}/`, { method: 'GET' }, onLogout);
 };
 
-export const getQrCodeData = (qrId, onLogout) => {
-  return fetchAuthenticated(`/api/personaggi/api/qrcode/${qrId}/`, { method: 'GET' }, onLogout);
+export const getQrCodeData = (qrId, onLogout, personaggioId = null) => {
+  const q =
+    personaggioId != null && personaggioId !== ''
+      ? `?personaggio_id=${encodeURIComponent(String(personaggioId))}`
+      : '';
+  return fetchAuthenticated(`/api/personaggi/api/qrcode/${qrId}/${q}`, { method: 'GET' }, onLogout);
 };
 
 /**
@@ -576,15 +580,17 @@ export const confermaTransazione = (transazioneId, azione, onLogout) => {
 /**
  * Tenta di rubare un oggetto da un personaggio (azione "Ruba").
  */
-export const rubaOggetto = (oggettoId, targetPersonaggioId, onLogout) => {
+export const rubaOggetto = (oggettoId, targetPersonaggioId, onLogout, personaggioId = null) => {
+  const body = {
+    oggetto_id: oggettoId,
+    target_personaggio_id: targetPersonaggioId,
+  };
+  if (personaggioId != null && personaggioId !== '') body.personaggio_id = personaggioId;
   return fetchAuthenticated(
     '/api/personaggi/api/transazioni/ruba/', 
     {
       method: 'POST',
-      body: JSON.stringify({
-        oggetto_id: oggettoId,
-        target_personaggio_id: targetPersonaggioId,
-      })
+      body: JSON.stringify(body)
     },
     onLogout
   );
@@ -593,14 +599,14 @@ export const rubaOggetto = (oggettoId, targetPersonaggioId, onLogout) => {
 /**
  * Acquisisce un oggetto/attivata da un QR code.
  */
-export const acquisisciItem = (qrCodeId, onLogout) => {
+export const acquisisciItem = (qrCodeId, onLogout, personaggioId = null) => {
+  const body = { qrcode_id: qrCodeId };
+  if (personaggioId != null && personaggioId !== '') body.personaggio_id = personaggioId;
   return fetchAuthenticated(
     '/api/personaggi/api/transazioni/acquisisci/', 
     {
       method: 'POST',
-      body: JSON.stringify({
-        qrcode_id: qrCodeId,
-      })
+      body: JSON.stringify(body)
     },
     onLogout
   );
@@ -1671,6 +1677,24 @@ export const staffDeleteInventario = (id, onLogout) =>
 export const staffGetInventarioOggetti = (inventarioId, onLogout) => 
     fetchAuthenticated(`/api/personaggi/api/staff/inventari/${inventarioId}/oggetti/`, { method: 'GET' }, onLogout);
 
+export const staffGetManifesti = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/manifesti/', { method: 'GET' }, onLogout);
+export const staffCreateManifesto = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/manifesti/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateManifesto = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/manifesti/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteManifesto = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/manifesti/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetInnescoTimers = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/innesco-timer/', { method: 'GET' }, onLogout);
+export const staffCreateInnescoTimer = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/innesco-timer/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdateInnescoTimer = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeleteInnescoTimer = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/innesco-timer/${id}/`, { method: 'DELETE' }, onLogout);
+
 export const staffAggiungiOggettoInventario = (inventarioId, oggettoId, onLogout) => 
     fetchAuthenticated(`/api/personaggi/api/staff/inventari/${inventarioId}/aggiungi_oggetto/`, { 
         method: 'POST', 
@@ -1752,6 +1776,10 @@ export const staffGetPrefetture = (onLogout) => {
 
 export const staffGetRegioni = (onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/staff/regioni/', { method: 'GET' }, onLogout);
+};
+
+export const staffGetKorps = (onLogout) => {
+    return fetchAuthenticated('/api/personaggi/api/korp/', { method: 'GET' }, onLogout);
 };
 
 export const staffCreateRegione = (data, onLogout) => {

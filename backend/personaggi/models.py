@@ -1881,8 +1881,22 @@ class TessituraStatisticaBase(SyncableModel, models.Model):
     valore_base = models.IntegerField(default=0)
     def __str__(self): return f"{self.statistica.nome}: {self.valore_base}"
 
-class Manifesto(A_vista): 
-    def __str__(self): return f"Manifesto: {self.nome}"
+class Manifesto(A_vista):
+    """
+    Contenuto leggibile via QR. `testo` (da A_vista) può contenere HTML ricco.
+    `requisiti_lettura`: lista JSON opzionale per limitare la lettura, es.:
+    [{"tipo": "statistica", "sigla": "CCO", "min": 1}, {"tipo": "abilita", "id": 12}]
+    Lista vuota = tutti possono leggere.
+    """
+
+    requisiti_lettura = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Requisiti opzionali (statistica per sigla o abilità per id). Vuoto = accesso libero.",
+    )
+
+    def __str__(self):
+        return f"Manifesto: {self.nome}"
 
 class Inventario(A_vista):
     class Meta: verbose_name = "Inventario"; verbose_name_plural = "Inventari"
@@ -2315,7 +2329,124 @@ class StatoTimerAttivo(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.tipologia.nome} - Fine: {self.data_fine}"
-            
+
+
+# --- Sessione doppia scansione inventario (non personaggio) ---
+INVENTARIO_QR_ATTESA_SECONDI = 30
+
+
+class QrInventarioScanSession(SyncableModel, models.Model):
+    """
+    Prima scansione QR inventario: crea sessione; dopo INVENTARIO_QR_ATTESA_SECONDI
+    la seconda scansione dello stesso QR (stesso utente/PG) sblocca il payload completo.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="qr_inventario_sessions")
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="qr_inventario_sessions",
+    )
+    qr_code = models.ForeignKey("QrCode", on_delete=models.CASCADE, related_name="inventario_scan_sessions")
+    inventario = models.ForeignKey("Inventario", on_delete=models.CASCADE, related_name="qr_scan_sessions")
+    first_scan_at = models.DateTimeField(auto_now_add=True)
+    confermato_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Sessione scansione inventario QR"
+        verbose_name_plural = "Sessioni scansione inventario QR"
+        indexes = [
+            models.Index(fields=["user", "qr_code", "confermato_at"]),
+            models.Index(fields=["personaggio", "qr_code"]),
+        ]
+
+
+class InnescoTimer(A_vista):
+    """
+    Innesco timer personale (e broadcast mirato) collegabile a un QrCode come altre A_vista.
+    """
+
+    INNESCO_TARGET_GLOBAL = "globale"
+    INNESCO_TARGET_FILTRI = "filtri"
+    INNESCO_TARGET_CHOICES = [
+        (INNESCO_TARGET_GLOBAL, "Tutti i giocatori"),
+        (INNESCO_TARGET_FILTRI, "Solo era / regione / KORP selezionate"),
+    ]
+
+    modalita_target = models.CharField(
+        max_length=16,
+        choices=INNESCO_TARGET_CHOICES,
+        default=INNESCO_TARGET_GLOBAL,
+        db_index=True,
+    )
+    durata_secondi = models.PositiveIntegerField(default=60, verbose_name="Durata countdown (secondi)")
+    max_cariche = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Cariche per ciclo",
+        help_text="Quante volte si può attivare prima della rigenerazione (0 = illimitato).",
+    )
+    rigenera_cariche_ogni_secondi = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Rigenera cariche ogni (secondi)",
+        help_text="Lasciare vuoto per nessuna rigenerazione automatica delle cariche.",
+    )
+    segnale_luminoso = models.BooleanField(
+        default=True,
+        verbose_name="Segnale luminoso in-app",
+        help_text="Il client può evidenziare il timer in modo più visibile.",
+    )
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="innesco_timers",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+    target_ere = models.ManyToManyField("Era", blank=True, related_name="innesco_timers")
+    target_regioni = models.ManyToManyField("Regione", blank=True, related_name="innesco_timers")
+    target_korps = models.ManyToManyField("Korp", blank=True, related_name="innesco_timers")
+
+    class Meta:
+        verbose_name = "Innesco timer (QR)"
+        verbose_name_plural = "Inneschi timer (QR)"
+
+    def __str__(self):
+        return f"InnescoTimer: {self.nome}"
+
+
+class StatoInnescoTimerPersonaggio(SyncableModel, models.Model):
+    """Stato runtime per cariche e scadenza countdown per innesco timer."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="stati_innesco_timer",
+    )
+    innesco_timer = models.ForeignKey(
+        InnescoTimer,
+        on_delete=models.CASCADE,
+        related_name="stati_personaggio",
+    )
+    data_fine = models.DateTimeField(verbose_name="Scadenza countdown")
+    cariche_usate_ciclo = models.PositiveIntegerField(default=0)
+    ciclo_iniziato_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Stato innesco timer (personaggio)"
+        verbose_name_plural = "Stati innesco timer (personaggio)"
+        unique_together = [("personaggio", "innesco_timer")]
+        indexes = [
+            models.Index(fields=["personaggio", "innesco_timer"]),
+        ]
+
+    def __str__(self):
+        return f"{self.personaggio_id} / {self.innesco_timer_id} fino {self.data_fine}"
+
+
 class ClasseOggetto(SyncableModel, models.Model):
     nome = models.CharField(max_length=50, unique=True)
     max_mod_totali = models.IntegerField(default=0, verbose_name="Max Mod Totali")

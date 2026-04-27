@@ -468,12 +468,33 @@ export const CharacterProvider = ({ children, onLogout }) => {
     ws.current.onmessage = (e) => {
       try {
         const d = JSON.parse(e.data);
-        if (d.action === 'TIMER_SYNC') {
-            updateTimerState(d.payload);
+        const inner = d.type === 'notification' ? d.payload : d;
+        const action = inner?.action;
+        const payload = inner?.payload || inner;
+
+        if (action === 'TIMER_SYNC' && payload) {
+            updateTimerState(payload);
+        }
+
+        if (action === 'TIMER_INNESCO_SYNC' && payload) {
+            const ids = payload.recipient_personaggio_ids || [];
+            const myId = parseInt(selectedCharacterId, 10);
+            if (!ids.length || ids.includes(myId)) {
+              updateTimerState({
+                nome: payload.nome,
+                data_fine: payload.data_fine,
+                alert_suono: true,
+                notifica_push: true,
+                messaggio_in_app: true,
+              });
+            }
         }
 
         if (d.type === 'notification') {
            const msg = d.payload;
+           if (!msg || msg.action === 'TIMER_SYNC' || msg.action === 'TIMER_INNESCO_SYNC') {
+             return;
+           }
            const myId = parseInt(selectedCharacterId);
            if (msg.tipo === 'BROAD' || (msg.tipo === 'INDV' && msg.destinatario_id === myId) || msg.tipo === 'GROUP') {
               setNotification(msg);
@@ -485,7 +506,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
       } catch (err) {}
     };
     return () => { if (ws.current) ws.current.close(); };
-  }, [selectedCharacterId, fetchUserMessages, queryClient]);
+  }, [selectedCharacterId, fetchUserMessages, queryClient, updateTimerState]);
 
 
   // --- VALUE DEL CONTEXT ---

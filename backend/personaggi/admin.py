@@ -46,6 +46,7 @@ from .models import (
     ConfigurazioneLivelloAura,
     Cerimoniale, CerimonialeCaratteristica,
     TipologiaTimer, TimerQrCode, StatoTimerAttivo,
+    InnescoTimer, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
@@ -688,6 +689,24 @@ class ManifestoAdmin(SModelAdmin):
     summernote_fields = ['testo']
     search_fields = ('nome', 'testo')
 
+
+@admin.register(InnescoTimer)
+class InnescoTimerAdmin(SModelAdmin):
+    list_display = ("id", "nome", "modalita_target", "durata_secondi", "max_cariche", "campagna")
+    summernote_fields = ["testo"]
+    filter_horizontal = ("target_ere", "target_regioni", "target_korps")
+
+
+@admin.register(QrInventarioScanSession)
+class QrInventarioScanSessionAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "personaggio", "qr_code", "inventario", "first_scan_at", "confermato_at")
+    readonly_fields = ("id", "sync_id", "updated_at", "first_scan_at")
+
+
+@admin.register(StatoInnescoTimerPersonaggio)
+class StatoInnescoTimerPersonaggioAdmin(admin.ModelAdmin):
+    list_display = ("id", "personaggio", "innesco_timer", "data_fine", "cariche_usate_ciclo")
+
 # --- NUOVA SEZIONE TIMER ---
 
 class TimerQrCodeInline(admin.StackedInline):
@@ -723,11 +742,12 @@ class QrCodeAdmin(admin.ModelAdmin):
     inlines = [TimerQrCodeInline] # <--- Aggiunge la configurazione timer al QR
 
     def get_timer_info(self, obj):
-        if hasattr(obj, 'timer_config'):
+        cfg = getattr(obj, "configurazione_timer", None)
+        if cfg:
             return format_html(
                 '<span style="color: #ff9800; font-weight: bold;">Timer: {} ({}s)</span>',
-                obj.timer_config.tipologia.nome,
-                obj.timer_config.durata_secondi
+                cfg.tipologia.nome,
+                cfg.durata_secondi,
             )
         return "-"
     get_timer_info.short_description = "Tipo Timer"

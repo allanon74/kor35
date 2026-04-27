@@ -19,6 +19,7 @@ from asgiref.sync import async_to_sync
 from .models import (
     OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, 
     A_vista, Inventario, Infusione, Tessitura, Personaggio, TransazioneSospesa, 
+    InnescoTimer,
     ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     CreditoMovimento, PuntiCaratteristicaMovimento, Punteggio, CARATTERISTICA, 
     PersonaggioModelloAura, ModelloAura, PropostaTecnica, 
@@ -81,6 +82,7 @@ from webpush.models import PushInformation, SubscriptionInfo
 import json
 
 from . import api_cache_revision
+from . import qr_logic
 
 # --- IMPORT SERVICES ---
 from .services import (
@@ -92,7 +94,7 @@ from .campaigns import ensure_user_in_base_campaign
 # --- IMPORT SERIALIZERS ---
 from .serializers import (
     ChangePasswordSerializer, OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
-    ManifestoSerializer, A_vistaSerializer, InventarioSerializer,
+    ManifestoSerializer, A_vistaSerializer, InventarioSerializer, CerimonialeSerializer,
     PersonaggioDetailSerializer, CreditoMovimentoCreateSerializer, PersonaggioListSerializer,
     TransazioneSospesaSerializer, PropostaTransazioneSerializer, 
     PuntiCaratteristicaMovimentoCreateSerializer, TransazioneCreateSerializer, 
@@ -1467,58 +1469,203 @@ def qr_code_detail_view(request: HttpRequest, pk: string) -> HttpResponse:
     return HttpResponse(html_response)
 
 class QrCodeDetailView(APIView):
+    """
+    Risoluzione QR: timer legacy (TimerQrCode), InnescoTimer, personaggio/inventario/oggetto/tecniche/manifesto.
+    Per inventari non-personaggio richiede doppia scansione (vedi qr_logic.gestisci_scansione_inventario_qr).
+    Query opzionale: ?personaggio_id=<id> (personaggio dell'utente autenticato) per permessi manifesto/inventario/innesco.
+    """
+
     def get(self, request, qrcode_id, format=None):
         try:
-            qr_code = QrCode.objects.select_related('vista').get(id=qrcode_id)
+            qr_code = QrCode.objects.select_related("vista").get(id=qrcode_id)
         except QrCode.DoesNotExist:
             return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
-        
-        # --- LOGICA NUOVA: Controllo se è un Timer ---
-        configurazione_timer = getattr(qr_code, 'configurazione_timer', None)
+
+        configurazione_timer = getattr(qr_code, "configurazione_timer", None)
         if configurazione_timer:
             return self.gestisci_scansione_timer(configurazione_timer)
 
         vista_obj = qr_code.vista
-        if vista_obj is None: return Response({"tipo_modello": "qrcode_scollegato", "messaggio": "Questo QrCode è valido ma non è collegato a nessun oggetto.", "qrcode_id": qr_code.id, "testo_qrcode": qr_code.testo}, status=status.HTTP_200_OK)
-        
+        if vista_obj is None:
+            return Response(
+                {
+                    "tipo_modello": "qrcode_scollegato",
+                    "messaggio": "Questo QrCode è valido ma non è collegato a nessun oggetto.",
+                    "qrcode_id": qr_code.id,
+                    "testo_qrcode": qr_code.testo,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        scanner_pg = None
+        raw_pid = request.query_params.get("personaggio_id")
+        if request.user.is_authenticated and raw_pid not in (None, ""):
+            try:
+                pid = int(raw_pid)
+            except (TypeError, ValueError):
+                pid = None
+            if pid is not None:
+                scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+
+        # Innesco timer (sottoclasse A_vista)
+        inn_timer = InnescoTimer.objects.filter(pk=vista_obj.pk).first()
+        if inn_timer:
+            if not scanner_pg:
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto (personaggio dell'utente collegato)."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            payload, err = qr_logic.attiva_innesco_timer_per_personaggio(scanner_pg, inn_timer)
+            if err:
+                return Response({"error": err}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {
+                    "tipo_modello": "timer_innesco",
+                    "messaggio": f"Innesco timer «{inn_timer.nome}» avviato.",
+                    "dati": {
+                        "nome": payload["nome"],
+                        "scadenza": payload["scadenza"].isoformat() if payload.get("scadenza") else None,
+                        "segnale_luminoso": payload.get("segnale_luminoso", True),
+                        "recipient_personaggio_ids": payload.get("recipient_personaggio_ids") or [],
+                    },
+                    "qrcode_id": qr_code.id,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         data = None
         model_type = None
-        
-        if hasattr(vista_obj, 'personaggio'):
-            model_type = 'personaggio'
-            serializer = PersonaggioPublicSerializer(vista_obj.personaggio)
+
+        # Inventario personaggio (stesso id inventario_ptr)
+        if Personaggio.objects.filter(inventario_ptr_id=vista_obj.pk).exists():
+            pg = Personaggio.objects.select_related("tipologia", "inventario_ptr").get(inventario_ptr_id=vista_obj.pk)
+            model_type = "personaggio"
+            serializer = PersonaggioPublicSerializer(pg)
             data = serializer.data
-        elif hasattr(vista_obj, 'inventario'):
-            model_type = 'inventario'
-            serializer = InventarioSerializer(vista_obj.inventario)
-            data = serializer.data
-        
-        if hasattr(vista_obj, 'oggetto'):
-            model_type = 'oggetto'
-            serializer = OggettoSerializer(vista_obj.oggetto)
-            data = serializer.data
-        elif hasattr(vista_obj, 'attivata'): # Legacy
-            model_type = 'attivata'
+
+        elif hasattr(vista_obj, "oggetto"):
+            model_type = "oggetto"
+            ser = OggettoSerializer(vista_obj.oggetto, context={"request": request, "personaggio": scanner_pg})
+            data = ser.data
+            if scanner_pg:
+                ok_take, msg_take = qr_logic.oggetto_puo_essere_acquisito_da_qr(scanner_pg, vista_obj.oggetto)
+                data = dict(data)
+                data["puo_acquisire_da_qr"] = ok_take
+                data["messaggio_acquisizione_qr"] = msg_take or None
+
+        elif hasattr(vista_obj, "attivata"):
+            model_type = "attivata"
             serializer = AttivataSerializer(vista_obj.attivata)
             data = serializer.data
-        elif hasattr(vista_obj, 'infusione'): # Nuovo
-            model_type = 'infusione'
-            serializer = InfusioneSerializer(vista_obj.infusione)
-            data = serializer.data
-        elif hasattr(vista_obj, 'tessitura'): # Nuovo
-            model_type = 'tessitura'
-            serializer = TessituraSerializer(vista_obj.tessitura)
-            data = serializer.data
-        elif hasattr(vista_obj, 'manifesto'):
-            model_type = 'manifesto'
+
+        elif hasattr(vista_obj, "infusione"):
+            model_type = "infusione"
+            t = vista_obj.infusione
+            serializer = InfusioneSerializer(t, context={"request": request, "personaggio": scanner_pg})
+            data = dict(serializer.data)
+            if scanner_pg:
+                ok_u, msg_u = scanner_pg.valida_acquisto_tecnica(t)
+                data["tecnica_usabile"] = ok_u
+                data["tecnica_usabilita_messaggio"] = msg_u
+                data["gia_posseduta"] = scanner_pg.infusioni_possedute.filter(pk=t.pk).exists()
+
+        elif hasattr(vista_obj, "tessitura"):
+            model_type = "tessitura"
+            t = vista_obj.tessitura
+            serializer = TessituraSerializer(t, context={"request": request, "personaggio": scanner_pg})
+            data = dict(serializer.data)
+            if scanner_pg:
+                ok_u, msg_u = scanner_pg.valida_acquisto_tecnica(t)
+                data["tecnica_usabile"] = ok_u
+                data["tecnica_usabilita_messaggio"] = msg_u
+                data["gia_posseduta"] = scanner_pg.tessiture_possedute.filter(pk=t.pk).exists()
+
+        elif hasattr(vista_obj, "cerimoniale"):
+            model_type = "cerimoniale"
+            t = vista_obj.cerimoniale
+            serializer = CerimonialeSerializer(t, context={"request": request, "personaggio": scanner_pg})
+            data = dict(serializer.data)
+            if scanner_pg:
+                ok_u, msg_u = scanner_pg.valida_acquisto_tecnica(t)
+                data["tecnica_usabile"] = ok_u
+                data["tecnica_usabilita_messaggio"] = msg_u
+                data["gia_posseduta"] = scanner_pg.cerimoniali_posseduti.filter(pk=t.pk).exists()
+
+        elif hasattr(vista_obj, "manifesto"):
+            model_type = "manifesto"
             serializer = ManifestoSerializer(vista_obj.manifesto)
-            data = serializer.data
+            data = dict(serializer.data)
+            if scanner_pg:
+                ok_r, msg_r = qr_logic.personaggio_soddisfa_requisiti_manifesto(scanner_pg, vista_obj.manifesto)
+                data["puo_leggere"] = ok_r
+                data["messaggio_accesso"] = msg_r or None
+                if not ok_r:
+                    data["testo"] = None
+            else:
+                reqs = vista_obj.manifesto.requisiti_lettura or []
+                if reqs:
+                    data["puo_leggere"] = False
+                    data["messaggio_accesso"] = "Accedi e indica personaggio_id per verificare i requisiti."
+                    data["testo"] = None
+                else:
+                    data["puo_leggere"] = True
+
+        elif Inventario.objects.filter(pk=vista_obj.pk).exists() and not Personaggio.objects.filter(
+            inventario_ptr_id=vista_obj.pk
+        ).exists():
+            if not request.user.is_authenticated:
+                return Response(
+                    {"error": "Autenticazione richiesta per accedere a un inventario QR."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            inv = Inventario.objects.get(pk=vista_obj.pk)
+            if not scanner_pg:
+                return Response(
+                    {
+                        "error": "Per inventari QR serve personaggio_id (personaggio attivo dell'utente).",
+                        "qrcode_id": qr_code.id,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            scan_info = qr_logic.gestisci_scansione_inventario_qr(
+                user=request.user,
+                personaggio=scanner_pg,
+                qr_code=qr_code,
+                inventario=inv,
+            )
+            if scan_info.get("fase") == "attesa":
+                return Response(
+                    {
+                        "tipo_modello": "inventario_attesa_conferma",
+                        "messaggio": "Attendi almeno 30 secondi e scansiona di nuovo lo stesso QR per confermare.",
+                        "dati": {
+                            **scan_info,
+                            "inventario_id": inv.id,
+                            "nome": inv.nome,
+                        },
+                        "qrcode_id": qr_code.id,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            # fase confermato: payload completo con permessi per oggetto
+            model_type = "inventario"
+            base = InventarioSerializer(inv).data
+            oggetti_out = []
+            for o in inv.get_oggetti():
+                perm = qr_logic.permessi_oggetto_inventario_qr(scanner_pg, o)
+                if not perm["visibile_inventario_qr"]:
+                    continue
+                od = OggettoSerializer(o, context={"request": request, "personaggio": scanner_pg}).data
+                od.update(perm)
+                oggetti_out.append(od)
+            data = {**base, "oggetti": oggetti_out, "inventario_qr_confermato": True}
+
         else:
-            model_type = 'a_vista'
+            model_type = "a_vista"
             serializer = A_vistaSerializer(vista_obj)
             data = serializer.data
 
-        response_payload = {"tipo_modello": model_type, "dati": data}
+        response_payload = {"tipo_modello": model_type, "dati": data, "qrcode_id": qr_code.id}
         return Response(response_payload, status=status.HTTP_200_OK) 
     
     def gestisci_scansione_timer(self, config):
@@ -1983,10 +2130,21 @@ class PersonaggioModificatoriDettagliatiView(APIView):
 class RubaView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request, format=None):
-        try:
-            personaggio_richiedente = Personaggio.objects.get(proprietario=request.user)
-        except Personaggio.DoesNotExist: return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = RubaSerializer(data=request.data, context={'richiedente': personaggio_richiedente})
+        char_id = request.data.get("personaggio_id")
+        qs = Personaggio.objects.filter(proprietario=request.user)
+        if char_id not in (None, ""):
+            try:
+                personaggio_richiedente = qs.filter(pk=int(char_id)).first()
+            except (TypeError, ValueError):
+                personaggio_richiedente = None
+        else:
+            personaggio_richiedente = qs.first()
+        if not personaggio_richiedente:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente (usa personaggio_id se ne hai più d'uno)."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = RubaSerializer(data=request.data, context={"richiedente": personaggio_richiedente})
         if serializer.is_valid():
             try:
                 oggetto_rubato = serializer.save()
@@ -1997,10 +2155,21 @@ class RubaView(APIView):
 class AcquisisciView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request, format=None):
-        try:
-            personaggio_richiedente = Personaggio.objects.get(proprietario=request.user)
-        except Personaggio.DoesNotExist: return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
-        serializer = AcquisisciSerializer(data=request.data, context={'richiedente': personaggio_richiedente})
+        char_id = request.data.get("personaggio_id")
+        qs = Personaggio.objects.filter(proprietario=request.user)
+        if char_id not in (None, ""):
+            try:
+                personaggio_richiedente = qs.filter(pk=int(char_id)).first()
+            except (TypeError, ValueError):
+                personaggio_richiedente = None
+        else:
+            personaggio_richiedente = qs.first()
+        if not personaggio_richiedente:
+            return Response(
+                {"error": "Nessun personaggio trovato per questo utente (usa personaggio_id se ne hai più d'uno)."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = AcquisisciSerializer(data=request.data, context={"richiedente": personaggio_richiedente})
         if serializer.is_valid():
             item_acquisito = serializer.save()
             return Response({"success": f"'{item_acquisito.nome}' acquisito con successo!"}, status=status.HTTP_200_OK)
@@ -4670,6 +4839,9 @@ class AssociaQrAVistaView(APIView):
                 elif hasattr(qr.vista, 'manifesto'):
                     elemento_associato = qr.vista.manifesto
                     tipo_elemento = "Manifesto"
+                elif InnescoTimer.objects.filter(pk=qr.vista.pk).exists():
+                    elemento_associato = InnescoTimer.objects.get(pk=qr.vista.pk)
+                    tipo_elemento = "Innesco timer"
                 
                 nome_associato = elemento_associato.nome if elemento_associato else "Sconosciuto"
                 
