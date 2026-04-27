@@ -29,7 +29,7 @@ from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
-    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, A_vista, Mattone, InnescoTimer,
+    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, A_vista, Mattone, InnescoTimer,
     AURA, 
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -233,7 +233,18 @@ class EraSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Era
-        fields = ("id", "nome", "abbreviazione", "descrizione_breve", "descrizione", "ordine", "attiva", "prefetture")
+        fields = (
+            "id",
+            "nome",
+            "abbreviazione",
+            "descrizione_breve",
+            "descrizione",
+            "difetto_interpretativo_titolo",
+            "difetto_interpretativo_testo",
+            "ordine",
+            "attiva",
+            "prefetture",
+        )
 
 
 class RegioneSerializer(serializers.ModelSerializer):
@@ -1556,6 +1567,45 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
     class Meta:
         model = Manifesto
         fields = ("id", "nome", "testo", "requisiti_lettura")
+
+
+class NodoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Nodo
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "tipo_nodo",
+        )
+
+
+class NodoStaffSerializer(serializers.ModelSerializer):
+    foto_posizione_url = serializers.SerializerMethodField()
+
+    def get_foto_posizione_url(self, obj):
+        if not obj.foto_posizione:
+            return None
+        req = self.context.get("request")
+        try:
+            return req.build_absolute_uri(obj.foto_posizione.url) if req else obj.foto_posizione.url
+        except Exception:
+            return None
+
+    class Meta:
+        model = Nodo
+        fields = (
+            "id",
+            "nome",
+            "testo",
+            "tipo_nodo",
+            "disponibile_dal",
+            "ultima_scansione_at",
+            "foto_posizione",
+            "foto_posizione_url",
+            "campagna",
+        )
+        read_only_fields = ("campagna",)
 
 
 class InnescoTimerStaffSerializer(serializers.ModelSerializer):

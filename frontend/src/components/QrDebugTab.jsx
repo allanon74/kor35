@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Search, QrCode, ExternalLink } from 'lucide-react';
 import StaffQrTab from './StaffQrTab';
-import { getQrCodeData } from '../api';
+import { staffInspectQrCode } from '../api';
 
 /**
  * Tab di debug per ispezionare le associazioni QR.
@@ -25,7 +25,7 @@ const QrDebugTab = ({ onLogout }) => {
     setQrData(null);
 
     try {
-      const data = await getQrCodeData(id.trim(), onLogout);
+      const data = await staffInspectQrCode(id.trim(), onLogout);
       setQrData(data);
     } catch (err) {
       setError(err.message || 'Impossibile recuperare i dati del QR');
@@ -128,45 +128,19 @@ const QrDebugTab = ({ onLogout }) => {
               QR Code: {qrData.id}
             </h3>
             <p className="text-gray-400 text-sm">
-              Tipo: <span className="text-indigo-400 font-semibold">{qrData.tipo}</span>
+              Tipo contenuto: <span className="text-indigo-400 font-semibold">{qrData.tipo_contenuto || 'Vuoto'}</span>
             </p>
           </div>
 
-          {/* Display different sections based on tipo */}
-          {qrData.tipo === 'personaggio' && qrData.personaggio && (
-            <div className="space-y-3">
-              <h4 className="text-lg font-bold text-indigo-400">Personaggio</h4>
-              <div className="bg-gray-900 rounded-lg p-4">
-                <p className="text-white font-semibold text-lg">{qrData.personaggio.nome}</p>
-                <p className="text-gray-400 text-sm">ID: {qrData.personaggio.id}</p>
-              </div>
+          <div className="space-y-3">
+            <h4 className="text-lg font-bold text-indigo-400">Associazione</h4>
+            <div className="bg-gray-900 rounded-lg p-4 space-y-2">
+              <p className="text-white font-semibold text-lg">{qrData.nome_contenuto || 'Nessuno'}</p>
+              <p className="text-gray-400 text-sm">
+                Testo raw: <span className="text-indigo-300">{qrData.testo_raw || '—'}</span>
+              </p>
             </div>
-          )}
-
-          {qrData.tipo === 'manifesto' && qrData.manifesto && (
-            <div className="space-y-3">
-              <h4 className="text-lg font-bold text-indigo-400">Vista Manifesto</h4>
-              <div className="bg-gray-900 rounded-lg p-4">
-                <p className="text-white font-semibold">{qrData.manifesto.nome}</p>
-                <p className="text-gray-400 text-sm">Quest: {qrData.manifesto.quest_nome}</p>
-              </div>
-            </div>
-          )}
-
-          {qrData.tipo === 'a_vista' && qrData.dettagli_elemento && (
-            <div className="space-y-3">
-              <h4 className="text-lg font-bold text-indigo-400">Elemento A_Vista</h4>
-              <div className="bg-gray-900 rounded-lg p-4 space-y-2">
-                <p className="text-white font-semibold text-lg">{qrData.dettagli_elemento.nome}</p>
-                <p className="text-gray-400 text-sm">
-                  Tipo: <span className="text-indigo-300">{qrData.dettagli_elemento.tipo_elemento}</span>
-                </p>
-                {qrData.dettagli_elemento.descrizione && (
-                  <p className="text-gray-400 text-sm mt-2">{qrData.dettagli_elemento.descrizione}</p>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
 
           {/* Raw JSON Data (Collapsible) */}
           <details className="bg-gray-900 rounded-lg overflow-hidden">

@@ -504,6 +504,10 @@ export const getQrCodeData = (qrId, onLogout, personaggioId = null) => {
   return fetchAuthenticated(`/api/personaggi/api/qrcode/${qrId}/${q}`, { method: 'GET' }, onLogout);
 };
 
+export const staffInspectQrCode = (qrId, onLogout) => {
+  return fetchAuthenticated(`/api/personaggi/api/staff/qr-inspect/${qrId}/`, { method: 'GET' }, onLogout);
+};
+
 /**
  * Richiede un oggetto da un inventario (azione "Prendi") - Sistema legacy
  */
@@ -1685,6 +1689,15 @@ export const staffUpdateManifesto = (id, data, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/manifesti/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const staffDeleteManifesto = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/manifesti/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetNodi = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/nodi/', { method: 'GET' }, onLogout);
+export const staffCreateNodo = (data, onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/nodi/', { method: 'POST', body: data }, onLogout);
+export const staffUpdateNodo = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/nodi/${id}/`, { method: 'PATCH', body: data }, onLogout);
+export const staffDeleteNodo = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/nodi/${id}/`, { method: 'DELETE' }, onLogout);
 
 export const staffGetInnescoTimers = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/innesco-timer/', { method: 'GET' }, onLogout);

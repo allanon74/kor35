@@ -26,6 +26,58 @@ const emptyForm = () => ({
   target_korps_ids: [],
 });
 
+const TargetCheckboxGroup = ({ title, options, selectedIds, onChange }) => {
+  const normalizedSelected = Array.isArray(selectedIds) ? selectedIds : [];
+  return (
+    <div className="text-sm border border-gray-700 rounded p-2 bg-gray-900/30">
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-semibold text-gray-200">{title}</span>
+        <div className="flex gap-2 text-[10px]">
+          <button
+            type="button"
+            className="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600"
+            onClick={() => onChange(options.map((o) => o.id))}
+          >
+            Tutti
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1 bg-gray-700 rounded hover:bg-gray-600"
+            onClick={() => onChange([])}
+          >
+            Nessuno
+          </button>
+        </div>
+      </div>
+      {options.length === 0 ? (
+        <p className="text-xs text-gray-500">Nessuna opzione disponibile.</p>
+      ) : (
+        <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+          {options.map((row) => {
+            const checked = normalizedSelected.includes(row.id);
+            return (
+              <label key={row.id} className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onChange([...normalizedSelected, row.id]);
+                    } else {
+                      onChange(normalizedSelected.filter((id) => id !== row.id));
+                    }
+                  }}
+                />
+                <span>{row.nome}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const InnescoTimerManager = ({ onBack, onLogout }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -213,14 +265,14 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
             />
           </label>
           <label className="block text-sm">
-            Target
+            Target timer
             <select
               className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
               value={editing.modalita_target}
               onChange={(e) => setEditing({ ...editing, modalita_target: e.target.value })}
             >
-              <option value="globale">Tutti i giocatori</option>
-              <option value="filtri">Filtri era / regione / KORP (invio mirato)</option>
+              <option value="globale">Globale: tutti i giocatori ricevono il timer</option>
+              <option value="filtri">Filtri: solo i personaggi che matchano i target</option>
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm">
@@ -232,57 +284,31 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
             Segnale luminoso in-app
           </label>
           {editing.modalita_target === 'filtri' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <label className="text-sm">
-                Ere target
-                <select
-                  multiple
-                  className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 min-h-[110px]"
-                  value={(editing.target_ere_ids || []).map(String)}
-                  onChange={(e) => {
-                    const values = Array.from(e.target.selectedOptions).map((o) => parseInt(o.value, 10)).filter(Boolean);
-                    setEditing({ ...editing, target_ere_ids: values });
-                  }}
-                >
-                  {ereOptions.map((row) => (
-                    <option key={row.id} value={row.id}>{row.nome}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-sm">
-                Regioni target
-                <select
-                  multiple
-                  className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 min-h-[110px]"
-                  value={(editing.target_regioni_ids || []).map(String)}
-                  onChange={(e) => {
-                    const values = Array.from(e.target.selectedOptions).map((o) => parseInt(o.value, 10)).filter(Boolean);
-                    setEditing({ ...editing, target_regioni_ids: values });
-                  }}
-                >
-                  {regioniOptions.map((row) => (
-                    <option key={row.id} value={row.id}>{row.nome}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="text-sm">
-                KORP target
-                <select
-                  multiple
-                  className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600 min-h-[110px]"
-                  value={(editing.target_korps_ids || []).map(String)}
-                  onChange={(e) => {
-                    const values = Array.from(e.target.selectedOptions).map((o) => parseInt(o.value, 10)).filter(Boolean);
-                    setEditing({ ...editing, target_korps_ids: values });
-                  }}
-                >
-                  {korpOptions.map((row) => (
-                    <option key={row.id} value={row.id}>{row.nome}</option>
-                  ))}
-                </select>
-              </label>
+            <div className="space-y-2">
+              <p className="text-xs text-amber-200/90 bg-amber-950/40 border border-amber-800/40 rounded p-2">
+                Seleziona uno o più target. I personaggi ricevono il timer solo se rispettano i filtri selezionati.
+                Se lasci tutti i box vuoti, il timer resta di fatto globale.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <TargetCheckboxGroup
+                  title="Ere target"
+                  options={ereOptions}
+                  selectedIds={editing.target_ere_ids}
+                  onChange={(ids) => setEditing({ ...editing, target_ere_ids: ids })}
+                />
+                <TargetCheckboxGroup
+                  title="Regioni target"
+                  options={regioniOptions}
+                  selectedIds={editing.target_regioni_ids}
+                  onChange={(ids) => setEditing({ ...editing, target_regioni_ids: ids })}
+                />
+                <TargetCheckboxGroup
+                  title="KORP target"
+                  options={korpOptions}
+                  selectedIds={editing.target_korps_ids}
+                  onChange={(ids) => setEditing({ ...editing, target_korps_ids: ids })}
+                />
+              </div>
             </div>
           )}
           <div className="flex gap-2">

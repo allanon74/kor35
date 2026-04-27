@@ -11,7 +11,7 @@ from django.utils import timezone
 from .models import (
     CARATTERISTICA, CreditoMovimento, Dichiarazione, OggettoStatisticaBase, Personaggio, PersonaggioCerimoniale, 
     PersonaggioLog, PersonaggioStatisticaBase, QrCode, Oggetto, OggettoCaratteristica, 
-    Manifesto, OggettoStatistica, 
+    Manifesto, Nodo, OggettoStatistica, 
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -688,6 +688,13 @@ class ManifestoAdmin(SModelAdmin):
     readonly_fields = ('id', 'data_creazione')
     summernote_fields = ['testo']
     search_fields = ('nome', 'testo')
+
+
+@admin.register(Nodo)
+class NodoAdmin(SModelAdmin):
+    list_display = ("id", "nome", "tipo_nodo", "disponibile_dal", "campagna")
+    readonly_fields = ("id", "data_creazione", "ultima_scansione_at")
+    summernote_fields = ["testo"]
 
 
 @admin.register(InnescoTimer)

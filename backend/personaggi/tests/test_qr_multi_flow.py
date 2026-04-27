@@ -12,6 +12,8 @@ from rest_framework.test import APIClient
 from personaggi.models import (
     Manifesto,
     Inventario,
+    Nodo,
+    Era,
     QrCode,
     Personaggio,
     QrInventarioScanSession,
@@ -52,3 +54,15 @@ class QrManifestoInventarioTests(TestCase):
         self.assertTrue(r2.data["dati"].get("inventario_qr_confermato"))
 
         self.assertEqual(QrInventarioScanSession.objects.filter(confermato_at__isnull=False).count(), 1)
+
+    def test_nodo_scan_imposta_cooldown_e_reward(self):
+        era = Era.objects.create(nome="Eroi", abbreviazione="eroi")
+        self.pg.era = era
+        self.pg.save(update_fields=["era"])
+        nodo = Nodo.objects.create(nome="Nodo 1", testo="", tipo_nodo="MIN")
+        qr = QrCode.objects.create(vista=nodo)
+
+        r = self.client.get(f"/api/personaggi/api/qrcode/{qr.id}/", {"personaggio_id": self.pg.id})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data["tipo_modello"], "nodo")
+        self.assertIsNotNone(r.data["dati"].get("cooldown_until"))

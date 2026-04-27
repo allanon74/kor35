@@ -6,6 +6,7 @@ import hashlib
 import secrets
 import string
 import copy
+from io import BytesIO
 from django.db import models, IntegrityError, transaction
 from django.db.models import Q
 from django.db.models.signals import post_save
@@ -23,6 +24,12 @@ from icon_widget.fields import CustomIconField
 from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 import uuid
 from django.apps import apps
+from django.core.files.base import ContentFile
+
+try:
+    from PIL import Image
+except Exception:  # pragma: no cover
+    Image = None
 
 # --- COSTANTI DI SISTEMA (FALLBACK) ---
 # COSTANTI DI FALLBACK (usate quando stat_costo_* non è configurato sull'aura)
@@ -1898,6 +1905,67 @@ class Manifesto(A_vista):
     def __str__(self):
         return f"Manifesto: {self.nome}"
 
+TIPO_NODO_MINORE = "MIN"
+TIPO_NODO_MAGGIORE = "MAG"
+TIPO_NODO_CHOICES = [
+    (TIPO_NODO_MINORE, "Nodo minore"),
+    (TIPO_NODO_MAGGIORE, "Nodo maggiore"),
+]
+
+
+class Nodo(A_vista):
+    """
+    Nodo QR con reward era-specifica.
+    Dopo ogni scansione va in cooldown (random 5-25 minuti) e muta stato:
+    10% MAGGIORE, 90% MINORE.
+    """
+
+    tipo_nodo = models.CharField(max_length=3, choices=TIPO_NODO_CHOICES, default=TIPO_NODO_MINORE, db_index=True)
+    disponibile_dal = models.DateTimeField(null=True, blank=True, db_index=True)
+    ultima_scansione_at = models.DateTimeField(null=True, blank=True)
+    foto_posizione = models.ImageField(
+        upload_to="nodi/",
+        null=True,
+        blank=True,
+        help_text="Foto di riferimento posizione nodo (salvata in bassa risoluzione).",
+    )
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="nodi",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+
+    class Meta:
+        verbose_name = "Nodo (QR)"
+        verbose_name_plural = "Nodi (QR)"
+
+    def __str__(self):
+        return f"Nodo: {self.nome} ({self.get_tipo_nodo_display()})"
+
+    def save(self, *args, **kwargs):
+        """
+        Comprimi la foto posizione in bassa risoluzione per uso staff.
+        """
+        if self.foto_posizione and Image is not None:
+            try:
+                self.foto_posizione.open("rb")
+                img = Image.open(self.foto_posizione)
+                if img.mode not in ("RGB", "L"):
+                    img = img.convert("RGB")
+                img.thumbnail((960, 960))
+                out = BytesIO()
+                img.save(out, format="JPEG", quality=60, optimize=True)
+                out.seek(0)
+                original_name = os.path.basename(self.foto_posizione.name or "nodo.jpg")
+                base, _ext = os.path.splitext(original_name)
+                self.foto_posizione.save(f"{base}.jpg", ContentFile(out.read()), save=False)
+            except Exception:
+                # Fallback: manteniamo il file originale se la conversione fallisce.
+                pass
+        super().save(*args, **kwargs)
+
 class Inventario(A_vista):
     class Meta: verbose_name = "Inventario"; verbose_name_plural = "Inventari"
     def __str__(self): return f"Inventario: {self.nome}"
@@ -1925,6 +1993,8 @@ class Era(SyncableModel, models.Model):
     abbreviazione = models.CharField(max_length=30, blank=True, default="")
     descrizione_breve = models.CharField(max_length=280, blank=True, default="")
     descrizione = models.TextField(blank=True, default="")
+    difetto_interpretativo_titolo = models.CharField(max_length=140, blank=True, default="")
+    difetto_interpretativo_testo = models.TextField(blank=True, default="")
     abilita = models.ManyToManyField("Abilita", through="EraAbilita", related_name="ere_collegate", blank=True)
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)

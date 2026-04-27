@@ -711,6 +711,29 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess }) => {
           </div>
         );
 
+      case 'nodo':
+        return (
+          <div className="text-center py-8">
+            <Sparkles size={56} className="mx-auto text-cyan-400 mb-4" />
+            <h3 className="text-2xl font-black text-cyan-300 uppercase tracking-tight">{data.dati?.nome || 'Nodo'}</h3>
+            <p className="text-gray-300 mt-2">{data.messaggio}</p>
+            {!!data.dati?.reward?.pool && (
+              <p className="text-sm text-emerald-300 mt-4">
+                +{data.dati.reward.pool.delta} {data.dati.reward.pool.sigla}
+              </p>
+            )}
+            {!!data.dati?.reward?.crediti && (
+              <p className="text-sm text-emerald-300 mt-4">+{data.dati.reward.crediti} crediti</p>
+            )}
+            {data.dati?.cooldown_until && (
+              <p className="text-xs text-gray-500 mt-4">Cooldown fino a: {new Date(data.dati.cooldown_until).toLocaleString()}</p>
+            )}
+            {data.dati?.remaining_seconds > 0 && (
+              <p className="text-xs text-amber-300 mt-3">Tempo residuo: {data.dati.remaining_seconds}s</p>
+            )}
+          </div>
+        );
+
       case 'qrcode_scollegato':
         return (
           <div className="text-center">

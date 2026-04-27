@@ -4,6 +4,7 @@ Logica QR lato server: manifesti, inventario a doppia scansione, innesco timer, 
 from __future__ import annotations
 
 from datetime import timedelta
+import random
 from typing import Any, Dict, List, Optional, Tuple
 
 from django.db import transaction
@@ -308,3 +309,109 @@ def oggetto_puo_essere_acquisito_da_qr(personaggio, oggetto) -> Tuple[bool, str]
     if v >= 1:
         return True, ""
     return False, "Non possiedi un punteggio sufficiente nell'aura richiesta per prendere questo oggetto."
+
+
+def _abbr_era(pg) -> str:
+    return ((getattr(getattr(pg, "era", None), "abbreviazione", "") or "").strip().casefold())
+
+
+def _find_tipologia_by_candidates(candidates: List[str]):
+    from .models import TipologiaEffetto
+
+    for name in candidates:
+        row = TipologiaEffetto.objects.filter(nome__icontains=name).order_by("id").first()
+        if row:
+            return row
+    return None
+
+
+def applica_effetto_nodo_scan(personaggio, nodo) -> Dict[str, Any]:
+    """
+    Applica reward nodo in base all'era del personaggio.
+    - Minore: reward base
+    - Maggiore: reward x2
+    Dopo la scansione imposta cooldown random 5..25 min e muta stato (10% MAG).
+    """
+    from .models import TIPO_NODO_MAGGIORE, TIPO_NODO_MINORE
+
+    now = timezone.now()
+    if nodo.disponibile_dal and now < nodo.disponibile_dal:
+        rem = int((nodo.disponibile_dal - now).total_seconds())
+        return {"ok": False, "error": "nodo_in_cooldown", "remaining_seconds": max(rem, 0)}
+
+    abbr = _abbr_era(personaggio)
+    is_maggiore = nodo.tipo_nodo == TIPO_NODO_MAGGIORE
+    mult = 2 if is_maggiore else 1
+    rewards: Dict[str, Any] = {"era_abbreviazione": abbr, "tipo_nodo_pre": nodo.tipo_nodo}
+
+    with transaction.atomic():
+        if abbr == "eroi":
+            delta = personaggio.regola_risorsa_staff("TEO", mult, motivo="Nodo scansionato")
+            rewards["pool"] = {"sigla": "TEO", "delta": mult, "valore_corrente": delta}
+        elif abbr == "rocche":
+            delta = personaggio.regola_risorsa_staff("SIW", mult, motivo="Nodo scansionato")
+            rewards["pool"] = {"sigla": "SIW", "delta": mult, "valore_corrente": delta}
+        elif abbr in ("verità", "verita"):
+            delta = personaggio.regola_risorsa_staff("ROT", mult, motivo="Nodo scansionato")
+            rewards["pool"] = {"sigla": "ROT", "delta": mult, "valore_corrente": delta}
+        elif abbr == "imperatore":
+            cred = 25 * mult
+            personaggio.modifica_crediti(cred, "Nodo scansionato")
+            rewards["crediti"] = cred
+        elif abbr == "silenzio":
+            delta = personaggio.regola_risorsa_staff("AST", mult, motivo="Nodo scansionato")
+            rewards["pool"] = {"sigla": "AST", "delta": mult, "valore_corrente": delta}
+        elif abbr == "famiglie":
+            delta = personaggio.regola_risorsa_staff("MUT", mult, motivo="Nodo scansionato")
+            rewards["pool"] = {"sigla": "MUT", "delta": mult, "valore_corrente": delta}
+        elif abbr == "paradossi":
+            delta = personaggio.regola_risorsa_staff("AVA", mult, motivo="Nodo scansionato")
+            rewards["pool"] = {"sigla": "AVA", "delta": mult, "valore_corrente": delta}
+        else:
+            rewards["note"] = "Nessuna reward configurata per questa era."
+
+        cd_minutes = random.randint(5, 25)
+        nodo.ultima_scansione_at = now
+        nodo.disponibile_dal = now + timedelta(minutes=cd_minutes)
+        nodo.tipo_nodo = TIPO_NODO_MAGGIORE if random.random() < 0.10 else TIPO_NODO_MINORE
+        nodo.save(update_fields=["ultima_scansione_at", "disponibile_dal", "tipo_nodo", "updated_at"])
+
+    rewards["ok"] = True
+    rewards["cooldown_until"] = nodo.disponibile_dal
+    rewards["cooldown_minutes"] = cd_minutes
+    rewards["tipo_nodo_post"] = nodo.tipo_nodo
+    return rewards
+
+
+def consuma_pool_speciale(personaggio, stat_sigla: str) -> Dict[str, Any]:
+    """
+    Hook di consumo pool (pulsante già esistente in scheda gioco).
+    Restituisce payload extra da allegare alla risposta API.
+    """
+    from .effetti_casuali import seleziona_effetto_casuale
+
+    sigla = (stat_sigla or "").strip().upper()
+    if sigla == "TEO":
+        tip = _find_tipologia_by_candidates(["trucchetti", "trucchetto"])
+        if not tip:
+            return {"note": "Nessuna tipologia effetti per Trucchetti configurata."}
+        res = seleziona_effetto_casuale(tip, personaggio)
+        return {"speciale": "trucchetto", "risultato": res}
+    if sigla == "ROT":
+        tip = _find_tipologia_by_candidates(["marchingegni", "marchingegno"])
+        if not tip:
+            return {"note": "Nessuna tipologia effetti per Marchingegni configurata."}
+        res = seleziona_effetto_casuale(tip, personaggio)
+        return {"speciale": "marchingegno", "risultato": res}
+    if sigla == "SIW":
+        return {"speciale": "siw", "note": "Seme Ironwood consumato. Può sostituire un chakra."}
+    if sigla == "AST":
+        return {"speciale": "ast", "note": "Astuzia consumata. Annotare aiuto prova."}
+    if sigla == "MUT":
+        cur = personaggio.get_risorsa_corrente("MUT")
+        return {"speciale": "mut", "note": "Mutageno consumato. Definire mutazione con lo staff.", "mut_points_left": cur}
+    if sigla == "AVA":
+        cur = personaggio.get_risorsa_corrente("AVA")
+        chance = min(100, cur * 2)
+        return {"speciale": "ava", "note": "Regola resurrezione non attiva in questa fase.", "ava_points_left": cur, "resurrect_chance_percent": chance}
+    return {}

@@ -17,7 +17,7 @@ from asgiref.sync import async_to_sync
 
 # --- IMPORT MODELLI AGGIORNATI ---
 from .models import (
-    OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, 
+    OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, Nodo,
     A_vista, Inventario, Infusione, Tessitura, Personaggio, TransazioneSospesa, 
     InnescoTimer,
     ConsumabilePersonaggio, CreazioneConsumabileInCorso,
@@ -94,7 +94,7 @@ from .campaigns import ensure_user_in_base_campaign
 # --- IMPORT SERIALIZERS ---
 from .serializers import (
     ChangePasswordSerializer, OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
-    ManifestoSerializer, A_vistaSerializer, InventarioSerializer, CerimonialeSerializer,
+    ManifestoSerializer, NodoSerializer, A_vistaSerializer, InventarioSerializer, CerimonialeSerializer,
     PersonaggioDetailSerializer, CreditoMovimentoCreateSerializer, PersonaggioListSerializer,
     TransazioneSospesaSerializer, PropostaTransazioneSerializer, 
     PuntiCaratteristicaMovimentoCreateSerializer, TransazioneCreateSerializer, 
@@ -1528,6 +1528,54 @@ class QrCodeDetailView(APIView):
                         "segnale_luminoso": payload.get("segnale_luminoso", True),
                         "recipient_personaggio_ids": payload.get("recipient_personaggio_ids") or [],
                     },
+                    "qrcode_id": qr_code.id,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        nodo = Nodo.objects.filter(pk=vista_obj.pk).first()
+        if nodo:
+            if not scanner_pg:
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto per la scansione nodo."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            res = qr_logic.applica_effetto_nodo_scan(scanner_pg, nodo)
+            if not res.get("ok"):
+                if res.get("error") == "nodo_in_cooldown":
+                    return Response(
+                        {
+                            "tipo_modello": "nodo",
+                            "messaggio": "Nodo in cooldown. Riprova più tardi.",
+                            "dati": {
+                                "nome": nodo.nome,
+                                "tipo_nodo": nodo.tipo_nodo,
+                            },
+                            "qrcode_id": qr_code.id,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                return Response({"error": "Impossibile attivare il nodo."}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = NodoSerializer(nodo)
+            payload = dict(serializer.data)
+            payload.update(
+                {
+                    "era_abbreviazione": res.get("era_abbreviazione"),
+                    "tipo_nodo_pre": res.get("tipo_nodo_pre"),
+                    "tipo_nodo_post": res.get("tipo_nodo_post"),
+                    "reward": {
+                        "pool": res.get("pool"),
+                        "crediti": res.get("crediti"),
+                        "note": res.get("note"),
+                    },
+                }
+            )
+            return Response(
+                {
+                    "tipo_modello": "nodo",
+                    "messaggio": "Nodo attivato.",
+                    "dati": payload,
                     "qrcode_id": qr_code.id,
                 },
                 status=status.HTTP_200_OK,
@@ -4227,6 +4275,7 @@ class GameActionsViewSet(viewsets.ViewSet):
         try:
             with transaction.atomic():
                 nuovo = pg.consuma_risorsa_statistica(stat_sigla)
+                extra = qr_logic.consuma_pool_speciale(pg, stat_sigla)
                 pg.advance_recuperi_risorse(only_sigla=stat_sigla)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -4239,6 +4288,7 @@ class GameActionsViewSet(viewsets.ViewSet):
             'valore_corrente': nuovo,
             'valore_max': max_v,
             'risorse_consumabili': pg.risorse_consumabili,
+            'speciale': extra,
             'recupero_auto': {
                 'active': bool(rec.get('active')),
                 'next_tick_at': rec.get('next_tick_at').isoformat() if rec.get('next_tick_at') else None,
@@ -4842,6 +4892,9 @@ class AssociaQrAVistaView(APIView):
                 elif InnescoTimer.objects.filter(pk=qr.vista.pk).exists():
                     elemento_associato = InnescoTimer.objects.get(pk=qr.vista.pk)
                     tipo_elemento = "Innesco timer"
+                elif Nodo.objects.filter(pk=qr.vista.pk).exists():
+                    elemento_associato = Nodo.objects.get(pk=qr.vista.pk)
+                    tipo_elemento = "Nodo"
                 
                 nome_associato = elemento_associato.nome if elemento_associato else "Sconosciuto"
                 

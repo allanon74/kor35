@@ -9,16 +9,17 @@ from django.db import transaction
 from django.utils import timezone
 from django.db.models import Count, Q
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
-    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, InnescoTimer,
+    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, InnescoTimer,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
     TipologiaEffetto, EffettoCasuale,
-    Era, Prefettura, Regione,
+    Era, Prefettura, Regione, Korp,
     Dichiarazione,
     Campagna, CampagnaFeaturePolicy,
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI,
@@ -47,6 +48,7 @@ from .serializers import (
     EraStaffSerializer, PrefetturaStaffSerializer, RegioneStaffSerializer,
     DichiarazioneStaffSerializer,
     ManifestoStaffSerializer,
+    NodoStaffSerializer,
     InnescoTimerStaffSerializer,
 )
 
@@ -641,6 +643,28 @@ class ManifestoStaffViewSet(viewsets.ModelViewSet):
     queryset = Manifesto.objects.all().order_by("-id")
     serializer_class = ManifestoStaffSerializer
     permission_classes = [IsStaffOrMaster]
+
+
+class NodoStaffViewSet(viewsets.ModelViewSet):
+    """CRUD nodi QR (cooldown + tipo minore/maggiore)."""
+
+    serializer_class = NodoStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        qs = Nodo.objects.all().order_by("-id")
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if active == base:
+            return qs.filter(campagna=active)
+        return qs.filter(Q(campagna=active) | Q(campagna=base))
+
+    def perform_create(self, serializer):
+        camp = _get_active_campaign(self.request) or _get_default_campaign()
+        serializer.save(campagna=camp)
 
 
 class InnescoTimerStaffViewSet(viewsets.ModelViewSet):

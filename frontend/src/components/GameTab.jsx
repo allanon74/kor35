@@ -686,6 +686,20 @@ const GameTab = ({ onNavigate }) => {
                     )}
                 </div>
                 <div className="flex flex-col gap-4">
+                    {(char?.era?.difetto_interpretativo_titolo || char?.era?.difetto_interpretativo_testo) && (
+                        <div className="bg-violet-950/40 border border-violet-700/50 rounded-lg p-3">
+                            <div className="text-[10px] uppercase tracking-wider text-violet-300 font-bold">Difetto interpretativo</div>
+                            {char?.era?.difetto_interpretativo_titolo && (
+                                <div className="text-sm font-bold text-violet-100 mt-1">{char.era.difetto_interpretativo_titolo}</div>
+                            )}
+                            {char?.era?.difetto_interpretativo_testo && (
+                                <div
+                                    className="text-xs text-violet-100/90 mt-2 prose prose-invert prose-sm max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: char.era.difetto_interpretativo_testo }}
+                                />
+                            )}
+                        </div>
+                    )}
                     <DamageControlPanel stats={tacticalStats} maxHp={maxHP} maxArmor={maxArmor} maxShell={maxShell} onChange={handleStatChange} />
                     {(maxChakra > 0) && <ChakraWidget current={tacticalStats['CHA_CUR']} max={maxChakra} onChange={handleStatChange} />}
                     <RigenerazioneTimerWidget

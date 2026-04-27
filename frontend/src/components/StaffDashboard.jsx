@@ -39,6 +39,7 @@ const DichiarazioniGlossarioManager = lazy(() => import('./editors/Dichiarazioni
 const ArcanaProfilesTab = lazy(() => import('./editors/ArcanaProfilesTab'));
 const CampaignManager = lazy(() => import('./editors/CampaignManager'));
 const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
+const NodoManager = lazy(() => import('./editors/NodoManager'));
 const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
 
 // Loading component
@@ -99,6 +100,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'immagini', label: 'Immagini Wiki', icon: <Image size={24} />, color: 'bg-teal-700', component: ImmagineManager },
         { id: 'inventari', label: 'Inventari', icon: <Package size={24} />, color: 'bg-slate-700', component: InventarioManager },
         { id: 'manifesti', label: 'Manifesti (QR)', icon: <BookText size={24} />, color: 'bg-amber-900', component: ManifestoManager },
+        { id: 'nodi', label: 'Nodi (QR)', icon: <Sparkles size={24} />, color: 'bg-cyan-900', component: NodoManager },
         { id: 'innesco-timer', label: 'Innesco timer (QR)', icon: <Sparkles size={24} />, color: 'bg-orange-900', component: InnescoTimerManager },
         { id: 'effetti-casuali', label: 'Effetti Casuali', icon: <Sparkles size={24} />, color: 'bg-amber-700', component: EffettiCasualiManager },
         { id: 'social-report', label: 'Report Social Eventi', icon: <Sparkles size={24} />, color: 'bg-fuchsia-700', component: SocialEventReportTab },
