@@ -1277,6 +1277,14 @@ class Statistica(Punteggio):
         help_text="Se attivo, il valore massimo della statistica definisce il tetto di un pool "
         "con contatore separato (consumi, log, effetti temporanei). Es. Fortuna (FRT).",
     )
+    pool_corrente_default_pieno_se_assente = models.BooleanField(
+        default=True,
+        verbose_name="Pool: assente = pieno (come Fortuna)",
+        help_text="Se vero, senza valore salvato in risorse_consumabili il contatore coincide col massimo di scheda "
+        "(tipico Fortuna: aumenti la stat e ti ritieni al completo). Se falso (Teoforia, Rottami, nodi, …), "
+        "senza valore salvato il contatore è 0; solo ricompense/consumi/staff alzano il corrente; alzare solo il max "
+        "da abilità non riempie il pool.",
+    )
     auto_recupero_attivo = models.BooleanField(
         default=False,
         verbose_name="Recupero automatico attivo",
@@ -2867,11 +2875,13 @@ class Personaggio(Inventario):
             return 0
         raw = (self.risorse_consumabili or {}).get(sigla)
         if raw is None:
-            return max_v
+            if getattr(stat, "pool_corrente_default_pieno_se_assente", True):
+                return max_v
+            return 0
         try:
             v = int(raw)
         except (TypeError, ValueError):
-            return max_v
+            return max_v if getattr(stat, "pool_corrente_default_pieno_se_assente", True) else 0
         return max(0, min(v, max_v))
 
     def _get_cfg_recupero_risorsa(self, sigla):

@@ -391,6 +391,21 @@ const CharacterSheet = memo(({ data, onLogout }) => {
         </div>
       </div>
 
+      {(data?.era?.difetto_interpretativo_titolo || data?.era?.difetto_interpretativo_testo) && (
+        <div className="mb-6 bg-violet-950/35 border border-violet-700/45 rounded-xl p-4">
+          <div className="text-[10px] uppercase tracking-wider text-violet-300 font-bold">Difetto interpretativo (era)</div>
+          {data?.era?.difetto_interpretativo_titolo && (
+            <div className="text-sm font-bold text-violet-100 mt-1">{data.era.difetto_interpretativo_titolo}</div>
+          )}
+          {data?.era?.difetto_interpretativo_testo && (
+            <div
+              className="text-xs text-violet-100/90 mt-2 prose prose-invert prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: data.era.difetto_interpretativo_testo }}
+            />
+          )}
+        </div>
+      )}
+
       {/* Banner Notifiche */}
       {'Notification' in window && Notification.permission !== 'granted' && (
          <div className="mb-6 p-4 bg-indigo-900/50 rounded-lg border border-indigo-500 flex flex-col sm:flex-row justify-between items-center gap-3">
