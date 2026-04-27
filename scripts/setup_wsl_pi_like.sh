@@ -68,6 +68,14 @@ if [ ! -f "$BACKEND_DIR/.env" ]; then
   fi
 fi
 
+# npm come root scrive frontend/node_modules come root → EACCES per deploy/rsync (causa tipica: make restart lanciato con sudo).
+if [ "$SKIP_FRONTEND_BUILD" != true ] && [ "$(id -u)" -eq 0 ] && [ "${KOR35_ALLOW_ROOT_FRONTEND_BUILD:-}" != "1" ]; then
+  echo "ERRORE: non eseguire la build npm di questo script come root (ownership su frontend/ e node_modules)." >&2
+  echo "Usa l'utente deploy (o altro non-root) oppure solo --skip-frontend-build sul server di produzione." >&2
+  echo "Override consapevole: KOR35_ALLOW_ROOT_FRONTEND_BUILD=1 $0 ..." >&2
+  exit 1
+fi
+
 if [ "$SKIP_FRONTEND_BUILD" = true ]; then
   echo ""
   echo "Build frontend SALTATA (--skip-frontend-build)."
