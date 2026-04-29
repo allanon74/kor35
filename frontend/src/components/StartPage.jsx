@@ -11,6 +11,7 @@ import {
   fetchAuthenticated,
   resolveMediaUrl,
   socialUpdateMyProfile,
+  normCampaignSlug,
 } from '../api';
 import { useCharacter } from './CharacterContext';
 import PasswordChangeModal from './PasswordChangeModal';
@@ -158,7 +159,9 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       prefettura_esterna: false,
       tipologia: 1,
       costume: '',
-      campagna: campaigns.find((c) => c.slug === activeCampaign)?.id || '',
+      campagna:
+        campaigns.find((c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign))?.id ||
+        '',
     });
     setShowEditor(true);
     setEditPermissions({ can_edit_era: true, can_edit_razza: true });
@@ -236,7 +239,10 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       await fetchPersonaggi();
       if (!isCreateMode && savedCampaignId) {
         const targetCampaign = (campaigns || []).find((c) => String(c.id) === String(savedCampaignId));
-        if (targetCampaign?.slug && targetCampaign.slug !== activeCampaign) {
+        if (
+          targetCampaign?.slug &&
+          normCampaignSlug(targetCampaign.slug) !== normCampaignSlug(activeCampaign)
+        ) {
           await changeActiveCampaign(targetCampaign.slug);
         }
       }
@@ -250,7 +256,10 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   const enterCharacter = async (char) => {
     const targetCampaignId = String(char?.campagna || '');
     const targetCampaign = (campaigns || []).find((c) => String(c.id) === targetCampaignId);
-    if (targetCampaign?.slug && targetCampaign.slug !== activeCampaign) {
+    if (
+      targetCampaign?.slug &&
+      normCampaignSlug(targetCampaign.slug) !== normCampaignSlug(activeCampaign)
+    ) {
       try {
         await changeActiveCampaign(targetCampaign.slug);
       } catch (_err) {
@@ -287,7 +296,9 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       : 'border-red-700 bg-red-950/70 text-red-200';
 
   const charactersGrouped = useMemo(() => {
-    const activeCampaignId = campaigns.find((c) => c.slug === activeCampaign)?.id || null;
+    const activeCampaignId =
+      campaigns.find((c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign))?.id ||
+      null;
     const visibleCharacters = (characters || []).filter((char) => {
       if (!activeCampaignId) return true;
       return String(char.campagna || "") === String(activeCampaignId);
@@ -317,7 +328,11 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   }, [characters, campaigns, activeCampaign]);
 
   const manageableCampaigns = useMemo(
-    () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER'),
+    () =>
+      (campaigns || []).filter((c) => {
+        const r = String(c.ruolo || '').trim().toUpperCase();
+        return r === 'MASTER' || r === 'HEAD_MASTER';
+      }),
     [campaigns]
   );
 
@@ -342,7 +357,9 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                 title="Cambia campagna attiva"
               >
                 <Globe size={12} />
-                Campagna: {(campaigns.find((c) => c.slug === activeCampaign)?.nome) || 'Kor35'}
+                Campagna:{' '}
+                {(campaigns.find((c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign))
+                  ?.nome) || 'Kor35'}
               </button>
             )}
           </div>
@@ -728,7 +745,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
             </div>
             <div className="p-4 space-y-2">
               {(campaigns || []).map((c) => {
-                const isCurrent = c.slug === activeCampaign;
+                const isCurrent = normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign);
                 return (
                   <button
                     key={c.id || c.slug}

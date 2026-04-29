@@ -7,7 +7,7 @@ import QrTab from './QrTab.jsx';
 import QrResultModal from './QrResultModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
+import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
 import packageInfo from '../../package.json';
 
 import { 
@@ -461,7 +461,9 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     [campaigns]
   );
   const singleCampaignLabel = useMemo(() => {
-    const activeInMembership = campaignsWithMembership.find((c) => c.slug === activeCampaign);
+    const activeInMembership = campaignsWithMembership.find(
+      (c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign)
+    );
     if (activeInMembership) return activeInMembership.nome;
     return campaignsWithMembership[0]?.nome || 'Kor35';
   }, [campaignsWithMembership, activeCampaign]);
@@ -579,7 +581,9 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                         <select
                             className="w-full bg-gray-900 text-white p-2 rounded border border-gray-600 focus:border-indigo-500 outline-none text-sm mb-3"
                             value={
-                                campaignsWithMembership.some((c) => c.slug === activeCampaign)
+                                campaignsWithMembership.some(
+                                  (c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign)
+                                )
                                     ? activeCampaign
                                     : (campaignsWithMembership[0]?.slug || 'kor35')
                             }

@@ -18,6 +18,7 @@ import {
   validateActiveCampaign,
   getActiveCampaignSlug,
   setActiveCampaignSlug,
+  normCampaignSlug,
 } from '../api'; 
 import NotificationPopup from './NotificationPopup';
 
@@ -97,8 +98,9 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [staffWorkMode, setStaffWorkMode] = useState('dashboard');
   const [campaigns, setCampaigns] = useState([]);
   const [activeCampaign, setActiveCampaign] = useState(() => getActiveCampaignSlug());
-  const activeCampaignMeta = campaigns.find((c) => c.slug === activeCampaign) || null;
-  const activeCampaignRole = activeCampaignMeta?.ruolo || 'PLAYER';
+  const activeCampaignMeta =
+    campaigns.find((c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign)) || null;
+  const activeCampaignRole = String(activeCampaignMeta?.ruolo || 'PLAYER').trim().toUpperCase();
   const isCampaignHeadMaster = activeCampaignRole === 'HEAD_MASTER';
   const isCampaignMaster =
     activeCampaignRole === 'MASTER' || activeCampaignRole === 'HEAD_MASTER';
@@ -273,9 +275,14 @@ export const CharacterProvider = ({ children, onLogout }) => {
       ? campaigns.find((c) => String(c.id) === targetCampaignId)
       : null;
 
-    if (targetCampaign?.slug && targetCampaign.slug !== activeCampaign) {
+    if (
+      targetCampaign?.slug &&
+      normCampaignSlug(targetCampaign.slug) !== normCampaignSlug(activeCampaign)
+    ) {
       try {
-        const previousCampaign = campaigns.find((c) => c.slug === activeCampaign);
+        const previousCampaign = campaigns.find(
+          (c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign)
+        );
         await validateActiveCampaign(targetCampaign.slug, onLogout);
         setActiveCampaign(setActiveCampaignSlug(targetCampaign.slug));
         await queryClient.invalidateQueries();

@@ -385,7 +385,11 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     }, [personaggiList, campaigns]);
 
     const manageableCampaigns = useMemo(
-        () => (campaigns || []).filter((c) => c.ruolo === 'MASTER' || c.ruolo === 'HEAD_MASTER'),
+        () =>
+            (campaigns || []).filter((c) => {
+                const r = String(c.ruolo || '').trim().toUpperCase();
+                return r === 'MASTER' || r === 'HEAD_MASTER';
+            }),
         [campaigns]
     );
     const canMoveCharacterCampaign = editMode && manageableCampaigns.length > 1;

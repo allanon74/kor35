@@ -20,6 +20,9 @@ export const setActiveCampaignSlug = (slug) => {
   return normalized;
 };
 
+/** Confronto stabile slug campagna (DB vs localStorage / header). */
+export const normCampaignSlug = (s) => String(s || '').trim().toLowerCase();
+
 /**
  * Helper generico per le chiamate API autenticate.
  * Gestisce l'header Authorization e il caso di token non valido.
