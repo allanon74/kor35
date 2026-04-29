@@ -264,15 +264,18 @@ class CampagnaUtenteAdminViewSet(viewsets.ModelViewSet):
         manageable_campaign_ids = CampagnaUtente.objects.filter(
             user=user,
             attivo=True,
-            ruolo__in=[CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER],
+            ruolo=CAMPAGNA_ROLE_HEAD_MASTER,
         ).values_list("campagna_id", flat=True)
         return qs.filter(campagna_id__in=manageable_campaign_ids)
 
     def _assert_can_manage_campaign_membership(self, request, campagna):
         if request.user.is_superuser:
             return
-        if not _can_operate_in_campaign(request.user, campagna, needs_master=True):
-            raise permissions.PermissionDenied("Solo Head Master/Master della campagna possono gestire le membership.")
+        role = _user_campaign_role(request.user, campagna)
+        if role != CAMPAGNA_ROLE_HEAD_MASTER:
+            raise permissions.PermissionDenied(
+                "Solo i superuser Django o gli Head Master della campagna possono gestire le membership."
+            )
 
     def create(self, request, *args, **kwargs):
         campagna_id = request.data.get("campagna")
