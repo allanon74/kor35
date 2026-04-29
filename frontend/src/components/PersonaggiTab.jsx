@@ -29,6 +29,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         fetchPersonaggi, 
         refreshCharacterData, 
         isCampaignMaster,
+        isCampaignStaffer,
         isAdmin, 
         viewAll, 
         toggleViewAll, 
@@ -463,7 +464,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                     </div>
                     {group.rows.map(char => {
                     const isSelected = selectedCharacterId === String(char.id);
-                    const staffToolbar = (isCampaignMaster || isAdmin);
+                    const staffToolbar = isCampaignStaffer || isAdmin;
                     /* Grid + overflow-hidden a sinistra: evita che testo lungo copra la toolbar (hit-testing / paint sopra i pulsanti). */
                     const rowBase = `relative isolate group flex flex-col gap-3 p-3 sm:p-4 rounded-xl border transition-all duration-200 hover:shadow-md active:opacity-95 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-center ${
                         isSelected
@@ -723,7 +724,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                 )}
                             </div>
 
-                            {(isCampaignMaster || isAdmin) && (
+                            {(isCampaignStaffer || isAdmin) && (
                                 <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-4 mt-4">
                                     <div className="flex items-center gap-2 text-amber-500 font-bold text-xs uppercase tracking-widest">
                                         <ShieldAlert size={14}/> Area Staff
