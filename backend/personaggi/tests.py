@@ -1,8 +1,9 @@
 from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.test import APITestCase
+from unittest.mock import patch
 
-from .models import Campagna, CampagnaUtente
+from .models import Abilita, Campagna, CampagnaUtente, Personaggio, Punteggio, TipologiaPersonaggio
 from .sso import _upsert_local_user
 
 
@@ -245,3 +246,81 @@ class LocalLoginCampaignRepairTests(APITestCase):
         self.assertEqual(r_super.status_code, status.HTTP_200_OK)
         self.assertFalse(CampagnaUtente.objects.filter(user=staff).exists())
         self.assertFalse(CampagnaUtente.objects.filter(user=superuser).exists())
+
+
+class AINTraitPcDeltaTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="ain-player", password="x")
+        self.client.force_authenticate(user=self.user)
+
+        self.campagna = Campagna.objects.create(
+            slug="kor35-ain",
+            nome="Kor35 AIN",
+            is_default=True,
+            is_base=True,
+            attiva=True,
+        )
+        self.tipologia = TipologiaPersonaggio.objects.create(
+            nome="Giocante AIN Test",
+            caratteristiche_iniziali=8,
+            crediti_iniziali=0,
+            giocante=True,
+        )
+        self.caratteristica = Punteggio.objects.create(
+            nome="Caratteristica Test AIN",
+            sigla="CAT",
+            tipo="CA",
+        )
+        self.aura_innata = Punteggio.objects.create(
+            nome="Aura Innata Test",
+            sigla="AIN",
+            tipo="AU",
+        )
+        self.personaggio = Personaggio.objects.create(
+            nome="PG AIN",
+            proprietario=self.user,
+            tipologia=self.tipologia,
+            campagna=self.campagna,
+        )
+        self.tratto_negativo = Abilita.objects.create(
+            nome="Archetipo - Negativo",
+            caratteristica=self.caratteristica,
+            costo_pc=-1,
+            costo_crediti=0,
+            is_tratto_aura=True,
+            aura_riferimento=self.aura_innata,
+            livello_riferimento=1,
+            campagna=self.campagna,
+        )
+        self.tratto_umano = Abilita.objects.create(
+            nome="Archetipo - Umano",
+            caratteristica=self.caratteristica,
+            costo_pc=0,
+            costo_crediti=0,
+            is_tratto_aura=True,
+            aura_riferimento=self.aura_innata,
+            livello_riferimento=0,
+            campagna=self.campagna,
+        )
+
+    @patch("personaggi.models.Personaggio.valida_acquisizione_abilita", return_value=(True, ""))
+    def test_ain_trait_swap_applies_pc_delta_for_negative_and_zero_cost(self, _mock_valida):
+        self.assertEqual(self.personaggio.punti_caratteristica, 8)
+
+        r1 = self.client.post(
+            "/api/personaggi/api/personaggio/me/acquisisci_abilita/",
+            {"personaggio_id": self.personaggio.id, "abilita_id": self.tratto_negativo.id},
+            format="json",
+        )
+        self.assertEqual(r1.status_code, status.HTTP_200_OK)
+        self.personaggio.refresh_from_db()
+        self.assertEqual(self.personaggio.punti_caratteristica, 9)
+
+        r2 = self.client.post(
+            "/api/personaggi/api/personaggio/me/acquisisci_abilita/",
+            {"personaggio_id": self.personaggio.id, "abilita_id": self.tratto_umano.id},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, status.HTTP_200_OK)
+        self.personaggio.refresh_from_db()
+        self.assertEqual(self.personaggio.punti_caratteristica, 8)

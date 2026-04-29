@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { staffGetAbilitaList, staffDeleteAbilita, prefetchAbilitaEditorResources } from '../../api';
+import { staffGetAbilitaList, staffDeleteAbilita } from '../../api';
 import MasterGenericList from './MasterGenericList';
 import { useCharacter } from '../CharacterContext';
 
@@ -29,12 +29,6 @@ const AbilitaList = ({ onAdd, onEdit, onLogout }) => {
             return { search: s, isTrattoAura };
         });
     }, []);
-
-    useEffect(() => {
-        prefetchAbilitaEditorResources(onLogout).catch((error) => {
-            console.warn('Prefetch risorse editor abilita fallito', error);
-        });
-    }, [onLogout]);
 
     useEffect(() => {
         let cancelled = false;

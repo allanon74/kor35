@@ -538,9 +538,21 @@ class AcquisisciAbilitaView(APIView):
         if not ok_val:
             return Response({"error": msg_val}, status=status.HTTP_400_BAD_REQUEST)
 
+        old_ain_trait = None
         if is_tratto_ain:
             liv = abilita.livello_riferimento
             if liv in (0, 1):
+                old_ain_trait = (
+                    PersonaggioAbilita.objects.select_related("abilita")
+                    .filter(
+                        personaggio=personaggio,
+                        abilita__is_tratto_aura=True,
+                        abilita__aura_riferimento__sigla='AIN',
+                        abilita__livello_riferimento__in=(0, 1),
+                    )
+                    .order_by("-data_acquisizione")
+                    .first()
+                )
                 PersonaggioAbilita.objects.filter(
                     personaggio=personaggio,
                     abilita__is_tratto_aura=True,
@@ -548,6 +560,17 @@ class AcquisisciAbilitaView(APIView):
                     abilita__livello_riferimento__in=(0, 1),
                 ).delete()
             elif liv == 2:
+                old_ain_trait = (
+                    PersonaggioAbilita.objects.select_related("abilita")
+                    .filter(
+                        personaggio=personaggio,
+                        abilita__is_tratto_aura=True,
+                        abilita__aura_riferimento__sigla='AIN',
+                        abilita__livello_riferimento=2,
+                    )
+                    .order_by("-data_acquisizione")
+                    .first()
+                )
                 PersonaggioAbilita.objects.filter(
                     personaggio=personaggio,
                     abilita__is_tratto_aura=True,
@@ -577,8 +600,32 @@ class AcquisisciAbilitaView(APIView):
                     return Response({"error": f"Prerequisito non soddisfatto: {prereq.nome}"}, status=status.HTTP_400_BAD_REQUEST)
 
         if is_tratto_ain:
-            costo_pc_finale = 0
-            costo_crediti_finale = Decimal(0)
+            old_abilita = old_ain_trait.abilita if old_ain_trait else None
+            old_costo_pc = int(getattr(old_abilita, "costo_pc", 0) or 0)
+            old_costo_crediti = Decimal(getattr(old_abilita, "costo_crediti", 0) or 0)
+            new_costo_pc = int(abilita.costo_pc or 0)
+            new_costo_crediti = Decimal(abilita.costo_crediti or 0)
+
+            # Swap AIN: prima "rimborsa" il vecchio tratto, poi applica il nuovo.
+            # Con costi negativi mantiene il delta corretto (es: -1 -> 0 => -1 PC).
+            pc_delta = old_costo_pc - new_costo_pc
+            crediti_delta = old_costo_crediti - new_costo_crediti
+
+            if pc_delta < 0 and personaggio.punti_caratteristica < abs(pc_delta):
+                return Response(
+                    {"error": f"Punti Caratteristica insufficenti. Richiesti: {abs(pc_delta)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if crediti_delta < 0 and Decimal(personaggio.crediti) < abs(crediti_delta):
+                return Response(
+                    {"error": f"Crediti insufficienti. Richiesti: {abs(crediti_delta)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if pc_delta:
+                personaggio.modifica_pc(pc_delta, f"Cambio tratto AIN: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}")
+            if crediti_delta:
+                personaggio.modifica_crediti(crediti_delta, f"Cambio tratto AIN: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}")
         else:
             mods = personaggio.modificatori_calcolati
             sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0})
