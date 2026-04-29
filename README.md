@@ -22,7 +22,7 @@ Monorepo KOR35 con architettura:
 - `backend/` Django + DRF + Channels
 - `frontend/` React/Vite
 - `config/docker/` compose base + override ambiente
-- `scripts/` automazione operativa (`up/down/logs/status/sync`)
+- `scripts/` automazione operativa (`up/down/logs/status/sync`, merge Git verso `main`, riallineamento branch)
 
 Profili ambiente supportati:
 - `dev-home`
@@ -320,8 +320,8 @@ Nel repo, `compose.mirror.yml` monta Omada su **`../../omada_data`** e **`../../
 
 ### Fase A — Repository e GitHub
 
-1. **Merge** del branch `docker` in `main` (PR consigliata, review di `deploy.yml` e `compose.*`).
-2. **Push** su `origin/main`.
+1. **Merge** del branch `docker` in `main` (PR consigliata, review di `deploy.yml` e `compose.*`). In alternativa da terminale, con branch di lavoro checked out: `./scripts/merge_current_into_main.sh` (merge + push `main` di default; vedi [Git: merge in `main` e riallineamento branch](#git-merge-in-main-e-riallineamento-branch)).
+2. **Push** su `origin/main`: se usi solo PR/Merge su GitHub, verifica che `main` remoto sia aggiornato; se usi `./scripts/merge_current_into_main.sh` senza `--no-push`, il push è già incluso.
 3. Il workflow legacy in **`frontend/.github/workflows/`** è stato **rimosso** dal repo; il deploy ufficiale è solo **`.github/workflows/deploy.yml`** in root.
 4. **Secrets**: compila o aggiorna secondo la tabella **«Riepilogo secrets»** in questa sezione e la tabella **4.1** in *Setup Da Zero*; in particolare `SERVER_PROJECT_PATH` e `PRODUCTION_HEALTHCHECK_URL` per produzione, `MIRROR_*` per il Pi.
 

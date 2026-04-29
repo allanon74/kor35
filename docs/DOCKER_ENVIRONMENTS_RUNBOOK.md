@@ -418,3 +418,12 @@ Flusso consigliato:
 - per il catch-up iniziale, il service mirror esegue `sync_edge_node` con `EDGE_SYNC_HTTP_TIMEOUT=900` e `TimeoutStartSec=20min`.
 - lato master/prod, Nginx API usa timeout proxy lunghi (`proxy_send_timeout`/`proxy_read_timeout` a 900s) per evitare `504` durante le sync corpose.
 - lato backend Gunicorn (compose.base) il timeout worker è aumentato a 900s (`graceful-timeout` 120s) per evitare `WORKER TIMEOUT` su `/api/sync/edge/` durante il riallineamento iniziale.
+
+## 10) Script Git (merge su `main` e riallineamento branch)
+
+Oltre agli script Docker/sync, in `scripts/` ci sono helper per il flusso Git quotidiano (dettaglio completo nel `README.md` root del monorepo):
+
+- **`merge_current_into_main.sh`**: dal branch corrente (es. `test`) esegue merge in `main`, **di default** `git push origin main`, poi **torna al branch di partenza**. `--no-push` per solo merge locale. `--help` per le opzioni.
+- **`realign_branch_to_main.sh`**: sul branch corrente incorpora `origin/main` con merge; opzione **`--hard`** per `reset --hard` a `origin/main` (distruttivo, con conferma).
+
+Prerequisiti comuni: repository git, working tree pulita, branch `main` locale aggiornato dove richiesto dagli script.

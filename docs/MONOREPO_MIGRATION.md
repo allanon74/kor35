@@ -8,7 +8,7 @@ sviluppo, mirror e produzione.
 - `backend/` codice Django
 - `frontend/` codice React/Vite (importato da `kor35-app`)
 - `config/docker/` compose base + override ambiente
-- `scripts/` tooling operativo (up/down/logs/sync/deploy helper)
+- `scripts/` tooling operativo (up/down/logs/sync/deploy helper; vedi anche `merge_current_into_main.sh` e `realign_branch_to_main.sh` nel README root)
 - `docs/` runbook e checklist
 
 ## Stato corrente
