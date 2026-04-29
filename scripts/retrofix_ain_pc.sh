@@ -18,6 +18,7 @@ ENV_PROFILE="prod"
 APPLY=false
 WITH_BACKUP=false
 PERSONAGGIO_ID=""
+AUTO_UP=false
 
 usage() {
   cat <<'EOF'
@@ -28,6 +29,7 @@ Opzioni:
   --apply                 Applica davvero i movimenti PC (default: dry-run)
   --with-backup           Esegue backup DB prima di --apply
   --personaggio-id <id>   Limita il fix a un singolo personaggio
+  --auto-up               Se backend è fermo, avvia db/redis/backend automaticamente
   -h, --help              Mostra questo help
 EOF
 }
@@ -62,6 +64,10 @@ while [ $# -gt 0 ]; do
       fi
       shift 2
       ;;
+    --auto-up)
+      AUTO_UP=true
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -94,9 +100,24 @@ if [ "$WITH_BACKUP" = true ]; then
   "$SCRIPT_DIR/backup_db_daily.sh" --env "$WSL_PI_ENV_PROFILE"
 fi
 
-if ! wsl_pi_compose ps backend >/dev/null 2>&1; then
-  echo "Servizio backend non disponibile nello stack corrente." >&2
-  echo "Avvia prima lo stack, poi riprova." >&2
+is_backend_running() {
+  local running
+  running="$(wsl_pi_compose ps --status running --services backend 2>/dev/null || true)"
+  [ "$running" = "backend" ]
+}
+
+if ! is_backend_running; then
+  if [ "$AUTO_UP" = true ]; then
+    echo "Backend non in esecuzione: avvio db/redis/backend..."
+    wsl_pi_compose up -d db redis backend
+  fi
+fi
+
+if ! is_backend_running; then
+  echo "Il servizio backend non è in esecuzione per il profilo '$WSL_PI_ENV_PROFILE'." >&2
+  echo "Avvio suggerito:" >&2
+  echo "  ./scripts/up_wsl_pi_like.sh --env $WSL_PI_ENV_PROFILE --no-build" >&2
+  echo "Oppure riesegui questo script con --auto-up." >&2
   exit 1
 fi
 

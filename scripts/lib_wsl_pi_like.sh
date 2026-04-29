@@ -72,6 +72,8 @@ wsl_pi_set_env_profile() {
       WSL_PI_ENV_PROFILE="prod"
       WSL_PI_COMPOSE_FILE="compose.prod.yml"
       KOR35_BACKEND_ENV_FILE="$KOR35_ROOT/backend/.env.prod"
+      # Produzione usa project name dedicato.
+      WSL_PI_COMPOSE_PROJECT_NAME="${WSL_PI_COMPOSE_PROJECT_NAME:-kor35-prod}"
       ;;
     *)
       echo "Profilo non valido: $profile" >&2
