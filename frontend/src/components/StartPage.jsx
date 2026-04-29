@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ArrowRight, Lock, Star, Globe, X } from 'lucide-react';
+import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ShieldAlert, ArrowRight, Lock, Star, Globe, X } from 'lucide-react';
 import {
   createPersonaggio,
   getArcanaPasswordStatus,
@@ -159,6 +159,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       prefettura_esterna: false,
       tipologia: 1,
       costume: '',
+      watch_enabled: false,
       campagna:
         campaigns.find((c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign))?.id ||
         '',
@@ -180,6 +181,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       prefettura_esterna: !!char.prefettura_esterna,
       tipologia: typeof char.tipologia === 'object' ? (char.tipologia?.id || 1) : (char.tipologia || 1),
       costume: char.costume || '',
+      watch_enabled: !!char.watch_enabled,
       campagna: char.campagna || '',
     });
     setShowEditor(true);
@@ -213,6 +215,11 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         delete payload.nome;
         delete payload.testo;
       }
+    }
+    if (!isCampaignStaffer) {
+      delete payload.watch_enabled;
+    } else {
+      payload.watch_enabled = !!payload.watch_enabled;
     }
     try {
       let charId = formData.id;
@@ -641,9 +648,12 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                   </select>
                 </div>
               </div>
-              {isCampaignMaster && (
+              {isCampaignStaffer && (
                 <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-3">
-                  <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Sezione staff/master</div>
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber-400">
+                    <ShieldAlert size={14} aria-hidden />
+                    Area staff
+                  </div>
                   <div className="grid md:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-gray-400 uppercase">Tipologia</label>
@@ -659,7 +669,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                         ))}
                       </select>
                     </div>
-                    {!isCreateMode && manageableCampaigns.length > 1 && (
+                    {!isCreateMode && isCampaignMaster && manageableCampaigns.length > 1 && (
                       <div>
                         <label className="text-xs text-gray-400 uppercase">Campagna personaggio</label>
                         <select
@@ -685,6 +695,14 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                       onChange={(e) => setFormData({ ...formData, costume: e.target.value })}
                     />
                   </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={!!formData.watch_enabled}
+                      onChange={(e) => setFormData({ ...formData, watch_enabled: e.target.checked })}
+                    />
+                    Abilita uso smartwatch per questo personaggio
+                  </label>
                 </div>
               )}
               <label className="inline-flex items-center gap-2 text-sm text-gray-300">
