@@ -14,6 +14,7 @@ sito kor35
 - [Setup Ambienti Di Sviluppo (prima di `make`)](#setup-ambienti-di-sviluppo-prima-di-make)
 - [Appendice: Comandi rapidi quotidiani](#appendice-comandi-rapidi-quotidiani)
 - [Transizione post-merge (docker → main)](#transizione-post-merge-docker--main)
+- [Git: merge in `main` e riallineamento branch](#git-merge-in-main-e-riallineamento-branch)
 
 ## Panoramica rapida
 
@@ -49,6 +50,35 @@ Dettagli:
 - `config/docker/compose.base.yml` + `compose.<env>.yml`
 - `config/env_templates/*.env.example` template env backend per profilo
 - `scripts/use_env_backend.sh` per inizializzare `backend/.env.<profilo>`
+
+## Git: merge in `main` e riallineamento branch
+
+Due script nella root repo (`./scripts/…`) per workflow tipici dopo lavoro su un branch (es. `test`) e aggiornamenti diretti su `main`.
+
+### `merge_current_into_main.sh`
+
+Merge del **branch corrente** dentro **`main`** locale, con conferma interattiva.
+
+| Comando | Effetto |
+|--------|--------|
+| `./scripts/merge_current_into_main.sh` | `git checkout main` → `git merge <branch-precedente>` → **`git push origin main`** → torni sul branch di partenza |
+| `./scripts/merge_current_into_main.sh --no-push` | Stesso merge **senza** push (solo locale) |
+| `./scripts/merge_current_into_main.sh --push` | Esplicito: uguale al default |
+
+Prerequisiti: working tree pulita; non essere già su `main`; branch locale `main` presente. In caso di **conflitto sul merge**, lo script si interrompe mentre sei su `main`: risolvi e completa a mano. Dopo merge/push riusciti viene eseguito di nuovo `git checkout` sul branch iniziale.
+
+Aiuto: `./scripts/merge_current_into_main.sh --help`
+
+### `realign_branch_to_main.sh`
+
+Aggiorna il **branch corrente** con quanto presente su **`origin/main`** (utile se `main` è avanti perché qualcuno ha pushato senza passare dal tuo branch).
+
+| Comando | Effetto |
+|--------|--------|
+| `./scripts/realign_branch_to_main.sh` | `git fetch` → **`git merge origin/main`** nel branch corrente |
+| `./scripts/realign_branch_to_main.sh --hard` | **`git reset --hard origin/main`**: il branch locale diventa identico a `origin/main` (perdi commit non presenti su `origin/main`; chiede conferma, salvo `--yes`) |
+
+Opzioni: `--remote <nome>` (default `origin`), `--main <branch>` (default `main`). Richiede working tree pulita.
 
 ## Deploy sicuro (GitHub Actions)
 
