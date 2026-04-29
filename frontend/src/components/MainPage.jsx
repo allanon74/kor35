@@ -15,7 +15,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle // <-- [MODIFICA] Icona HelpCircle aggiunta
+    Key, HelpCircle, Watch
 } from 'lucide-react';
 
 import AbilitaTab from './AbilitaTab.jsx';
@@ -29,6 +29,7 @@ import InventoryTab from './InventoryTab.jsx';
 import LogViewer from './LogViewer.jsx';
 import TransazioniViewer from './TransazioniViewer.jsx';
 import GameTab from './GameTab.jsx';
+import WatchTab from './WatchTab.jsx';
 import JobRequestsWidget from './JobRequestsWidget.jsx'; 
 import PersonaggiTab from './PersonaggiTab.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
@@ -80,6 +81,7 @@ const TAB_TO_WIKI_SLUG = {
     'consumabili': 'consumabili',
     'home': 'gestione-personaggio',
     'game': 'navigazione-app',
+    'watch': 'smartwatch-wear-os',
 };
 
 const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
@@ -211,6 +213,20 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     isCampaignHeadMaster,
   } = useCharacter();
 
+  const listWatchRowForSelected = useMemo(() => {
+    if (!selectedCharacterId) return null;
+    return (personaggiList || []).find((p) => String(p.id) === String(selectedCharacterId));
+  }, [personaggiList, selectedCharacterId]);
+
+  /** Tab Watch visibile solo se lo staff ha abilitato il device per il PG (dettaglio o fallback lista). */
+  const watchTabEnabled = useMemo(() => {
+    if (!selectedCharacterId) return false;
+    if (!selectedCharacterData) return !!listWatchRowForSelected?.watch_enabled;
+    const v = selectedCharacterData.watch_enabled;
+    if (v !== undefined && v !== null) return !!v;
+    return !!listWatchRowForSelected?.watch_enabled;
+  }, [selectedCharacterId, selectedCharacterData, listWatchRowForSelected]);
+
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
 
   const auraInnataRecord = useMemo(
@@ -249,7 +265,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
   const isValidTabId = useCallback((tabId) => {
     if (!tabId) return false;
-    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg') return true;
+    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch') return true;
     return AVAILABLE_TABS.some(t => t.id === tabId);
   }, []);
 
@@ -477,10 +493,16 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const revivalSec = String(revivalRemaining % 60).padStart(2, '0');
 
   useEffect(() => {
-    if (isComaLocked && activeTab !== 'game') {
+    if (isComaLocked && activeTab !== 'game' && activeTab !== 'watch') {
       setActiveTab('game');
     }
   }, [isComaLocked, activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'watch') return;
+    if (!selectedCharacterId) return;
+    if (!watchTabEnabled) setActiveTab('game');
+  }, [activeTab, selectedCharacterId, watchTabEnabled]);
 
   useEffect(() => {
     if (!selectedCharacterId && activeTab !== 'personaggi') {
@@ -526,6 +548,28 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const renderTabContent = useCallback(() => {
     if (activeTab === 'home') return <HomeTab onLogout={onLogout} />;
     if (activeTab === 'game') return <GameTab onNavigate={handleMenuNavigation} />;
+    if (activeTab === 'watch') {
+      if (!selectedCharacterId) {
+        return (
+          <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center text-gray-500 animate-fadeIn">
+            <Users size={64} className="opacity-20 animate-pulse" />
+            <p className="text-lg font-bold">Nessun Personaggio Selezionato</p>
+            <button
+              type="button"
+              onClick={() => setActiveTab('personaggi')}
+              className="rounded-lg bg-indigo-600 px-6 py-2 text-xs font-bold uppercase text-white shadow-lg transition-all hover:bg-indigo-500 hover:shadow-indigo-500/20 active:scale-95"
+            >
+              Vai alla selezione
+            </button>
+          </div>
+        );
+      }
+      return (
+        <div className="h-full overflow-y-auto">
+          <WatchTab />
+        </div>
+      );
+    }
     if (activeTab === 'admin_msg') return <AdminMessageTab onLogout={onLogout} />;
 
     const tabDef = AVAILABLE_TABS.find(t => t.id === activeTab);
@@ -578,6 +622,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     handleScanSuccess,
     onLogout,
     setActiveTab,
+    selectedCharacterId,
   ]);
 
   // --- CONTENUTO MENU (render function, evita remount continui della sidebar) ---
@@ -715,6 +760,33 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                         </div>
                     );
                 })}
+
+                {selectedCharacterId && watchTabEnabled && (
+                    <div
+                        className={`flex items-center justify-between rounded-lg border p-2 transition-colors ${
+                            activeTab === 'watch'
+                                ? 'border-sky-500/40 bg-sky-950/30'
+                                : 'border-transparent hover:bg-gray-700/50'
+                        }`}
+                    >
+                        <button
+                            type="button"
+                            className="flex flex-1 items-center gap-3 py-1 text-left"
+                            onClick={() => handleMenuNavigation('watch')}
+                        >
+                            <Watch size={20} className={activeTab === 'watch' ? 'text-sky-400' : 'text-gray-400 group-hover:text-gray-200'} />
+                            <span
+                                className={
+                                    activeTab === 'watch'
+                                        ? 'font-bold text-sky-100'
+                                        : 'text-gray-300 hover:text-white'
+                                }
+                            >
+                                Smartwatch
+                            </span>
+                        </button>
+                    </div>
+                )}
 
                 {/* LINK WIKI PUBBLICA (Style Uniformato) */}
                 <div className="h-px bg-gray-700 my-2 mx-1"></div>
@@ -1017,7 +1089,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                         : 'Coma in corso'}
                   </div>
                   <div className="text-xs mt-1 text-red-200">
-                    Accesso limitato: fino a risoluzione del coma puoi usare solo la scheda `Game`.
+                    Accesso limitato: fino a risoluzione del coma puoi usare solo le schede Game e Watch.
                   </div>
                 </div>
               </div>
@@ -1029,7 +1101,14 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
           <nav className="flex justify-around items-center bg-gray-800 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] shrink-0 border-t border-gray-700 z-10 h-[60px] pb-safe">
             <TabButton icon={<Gamepad2 size={24} />} label="Game" isActive={activeTab === 'game'} onClick={() => setActiveTab('game')} />
             <TabButton icon={<Home size={24} />} label="Scheda" isActive={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-            
+            {selectedCharacterId && watchTabEnabled ? (
+              <TabButton
+                icon={<Watch size={22} />}
+                label="Watch"
+                isActive={activeTab === 'watch'}
+                onClick={() => setActiveTab('watch')}
+              />
+            ) : null}
             <div className="w-px h-8 bg-gray-700 mx-1 opacity-50"></div>
 
             {userShortcuts.map(tabId => {
