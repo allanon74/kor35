@@ -71,6 +71,7 @@ export default function App() {
         isCampaignMaster: false,
         isCampaignHeadMaster: false,
         isCampaignRedactor: false,
+        isGlobalSuperuser: false,
         isAdmin: false,
         character: null,
         notifiche: [],

@@ -30,8 +30,8 @@ export default function PublicLayout({ token }) {
     return localStorage.getItem('wiki_hide_admin_content') === 'true';
   });
 
-  const { character, isCampaignRedactor, isCampaignMaster, isAdmin } = useCharacter();
-  const canEdit = isCampaignRedactor || isCampaignMaster || isAdmin;
+  const { character, isCampaignRedactor, isCampaignMaster } = useCharacter();
+  const canEdit = isCampaignRedactor || isCampaignMaster;
   const location = useLocation();
 
   // --- HELPER: COSTRUZIONE ALBERO E ORDINAMENTO ---

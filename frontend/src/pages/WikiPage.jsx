@@ -13,8 +13,8 @@ export default function WikiPage({ slug: propSlug }) {
   const currentSlug = propSlug || slug || 'home'; 
   
   // Permessi wiki basati su ruoli campagna (+ admin generale).
-  const { isCampaignRedactor, isCampaignMaster, isAdmin } = useCharacter();
-  const canEdit = isCampaignRedactor || isCampaignMaster || isAdmin;
+  const { isCampaignRedactor, isCampaignMaster } = useCharacter();
+  const canEdit = isCampaignRedactor || isCampaignMaster;
 
   const [pageData, setPageData] = useState(null);
   const [wikiGlossary, setWikiGlossary] = useState([]);

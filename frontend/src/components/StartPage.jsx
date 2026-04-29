@@ -624,7 +624,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                   </select>
                 </div>
               </div>
-              {(isCampaignMaster || isAdmin) && (
+              {isCampaignMaster && (
                 <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-3">
                   <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Sezione staff/master</div>
                   <div className="grid md:grid-cols-2 gap-3">

@@ -630,7 +630,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                 )}
 
                 {/* 2. ADMIN VIEW ALL TOGGLE */}
-                {isAdmin && (
+                {(isCampaignMaster || isAdmin) && (
                     <div className="mt-3 flex items-center justify-between pt-3 border-t border-gray-700">
                         <span className="text-sm text-gray-300 flex items-center gap-2">
                             <Filter size={16} /> Vedi tutti i PG

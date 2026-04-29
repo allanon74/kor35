@@ -63,8 +63,11 @@ export const CharacterProvider = ({ children, onLogout }) => {
   // --- STATI GLOBALI UI ---
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem('kor35_last_char_id') || '');
   const [preferredCharacterId, setPreferredCharacterId] = useState(() => localStorage.getItem('kor35_preferred_char_id') || '');
-  /** Allineato al backend: non affidarti solo a localStorage (può restare desincronizzato dopo login/token). */
-  const [isAdmin, setIsAdmin] = useState(() => {
+  /**
+   * Solo superuser Django: bypass globale (es. notifiche sistema, vedi tutti i PG).
+   * I permessi di gioco usano i ruoli di campagna (HEAD_MASTER, MASTER, …), non is_staff.
+   */
+  const [isGlobalSuperuser, setIsGlobalSuperuser] = useState(() => {
     const stored = localStorage.getItem('kor35_is_admin');
     if (stored !== null) return stored === 'true';
     return localStorage.getItem('kor35_is_master') === 'true';
@@ -81,7 +84,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
         );
         if (cancelled || !me || typeof me !== 'object') return;
         const serverSuper = !!me.is_superuser;
-        setIsAdmin(serverSuper);
+        setIsGlobalSuperuser(serverSuper);
         localStorage.setItem('kor35_is_admin', String(serverSuper));
       } catch {
         /* mantieni fallback iniziale da localStorage */
@@ -96,9 +99,13 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [activeCampaign, setActiveCampaign] = useState(() => getActiveCampaignSlug());
   const activeCampaignMeta = campaigns.find((c) => c.slug === activeCampaign) || null;
   const activeCampaignRole = activeCampaignMeta?.ruolo || 'PLAYER';
-  const isCampaignHeadMaster = isAdmin || activeCampaignRole === 'HEAD_MASTER';
-  const isCampaignMaster = isAdmin || activeCampaignRole === 'MASTER' || activeCampaignRole === 'HEAD_MASTER';
-  const isCampaignStaffer = isAdmin || activeCampaignRole === 'STAFFER' || activeCampaignRole === 'MASTER' || activeCampaignRole === 'HEAD_MASTER';
+  const isCampaignHeadMaster = activeCampaignRole === 'HEAD_MASTER';
+  const isCampaignMaster =
+    activeCampaignRole === 'MASTER' || activeCampaignRole === 'HEAD_MASTER';
+  const isCampaignStaffer =
+    activeCampaignRole === 'STAFFER' ||
+    activeCampaignRole === 'MASTER' ||
+    activeCampaignRole === 'HEAD_MASTER';
   const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
 
   const [viewAll, setViewAll] = useState(false);
@@ -451,7 +458,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
   // --- ADMIN & NOTIFICHE ---
   const [adminPendingCount, setAdminPendingCount] = useState(0);
   useEffect(() => {
-      if (isAdmin && !viewAll) {
+      if (isGlobalSuperuser && !viewAll) {
           const check = async () => {
               try { const d = await getAdminPendingProposalsCount(onLogout); setAdminPendingCount(d.count); } 
               catch (e) {}
@@ -460,7 +467,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
           const i = setInterval(check, 60000);
           return () => clearInterval(i);
       }
-  }, [isAdmin, viewAll, onLogout]);
+  }, [isGlobalSuperuser, viewAll, onLogout]);
 
   const subscribeToPush = useCallback(async () => {
     // Feature flag: abilita webpush solo se esplicitamente attivo.
@@ -582,7 +589,9 @@ export const CharacterProvider = ({ children, onLogout }) => {
     campaigns,
     activeCampaign,
     changeActiveCampaign,
-    isAdmin,
+    /** Superuser Django (bypass globale). Alias legacy per il codice esistente. */
+    isGlobalSuperuser,
+    isAdmin: isGlobalSuperuser,
     viewAll,
     toggleViewAll,
     adminPendingCount,

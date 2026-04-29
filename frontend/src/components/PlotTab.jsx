@@ -26,8 +26,8 @@ const RISORSE_CACHE_KEY = 'plot_risorse_cache';
 const RISORSE_CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minuti
 
 const PlotTab = ({ onLogout }) => {
-    const { isAdmin, isCampaignMaster } = useCharacter();
-    const canManagePlot = isAdmin || isCampaignMaster;
+    const { isCampaignMaster } = useCharacter();
+    const canManagePlot = isCampaignMaster;
     const [eventi, setEventi] = useState([]);
     const [selectedEvento, setSelectedEvento] = useState(null);
     const [loading, setLoading] = useState(true);

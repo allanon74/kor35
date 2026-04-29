@@ -53,7 +53,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     const [activeTool, setActiveTool] = useState(initialTool); 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [socialUnreadCount, setSocialUnreadCount] = useState(0);
-    const { selectedCharacterId, isAdmin, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster } = useCharacter();
+    const { selectedCharacterId, isGlobalSuperuser, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster } = useCharacter();
 
     React.useEffect(() => {
         setActiveTool(initialTool);
@@ -114,7 +114,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
 
     const visibleTools = useMemo(() => {
         // Admin globale senza ruolo campagna: solo strumenti globali.
-        if (isAdmin && !isCampaignStaffer) {
+        if (isGlobalSuperuser && !isCampaignStaffer) {
             return toolsConfig.filter((t) => ['arcana-profiles', 'campagne'].includes(t.id));
         }
 
@@ -124,18 +124,18 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         }
 
         // Master: tutte le schede eccetto Campagne e Arcana SSO.
-        if (isCampaignMaster && !isCampaignHeadMaster && !isAdmin) {
+        if (isCampaignMaster && !isCampaignHeadMaster && !isGlobalSuperuser) {
             return toolsConfig.filter((t) => !['campagne', 'arcana-profiles'].includes(t.id));
         }
 
         // Head Master: tutte tranne Arcana SSO.
-        if (isCampaignHeadMaster && !isAdmin) {
+        if (isCampaignHeadMaster && !isGlobalSuperuser) {
             return toolsConfig.filter((t) => t.id !== 'arcana-profiles');
         }
 
-        // Admin con ruolo campagna o fallback: tutto.
+        // Superuser con ruolo campagna o fallback: tutto.
         return toolsConfig;
-    }, [toolsConfig, isAdmin, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster]);
+    }, [toolsConfig, isGlobalSuperuser, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster]);
 
     const handleToolSelect = useCallback((id) => {
         setActiveTool(id);
