@@ -16,7 +16,7 @@ import {
 } from '../api';
 import { useCharacter } from './CharacterContext';
 import { 
-    User, Users, Plus, Edit, X, ShieldAlert, Coins, Zap, Gem, RotateCcw, Skull, Heart
+    User, Users, Plus, Edit, X, ShieldAlert, Coins, Zap, Gem, RotateCcw, Skull, Heart, Watch
 } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import BuildVersions from './BuildVersions';
@@ -499,8 +499,17 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             </div>
 
                             <div className="min-w-0">
-                                <h3 className="break-words text-base sm:text-lg font-bold leading-tight">
-                                    {char.nome}
+                                <h3 className="break-words text-base sm:text-lg font-bold leading-tight flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    <span>{char.nome}</span>
+                                    {char.watch_enabled ? (
+                                        <span
+                                            className="inline-flex shrink-0 text-sky-400"
+                                            title="Smartwatch abilitato"
+                                            aria-label="Smartwatch abilitato"
+                                        >
+                                            <Watch size={18} strokeWidth={2.25} aria-hidden />
+                                        </span>
+                                    ) : null}
                                     {char.data_morte ? (
                                         <span className="ml-2 inline-flex rounded-full border border-red-700 bg-red-900/70 px-2 py-0.5 align-middle text-[10px] uppercase tracking-wide text-red-200">
                                             Morto

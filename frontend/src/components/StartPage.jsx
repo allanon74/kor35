@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ShieldAlert, ArrowRight, Lock, Star, Globe, X } from 'lucide-react';
+import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ShieldAlert, ArrowRight, Lock, Star, Globe, X, Watch } from 'lucide-react';
 import {
   createPersonaggio,
   getArcanaPasswordStatus,
@@ -466,7 +466,18 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-bold text-white truncate">{char.nome}</div>
+                      <div className="font-bold text-white flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">{char.nome}</span>
+                        {char.watch_enabled ? (
+                          <span
+                            className="inline-flex shrink-0 text-sky-400"
+                            title="Smartwatch abilitato"
+                            aria-label="Smartwatch abilitato"
+                          >
+                            <Watch size={16} strokeWidth={2.25} aria-hidden />
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="text-[10px] inline-flex px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-200 border border-indigo-700 mt-1">
                         Campagna: {char.campagna_nome || 'Kor35'}
                       </div>
