@@ -2504,6 +2504,7 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
             'avatar_url',
+            'watch_enabled',
             )
         read_only_fields = ('crediti', 'punti_caratteristica') 
 
