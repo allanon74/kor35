@@ -1,5 +1,11 @@
 resolver 127.0.0.11 valid=10s ipv6=off;
 
+location ^~ /watch-apps/ {
+    root /usr/share/nginx/html;
+    try_files $uri =404;
+    add_header Cache-Control "public, max-age=300" always;
+}
+
 location / {
     root /usr/share/nginx/html;
     index index.html;

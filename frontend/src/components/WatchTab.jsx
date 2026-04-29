@@ -3,6 +3,15 @@ import { Watch } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { watchPairConfirm, watchDisconnect, watchWearManifest } from '../api';
 
+/** URL assoluto per download APK: evita href solo-path se il manifest espone path relativo. */
+function wearApkAbsoluteUrl(apkUrl) {
+    if (!apkUrl || typeof apkUrl !== 'string') return '';
+    const u = apkUrl.trim();
+    if (/^https?:\/\//i.test(u)) return u;
+    if (typeof window === 'undefined') return u;
+    return u.startsWith('/') ? `${window.location.origin}${u}` : `${window.location.origin}/${u}`;
+}
+
 /**
  * Scheda dedicata fuori dal contesto IN_GAME (Game / Scheda): pairing Wear OS, APK e disconnessione device.
  */
@@ -123,7 +132,7 @@ const WatchTab = () => {
                         App Wear OS (v{wearManifest.version || 'n/d'}). Installa dal telefono Android collegato all&apos;orologio.
                         <div className="mt-2">
                             <a
-                                href={wearManifest.apk_url}
+                                href={wearApkAbsoluteUrl(wearManifest.apk_url)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex rounded bg-indigo-900/70 px-3 py-2 text-xs font-bold hover:bg-indigo-800"
