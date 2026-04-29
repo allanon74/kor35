@@ -3,6 +3,9 @@ import { Watch } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { watchPairConfirm, watchDisconnect, watchWearManifest } from '../api';
 
+/** Allineato al default backend `WATCH_WEAR_APK_PATH` (nginx: react_build/watch-apps/...). */
+const WEAR_DEFAULT_APK_PATH = '/watch-apps/wearos-kor35/app-release.apk';
+
 /** URL assoluto per download APK: evita href solo-path se il manifest espone path relativo. */
 function wearApkAbsoluteUrl(apkUrl) {
     if (!apkUrl || typeof apkUrl !== 'string') return '';
@@ -124,8 +127,9 @@ const WatchTab = () => {
 
             <div className="rounded-xl border border-sky-800/50 bg-gray-900/70 p-4 space-y-3">
                 <p className="text-[11px] text-gray-400">
-                    Il pairing con codice funziona in ogni ambiente. Il link «Scarica app» compare solo se il server
-                    espone il manifest con APK (file servito da Nginx).
+                    Il pairing con codice funziona in ogni ambiente. Il manifest API (versione + URL ufficiale) richiede
+                    backend con <span className="font-mono">WATCH_WEAR_ENABLED</span> e risposta 200; il file APK va
+                    comunque copiato sul volume nginx (es. rsync da CI).
                 </p>
                 {wearManifest?.apk_url ? (
                     <div className="rounded-lg border border-gray-700 bg-gray-800/60 p-3 text-xs text-gray-300">
@@ -142,10 +146,26 @@ const WatchTab = () => {
                         </div>
                     </div>
                 ) : (
-                    <p className="text-[11px] text-amber-200/90">
-                        Nessun APK da questo host: verifica file e <span className="font-mono">WATCH_WEAR_ENABLED</span>.
-                        Il codice di pairing qui sotto funziona comunque.
-                    </p>
+                    <div className="rounded-lg border border-amber-900/40 bg-amber-950/20 p-3 space-y-2 text-[11px] text-gray-300">
+                        <p className="text-amber-200/90">
+                            Manifest Wear non disponibile da questo host (errore di rete, 404 o{' '}
+                            <span className="font-mono">WATCH_WEAR_ENABLED=false</span> nel backend). Il pairing qui
+                            sotto funziona comunque.
+                        </p>
+                        <p className="text-gray-400">
+                            Puoi provare il download diretto sullo stesso host: ha successo solo se l&apos;APK è stato
+                            pubblicato sotto nginx (<span className="font-mono">extra/ota-artifacts/…</span> → rsync in
+                            deploy).
+                        </p>
+                        <a
+                            href={wearApkAbsoluteUrl(WEAR_DEFAULT_APK_PATH)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex rounded bg-indigo-900/70 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-800"
+                        >
+                            Scarica APK Wear OS (link diretto)
+                        </a>
+                    </div>
                 )}
 
                 {watchBinding ? (
