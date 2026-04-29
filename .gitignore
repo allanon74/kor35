@@ -165,6 +165,9 @@ extra/local-artifacts/*
 !extra/local-artifacts/lilygo-twatch-2021/**
 !extra/local-artifacts/wearos-kor35/
 !extra/local-artifacts/wearos-kor35/**
+extra/local-artifacts/wearos-kor35/.gradle/
+extra/local-artifacts/wearos-kor35/.idea/
+extra/local-artifacts/wearos-kor35/app/build/
 
 # Backend environment profiles (secrets)
 backend/.env
