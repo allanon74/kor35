@@ -1920,6 +1920,120 @@ TIPO_NODO_CHOICES = [
     (TIPO_NODO_MAGGIORE, "Nodo maggiore"),
 ]
 
+NODO_REWARD_POOL = "POOL"
+NODO_REWARD_CREDITI = "CRDT"
+NODO_REWARD_TIPO_CHOICES = [
+    (NODO_REWARD_POOL, "Pool statistica"),
+    (NODO_REWARD_CREDITI, "Crediti"),
+]
+
+
+class NodoRewardConfig(SyncableModel, models.Model):
+    """
+    Configurazione riusabile dei reward nodo per era.
+    Un Nodo può agganciarsi a questa configurazione; in assenza, si usa fallback hardcoded.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    nome = models.CharField(max_length=120)
+    descrizione = models.TextField(blank=True, default="")
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="nodo_reward_configs",
+        default=get_default_campagna_id,
+        db_index=True,
+    )
+    attiva = models.BooleanField(default=True)
+    prob_minore_to_maggiore = models.PositiveSmallIntegerField(
+        default=10,
+        help_text="Probabilità % che dopo una scansione un nodo MINORE diventi MAGGIORE.",
+    )
+    prob_maggiore_to_minore = models.PositiveSmallIntegerField(
+        default=90,
+        help_text="Probabilità % che dopo una scansione un nodo MAGGIORE diventi MINORE.",
+    )
+    cooldown_minuti_min = models.PositiveSmallIntegerField(
+        default=5,
+        help_text="Cooldown minimo (minuti) dopo scansione nodo.",
+    )
+    cooldown_minuti_max = models.PositiveSmallIntegerField(
+        default=25,
+        help_text="Cooldown massimo (minuti) dopo scansione nodo.",
+    )
+
+    class Meta:
+        verbose_name = "Configurazione reward nodo"
+        verbose_name_plural = "Configurazioni reward nodo"
+        ordering = ["nome"]
+
+    def __str__(self):
+        return self.nome
+
+    def clean(self):
+        if self.prob_minore_to_maggiore < 0 or self.prob_minore_to_maggiore > 100:
+            raise ValidationError("prob_minore_to_maggiore deve essere tra 0 e 100.")
+        if self.prob_maggiore_to_minore < 0 or self.prob_maggiore_to_minore > 100:
+            raise ValidationError("prob_maggiore_to_minore deve essere tra 0 e 100.")
+        if self.cooldown_minuti_min < 1:
+            raise ValidationError("cooldown_minuti_min deve essere almeno 1.")
+        if self.cooldown_minuti_max < self.cooldown_minuti_min:
+            raise ValidationError("cooldown_minuti_max deve essere >= cooldown_minuti_min.")
+
+
+class NodoRewardRegolaEra(SyncableModel, models.Model):
+    """
+    Regola reward per una specifica era, legata a una configurazione nodo.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    config = models.ForeignKey(
+        "NodoRewardConfig",
+        on_delete=models.CASCADE,
+        related_name="regole_era",
+    )
+    era = models.ForeignKey(
+        "Era",
+        on_delete=models.CASCADE,
+        related_name="nodo_reward_regole",
+    )
+    tipo_reward = models.CharField(
+        max_length=4,
+        choices=NODO_REWARD_TIPO_CHOICES,
+        default=NODO_REWARD_POOL,
+        db_index=True,
+    )
+    statistica_pool = models.ForeignKey(
+        "Statistica",
+        on_delete=models.PROTECT,
+        related_name="nodo_reward_regole",
+        null=True,
+        blank=True,
+        limit_choices_to={"is_risorsa_pool": True},
+        help_text="Richiesta quando tipo_reward = Pool statistica.",
+    )
+    delta_base = models.IntegerField(
+        default=1,
+        help_text="Valore base: con nodo MAGGIORE verrà moltiplicato x2.",
+    )
+
+    class Meta:
+        verbose_name = "Regola reward nodo per era"
+        verbose_name_plural = "Regole reward nodo per era"
+        unique_together = [("config", "era")]
+        ordering = ["config__nome", "era__ordine", "era__nome"]
+
+    def __str__(self):
+        return f"{self.config.nome} - {self.era.nome}"
+
+    def clean(self):
+        if self.tipo_reward == NODO_REWARD_POOL and not self.statistica_pool_id:
+            raise ValidationError("Se tipo reward è POOL devi selezionare una statistica pool.")
+        if self.tipo_reward == NODO_REWARD_CREDITI and self.statistica_pool_id:
+            raise ValidationError("Per reward crediti non devi impostare statistica pool.")
+
 
 class Nodo(A_vista):
     """
@@ -1943,6 +2057,14 @@ class Nodo(A_vista):
         related_name="nodi",
         default=get_default_campagna_id,
         db_index=True,
+    )
+    reward_config = models.ForeignKey(
+        "NodoRewardConfig",
+        on_delete=models.PROTECT,
+        related_name="nodi",
+        null=True,
+        blank=True,
+        help_text="Se valorizzata, usa le regole DB per era. Se vuota, fallback hardcoded legacy.",
     )
 
     class Meta:

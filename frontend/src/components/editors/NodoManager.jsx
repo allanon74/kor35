@@ -7,6 +7,7 @@ import StaffQrBadge from './StaffQrBadge';
 import {
   associaQrDiretto,
   staffGetNodi,
+  staffGetNodoRewardConfigs,
   staffCreateNodo,
   staffUpdateNodo,
   staffDeleteNodo,
@@ -19,6 +20,7 @@ const emptyForm = () => ({
   disponibile_dal: '',
   foto_posizione: null,
   foto_posizione_url: '',
+  reward_config: '',
 });
 
 const toInputDateTimeLocal = (iso) => {
@@ -33,6 +35,7 @@ const NodoManager = ({ onBack, onLogout }) => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
+  const [rewardConfigs, setRewardConfigs] = useState([]);
   const [fotoInputMode, setFotoInputMode] = useState('camera'); // 'camera' | 'gallery'
   const [scanningId, setScanningId] = useState(null);
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
@@ -55,6 +58,18 @@ const NodoManager = ({ onBack, onLogout }) => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const loadConfigs = async () => {
+      try {
+        const data = await staffGetNodoRewardConfigs(onLogout);
+        setRewardConfigs(Array.isArray(data) ? data : []);
+      } catch (_e) {
+        setRewardConfigs([]);
+      }
+    };
+    loadConfigs();
+  }, [onLogout]);
+
   const save = async () => {
     if (!editing?.nome?.trim()) {
       setMsg('Il nome è obbligatorio');
@@ -64,6 +79,7 @@ const NodoManager = ({ onBack, onLogout }) => {
     formData.append('nome', editing.nome);
     formData.append('testo', editing.testo || '');
     formData.append('tipo_nodo', editing.tipo_nodo || 'MIN');
+    formData.append('reward_config', editing.reward_config || '');
     if (editing.disponibile_dal) formData.append('disponibile_dal', editing.disponibile_dal);
     if (editing.foto_posizione instanceof File) formData.append('foto_posizione', editing.foto_posizione);
     try {
@@ -137,6 +153,7 @@ const NodoManager = ({ onBack, onLogout }) => {
                     <div className="font-semibold">{n.nome}</div>
                     <div className="text-[10px] text-gray-500">
                       Tipo: {n.tipo_nodo === 'MAG' ? 'Nodo maggiore' : 'Nodo minore'}
+                      {n.reward_config_nome ? ` · config: ${n.reward_config_nome}` : ' · fallback legacy'}
                       {n.disponibile_dal ? ` · disponibile da ${new Date(n.disponibile_dal).toLocaleString()}` : ''}
                     </div>
                     </div>
@@ -160,6 +177,7 @@ const NodoManager = ({ onBack, onLogout }) => {
                           ...n,
                           disponibile_dal: toInputDateTimeLocal(n.disponibile_dal),
                           foto_posizione: null,
+                          reward_config: n.reward_config || '',
                         });
                       }}
                     >
@@ -226,6 +244,24 @@ const NodoManager = ({ onBack, onLogout }) => {
                 />
               </label>
             </div>
+            <label className="block text-sm">
+              Sistema reward nodo
+              <select
+                className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
+                value={editing.reward_config || ''}
+                onChange={(e) => setEditing({ ...editing, reward_config: e.target.value })}
+              >
+                <option value="">Fallback legacy (hardcoded)</option>
+                {rewardConfigs.map((cfg) => (
+                  <option key={cfg.id} value={cfg.id}>
+                    {cfg.nome}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-500 mt-1">
+                Se vuoto, il nodo usa il fallback storico hardcoded in backend.
+              </p>
+            </label>
             <div className="block text-sm space-y-2">
               <div>
                 <span className="block mb-1">Foto posizione nodo (solo master, salvata in bassa risoluzione)</span>

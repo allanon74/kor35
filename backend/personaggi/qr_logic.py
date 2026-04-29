@@ -332,7 +332,12 @@ def applica_effetto_nodo_scan(personaggio, nodo) -> Dict[str, Any]:
     - Maggiore: reward x2
     Dopo la scansione imposta cooldown random 5..25 min e muta stato (10% MAG).
     """
-    from .models import TIPO_NODO_MAGGIORE, TIPO_NODO_MINORE
+    from .models import (
+        NODO_REWARD_CREDITI,
+        NODO_REWARD_POOL,
+        TIPO_NODO_MAGGIORE,
+        TIPO_NODO_MINORE,
+    )
 
     now = timezone.now()
     if nodo.disponibile_dal and now < nodo.disponibile_dal:
@@ -345,35 +350,80 @@ def applica_effetto_nodo_scan(personaggio, nodo) -> Dict[str, Any]:
     rewards: Dict[str, Any] = {"era_abbreviazione": abbr, "tipo_nodo_pre": nodo.tipo_nodo}
 
     with transaction.atomic():
-        if abbr == "eroi":
-            delta = personaggio.regola_risorsa_staff("TEO", mult, motivo="Nodo scansionato")
-            rewards["pool"] = {"sigla": "TEO", "delta": mult, "valore_corrente": delta}
-        elif abbr == "rocche":
-            delta = personaggio.regola_risorsa_staff("SIW", mult, motivo="Nodo scansionato")
-            rewards["pool"] = {"sigla": "SIW", "delta": mult, "valore_corrente": delta}
-        elif abbr in ("verità", "verita"):
-            delta = personaggio.regola_risorsa_staff("ROT", mult, motivo="Nodo scansionato")
-            rewards["pool"] = {"sigla": "ROT", "delta": mult, "valore_corrente": delta}
-        elif abbr == "imperatore":
-            cred = 25 * mult
-            personaggio.modifica_crediti(cred, "Nodo scansionato")
-            rewards["crediti"] = cred
-        elif abbr == "silenzio":
-            delta = personaggio.regola_risorsa_staff("AST", mult, motivo="Nodo scansionato")
-            rewards["pool"] = {"sigla": "AST", "delta": mult, "valore_corrente": delta}
-        elif abbr == "famiglie":
-            delta = personaggio.regola_risorsa_staff("MUT", mult, motivo="Nodo scansionato")
-            rewards["pool"] = {"sigla": "MUT", "delta": mult, "valore_corrente": delta}
-        elif abbr == "paradossi":
-            delta = personaggio.regola_risorsa_staff("AVA", mult, motivo="Nodo scansionato")
-            rewards["pool"] = {"sigla": "AVA", "delta": mult, "valore_corrente": delta}
-        else:
-            rewards["note"] = "Nessuna reward configurata per questa era."
+        # Prima scelta: configurazione DB (reward_config) sul nodo.
+        # Fallback legacy hardcoded mantenuto per i nodi preesistenti/non configurati.
+        applied_from_config = False
+        cfg = getattr(nodo, "reward_config", None)
+        if cfg and getattr(personaggio, "era_id", None):
+            regola = (
+                cfg.regole_era.select_related("statistica_pool")
+                .filter(era_id=personaggio.era_id)
+                .first()
+            )
+            if regola:
+                delta_effettivo = int(regola.delta_base or 0) * mult
+                if regola.tipo_reward == NODO_REWARD_POOL and regola.statistica_pool_id and delta_effettivo:
+                    sigla = (regola.statistica_pool.sigla or "").strip().upper()
+                    delta = personaggio.regola_risorsa_staff(sigla, delta_effettivo, motivo="Nodo scansionato (config)")
+                    rewards["pool"] = {"sigla": sigla, "delta": delta_effettivo, "valore_corrente": delta}
+                    rewards["reward_source"] = "config"
+                    applied_from_config = True
+                elif regola.tipo_reward == NODO_REWARD_CREDITI and delta_effettivo:
+                    personaggio.modifica_crediti(delta_effettivo, "Nodo scansionato (config)")
+                    rewards["crediti"] = delta_effettivo
+                    rewards["reward_source"] = "config"
+                    applied_from_config = True
 
-        cd_minutes = random.randint(5, 25)
+        if not applied_from_config:
+            # Fallback legacy hardcoded (retrocompatibilità):
+            # usato quando il nodo non ha reward_config o la config non copre l'era corrente.
+            rewards["reward_source"] = "fallback_hardcoded"
+            if abbr == "eroi":
+                delta = personaggio.regola_risorsa_staff("TEO", mult, motivo="Nodo scansionato")
+                rewards["pool"] = {"sigla": "TEO", "delta": mult, "valore_corrente": delta}
+            elif abbr == "rocche":
+                delta = personaggio.regola_risorsa_staff("SIW", mult, motivo="Nodo scansionato")
+                rewards["pool"] = {"sigla": "SIW", "delta": mult, "valore_corrente": delta}
+            elif abbr in ("verità", "verita"):
+                delta = personaggio.regola_risorsa_staff("ROT", mult, motivo="Nodo scansionato")
+                rewards["pool"] = {"sigla": "ROT", "delta": mult, "valore_corrente": delta}
+            elif abbr in ("imperatore", "capitale"):
+                cred = 25 * mult
+                personaggio.modifica_crediti(cred, "Nodo scansionato")
+                rewards["crediti"] = cred
+            elif abbr == "silenzio":
+                delta = personaggio.regola_risorsa_staff("AST", mult, motivo="Nodo scansionato")
+                rewards["pool"] = {"sigla": "AST", "delta": mult, "valore_corrente": delta}
+            elif abbr == "famiglie":
+                delta = personaggio.regola_risorsa_staff("MUT", mult, motivo="Nodo scansionato")
+                rewards["pool"] = {"sigla": "MUT", "delta": mult, "valore_corrente": delta}
+            elif abbr == "paradossi":
+                delta = personaggio.regola_risorsa_staff("AVA", mult, motivo="Nodo scansionato")
+                rewards["pool"] = {"sigla": "AVA", "delta": mult, "valore_corrente": delta}
+            else:
+                rewards["note"] = "Nessuna reward configurata per questa era."
+
+        # Cooldown da configurazione (se presente), altrimenti fallback legacy 5..25.
+        if cfg:
+            cd_min = max(1, int(cfg.cooldown_minuti_min or 5))
+            cd_max = max(cd_min, int(cfg.cooldown_minuti_max or 25))
+            cd_minutes = random.randint(cd_min, cd_max)
+        else:
+            cd_minutes = random.randint(5, 25)
         nodo.ultima_scansione_at = now
         nodo.disponibile_dal = now + timedelta(minutes=cd_minutes)
-        nodo.tipo_nodo = TIPO_NODO_MAGGIORE if random.random() < 0.10 else TIPO_NODO_MINORE
+        # Trasformazione tipo nodo:
+        # - se esiste reward_config usa le probabilità configurate
+        # - altrimenti mantiene fallback legacy 10% MAG / 90% MIN
+        if cfg:
+            p_min_to_mag = max(0, min(100, int(cfg.prob_minore_to_maggiore or 0))) / 100.0
+            p_mag_to_min = max(0, min(100, int(cfg.prob_maggiore_to_minore or 0))) / 100.0
+            if nodo.tipo_nodo == TIPO_NODO_MINORE:
+                nodo.tipo_nodo = TIPO_NODO_MAGGIORE if random.random() < p_min_to_mag else TIPO_NODO_MINORE
+            else:
+                nodo.tipo_nodo = TIPO_NODO_MINORE if random.random() < p_mag_to_min else TIPO_NODO_MAGGIORE
+        else:
+            nodo.tipo_nodo = TIPO_NODO_MAGGIORE if random.random() < 0.10 else TIPO_NODO_MINORE
         nodo.save(update_fields=["ultima_scansione_at", "disponibile_dal", "tipo_nodo", "updated_at"])
 
     rewards["ok"] = True

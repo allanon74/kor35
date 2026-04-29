@@ -29,7 +29,7 @@ from .models import (
     AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
-    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, A_vista, Mattone, InnescoTimer,
+    abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
     AURA, 
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -1600,9 +1600,24 @@ class NodoSerializer(serializers.ModelSerializer):
         )
 
 
+class NodoRewardConfigStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NodoRewardConfig
+        fields = (
+            "id",
+            "nome",
+            "attiva",
+            "prob_minore_to_maggiore",
+            "prob_maggiore_to_minore",
+            "cooldown_minuti_min",
+            "cooldown_minuti_max",
+        )
+
+
 class NodoStaffSerializer(serializers.ModelSerializer):
     foto_posizione_url = serializers.SerializerMethodField()
     has_qrcode = serializers.BooleanField(read_only=True)
+    reward_config_nome = serializers.CharField(source="reward_config.nome", read_only=True)
 
     def get_foto_posizione_url(self, obj):
         if not obj.foto_posizione:
@@ -1625,6 +1640,8 @@ class NodoStaffSerializer(serializers.ModelSerializer):
             "foto_posizione",
             "foto_posizione_url",
             "campagna",
+            "reward_config",
+            "reward_config_nome",
             "has_qrcode",
         )
         read_only_fields = ("campagna",)

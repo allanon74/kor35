@@ -11,7 +11,7 @@ from django.utils import timezone
 from .models import (
     CARATTERISTICA, CreditoMovimento, Dichiarazione, OggettoStatisticaBase, Personaggio, PersonaggioCerimoniale, 
     PersonaggioLog, PersonaggioStatisticaBase, QrCode, Oggetto, OggettoCaratteristica, 
-    Manifesto, Nodo, OggettoStatistica, 
+    Manifesto, Nodo, NodoRewardConfig, NodoRewardRegolaEra, OggettoStatistica, 
     Attivata, AttivataStatisticaBase, TipologiaPersonaggio,
     Infusione, Tessitura, 
     # NUOVI MODELLI INTERMEDI
@@ -692,9 +692,34 @@ class ManifestoAdmin(SModelAdmin):
 
 @admin.register(Nodo)
 class NodoAdmin(SModelAdmin):
-    list_display = ("id", "nome", "tipo_nodo", "disponibile_dal", "campagna")
+    list_display = ("id", "nome", "tipo_nodo", "reward_config", "disponibile_dal", "campagna")
     readonly_fields = ("id", "data_creazione", "ultima_scansione_at")
     summernote_fields = ["testo"]
+    autocomplete_fields = ("reward_config",)
+
+
+class NodoRewardRegolaEraInline(admin.TabularInline):
+    model = NodoRewardRegolaEra
+    extra = 1
+    autocomplete_fields = ("era", "statistica_pool")
+    fields = ("era", "tipo_reward", "statistica_pool", "delta_base")
+
+
+@admin.register(NodoRewardConfig)
+class NodoRewardConfigAdmin(SModelAdmin):
+    list_display = (
+        "nome",
+        "campagna",
+        "attiva",
+        "prob_minore_to_maggiore",
+        "prob_maggiore_to_minore",
+        "cooldown_minuti_min",
+        "cooldown_minuti_max",
+        "updated_at",
+    )
+    list_filter = ("attiva", "campagna")
+    search_fields = ("nome", "descrizione")
+    inlines = (NodoRewardRegolaEraInline,)
 
 
 @admin.register(InnescoTimer)

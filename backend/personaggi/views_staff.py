@@ -14,7 +14,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
-    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, InnescoTimer,
+    QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
     A_vista, Attivata,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
@@ -52,6 +52,7 @@ from .serializers import (
     DichiarazioneStaffSerializer,
     ManifestoStaffSerializer,
     NodoStaffSerializer,
+    NodoRewardConfigStaffSerializer,
     InnescoTimerStaffSerializer,
     A_vistaSerializer,
     AttivataSerializer,
@@ -822,6 +823,23 @@ class NodoStaffViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         camp = _get_active_campaign(self.request) or _get_default_campaign()
         serializer.save(campagna=camp)
+
+
+class NodoRewardConfigStaffViewSet(viewsets.ReadOnlyModelViewSet):
+    """Lista configurazioni reward nodo disponibili per l'editor staff nodi."""
+
+    serializer_class = NodoRewardConfigStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+    def get_queryset(self):
+        qs = NodoRewardConfig.objects.filter(attiva=True).order_by("nome")
+        active = _get_active_campaign(self.request)
+        base = _get_default_campaign()
+        if not active:
+            return qs
+        if base and active.id != base.id:
+            return qs.filter(Q(campagna=active) | Q(campagna=base))
+        return qs.filter(campagna=active)
 
 
 class InnescoTimerStaffViewSet(viewsets.ModelViewSet):

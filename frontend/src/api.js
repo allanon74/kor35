@@ -1692,6 +1692,8 @@ export const staffDeleteManifesto = (id, onLogout) =>
 
 export const staffGetNodi = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/nodi/', { method: 'GET' }, onLogout);
+export const staffGetNodoRewardConfigs = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/nodi-reward-config/', { method: 'GET' }, onLogout);
 export const staffCreateNodo = (data, onLogout) =>
   fetchAuthenticated('/api/personaggi/api/staff/nodi/', { method: 'POST', body: data }, onLogout);
 export const staffUpdateNodo = (id, data, onLogout) =>
