@@ -62,7 +62,7 @@ from datetime import timedelta, datetime
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, exceptions
 from rest_framework.authtoken.admin import User
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
@@ -273,7 +273,7 @@ class CampagnaUtenteAdminViewSet(viewsets.ModelViewSet):
             return
         role = _user_campaign_role(request.user, campagna)
         if role != CAMPAGNA_ROLE_HEAD_MASTER:
-            raise permissions.PermissionDenied(
+            raise exceptions.PermissionDenied(
                 "Solo i superuser Django o gli Head Master della campagna possono gestire le membership."
             )
 
