@@ -2,10 +2,7 @@
 
 ## Base URL
 
-Usare base URL configurabile:
-
-- rete edge locale (es. `http://10.42.0.1`)
-- rete casa/lab
+Valore di default nel codice: `https://www.kor35.it/` (produzione). Per laboratorio si può temporaneamente cambiare in `Kor35ApiConfig` e ricompilare.
 
 ## Headers richiesti
 

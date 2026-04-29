@@ -41,7 +41,7 @@ Questo progetto e' in `extra/local-artifacts/`: viene versionato su GitHub ma vi
 
 1. Apri `extra/local-artifacts/wearos-kor35` in Android Studio.
 2. Lascia sincronizzare Gradle.
-3. Configura endpoint in `Kor35ApiConfig`.
+3. L’endpoint di default è `https://www.kor35.it/` in `Kor35ApiConfig` (modificalo solo per test fuori produzione).
 4. Esegui su emulatore/dispositivo Wear OS.
 5. Per release APK verso deploy KOR35 usa `scripts/release_wearos_apk.sh`.
 
