@@ -462,7 +462,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const [notification, setNotification] = useState(null);
   const ws = useRef(null);
   useEffect(() => {
-    const wsUrl = window.location.hostname === 'localhost' ? 'ws://127.0.0.1:8000/ws/notifications/' : `wss://www.kor35.it/ws/notifications/`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/notifications/`;
     if (ws.current) ws.current.close();
     ws.current = new WebSocket(wsUrl);
     ws.current.onmessage = (e) => {
@@ -474,6 +475,10 @@ export const CharacterProvider = ({ children, onLogout }) => {
 
         if (action === 'TIMER_SYNC' && payload) {
             updateTimerState(payload);
+        }
+
+        if (action === 'WATCH_SYNC' && payload?.personaggio_id && String(payload.personaggio_id) === String(selectedCharacterId)) {
+            queryClient.invalidateQueries({ queryKey: ['personaggio', String(selectedCharacterId)] });
         }
 
         if (action === 'TIMER_INNESCO_SYNC' && payload) {

@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff
+from . import views, views_staff, watch_views
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -100,6 +100,16 @@ router.register(r'staff/campagne-utenti', views.CampagnaUtenteAdminViewSet, base
 router.register(r'staff/campagne-feature-policy', views.CampagnaFeaturePolicyAdminViewSet, basename='staff-campagne-feature-policy')
 
 urlpatterns = [
+    path('api/device/watch/pair/start/', watch_views.WatchPairStartView.as_view(), name='watch-pair-start'),
+    path('api/device/watch/pair/status/', watch_views.WatchPairStatusView.as_view(), name='watch-pair-status'),
+    path('api/device/watch/pair/confirm/', watch_views.WatchPairConfirmView.as_view(), name='watch-pair-confirm'),
+    path('api/device/watch/disconnect/', watch_views.WatchDisconnectView.as_view(), name='watch-disconnect'),
+    path('api/device/watch/status/', watch_views.WatchBindingStatusView.as_view(), name='watch-status'),
+    path('api/device/watch/profile/', watch_views.WatchProfileView.as_view(), name='watch-profile'),
+    path('api/device/watch/sync/', watch_views.WatchSyncView.as_view(), name='watch-sync'),
+    path('api/device/watch/ota/manifest/', watch_views.WatchOtaManifestView.as_view(), name='watch-ota-manifest'),
+    path('api/device/watch/wearos/manifest/', watch_views.WatchWearManifestView.as_view(), name='watch-wearos-manifest'),
+
     
     path('auth/', MyAuthToken.as_view()),
     path('csrf/', get_csrf_token),

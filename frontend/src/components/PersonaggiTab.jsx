@@ -145,6 +145,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             tipologia: tipoId,
             testo: char.testo || '',
             costume: char.costume || '',
+            watch_enabled: !!char.watch_enabled,
             campagna: char.campagna || '',
             era: typeof char.era === 'object' ? (char.era?.id || '') : (char.era || ''),
             prefettura: typeof char.prefettura === 'object' ? (char.prefettura?.id || '') : (char.prefettura || ''),
@@ -742,6 +743,14 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         value={formData.costume} 
                                         onChange={val => setFormData({...formData, costume: val})}
                                     />
+                                    <label className="flex items-center gap-2 text-sm text-gray-200">
+                                        <input
+                                            type="checkbox"
+                                            checked={!!formData.watch_enabled}
+                                            onChange={(e) => setFormData({ ...formData, watch_enabled: e.target.checked })}
+                                        />
+                                        Abilita uso smartwatch per questo personaggio
+                                    </label>
                                 </div>
                             )}
                             {canMoveCharacterCampaign && (

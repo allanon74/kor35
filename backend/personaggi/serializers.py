@@ -58,6 +58,7 @@ from .models import (
     CampagnaUtente,
     CampagnaFeaturePolicy,
     CAMPAGNA_ROLE_HEAD_MASTER,
+    WatchDeviceBinding,
 )
 
 # -----------------------------------------------------------------------------
@@ -1883,6 +1884,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     prefettura = PrefetturaSerializer(read_only=True)
     prefettura_esterna = serializers.BooleanField(required=False)
     avatar_url = serializers.SerializerMethodField()
+    watch_enabled = serializers.BooleanField(read_only=True)
+    watch_binding = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -1905,10 +1908,28 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'can_edit_era',
             'era', 'prefettura', 'prefettura_esterna',
             'avatar_url',
+            'watch_enabled', 'watch_binding',
         )
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))
+
+    def get_watch_binding(self, obj):
+        binding = (
+            WatchDeviceBinding.objects.filter(personaggio=obj, is_active=True)
+            .order_by("-updated_at")
+            .first()
+        )
+        if not binding:
+            return None
+        return {
+            "id": str(binding.id),
+            "device_id": binding.device_id,
+            "transport_mode": binding.transport_mode,
+            "firmware_version": binding.firmware_version,
+            "last_seen_at": binding.last_seen_at.isoformat() if binding.last_seen_at else None,
+            "is_active": bool(binding.is_active),
+        }
 
     def to_representation(self, instance):
         """
@@ -2160,6 +2181,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             stats.append({
                 'sigla': stat.sigla,
                 'nome': stat.nome,
+                'colore': getattr(stat, 'colore', None),
                 'valore_max': val_max,
                 'valore_corrente': val_current
             })
@@ -2178,6 +2200,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             out.append({
                 'sigla': stat.sigla,
                 'nome': stat.nome,
+                'colore': getattr(stat, 'colore', None),
                 'descrizione': stat.descrizione or '',
                 'valore_max': max_v,
                 'valore_corrente': cur,
@@ -2315,6 +2338,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'tipologia', 'tipologia_nome', 
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
+            'watch_enabled',
             'segno_zodiacale', 'segno_zodiacale_nome',
             'campagna', 'campagna_nome',
             'era', 'prefettura', 'prefettura_esterna', 'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',

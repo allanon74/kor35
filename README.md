@@ -6,6 +6,8 @@ sito kor35
 - [Panoramica rapida](#panoramica-rapida)
 - [Struttura repository](#struttura-repository)
 - [Deploy sicuro (GitHub Actions)](#deploy-sicuro-github-actions)
+- [OTA smartwatch (T-Watch)](#ota-smartwatch-t-watch)
+- [Wear OS app (distribuzione APK)](#wear-os-app-distribuzione-apk)
 - [Backup DB (produzione)](#backup-db-produzione)
 - [Sviluppo locale in WSL](#sviluppo-locale-in-wsl)
 - [Setup Da Zero: Deploy Automatico GitHub](#setup-da-zero-deploy-automatico-github)
@@ -131,6 +133,110 @@ Altri accorgimenti:
 ### Nota importante
 
 Il deploy è intenzionalmente **main-only**: anche da `workflow_dispatch` viene rifiutato qualsiasi `ref` diverso da `main`.
+
+## OTA smartwatch (T-Watch)
+
+Firmware OTA T-Watch 2021:
+
+- sorgente firmware locale (versionato su GitHub ma escluso dai server in deploy): `extra/local-artifacts/lilygo-twatch-2021/`
+- artefatti OTA (versionati su GitHub ma esclusi dai server in deploy): `extra/ota-artifacts/lilygo-twatch-2021/`
+- artefatto OTA deployato verso `react_build/watch-ota/...`: `extra/ota-artifacts/lilygo-twatch-2021/firmware.bin`
+- script release: `scripts/release_watch_ota.sh`
+
+### Flusso operativo standard
+
+1. Compila e prepara il binario OTA:
+
+```bash
+cd /home/django/progetti/kor35
+./scripts/release_watch_ota.sh
+```
+
+2. Verifica che esista:
+
+```bash
+ls -lh extra/ota-artifacts/lilygo-twatch-2021/firmware.bin
+```
+
+3. Commit/push su `main`.
+
+4. Il workflow `.github/workflows/deploy.yml` copia automaticamente `firmware.bin` su:
+   - production (`react_build/watch-ota/lilygo-twatch-2021/firmware.bin`)
+   - mirror raspberry (`react_build/watch-ota/lilygo-twatch-2021/firmware.bin`)
+
+### Note
+
+- Se `firmware.bin` non e' presente, il deploy fa **skip** dello step OTA senza fallire.
+- Lo script usa PlatformIO CLI (`pio`) e l'env `ttgo-t-watch` (override con `PIO_ENV=...`).
+
+## Wear OS app (distribuzione APK)
+
+Distribuzione APK Wear OS:
+
+- sorgente app locale (versionato su GitHub ma escluso dai server in deploy): `extra/local-artifacts/wearos-kor35/`
+- artefatti APK (versionati su GitHub ma esclusi dai server in deploy): `extra/ota-artifacts/wearos-kor35/`
+- script release APK: `scripts/release_wearos_apk.sh`
+
+### Flusso operativo standard
+
+1. Compila e prepara l'APK:
+
+```bash
+cd /home/django/progetti/kor35
+./scripts/release_wearos_apk.sh
+```
+
+2. Verifica che esista:
+
+```bash
+ls -lh extra/ota-artifacts/wearos-kor35/app-release.apk
+```
+
+3. Commit/push su `main`.
+
+4. Il workflow `.github/workflows/deploy.yml` copia automaticamente `app-release.apk` su:
+   - production (`react_build/watch-apps/wearos-kor35/app-release.apk`)
+   - mirror raspberry (`react_build/watch-apps/wearos-kor35/app-release.apk`)
+
+5. Nella web app, se il personaggio ha `watch_enabled`, in sezione Devices compare il pulsante download Wear OS.
+
+### Setup WSL per build APK (Gradle)
+
+Se lavori da WSL e il progetto Wear e' sotto `/home/...`, usa tool Linux (non Gradle/JDK Windows).
+
+1. Installa prerequisiti:
+
+```bash
+sudo apt update
+sudo apt install -y openjdk-17-jdk zip unzip curl
+```
+
+2. Installa SDKMAN + Gradle moderno:
+
+```bash
+curl -s "https://get.sdkman.io" | bash
+source "$HOME/.sdkman/bin/sdkman-init.sh"
+sdk install gradle 8.7
+gradle -v
+```
+
+3. Genera il wrapper nel progetto Wear:
+
+```bash
+cd /home/django/progetti/kor35/extra/local-artifacts/wearos-kor35
+gradle wrapper --gradle-version 8.7
+```
+
+4. Esegui release APK:
+
+```bash
+cd /home/django/progetti/kor35
+./scripts/release_wearos_apk.sh
+```
+
+Note:
+- Se Android Studio e' installato su Windows, non usare JDK Windows per build Gradle su progetto WSL.
+- Se lo script segnala problemi download bootstrap Gradle (403/proxy), genera prima `gradlew` con i comandi sopra.
 
 ## Backup DB (produzione)
 

@@ -160,7 +160,11 @@ omada_data/
 omada_logs/
 
 # Root cleanup / quarantine area
-extra/local-artifacts/
+extra/local-artifacts/*
+!extra/local-artifacts/lilygo-twatch-2021/
+!extra/local-artifacts/lilygo-twatch-2021/**
+!extra/local-artifacts/wearos-kor35/
+!extra/local-artifacts/wearos-kor35/**
 
 # Backend environment profiles (secrets)
 backend/.env

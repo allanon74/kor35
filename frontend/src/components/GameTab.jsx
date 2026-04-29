@@ -10,7 +10,7 @@ import {
     useOptimisticStatChange,
     useConsumaRisorsa,
 } from '../hooks/useGameData';
-import { gameComaControl } from '../api';
+import { gameComaControl, watchPairConfirm, watchDisconnect, watchWearManifest } from '../api';
 
 import ActiveItemWidget from './ActiveItemWidget'; 
 
@@ -386,6 +386,10 @@ const GameTab = ({ onNavigate }) => {
     const { selectedCharacterData: char, unreadCount, refreshCharacterData, onLogout } = useCharacter();
     const [favorites, setFavorites] = useState([]);
     const [comaBusy, setComaBusy] = useState(false);
+    const [pairCodeInput, setPairCodeInput] = useState('');
+    const [pairTransportMode, setPairTransportMode] = useState('WIFI');
+    const [watchBusy, setWatchBusy] = useState(false);
+    const [wearManifest, setWearManifest] = useState(null);
     
     const statMutation = useOptimisticStatChange();
     const risorsaMutation = useConsumaRisorsa();
@@ -610,6 +614,57 @@ const GameTab = ({ onNavigate }) => {
     const heavyMax = statOgp ? statOgp.valore_max : 0;
     const heavyConsumers = char.oggetti.filter(i => i.is_equipaggiato && i.is_pesante);
     const heavyUsed = heavyConsumers.length;
+    const watchBinding = char.watch_binding || null;
+
+    const handleWatchPair = async () => {
+        if (!pairCodeInput.trim()) {
+            alert('Inserisci il codice del device in attesa.');
+            return;
+        }
+        setWatchBusy(true);
+        try {
+            await watchPairConfirm(char.id, pairCodeInput, pairTransportMode, onLogout);
+            setPairCodeInput('');
+            await refreshCharacterData();
+        } catch (e) {
+            alert(e?.message || 'Errore pairing smartwatch.');
+        } finally {
+            setWatchBusy(false);
+        }
+    };
+
+    const handleWatchDisconnect = async () => {
+        setWatchBusy(true);
+        try {
+            await watchDisconnect(char.id, onLogout);
+            await refreshCharacterData();
+        } catch (e) {
+            alert(e?.message || 'Errore disconnessione smartwatch.');
+        } finally {
+            setWatchBusy(false);
+        }
+    };
+
+    useEffect(() => {
+        let mounted = true;
+        const loadWearManifest = async () => {
+            if (!char?.id || !char?.watch_enabled) {
+                if (mounted) setWearManifest(null);
+                return;
+            }
+            try {
+                const data = await watchWearManifest(char.id, onLogout);
+                if (!mounted) return;
+                setWearManifest(data?.enabled ? data : null);
+            } catch {
+                if (mounted) setWearManifest(null);
+            }
+        };
+        loadWearManifest();
+        return () => {
+            mounted = false;
+        };
+    }, [char?.id, char?.watch_enabled, onLogout]);
 
     return (
         <div className="pb-24 px-2 space-y-6 animate-fadeIn text-gray-100 pt-2">
@@ -829,6 +884,74 @@ const GameTab = ({ onNavigate }) => {
                 <h3 className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold flex items-center gap-2 mb-2 ml-1">
                     <Zap size={12} /> Dispositivi Attivi
                 </h3>
+                <div className="mb-3 bg-gray-900/60 border border-emerald-800/40 rounded-lg p-3">
+                    {!char.watch_enabled ? (
+                        <p className="text-xs text-gray-300">
+                            Smartwatch non abilitato per questo personaggio. Chiedi allo staff di attivare il flag.
+                        </p>
+                    ) : (
+                        <div className="space-y-2">
+                            <div className="text-xs text-emerald-200 font-semibold">Devices</div>
+                            {wearManifest?.apk_url ? (
+                                <div className="text-xs text-gray-300 bg-gray-800/60 border border-gray-700 rounded p-2">
+                                    App Wear OS disponibile (v{wearManifest.version || 'n/d'}). Apri da telefono Android e installa sul dispositivo Wear OS.
+                                    <div className="mt-2">
+                                        <a
+                                            href={wearManifest.apk_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex px-3 py-2 rounded bg-indigo-900/70 hover:bg-indigo-800 text-xs font-bold"
+                                        >
+                                            Scarica app Wear OS
+                                        </a>
+                                    </div>
+                                </div>
+                            ) : null}
+                            {watchBinding ? (
+                                <>
+                                    <div className="text-xs text-gray-300">
+                                        Connesso: <span className="font-mono text-white">{watchBinding.device_id}</span> · Trasporto: {watchBinding.transport_mode}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        disabled={watchBusy}
+                                        onClick={handleWatchDisconnect}
+                                        className="px-3 py-2 rounded bg-red-900/60 hover:bg-red-800 text-xs font-bold disabled:opacity-50"
+                                    >
+                                        Disconnetti dispositivo
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex flex-col md:flex-row gap-2">
+                                        <input
+                                            value={pairCodeInput}
+                                            onChange={(e) => setPairCodeInput(e.target.value.toUpperCase().slice(0, 12))}
+                                            placeholder="Codice device (es. A7K9Q2)"
+                                            className="bg-gray-800 border border-gray-600 rounded px-3 py-2 text-xs font-mono text-white w-full md:w-64"
+                                        />
+                                        <select
+                                            value={pairTransportMode}
+                                            onChange={(e) => setPairTransportMode(e.target.value)}
+                                            className="bg-gray-800 border border-gray-600 rounded px-2 py-2 text-xs"
+                                        >
+                                            <option value="WIFI">Wi-Fi diretto</option>
+                                            <option value="BT_BRIDGE">Bluetooth bridge</option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            disabled={watchBusy || !pairCodeInput.trim()}
+                                            onClick={handleWatchPair}
+                                            className="px-3 py-2 rounded bg-emerald-900/60 hover:bg-emerald-800 text-xs font-bold disabled:opacity-50"
+                                        >
+                                            Connetti Device al personaggio attivo
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
                 <div className="space-y-3">
                     {groupedActiveItems.map((group) => (
                         <div key={`act-host-${group.host?.id || group.hostName}`} className="p-2 rounded-lg border border-gray-700/70 bg-gray-900/40">

@@ -1915,6 +1915,44 @@ export const gameComaControl = (charId, action, onLogout) =>
         body: JSON.stringify({ char_id: charId, action }),
     }, onLogout);
 
+export const watchGetStatus = (charId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/device/watch/status/?char_id=${encodeURIComponent(String(charId))}`,
+    { method: 'GET' },
+    onLogout
+  );
+
+export const watchPairConfirm = (charId, code, transportMode, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/device/watch/pair/confirm/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        char_id: charId,
+        code: String(code || '').trim().toUpperCase(),
+        transport_mode: transportMode || 'WIFI',
+      }),
+    },
+    onLogout
+  );
+
+export const watchDisconnect = (charId, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/device/watch/disconnect/',
+    {
+      method: 'POST',
+      body: JSON.stringify({ char_id: charId }),
+    },
+    onLogout
+  );
+
+export const watchWearManifest = (charId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/device/watch/wearos/manifest/?char_id=${encodeURIComponent(String(charId))}`,
+    { method: 'GET' },
+    onLogout
+  );
+
 /** Staff: elenco personaggi con pool risorse (FRT, …). */
 export const staffGetRisorsePool = (onLogout) =>
     fetchAuthenticated('/api/personaggi/api/staff/risorse-pool/', { method: 'GET' }, onLogout);

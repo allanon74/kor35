@@ -289,6 +289,20 @@ EDGE_SYNC_STATE_FILE = env(
     "EDGE_SYNC_STATE_FILE",
     default=str(BASE_DIR / ".edge_sync_state.json"),
 )
+
+# OTA smartwatch (T-Watch): manifest + firmware bin serviti da frontend/nginx.
+WATCH_OTA_ENABLED = env("WATCH_OTA_ENABLED", default="true").strip().lower() == "true"
+WATCH_OTA_VERSION = env("WATCH_OTA_VERSION", default="0.1.0").strip()
+WATCH_OTA_BIN_PATH = env(
+    "WATCH_OTA_BIN_PATH",
+    default="/watch-ota/lilygo-twatch-2021/firmware.bin",
+).strip()
+WATCH_WEAR_ENABLED = env("WATCH_WEAR_ENABLED", default="true").strip().lower() == "true"
+WATCH_WEAR_VERSION = env("WATCH_WEAR_VERSION", default="0.1.0").strip()
+WATCH_WEAR_APK_PATH = env(
+    "WATCH_WEAR_APK_PATH",
+    default="/watch-apps/wearos-kor35/app-release.apk",
+).strip()
 # Risposta JSON con messaggio errore DB completo (endpoint protetto da EdgeToken)
 EDGE_SYNC_VERBOSE_ERRORS = env.bool("EDGE_SYNC_VERBOSE_ERRORS", default=True)
 

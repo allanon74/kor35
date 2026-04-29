@@ -2857,6 +2857,7 @@ class Personaggio(Inventario):
     prefettura = models.ForeignKey("Prefettura", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     prefettura_esterna = models.BooleanField(default=False)
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="personaggi", default=get_default_campagna_id, db_index=True)
+    watch_enabled = models.BooleanField(default=False, db_index=True)
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
@@ -4956,6 +4957,78 @@ class UserSocialPreference(SyncableModel, models.Model):
         if self.preferred_personaggio:
             return f"{self.user.username} -> {self.preferred_personaggio.nome}"
         return f"{self.user.username} -> Nessun preferito"
+
+
+WATCH_TRANSPORT_WIFI = "WIFI"
+WATCH_TRANSPORT_BT_BRIDGE = "BT_BRIDGE"
+WATCH_TRANSPORT_CHOICES = [
+    (WATCH_TRANSPORT_WIFI, "Wi-Fi diretto"),
+    (WATCH_TRANSPORT_BT_BRIDGE, "Bluetooth bridge"),
+]
+
+
+class WatchPairingCode(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="watch_pairing_codes", default=get_default_campagna_id, db_index=True)
+    device_id = models.CharField(max_length=96, db_index=True)
+    code_hash = models.CharField(max_length=128, db_index=True)
+    expires_at = models.DateTimeField(db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Watch Pairing Code"
+        verbose_name_plural = "Watch Pairing Codes"
+        indexes = [
+            models.Index(fields=["device_id", "expires_at"]),
+            models.Index(fields=["campagna", "used_at"]),
+        ]
+
+
+class WatchDeviceBinding(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="watch_bindings", default=get_default_campagna_id, db_index=True)
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="watch_bindings", db_index=True)
+    device_id = models.CharField(max_length=96, db_index=True)
+    pair_token = models.CharField(max_length=96, unique=True, db_index=True)
+    firmware_version = models.CharField(max_length=64, blank=True, default="")
+    transport_mode = models.CharField(max_length=16, choices=WATCH_TRANSPORT_CHOICES, default=WATCH_TRANSPORT_WIFI)
+    is_active = models.BooleanField(default=True, db_index=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Watch Device Binding"
+        verbose_name_plural = "Watch Device Bindings"
+        indexes = [
+            models.Index(fields=["personaggio", "is_active"]),
+            models.Index(fields=["device_id", "is_active"]),
+            models.Index(fields=["campagna", "is_active"]),
+        ]
+
+
+class WatchDeviceEventLog(SyncableModel, models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    binding = models.ForeignKey("WatchDeviceBinding", on_delete=models.CASCADE, related_name="event_logs")
+    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="watch_event_logs", db_index=True)
+    client_event_id = models.CharField(max_length=80, db_index=True)
+    stat_sigla = models.CharField(max_length=16, blank=True, default="")
+    delta = models.SmallIntegerField(default=0)
+    applied = models.BooleanField(default=False, db_index=True)
+    server_payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Watch Device Event Log"
+        verbose_name_plural = "Watch Device Event Logs"
+        unique_together = [("binding", "client_event_id")]
+        indexes = [
+            models.Index(fields=["personaggio", "created_at"]),
+            models.Index(fields=["binding", "applied"]),
+        ]
 
 
 class ArcanaSSOIdentity(models.Model):

@@ -127,6 +127,56 @@ jobs:
           name: frontend-dist
           path: dist-upload
 
+      - name: Rsync firmware OTA verso produzione
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+          PORT: ${{ secrets.SERVER_SSH_PORT }}
+          PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+        run: |
+          set -euo pipefail
+          SRC="extra/ota-artifacts/lilygo-twatch-2021/firmware.bin"
+          if [ ! -f "$SRC" ]; then
+            echo "Firmware OTA non presente ($SRC): skip upload."
+            exit 0
+          fi
+          REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
+          REMOTE_DIR="${REMOTE_BASE}/config/docker/nginx-docker/react_build/watch-ota/lilygo-twatch-2021"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
+          rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/firmware.bin"
+
+      - name: Rsync APK Wear OS verso produzione
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+          PORT: ${{ secrets.SERVER_SSH_PORT }}
+          PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+        run: |
+          set -euo pipefail
+          SRC="extra/ota-artifacts/wearos-kor35/app-release.apk"
+          if [ ! -f "$SRC" ]; then
+            echo "APK Wear OS non presente ($SRC): skip upload."
+            exit 0
+          fi
+          REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
+          REMOTE_DIR="${REMOTE_BASE}/config/docker/nginx-docker/react_build/watch-apps/wearos-kor35"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
+          rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/app-release.apk"
+
       - name: Rsync frontend verso produzione
         if: needs.build-frontend.outputs.changed == 'true'
         env:
@@ -210,6 +260,8 @@ jobs:
               git reset --hard "${REF}"
             fi
             DEPLOYED_SHA="$(git rev-parse HEAD)"
+            # Cartelle firmware/app locali utili in repo (GitHub) ma non da tenere sul server.
+            rm -rf "${PROJECT_PATH}/extra/local-artifacts" "${PROJECT_PATH}/extra/ota-artifacts"
             export KOR35_BUILD_SHA="${DEPLOYED_SHA}"
             export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
             export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
@@ -261,6 +313,58 @@ jobs:
         with:
           name: frontend-dist
           path: dist-upload
+
+      - name: Rsync firmware OTA verso mirror
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
+          HOST: ${{ secrets.MIRROR_SERVER_HOST }}
+          USER: ${{ secrets.MIRROR_SERVER_USER }}
+          PORT: ${{ secrets.MIRROR_SERVER_SSH_PORT }}
+          ROOT_PATH: ${{ secrets.MIRROR_ROOT_PATH }}
+          BACKEND_PATH: ${{ secrets.MIRROR_BACKEND_PATH }}
+        run: |
+          set -euo pipefail
+          SRC="extra/ota-artifacts/lilygo-twatch-2021/firmware.bin"
+          if [ ! -f "$SRC" ]; then
+            echo "Firmware OTA non presente ($SRC): skip upload mirror."
+            exit 0
+          fi
+          REMOTE_BASE="${ROOT_PATH:-${BACKEND_PATH:-/home/pi/kor35-replica}}"
+          REMOTE_DIR="${REMOTE_BASE}/config/docker/nginx-docker/react_build/watch-ota/lilygo-twatch-2021"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
+          rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/firmware.bin"
+
+      - name: Rsync APK Wear OS verso mirror
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
+          HOST: ${{ secrets.MIRROR_SERVER_HOST }}
+          USER: ${{ secrets.MIRROR_SERVER_USER }}
+          PORT: ${{ secrets.MIRROR_SERVER_SSH_PORT }}
+          ROOT_PATH: ${{ secrets.MIRROR_ROOT_PATH }}
+          BACKEND_PATH: ${{ secrets.MIRROR_BACKEND_PATH }}
+        run: |
+          set -euo pipefail
+          SRC="extra/ota-artifacts/wearos-kor35/app-release.apk"
+          if [ ! -f "$SRC" ]; then
+            echo "APK Wear OS non presente ($SRC): skip upload mirror."
+            exit 0
+          fi
+          REMOTE_BASE="${ROOT_PATH:-${BACKEND_PATH:-/home/pi/kor35-replica}}"
+          REMOTE_DIR="${REMOTE_BASE}/config/docker/nginx-docker/react_build/watch-apps/wearos-kor35"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
+          rsync -avz -e "ssh $SSH_OPTS" "$SRC" "${USER}@${HOST}:${REMOTE_DIR}/app-release.apk"
 
       - name: Rsync frontend verso mirror
         if: needs.build-frontend.outputs.changed == 'true'
@@ -341,6 +445,8 @@ jobs:
               git reset --hard "${REF}"
             fi
             MIRROR_BACKEND_DEPLOYED_SHA="$(git rev-parse HEAD)"
+            # Cartelle firmware/app locali utili in repo (GitHub) ma non da tenere sul mirror.
+            rm -rf "${MIRROR_REPO_PATH}/extra/local-artifacts" "${MIRROR_REPO_PATH}/extra/ota-artifacts"
             export KOR35_BUILD_SHA="${MIRROR_BACKEND_DEPLOYED_SHA}"
             export KOR35_BUILD_VERSION="g$(git rev-parse --short HEAD)"
             export KOR35_BUILD_TIME="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
