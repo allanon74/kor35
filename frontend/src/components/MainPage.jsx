@@ -31,7 +31,6 @@ import TransazioniViewer from './TransazioniViewer.jsx';
 import GameTab from './GameTab.jsx';
 import JobRequestsWidget from './JobRequestsWidget.jsx'; 
 import PersonaggiTab from './PersonaggiTab.jsx';
-import StartPage from './StartPage.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
 
 // --- [MODIFICA] Import Modale Password ---
@@ -533,7 +532,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     if (tabDef) {
         const Component = tabDef.component;
         if (tabDef.id === 'personaggi') {
-            return <StartPage onLogout={onLogout} onSwitchToMaster={onSwitchToMaster} />;
+            return (
+                <PersonaggiTab
+                    onLogout={onLogout}
+                    onSelectChar={() => setActiveTab('game')}
+                />
+            );
         }
         
         if (!selectedCharacterId && tabDef.id !== 'personaggi') {
@@ -565,7 +569,16 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
         return <Component onLogout={onLogout} />;
     }
     return <HomeTab onLogout={onLogout} />;
-  }, [activeTab, selectedCharacterId, isStealingOnCooldown, cooldownTimer, handleMenuNavigation, handleScanSuccess, onLogout]);
+  }, [
+    activeTab,
+    selectedCharacterId,
+    isStealingOnCooldown,
+    cooldownTimer,
+    handleMenuNavigation,
+    handleScanSuccess,
+    onLogout,
+    setActiveTab,
+  ]);
 
   // --- CONTENUTO MENU (render function, evita remount continui della sidebar) ---
   const renderMenuContent = () => (
