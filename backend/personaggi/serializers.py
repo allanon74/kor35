@@ -3111,9 +3111,11 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
 # SSO per OSSN 
 
 class SSOUserSerializer(serializers.ModelSerializer):
+    """Profilo utente corrente (token). Include flag staff per allineare la UI al backend."""
+
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'is_superuser')
         
         
 # Serializers per tabelle

@@ -63,12 +63,34 @@ export const CharacterProvider = ({ children, onLogout }) => {
   // --- STATI GLOBALI UI ---
   const [selectedCharacterId, setSelectedCharacterId] = useState(() => localStorage.getItem('kor35_last_char_id') || '');
   const [preferredCharacterId, setPreferredCharacterId] = useState(() => localStorage.getItem('kor35_preferred_char_id') || '');
-  const [isAdmin] = useState(() => {
+  /** Allineato al backend: non affidarti solo a localStorage (può restare desincronizzato dopo login/token). */
+  const [isAdmin, setIsAdmin] = useState(() => {
     const stored = localStorage.getItem('kor35_is_admin');
     if (stored !== null) return stored === 'true';
-    // Backward compatibility con sessioni precedenti.
     return localStorage.getItem('kor35_is_master') === 'true';
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await fetchAuthenticated(
+          '/api/personaggi/api/user/me/',
+          { method: 'GET' },
+          onLogout
+        );
+        if (cancelled || !me || typeof me !== 'object') return;
+        const serverSuper = !!me.is_superuser;
+        setIsAdmin(serverSuper);
+        localStorage.setItem('kor35_is_admin', String(serverSuper));
+      } catch {
+        /* mantieni fallback iniziale da localStorage */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onLogout]);
   const [staffWorkMode, setStaffWorkMode] = useState('dashboard');
   const [campaigns, setCampaigns] = useState([]);
   const [activeCampaign, setActiveCampaign] = useState(() => getActiveCampaignSlug());
