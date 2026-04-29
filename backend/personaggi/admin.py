@@ -63,6 +63,88 @@ from icon_widget.widgets import CustomIconWidget
 
 HIGHLIGHT_STYLE = 'background-color: #fff3e0; border: 2px solid #ff9800; font-weight: bold;'
 
+# Ordine/etichettatura visuale dei modelli nella home Admin (app "personaggi").
+# Obiettivo: raggruppare per tema senza cambiare la struttura dati.
+PERSONAGGI_ADMIN_MODEL_GROUPS = {
+    # Campagna / governance
+    "Campagna": ("Campagne", 10),
+    "CampagnaUtente": ("Campagne", 11),
+    "CampagnaFeaturePolicy": ("Campagne", 12),
+    # Anagrafiche mondo
+    "Era": ("Mondo", 20),
+    "Prefettura": ("Mondo", 21),
+    "Regione": ("Mondo", 22),
+    "Korp": ("Mondo", 23),
+    "Carriera": ("Mondo", 24),
+    "SegnoZodiacale": ("Mondo", 25),
+    "CaricaKorp": ("Mondo", 26),
+    "CaricaCarriera": ("Mondo", 27),
+    "PersonaggioKorpMembership": ("Mondo", 28),
+    "PersonaggioCarrieraMembership": ("Mondo", 29),
+    # Personaggi / gameplay
+    "Personaggio": ("Personaggi", 30),
+    "Inventario": ("Personaggi", 31),
+    "Oggetto": ("Personaggi", 32),
+    "OggettoBase": ("Personaggi", 33),
+    "ClasseOggetto": ("Personaggi", 34),
+    "QrCode": ("QR", 40),
+    "Manifesto": ("QR", 41),
+    "Nodo": ("QR", 42),
+    "NodoRewardConfig": ("QR", 43),
+    "InnescoTimer": ("QR", 44),
+    "QrInventarioScanSession": ("QR", 45),
+    "StatoInnescoTimerPersonaggio": ("QR", 46),
+    "TipologiaTimer": ("QR", 47),
+    "StatoTimerAttivo": ("QR", 48),
+    # Sistemi di regole
+    "Punteggio": ("Regole", 50),
+    "Statistica": ("Regole", 51),
+    "StatisticaContainer": ("Regole", 52),
+    "Abilita": ("Regole", 53),
+    "Tier": ("Regole", 54),
+    "Tabella": ("Regole", 55),
+    "Caratteristica": ("Regole", 56),
+    "Aura": ("Regole", 57),
+    "ModelloAura": ("Regole", 58),
+    "Mattone": ("Regole", 59),
+    # Crafting / effetti
+    "Infusione": ("Crafting", 60),
+    "Tessitura": ("Crafting", 61),
+    "Cerimoniale": ("Crafting", 62),
+    "ForgiaturaInCorso": ("Crafting", 63),
+    "RichiestaAssemblaggio": ("Crafting", 64),
+    "TipologiaEffetto": ("Crafting", 65),
+    "EffettoCasuale": ("Crafting", 66),
+    "ConsumabilePersonaggio": ("Crafting", 67),
+    "CreazioneConsumabileInCorso": ("Crafting", 68),
+    # Comunicazioni / utility
+    "Gruppo": ("Comunicazioni", 70),
+    "Messaggio": ("Comunicazioni", 71),
+    "TransazioneSospesa": ("Comunicazioni", 72),
+    "Dichiarazione": ("Comunicazioni", 73),
+    "UserSocialPreference": ("Comunicazioni", 74),
+}
+
+_original_get_app_list = admin.AdminSite.get_app_list
+
+
+def _grouped_get_app_list(self, request, app_label=None):
+    app_list = _original_get_app_list(self, request, app_label)
+    for app in app_list:
+        if app.get("app_label") != "personaggi":
+            continue
+        models = app.get("models", [])
+        for m in models:
+            obj_name = m.get("object_name")
+            group, order = PERSONAGGI_ADMIN_MODEL_GROUPS.get(obj_name, ("Altro", 999))
+            m["_personaggi_order"] = order
+            m["name"] = f"[{group}] {m['name']}"
+        models.sort(key=lambda m: (m.get("_personaggi_order", 999), m.get("name", "")))
+    return app_list
+
+
+admin.AdminSite.get_app_list = _grouped_get_app_list
+
 class PunteggioAdminForm(forms.ModelForm):
     def clean_icona_nome_originale(self):
         """
@@ -925,6 +1007,23 @@ class EraAdmin(admin.ModelAdmin):
     list_editable = ("abbreviazione", "ordine", "attiva")
     search_fields = ("nome", "descrizione_breve", "descrizione")
     inlines = [EraAbilitaInline, PrefetturaInline]
+    actions = ["riallinea_abilita_default_personaggi_era"]
+
+    @admin.action(description="Riallinea abilità default ai personaggi delle ere selezionate")
+    def riallinea_abilita_default_personaggi_era(self, request, queryset):
+        era_ids = list(queryset.values_list("id", flat=True))
+        if not era_ids:
+            self.message_user(request, "Nessuna era selezionata.")
+            return
+        personaggi = Personaggio.objects.filter(era_id__in=era_ids).distinct()
+        updated = 0
+        for pg in personaggi.iterator():
+            pg._sync_abilita_default_era()
+            updated += 1
+        self.message_user(
+            request,
+            f"Riallineamento completato: {updated} personaggi aggiornati.",
+        )
 
 
 @admin.register(Prefettura)
@@ -940,6 +1039,28 @@ class RegioneAdmin(admin.ModelAdmin):
     list_editable = ("sigla", "ordine", "attiva")
     search_fields = ("nome", "sigla", "descrizione")
     inlines = [RegioneAbilitaInline]
+    actions = ["riallinea_abilita_default_personaggi_regione"]
+
+    @admin.action(description="Riallinea abilità default ai personaggi delle regioni selezionate")
+    def riallinea_abilita_default_personaggi_regione(self, request, queryset):
+        regione_ids = list(queryset.values_list("id", flat=True))
+        if not regione_ids:
+            self.message_user(request, "Nessuna regione selezionata.")
+            return
+        personaggi = (
+            Personaggio.objects
+            .filter(prefettura__regione_id__in=regione_ids)
+            .select_related("prefettura")
+            .distinct()
+        )
+        updated = 0
+        for pg in personaggi.iterator():
+            pg._sync_abilita_default_era()
+            updated += 1
+        self.message_user(
+            request,
+            f"Riallineamento completato: {updated} personaggi aggiornati.",
+        )
 
 
 @admin.register(Korp)
