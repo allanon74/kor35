@@ -2,21 +2,39 @@
 set -euo pipefail
 
 # Esegue il merge del branch corrente in main con conferma esplicita.
+# Alla fine torna al branch da cui sei partito (dopo merge e, di default, push su origin).
 # Uso:
-#   ./scripts/merge_current_into_main.sh
-#   ./scripts/merge_current_into_main.sh --push
+#   ./scripts/merge_current_into_main.sh              # merge + push origin main
+#   ./scripts/merge_current_into_main.sh --no-push    # solo merge locale
+#   ./scripts/merge_current_into_main.sh --push       # esplicito (stesso effetto del default)
 
-DO_PUSH=false
+DO_PUSH=true
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --no-push)
+      DO_PUSH=false
+      shift
+      ;;
     --push)
       DO_PUSH=true
       shift
       ;;
+    -h|--help)
+      cat <<'EOF'
+Uso: merge_current_into_main.sh [--no-push]
+
+  (default)     merge del branch corrente in main + git push origin main
+  --no-push     solo merge locale, nessun push
+  --push        esplicito (uguale al default)
+
+Alla fine torni al branch da cui sei partito.
+EOF
+      exit 0
+      ;;
     *)
       echo "Argomento non riconosciuto: $1" >&2
-      echo "Uso: $0 [--push]" >&2
+      echo "Uso: $0 [--no-push]  (default: push su origin)" >&2
       exit 1
       ;;
   esac
@@ -53,7 +71,9 @@ fi
 echo "Stai per eseguire:"
 echo "  merge di '$CURRENT_BRANCH' in '$TARGET_BRANCH'"
 if [ "$DO_PUSH" = true ]; then
-  echo "  push di '$TARGET_BRANCH' su 'origin'"
+  echo "  push di '$TARGET_BRANCH' su 'origin' (default)"
+else
+  echo "  nessun push (--no-push)"
 fi
 echo
 read -r -p "Confermi? [y/N] " CONFIRM
@@ -79,3 +99,7 @@ if [ "$DO_PUSH" = true ]; then
 fi
 
 echo "Merge completato con successo."
+
+echo "Ritorno al branch iniziale '$CURRENT_BRANCH'..."
+git checkout "$CURRENT_BRANCH"
+echo "Sei di nuovo su '$CURRENT_BRANCH'."
