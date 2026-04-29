@@ -399,6 +399,27 @@ const GameTab = ({ onNavigate }) => {
         setFavorites(savedFavs);
     }, []);
 
+    useEffect(() => {
+        let mounted = true;
+        const loadWearManifest = async () => {
+            if (!char?.id || !char?.watch_enabled) {
+                if (mounted) setWearManifest(null);
+                return;
+            }
+            try {
+                const data = await watchWearManifest(char.id, onLogout);
+                if (!mounted) return;
+                setWearManifest(data?.enabled ? data : null);
+            } catch {
+                if (mounted) setWearManifest(null);
+            }
+        };
+        loadWearManifest();
+        return () => {
+            mounted = false;
+        };
+    }, [char?.id, char?.watch_enabled, onLogout]);
+
     // --- FUNZIONI HELPER PER VISUALIZZAZIONE ---
     const isActiveByTime = (item) => {
         if (!item.data_fine_attivazione) return true;
@@ -644,27 +665,6 @@ const GameTab = ({ onNavigate }) => {
             setWatchBusy(false);
         }
     };
-
-    useEffect(() => {
-        let mounted = true;
-        const loadWearManifest = async () => {
-            if (!char?.id || !char?.watch_enabled) {
-                if (mounted) setWearManifest(null);
-                return;
-            }
-            try {
-                const data = await watchWearManifest(char.id, onLogout);
-                if (!mounted) return;
-                setWearManifest(data?.enabled ? data : null);
-            } catch {
-                if (mounted) setWearManifest(null);
-            }
-        };
-        loadWearManifest();
-        return () => {
-            mounted = false;
-        };
-    }, [char?.id, char?.watch_enabled, onLogout]);
 
     return (
         <div className="pb-24 px-2 space-y-6 animate-fadeIn text-gray-100 pt-2">
