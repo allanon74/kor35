@@ -15,6 +15,7 @@ import WidgetSocial from './wg/WidgetSocial';
 import { WidgetButtonsSlot } from './wg/WidgetButtons';
 import WidgetMattoni from './wg/WidgetMattoni';
 import WidgetTierCollection from './wg/WidgetTierCollection';
+import WidgetEra from './wg/WidgetEra';
 
 const WIDGET_REGEX = /{{WIDGET_([A-Z_]+):([A-Za-z0-9-]+)}}/g;
 
@@ -36,6 +37,8 @@ function renderWidgetByType(type, id, characterValue, navigate) {
       case 'PULSANTI': return <WidgetButtonsSlot id={id} navigate={navigate} />;
       case 'MATTONI': return <WidgetMattoni id={id} />;
       case 'TIER_COLLECTION': return <WidgetTierCollection id={id} />;
+      case 'ERA':
+      case 'ERE': return <WidgetEra id={id} />;
       default: return <div className="text-red-500 text-xs p-2 border border-red-300 bg-red-50 font-mono">[WIDGET IGNOTO: {type}]</div>;
     }
   })();

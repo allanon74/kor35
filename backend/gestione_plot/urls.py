@@ -16,7 +16,7 @@ from .views import(
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
-    get_wiki_menu, get_wiki_page, get_wiki_tier_display, get_wiki_tier_collection_display, get_wiki_mattoni_display, get_wiki_image_display, get_wiki_buttons_display, public_wiki_punteggi, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
+    get_wiki_menu, get_wiki_page, get_wiki_tier_display, get_wiki_tier_collection_display, get_wiki_mattoni_display, get_wiki_image_display, get_wiki_buttons_display, get_wiki_era_display, public_wiki_punteggi, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
     PublicWikiTierWidgetViewSet, StaffWikiTierWidgetViewSet,
     PublicWikiTierCollectionWidgetViewSet, StaffWikiTierCollectionWidgetViewSet,
     PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
@@ -93,6 +93,7 @@ urlpatterns = [
     path('api/wiki/mattoni-display/<str:key>/', get_wiki_mattoni_display, name='wiki_mattoni_display'),
     path('api/wiki/image-display/<str:key>/', get_wiki_image_display, name='wiki_image_display'),
     path('api/wiki/buttons-display/<str:key>/', get_wiki_buttons_display, name='wiki_buttons_display'),
+    path('api/wiki/era-display/<str:key>/', get_wiki_era_display, name='wiki_era_display'),
     path('api/wiki/punteggi/', public_wiki_punteggi, name='wiki_punteggi'),
     path('api/', include(router.urls)),
 ]   

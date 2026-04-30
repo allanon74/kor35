@@ -37,6 +37,8 @@ from personaggi.models import (
     CAMPAGNA_ROLE_STAFFER,
     CAMPAGNA_ROLE_MASTER,
     CAMPAGNA_ROLE_HEAD_MASTER,
+    Era,
+    EraAbilita,
 )
 
 from personaggi.serializers import (
@@ -1051,6 +1053,51 @@ def get_wiki_buttons_display(request, key):
         raise Http404("No WikiButtonWidget matches the given query.")
     serializer = WikiButtonWidgetSerializer(obj)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_wiki_era_display(request, key):
+    """
+    Restituisce i dati di un'Era per {{WIDGET_ERA:id}}.
+    Mostra anche le abilità assegnate automaticamente (is_default=True).
+    """
+    era = _resolve_by_pk_or_sync_id(
+        Era.objects.prefetch_related(
+            Prefetch(
+                'ere_abilita',
+                queryset=(
+                    EraAbilita.objects
+                    .filter(is_default=True)
+                    .select_related('abilita')
+                    .order_by('ordine', 'abilita__nome')
+                ),
+            )
+        ),
+        key,
+    )
+    if not era:
+        raise Http404("No Era matches the given query.")
+
+    abilita_auto = [
+        {
+            'id': row.abilita_id,
+            'nome': row.abilita.nome,
+            'descrizione': row.abilita.descrizione or '',
+        }
+        for row in era.ere_abilita.all()
+        if row.abilita_id
+    ]
+
+    return Response({
+        'id': era.id,
+        'sync_id': str(era.sync_id) if getattr(era, 'sync_id', None) else None,
+        'nome': era.nome,
+        'descrizione_breve': era.descrizione_breve or '',
+        'difetto_interpretativo_titolo': era.difetto_interpretativo_titolo or '',
+        'difetto_interpretativo_testo': era.difetto_interpretativo_testo or '',
+        'abilita_automatiche': abilita_auto,
+    })
 
 
 @api_view(['GET'])

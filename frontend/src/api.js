@@ -2268,6 +2268,10 @@ export const getWikiMattoniWidgetDisplay = (id) => {
   return fetchPublic(`/api/plot/api/wiki/mattoni-display/${encodeURIComponent(String(id))}/`);
 };
 
+export const getWikiEraDisplay = (id) => {
+  return fetchPublic(`/api/plot/api/wiki/era-display/${encodeURIComponent(String(id))}/`);
+};
+
 export const getWikiPunteggi = (tipo) => {
   const t = tipo ? String(tipo).trim() : '';
   return fetchPublic(`/api/plot/api/wiki/punteggi/?tipo=${encodeURIComponent(t)}`);
