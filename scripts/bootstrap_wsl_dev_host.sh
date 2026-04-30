@@ -118,8 +118,8 @@ else
 fi
 
 if [ "$INSTALL_NODE" = true ]; then
-  echo "==> Installo Node.js LTS (NodeSource 20.x)"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+  echo "==> Installo Node.js LTS (NodeSource 22.x)"
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 else
   echo "==> Node.js saltato (--skip-node)"
