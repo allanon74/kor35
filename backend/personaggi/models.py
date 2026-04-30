@@ -2434,6 +2434,22 @@ class QrCode(SyncableModel, models.Model):
     data_creazione = models.DateTimeField(auto_now_add=True)
     testo = models.TextField(blank=True, null=True)
     vista = models.OneToOneField(A_vista, blank=True, null=True, on_delete=models.SET_NULL)
+    inventario_presente = models.BooleanField(
+        default=False,
+        help_text="Flag inventario QR staff: presente all'ultimo inventario.",
+    )
+    inventario_colore_codice = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+        help_text="Colore del codice QR rilevato durante inventario (HEX, es. #FFFFFF).",
+    )
+    inventario_colore_sfondo = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+        help_text="Colore sfondo QR rilevato durante inventario (HEX, es. #000000).",
+    )
     def save(self, *args, **kwargs):
         if self._state.adding:
             while True:

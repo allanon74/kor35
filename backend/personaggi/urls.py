@@ -14,6 +14,7 @@ from .views_staff import (
     TipologiaEffettoViewSet, EffettoCasualeViewSet, SelezionaEffettoCasualeView,
     MattoniMagiciListView,
     DichiarazioneStaffViewSet,
+    StaffQrInventoryScanView,
 )
 
 
@@ -218,6 +219,7 @@ urlpatterns = [
     path('api/classi_oggetto/', views.ClasseOggettoListView.as_view(), name='lista_classi_oggetto'),
     
     path('api/staff/qr-inspect/<str:qr_id>/', QrInspectorView.as_view(), name='staff-qr-inspect'),
+    path('api/staff/qr-inventario-scan/', StaffQrInventoryScanView.as_view(), name='staff-qr-inventario-scan'),
     path('api/staff/approva-proposta/<int:proposta_id>/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     
     path('api/staff/proposte/valutazione/', ProposteValutazioneList.as_view(), name='staff-proposte-valutazione'),

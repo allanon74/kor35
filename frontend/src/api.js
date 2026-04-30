@@ -511,6 +511,14 @@ export const staffInspectQrCode = (qrId, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/staff/qr-inspect/${qrId}/`, { method: 'GET' }, onLogout);
 };
 
+export const staffQrInventarioScan = (payload, onLogout) => {
+  return fetchAuthenticated(
+    '/api/personaggi/api/staff/qr-inventario-scan/',
+    { method: 'POST', body: JSON.stringify(payload) },
+    onLogout
+  );
+};
+
 /**
  * Richiede un oggetto da un inventario (azione "Prendi") - Sistema legacy
  */

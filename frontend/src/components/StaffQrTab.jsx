@@ -14,7 +14,131 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
   const html5QrCodeRef = useRef(null);
   const qrReaderId = "staff-qr-reader-element";
 
-  const handleScanData = async (decodedText) => {
+  const rgbToHex = (r, g, b) => {
+    const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
+    return `#${[clamp(r), clamp(g), clamp(b)].map((x) => x.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+  };
+
+  const estimateColorsFromImageData = (imageData) => {
+    if (!imageData?.data || imageData.data.length < 4) return null;
+    const pixels = [];
+    const data = imageData.data;
+    let sumR = 0;
+    let sumG = 0;
+    let sumB = 0;
+    let count = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 16) continue;
+      sumR += data[i];
+      sumG += data[i + 1];
+      sumB += data[i + 2];
+      count += 1;
+    }
+
+    if (count < 60) return null;
+
+    // Gray-world white balance per compensare dominanti colore da illuminazione.
+    const meanR = sumR / count;
+    const meanG = sumG / count;
+    const meanB = sumB / count;
+    const meanGray = (meanR + meanG + meanB) / 3 || 1;
+    const gainR = meanGray / (meanR || 1);
+    const gainG = meanGray / (meanG || 1);
+    const gainB = meanGray / (meanB || 1);
+    const clamp = (v) => Math.max(0, Math.min(255, v));
+
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i + 3];
+      if (a < 16) continue;
+      const r = clamp(data[i] * gainR);
+      const g = clamp(data[i + 1] * gainG);
+      const b = clamp(data[i + 2] * gainB);
+      const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      pixels.push({ r, g, b, l });
+    }
+
+    if (pixels.length < 60) return null;
+
+    pixels.sort((a, b) => a.l - b.l);
+    const bucketSize = Math.max(20, Math.floor(pixels.length * 0.18));
+    const dark = pixels.slice(0, bucketSize);
+    const light = pixels.slice(-bucketSize);
+    const midStart = Math.floor(pixels.length * 0.4);
+    const midEnd = Math.floor(pixels.length * 0.6);
+    const mid = pixels.slice(midStart, Math.max(midStart + 1, midEnd));
+
+    const avg = (arr, key) => arr.reduce((acc, p) => acc + p[key], 0) / arr.length;
+    const darkRgb = { r: avg(dark, 'r'), g: avg(dark, 'g'), b: avg(dark, 'b'), l: avg(dark, 'l') };
+    const lightRgb = { r: avg(light, 'r'), g: avg(light, 'g'), b: avg(light, 'b'), l: avg(light, 'l') };
+    const midL = avg(mid, 'l');
+
+    const luminanceGap = lightRgb.l - darkRgb.l;
+    const midContrast = Math.abs(midL - (darkRgb.l + lightRgb.l) / 2);
+    const confidence = Math.max(
+      0,
+      Math.min(1, luminanceGap / 220 - midContrast / 160)
+    );
+
+    // In casi ambigui (controluce/blur), non forziamo colore "reale".
+    if (confidence < 0.2 || luminanceGap < 35) {
+      return {
+        codice: '#FFFFFF',
+        sfondo: '#000000',
+        confidence: 0,
+      };
+    }
+
+    return {
+      codice: rgbToHex(darkRgb.r, darkRgb.g, darkRgb.b),
+      sfondo: rgbToHex(lightRgb.r, lightRgb.g, lightRgb.b),
+      confidence,
+    };
+  };
+
+  const estimateColorsFromVideo = () => {
+    try {
+      const root = document.getElementById(qrReaderId);
+      const video = root?.querySelector?.('video');
+      if (!video || !video.videoWidth || !video.videoHeight) return null;
+
+      const canvas = document.createElement('canvas');
+      const width = Math.min(320, video.videoWidth);
+      const height = Math.min(320, video.videoHeight);
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return null;
+
+      ctx.drawImage(video, 0, 0, width, height);
+      const sampleW = Math.floor(width * 0.6);
+      const sampleH = Math.floor(height * 0.6);
+      const sx = Math.floor((width - sampleW) / 2);
+      const sy = Math.floor((height - sampleH) / 2);
+      const imageDataCenter = ctx.getImageData(sx, sy, sampleW, sampleH);
+      const centerColors = estimateColorsFromImageData(imageDataCenter);
+
+      // Fallback su area più ampia se il centro è poco affidabile.
+      if (!centerColors || centerColors.confidence < 0.25) {
+        const broadW = Math.floor(width * 0.85);
+        const broadH = Math.floor(height * 0.85);
+        const bx = Math.floor((width - broadW) / 2);
+        const by = Math.floor((height - broadH) / 2);
+        const imageDataBroad = ctx.getImageData(bx, by, broadW, broadH);
+        const broadColors = estimateColorsFromImageData(imageDataBroad);
+        if (!centerColors) return broadColors;
+        if (!broadColors) return centerColors;
+        return broadColors.confidence > centerColors.confidence ? broadColors : centerColors;
+      }
+      return centerColors;
+    } catch (err) {
+      console.warn('Stima colori QR da video fallita:', err);
+      return null;
+    }
+  };
+
+  const handleScanData = async (decodedText, scanMeta = null) => {
     setIsScanning(false);
     setIsLoading(true);
     setError('');
@@ -22,8 +146,8 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
     try {
       await stopWebcamScan();
       
-      // Per uso staff, passiamo direttamente l'ID scansionato
-      onScanSuccess(decodedText);
+      // Per uso staff, passiamo ID e metadata opzionali (es. colori stimati)
+      onScanSuccess(decodedText, scanMeta);
       
     } catch (err) {
       setError(err.message || 'Impossibile elaborare il QR.');
@@ -53,7 +177,8 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
           { facingMode: "environment" },
           config,
           (decodedText, decodedResult) => {
-            handleScanData(decodedText);
+            const colors = estimateColorsFromVideo();
+            handleScanData(decodedText, { colors, decodedResult });
           },
           (errorMessage) => {
             // Errore durante la scansione (es. non trova QR), non fatale
@@ -96,7 +221,7 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
     try {
       const fileScanner = new Html5Qrcode(qrReaderId, /* verbose= */ false);
       const decodedText = await fileScanner.scanFile(file, /* showImage= */ false);
-      handleScanData(decodedText);
+      handleScanData(decodedText, { colors: null });
     } catch (err) {
       console.error("Errore scansione file:", err);
       setError("Impossibile leggere il QR code dal file. Prova un'altra immagine.");

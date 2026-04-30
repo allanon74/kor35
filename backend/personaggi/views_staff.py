@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.db.models import Count, Q
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+import re
 
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
@@ -252,6 +253,83 @@ class QrInspectorView(APIView):
             return Response(_staff_qr_inspect_payload(qr, request))
         except QrCode.DoesNotExist:
             return Response({'error': 'Non trovato'}, status=404)
+
+
+class StaffQrInventoryScanView(APIView):
+    """
+    Inventario QR lato staff.
+    - modalita "totale": opzionalmente azzera tutto, poi marca il QR scansionato come presente.
+    - modalita "additiva": lascia invariati i non scansionati, aggiorna solo il QR corrente.
+    """
+
+    permission_classes = [IsStaffOrMaster]
+    HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+    def post(self, request):
+        qr_id = str(request.data.get("qr_id") or "").strip()
+        modalita = str(request.data.get("modalita") or "additiva").strip().lower()
+        reset_before_scan = bool(request.data.get("reset_before_scan", False))
+        inventario_colore_codice = request.data.get("inventario_colore_codice")
+        inventario_colore_sfondo = request.data.get("inventario_colore_sfondo")
+
+        if not qr_id:
+            return Response({"error": "qr_id obbligatorio"}, status=status.HTTP_400_BAD_REQUEST)
+        if modalita not in {"totale", "additiva"}:
+            return Response(
+                {"error": "modalita non valida: usare 'totale' o 'additiva'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            if modalita == "totale" and reset_before_scan:
+                QrCode.objects.all().update(
+                    inventario_presente=False,
+                    inventario_colore_codice="",
+                    inventario_colore_sfondo="",
+                )
+
+            try:
+                qr = QrCode.objects.select_for_update().get(id=qr_id)
+            except QrCode.DoesNotExist:
+                return Response(
+                    {"error": "QR sconosciuto", "qr_sconosciuto": True, "qr_id": qr_id},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            codice = str(inventario_colore_codice or "").strip().upper()
+            sfondo = str(inventario_colore_sfondo or "").strip().upper()
+            if not self.HEX_RE.match(codice):
+                codice = "#FFFFFF"
+            if not self.HEX_RE.match(sfondo):
+                sfondo = "#000000"
+
+            qr.inventario_presente = True
+            qr.inventario_colore_codice = codice
+            qr.inventario_colore_sfondo = sfondo
+            qr.save(
+                update_fields=[
+                    "inventario_presente",
+                    "inventario_colore_codice",
+                    "inventario_colore_sfondo",
+                    "updated_at",
+                ]
+            )
+
+            presenti_count = QrCode.objects.filter(inventario_presente=True).count()
+
+        return Response(
+            {
+                "status": "ok",
+                "qr_id": qr.id,
+                "modalita": modalita,
+                "presente": True,
+                "inventario_colore_codice": qr.inventario_colore_codice,
+                "inventario_colore_sfondo": qr.inventario_colore_sfondo,
+                "totale_presenti": presenti_count,
+                "reset_applicato": bool(modalita == "totale" and reset_before_scan),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 # class ApprovaPropostaView(APIView):
 #     permission_classes = [IsAdminUser]
