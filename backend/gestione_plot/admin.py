@@ -1,10 +1,10 @@
 from django.contrib import admin
 from .models import (
     Evento, GiornoEvento, Quest, QuestMostro, QuestVista,
-    MostroTemplate, AttaccoTemplate, PngAssegnato, 
+    MostroTemplate, AttaccoTemplate, PngAssegnato,
     StaffOffGame, QuestFase, QuestTask,
     PaginaRegolamento, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
-    ConfigurazioneSito, LinkSocial
+    ConfigurazioneSito, LinkSocial, PayPalImpostazioniGlobali, IscrizioneEventoPagamento, EventoPremioPersonaggio,
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
@@ -74,11 +74,67 @@ class AttaccoTemplateAdmin(admin.ModelAdmin):
 
 @admin.register(Evento)
 class EventoAdmin(SModelAdmin):
-    list_display = ('titolo', 'data_inizio', 'data_fine', 'luogo')
-    list_filter = ('data_inizio',)
+    list_display = (
+        'titolo',
+        'data_inizio',
+        'data_fine',
+        'luogo',
+        'pc_guadagnati',
+        'crediti_guadagnati',
+        'iscrizione_apertura',
+        'iscrizione_chiusura',
+        'iscrizione_costo_euro',
+        'iscrizione_test_attiva',
+    )
+    list_filter = ('data_inizio', 'iscrizione_test_attiva')
     search_fields = ('titolo',)
     inlines = [GiornoEventoInline]
     filter_horizontal = ('staff_assegnato', 'partecipanti')
+
+
+@admin.register(PayPalImpostazioniGlobali)
+class PayPalImpostazioniGlobaliAdmin(admin.ModelAdmin):
+    list_display = ('id', 'use_sandbox', 'updated_at')
+
+    fieldsets = (
+        (
+            "Ambiente",
+            {
+                "fields": ("use_sandbox",),
+                "description": "In produzione disattiva Sandbox e compila le credenziali Live. "
+                "Gli eventi con «test iscrizione» usano sempre Sandbox per Master/Head Master.",
+            },
+        ),
+        (
+            "Sandbox (developer.paypal.com)",
+            {"fields": ("sandbox_client_id", "sandbox_client_secret")},
+        ),
+        (
+            "Live",
+            {"fields": ("live_client_id", "live_client_secret")},
+        ),
+    )
+
+    def has_add_permission(self, request):
+        return not PayPalImpostazioniGlobali.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EventoPremioPersonaggio)
+class EventoPremioPersonaggioAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'evento', 'personaggio')
+    search_fields = ('personaggio__nome', 'evento__titolo')
+    readonly_fields = ('sync_id', 'updated_at', 'created_at')
+
+
+@admin.register(IscrizioneEventoPagamento)
+class IscrizioneEventoPagamentoAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'evento', 'personaggio', 'utente', 'stato', 'importo_euro', 'sandbox_usato', 'paypal_order_id')
+    list_filter = ('stato', 'sandbox_usato')
+    search_fields = ('paypal_order_id', 'paypal_capture_id', 'personaggio__nome', 'utente__username')
+    readonly_fields = ('sync_id', 'updated_at', 'created_at', 'paypal_order_id', 'paypal_capture_id')
 
 @admin.register(GiornoEvento)
 class GiornoEventoAdmin(SModelAdmin):

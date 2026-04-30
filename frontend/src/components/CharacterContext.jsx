@@ -19,6 +19,7 @@ import {
   getActiveCampaignSlug,
   setActiveCampaignSlug,
   normCampaignSlug,
+  postEventoPremiApplica,
 } from '../api'; 
 import NotificationPopup from './NotificationPopup';
 
@@ -195,6 +196,26 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isLoading: isLoadingDetail,
     refetch: refetchCharacterDetail
   } = usePersonaggioDetail(selectedCharacterId, onLogout);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await postEventoPremiApplica(onLogout);
+        if (!cancelled) {
+          await refetchPersonaggiList();
+          await refetchCharacterDetail();
+        }
+      } catch {
+        /* Nessun premio applicabile o errore rete: non bloccare l'app */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Eseguito al mount del provider (es. dopo login o refresh): idempotente lato server.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- evita re-run ad ogni cambio refetch RQ
+  }, [onLogout]);
 
   // 4. Dati Lazy Loading (Estraiamo anche i refetch)
   const { 

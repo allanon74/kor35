@@ -151,6 +151,7 @@ urlpatterns = [
     path('api/punteggi/all/', views.PunteggiListView.as_view(), name='api_punteggi_all'),
     path('api/statistiche/containers/', views.StatisticaContainerListView.as_view(), name='api_statistiche_containers'),
     path('api/cache-revision/', views.CacheRevisionView.as_view(), name='api_cache_revision'),
+    path('api/evento-premi/applica/', views.EventoPremiApplicaView.as_view(), name='api_evento_premi_applica'),
     
     # --- MESSAGING ENDPOINTS (Phase 1) ---
     path('api/messaggi/', views.MessaggioListView.as_view(), name='api_messaggi_list'),

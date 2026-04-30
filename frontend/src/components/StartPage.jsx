@@ -16,6 +16,7 @@ import {
 import { useCharacter } from './CharacterContext';
 import PasswordChangeModal from './PasswordChangeModal';
 import RichTextEditor from './RichTextEditor';
+import EventSubscriptionStartPanel from './EventSubscriptionStartPanel';
 
 export default function StartPage({ onLogout, onSwitchToMaster }) {
   const navigate = useNavigate();
@@ -386,6 +387,8 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
             </div>
           </div>
         )}
+
+        <EventSubscriptionStartPanel onLogout={onLogout} />
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <button

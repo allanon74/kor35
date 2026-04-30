@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, memo } from 'react';
-import { 
-    MapPin, Edit2, Trash2, Calendar, 
-    Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck 
+import {
+    MapPin, Edit2, Trash2, Calendar,
+    Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck, Ticket,
 } from 'lucide-react';
 
 const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno }) => {
@@ -14,6 +14,15 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
         risorse.png?.filter(p => p.giocante === true) || [], 
         [risorse.png]
     );
+
+    const fmtIscrizioneDt = useCallback((iso) => {
+        if (!iso) return null;
+        try {
+            return new Date(iso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
+        } catch {
+            return String(iso);
+        }
+    }, []);
 
     const handleListChange = useCallback(async (fieldName, targetId, action) => {
         let currentList = evento[fieldName] || [];
@@ -51,8 +60,37 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                     <div className="flex flex-wrap gap-4 text-[10px] font-bold uppercase text-gray-400 italic">
                         <span className="flex items-center gap-1"><MapPin size={12} className="text-indigo-400"/> {evento.luogo || 'Senza luogo'}</span>
                         <span className="flex items-center gap-1"><Calendar size={12} className="text-indigo-400"/> {new Date(evento.data_inizio).toLocaleDateString()}</span>
-                        <span className="text-indigo-400 flex items-center gap-1"><Star size={12}/> {evento.pc_guadagnati} PC</span>
+                        <span className="text-indigo-400 flex items-center gap-1">
+                            <Star size={12} /> Premio iscritti: {evento.pc_guadagnati ?? 1} PC ·{' '}
+                            {Number(evento.crediti_guadagnati ?? 1000).toLocaleString('it-IT', {
+                                minimumFractionDigits: 0,
+                                maximumFractionDigits: 2,
+                            })}{' '}
+                            CR
+                        </span>
                     </div>
+                    {(evento.iscrizione_apertura ||
+                        evento.iscrizione_chiusura ||
+                        Number(evento.iscrizione_costo_euro) > 0 ||
+                        evento.iscrizione_test_attiva) && (
+                        <div className="mt-2 rounded-lg border border-indigo-800/50 bg-indigo-950/25 px-3 py-2 text-[11px] text-indigo-100/95 normal-case font-medium not-italic">
+                            <span className="inline-flex items-center gap-1.5 font-black uppercase text-[10px] text-indigo-300 tracking-wide">
+                                <Ticket size={12} aria-hidden />
+                                Iscrizione PayPal
+                            </span>
+                            <div className="mt-1.5 flex flex-col gap-0.5 text-gray-300">
+                                <span>
+                                    Finestra:{' '}
+                                    {fmtIscrizioneDt(evento.iscrizione_apertura) || '—'} →{' '}
+                                    {fmtIscrizioneDt(evento.iscrizione_chiusura) || '—'}
+                                </span>
+                                <span>Costo: {Number(evento.iscrizione_costo_euro || 0).toFixed(2)} €</span>
+                                {evento.iscrizione_test_attiva ? (
+                                    <span className="text-amber-300 font-semibold">Modalità test attiva (solo staff campagna principale)</span>
+                                ) : null}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {isMaster && (

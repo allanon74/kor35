@@ -1531,6 +1531,28 @@ export const createEvento = (data, onLogout) => fetchAuthenticated('/api/plot/ap
 export const updateEvento = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'DELETE' }, onLogout);
 
+/** Elenco eventi con iscrizione aperta, requisiti utente e meta PayPal (client id per SDK). */
+export const getIscrizioniEventoEligibility = (onLogout) =>
+  fetchAuthenticated('/api/plot/iscrizioni-evento/eligibility/', { method: 'GET' }, onLogout);
+
+/** Body: { evento_id, personaggio_id } → { paypal_order_id, sandbox } */
+export const postIscrizioneEventoCreaOrdine = (body, onLogout) =>
+  fetchAuthenticated('/api/plot/iscrizioni-evento/crea-ordine/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, onLogout);
+
+/** Body: { paypal_order_id } → conferma iscrizione dopo approve PayPal */
+export const postIscrizioneEventoCattura = (body, onLogout) =>
+  fetchAuthenticated('/api/plot/iscrizioni-evento/cattura/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, onLogout);
+
+/** POST idempotente: accredita PC/crediti d'evento se siamo in giornata evento (una tantum per PG/evento). */
+export const postEventoPremiApplica = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/evento-premi/applica/', { method: 'POST', body: '{}' }, onLogout);
+
 // --- GIORNI ---
 export const createGiorno = (data, onLogout) => fetchAuthenticated('/api/plot/api/giorni/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateGiorno = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/giorni/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);

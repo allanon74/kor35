@@ -1,5 +1,9 @@
+import uuid
+from decimal import Decimal
+
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from personaggi.models import Personaggio, Manifesto, Inventario, QrCode, Tier, Punteggio
 from kor35.syncing import SyncableModel
 
@@ -43,7 +47,19 @@ class AttaccoTemplate(SyncableModel, models.Model):
 
 class Evento(SyncableModel, models.Model):
     titolo = models.CharField(max_length=200)
-    pc_guadagnati = models.PositiveIntegerField(default=0)
+    pc_guadagnati = models.PositiveIntegerField(
+        default=1,
+        verbose_name="PC guadagnati",
+        help_text="PC assegnati una sola volta a ogni PG iscritto al primo accesso durante i giorni d'evento.",
+    )
+    crediti_guadagnati = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("1000.00"),
+        validators=[MinValueValidator(0)],
+        verbose_name="Crediti guadagnati",
+        help_text="Crediti assegnati una sola volta a ogni PG iscritto al primo accesso durante i giorni d'evento.",
+    )
     data_inizio = models.DateTimeField()
     data_fine = models.DateTimeField()
     sinossi = models.TextField(blank=True)
@@ -61,12 +77,65 @@ class Evento(SyncableModel, models.Model):
         blank=True,
     )
 
+    # Iscrizione giocatori (PayPal): entrambe le date valorizzate = finestra attiva
+    iscrizione_apertura = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Iscrizione: apertura",
+        help_text="Inizio finestra iscrizione (incluso). Lasciare vuoto per disattivare l'iscrizione online.",
+    )
+    iscrizione_chiusura = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Iscrizione: chiusura",
+        help_text="Fine finestra iscrizione (incluso).",
+    )
+    iscrizione_costo_euro = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="Costo iscrizione (EUR)",
+        help_text="Importo addebitato via PayPal (es. 45.00). Deve essere > 0 per abilitare il pagamento.",
+    )
+    iscrizione_test_attiva = models.BooleanField(
+        default=False,
+        verbose_name="Test iscrizione (solo Master campagna principale)",
+        help_text="Se attivo, l'evento compare solo a Master/Head Master della campagna principale (slug kor35) per provare PayPal in sandbox.",
+    )
+
     class Meta:
         verbose_name = "Evento"
         verbose_name_plural = "1. Eventi"
 
     def __str__(self):
         return self.titolo
+
+
+class EventoPremioPersonaggio(SyncableModel, models.Model):
+    """
+    Segna che PC e crediti d'evento sono stati accreditati una volta al PG iscritto
+    (al primo accesso in sessione durante un giorno d'evento).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="premi_presenza")
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="premi_evento_presenza")
+
+    class Meta:
+        verbose_name = "Premio presenza evento (PG)"
+        verbose_name_plural = "Premi presenza evento"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("evento", "personaggio"),
+                name="uq_evento_premio_presenza_pg",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.evento_id} → PG {self.personaggio_id}"
+
 
 class GiornoEvento(SyncableModel, models.Model):
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='giorni')
@@ -749,3 +818,73 @@ class LinkSocial(SyncableModel, models.Model):
     
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.nome_visualizzato}"
+
+
+class PayPalImpostazioniGlobali(SyncableModel, models.Model):
+    """
+    Singleton (pk=1): credenziali PayPal sandbox e produzione per il pulsante/SDK.
+    I segreti restano solo lato server; il client_id viene esposto via API autenticata per il JS SDK.
+    """
+
+    use_sandbox = models.BooleanField(
+        default=True,
+        verbose_name="Usa ambiente Sandbox",
+        help_text="Se vero, ordini e token usano api-m.sandbox.paypal.com (credenziali sandbox).",
+    )
+    sandbox_client_id = models.CharField(max_length=255, blank=True, verbose_name="Sandbox Client ID")
+    sandbox_client_secret = models.TextField(blank=True, verbose_name="Sandbox Secret")
+    live_client_id = models.CharField(max_length=255, blank=True, verbose_name="Live Client ID")
+    live_client_secret = models.TextField(blank=True, verbose_name="Live Secret")
+
+    class Meta:
+        verbose_name = "Impostazioni PayPal (globale)"
+        verbose_name_plural = "Impostazioni PayPal (globale)"
+
+    def __str__(self):
+        return "Impostazioni PayPal"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        row, _created = cls.objects.get_or_create(pk=1)
+        return row
+
+
+class IscrizioneEventoPagamento(SyncableModel, models.Model):
+    """
+    Tentativo / esito pagamento iscrizione evento (Orders API v2).
+    """
+
+    class Stato(models.TextChoices):
+        PENDING = "PENDING", "In attesa di pagamento"
+        CAPTURED = "CAPTURED", "Pagato e iscritto"
+        FAILED = "FAILED", "Fallito"
+        CANCELLED = "CANCELLED", "Annullato"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="iscrizioni_paypal")
+    personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="iscrizioni_evento_paypal")
+    utente = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="iscrizioni_evento_paypal",
+    )
+    paypal_order_id = models.CharField(max_length=80, unique=True, db_index=True)
+    paypal_capture_id = models.CharField(max_length=80, blank=True)
+    stato = models.CharField(max_length=20, choices=Stato.choices, default=Stato.PENDING)
+    importo_euro = models.DecimalField(max_digits=10, decimal_places=2)
+    sandbox_usato = models.BooleanField(default=False, help_text="True se l'ordine è stato creato in sandbox.")
+    ultimo_errore = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Iscrizione evento (PayPal)"
+        verbose_name_plural = "Iscrizioni evento (PayPal)"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.evento_id} / {self.personaggio_id} ({self.stato})"

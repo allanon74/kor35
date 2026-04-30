@@ -4,6 +4,11 @@ from rest_framework.routers import DefaultRouter
 from icon_widget import views
 
 # from personaggi import views_staff
+from .iscrizioni_evento_views import (
+    iscrizioni_evento_cattura,
+    iscrizioni_evento_crea_ordine,
+    iscrizioni_evento_eligibility,
+)
 from .views import(
     EventoViewSet, PublicAuraViewSet, PublicTabellaViewSet, PublicTierViewSet, PublicEventiViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
@@ -75,6 +80,9 @@ router.register(r'public/link-social', PublicLinkSocialViewSet, basename='public
 router.register(r'public/wiki-glossario', PublicWikiGlossarioViewSet, basename='public-wiki-glossario')
 
 urlpatterns = [
+    path('iscrizioni-evento/eligibility/', iscrizioni_evento_eligibility),
+    path('iscrizioni-evento/crea-ordine/', iscrizioni_evento_crea_ordine),
+    path('iscrizioni-evento/cattura/', iscrizioni_evento_cattura),
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),
     path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
     path('api/wiki/image/<slug:slug>/', serve_wiki_image, name='wiki_image'),

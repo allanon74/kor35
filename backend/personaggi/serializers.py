@@ -2315,6 +2315,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     )
     # Per la visualizzazione (se serve)
     tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
+    tipologia_giocante = serializers.SerializerMethodField()
     proprietario = serializers.StringRelatedField(read_only=True)
     segno_zodiacale = serializers.PrimaryKeyRelatedField(read_only=True)
     segno_zodiacale_nome = serializers.CharField(source="segno_zodiacale.nome", read_only=True)
@@ -2334,8 +2335,8 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Personaggio
         fields = (
-            'id', 'nome', 'testo', 'costume', 
-            'tipologia', 'tipologia_nome', 
+            'id', 'nome', 'testo', 'costume',
+            'tipologia', 'tipologia_nome', 'tipologia_giocante',
             'proprietario', 'data_nascita', 'data_morte',
             'crediti', 'punti_caratteristica',
             'watch_enabled',
@@ -2349,6 +2350,10 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))
+
+    def get_tipologia_giocante(self, obj):
+        t = getattr(obj, "tipologia", None)
+        return bool(t and getattr(t, "giocante", False))
 
     def get_can_edit_razza(self, personaggio):
         try:

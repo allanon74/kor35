@@ -4,12 +4,14 @@ import { useCharacter } from '../components/CharacterContext';
 import StaffDashboard from '../components/StaffDashboard';
 import MainPage from '../components/MainPage';
 import StartPage from '../components/StartPage';
+import EventSubscriptionResultPage from '../pages/EventSubscriptionResultPage';
 
 const AppLayout = ({ token, onLogout }) => {
   const { isCampaignStaffer, isCampaignMaster } = useCharacter();
   const navigate = useNavigate();
   const location = useLocation();
   const isStartPagePath = location.pathname === '/app' || location.pathname === '/app/start';
+  const isEventSubscriptionResultPath = location.pathname === '/app/iscrizione-esito';
   
   // Stato per gestire quale interfaccia mostrare (solo per lo staff)
   // 'staff' = Dashboard Master | 'player' = Interfaccia Giocatore
@@ -82,6 +84,10 @@ const AppLayout = ({ token, onLogout }) => {
         initialTool={dashboardInitialTool}
       />
     );
+  }
+
+  if (isEventSubscriptionResultPath) {
+    return <EventSubscriptionResultPage onLogout={onLogout} />;
   }
 
   if (isStartPagePath) {

@@ -2349,6 +2349,21 @@ class CacheRevisionView(APIView):
         return Response(out, status=status.HTTP_200_OK)
 
 
+class EventoPremiApplicaView(APIView):
+    """
+    POST idempotente: accredita PC e crediti d'evento ai PG dell'utente iscritti,
+    se siamo in un giorno d'evento e il premio non è già stato assegnato per quel PG/evento.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, format=None):
+        from gestione_plot.evento_premi import applica_premi_presenza_eventi
+
+        data = applica_premi_presenza_eventi(request.user)
+        return Response(data, status=status.HTTP_200_OK)
+
+
 class PunteggiListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = PunteggioDetailSerializer

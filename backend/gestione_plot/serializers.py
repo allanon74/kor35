@@ -222,9 +222,11 @@ class EventoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Evento
         fields = [
-            'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 
-            'luogo', 'pc_guadagnati', 'staff_assegnato', 'partecipanti',
-            'giorni', 'staff_details', 'partecipanti_details'
+            'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine',
+            'luogo', 'pc_guadagnati', 'crediti_guadagnati', 'staff_assegnato', 'partecipanti',
+            'giorni', 'staff_details', 'partecipanti_details',
+            'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
+            'iscrizione_test_attiva',
         ]
 
     def get_giorni(self, obj):

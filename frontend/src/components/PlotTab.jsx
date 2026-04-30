@@ -167,8 +167,22 @@ const PlotTab = ({ onLogout }) => {
     const handleSaveMain = useCallback(async () => {
         try {
             if (editMode === 'evento') {
-                if (formData.id) await updateEvento(formData.id, formData, onLogout);
-                else await createEvento(formData, onLogout);
+                const raw = { ...formData };
+                delete raw.giorni;
+                delete raw.staff_details;
+                delete raw.partecipanti_details;
+                ['iscrizione_apertura', 'iscrizione_chiusura'].forEach((k) => {
+                    if (raw[k] === '' || raw[k] === undefined) raw[k] = null;
+                });
+                const cost = parseFloat(String(raw.iscrizione_costo_euro ?? '0').replace(',', '.'));
+                raw.iscrizione_costo_euro = Number.isFinite(cost) ? cost : 0;
+                const credEv = parseFloat(String(raw.crediti_guadagnati ?? '0').replace(',', '.'));
+                raw.crediti_guadagnati = Number.isFinite(credEv) ? credEv : 0;
+                const pcEv = parseInt(String(raw.pc_guadagnati ?? '1'), 10);
+                raw.pc_guadagnati = Number.isFinite(pcEv) && pcEv >= 0 ? pcEv : 1;
+                raw.iscrizione_test_attiva = !!raw.iscrizione_test_attiva;
+                if (raw.id) await updateEvento(raw.id, raw, onLogout);
+                else await createEvento(raw, onLogout);
             } else if (editMode === 'giorno') {
                 const data = { ...formData, evento: selectedEvento.id };
                 if (formData.id) await updateGiorno(formData.id, data, onLogout);
@@ -483,7 +497,19 @@ const PlotTab = ({ onLogout }) => {
                     )}
                 </select>
                 {canManagePlot && (
-                    <button onClick={() => startEdit('evento')} className="p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg"><Plus size={24}/></button>
+                    <button
+                        onClick={() =>
+                            startEdit('evento', {
+                                pc_guadagnati: 1,
+                                crediti_guadagnati: 1000,
+                                iscrizione_costo_euro: 0,
+                                iscrizione_test_attiva: false,
+                            })
+                        }
+                        className="p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg"
+                    >
+                        <Plus size={24} />
+                    </button>
                 )}
                 <button 
                     onClick={handlePrintEvent}
@@ -513,9 +539,104 @@ const PlotTab = ({ onLogout }) => {
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Inizio</label><input type="date" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatDateForInput(formData.data_inizio)} onChange={e => setFormData({...formData, data_inizio: e.target.value})} /></div>
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Fine</label><input type="date" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatDateForInput(formData.data_fine)} onChange={e => setFormData({...formData, data_fine: e.target.value})} /></div>
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Luogo</label><input className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.luogo || ''} onChange={e => setFormData({...formData, luogo: e.target.value})} /></div>
-                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">PC Guadagnati</label><input type="number" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.pc_guadagnati || 0} onChange={e => setFormData({...formData, pc_guadagnati: e.target.value})} /></div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">PC premio presenza</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
+                                            value={formData.pc_guadagnati === undefined || formData.pc_guadagnati === null ? '' : formData.pc_guadagnati}
+                                            onChange={(e) => setFormData({ ...formData, pc_guadagnati: e.target.value })}
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">Accreditati una sola volta per PG iscritto al primo login durante i giorni d&apos;evento (default 1).</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Crediti premio presenza</label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            step="0.01"
+                                            className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
+                                            value={
+                                                formData.crediti_guadagnati === undefined || formData.crediti_guadagnati === null
+                                                    ? ''
+                                                    : formData.crediti_guadagnati
+                                            }
+                                            onChange={(e) => setFormData({ ...formData, crediti_guadagnati: e.target.value })}
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">Default 1000; stessa regola dei PC.</p>
+                                    </div>
                                     <div className="md:col-span-2">
                                         <RichTextEditor label="Sinossi" value={formData.sinossi} onChange={val => setFormData({...formData, sinossi: val})} />
+                                    </div>
+                                    <div className="md:col-span-2 rounded-lg border border-indigo-800/60 bg-indigo-950/30 p-4 space-y-3">
+                                        <p className="text-[10px] font-black uppercase text-indigo-300 tracking-widest">
+                                            Iscrizione giocatori (PayPal)
+                                        </p>
+                                        <p className="text-[11px] text-gray-400 leading-snug">
+                                            Imposta apertura e chiusura <span className="text-indigo-200">e</span> un costo maggiore di zero per
+                                            attivare il pulsante sulla start page. Lascia le date vuote per disattivare.
+                                        </p>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">
+                                                Iscrizione — apertura
+                                            </label>
+                                            <input
+                                                type="datetime-local"
+                                                className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
+                                                value={formatDateTimeForInput(formData.iscrizione_apertura)}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, iscrizione_apertura: e.target.value || null })
+                                                }
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">
+                                                Iscrizione — chiusura
+                                            </label>
+                                            <input
+                                                type="datetime-local"
+                                                className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
+                                                value={formatDateTimeForInput(formData.iscrizione_chiusura)}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, iscrizione_chiusura: e.target.value || null })
+                                                }
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">
+                                                Costo iscrizione (EUR)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                step="0.01"
+                                                className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
+                                                value={
+                                                    formData.iscrizione_costo_euro === undefined ||
+                                                    formData.iscrizione_costo_euro === null
+                                                        ? ''
+                                                        : formData.iscrizione_costo_euro
+                                                }
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, iscrizione_costo_euro: e.target.value })
+                                                }
+                                            />
+                                        </div>
+                                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-300">
+                                            <input
+                                                type="checkbox"
+                                                className="rounded border-gray-600"
+                                                checked={!!formData.iscrizione_test_attiva}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, iscrizione_test_attiva: e.target.checked })
+                                                }
+                                            />
+                                            <span>
+                                                Test iscrizione (solo Master / Head Master campagna principale; pagamento in
+                                                sandbox)
+                                            </span>
+                                        </label>
                                     </div>
                                 </>
                             )}
