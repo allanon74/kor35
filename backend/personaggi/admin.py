@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django import forms
+import re
 from django.forms import Media
+from django.core.exceptions import ValidationError
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 from django_summernote.admin import SummernoteInlineModelAdmin as SInlineModelAdmin
 from django.utils.html import format_html
@@ -831,6 +833,28 @@ class TimerQrCodeInline(admin.StackedInline):
     verbose_name_plural = "Configurazione Countdown"
     fk_name = 'qr_code'
 
+
+class QrCodeAdminForm(forms.ModelForm):
+    HEX_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+    class Meta:
+        model = QrCode
+        fields = "__all__"
+
+    def _clean_hex(self, field_name, fallback):
+        value = str(self.cleaned_data.get(field_name) or "").strip().upper()
+        if not value:
+            return fallback
+        if not self.HEX_RE.match(value):
+            raise ValidationError("Formato non valido: usa #RRGGBB (es. #A1B2C3).")
+        return value
+
+    def clean_inventario_colore_codice(self):
+        return self._clean_hex("inventario_colore_codice", "#FFFFFF")
+
+    def clean_inventario_colore_sfondo(self):
+        return self._clean_hex("inventario_colore_sfondo", "#000000")
+
 @admin.register(TipologiaTimer)
 class TipologiaTimerAdmin(admin.ModelAdmin):
     list_display = ('nome', 'alert_suono', 'notifica_push', 'messaggio_in_app')
@@ -849,11 +873,27 @@ class StatoTimerAttivoAdmin(admin.ModelAdmin):
 
 @admin.register(QrCode)
 class QrCodeAdmin(admin.ModelAdmin):
-    list_display = ('id', 'data_creazione', 'get_timer_info')
+    form = QrCodeAdminForm
+    list_display = (
+        'id',
+        'data_creazione',
+        'inventario_presente',
+        'inventario_colore_codice_preview',
+        'inventario_colore_sfondo_preview',
+        'get_vista_associata_si_no',
+        'get_timer_info',
+    )
     readonly_fields = ('id', 'data_creazione')
     search_fields = ('id',)
+    list_filter = (
+        'inventario_presente',
+        'inventario_colore_codice',
+        'inventario_colore_sfondo',
+        ('vista', admin.EmptyFieldListFilter),
+    )
     summernote_fields = ['testo']
     inlines = [TimerQrCodeInline] # <--- Aggiunge la configurazione timer al QR
+    list_select_related = ('vista',)
 
     def get_timer_info(self, obj):
         cfg = getattr(obj, "configurazione_timer", None)
@@ -865,6 +905,44 @@ class QrCodeAdmin(admin.ModelAdmin):
             )
         return "-"
     get_timer_info.short_description = "Tipo Timer"
+
+    def get_vista_associata_si_no(self, obj):
+        return "Si" if obj.vista_id else "No"
+    get_vista_associata_si_no.short_description = "Vista associata"
+
+    def inventario_colore_codice_preview(self, obj):
+        value = (obj.inventario_colore_codice or "").strip() or "#FFFFFF"
+        return format_html(
+            '<span style="display:inline-block;width:14px;height:14px;border:1px solid #666;'
+            'vertical-align:middle;margin-right:6px;background:{};"></span>{}',
+            value,
+            value,
+        )
+    inventario_colore_codice_preview.short_description = "Colore codice"
+
+    def inventario_colore_sfondo_preview(self, obj):
+        value = (obj.inventario_colore_sfondo or "").strip() or "#000000"
+        return format_html(
+            '<span style="display:inline-block;width:14px;height:14px;border:1px solid #666;'
+            'vertical-align:middle;margin-right:6px;background:{};"></span>{}',
+            value,
+            value,
+        )
+    inventario_colore_sfondo_preview.short_description = "Colore sfondo"
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        for field_name, fallback in (
+            ("inventario_colore_codice", "#FFFFFF"),
+            ("inventario_colore_sfondo", "#000000"),
+        ):
+            if field_name in form.base_fields:
+                form.base_fields[field_name].widget = forms.TextInput(
+                    attrs={"type": "color"}
+                )
+                current = form.base_fields[field_name].initial
+                form.base_fields[field_name].initial = current or fallback
+        return form
     
     
 # @admin.register(Attivata)
