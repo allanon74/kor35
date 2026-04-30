@@ -116,17 +116,36 @@ def _events_in_registration_window(now):
 
 def _already_registered_row(user, evento: Evento):
     row = (
-        evento.partecipanti.filter(proprietario=user, tipologia__giocante=True)
+        evento.partecipanti.filter(proprietario=user)
         .order_by("nome")
         .first()
     )
     if row:
         return {"personaggio_id": row.id, "personaggio_nome": row.nome}
+
+    paid = (
+        IscrizioneEventoPagamento.objects.filter(
+            evento=evento,
+            utente=user,
+            stato=IscrizioneEventoPagamento.Stato.CAPTURED,
+        )
+        .select_related("personaggio")
+        .order_by("-created_at")
+        .first()
+    )
+    if paid and paid.personaggio:
+        return {"personaggio_id": paid.personaggio_id, "personaggio_nome": paid.personaggio.nome}
     return None
 
 
 def _has_any_character_registered(user, evento: Evento) -> bool:
-    return evento.partecipanti.filter(proprietario=user, tipologia__giocante=True).exists()
+    if evento.partecipanti.filter(proprietario=user).exists():
+        return True
+    return IscrizioneEventoPagamento.objects.filter(
+        evento=evento,
+        utente=user,
+        stato=IscrizioneEventoPagamento.Stato.CAPTURED,
+    ).exists()
 
 
 @api_view(["GET"])
