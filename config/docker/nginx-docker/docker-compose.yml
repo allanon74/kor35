@@ -52,7 +52,15 @@ services:
       - ./media_data:/app/media
     expose:
       - "8000"
-    command: gunicorn kor35.wsgi:application --bind 0.0.0.0:8000 --timeout 120 --graceful-timeout 30
+    command: >
+      gunicorn kor35.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers 3
+      --threads 2
+      --max-requests 1000
+      --max-requests-jitter 100
+      --timeout 120
+      --graceful-timeout 30
     healthcheck:
       test:
         [

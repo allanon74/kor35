@@ -4,15 +4,19 @@ import { Ticket, X } from 'lucide-react';
 import {
   fetchAuthenticated,
   getIscrizioniEventoEligibility,
+  postIscrizioneEventoAnnulla,
   postIscrizioneEventoCattura,
   postIscrizioneEventoCreaOrdine,
 } from '../api';
 
-function loadPayPalScript(clientId, currency, sandbox) {
+function loadPayPalScript(clientId, currency, sandbox, uiFlags = {}) {
   const host = sandbox ? 'https://www.sandbox.paypal.com' : 'https://www.paypal.com';
+  const disabled = ['bancontact', 'blik', 'eps', 'giropay', 'ideal', 'p24', 'sepa', 'sofort', 'venmo'];
+  if (!uiFlags.showCard) disabled.push('card');
+  if (!uiFlags.showMybank) disabled.push('mybank');
   const src = `${host}/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=${encodeURIComponent(
     currency || 'EUR'
-  )}&intent=capture`;
+  )}&intent=capture&components=buttons&disable-funding=${encodeURIComponent(disabled.join(','))}`;
   return new Promise((resolve, reject) => {
     const existing = document.querySelector('script[data-kor35-paypal-sdk="1"]');
     if (existing) {
@@ -40,6 +44,7 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
   const [modalChars, setModalChars] = useState([]);
   const [selectedPgId, setSelectedPgId] = useState('');
   const [paypalUiErr, setPaypalUiErr] = useState('');
+  const currentOrderIdRef = useRef('');
   const paypalHostRef = useRef(null);
 
   const reload = useCallback(async () => {
@@ -96,6 +101,7 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
     setModalEvent(null);
     setSelectedPgId('');
     setPaypalUiErr('');
+    currentOrderIdRef.current = '';
     if (paypalHostRef.current) {
       paypalHostRef.current.innerHTML = '';
     }
@@ -112,11 +118,16 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
     let cancelled = false;
     const run = async () => {
       setPaypalUiErr('');
+    currentOrderIdRef.current = '';
       if (paypalHostRef.current) paypalHostRef.current.innerHTML = '';
       try {
-        await loadPayPalScript(clientId, 'EUR', sandbox);
+        const uiFlags = {
+          showCard: !!modalEvent?.paypal_show_card,
+          showMybank: !!modalEvent?.paypal_show_mybank,
+        };
+        await loadPayPalScript(clientId, 'EUR', sandbox, uiFlags);
         if (cancelled || !window.paypal) throw new Error('SDK PayPal non disponibile');
-        const buttons = window.paypal.Buttons({
+        const buttonsConfig = {
           style: { layout: 'vertical', shape: 'rect', label: 'pay' },
           createOrder: async () => {
             const res = await postIscrizioneEventoCreaOrdine(
@@ -125,6 +136,7 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
             );
             const oid = res?.paypal_order_id;
             if (!oid) throw new Error(res?.error || 'Ordine PayPal non creato');
+            currentOrderIdRef.current = String(oid);
             return oid;
           },
           onApprove: async (d) => {
@@ -137,7 +149,15 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
               navigate('/app/iscrizione-esito?esito=rifiutato');
             }
           },
-          onCancel: () => {
+          onCancel: async (d) => {
+            const orderToCancel = String(d?.orderID || currentOrderIdRef.current || "").trim();
+            if (orderToCancel) {
+              try {
+                await postIscrizioneEventoAnnulla({ paypal_order_id: orderToCancel }, onLogout);
+              } catch {
+                /* best effort */
+              }
+            }
             closeModal();
             navigate('/app/iscrizione-esito?esito=cancellato');
           },
@@ -145,7 +165,11 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
             closeModal();
             navigate('/app/iscrizione-esito?esito=rifiutato');
           },
-        });
+        };
+        if (!uiFlags.showCard && !uiFlags.showMybank) {
+          buttonsConfig.fundingSource = window.paypal.FUNDING.PAYPAL;
+        }
+        const buttons = window.paypal.Buttons(buttonsConfig);
         if (paypalHostRef.current) await buttons.render(paypalHostRef.current);
       } catch (e) {
         if (!cancelled) setPaypalUiErr(e?.message || 'Errore PayPal');
@@ -237,6 +261,10 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
               <X size={22} />
             </button>
             <h3 className="text-lg font-bold pr-8">{modalEvent.titolo}</h3>
+            <div className="rounded-lg border border-emerald-700 bg-emerald-950/40 px-3 py-2 text-center">
+              <p className="text-xs uppercase tracking-wide text-emerald-300 font-black">Importo da pagare</p>
+              <p className="text-3xl font-black text-emerald-100 leading-tight">{modalEvent?.costo_euro} €</p>
+            </div>
             <p className="text-sm text-gray-400">Scegli il personaggio da iscrivere (campagna principale, vivo).</p>
             <label className="block text-xs font-bold text-gray-400 uppercase">Personaggio</label>
             <select

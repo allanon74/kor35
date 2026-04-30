@@ -125,6 +125,10 @@ def _already_registered_row(user, evento: Evento):
     return None
 
 
+def _has_any_character_registered(user, evento: Evento) -> bool:
+    return evento.partecipanti.filter(proprietario=user, tipologia__giocante=True).exists()
+
+
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def iscrizioni_evento_eligibility(request):
@@ -157,6 +161,8 @@ def iscrizioni_evento_eligibility(request):
             "paypal_uses_sandbox": sandbox,
             "paypal_client_id": cid if paypal_ready else "",
             "paypal_ready": paypal_ready,
+            "paypal_show_card": bool(paypal_row.mostra_pulsante_carta),
+            "paypal_show_mybank": bool(paypal_row.mostra_pulsante_mybank),
         }
         if registered:
             row["cta_kind"] = "registered"
@@ -237,6 +243,9 @@ def iscrizioni_evento_crea_ordine(request):
     if not pg:
         return Response({"error": "Personaggio non valido o non ammesso"}, status=status.HTTP_400_BAD_REQUEST)
 
+    if _has_any_character_registered(request.user, evento):
+        return Response({"error": "Hai già un personaggio iscritto a questo evento"}, status=status.HTTP_409_CONFLICT)
+
     if evento.partecipanti.filter(id=pg.id).exists():
         return Response({"error": "Personaggio già iscritto a questo evento"}, status=status.HTTP_409_CONFLICT)
 
@@ -302,6 +311,32 @@ def _extract_capture_id(capture_json: dict) -> str:
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
+def iscrizioni_evento_annulla(request):
+    """
+    Marca un tentativo ordine come annullato (es. utente chiude o annulla nel popup PayPal).
+    Body: { "paypal_order_id": "..." }
+    """
+    order_id = str(request.data.get("paypal_order_id") or "").strip()
+    if not order_id:
+        return Response({"error": "paypal_order_id richiesto"}, status=status.HTTP_400_BAD_REQUEST)
+
+    row = IscrizioneEventoPagamento.objects.filter(paypal_order_id=order_id, utente=request.user).first()
+    if not row:
+        return Response({"error": "Ordine non trovato"}, status=status.HTTP_404_NOT_FOUND)
+
+    if row.stato == IscrizioneEventoPagamento.Stato.CAPTURED:
+        return Response({"status": "already_captured"}, status=status.HTTP_200_OK)
+
+    if row.stato != IscrizioneEventoPagamento.Stato.CANCELLED:
+        row.stato = IscrizioneEventoPagamento.Stato.CANCELLED
+        row.ultimo_errore = "Pagamento annullato dall'utente"
+        row.save(update_fields=["stato", "ultimo_errore", "updated_at"])
+
+    return Response({"status": "cancelled"}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def iscrizioni_evento_cattura(request):
     """
     Cattura pagamento PayPal e aggiunge il PG ai partecipanti dell'evento.
@@ -360,6 +395,13 @@ def iscrizioni_evento_cattura(request):
                 return Response({"status": "already_captured"}, status=status.HTTP_200_OK)
 
             ev = Evento.objects.select_for_update().get(pk=row_locked.evento_id)
+            other_registered = ev.partecipanti.filter(proprietario=row_locked.utente, tipologia__giocante=True).exclude(id=row_locked.personaggio_id).exists()
+            if other_registered:
+                row_locked.stato = IscrizioneEventoPagamento.Stato.FAILED
+                row_locked.ultimo_errore = "Esiste già un altro tuo personaggio iscritto a questo evento."
+                row_locked.save(update_fields=["stato", "ultimo_errore", "updated_at"])
+                return Response({"error": row_locked.ultimo_errore}, status=status.HTTP_409_CONFLICT)
+
             if not ev.partecipanti.filter(id=row_locked.personaggio_id).exists():
                 ev.partecipanti.add(row_locked.personaggio_id)
             row_locked.paypal_capture_id = capture_id

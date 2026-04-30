@@ -1549,6 +1549,13 @@ export const postIscrizioneEventoCattura = (body, onLogout) =>
     body: JSON.stringify(body),
   }, onLogout);
 
+/** Body: { paypal_order_id } -> marca tentativo annullato */
+export const postIscrizioneEventoAnnulla = (body, onLogout) =>
+  fetchAuthenticated('/api/plot/iscrizioni-evento/annulla/', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, onLogout);
+
 /** POST idempotente: accredita PC/crediti d'evento se siamo in giornata evento (una tantum per PG/evento). */
 export const postEventoPremiApplica = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/evento-premi/applica/', { method: 'POST', body: '{}' }, onLogout);

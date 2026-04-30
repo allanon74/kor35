@@ -836,6 +836,17 @@ class PayPalImpostazioniGlobali(SyncableModel, models.Model):
     live_client_id = models.CharField(max_length=255, blank=True, verbose_name="Live Client ID")
     live_client_secret = models.TextField(blank=True, verbose_name="Live Secret")
 
+    mostra_pulsante_carta = models.BooleanField(
+        default=False,
+        verbose_name="Mostra pulsante Carta",
+        help_text="Se attivo, nel checkout PayPal puo comparire anche il pulsante carta.",
+    )
+    mostra_pulsante_mybank = models.BooleanField(
+        default=False,
+        verbose_name="Mostra pulsante MyBank",
+        help_text="Se attivo, nel checkout PayPal puo comparire anche MyBank (quando supportato).",
+    )
+
     class Meta:
         verbose_name = "Impostazioni PayPal (globale)"
         verbose_name_plural = "Impostazioni PayPal (globale)"

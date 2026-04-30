@@ -5,6 +5,7 @@ from icon_widget import views
 
 # from personaggi import views_staff
 from .iscrizioni_evento_views import (
+    iscrizioni_evento_annulla,
     iscrizioni_evento_cattura,
     iscrizioni_evento_crea_ordine,
     iscrizioni_evento_eligibility,
@@ -83,6 +84,7 @@ urlpatterns = [
     path('iscrizioni-evento/eligibility/', iscrizioni_evento_eligibility),
     path('iscrizioni-evento/crea-ordine/', iscrizioni_evento_crea_ordine),
     path('iscrizioni-evento/cattura/', iscrizioni_evento_cattura),
+    path('iscrizioni-evento/annulla/', iscrizioni_evento_annulla),
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),
     path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
     path('api/wiki/image/<slug:slug>/', serve_wiki_image, name='wiki_image'),

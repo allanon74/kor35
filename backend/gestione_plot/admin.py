@@ -94,7 +94,7 @@ class EventoAdmin(SModelAdmin):
 
 @admin.register(PayPalImpostazioniGlobali)
 class PayPalImpostazioniGlobaliAdmin(admin.ModelAdmin):
-    list_display = ('id', 'use_sandbox', 'updated_at')
+    list_display = ('id', 'use_sandbox', 'mostra_pulsante_carta', 'mostra_pulsante_mybank', 'updated_at')
 
     fieldsets = (
         (
@@ -112,6 +112,10 @@ class PayPalImpostazioniGlobaliAdmin(admin.ModelAdmin):
         (
             "Live",
             {"fields": ("live_client_id", "live_client_secret")},
+        ),
+        (
+            "Checkout UI",
+            {"fields": ("mostra_pulsante_carta", "mostra_pulsante_mybank")},
         ),
     )
 
