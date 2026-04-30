@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 class WatchViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = WatchRepository(
@@ -89,10 +90,35 @@ class WatchViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
                 }
-                .onFailure {
-                    _state.update { it.copy(pairStatus = "Sessione non valida, rifai pairing.", pairToken = "") }
-                    repo.clearPairToken()
+                .onFailure { e ->
+                    // Prima errore di rete dopo standby cancellava il token: così chiedeva sempre il pairing.
+                    when {
+                        e is HttpException && e.code() in listOf(401, 403) -> {
+                            _state.update {
+                                it.copy(
+                                    pairStatus = "Sessione non più valida. Rifai pairing dalla web.",
+                                    pairToken = "",
+                                )
+                            }
+                            repo.clearPairToken()
+                        }
+                        else -> {
+                            _state.update { s ->
+                                s.copy(
+                                    pairStatus = "Rete assente o server non raggiungibile.",
+                                )
+                            }
+                        }
+                    }
                 }
+        }
+    }
+
+    /** Chiude la sessione sullo SW (token cancellato). Il pairing va rifatto solo se vuoi ricollegarti. */
+    fun disconnectSession() {
+        viewModelScope.launch {
+            repo.clearPairToken()
+            _state.update { WatchUiState(pairStatus = "Sessione chiusa.") }
         }
     }
 

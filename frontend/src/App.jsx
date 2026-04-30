@@ -34,6 +34,11 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    try {
+      sessionStorage.removeItem('kor35_main_active_tab');
+    } catch (e) {
+      /* noop */
+    }
     const loginMethod = String(localStorage.getItem('kor35_login_method') || '').toLowerCase();
     localStorage.removeItem('kor35_token');
     localStorage.removeItem('kor35_is_admin');

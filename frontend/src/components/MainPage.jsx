@@ -66,6 +66,29 @@ const DEFAULT_SHORTCUTS = ['inventario', 'abilita', 'messaggi', 'qr'];
 
 // Mappatura tab -> slug pagina wiki
 // Nota: gli slug sono unici nel database, le pagine sono organizzate gerarchicamente tramite parent
+/** Ripristino tab dopo standby / riapertura PWA (sessione browser). */
+const MAIN_TAB_STORAGE_KEY = 'kor35_main_active_tab';
+
+function isValidMainTabId(tabId) {
+    if (!tabId) return false;
+    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch') return true;
+    return AVAILABLE_TABS.some((t) => t.id === tabId);
+}
+
+function readStoredMainTab() {
+    if (typeof window === 'undefined') return 'game';
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get('tab');
+        if (isValidMainTabId(urlTab)) return urlTab;
+        const stored = sessionStorage.getItem(MAIN_TAB_STORAGE_KEY);
+        if (isValidMainTabId(stored)) return stored;
+    } catch (e) {
+        /* noop */
+    }
+    return 'game';
+}
+
 const TAB_TO_WIKI_SLUG = {
     'inventario': 'inventario',
     'abilita': 'abilita',
@@ -87,7 +110,7 @@ const TAB_TO_WIKI_SLUG = {
 const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('game'); 
+  const [activeTab, setActiveTab] = useState(readStoredMainTab);
   const [qrResultData, setQrResultData] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -263,22 +286,39 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     if (token) fetchPersonaggi();
   }, [token, fetchPersonaggi]);
 
-  const isValidTabId = useCallback((tabId) => {
-    if (!tabId) return false;
-    if (tabId === 'game' || tabId === 'home' || tabId === 'admin_msg' || tabId === 'watch') return true;
-    return AVAILABLE_TABS.some(t => t.id === tabId);
-  }, []);
-
-  // Legge il tab dalla URL (deep-link): /app?tab=personaggi
-  // NB: solo in lettura. Evitiamo sync bidirezionale URL<->state
-  // per prevenire loop di navigazione in produzione.
+  // Legge il tab dalla URL quando cambia (deep-link, bookmark): /app?tab=watch
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const urlTab = params.get('tab');
-    if (isValidTabId(urlTab)) {
+    if (isValidMainTabId(urlTab)) {
       setActiveTab(urlTab);
     }
-  }, [location.search, isValidTabId]);
+  }, [location.search]);
+
+  // Persiste il tab così dopo standby / kill soft del browser si torna alla stessa schermata.
+  useEffect(() => {
+    try {
+      if (isValidMainTabId(activeTab)) {
+        sessionStorage.setItem(MAIN_TAB_STORAGE_KEY, activeTab);
+      }
+    } catch (e) {
+      /* noop */
+    }
+  }, [activeTab]);
+
+  // Sincronizza ?tab= nell'URL (replace) così OS e PWA ripristinano la vista corretta al wake.
+  useEffect(() => {
+    if (!isValidMainTabId(activeTab)) return;
+    try {
+      const params = new URLSearchParams(location.search);
+      if (params.get('tab') === activeTab) return;
+      params.set('tab', activeTab);
+      const q = params.toString();
+      navigate({ pathname: location.pathname, search: q ? `?${q}` : '' }, { replace: true });
+    } catch (e) {
+      /* noop */
+    }
+  }, [activeTab, navigate, location.pathname, location.search]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

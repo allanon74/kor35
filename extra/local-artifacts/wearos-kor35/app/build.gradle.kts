@@ -1,8 +1,20 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.kapt")
 }
+
+/** Firma release opzionale (installabile su device): env o proprietà Gradle (non committare segreti). */
+fun wearEnvOrProp(envVar: String, gradleProp: String): String? =
+    System.getenv(envVar)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: project.findProperty(gradleProp)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+
+val wearReleaseStorePath: String? = wearEnvOrProp("WEAR_RELEASE_STORE_FILE", "wear.release.storeFile")
+val wearReleaseStorePassword: String? = wearEnvOrProp("WEAR_RELEASE_STORE_PASSWORD", "wear.release.storePassword")
+val wearReleaseKeyAlias: String? = wearEnvOrProp("WEAR_RELEASE_KEY_ALIAS", "wear.release.keyAlias")
+val wearReleaseKeyPassword: String? = wearEnvOrProp("WEAR_RELEASE_KEY_PASSWORD", "wear.release.keyPassword")
 
 android {
     namespace = "it.kor35.wearos"
@@ -16,6 +28,25 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        val storePath = wearReleaseStorePath
+        val storePass = wearReleaseStorePassword
+        val alias = wearReleaseKeyAlias
+        if (
+            !storePath.isNullOrBlank() &&
+            !storePass.isNullOrBlank() &&
+            !alias.isNullOrBlank()
+        ) {
+            create("release") {
+                val resolved = File(storePath.trim())
+                storeFile = if (resolved.isAbsolute) file(resolved) else rootProject.file(storePath.trim())
+                storePassword = storePass
+                keyAlias = alias
+                keyPassword = wearReleaseKeyPassword?.ifBlank { null } ?: storePass
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -23,6 +54,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 

@@ -24,6 +24,21 @@ fi
 
 mkdir -p "${ARTIFACT_DIR}"
 
+# Firma release (APK installabile): env WEAR_RELEASE_* oppure signing.env accanto al modulo Wear.
+SIGNING_ENV="${WEAR_PROJECT_DIR}/signing.env"
+if [[ -f "${SIGNING_ENV}" ]]; then
+  echo "==> Carico firma da ${SIGNING_ENV}"
+  set -a
+  # shellcheck source=/dev/null
+  source "${SIGNING_ENV}"
+  set +a
+fi
+if [[ -z "${WEAR_RELEASE_STORE_FILE:-}" || -z "${WEAR_RELEASE_STORE_PASSWORD:-}" || -z "${WEAR_RELEASE_KEY_ALIAS:-}" ]]; then
+  echo "WARN: Firma release non configurata (WEAR_RELEASE_* mancanti)."
+  echo "    Senza keystore l'APK sarà unsigned e su device può fallire (INSTALL_PARSE_FAILED_NO_CERTIFICATES)."
+  echo "    Vedi: extra/local-artifacts/wearos-kor35/signing.env.example"
+fi
+
 # Forza un JDK completo (con jlink) per AGP.
 if [[ -z "${JAVA_HOME:-}" || ! -x "${JAVA_HOME}/bin/jlink" ]]; then
   for CANDIDATE in \
@@ -92,14 +107,20 @@ PY
   fi
 )
 
+APK_UNSIGNED_FALLBACK=0
 if [[ ! -f "${SOURCE_APK}" ]]; then
   if [[ -f "${SOURCE_APK_UNSIGNED}" ]]; then
     SOURCE_APK="${SOURCE_APK_UNSIGNED}"
+    APK_UNSIGNED_FALLBACK=1
   else
     echo "Errore: APK non trovato dopo build: ${SOURCE_APK}"
     echo "Controllati anche: ${SOURCE_APK_UNSIGNED}"
     exit 1
   fi
+fi
+
+if [[ "${APK_UNSIGNED_FALLBACK}" -eq 1 ]]; then
+  echo "ATTENZIONE: in uso app-release-unsigned.apk (nessuna firma release configurata)." >&2
 fi
 
 cp -f "${SOURCE_APK}" "${TARGET_APK}"

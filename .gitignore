@@ -168,6 +168,9 @@ extra/local-artifacts/*
 extra/local-artifacts/wearos-kor35/.gradle/
 extra/local-artifacts/wearos-kor35/.idea/
 extra/local-artifacts/wearos-kor35/app/build/
+extra/local-artifacts/wearos-kor35/signing.env
+extra/local-artifacts/wearos-kor35/*.jks
+extra/local-artifacts/wearos-kor35/*.keystore
 
 # Backend environment profiles (secrets)
 backend/.env

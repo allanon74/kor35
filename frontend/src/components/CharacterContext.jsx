@@ -374,6 +374,16 @@ export const CharacterProvider = ({ children, onLogout }) => {
     }
   }, [selectedCharacterId, queryClient, refetchCharacterDetail, refetchSkills, refetchInfusioni, refetchTessiture, refetchCerimoniali]);
 
+  // Tornando alla PWA / scheda (es. dopo modifiche dallo smartwatch) allinea i dati se il WS era in pausa.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible' || !selectedCharacterId) return;
+      refreshCharacterData();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [selectedCharacterId, refreshCharacterData]);
+
   const fetchPersonaggi = useCallback(() => {
     return refetchPersonaggiList();
   }, [refetchPersonaggiList]);

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Segno stilizzato (fallback finché non si genera dal Logo Kor-AD.png con lo script) -->
+    <path
+        android:fillColor="#38bdf8"
+        android:pathData="M54,24 L82,54 L54,84 L26,54 Z" />
+    <path
+        android:fillColor="#0f172a"
+        android:pathData="M54,38 L68,54 L54,70 L40,54 Z" />
+</vector>
