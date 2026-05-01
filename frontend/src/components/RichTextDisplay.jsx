@@ -164,3 +164,6 @@ const RichTextDisplay = ({ content, onUpdate, onLogout }) => {
 };
 
 export default RichTextDisplay;
+
+/** Alias esplicito per le viste di sola lettura (stesso componente di RichTextDisplay). */
+export { RichTextDisplay as RichTextViewer };

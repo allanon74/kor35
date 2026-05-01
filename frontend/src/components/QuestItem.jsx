@@ -1,7 +1,7 @@
 // src/components/QuestItem.jsx
 import React, { useState, useMemo, useCallback, memo } from 'react';
 import { Edit2, Trash, Plus, Package, List, User as UserIcon, QrCode as QrIcon, X } from 'lucide-react';
-import RichTextDisplay from './RichTextDisplay';
+import { RichTextViewer } from './RichTextDisplay';
 import QuestFaseSection from './QuestFaseSection';
 import SearchableSelect from './editors/SearchableSelect';
 
@@ -17,7 +17,7 @@ const TIPO_A_VISTA_OPTIONS = [
     { value: 'MAN', label: 'Manifesto' }
 ];
 
-const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChange, onEdit, onScanQr }) => {
+const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChange, onEdit, onEditTask, onScanQr }) => {
     const [viewMode, setViewMode] = useState('FASI'); // 'FASI' o 'STAFF'
     const [newVista, setNewVista] = useState({ tipo: 'MAN', a_vista_id: '' });
 
@@ -63,11 +63,11 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
             <div className="p-6 space-y-8">
                 {/* 2. Info Quest (Descrizione e Props) */}
                 <div className="space-y-4">
-                    {quest.descrizione_ampia && <div className="bg-black/20 p-4 rounded-xl border border-gray-800 italic text-gray-300 leading-relaxed"><RichTextDisplay content={quest.descrizione_ampia} /></div>}
+                    {quest.descrizione_ampia && <div className="bg-black/20 p-4 rounded-xl border border-gray-800 italic text-gray-300 leading-relaxed"><RichTextViewer content={quest.descrizione_ampia} /></div>}
                     {quest.props && (
                         <div className="flex items-start gap-3 bg-amber-900/10 border border-amber-900/20 p-4 rounded-xl">
                             <Package size={20} className="text-amber-500 shrink-0 mt-0.5" />
-                            <div><span className="text-[10px] font-black text-amber-500 uppercase block mb-1 tracking-widest">Materiale di Scena:</span><div className="text-amber-100/80 text-sm"><RichTextDisplay content={quest.props} /></div></div>
+                            <div><span className="text-[10px] font-black text-amber-500 uppercase block mb-1 tracking-widest">Materiale di Scena:</span><div className="text-amber-100/80 text-sm"><RichTextViewer content={quest.props} /></div></div>
                         </div>
                     )}
                 </div>
@@ -87,6 +87,7 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
                                     onStatChange={onStatChange} 
                                     onEdit={() => onEdit('fase', fase)}
                                     onDelete={() => onRemoveSub('fase', fase.id)}
+                                    onEditTask={onEditTask}
                                 />
                             ))}
                             {isMaster && (

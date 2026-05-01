@@ -17,6 +17,7 @@ from .models import (
     SequenzaVolo,
     SessioneVolo,
     SottosistemaNave,
+    StatoAllertaPilot,
     StatoSottosistemaSessione,
     TentativoCodice,
 )
@@ -80,6 +81,7 @@ class EventoNaveSerializer(serializers.ModelSerializer):
             "descrizione",
             "codice_soluzione_esatta",
             "codici_soluzione_parziale",
+            "codici_precipizio",
             "durata_base_secondi",
             "peso_random",
             "sottosistema",
@@ -94,6 +96,58 @@ class SequenzaVoloSerializer(serializers.ModelSerializer):
         model = SequenzaVolo
         fields = ["id", "tipo", "nome", "codici", "attiva"]
         read_only_fields = ["id"]
+
+
+class StatoAllertaPilotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StatoAllertaPilot
+        fields = [
+            "id",
+            "livello",
+            "nome",
+            "colore",
+            "frequenza_evento_min_sec",
+            "frequenza_evento_max_sec",
+            "tempo_risoluzione_secondi",
+            "equivale_nave_abbattuta",
+        ]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs):
+        lo = attrs.get("frequenza_evento_min_sec")
+        hi = attrs.get("frequenza_evento_max_sec")
+        if lo is not None and hi is not None and lo > hi:
+            raise serializers.ValidationError(
+                {
+                    "frequenza_evento_max_sec": "Deve essere >= frequenza minima.",
+                }
+            )
+        col = attrs.get("colore")
+        if col is not None and str(col).strip() != "":
+            c = str(col).strip()
+            if len(c) != 7 or not c.startswith("#"):
+                raise serializers.ValidationError(
+                    {"colore": "Usa formato esadecimale #RRGGBB."}
+                )
+        return attrs
+
+    def validate_livello(self, value):
+        if value < 0 or value > 6:
+            raise serializers.ValidationError("Livello consentito: 0..6.")
+        return value
+
+
+class StatoAllertaPilotPublicSerializer(serializers.ModelSerializer):
+    """Sottinsieme per console pilota (colori e nomi)."""
+
+    class Meta:
+        model = StatoAllertaPilot
+        fields = [
+            "livello",
+            "nome",
+            "colore",
+            "equivale_nave_abbattuta",
+        ]
 
 
 class StatoSottosistemaRuntimeSerializer(serializers.ModelSerializer):

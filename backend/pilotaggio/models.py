@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -138,10 +139,11 @@ class EventoNave(SyncableModel, models.Model):
     Logica di risoluzione:
     - codice_soluzione_esatta -> evento risolto, defcon -1
     - pattern in codici_soluzione_parziale (lista regex/jolly) -> defcon invariato
+    - pattern in codici_precipizio -> precipitazione immediata (stesso formato dei parziali)
     - tutto il resto + timeout -> fallimento, defcon +1
 
     I pattern parziali usano `_` come jolly (singolo carattere) e maiuscole.
-    Esempio: "A_5" matcha qualsiasi codice A?5 di lunghezza 3.
+    Esempio: "A_5" oppure intervallo sulla terza cifra: "ML(4-9)" per ML4..ML9.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -157,7 +159,15 @@ class EventoNave(SyncableModel, models.Model):
     codici_soluzione_parziale = models.JSONField(
         default=list,
         blank=True,
-        help_text='Lista di pattern parziali ammessi, jolly "_". Es. ["A_3","_B5"].',
+        help_text='Pattern parziali: jolly "_" (es. ["A_3","_B5"]) o intervallo terza cifra (es. ["ML(4-9)"]).',
+    )
+    codici_precipizio = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Pattern che causano precipitazione immediata (DEFCON oltre il massimo). "
+            'Stessa sintassi dei parziali. Es. ["XX9","ZZ(8-9)"]. Valutati dopo la soluzione esatta.'
+        ),
     )
     durata_base_secondi = models.PositiveIntegerField(
         default=20,
@@ -188,6 +198,10 @@ class EventoNave(SyncableModel, models.Model):
         if isinstance(self.codici_soluzione_parziale, list):
             self.codici_soluzione_parziale = [
                 str(p).upper() for p in self.codici_soluzione_parziale if p
+            ]
+        if isinstance(self.codici_precipizio, list):
+            self.codici_precipizio = [
+                str(p).upper() for p in self.codici_precipizio if p
             ]
         super().save(*args, **kwargs)
 
@@ -233,6 +247,58 @@ class SequenzaVolo(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} ({len(self.codici or [])} step)"
+
+
+class StatoAllertaPilot(SyncableModel, models.Model):
+    """
+    Livello DEFCON 0..6: nome, colore UI, frequenza spawn eventi e tempo risoluzione.
+    Esattamente un livello deve avere `equivale_nave_abbattuta` (tipicamente 6).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    livello = models.PositiveSmallIntegerField(
+        unique=True,
+        validators=[MinValueValidator(0), MaxValueValidator(6)],
+        help_text="Allineato al DEFCON runtime (0..5 in volo; 6 = oltre soglia / precipizio).",
+    )
+    nome = models.CharField(max_length=80)
+    colore = models.CharField(
+        max_length=7,
+        default="#888888",
+        help_text="Colore CSS (#RRGGBB) per la console.",
+    )
+    frequenza_evento_min_sec = models.PositiveIntegerField(
+        default=60,
+        help_text="Estremo inferiore dell'intervallo (secondi) prima del prossimo evento.",
+    )
+    frequenza_evento_max_sec = models.PositiveIntegerField(
+        default=90,
+        help_text="Estremo superiore dell'intervallo (secondi) prima del prossimo evento.",
+    )
+    tempo_risoluzione_secondi = models.PositiveIntegerField(
+        default=20,
+        help_text="Durata countdown (secondi) per risolvere un evento mentre si e' in questo livello.",
+    )
+    equivale_nave_abbattuta = models.BooleanField(
+        default=False,
+        help_text="Se vero: questo livello descrive la nave precipitata (crash). Solo uno tra 0..6.",
+    )
+
+    class Meta:
+        verbose_name = "Stato allerta console"
+        verbose_name_plural = "Stati allerta console"
+        ordering = ["livello"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.equivale_nave_abbattuta:
+            StatoAllertaPilot.objects.exclude(pk=self.pk).update(
+                equivale_nave_abbattuta=False
+            )
+
+    def __str__(self):
+        return f"{self.livello} — {self.nome}"
 
 
 # ---------------------------------------------------------------------------
@@ -335,12 +401,14 @@ EVENTO_ESITO_RISOLTO = "risolto"
 EVENTO_ESITO_PARZIALE = "parziale"
 EVENTO_ESITO_FALLITO = "fallito"
 EVENTO_ESITO_TIMEOUT = "timeout"
+EVENTO_ESITO_PRECIPITAZIO = "precipizio"
 EVENTO_ESITO_CHOICES = [
     (EVENTO_ESITO_PENDING, "In attesa"),
     (EVENTO_ESITO_RISOLTO, "Risolto"),
     (EVENTO_ESITO_PARZIALE, "Parziale"),
     (EVENTO_ESITO_FALLITO, "Fallito"),
     (EVENTO_ESITO_TIMEOUT, "Timeout"),
+    (EVENTO_ESITO_PRECIPITAZIO, "Precipizio"),
 ]
 
 

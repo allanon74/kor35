@@ -3,7 +3,7 @@ Motore della console pilotaggio.
 
 Logica autoritativa lato backend:
 - generazione random degli eventi pesata sui pesi configurati;
-- valutazione codici in 3 caratteri (esatto/parziale/dannoso);
+- valutazione codici in 3 caratteri (esatto/parziale/dannoso); parziali con `_` o ``XY(N-M)``;
 - aggiornamento DEFCON (gravita') e regola di crash (DEFCON > DEFCON_MAX);
 - frequenza eventi e durata countdown variabile in base a DEFCON;
 - ripristino automatico sottosistemi dopo `durata_ripristino_secondi`;
@@ -14,6 +14,7 @@ Tutte le mutazioni sui modelli pilotaggio passano da qui in `transaction.atomic`
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import List, Optional, Tuple
@@ -25,6 +26,7 @@ from .models import (
     DEFCON_MAX,
     EVENTO_ESITO_FALLITO,
     EVENTO_ESITO_PARZIALE,
+    EVENTO_ESITO_PRECIPITAZIO,
     EVENTO_ESITO_PENDING,
     EVENTO_ESITO_RISOLTO,
     EVENTO_ESITO_TIMEOUT,
@@ -67,10 +69,38 @@ def codice_valido_3char(codice: str) -> bool:
     return True
 
 
+# Due caratteri (con jolly `_`) + terza cifra in intervallo: es. ML(4-9) -> ML4..ML9
+_PATTERN_PARZIALE_RANGE = re.compile(r"^(.{2})\((\d)-(\d)\)$")
+
+
 def matcha_pattern(pattern: str, codice: str) -> bool:
-    """Match pattern parziale con jolly `_` (singolo carattere)."""
-    p = normalizza_codice(pattern)
+    """
+    Match pattern parziale su codice 3 caratteri.
+
+    Formati:
+    - Jolly `_` (singolo carattere): es. ``A_3``, ``_B5``.
+    - Intervallo sulla terza cifra: ``XY(N-M)`` con X,Y lettere/cifre/jolly,
+      N e M cifre singole 0-9 (comprese); es. ``ML(4-9)`` equivale a ML4..ML9.
+    """
+    raw = (pattern or "").strip()
     c = normalizza_codice(codice)
+    if len(c) != 3:
+        return False
+
+    m = _PATTERN_PARZIALE_RANGE.match(normalizza_codice(raw))
+    if m:
+        prefisso, lo_s, hi_s = m.group(1), m.group(2), m.group(3)
+        lo, hi = int(lo_s), int(hi_s)
+        if lo > hi:
+            lo, hi = hi, lo
+        if not c[2].isdigit():
+            return False
+        d = int(c[2])
+        if d < lo or d > hi:
+            return False
+        return all(prefisso[i] == "_" or prefisso[i] == c[i] for i in range(2))
+
+    p = normalizza_codice(raw)
     if len(p) != len(c):
         return False
     return all(pc == "_" or pc == cc for pc, cc in zip(p, c))
@@ -81,11 +111,29 @@ def matcha_pattern(pattern: str, codice: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _stato_allerta_config(livello: int):
+    """Configurazione staff per livello 0..6; None se tabella assente o riga mancante."""
+    try:
+        from .models import StatoAllertaPilot
+
+        liv = int(livello)
+        if liv < 0:
+            liv = 0
+        if liv > 6:
+            liv = 6
+        return StatoAllertaPilot.objects.filter(livello=liv).first()
+    except Exception:
+        return None
+
+
 def secondi_evento_per_defcon(durata_base: int, defcon: int) -> int:
     """
-    Riduce la durata countdown in modo monotono crescente al salire del DEFCON.
-    A DEFCON 0 -> durata_base. A DEFCON DEFCON_MAX -> ~30% durata_base.
+    Durata countdown evento attivo. Se esiste `StatoAllertaPilot` per questo DEFCON,
+    usa `tempo_risoluzione_secondi`; altrimenti formula storica su durata_base.
     """
+    cfg = _stato_allerta_config(defcon)
+    if cfg is not None:
+        return max(3, int(cfg.tempo_risoluzione_secondi))
     base = max(3, int(durata_base or 20))
     fattore = max(0.3, 1.0 - 0.14 * max(0, defcon))
     return max(3, int(round(base * fattore)))
@@ -93,9 +141,14 @@ def secondi_evento_per_defcon(durata_base: int, defcon: int) -> int:
 
 def secondi_prossimo_evento_per_defcon(defcon: int) -> int:
     """
-    Intervallo prima del prossimo evento generato.
-    A DEFCON 0 -> 60..90s. A DEFCON DEFCON_MAX -> 12..20s.
+    Intervallo casuale prima del prossimo evento. Se esiste riga staff per il DEFCON,
+    usa [frequenza_evento_min_sec, frequenza_evento_max_sec].
     """
+    cfg = _stato_allerta_config(defcon)
+    if cfg is not None:
+        lo = max(3, min(cfg.frequenza_evento_min_sec, cfg.frequenza_evento_max_sec))
+        hi = max(lo, max(cfg.frequenza_evento_min_sec, cfg.frequenza_evento_max_sec))
+        return random.randint(lo, hi)
     minimo_base = 60
     massimo_base = 90
     fattore = max(0.2, 1.0 - 0.16 * max(0, defcon))
@@ -129,6 +182,19 @@ def applica_delta_defcon(sessione: SessioneVolo, delta: int) -> int:
     sessione.defcon = nuovo
     sessione.save(update_fields=["defcon", "updated_at"])
     return nuovo
+
+
+def forza_precipizio(sessione: SessioneVolo) -> int:
+    """
+    Precipitazione immediata: stato crashed e DEFCON a DEFCON_MAX+1 (es. 6 se MAX=5).
+    """
+    sessione.stato = SESSIONE_STATO_CRASHED
+    sessione.ended_at = timezone.now()
+    sessione.defcon = DEFCON_MAX + 1
+    sessione.save(
+        update_fields=["stato", "ended_at", "defcon", "updated_at"]
+    )
+    return sessione.defcon
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +416,7 @@ def durata_viaggio_secondi(prefettura_partenza, prefettura_arrivo, defcon_inizia
 
 @dataclass
 class ValutazioneCodice:
-    esito: str  # uno tra EVENTO_ESITO_*, oppure 'sequenza_ok'/'sequenza_ko'/'invalido'/'no_evento'
+    esito: str  # ... 'precipizio' / 'sequenza_ok' / 'sequenza_ko' / 'invalido' / 'no_evento' / ...
     delta_defcon: int
     nuovo_defcon: int
     descrizione: str
@@ -431,6 +497,7 @@ def processa_codice(sessione: SessioneVolo, codice_raw: str) -> ValutazioneCodic
        - formato non valido -> defcon +1
        - sottosistema guasto sul primo char -> defcon +1
        - codice == soluzione esatta evento attivo -> defcon -1
+       - codice match pattern precipizio evento attivo -> precipitazione immediata
        - codice match parziale evento attivo -> defcon invariato
        - altrimenti -> defcon +1
     """
@@ -530,6 +597,7 @@ def processa_codice(sessione: SessioneVolo, codice_raw: str) -> ValutazioneCodic
     evento = pending.evento
     soluzione = normalizza_codice(evento.codice_soluzione_esatta)
     parziali = [normalizza_codice(p) for p in (evento.codici_soluzione_parziale or [])]
+    precipizi = [normalizza_codice(p) for p in (evento.codici_precipizio or [])]
 
     if codice == soluzione:
         pending.esito = EVENTO_ESITO_RISOLTO
@@ -553,6 +621,30 @@ def processa_codice(sessione: SessioneVolo, codice_raw: str) -> ValutazioneCodic
             delta_defcon=-1,
             nuovo_defcon=nuovo,
             descrizione="Evento risolto.",
+        )
+
+    if any(matcha_pattern(p, codice) for p in precipizi):
+        pending.esito = EVENTO_ESITO_PRECIPITAZIO
+        pending.risolto_at = timezone.now()
+        pending.codice_inserito = codice
+        pending.save(
+            update_fields=["esito", "risolto_at", "codice_inserito", "updated_at"]
+        )
+        nuovo = forza_precipizio(sessione)
+        TentativoCodice.objects.create(
+            sessione=sessione,
+            evento_attivo=pending,
+            codice=codice,
+            esito="precipizio",
+            defcon_pre=defcon_pre,
+            defcon_post=nuovo,
+            note="Pattern critico: precipitazione immediata.",
+        )
+        return ValutazioneCodice(
+            esito="precipizio",
+            delta_defcon=nuovo - defcon_pre,
+            nuovo_defcon=nuovo,
+            descrizione="Codice critico: nave precipitata.",
         )
 
     if any(matcha_pattern(p, codice) for p in parziali):

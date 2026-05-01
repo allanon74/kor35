@@ -110,6 +110,24 @@ class CountdownTests(TestCase):
         self.assertGreaterEqual(secondi_evento_per_defcon(30, 99), 3)
 
 
+class MatchPatternParzialeTests(TestCase):
+    def test_range_ml_4_9(self):
+        self.assertTrue(matcha_pattern("ML(4-9)", "ML4"))
+        self.assertTrue(matcha_pattern("ML(4-9)", "ML9"))
+        self.assertFalse(matcha_pattern("ML(4-9)", "ML3"))
+        self.assertFalse(matcha_pattern("ML(4-9)", "MK5"))
+
+    def test_range_bounds_invertiti(self):
+        self.assertTrue(matcha_pattern("ML(9-4)", "ML5"))
+
+    def test_range_con_jolly(self):
+        self.assertTrue(matcha_pattern("_L(4-9)", "AL8"))
+        self.assertFalse(matcha_pattern("_L(4-9)", "XL3"))
+
+    def test_legacy_underscore(self):
+        self.assertTrue(matcha_pattern("A_2", "A52"))
+
+
 class CodiceProcessingTests(TestCase):
     def setUp(self):
         self.pilota = _crea_pilota()
@@ -148,6 +166,26 @@ class CodiceProcessingTests(TestCase):
         self.assertEqual(ris.esito, EVENTO_ESITO_PARZIALE)
         self.session.refresh_from_db()
         self.assertEqual(self.session.defcon, 0)
+
+    def test_codice_parziale_intervallo_cifra(self):
+        self.evento_a.codice_soluzione_esatta = "ZZ9"
+        self.evento_a.codici_soluzione_parziale = ["ML(4-9)"]
+        self.evento_a.save()
+        ris = processa_codice(self.session, "ML6")
+        self.assertEqual(ris.esito, EVENTO_ESITO_PARZIALE)
+
+    def test_codice_precipizio_crash_immediato(self):
+        self.evento_a.codice_soluzione_esatta = "AB1"
+        self.evento_a.codici_soluzione_parziale = []
+        self.evento_a.codici_precipizio = ["XX9"]
+        self.evento_a.save()
+        self.session.defcon = 2
+        self.session.save()
+        ris = processa_codice(self.session, "XX9")
+        self.assertEqual(ris.esito, "precipizio")
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.stato, SESSIONE_STATO_CRASHED)
+        self.assertEqual(self.session.defcon, DEFCON_MAX + 1)
 
     def test_codice_dannoso_aumenta_defcon(self):
         ris = processa_codice(self.session, "X99")

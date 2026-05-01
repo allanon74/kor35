@@ -71,6 +71,11 @@ export default function Cockpit({
   const evento = state.evento_attivo;
   const defcon = sessione.defcon || 0;
   const defconMax = state.defcon_max || 5;
+  const statiAllerta = state.stati_allerta || [];
+  const statoAbbattuta = statiAllerta.find((s) => s.equivale_nave_abbattuta);
+  const statoCorrente =
+    statiAllerta.find((s) => s.livello === defcon) ||
+    (defcon > defconMax ? statoAbbattuta : null);
   const seqDecollo = state.sequenze?.decollo;
   const seqAtter = state.sequenze?.atterraggio;
 
@@ -84,8 +89,15 @@ export default function Cockpit({
 
   if (isCrashed) {
     return (
-      <div className="center-screen crash-screen">
-        <h1>// CRASH //</h1>
+      <div
+        className="center-screen crash-screen"
+        style={
+          statoAbbattuta?.colore
+            ? { background: `linear-gradient(160deg, ${statoAbbattuta.colore} 0%, #0f0f12 55%)` }
+            : undefined
+        }
+      >
+        <h1>// {statoAbbattuta?.nome?.toUpperCase() || 'CRASH'} //</h1>
         <p>La nave ha superato la gravita' critica e e' precipitata.</p>
         <div className="row" style={{ marginTop: '2rem' }}>
           <button type="button" className="btn" onClick={onLogout}>Logout pilota</button>
@@ -113,8 +125,24 @@ export default function Cockpit({
       <div className="defcon-strip">
         <div>
           <div className="label">DEFCON</div>
-          <div className={`value ${defconClass(defcon, defconMax)}`}>
+          <div
+            className={`value ${statoCorrente ? '' : defconClass(defcon, defconMax)}`}
+            style={
+              statoCorrente
+                ? {
+                    backgroundColor: statoCorrente.colore || '#444',
+                    color: '#fff',
+                  }
+                : undefined
+            }
+            title={statoCorrente?.nome || ''}
+          >
             {defcon > defconMax ? 'CRASH' : defcon}
+            {statoCorrente ? (
+              <span style={{ display: 'block', fontSize: '0.65rem', fontWeight: 500, marginTop: '0.15rem', opacity: 0.95 }}>
+                {statoCorrente.nome}
+              </span>
+            ) : null}
           </div>
         </div>
         <div style={{ textAlign: 'center' }}>

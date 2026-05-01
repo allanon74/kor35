@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback, memo } from 'react';
 import { Swords, Users, Monitor, Trash, Heart, Shield, Edit2, Plus, ChevronDown, ChevronUp, UserCheck, Shirt, ScrollText, Zap, SquareActivity } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
-import RichTextDisplay from './RichTextDisplay';
+import { RichTextViewer } from './RichTextDisplay';
 
 // --- SOTTO-COMPONENTE PER LA CARD DEL TASK --- (Memoized)
-const TaskCard = memo(({ task, isMaster, currentUserId, onRemove, onStatChange }) => {
+const TaskCard = memo(({ task, isMaster, currentUserId, onRemove, onStatChange, onEditTask }) => {
     
     // 1. LOGICA "IS MINE"
     const isMine = useMemo(() => {
@@ -55,7 +55,7 @@ const TaskCard = memo(({ task, isMaster, currentUserId, onRemove, onStatChange }
                 </div>
             );
         }
-        return <RichTextDisplay content={attacchi} />;
+        return <RichTextViewer content={attacchi} />;
     };
 
     return (
@@ -88,9 +88,26 @@ const TaskCard = memo(({ task, isMaster, currentUserId, onRemove, onStatChange }
                             <ChevronDown size={20}/>
                         </div>
                         {isMaster && (
-                            <button onClick={(e) => { e.stopPropagation(); onRemove(task.id); }} className="p-1.5 hover:bg-red-900/50 text-gray-500 hover:text-red-400 rounded transition-colors ml-2">
-                                <Trash size={16}/>
-                            </button>
+                            <div className="flex items-center gap-0.5 ml-2" onClick={(e) => e.stopPropagation()}>
+                                {onEditTask && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onEditTask(task)}
+                                        className="p-1.5 hover:bg-indigo-900/50 text-gray-500 hover:text-indigo-300 rounded transition-colors"
+                                        title="Modifica incarico"
+                                    >
+                                        <Edit2 size={16} />
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => onRemove(task.id)}
+                                    className="p-1.5 hover:bg-red-900/50 text-gray-500 hover:text-red-400 rounded transition-colors"
+                                    title="Elimina incarico"
+                                >
+                                    <Trash size={16} />
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -115,7 +132,7 @@ const TaskCard = memo(({ task, isMaster, currentUserId, onRemove, onStatChange }
                                 <ScrollText size={10}/> Descrizione Narrativa
                             </div>
                             <div className="scale-100 origin-top-left">
-                                <RichTextDisplay content={task.descrizione} />
+                                <RichTextViewer content={task.descrizione} />
                             </div>
                         </div>
                     )}
@@ -125,7 +142,7 @@ const TaskCard = memo(({ task, isMaster, currentUserId, onRemove, onStatChange }
                         <div className="bg-black/30 p-3 rounded-lg border border-white/5 text-gray-300 shadow-sm">
                             <div className="text-[9px] font-bold text-gray-500 uppercase mb-1 flex items-center gap-1"><Edit2 size={10}/> Istruzioni Operative</div>
                             <div className="scale-100 origin-top-left">
-                                <RichTextDisplay content={task.istruzioni} />
+                                <RichTextViewer content={task.istruzioni} />
                             </div>
                         </div>
                     )}
@@ -190,7 +207,7 @@ const StatMini = memo(({ icon, label, value, onUp, onDown, color }) => (
 StatMini.displayName = 'StatMini';
 
 // --- COMPONENTE PRINCIPALE ---
-const QuestFaseSection = memo(({ fase, isMaster, risorse, onAddTask, onRemoveTask, onStatChange, onEdit, onDelete }) => {
+const QuestFaseSection = memo(({ fase, isMaster, risorse, onAddTask, onRemoveTask, onStatChange, onEdit, onDelete, onEditTask }) => {
     const [formOpen, setFormOpen] = useState(false);
     
     // STATO DEL FORM AGGIORNATO CON 'descrizione'
@@ -265,7 +282,7 @@ const QuestFaseSection = memo(({ fase, isMaster, risorse, onAddTask, onRemoveTas
             {fase.descrizione && (
                 <div className="bg-gray-900/40 px-4 py-3 border-b border-gray-700/50">
                     <div className="text-gray-300 text-xs leading-relaxed">
-                        <RichTextDisplay content={fase.descrizione} />
+                        <RichTextViewer content={fase.descrizione} />
                     </div>
                 </div>
             )}
@@ -282,7 +299,15 @@ const QuestFaseSection = memo(({ fase, isMaster, risorse, onAddTask, onRemoveTas
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 {groupedTasks[key].map(task => (
-                                    <TaskCard key={task.id} task={task} isMaster={isMaster} currentUserId={currentUserId} onRemove={onRemoveTask} onStatChange={onStatChange} />
+                                    <TaskCard
+                                        key={task.id}
+                                        task={task}
+                                        isMaster={isMaster}
+                                        currentUserId={currentUserId}
+                                        onRemove={onRemoveTask}
+                                        onStatChange={onStatChange}
+                                        onEditTask={onEditTask}
+                                    />
                                 ))}
                             </div>
                         </div>
@@ -359,8 +384,14 @@ const QuestFaseSection = memo(({ fase, isMaster, risorse, onAddTask, onRemoveTas
                                     {/* CAMPO ISTRUZIONI */}
                                     <div className="space-y-1">
                                         <label className="text-[9px] font-bold text-gray-500 uppercase px-1">Istruzioni Operative</label>
-                                        <div className="h-32 border border-gray-700 rounded-lg overflow-hidden bg-gray-900 shadow-inner">
-                                            <RichTextEditor value={form.istruzioni} onChange={(val) => setForm({...form, istruzioni: val})} placeholder="Dettagli tecnici e regole..." />
+                                        <div className="min-h-[200px] max-h-[min(420px,50vh)] border border-gray-700 rounded-lg overflow-hidden bg-gray-900 shadow-inner">
+                                            <RichTextEditor
+                                                value={form.istruzioni}
+                                                onChange={(val) => setForm({...form, istruzioni: val})}
+                                                placeholder="Dettagli tecnici e regole..."
+                                                stickyToolbar
+                                                editorHeightClass="min-h-[160px] max-h-[min(320px,42vh)]"
+                                            />
                                         </div>
                                     </div>
                                     

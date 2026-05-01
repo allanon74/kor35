@@ -17,18 +17,31 @@ import {
   staffGetPilotIntensita,
   staffGetPilotSequenze,
   staffGetPilotSottosistemi,
+  staffGetPilotStatiAllerta,
   staffUpdatePilotComando,
   staffUpdatePilotEvento,
   staffUpdatePilotIntensita,
   staffUpdatePilotSequenza,
   staffUpdatePilotSottosistema,
+  staffUpdatePilotStatoAllerta,
 } from '../../api';
+
+const PILOT_TABS = [
+  { id: 'sottosistemi', label: 'Sottosistemi' },
+  { id: 'comandi', label: 'Comandi' },
+  { id: 'intensita', label: 'Intensità' },
+  { id: 'eventi', label: 'Eventi' },
+  { id: 'sequenze', label: 'Sequenze' },
+  { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
+  { id: 'combinazioni', label: 'Combinazioni' },
+];
 
 const defaultEvento = {
   nome: '',
   descrizione: '',
   codice_soluzione_esatta: '',
   codici_soluzione_parziale: '',
+  codici_precipizio: '',
   durata_base_secondi: 20,
   peso_random: 10,
   sottosistema: '',
@@ -61,23 +74,29 @@ export default function PilotaggioManager({ onLogout }) {
 
   const [scanningForSottosistemaId, setScanningForSottosistemaId] = useState(null);
   const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
+  const [activeTab, setActiveTab] = useState('sottosistemi');
+  const [statiAllerta, setStatiAllerta] = useState([]);
+  const [editStatoId, setEditStatoId] = useState(null);
+  const [editStato, setEditStato] = useState({});
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [s, c, i, e, seq] = await Promise.all([
+      const [s, c, i, e, seq, stati] = await Promise.all([
         staffGetPilotSottosistemi(onLogout),
         staffGetPilotComandi(onLogout),
         staffGetPilotIntensita(onLogout),
         staffGetPilotEventi(onLogout),
         staffGetPilotSequenze(onLogout),
+        staffGetPilotStatiAllerta(onLogout).catch(() => []),
       ]);
       setSottosistemi(Array.isArray(s) ? s : []);
       setComandi(Array.isArray(c) ? c : []);
       setIntensita(Array.isArray(i) ? i : []);
       setEventi(Array.isArray(e) ? e : []);
       setSequenze(Array.isArray(seq) ? seq : []);
+      setStatiAllerta(Array.isArray(stati) ? stati : []);
     } catch (err) {
       setError(err?.message || 'Errore caricamento pilotaggio.');
     } finally {
@@ -144,11 +163,16 @@ export default function PilotaggioManager({ onLogout }) {
       .split(',')
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean);
+    const precipizi = String(nuovoEvento.codici_precipizio || '')
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
     await staffCreatePilotEvento(
       {
         ...nuovoEvento,
         codice_soluzione_esatta: nuovoEvento.codice_soluzione_esatta.toUpperCase(),
         codici_soluzione_parziale: patterns,
+        codici_precipizio: precipizi,
         sottosistema: nuovoEvento.sottosistema || null,
       },
       onLogout
@@ -189,12 +213,17 @@ export default function PilotaggioManager({ onLogout }) {
       .split(',')
       .map((s) => s.trim().toUpperCase())
       .filter(Boolean);
+    const precipizi = String(editEvento.codici_precipizio || '')
+      .split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter(Boolean);
     await staffUpdatePilotEvento(
       editEventoId,
       {
         ...editEvento,
         codice_soluzione_esatta: editEvento.codice_soluzione_esatta.toUpperCase(),
         codici_soluzione_parziale: patterns,
+        codici_precipizio: precipizi,
         sottosistema: editEvento.sottosistema || null,
       },
       onLogout
@@ -212,6 +241,23 @@ export default function PilotaggioManager({ onLogout }) {
     loadData();
   };
 
+  const salvaStatoAllerta = async () => {
+    await staffUpdatePilotStatoAllerta(
+      editStatoId,
+      {
+        nome: editStato.nome,
+        colore: editStato.colore,
+        frequenza_evento_min_sec: Number(editStato.frequenza_evento_min_sec),
+        frequenza_evento_max_sec: Number(editStato.frequenza_evento_max_sec),
+        tempo_risoluzione_secondi: Number(editStato.tempo_risoluzione_secondi),
+        equivale_nave_abbattuta: Boolean(editStato.equivale_nave_abbattuta),
+      },
+      onLogout
+    );
+    setEditStatoId(null);
+    loadData();
+  };
+
   if (loading) {
     return <div className="p-6 text-gray-300">Caricamento modulo pilotaggio...</div>;
   }
@@ -221,6 +267,24 @@ export default function PilotaggioManager({ onLogout }) {
       <h2 className="text-xl font-bold">Gestione Pilotaggio</h2>
       {error ? <div className="rounded bg-red-900/40 border border-red-600 p-3 text-sm">{error}</div> : null}
 
+      <div className="flex flex-wrap gap-2 border-b border-gray-600 pb-3">
+        {PILOT_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setActiveTab(t.id)}
+            className={`px-3 py-2 rounded-t text-sm font-medium transition-colors ${
+              activeTab === t.id
+                ? 'bg-indigo-700 text-white'
+                : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'sottosistemi' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-2">Sottosistemi (1° carattere)</h3>
         <p className="text-xs text-gray-400 mb-3 leading-relaxed">
@@ -291,6 +355,7 @@ export default function PilotaggioManager({ onLogout }) {
           ))}
         </div>
       </section>
+      ) : null}
 
       {scanningForSottosistemaId ? (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
@@ -329,6 +394,7 @@ export default function PilotaggioManager({ onLogout }) {
         </div>
       ) : null}
 
+      {activeTab === 'comandi' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-3">Comandi (2° carattere)</h3>
         <div className="flex gap-2 mb-3">
@@ -357,7 +423,9 @@ export default function PilotaggioManager({ onLogout }) {
           </div>
         ))}
       </section>
+      ) : null}
 
+      {activeTab === 'intensita' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-3">Intensità (3° carattere numerico)</h3>
         <div className="flex gap-2 mb-3">
@@ -386,14 +454,17 @@ export default function PilotaggioManager({ onLogout }) {
           </div>
         ))}
       </section>
+      ) : null}
 
+      {activeTab === 'eventi' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-3">Eventi viaggio (randomici)</h3>
         <div className="grid md:grid-cols-2 gap-2 mb-3">
           <input className="bg-gray-800 rounded px-2 py-1" placeholder="Nome evento" value={nuovoEvento.nome} onChange={(e) => setNuovoEvento((p) => ({ ...p, nome: e.target.value }))} />
           <input className="bg-gray-800 rounded px-2 py-1" placeholder="Codice esatto (es. AB3)" value={nuovoEvento.codice_soluzione_esatta} onChange={(e) => setNuovoEvento((p) => ({ ...p, codice_soluzione_esatta: e.target.value }))} />
           <input className="bg-gray-800 rounded px-2 py-1 md:col-span-2" placeholder="Descrizione" value={nuovoEvento.descrizione} onChange={(e) => setNuovoEvento((p) => ({ ...p, descrizione: e.target.value }))} />
-          <input className="bg-gray-800 rounded px-2 py-1 md:col-span-2" placeholder="Pattern parziali separati da virgola (es. A_3,_B5)" value={nuovoEvento.codici_soluzione_parziale} onChange={(e) => setNuovoEvento((p) => ({ ...p, codici_soluzione_parziale: e.target.value }))} />
+          <input className="bg-gray-800 rounded px-2 py-1 md:col-span-2" placeholder="Parziali successo parziale (virgola): A_3, _B5, ML(4-9)" value={nuovoEvento.codici_soluzione_parziale} onChange={(e) => setNuovoEvento((p) => ({ ...p, codici_soluzione_parziale: e.target.value }))} />
+          <input className="bg-gray-800 rounded px-2 py-1 md:col-span-2 border border-red-900/50" placeholder="Precipizio immediato (virgola, stessa sintassi): es. XX9, ZZ(8-9) → DEFCON massimo + crash" value={nuovoEvento.codici_precipizio} onChange={(e) => setNuovoEvento((p) => ({ ...p, codici_precipizio: e.target.value }))} />
           <button className="px-3 py-1 rounded bg-indigo-600 md:col-span-2" onClick={addEvento}>Aggiungi evento</button>
         </div>
         {eventi.map((e) => (
@@ -404,6 +475,7 @@ export default function PilotaggioManager({ onLogout }) {
                 <input className="bg-gray-700 rounded px-2 py-1" value={editEvento.codice_soluzione_esatta} onChange={(ev) => setEditEvento((p) => ({ ...p, codice_soluzione_esatta: ev.target.value }))} />
                 <input className="bg-gray-700 rounded px-2 py-1 md:col-span-2" value={editEvento.descrizione} onChange={(ev) => setEditEvento((p) => ({ ...p, descrizione: ev.target.value }))} />
                 <input className="bg-gray-700 rounded px-2 py-1 md:col-span-2" value={editEvento.codici_soluzione_parziale} onChange={(ev) => setEditEvento((p) => ({ ...p, codici_soluzione_parziale: ev.target.value }))} />
+                <input className="bg-gray-700 rounded px-2 py-1 md:col-span-2 border border-red-900/40" value={editEvento.codici_precipizio} onChange={(ev) => setEditEvento((p) => ({ ...p, codici_precipizio: ev.target.value }))} placeholder="Pattern precipizio (virgola)" />
                 <div className="flex gap-3 md:col-span-2">
                   <button className="text-emerald-400" onClick={salvaEvento}>Salva</button>
                   <button className="text-gray-300" onClick={() => setEditEventoId(null)}>Annulla</button>
@@ -422,6 +494,7 @@ export default function PilotaggioManager({ onLogout }) {
                         descrizione: e.descrizione || '',
                         codice_soluzione_esatta: e.codice_soluzione_esatta || '',
                         codici_soluzione_parziale: Array.isArray(e.codici_soluzione_parziale) ? e.codici_soluzione_parziale.join(',') : '',
+                        codici_precipizio: Array.isArray(e.codici_precipizio) ? e.codici_precipizio.join(',') : '',
                         durata_base_secondi: e.durata_base_secondi ?? 20,
                         peso_random: e.peso_random ?? 10,
                         sottosistema: e.sottosistema || '',
@@ -438,7 +511,9 @@ export default function PilotaggioManager({ onLogout }) {
           </div>
         ))}
       </section>
+      ) : null}
 
+      {activeTab === 'sequenze' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-3">Sequenze decollo/atterraggio</h3>
         <div className="grid md:grid-cols-2 gap-2 mb-3">
@@ -477,7 +552,95 @@ export default function PilotaggioManager({ onLogout }) {
           </div>
         ))}
       </section>
+      ) : null}
 
+      {activeTab === 'stati_allerta' ? (
+      <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
+        <h3 className="font-semibold mb-2">Stati di allerta (DEFCON 0–6)</h3>
+        <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+          Livelli allineati al DEFCON della sessione. Imposta intervallo tra un evento e l&apos;altro (secondi) e il countdown per risolvere un evento mentre sei in quel livello.
+          Segna un solo livello come <strong className="text-gray-300">nave abbattuta</strong> (crash / DEFCON oltre il massimo).
+        </p>
+        <div className="space-y-3 text-sm">
+          {statiAllerta.map((st) => (
+            <div key={st.id} className="bg-gray-800/70 rounded-lg p-3 border border-gray-600">
+              {editStatoId === st.id ? (
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 items-end">
+                  <div className="text-xs text-gray-500 sm:col-span-2 lg:col-span-3">Livello {st.livello}</div>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Nome</span>
+                    <input className="bg-gray-700 rounded px-2 py-1 w-full mt-0.5" value={editStato.nome || ''} onChange={(e) => setEditStato((p) => ({ ...p, nome: e.target.value }))} />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Colore (#RRGGBB)</span>
+                    <div className="flex gap-2 mt-0.5">
+                      <input type="color" className="h-9 w-14 rounded cursor-pointer border-0 p-0 bg-transparent" value={(editStato.colore || '#888888').slice(0, 7)} onChange={(e) => setEditStato((p) => ({ ...p, colore: e.target.value }))} />
+                      <input className="bg-gray-700 rounded px-2 py-1 flex-1 font-mono text-xs" value={editStato.colore || ''} onChange={(e) => setEditStato((p) => ({ ...p, colore: e.target.value }))} />
+                    </div>
+                  </label>
+                  <label className="block sm:col-span-2 lg:col-span-1">
+                    <span className="text-xs text-gray-400">Freq. eventi min–max (s)</span>
+                    <div className="flex gap-2 mt-0.5">
+                      <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full" value={editStato.frequenza_evento_min_sec} onChange={(e) => setEditStato((p) => ({ ...p, frequenza_evento_min_sec: e.target.value }))} />
+                      <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full" value={editStato.frequenza_evento_max_sec} onChange={(e) => setEditStato((p) => ({ ...p, frequenza_evento_max_sec: e.target.value }))} />
+                    </div>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Tempo risoluzione evento (s)</span>
+                    <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full mt-0.5" value={editStato.tempo_risoluzione_secondi} onChange={(e) => setEditStato((p) => ({ ...p, tempo_risoluzione_secondi: e.target.value }))} />
+                  </label>
+                  <label className="flex items-center gap-2 sm:col-span-2 lg:col-span-3 cursor-pointer">
+                    <input type="checkbox" checked={Boolean(editStato.equivale_nave_abbattuta)} onChange={(e) => setEditStato((p) => ({ ...p, equivale_nave_abbattuta: e.target.checked }))} />
+                    <span className="text-sm text-red-300">Equivale a nave abbattuta / precipitata</span>
+                  </label>
+                  <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
+                    <button type="button" className="text-emerald-400" onClick={salvaStatoAllerta}>Salva</button>
+                    <button type="button" className="text-gray-400" onClick={() => setEditStatoId(null)}>Annulla</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg font-bold text-white shrink-0" style={{ backgroundColor: st.colore || '#555' }}>
+                      {st.livello}
+                    </span>
+                    <div>
+                      <div className="font-semibold">{st.nome}</div>
+                      <div className="text-xs text-gray-400">
+                        Eventi ogni {st.frequenza_evento_min_sec}–{st.frequenza_evento_max_sec}s · Risoluzione {st.tempo_risoluzione_secondi}s
+                        {st.equivale_nave_abbattuta ? <span className="text-red-400 ml-2">· Nave abbattuta</span> : null}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-indigo-300 shrink-0 self-start md:self-center"
+                    onClick={() => {
+                      setEditStatoId(st.id);
+                      setEditStato({
+                        nome: st.nome || '',
+                        colore: st.colore || '#888888',
+                        frequenza_evento_min_sec: st.frequenza_evento_min_sec ?? 60,
+                        frequenza_evento_max_sec: st.frequenza_evento_max_sec ?? 90,
+                        tempo_risoluzione_secondi: st.tempo_risoluzione_secondi ?? 20,
+                        equivale_nave_abbattuta: Boolean(st.equivale_nave_abbattuta),
+                      });
+                    }}
+                  >
+                    Modifica
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {!statiAllerta.length ? (
+            <p className="text-gray-400 text-sm">Nessuno stato caricato. Esegui le migrazioni (<code className="text-xs">0005_statoallertapilot</code>).</p>
+          ) : null}
+        </div>
+      </section>
+      ) : null}
+
+      {activeTab === 'combinazioni' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-3">Lista richiesta: sottosistema = carattere + numero = comando</h3>
         <div className="max-h-48 overflow-y-auto space-y-1 text-xs mb-4">
@@ -497,6 +660,7 @@ export default function PilotaggioManager({ onLogout }) {
           {!listaCombinata.length ? <div className="text-gray-400">Nessuna combinazione disponibile.</div> : null}
         </div>
       </section>
+      ) : null}
     </div>
   );
 }

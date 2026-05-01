@@ -10,9 +10,25 @@ from .models import (
     SequenzaVolo,
     SessioneVolo,
     SottosistemaNave,
+    StatoAllertaPilot,
     StatoSottosistemaSessione,
     TentativoCodice,
 )
+
+
+@admin.register(StatoAllertaPilot)
+class StatoAllertaPilotAdmin(admin.ModelAdmin):
+    list_display = (
+        "livello",
+        "nome",
+        "colore",
+        "frequenza_evento_min_sec",
+        "frequenza_evento_max_sec",
+        "tempo_risoluzione_secondi",
+        "equivale_nave_abbattuta",
+    )
+    list_editable = ("equivale_nave_abbattuta",)
+    ordering = ("livello",)
 
 
 @admin.register(SottosistemaNave)

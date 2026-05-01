@@ -3,6 +3,7 @@ import {
     MapPin, Edit2, Trash2, Calendar,
     Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck, Ticket,
 } from 'lucide-react';
+import { RichTextViewer } from './RichTextDisplay';
 
 const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
@@ -105,10 +106,11 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                 )}
             </div>
 
-            <div 
-                className="text-gray-300 text-sm italic border-l-2 border-indigo-500 pl-4 bg-indigo-500/5 py-2 ql-editor-view"
-                dangerouslySetInnerHTML={{ __html: evento.sinossi }}
-            />
+            {evento.sinossi ? (
+                <div className="text-gray-300 text-sm italic border-l-2 border-indigo-500 pl-4 bg-indigo-500/5 py-2 ql-editor-view">
+                    <RichTextViewer content={evento.sinossi} />
+                </div>
+            ) : null}
 
             {/* SEZIONE STAFF (Sempre visibile) */}
             <div className="space-y-3 pt-2">

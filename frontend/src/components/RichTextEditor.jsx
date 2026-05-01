@@ -268,7 +268,15 @@ const SmallActionButton = ({ label, onClick, title, className = '' }) => (
     </button>
 );
 
-const RichTextEditor = ({ value, onChange, placeholder, label, editorHeightClass = 'min-h-[120px] max-h-[300px]' }) => {
+const RichTextEditor = ({
+    value,
+    onChange,
+    placeholder,
+    label,
+    editorHeightClass = 'min-h-[120px] max-h-[300px]',
+    /** Se true, la toolbar resta visibile in alto mentre si scorre il contenuto del modal/pannello. */
+    stickyToolbar = false,
+}) => {
     const editorRef = useRef(null);
     const colorInputRef = useRef(null);
     const [currentBlockType, setCurrentBlockType] = useState('p');
@@ -684,7 +692,11 @@ const RichTextEditor = ({ value, onChange, placeholder, label, editorHeightClass
             <div className="border border-gray-600 rounded-md bg-gray-800 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent transition-all">
                 
                 {/* Toolbar */}
-                <div className="flex flex-wrap items-center gap-1 p-2 bg-gray-700 border-b border-gray-600">
+                <div
+                    className={`flex flex-wrap items-center gap-1 p-2 bg-gray-700 border-b border-gray-600 ${
+                        stickyToolbar ? 'sticky top-0 z-30 shadow-[0_4px_12px_rgba(0,0,0,0.35)]' : ''
+                    }`}
+                >
                     {!isHtmlMode && (
                         <>
                             {/* Gruppo Paragrafi HTML */}

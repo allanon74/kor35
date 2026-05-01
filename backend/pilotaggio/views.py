@@ -55,6 +55,7 @@ from .models import (
     SequenzaVolo,
     SessioneVolo,
     SottosistemaNave,
+    StatoAllertaPilot,
     StatoSottosistemaSessione,
     TentativoCodice,
 )
@@ -68,6 +69,8 @@ from .serializers import (
     SequenzaVoloSerializer,
     SessioneVoloSerializer,
     SottosistemaNaveSerializer,
+    StatoAllertaPilotPublicSerializer,
+    StatoAllertaPilotSerializer,
     StatoSottosistemaRuntimeSerializer,
     TentativoCodiceSerializer,
 )
@@ -395,6 +398,9 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
         .first()
     )
 
+    stati_qs = StatoAllertaPilot.objects.all().order_by("livello")
+    stati_allerta = StatoAllertaPilotPublicSerializer(stati_qs, many=True).data
+
     payload = {
         "pilota": {
             "id": pilota.pk,
@@ -403,6 +409,7 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
         "sessione": SessioneVoloSerializer(sessione).data if sessione else None,
         "evento_attivo": EventoAttivoSerializer(pending).data if pending else None,
         "sottosistemi": sub_serializer.data,
+        "stati_allerta": stati_allerta,
         "sequenze": {
             "decollo": {
                 "presente": bool(decollo_seq),
@@ -756,11 +763,15 @@ class PilotCatalogView(APIView):
                         "comandi_disponibili": comandi_per_slot,
                     }
                 )
+        stati_qs = StatoAllertaPilot.objects.all().order_by("livello")
+        stati_allerta = StatoAllertaPilotPublicSerializer(stati_qs, many=True).data
+
         return Response(
             {
                 "sottosistemi": SottosistemaNaveSerializer(sotto, many=True).data,
                 "comandi": ComandoNaveSerializer(cmd, many=True).data,
                 "intensita": IntensitaComandoSerializer(intensita, many=True).data,
+                "stati_allerta": stati_allerta,
                 "lista_combinazioni_codici": combinations,
                 "lista_sottosistema_numero_comando": lista_sottosistema_numero_comando,
             }
@@ -888,6 +899,14 @@ class StaffEventoViewSet(viewsets.ModelViewSet):
 class StaffSequenzaViewSet(viewsets.ModelViewSet):
     queryset = SequenzaVolo.objects.all().order_by("tipo", "-created_at")
     serializer_class = SequenzaVoloSerializer
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+
+class StaffStatoAllertaViewSet(viewsets.ModelViewSet):
+    """CRUD livelli DEFCON 0..6 (colori, tempi, nave abbattuta)."""
+
+    queryset = StatoAllertaPilot.objects.all().order_by("livello")
+    serializer_class = StatoAllertaPilotSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
 
 

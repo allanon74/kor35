@@ -7,13 +7,13 @@ import {
     addPngToQuest, addMostroToQuest, addVistaToQuest,
     removePngFromQuest, removeMostroFromQuest, removeVistaFromQuest,
     addFaseToQuest, removeFaseFromQuest,updateFase,
-    addTaskToFase, removeTaskFromFase,
+    addTaskToFase, updateTask, removeTaskFromFase,
     // AGGIUNTI GLI IMPORT MANCANTI PER LO STAFF:
     staffCreateOffGame, staffDeleteOffGame,
     fetchAuthenticated 
 } from '../api';
 import { useCharacter } from './CharacterContext';
-import { Plus, X, Save, Printer } from 'lucide-react';
+import { Plus, X, Save, Printer, Calendar } from 'lucide-react';
 import EventoSection from './EventoSection';
 import GiornoSection from './GiornoSection';
 import QrTab from './QrTab'; 
@@ -164,6 +164,39 @@ const PlotTab = ({ onLogout }) => {
         setFormData({ ...oggetto });
     }, []);
 
+    const handleEditTask = useCallback((task) => {
+        const sid = task.staffer_details?.id ?? task.staffer;
+        startEdit('task', {
+            id: task.id,
+            ruolo: task.ruolo,
+            staffer: sid != null ? String(sid) : '',
+            personaggio: task.personaggio_details?.id ?? task.personaggio ?? '',
+            mostro_template: task.mostro_details?.id ?? task.mostro_template ?? '',
+            compito_offgame: task.compito_offgame || 'REG',
+            istruzioni: task.istruzioni || '',
+        });
+    }, [startEdit]);
+
+    /** PnG dello staffer selezionato (stesso filtro del form task in fase). */
+    const taskPngFiltrati = useMemo(() => {
+        if (editMode !== 'task' || !formData.staffer) return [];
+        const stafferId = parseInt(formData.staffer, 10);
+        const stafferObj = risorse.staff?.find((s) => s.id === stafferId);
+        const stafferName = stafferObj ? stafferObj.username : '';
+        return (
+            risorse.png?.filter((p) => {
+                let isMio = false;
+                if (p.proprietario_id !== undefined) isMio = p.proprietario_id === stafferId;
+                else if (typeof p.proprietario === 'object' && p.proprietario !== null)
+                    isMio = p.proprietario.id === stafferId;
+                else if (typeof p.proprietario === 'string') isMio = p.proprietario === stafferName;
+                else isMio = p.proprietario == stafferId;
+                const isPnG = p.giocante === false || p.giocante === undefined;
+                return isMio && isPnG;
+            }) || []
+        );
+    }, [editMode, formData.staffer, risorse.png, risorse.staff]);
+
     const handleSaveMain = useCallback(async () => {
         try {
             if (editMode === 'evento') {
@@ -194,7 +227,34 @@ const PlotTab = ({ onLogout }) => {
                 if (formData.id) {
                     await updateFase(formData.id, formData, onLogout);
                 }
-             } 
+            } else if (editMode === 'task' && formData.id) {
+                const stafferId = parseInt(String(formData.staffer), 10);
+                if (!Number.isFinite(stafferId)) {
+                    alert('Seleziona un membro dello staff.');
+                    return;
+                }
+                const payload = {
+                    staffer: stafferId,
+                    ruolo: formData.ruolo,
+                    istruzioni: formData.istruzioni || '',
+                };
+                if (formData.ruolo === 'PNG') {
+                    payload.personaggio = formData.personaggio ? parseInt(String(formData.personaggio), 10) : null;
+                    payload.mostro_template = null;
+                    payload.compito_offgame = null;
+                } else if (formData.ruolo === 'MOSTRO') {
+                    payload.mostro_template = formData.mostro_template
+                        ? parseInt(String(formData.mostro_template), 10)
+                        : null;
+                    payload.personaggio = null;
+                    payload.compito_offgame = null;
+                } else {
+                    payload.compito_offgame = formData.compito_offgame || 'REG';
+                    payload.personaggio = null;
+                    payload.mostro_template = null;
+                }
+                await updateTask(formData.id, payload, onLogout);
+            }
             setEditMode(null);
             refreshData();
         } catch (e) { alert("Errore durante il salvataggio."); console.error(e); }
@@ -522,14 +582,14 @@ const PlotTab = ({ onLogout }) => {
             </div>
 
             {editMode && (
-                <div className="fixed inset-0 z-100 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-gray-800 p-6 rounded-2xl w-full max-w-3xl border-t-4 border-indigo-500 shadow-2xl overflow-y-auto max-h-[90vh]">
-                        <div className="flex justify-between items-center mb-6">
+                <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-gray-800 rounded-2xl w-full max-w-3xl border-t-4 border-indigo-500 shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+                        <div className="shrink-0 flex justify-between items-center px-6 pt-5 pb-4 border-b border-gray-700/80 bg-gray-800">
                             <h3 className="text-xl font-black uppercase text-indigo-400 italic tracking-widest">Editor {editMode}</h3>
-                            <button onClick={() => setEditMode(null)} className="p-2 hover:bg-gray-700 rounded-full transition-colors"><X/></button>
+                            <button type="button" onClick={() => setEditMode(null)} className="p-2 hover:bg-gray-700 rounded-full transition-colors" aria-label="Chiudi"><X/></button>
                         </div>
+                        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 custom-scrollbar">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* ... Codice form invariato ... */}
                             {editMode === 'evento' && (
                                 <>
                                     <div className="md:col-span-2">
@@ -567,7 +627,7 @@ const PlotTab = ({ onLogout }) => {
                                         <p className="text-[10px] text-gray-500 mt-1">Default 1000; stessa regola dei PC.</p>
                                     </div>
                                     <div className="md:col-span-2">
-                                        <RichTextEditor label="Sinossi" value={formData.sinossi} onChange={val => setFormData({...formData, sinossi: val})} />
+                                        <RichTextEditor label="Sinossi" value={formData.sinossi} onChange={val => setFormData({...formData, sinossi: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
                                     </div>
                                     <div className="md:col-span-2 rounded-lg border border-indigo-800/60 bg-indigo-950/30 p-4 space-y-3">
                                         <p className="text-[10px] font-black uppercase text-indigo-300 tracking-widest">
@@ -647,7 +707,7 @@ const PlotTab = ({ onLogout }) => {
                                         <input className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700 focus:border-indigo-500 outline-none" value={formData.titolo || ''} onChange={e => setFormData({...formData, titolo: e.target.value})} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <RichTextEditor label="Sinossi Breve (Sottotitolo)" value={formData.sinossi_breve} onChange={val => setFormData({...formData, sinossi_breve: val})} />
+                                        <RichTextEditor label="Sinossi Breve (Sottotitolo)" value={formData.sinossi_breve} onChange={val => setFormData({...formData, sinossi_breve: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Inizio (Data/Ora)</label>
@@ -658,7 +718,7 @@ const PlotTab = ({ onLogout }) => {
                                         <input type="datetime-local" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatDateTimeForInput(formData.data_ora_fine)} onChange={e => setFormData({...formData, data_ora_fine: e.target.value})} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <RichTextEditor label="Descrizione Plot Completa (Info Master)" value={formData.descrizione_completa} onChange={val => setFormData({...formData, descrizione_completa: val})} />
+                                        <RichTextEditor label="Descrizione Plot Completa (Info Master)" value={formData.descrizione_completa} onChange={val => setFormData({...formData, descrizione_completa: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
                                     </div>
                                 </>
                             )}
@@ -667,10 +727,10 @@ const PlotTab = ({ onLogout }) => {
                                     <div className="md:col-span-2"><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Titolo Quest</label><input className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.titolo || ''} onChange={e => setFormData({...formData, titolo: e.target.value})} /></div>
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Orario</label><input type="time" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatTimeForInput(formData.orario_indicativo)} onChange={e => setFormData({...formData, orario_indicativo: e.target.value})} /></div>
                                     <div className="md:col-span-2">
-                                        <RichTextEditor label="Descrizione Ampia" value={formData.descrizione_ampia} onChange={val => setFormData({...formData, descrizione_ampia: val})} />
+                                        <RichTextEditor label="Descrizione Ampia" value={formData.descrizione_ampia} onChange={val => setFormData({...formData, descrizione_ampia: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <RichTextEditor label="Props (Materiale di scena)" value={formData.props} onChange={val => setFormData({...formData, props: val})} />
+                                        <RichTextEditor label="Props (Materiale di scena)" value={formData.props} onChange={val => setFormData({...formData, props: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
                                     </div>
                                 </>
                             )}
@@ -689,22 +749,169 @@ const PlotTab = ({ onLogout }) => {
                                             onChange={e => setFormData({...formData, ordine: parseInt(e.target.value)})} />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Descrizione (Opzionale)</label>
-                                        <textarea className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700 h-24 resize-none" 
-                                            value={formData.descrizione || ''} 
-                                            onChange={e => setFormData({...formData, descrizione: e.target.value})} />
+                                        <RichTextEditor label="Descrizione (Opzionale)" value={formData.descrizione || ''} onChange={val => setFormData({...formData, descrizione: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
+                                    </div>
+                                </>
+                            )}
+                            {editMode === 'task' && (
+                                <>
+                                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Membro Staff</label>
+                                            <select
+                                                className="w-full bg-gray-900 p-3 rounded-lg text-sm text-white border border-gray-700 focus:border-indigo-500 outline-none"
+                                                value={formData.staffer}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, staffer: e.target.value, personaggio: '' })
+                                                }
+                                            >
+                                                <option value="">Seleziona Staffer...</option>
+                                                {risorse.staff?.map((s) => (
+                                                    <option key={s.id} value={s.id}>
+                                                        {s.username}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Ruolo / Tipo</label>
+                                            <select
+                                                className="w-full bg-gray-900 p-3 rounded-lg text-sm text-indigo-400 border border-gray-700 font-black outline-none"
+                                                value={formData.ruolo}
+                                                onChange={(e) => setFormData({ ...formData, ruolo: e.target.value })}
+                                            >
+                                                <option value="PNG">RUOLO: PnG</option>
+                                                <option value="MOSTRO">RUOLO: Mostro</option>
+                                                <option value="OFF">RUOLO: Off-Game</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {formData.ruolo === 'PNG' && (
+                                        <div className="md:col-span-2 space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Personaggio PnG</label>
+                                            <select
+                                                className="w-full bg-gray-900 p-3 rounded-lg text-sm border border-gray-700 outline-none"
+                                                value={formData.personaggio}
+                                                onChange={(e) => setFormData({ ...formData, personaggio: e.target.value })}
+                                                disabled={!formData.staffer}
+                                            >
+                                                <option value="">
+                                                    {formData.staffer ? 'Seleziona PnG dello Staffer...' : 'Prima seleziona uno staffer'}
+                                                </option>
+                                                {taskPngFiltrati.map((p) => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.nome}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                    {formData.ruolo === 'MOSTRO' && (
+                                        <div className="md:col-span-2 space-y-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Template Mostro</label>
+                                            <select
+                                                className="w-full bg-gray-900 p-3 rounded-lg text-sm border border-gray-700 outline-none"
+                                                value={formData.mostro_template}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, mostro_template: e.target.value })
+                                                }
+                                            >
+                                                <option value="">Seleziona Template Mostro...</option>
+                                                {risorse.templates?.map((t) => (
+                                                    <option key={t.id} value={t.id}>
+                                                        {t.nome}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                    {formData.ruolo === 'OFF' && (
+                                        <div className="md:col-span-2 flex gap-2 justify-center bg-gray-900 p-1 rounded-lg border border-gray-700">
+                                            {[
+                                                ['REG', 'Regole'],
+                                                ['AIU', 'Aiuto'],
+                                                ['ALL', 'Allestimento'],
+                                            ].map(([v, l]) => (
+                                                <label
+                                                    key={v}
+                                                    className={`flex-1 text-center py-2 rounded-md cursor-pointer text-[10px] font-bold transition-all ${
+                                                        formData.compito_offgame === v
+                                                            ? 'bg-indigo-600 text-white shadow-lg'
+                                                            : 'hover:bg-gray-800 text-gray-500'
+                                                    }`}
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        className="hidden"
+                                                        value={v}
+                                                        checked={formData.compito_offgame === v}
+                                                        onChange={() =>
+                                                            setFormData({ ...formData, compito_offgame: v })
+                                                        }
+                                                    />{' '}
+                                                    {l}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="md:col-span-2 space-y-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Istruzioni Operative</label>
+                                        <div className="min-h-[200px] max-h-[min(440px,48vh)] border border-gray-700 rounded-lg overflow-hidden bg-gray-900">
+                                            <RichTextEditor
+                                                value={formData.istruzioni}
+                                                onChange={(val) => setFormData({ ...formData, istruzioni: val })}
+                                                placeholder="Dettagli tecnici e regole..."
+                                                stickyToolbar
+                                                editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]"
+                                            />
+                                        </div>
                                     </div>
                                 </>
                             )}
                         </div>
-                        <button onClick={handleSaveMain} className="w-full mt-6 bg-indigo-600 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-indigo-500 transition-all flex items-center justify-center gap-2">
-                            <Save size={20}/> Salva {editMode}
-                        </button>
+                        </div>
+                        <div className="shrink-0 px-6 py-4 border-t border-gray-700 bg-gray-800">
+                            <button type="button" onClick={handleSaveMain} className="w-full bg-indigo-600 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-indigo-500 transition-all flex items-center justify-center gap-2">
+                                <Save size={20}/> Salva {editMode}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {eventi.length > 0 && (
+                    <div className="px-4 pt-4 pb-3 border-b border-gray-800 bg-gray-950/50">
+                        <div className="text-[10px] font-black uppercase text-gray-500 tracking-widest mb-3 flex items-center gap-2">
+                            <Calendar size={14} className="text-indigo-400 shrink-0" aria-hidden />
+                            Eventi
+                        </div>
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                            {eventi.map((ev) => (
+                                <button
+                                    key={ev.id}
+                                    type="button"
+                                    onClick={() => setSelectedEvento(ev)}
+                                    className={`shrink-0 text-left min-w-[200px] max-w-[300px] rounded-xl border px-4 py-3 transition-all ${
+                                        selectedEvento?.id === ev.id
+                                            ? 'border-indigo-500 bg-indigo-950/50 shadow-lg shadow-indigo-900/25'
+                                            : 'border-gray-800 bg-gray-900/90 hover:border-gray-600'
+                                    }`}
+                                >
+                                    <div className="font-black text-sm text-white uppercase tracking-tight line-clamp-2">
+                                        {ev.titolo || 'Senza titolo'}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1">
+                                        <Calendar size={10} className="shrink-0 opacity-70" aria-hidden />
+                                        {ev.data_inizio
+                                            ? new Date(ev.data_inizio).toLocaleDateString('it-IT')
+                                            : '—'}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 {eventi.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center p-8 text-center">
                         <p className="text-xl font-bold text-gray-400 mb-4">Nessun evento disponibile</p>
@@ -746,7 +953,8 @@ const PlotTab = ({ onLogout }) => {
                                     onEdit={startEdit} 
                                     onDelete={handleDeleteGiorno} 
                                     onAddQuest={handleAddQuest}
-                                    questHandlers={questHandlers} 
+                                    questHandlers={questHandlers}
+                                    onEditTask={handleEditTask}
                                 />
                             ))}
                         </div>

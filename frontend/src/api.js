@@ -1884,6 +1884,14 @@ export const staffDeletePilotEvento = (id, onLogout) =>
 
 export const staffGetPilotSequenze = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/sequenze/', { method: 'GET' }, onLogout);
+
+export const staffGetPilotStatiAllerta = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/stati-allerta/', { method: 'GET' }, onLogout);
+export const staffUpdatePilotStatoAllerta = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/stati-allerta/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }, onLogout);
 export const staffCreatePilotSequenza = (data, onLogout) =>
   fetchAuthenticated('/api/pilot/staff/sequenze/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const staffUpdatePilotSequenza = (id, data, onLogout) =>
@@ -2240,6 +2248,8 @@ export const staffDeleteOffGame = async (id, onLogout) => {
 export const addFaseToQuest = (payload, onLogout) => fetchAuthenticated('/api/plot/api/fasi/', { method: 'POST', body: JSON.stringify(payload) }, onLogout);
 export const removeFaseFromQuest = (id, onLogout) => fetchAuthenticated(`/api/plot/api/fasi/${id}/`, { method: 'DELETE' }, onLogout);
 export const addTaskToFase = (payload, onLogout) => fetchAuthenticated('/api/plot/api/tasks/', { method: 'POST', body: JSON.stringify(payload) }, onLogout);
+export const updateTask = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/tasks/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const removeTaskFromFase = (id, onLogout) => fetchAuthenticated(`/api/plot/api/tasks/${id}/`, { method: 'DELETE' }, onLogout);
 export const updateFase = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/fasi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 

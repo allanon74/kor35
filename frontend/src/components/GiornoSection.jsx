@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useCallback, memo } from 'react'; 
 import { Calendar, Clock, Edit2, Trash, ChevronDown, ChevronUp, BookOpen, Plus } from 'lucide-react';
 import QuestItem from './QuestItem';
-import RichTextDisplay from './RichTextDisplay';
+import { RichTextViewer } from './RichTextDisplay';
 
-const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAddQuest, questHandlers }) => {
+const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAddQuest, questHandlers, onEditTask }) => {
     const [showDettagli, setShowDettagli] = useState(false);
 
     // LOGICA DI ORDINAMENTO AGGIUNTA (Memoized)
@@ -39,7 +39,7 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
                     {/* Sinossi Breve */}
                     {giorno.sinossi_breve && (
                         <div className="text-sm text-indigo-300 italic font-medium bg-indigo-900/10 p-2 rounded-lg border border-indigo-500/20 mt-2">
-                            <RichTextDisplay content={giorno.sinossi_breve} />
+                            <RichTextViewer content={giorno.sinossi_breve} />
                         </div>
                     )}
 
@@ -76,7 +76,7 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
                 <div className="bg-emerald-950/20 border-l-2 border-emerald-500 p-4 rounded-r-lg animate-in fade-in w-full">
                     <h4 className="text-[10px] font-black text-emerald-500 uppercase mb-2">Dettagli Plot / Note Master</h4>
                     <div className="text-xs text-gray-400 bg-black/20 p-2 rounded">
-                        <RichTextDisplay content={giorno.descrizione_completa} />
+                        <RichTextViewer content={giorno.descrizione_completa} />
                     </div>
                 </div>
             )}
@@ -90,7 +90,7 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
                         isMaster={isMaster} 
                         risorse={risorse} 
                         onEdit={onEdit} 
-                        // Espando i questHandlers (onAddSub, onRemoveSub, ecc.)
+                        onEditTask={onEditTask}
                         onAddSub={questHandlers.onAddSub}
                         onRemoveSub={questHandlers.onRemoveSub}
                         onStatChange={questHandlers.onStatChange}
