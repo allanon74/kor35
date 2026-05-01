@@ -9,6 +9,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from .models import (
+    ComandoCriticoGlobale,
     ComandoNave,
     EventoAttivoSessione,
     EventoNave,
@@ -52,6 +53,13 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
         except Exception:
             qr = None
         return "pronto" if qr else "incompleto"
+
+
+class ComandoCriticoGlobaleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComandoCriticoGlobale
+        fields = ["id", "pattern", "nome", "attivo"]
+        read_only_fields = ["id"]
 
 
 class ComandoNaveSerializer(serializers.ModelSerializer):

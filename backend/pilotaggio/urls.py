@@ -7,7 +7,7 @@ Rotte sotto `/api/pilot/...`:
 - subsystems/qr-action  (login DRF token: usato da app principale)
 - catalog, prefetture
 - staff/sottosistemi, staff/comandi, staff/intensita, staff/eventi, staff/sequenze,
-  staff/stati-allerta, staff/sessioni
+  staff/stati-allerta, staff/comandi-critici, staff/sessioni
 """
 from __future__ import annotations
 
@@ -20,6 +20,11 @@ from . import views
 router = DefaultRouter()
 router.register(r"staff/sottosistemi", views.StaffSottosistemaViewSet, basename="pilot-staff-sottosistemi")
 router.register(r"staff/comandi", views.StaffComandoViewSet, basename="pilot-staff-comandi")
+router.register(
+    r"staff/comandi-critici",
+    views.StaffComandoCriticoGlobaleViewSet,
+    basename="pilot-staff-comandi-critici",
+)
 router.register(r"staff/intensita", views.StaffIntensitaViewSet, basename="pilot-staff-intensita")
 router.register(r"staff/eventi", views.StaffEventoViewSet, basename="pilot-staff-eventi")
 router.register(r"staff/sequenze", views.StaffSequenzaViewSet, basename="pilot-staff-sequenze")

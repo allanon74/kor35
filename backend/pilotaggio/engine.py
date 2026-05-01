@@ -73,6 +73,16 @@ def codice_valido_3char(codice: str) -> bool:
 _PATTERN_PARZIALE_RANGE = re.compile(r"^(.{2})\((\d)-(\d)\)$")
 
 
+def codice_critico_globale_attivo(codice: str) -> bool:
+    """True se il codice coincide con un pattern critico globale (staff)."""
+    from .models import ComandoCriticoGlobale
+
+    for row in ComandoCriticoGlobale.objects.filter(attivo=True).only("pattern"):
+        if matcha_pattern(row.pattern, codice):
+            return True
+    return False
+
+
 def matcha_pattern(pattern: str, codice: str) -> bool:
     """
     Match pattern parziale su codice 3 caratteri.
@@ -492,8 +502,9 @@ def processa_codice(sessione: SessioneVolo, codice_raw: str) -> ValutazioneCodic
 
     Regole prioritarie:
     1. crash o terminata -> rifiutato.
-    2. fase decollo/atterraggio -> sequenza obbligatoria.
-    3. fase volo:
+    2. formato valido -> codice critico globale -> precipizio immediato.
+    3. fase decollo/atterraggio -> sequenza obbligatoria.
+    4. fase volo:
        - formato non valido -> defcon +1
        - sottosistema guasto sul primo char -> defcon +1
        - codice == soluzione esatta evento attivo -> defcon -1
@@ -530,6 +541,24 @@ def processa_codice(sessione: SessioneVolo, codice_raw: str) -> ValutazioneCodic
             delta_defcon=+1,
             nuovo_defcon=nuovo,
             descrizione="Formato codice non valido.",
+        )
+
+    if codice_critico_globale_attivo(codice):
+        nuovo = forza_precipizio(sessione)
+        TentativoCodice.objects.create(
+            sessione=sessione,
+            evento_attivo=pending,
+            codice=codice,
+            esito="precipizio",
+            defcon_pre=defcon_pre,
+            defcon_post=nuovo,
+            note="Codice critico globale.",
+        )
+        return ValutazioneCodice(
+            esito="precipizio",
+            delta_defcon=nuovo - defcon_pre,
+            nuovo_defcon=nuovo,
+            descrizione="Codice critico: nave precipitata.",
         )
 
     if sessione.stato == SESSIONE_STATO_DECOLLO:

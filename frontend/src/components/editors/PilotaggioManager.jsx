@@ -3,22 +3,26 @@ import StaffQrTab from '../StaffQrTab';
 import {
   staffAssociaPilotSottosistemaQr,
   staffCreatePilotComando,
+  staffCreatePilotComandoCritico,
   staffCreatePilotEvento,
   staffCreatePilotIntensita,
   staffCreatePilotSequenza,
   staffCreatePilotSottosistema,
   staffDeletePilotComando,
+  staffDeletePilotComandoCritico,
   staffDeletePilotEvento,
   staffDeletePilotIntensita,
   staffDeletePilotSequenza,
   staffDeletePilotSottosistema,
   staffGetPilotComandi,
+  staffGetPilotComandiCritici,
   staffGetPilotEventi,
   staffGetPilotIntensita,
   staffGetPilotSequenze,
   staffGetPilotSottosistemi,
   staffGetPilotStatiAllerta,
   staffUpdatePilotComando,
+  staffUpdatePilotComandoCritico,
   staffUpdatePilotEvento,
   staffUpdatePilotIntensita,
   staffUpdatePilotSequenza,
@@ -31,6 +35,7 @@ const PILOT_TABS = [
   { id: 'comandi', label: 'Comandi' },
   { id: 'intensita', label: 'Intensità' },
   { id: 'eventi', label: 'Eventi' },
+  { id: 'comandi_critici', label: 'Comandi critici (globali)' },
   { id: 'sequenze', label: 'Sequenze' },
   { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
   { id: 'combinazioni', label: 'Combinazioni' },
@@ -56,11 +61,13 @@ export default function PilotaggioManager({ onLogout }) {
   const [intensita, setIntensita] = useState([]);
   const [eventi, setEventi] = useState([]);
   const [sequenze, setSequenze] = useState([]);
+  const [comandiCritici, setComandiCritici] = useState([]);
   const [nuovoSotto, setNuovoSotto] = useState({ codice: '', nome: '' });
   const [nuovoComando, setNuovoComando] = useState({ codice: '', nome: '' });
   const [nuovaIntensita, setNuovaIntensita] = useState({ valore: 0, nome: '' });
   const [nuovoEvento, setNuovoEvento] = useState(defaultEvento);
   const [nuovaSequenza, setNuovaSequenza] = useState({ tipo: 'decollo', nome: '', codici: '', attiva: true });
+  const [nuovoCritico, setNuovoCritico] = useState({ pattern: '', nome: '', attivo: true });
   const [editSottoId, setEditSottoId] = useState(null);
   const [editSotto, setEditSotto] = useState({ codice: '', nome: '' });
   const [editComandoId, setEditComandoId] = useState(null);
@@ -71,6 +78,8 @@ export default function PilotaggioManager({ onLogout }) {
   const [editEvento, setEditEvento] = useState(defaultEvento);
   const [editSequenzaId, setEditSequenzaId] = useState(null);
   const [editSequenza, setEditSequenza] = useState({ tipo: 'decollo', nome: '', codici: '', attiva: true });
+  const [editCriticoId, setEditCriticoId] = useState(null);
+  const [editCritico, setEditCritico] = useState({ pattern: '', nome: '', attivo: true });
 
   const [scanningForSottosistemaId, setScanningForSottosistemaId] = useState(null);
   const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
@@ -83,12 +92,13 @@ export default function PilotaggioManager({ onLogout }) {
     setLoading(true);
     setError('');
     try {
-      const [s, c, i, e, seq, stati] = await Promise.all([
+      const [s, c, i, e, seq, crit, stati] = await Promise.all([
         staffGetPilotSottosistemi(onLogout),
         staffGetPilotComandi(onLogout),
         staffGetPilotIntensita(onLogout),
         staffGetPilotEventi(onLogout),
         staffGetPilotSequenze(onLogout),
+        staffGetPilotComandiCritici(onLogout).catch(() => []),
         staffGetPilotStatiAllerta(onLogout).catch(() => []),
       ]);
       setSottosistemi(Array.isArray(s) ? s : []);
@@ -96,6 +106,7 @@ export default function PilotaggioManager({ onLogout }) {
       setIntensita(Array.isArray(i) ? i : []);
       setEventi(Array.isArray(e) ? e : []);
       setSequenze(Array.isArray(seq) ? seq : []);
+      setComandiCritici(Array.isArray(crit) ? crit : []);
       setStatiAllerta(Array.isArray(stati) ? stati : []);
     } catch (err) {
       setError(err?.message || 'Errore caricamento pilotaggio.');
@@ -178,6 +189,31 @@ export default function PilotaggioManager({ onLogout }) {
       onLogout
     );
     setNuovoEvento(defaultEvento);
+    loadData();
+  };
+  const addComandoCritico = async () => {
+    await staffCreatePilotComandoCritico(
+      {
+        pattern: nuovoCritico.pattern.trim().toUpperCase(),
+        nome: nuovoCritico.nome.trim(),
+        attivo: Boolean(nuovoCritico.attivo),
+      },
+      onLogout
+    );
+    setNuovoCritico({ pattern: '', nome: '', attivo: true });
+    loadData();
+  };
+  const salvaComandoCritico = async () => {
+    await staffUpdatePilotComandoCritico(
+      editCriticoId,
+      {
+        pattern: editCritico.pattern.trim().toUpperCase(),
+        nome: editCritico.nome.trim(),
+        attivo: Boolean(editCritico.attivo),
+      },
+      onLogout
+    );
+    setEditCriticoId(null);
     loadData();
   };
   const addSequenza = async () => {
@@ -510,6 +546,70 @@ export default function PilotaggioManager({ onLogout }) {
             )}
           </div>
         ))}
+      </section>
+      ) : null}
+
+      {activeTab === 'comandi_critici' ? (
+      <section className="rounded-xl border border-red-900/40 p-4 bg-gray-900/60">
+        <h3 className="font-semibold mb-2 text-red-200">Comandi critici globali</h3>
+        <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+          Definisci pattern sul codice a 3 caratteri (stessa sintassi degli eventi: jolly <strong className="text-gray-300">_</strong>, intervalli{' '}
+          <strong className="text-gray-300 font-mono">XY(N-M)</strong>). Se il pilota inserisce un codice valido che matcha una riga{' '}
+          <em>attiva</em>, la nave precipita subito — anche senza evento attivo o durante decollo/atterraggio.
+        </p>
+        <div className="flex flex-wrap gap-2 mb-3 items-end">
+          <input className="bg-gray-800 rounded px-2 py-1 font-mono w-28" maxLength={48} placeholder="XX9" value={nuovoCritico.pattern} onChange={(e) => setNuovoCritico((p) => ({ ...p, pattern: e.target.value }))} />
+          <input className="bg-gray-800 rounded px-2 py-1 flex-1 min-w-[8rem]" placeholder="Etichetta (opzionale)" value={nuovoCritico.nome} onChange={(e) => setNuovoCritico((p) => ({ ...p, nome: e.target.value }))} />
+          <label className="flex items-center gap-2 text-sm text-gray-300">
+            <input type="checkbox" checked={nuovoCritico.attivo} onChange={(e) => setNuovoCritico((p) => ({ ...p, attivo: e.target.checked }))} />
+            Attivo
+          </label>
+          <button type="button" className="px-3 py-1 rounded bg-red-800 hover:bg-red-700 text-white shrink-0" onClick={addComandoCritico}>Aggiungi</button>
+        </div>
+        <div className="space-y-1 text-sm">
+          {comandiCritici.map((row) => (
+            <div key={row.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-800/60 rounded px-2 py-2 border border-gray-700">
+              {editCriticoId === row.id ? (
+                <div className="flex flex-wrap gap-2 w-full items-center">
+                  <input className="bg-gray-700 rounded px-2 py-1 font-mono w-28" maxLength={48} value={editCritico.pattern} onChange={(e) => setEditCritico((p) => ({ ...p, pattern: e.target.value }))} />
+                  <input className="bg-gray-700 rounded px-2 py-1 flex-1 min-w-[10rem]" value={editCritico.nome} onChange={(e) => setEditCritico((p) => ({ ...p, nome: e.target.value }))} />
+                  <label className="flex items-center gap-2 text-xs text-gray-300 shrink-0">
+                    <input type="checkbox" checked={Boolean(editCritico.attivo)} onChange={(e) => setEditCritico((p) => ({ ...p, attivo: e.target.checked }))} />
+                    Attivo
+                  </label>
+                  <button type="button" className="text-emerald-400 shrink-0" onClick={salvaComandoCritico}>Salva</button>
+                  <button type="button" className="text-gray-300 shrink-0" onClick={() => setEditCriticoId(null)}>Annulla</button>
+                </div>
+              ) : (
+                <>
+                  <span>
+                    <span className="font-mono text-amber-200">{row.pattern}</span>
+                    {row.nome ? <span className="text-gray-400 ml-2">— {row.nome}</span> : null}
+                    {!row.attivo ? <span className="text-gray-500 ml-2 text-xs">(disattivato)</span> : null}
+                  </span>
+                  <div className="flex gap-3 shrink-0">
+                    <button
+                      type="button"
+                      className="text-indigo-300"
+                      onClick={() => {
+                        setEditCriticoId(row.id);
+                        setEditCritico({
+                          pattern: row.pattern || '',
+                          nome: row.nome || '',
+                          attivo: row.attivo ?? true,
+                        });
+                      }}
+                    >
+                      Modifica
+                    </button>
+                    <button type="button" className="text-red-400" onClick={() => staffDeletePilotComandoCritico(row.id, onLogout).then(loadData)}>Elimina</button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+          {!comandiCritici.length ? <p className="text-gray-500 text-sm">Nessun pattern critico configurato.</p> : null}
+        </div>
       </section>
       ) : null}
 

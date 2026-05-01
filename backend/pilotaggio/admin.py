@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    ComandoCriticoGlobale,
     ComandoNave,
     EventoAttivoSessione,
     EventoNave,
@@ -39,6 +40,13 @@ class SottosistemaNaveAdmin(admin.ModelAdmin):
     search_fields = ("codice", "nome")
     # a_vista / QR: solo API staff (associa-qr), non form admin
     fields = ("codice", "nome", "descrizione", "durata_ripristino_secondi", "attivo")
+
+
+@admin.register(ComandoCriticoGlobale)
+class ComandoCriticoGlobaleAdmin(admin.ModelAdmin):
+    list_display = ("pattern", "nome", "attivo")
+    list_filter = ("attivo",)
+    search_fields = ("pattern", "nome")
 
 
 @admin.register(ComandoNave)

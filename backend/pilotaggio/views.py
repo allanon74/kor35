@@ -40,6 +40,7 @@ from .engine import (
     tick_sessione,
 )
 from .models import (
+    ComandoCriticoGlobale,
     ComandoNave,
     DEFCON_MAX,
     EVENTO_ESITO_PENDING,
@@ -61,6 +62,7 @@ from .models import (
 )
 from .permissions import IsPilotConsole, IsStaffUser
 from .serializers import (
+    ComandoCriticoGlobaleSerializer,
     ComandoNaveSerializer,
     EventoAttivoSerializer,
     EventoNaveSerializer,
@@ -881,6 +883,14 @@ class StaffSottosistemaViewSet(viewsets.ModelViewSet):
 class StaffComandoViewSet(viewsets.ModelViewSet):
     queryset = ComandoNave.objects.all().order_by("codice")
     serializer_class = ComandoNaveSerializer
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+
+class StaffComandoCriticoGlobaleViewSet(viewsets.ModelViewSet):
+    """Pattern globali: un codice valido che li matcha precipita la nave subito."""
+
+    queryset = ComandoCriticoGlobale.objects.all().order_by("nome", "pattern")
+    serializer_class = ComandoCriticoGlobaleSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
 
 

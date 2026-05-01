@@ -301,6 +301,36 @@ class StatoAllertaPilot(SyncableModel, models.Model):
         return f"{self.livello} — {self.nome}"
 
 
+class ComandoCriticoGlobale(SyncableModel, models.Model):
+    """
+    Pattern di codice 3-char che provocano precipitazione immediata se inseriti,
+    indipendentemente dall'evento attivo. Stessa sintassi degli altri pattern
+    (jolly _, XY(N-M), ecc.).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pattern = models.CharField(
+        max_length=48,
+        help_text='Es. "XX9", "ML(4-9)", "_Z3"',
+    )
+    nome = models.CharField(max_length=120, blank=True, default="")
+    attivo = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Comando critico globale"
+        verbose_name_plural = "Comandi critici globali"
+        ordering = ["nome", "pattern"]
+
+    def save(self, *args, **kwargs):
+        if self.pattern:
+            self.pattern = str(self.pattern).strip().upper()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.nome or self.pattern
+
+
 # ---------------------------------------------------------------------------
 # Sessione di volo + runtime
 # ---------------------------------------------------------------------------

@@ -1864,6 +1864,16 @@ export const staffUpdatePilotComando = (id, data, onLogout) =>
 export const staffDeletePilotComando = (id, onLogout) =>
   fetchAuthenticated(`/api/pilot/staff/comandi/${id}/`, { method: 'DELETE' }, onLogout);
 
+/** Pattern globali: codice in sessione → precipizio immediato (indipendente dall'evento). */
+export const staffGetPilotComandiCritici = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/comandi-critici/', { method: 'GET' }, onLogout);
+export const staffCreatePilotComandoCritico = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/comandi-critici/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotComandoCritico = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/comandi-critici/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotComandoCritico = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/comandi-critici/${id}/`, { method: 'DELETE' }, onLogout);
+
 export const staffGetPilotIntensita = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/intensita/', { method: 'GET' }, onLogout);
 export const staffCreatePilotIntensita = (data, onLogout) =>

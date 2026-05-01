@@ -20,6 +20,7 @@ from pilotaggio.engine import (
     tick_sessione,
 )
 from pilotaggio.models import (
+    ComandoCriticoGlobale,
     DEFCON_MAX,
     EVENTO_ESITO_FALLITO,
     EVENTO_ESITO_PARZIALE,
@@ -294,6 +295,42 @@ class SequenzeVoloTests(TestCase):
         processa_codice(s, "Y22")
         s.refresh_from_db()
         self.assertEqual(s.stato, SESSIONE_STATO_ARRIVATA)
+
+
+class ComandoCriticoGlobaleTests(TestCase):
+    """Pattern staff globali: precipizio immediato senza dipendere dall'evento."""
+
+    def setUp(self):
+        self.pilota = _crea_pilota()
+        ComandoCriticoGlobale.objects.create(
+            pattern="QQ7", nome="Test critico", attivo=True
+        )
+
+    def test_precipizio_senza_evento_attivo(self):
+        s = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        ris = processa_codice(s, "QQ7")
+        self.assertEqual(ris.esito, "precipizio")
+        s.refresh_from_db()
+        self.assertEqual(s.stato, SESSIONE_STATO_CRASHED)
+        self.assertGreater(s.defcon, DEFCON_MAX)
+
+    def test_pattern_disattivo_non_precipita(self):
+        ComandoCriticoGlobale.objects.update(attivo=False)
+        s = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        ris = processa_codice(s, "QQ7")
+        self.assertEqual(ris.esito, "no_evento")
+        s.refresh_from_db()
+        self.assertNotEqual(s.stato, SESSIONE_STATO_CRASHED)
 
 
 class TimeoutEventoTests(TestCase):
