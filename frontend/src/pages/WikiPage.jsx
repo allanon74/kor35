@@ -121,7 +121,6 @@ export default function WikiPage({ slug: propSlug }) {
   // Layout standard per tutte le altre pagine
   return (
     <div className="max-w-5xl mx-auto bg-white min-h-screen shadow-sm md:rounded-lg overflow-hidden relative group">
-
         {/* --- BANNER BOZZA (NUOVO) --- */}
         {pageData?.public === false && (
             <div className="bg-yellow-100 border-b border-yellow-300 text-yellow-800 px-4 py-2 flex items-center justify-center gap-2 font-bold text-sm">

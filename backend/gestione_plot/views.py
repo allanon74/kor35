@@ -2,7 +2,7 @@ from rest_framework import mixins, viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import ValidationError
 
@@ -10,7 +10,12 @@ from django.shortcuts import get_object_or_404
 import os
 from django.conf import settings
 from django.http import HttpResponse, FileResponse, Http404
+from django.template.loader import render_to_string
+from django.utils import timezone
+from django.utils.html import escape
 from PIL import Image
+import re
+from pathlib import Path
 
 from django.db.models import Prefetch
 import logging
@@ -65,6 +70,7 @@ from django.contrib.auth.models import AnonymousUser, User
 from .permissions import IsStaffOrMaster
 
 logger = logging.getLogger(__name__)
+WIDGET_TOKEN_RE = re.compile(r"{{WIDGET_([A-Z_]+):([A-Za-z0-9-]+)}}")
 
 class IsMasterOrReadOnly(permissions.BasePermission):
     """
@@ -1151,6 +1157,404 @@ def get_wiki_page(request, slug):
     page = get_object_or_404(queryset, slug=slug)
     serializer = PaginaRegolamentoSerializer(page)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def download_wiki_manual_pdf(request):
+    """
+    Genera il PDF completo della wiki in formato "manuale".
+    Include solo le pagine che l'utente corrente puo' visualizzare.
+    """
+    pages = _get_wiki_pages_for_pdf(request)
+    if not pages:
+        raise Http404("Nessuna pagina wiki disponibile.")
+
+    cover_image_url = _resolve_wiki_cover_image_url(request, pages)
+
+    rendered_pages = []
+    for page in pages:
+        rendered_pages.append(
+            {
+                "titolo": page.titolo,
+                "slug": page.slug,
+                "rendered_content": _render_wiki_widgets_for_pdf(page.contenuto or "", request),
+            }
+        )
+
+    html_string = _render_wiki_manual_html(request, pages, rendered_pages, cover_image_url)
+    try:
+        from weasyprint import HTML
+    except Exception:
+        return HttpResponse(
+            "Servizio PDF non disponibile: dipendenze di rendering mancanti nel container.",
+            status=503,
+            content_type="text/plain; charset=utf-8",
+        )
+
+    pdf_bytes = HTML(string=html_string, base_url=request.build_absolute_uri("/")).write_pdf()
+
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = 'attachment; filename="kor35-manuale-wiki.pdf"'
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_wiki_manual_snapshot(request):
+    """
+    Genera il PDF wiki e lo salva su media come ultimo snapshot.
+    Permesso: staff wiki editor+.
+    """
+    if not _is_campaign_wiki_editor_plus(request):
+        return Response({"detail": "Permesso negato."}, status=status.HTTP_403_FORBIDDEN)
+
+    pages = _get_wiki_pages_for_pdf(request, force_public=True)
+    if not pages:
+        return Response({"detail": "Nessuna pagina wiki disponibile."}, status=status.HTTP_404_NOT_FOUND)
+
+    rendered_pages = [
+        {
+            "titolo": page.titolo,
+            "slug": page.slug,
+            "rendered_content": _render_wiki_widgets_for_pdf(page.contenuto or "", request),
+        }
+        for page in pages
+    ]
+    cover_image_url = _resolve_wiki_cover_image_url(request, pages)
+    html_string = _render_wiki_manual_html(request, pages, rendered_pages, cover_image_url)
+
+    try:
+        from weasyprint import HTML
+    except Exception:
+        return Response(
+            {"detail": "Servizio PDF non disponibile: dipendenze di rendering mancanti nel container."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    pdf_bytes = HTML(string=html_string, base_url=request.build_absolute_uri("/")).write_pdf()
+    output_path = _wiki_manual_latest_path()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(pdf_bytes)
+
+    return Response(
+        {
+            "ok": True,
+            "generated_at": timezone.localtime().isoformat(),
+            "download_url": "/api/plot/api/wiki/manuale/latest.pdf",
+        }
+    )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def download_latest_wiki_manual_pdf(request):
+    """
+    Scarica l'ultimo PDF wiki generato dallo staff.
+    """
+    output_path = _wiki_manual_latest_path()
+    if not output_path.exists():
+        raise Http404("Nessun manuale PDF generato al momento.")
+    response = FileResponse(open(output_path, "rb"), content_type="application/pdf")
+    response["Content-Disposition"] = 'attachment; filename="kor35-manuale-wiki-latest.pdf"'
+    return response
+
+
+def _get_wiki_pages_for_pdf(request, force_public=False):
+    queryset = PaginaRegolamento.objects.all().order_by('parent__id', 'ordine', 'titolo')
+    if force_public:
+        return list(queryset.filter(public=True, visibile_solo_staff=False))
+
+    effective_user = _public_wiki_effective_user(request)
+
+    if _is_campaign_master_plus(request, user_override=effective_user):
+        return list(queryset)
+    if _can_view_unpublished_non_staff_wiki(request, user_override=effective_user):
+        return list(queryset.filter(visibile_solo_staff=False))
+    return list(queryset.filter(public=True, visibile_solo_staff=False))
+
+
+def _resolve_wiki_cover_image_url(request, pages):
+    cover_source = next((p for p in pages if p.slug == "home" and getattr(p, "immagine", None)), None)
+    if cover_source is None:
+        cover_source = next((p for p in pages if getattr(p, "immagine", None)), None)
+    if cover_source and cover_source.immagine:
+        try:
+            return request.build_absolute_uri(cover_source.immagine.url)
+        except Exception:
+            return None
+    return None
+
+
+def _render_wiki_manual_html(request, pages, rendered_pages, cover_image_url):
+    context = {
+        "pages": pages,
+        "rendered_pages": rendered_pages,
+        "total_pages_count": len(pages),
+        "cover_image_url": cover_image_url,
+        "generated_from_host": request.get_host(),
+        "generated_at": timezone.localtime(),
+    }
+    return render_to_string("wiki/manuale_pdf.html", context)
+
+
+def _wiki_manual_latest_path():
+    return Path(settings.MEDIA_ROOT) / "wiki_exports" / "kor35-manuale-latest.pdf"
+
+
+def _render_wiki_widgets_for_pdf(content, request):
+    def _replace(match):
+        widget_type = (match.group(1) or "").strip().upper()
+        widget_key = (match.group(2) or "").strip()
+        return _widget_token_to_pdf_html(widget_type, widget_key, request)
+
+    rendered = WIDGET_TOKEN_RE.sub(_replace, content)
+    return _absolutize_img_src_for_pdf(rendered, request)
+
+
+def _widget_token_to_pdf_html(widget_type, widget_key, request):
+    try:
+        if widget_type == "TIER":
+            return _pdf_render_tier(widget_key)
+        if widget_type in ("TIER_COLLECTION", "COLLECTION", "COLLEZIONE", "COLLEZIONI"):
+            return _pdf_render_tier_collection(widget_key)
+        if widget_type == "MATTONI":
+            return _pdf_render_mattoni(widget_key)
+        if widget_type in ("BUTTONS", "PULSANTI"):
+            return ""
+        if widget_type in ("IMAGE", "IMMAGINE"):
+            return _pdf_render_image(widget_key, request)
+        if widget_type == "ERA":
+            return _pdf_render_era(widget_key)
+    except Exception as exc:
+        logger.warning("Errore rendering widget PDF %s:%s -> %s", widget_type, widget_key, exc)
+        return (
+            f'<div class="pdf-widget pdf-widget-error">'
+            f'<strong>Widget {escape(widget_type)}</strong>: errore di rendering.'
+            f"</div>"
+        )
+
+    return (
+        f'<div class="pdf-widget pdf-widget-missing">'
+        f'<strong>Widget {escape(widget_type)}</strong> non supportato nel PDF.'
+        f"</div>"
+    )
+
+
+def _pdf_render_tier(widget_key):
+    _abilita_prefetch = Prefetch(
+        'abilita',
+        queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3')
+    )
+    _caratt_prefetch = Prefetch('caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA'))
+    tier = _resolve_by_pk_or_sync_id(Tier.objects.prefetch_related(_abilita_prefetch, _caratt_prefetch), widget_key)
+    if not tier:
+        widget = _resolve_by_pk_or_sync_id(
+            WikiTierWidget.objects.select_related('tier').prefetch_related(
+                Prefetch('tier__abilita', queryset=Abilita.objects.select_related('caratteristica', 'caratteristica_2', 'caratteristica_3')),
+                Prefetch('tier__caratteristiche_visibili', queryset=Punteggio.objects.filter(tipo='CA')),
+            ),
+            widget_key,
+        )
+        tier = widget.tier if widget else None
+    if not tier:
+        return f'<div class="pdf-widget pdf-widget-error">Tier {escape(widget_key)} non trovato.</div>'
+
+    data = WikiTierSerializer(tier).data
+    caratteristiche = ", ".join(
+        [escape(c.get("sigla") or c.get("nome") or "") for c in (data.get("caratteristiche_visibili") or []) if (c.get("sigla") or c.get("nome"))]
+    )
+    abilita_rows = []
+    for abilita in (data.get("abilita") or []):
+        nome = escape(abilita.get("nome") or "")
+        costo = escape(abilita.get("costo") or "")
+        desc = abilita.get("descrizione") or ""
+        costo_html = f'<br><span class="muted">{costo}</span>' if costo else ""
+        abilita_rows.append(
+            f"<tr><td><strong>{nome}</strong>{costo_html}</td>"
+            f"<td>{desc}</td></tr>"
+        )
+    abilita_html = "".join(abilita_rows) or "<tr><td colspan='2'>Nessuna abilità.</td></tr>"
+    descrizione = data.get("descrizione") or ""
+    caratteristiche_html = f'<p class="muted">Caratteristiche: {caratteristiche}</p>' if caratteristiche else ""
+    descrizione_html = f'<div class="pdf-widget-rich">{descrizione}</div>' if descrizione else ""
+
+    return (
+        f'<section class="pdf-widget pdf-widget-tier">'
+        f'<div class="pdf-widget-head">'
+        f'<h4 class="pdf-widget-title">Tier: {escape(data.get("nome") or "")}</h4>'
+        f"{caratteristiche_html}"
+        f"</div>"
+        f"{descrizione_html}"
+        f'<table class="pdf-widget-table"><thead><tr><th>Abilità</th><th>Descrizione</th></tr></thead><tbody>{abilita_html}</tbody></table>'
+        f"</section>"
+    )
+
+
+def _pdf_render_tier_collection(widget_key):
+    widget = _resolve_by_pk_or_sync_id(
+        WikiTierCollectionWidget.objects.prefetch_related('widgets__tier'),
+        widget_key,
+    )
+    if not widget:
+        return f'<div class="pdf-widget pdf-widget-error">Collezione Tier {escape(widget_key)} non trovata.</div>'
+
+    if widget.source_mode == WikiTierCollectionWidget.SOURCE_SELECTED:
+        qs = widget.widgets.all().select_related('tier')
+    else:
+        qs = WikiTierWidget.objects.all().select_related('tier')
+    widget_ids = [str(w.sync_id) if getattr(w, "sync_id", None) else str(w.id) for w in qs if getattr(w, "tier", None)]
+    if not widget_ids:
+        return f'<div class="pdf-widget pdf-widget-error">Collezione Tier {escape(widget_key)} senza elementi.</div>'
+
+    rendered_items = "".join([_pdf_render_tier(wid) for wid in widget_ids])
+    return (
+        f'<section class="pdf-widget pdf-widget-tier-collection">'
+        f'<div class="pdf-widget-head">'
+        f'<h4 class="pdf-widget-title">{escape(widget.title or "Collezione Tier")}</h4>'
+        f"</div>"
+        f'<div class="pdf-tier-collection-grid">{rendered_items}</div>'
+        f"</section>"
+    )
+
+
+def _pdf_render_mattoni(widget_key):
+    widget = _resolve_by_pk_or_sync_id(
+        WikiMattoniWidget.objects.prefetch_related('aure', 'caratteristiche'),
+        widget_key,
+    )
+    if not widget:
+        return f'<div class="pdf-widget pdf-widget-error">Widget Mattoni {escape(widget_key)} non trovato.</div>'
+
+    mattoni_qs = Mattone.objects.select_related('aura', 'caratteristica_associata')
+    filter_type = widget.filter_type or WikiMattoniWidget.FILTER_ALL
+    if filter_type == WikiMattoniWidget.FILTER_AURA:
+        aura_ids = list(widget.aure.values_list('id', flat=True))
+        if aura_ids:
+            mattoni_qs = mattoni_qs.filter(aura_id__in=aura_ids)
+    elif filter_type == WikiMattoniWidget.FILTER_CARATTERISTICA:
+        car_ids = list(widget.caratteristiche.values_list('id', flat=True))
+        if car_ids:
+            mattoni_qs = mattoni_qs.filter(caratteristica_associata_id__in=car_ids)
+    data = MattoneWikiSerializer(mattoni_qs.order_by('aura__ordine', 'ordine', 'nome'), many=True).data
+
+    rows = []
+    for m in data:
+        rows.append(
+            "<tr>"
+            f"<td><strong>{escape(m.get('nome') or '')}</strong></td>"
+            f"<td>{escape((m.get('aura') or {}).get('nome') or '-')}</td>"
+            f"<td>{escape((m.get('caratteristica_associata') or {}).get('nome') or '-')}</td>"
+            f"<td>{m.get('descrizione_mattone') or ''}</td>"
+            "</tr>"
+        )
+    body = "".join(rows) or "<tr><td colspan='4'>Nessun mattone.</td></tr>"
+    return (
+        f'<section class="pdf-widget pdf-widget-mattoni">'
+        f'<div class="pdf-widget-head">'
+        f'<h4 class="pdf-widget-title">{escape(widget.title or "Mattoni")}</h4>'
+        f"</div>"
+        f'<table class="pdf-widget-table"><thead><tr><th>Nome</th><th>Aura</th><th>Caratteristica</th><th>Descrizione</th></tr></thead><tbody>{body}</tbody></table>'
+        f"</section>"
+    )
+
+
+def _pdf_render_image(widget_key, request):
+    obj = _resolve_by_pk_or_sync_id(WikiImmagine.objects.all(), widget_key)
+    if not obj:
+        return f'<div class="pdf-widget pdf-widget-error">Immagine widget {escape(widget_key)} non trovata.</div>'
+    serializer = WikiImmagineSerializer(obj, context={"request": request})
+    data = serializer.data
+    image_url = obj.immagine.url if getattr(obj, "immagine", None) else (data.get("immagine_url") or data.get("immagine"))
+    if image_url:
+        image_url = _normalize_img_src_for_pdf(image_url, request)
+    image_html = f'<img src="{escape(image_url)}" alt="{escape(data.get("titolo") or "")}" />' if image_url else ""
+    descrizione_html = f'<div class="muted">{escape(data.get("descrizione") or "")}</div>' if data.get("descrizione") else ""
+    caption_html = f'<figcaption>{escape(data.get("titolo") or "")}</figcaption>' if data.get("titolo") else ""
+    if not image_html:
+        return f'<div class="pdf-widget pdf-widget-error">Immagine widget {escape(widget_key)} non disponibile.</div>'
+    return (
+        f'<figure class="pdf-widget pdf-widget-image">'
+        f"{image_html}"
+        f"{caption_html}"
+        f"{descrizione_html}"
+        f"</figure>"
+    )
+
+
+def _absolutize_img_src_for_pdf(html, request):
+    if not html:
+        return html
+    return re.sub(
+        r'(<img\b[^>]*\bsrc=["\'])([^"\']+)(["\'])',
+        lambda m: f'{m.group(1)}{escape(_normalize_img_src_for_pdf(m.group(2), request))}{m.group(3)}',
+        html,
+        flags=re.IGNORECASE,
+    )
+
+
+def _normalize_img_src_for_pdf(src, request):
+    value = str(src or "").strip()
+    if not value:
+        return value
+    if value.startswith(("data:", "file://", "http://", "https://")):
+        return value
+
+    # Usa il file locale per /media quando disponibile: evita fetch HTTP in WeasyPrint.
+    if value.startswith("/media/"):
+        local_uri = _media_rel_to_file_uri(value[len("/media/"):])
+        return local_uri or request.build_absolute_uri(value)
+    if value.startswith("media/"):
+        local_uri = _media_rel_to_file_uri(value[len("media/"):])
+        return local_uri or request.build_absolute_uri(f"/{value}")
+
+    if value.startswith("/"):
+        return request.build_absolute_uri(value)
+    return request.build_absolute_uri(f"/{value.lstrip('/')}")
+
+
+def _media_rel_to_file_uri(rel_path):
+    rel_clean = str(rel_path or "").split("?", 1)[0].split("#", 1)[0].lstrip("/")
+    if not rel_clean:
+        return None
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    candidate = (media_root / rel_clean).resolve()
+    try:
+        candidate.relative_to(media_root)
+    except Exception:
+        return None
+    if not candidate.exists():
+        return None
+    return candidate.as_uri()
+
+
+def _pdf_render_era(widget_key):
+    era = _resolve_by_pk_or_sync_id(
+        Era.objects.prefetch_related(
+            Prefetch(
+                'ere_abilita',
+                queryset=(
+                    EraAbilita.objects.filter(is_default=True).select_related('abilita').order_by('ordine', 'abilita__nome')
+                ),
+            )
+        ),
+        widget_key,
+    )
+    if not era:
+        return f'<div class="pdf-widget pdf-widget-error">Era {escape(widget_key)} non trovata.</div>'
+    abilita = [row.abilita.nome for row in era.ere_abilita.all() if row.abilita_id]
+    abilita_html = "".join([f"<li>{escape(nome)}</li>" for nome in abilita]) or "<li>Nessuna abilità automatica.</li>"
+    descrizione_html = f'<div class="pdf-widget-rich">{era.descrizione_breve}</div>' if era.descrizione_breve else ""
+    return (
+        f'<section class="pdf-widget pdf-widget-era">'
+        f'<div class="pdf-widget-head">'
+        f'<h4 class="pdf-widget-title">Era: {escape(era.nome or "")}</h4>'
+        f"{descrizione_html}"
+        f"</div>"
+        f"<p><strong>Abilità automatiche</strong></p><ul>{abilita_html}</ul>"
+        f"</section>"
+    )
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])

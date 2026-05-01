@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, memo, lazy, Suspense } from 'react';
 import GenericHeader from './GenericHeader';
 import Sidebar from './Sidebar';
-import { socialGetNotifications } from '../api';
+import { socialGetNotifications, generateWikiManualPdfSnapshot, getWikiManualLatestPdfUrl } from '../api';
 import { useCharacter } from './CharacterContext';
 import { 
     Map, Scroll, FlaskConical, Gavel, 
@@ -53,6 +53,8 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     const [activeTool, setActiveTool] = useState(initialTool); 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [socialUnreadCount, setSocialUnreadCount] = useState(0);
+    const [pdfGenerating, setPdfGenerating] = useState(false);
+    const [pdfGenMessage, setPdfGenMessage] = useState('');
     const { selectedCharacterId, isGlobalSuperuser, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster } = useCharacter();
 
     React.useEffect(() => {
@@ -215,6 +217,20 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     );
 }, []);
 
+    const handleGenerateWikiPdf = useCallback(async () => {
+        setPdfGenerating(true);
+        setPdfGenMessage('');
+        try {
+            await generateWikiManualPdfSnapshot(onLogout);
+            setPdfGenMessage('Manuale PDF generato con successo.');
+        } catch (e) {
+            console.error('Errore generazione manuale PDF:', e);
+            setPdfGenMessage('Errore durante la generazione del manuale PDF.');
+        } finally {
+            setPdfGenerating(false);
+        }
+    }, [onLogout]);
+
     return (
         <div className="flex h-screen bg-gray-950 text-white overflow-hidden font-sans">
             
@@ -279,6 +295,29 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                     {activeTool === 'home' && (
                         <div className="min-h-full p-6 animate-fadeIn">
                             <h2 className="text-2xl font-black text-gray-700 uppercase italic mb-6 tracking-widest text-center md:text-left">Strumenti Staff</h2>
+                            <div className="mb-6 p-4 rounded-xl border border-indigo-500/30 bg-gray-900/70">
+                                <h3 className="text-sm font-black uppercase tracking-wider text-indigo-300 mb-3">Manuale Wiki PDF</h3>
+                                <div className="flex flex-col md:flex-row md:items-center gap-3">
+                                    <button
+                                        onClick={handleGenerateWikiPdf}
+                                        disabled={pdfGenerating}
+                                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${pdfGenerating ? 'bg-gray-700 text-gray-300 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
+                                    >
+                                        {pdfGenerating ? 'Generazione in corso...' : 'Genera Ultimo Manuale PDF'}
+                                    </button>
+                                    <a
+                                        href={getWikiManualLatestPdfUrl()}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-4 py-2 rounded-lg font-bold text-sm border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 transition-colors text-center"
+                                    >
+                                        Scarica Ultimo PDF
+                                    </a>
+                                </div>
+                                {pdfGenMessage && (
+                                    <p className="mt-2 text-xs text-gray-300">{pdfGenMessage}</p>
+                                )}
+                            </div>
                             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                                 {visibleTools.map(tool => (
                                     <button 

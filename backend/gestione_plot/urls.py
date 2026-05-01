@@ -22,6 +22,7 @@ from .views import(
     PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
     PublicWikiMattoniWidgetViewSet, StaffWikiMattoniWidgetViewSet,
     PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet, PublicWikiGlossarioViewSet,
+    download_wiki_manual_pdf, generate_wiki_manual_snapshot, download_latest_wiki_manual_pdf,
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -87,6 +88,9 @@ urlpatterns = [
     path('iscrizioni-evento/annulla/', iscrizioni_evento_annulla),
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),
     path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
+    path('api/wiki/manuale.pdf', download_wiki_manual_pdf, name='wiki_manual_pdf'),
+    path('api/wiki/manuale/genera/', generate_wiki_manual_snapshot, name='wiki_manual_generate'),
+    path('api/wiki/manuale/latest.pdf', download_latest_wiki_manual_pdf, name='wiki_manual_latest_pdf'),
     path('api/wiki/image/<slug:slug>/', serve_wiki_image, name='wiki_image'),
     path('api/wiki/tier-display/<str:key>/', get_wiki_tier_display, name='wiki_tier_display'),
     path('api/wiki/tier-collection-display/<str:key>/', get_wiki_tier_collection_display, name='wiki_tier_collection_display'),

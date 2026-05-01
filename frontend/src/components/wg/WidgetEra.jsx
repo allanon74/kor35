@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getWikiEraDisplay } from '../../api';
+import { sanitizeHtml } from '../../utils/htmlSanitizer';
+
+function HtmlContent({ html, className }) {
+  if (!html) return null;
+  return <div className={className} dangerouslySetInnerHTML={{ __html: sanitizeHtml(html) }} />;
+}
 
 export default function WidgetEra({ id }) {
   const [data, setData] = useState(null);
@@ -37,8 +43,11 @@ export default function WidgetEra({ id }) {
       </div>
 
       {data.descrizione_breve && (
-        <div className="p-3 md:p-4 text-xs md:text-sm text-gray-800 border-b border-gray-200 italic bg-amber-50/50">
-          {data.descrizione_breve}
+        <div className="p-3 md:p-4 border-b border-gray-200 italic bg-amber-50/50">
+          <HtmlContent
+            html={data.descrizione_breve}
+            className="prose prose-sm max-w-none text-xs md:text-sm text-gray-800"
+          />
         </div>
       )}
 
@@ -48,28 +57,35 @@ export default function WidgetEra({ id }) {
             {data.difetto_interpretativo_titolo || 'Difetto comportamentale'}
           </h4>
           {data.difetto_interpretativo_testo ? (
-            <p className="text-xs md:text-sm text-gray-700 whitespace-pre-wrap">{data.difetto_interpretativo_testo}</p>
+            <HtmlContent
+              html={data.difetto_interpretativo_testo}
+              className="prose prose-sm max-w-none text-xs md:text-sm text-gray-700"
+            />
           ) : (
             <p className="text-xs text-gray-500">Nessuna descrizione disponibile.</p>
           )}
         </div>
       )}
 
-      <div className="p-3 md:p-4">
-        <h4 className="text-xs md:text-sm font-semibold text-gray-900 mb-2">Abilita assegnate automaticamente</h4>
-        {abilitaAutomatiche.length === 0 ? (
+      {abilitaAutomatiche.length === 0 ? (
+        <div className="p-3 md:p-4">
           <p className="text-xs text-gray-500">Nessuna abilita automatica configurata.</p>
-        ) : (
-          <ul className="space-y-2">
-            {abilitaAutomatiche.map((a) => (
-              <li key={a.id} className="text-xs md:text-sm text-gray-800">
-                <span className="font-semibold">{a.nome}</span>
-                {a.descrizione && <span className="text-gray-600"> - {a.descrizione}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+        </div>
+      ) : (
+        abilitaAutomatiche.map((a) => (
+          <div key={a.id} className="p-3 md:p-4 border-t border-gray-200 bg-gray-50">
+            <h4 className="text-xs md:text-sm font-semibold text-gray-900 mb-1">{a.nome}</h4>
+            {a.descrizione ? (
+              <HtmlContent
+                html={a.descrizione}
+                className="prose prose-sm max-w-none text-xs md:text-sm text-gray-700"
+              />
+            ) : (
+              <p className="text-xs text-gray-500">Nessuna descrizione disponibile.</p>
+            )}
+          </div>
+        ))
+      )}
     </div>
   );
 }

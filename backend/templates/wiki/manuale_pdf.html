@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8" />
+    <title>KOR35 - Manuale Wiki</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 18mm 16mm 18mm 16mm;
+            @top-left {
+                content: "KOR35 - Manuale Wiki";
+                font-size: 8.5pt;
+                color: #6b6b6b;
+            }
+            @top-right {
+                content: "Edizione PDF";
+                font-size: 8.5pt;
+                color: #6b6b6b;
+            }
+            @bottom-center {
+                content: "Pagina " counter(page) " / " counter(pages);
+                font-size: 9px;
+                color: #666;
+            }
+        }
+
+        body {
+            font-family: "DejaVu Serif", Georgia, serif;
+            color: #1d1d1d;
+            font-size: 10.8pt;
+            line-height: 1.5;
+            hyphens: none;
+            text-align: left;
+        }
+
+        p, li, blockquote {
+            orphans: 3;
+            widows: 3;
+        }
+
+        .cover {
+            page-break-after: always;
+            text-align: center;
+            padding: 0;
+            border: 1px solid #ececec;
+            position: relative;
+            min-height: 240mm;
+            overflow: hidden;
+        }
+
+        .cover-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, #faf6f3 0%, #ffffff 100%);
+        }
+
+        .cover-bg-image {
+            position: absolute;
+            inset: 0;
+            background-size: cover;
+            background-position: center;
+            opacity: 0.22;
+        }
+
+        .cover-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.9) 100%);
+        }
+
+        .cover-content {
+            position: relative;
+            z-index: 1;
+            padding-top: 20vh;
+        }
+
+        .cover h1 {
+            font-size: 40pt;
+            letter-spacing: 1.5px;
+            margin: 0 0 6pt;
+            color: #5a1010;
+        }
+
+        .cover h2 {
+            font-size: 16pt;
+            margin: 0;
+            color: #555;
+            font-weight: normal;
+        }
+
+        .cover .subtitle {
+            margin-top: 12pt;
+            font-size: 11pt;
+            color: #666;
+        }
+
+        .cover .meta {
+            margin-top: 28pt;
+            font-size: 9pt;
+            color: #7a7a7a;
+        }
+
+        .quickstart {
+            page-break-after: always;
+            border: 1px solid #ececec;
+            padding: 14pt 16pt;
+            background: #fffdfc;
+        }
+
+        .quickstart h2 {
+            font-size: 19pt;
+            color: #5a1010;
+            margin: 0 0 10pt;
+            border-bottom: 1px solid #ded7d3;
+            padding-bottom: 6pt;
+        }
+
+        .quickstart p {
+            margin: 0 0 8pt;
+        }
+
+        .quickstart ul {
+            margin: 0 0 8pt;
+            padding-left: 18pt;
+        }
+
+        .quickstart li {
+            margin: 4pt 0;
+        }
+
+        .quickstart .tip-box {
+            margin-top: 10pt;
+            border-left: 3px solid #5a1010;
+            background: #f8f1ed;
+            padding: 8pt 10pt;
+            page-break-inside: avoid;
+        }
+
+        .toc {
+            page-break-after: always;
+        }
+
+        .toc h2 {
+            font-size: 22pt;
+            margin: 0 0 16pt;
+            color: #5a1010;
+            border-bottom: 1px solid #d5d5d5;
+            padding-bottom: 8pt;
+        }
+
+        .toc-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .toc-item {
+            margin: 0;
+            border-bottom: 1px dotted #d8d8d8;
+            padding: 5pt 0;
+            page-break-inside: avoid;
+        }
+
+        .toc-link {
+            display: block;
+            color: #222;
+            text-decoration: none;
+            font-size: 11pt;
+        }
+
+        .toc-link .toc-title {
+            font-weight: 600;
+        }
+
+        .toc-link::after {
+            content: " ..... " target-counter(attr(href), page);
+            float: right;
+            color: #777;
+            font-size: 10pt;
+        }
+
+        .wiki-page { page-break-before: auto; }
+        .wiki-page + .wiki-page { page-break-before: always; }
+
+        .chapter-head {
+            border-bottom: 1px solid #d5d5d5;
+            margin-bottom: 10pt;
+            padding-bottom: 6pt;
+            page-break-after: avoid;
+        }
+
+        .chapter-kicker {
+            font-size: 9pt;
+            color: #7a7a7a;
+            letter-spacing: 0.7px;
+            text-transform: uppercase;
+            margin: 0 0 4pt;
+        }
+
+        .chapter-title {
+            font-size: 24pt;
+            color: #5a1010;
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .wiki-meta {
+            font-size: 9pt;
+            color: #727272;
+            margin-bottom: 12pt;
+            font-style: italic;
+        }
+
+        .wiki-content p {
+            margin: 0 0 8pt;
+        }
+
+        .wiki-content img {
+            max-width: 78%;
+            max-height: 145mm;
+            height: auto;
+            display: block;
+            margin: 8pt auto 10pt;
+            border: 1px solid #ddd;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            page-break-inside: avoid;
+        }
+
+        .wiki-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12pt 0;
+            font-size: 10pt;
+            page-break-inside: avoid;
+        }
+
+        .wiki-content thead {
+            display: table-header-group;
+        }
+
+        .wiki-content tfoot {
+            display: table-footer-group;
+        }
+
+        .wiki-content th,
+        .wiki-content td {
+            border: 1px solid #bbb;
+            padding: 6px 7px;
+            vertical-align: top;
+        }
+
+        .wiki-content tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        .wiki-content th {
+            background: #f3f3f3;
+        }
+
+        .wiki-content h2,
+        .wiki-content h3,
+        .wiki-content h4 {
+            color: #2f2f2f;
+            margin-top: 16pt;
+            margin-bottom: 8pt;
+            page-break-after: avoid;
+            page-break-inside: avoid;
+        }
+
+        .wiki-content blockquote {
+            margin: 10pt 0;
+            padding: 8pt 12pt;
+            border-left: 3px solid #b8b8b8;
+            color: #444;
+            background: #f8f8f8;
+            page-break-inside: avoid;
+        }
+
+        .wiki-content pre,
+        .wiki-content code {
+            font-family: "DejaVu Sans Mono", Consolas, monospace;
+        }
+
+        .wiki-content pre {
+            background: #f5f5f5;
+            border: 1px solid #e3e3e3;
+            padding: 7pt;
+            white-space: pre-wrap;
+            word-break: break-word;
+            page-break-inside: avoid;
+        }
+
+        .wiki-content a {
+            color: #4e1010;
+            text-decoration: underline;
+            word-break: break-word;
+        }
+
+        .pdf-widget {
+            margin: 10pt 0;
+            padding: 8pt 10pt;
+            border: 1px solid #d8d8d8;
+            background: #fcfcfc;
+            page-break-inside: auto;
+            break-inside: auto;
+        }
+        .pdf-widget ul, .pdf-widget ol { padding-left: 16pt; margin: 5pt 0; }
+        .pdf-tier-collection-grid > .pdf-widget-tier { margin: 8pt 0; }
+
+        .pdf-widget-title {
+            margin: 0 0 6pt;
+            font-size: 12.5pt;
+            color: #5a1010;
+            page-break-after: avoid;
+            break-after: avoid;
+        }
+
+        .pdf-widget-title + .pdf-widget-table,
+        .pdf-widget-title + .pdf-widget-rich,
+        .pdf-widget-title + ul,
+        .pdf-widget-title + p,
+        .pdf-widget-title + .pdf-tier-collection-grid,
+        .pdf-widget-head + .pdf-widget-table,
+        .pdf-widget-head + .pdf-widget-rich,
+        .pdf-widget-head + ul,
+        .pdf-widget-head + p,
+        .pdf-widget-head + .pdf-tier-collection-grid {
+            page-break-before: avoid;
+            break-before: avoid;
+        }
+
+        .pdf-widget-head {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            margin-bottom: 4pt;
+        }
+
+        .pdf-widget-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6pt;
+            font-size: 9.5pt;
+            page-break-inside: auto;
+            break-inside: auto;
+        }
+
+        .pdf-widget-table thead {
+            display: table-header-group;
+        }
+
+        .pdf-widget-table tfoot {
+            display: table-footer-group;
+        }
+
+        .pdf-widget-table th,
+        .pdf-widget-table td {
+            border: 1px solid #bcbcbc;
+            padding: 5px 6px;
+            vertical-align: top;
+        }
+
+        .pdf-widget-table tr {
+            page-break-inside: auto;
+            break-inside: auto;
+        }
+
+        .pdf-widget-rich p {
+            margin: 0 0 5pt;
+        }
+
+        .pdf-tier-collection-grid {
+            page-break-inside: auto;
+            break-inside: auto;
+        }
+
+        .pdf-widget .muted {
+            color: #666;
+            font-size: 9pt;
+        }
+
+        .pdf-widget-image img {
+            max-width: 76%;
+            max-height: 135mm;
+            height: auto;
+            margin: 0 auto;
+            display: block;
+            border: 1px solid #ddd;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            page-break-inside: auto;
+            break-inside: auto;
+        }
+
+        .pdf-widget-image figcaption {
+            margin-top: 5pt;
+            font-size: 9pt;
+            color: #555;
+            text-align: center;
+            max-width: 76%;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .colophon {
+            page-break-before: always;
+            border-top: 2px solid #5a1010;
+            padding-top: 14pt;
+        }
+
+        .colophon h2 {
+            margin: 0 0 10pt;
+            font-size: 18pt;
+            color: #5a1010;
+        }
+
+        .colophon p {
+            margin: 0 0 7pt;
+        }
+
+        .colophon .meta-list {
+            margin: 10pt 0 0;
+            padding: 0;
+            list-style: none;
+            font-size: 10pt;
+        }
+
+        .colophon .meta-list li {
+            margin: 4pt 0;
+            padding-bottom: 4pt;
+            border-bottom: 1px dotted #d6d6d6;
+        }
+
+        .colophon .note {
+            margin-top: 12pt;
+            font-size: 9.5pt;
+            color: #555;
+            background: #f8f8f8;
+            border: 1px solid #e6e6e6;
+            padding: 8pt 10pt;
+        }
+    </style>
+</head>
+<body>
+    <section class="cover">
+        <div class="cover-bg"></div>
+        {% if cover_image_url %}
+            <div class="cover-bg-image" style="background-image: url('{{ cover_image_url }}');"></div>
+        {% endif %}
+        <div class="cover-overlay"></div>
+        <div class="cover-content">
+            <h1>KOR35</h1>
+            <h2>Manuale Wiki Ufficiale</h2>
+            <p class="subtitle">Versione impaginata per consultazione e stampa</p>
+            <p class="meta">
+                Generato da {{ generated_from_host }} il {{ generated_at|date:"d/m/Y H:i" }}
+            </p>
+        </div>
+    </section>
+
+    <section class="quickstart">
+        <h2>Uso Rapido del Manuale</h2>
+        <p>Questo PDF raccoglie l'intera wiki pubblicata/visibile al ruolo corrente in un formato unico da consultare anche offline.</p>
+        <ul>
+            <li><strong>Struttura:</strong> ogni pagina wiki diventa un capitolo numerato.</li>
+            <li><strong>Indice:</strong> usa l'indice per raggiungere velocemente il capitolo desiderato.</li>
+            <li><strong>Stampa:</strong> il layout e' ottimizzato per formato A4 fronte/retro.</li>
+            <li><strong>Aggiornamenti:</strong> rigenera il PDF dopo modifiche della wiki per avere il manuale aggiornato.</li>
+        </ul>
+        <div class="tip-box">
+            <strong>Nota:</strong> questa edizione contiene {{ total_pages_count }} capitoli ed e' pensata per uso operativo durante eventi e preparazione staff.
+        </div>
+    </section>
+
+    <section class="toc">
+        <h2>Indice</h2>
+        <ul class="toc-list">
+            {% for page in pages %}
+                <li class="toc-item">
+                    <a class="toc-link" href="#{{ page.slug }}">
+                        <span class="toc-title">{{ forloop.counter }}. {{ page.titolo }}</span>
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+
+    {% for page in rendered_pages %}
+        <section id="{{ page.slug }}" class="wiki-page">
+            <header class="chapter-head">
+                <p class="chapter-kicker">Capitolo {{ forloop.counter }}</p>
+                <h1 class="chapter-title">{{ page.titolo }}</h1>
+            </header>
+            <div class="wiki-meta">Slug: {{ page.slug }}</div>
+            <div class="wiki-content">{{ page.rendered_content|safe }}</div>
+        </section>
+    {% endfor %}
+
+    <section class="colophon">
+        <h2>Colophon e Changelog</h2>
+        <p>Questa edizione PDF e' stata generata automaticamente dalla wiki di gioco KOR35.</p>
+        <ul class="meta-list">
+            <li><strong>Data/Ora generazione:</strong> {{ generated_at|date:"d/m/Y H:i:s" }}</li>
+            <li><strong>Host sorgente:</strong> {{ generated_from_host }}</li>
+            <li><strong>Capitoli inclusi:</strong> {{ total_pages_count }}</li>
+            <li><strong>Formato:</strong> A4 ottimizzato per stampa e consultazione offline</li>
+        </ul>
+        <p class="note">
+            Per mantenere il manuale allineato alle regole correnti, rigenera il PDF dopo ogni aggiornamento significativo della wiki.
+        </p>
+    </section>
+</body>
+</html>

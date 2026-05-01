@@ -2212,6 +2212,20 @@ export const getWikiPage = async (slug) => {
   }
 };
 
+export const getWikiManualPdfUrl = () => {
+  const path = '/api/plot/api/wiki/manuale.pdf';
+  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+};
+
+export const getWikiManualLatestPdfUrl = () => {
+  const path = '/api/plot/api/wiki/manuale/latest.pdf';
+  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+};
+
+export const generateWikiManualPdfSnapshot = (onLogout) => {
+  return fetchAuthenticated('/api/plot/api/wiki/manuale/genera/', { method: 'POST', body: '{}' }, onLogout);
+};
+
 /** Lista glossario dichiarazioni per auto-link nelle pagine wiki (cache HTTP lato server). */
 export const getWikiGlossario = async () => {
   return fetchPublic('/api/plot/api/public/wiki-glossario/');

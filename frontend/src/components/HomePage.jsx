@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, LogIn, Scroll, BookOpen, Users, Calendar, Share2 } from 'lucide-react';
+import { Sparkles, LogIn, Scroll, BookOpen, Download } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
-import { getMediaUrl } from '../api';
+import { getMediaUrl, getWikiManualLatestPdfUrl } from '../api';
 import WidgetChiSiamo from './wg/WidgetChiSiamo';
 import WidgetEventi from './wg/WidgetEventi';
 import WidgetSocial from './wg/WidgetSocial';
@@ -100,6 +100,7 @@ export default function HomePage({ pageData }) {
             </div>
             <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
           </button>
+
         </div>
 
         {/* SEZIONE AMBIENTAZIONE E REGOLAMENTO */}
@@ -155,6 +156,30 @@ export default function HomePage({ pageData }) {
             </svg>
           </Link>
         </div>
+
+        <a
+          href={getWikiManualLatestPdfUrl()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group relative block w-full overflow-hidden bg-gradient-to-r from-red-800 to-rose-900 text-white rounded-xl p-6 md:p-7 shadow-lg hover:shadow-2xl transition-all mb-8"
+          title="Scarica l'ultimo manuale PDF generato dallo Staff"
+        >
+          <div className="relative z-10 flex items-center gap-4 md:gap-5">
+            <div className="bg-white/25 p-3 md:p-4 rounded-lg shrink-0">
+              <Download size={30} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-2xl md:text-3xl font-black leading-tight">Scarica Manuale PDF Completo</h3>
+              <p className="text-sm md:text-base text-white/80 mt-1">
+                Ultima versione generata dallo staff, pronta per consultazione e stampa.
+              </p>
+            </div>
+            <div className="ml-auto text-sm md:text-base font-bold text-white/80 group-hover:text-white transition-colors">
+              Download →
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 w-44 h-44 bg-rose-200 opacity-15 rounded-full -mr-20 -mt-20 group-hover:scale-125 transition-transform"></div>
+        </a>
 
         {/* SEZIONE WIDGET: CHI SIAMO, EVENTI, SOCIAL */}
         <div className="grid md:grid-cols-3 gap-6">
