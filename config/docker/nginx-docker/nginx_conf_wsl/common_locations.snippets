@@ -6,6 +6,26 @@ location ^~ /watch-apps/ {
     add_header Cache-Control "public, max-age=300" always;
 }
 
+# Console pilota (build separata)
+location ^~ /pilot/assets/ {
+    alias /usr/share/nginx/pilot/assets/;
+    try_files $uri =404;
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+}
+
+location = /pilot/index.html {
+    alias /usr/share/nginx/pilot/index.html;
+    add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    expires -1;
+}
+
+location ^~ /pilot/ {
+    alias /usr/share/nginx/pilot/;
+    index index.html;
+    try_files $uri $uri/ /pilot/index.html;
+}
+
 location / {
     root /usr/share/nginx/html;
     index index.html;

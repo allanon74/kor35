@@ -115,10 +115,77 @@ jobs:
           path: frontend/dist
           retention-days: 3
 
+  build-frontend-pilot:
+    name: Build frontend pilota (if frontend-pilot/ changed)
+    runs-on: ubuntu-latest
+    needs: [guard-main-ref]
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Rileva modifiche in frontend-pilot/
+        id: detect
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.force_frontend_build }}" = "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.sha }}"
+          else
+            REF_INPUT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
+            git fetch origin "${REF_INPUT}"
+            git checkout "${REF_INPUT}"
+            AFTER="$(git rev-parse HEAD)"
+            BEFORE="$(git rev-parse HEAD~1 2>/dev/null || true)"
+          fi
+          if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "$BEFORE" "$AFTER" -- frontend-pilot/ | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.detect.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: npm install && npm run build
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          cd frontend-pilot
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+          npm run build
+
+      - name: Upload dist (pilot)
+        if: steps.detect.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-pilot-dist
+          path: frontend-pilot/dist
+          retention-days: 3
+
   production-deploy:
     name: Production deploy
     runs-on: ubuntu-latest
-    needs: [guard-main-ref, build-frontend]
+    needs: [guard-main-ref, build-frontend, build-frontend-pilot]
     steps:
       # Runner pulito: senza checkout i path extra/ota-artifacts/ non esistono (rsync OTA/APK farebbe sempre skip).
       # Checkout completo superficiale (no sparse): meno corner case rispetto a sparse-checkout sui runner.
@@ -174,6 +241,24 @@ jobs:
           REMOTE_PREP
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
+
+      - name: Rimuovi build console pilota da produzione
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USER }}
+          PORT: ${{ secrets.SERVER_SSH_PORT }}
+          PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+        run: |
+          set -euo pipefail
+          REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh $SSH_OPTS "${USER}@${HOST}" "rm -rf '${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot'"
 
       - name: Rsync firmware OTA verso produzione
         env:
@@ -314,7 +399,7 @@ jobs:
   mirror-deploy:
     name: Mirror Raspberry backend deploy
     runs-on: ubuntu-latest
-    needs: [production-deploy, build-frontend]
+    needs: [production-deploy, build-frontend, build-frontend-pilot]
     steps:
       - name: Checkout repo (OTA/APK + coerenza ref deploy)
         uses: actions/checkout@v4
@@ -328,6 +413,13 @@ jobs:
         with:
           name: frontend-dist
           path: dist-upload
+
+      - name: Download frontend pilota dist
+        if: needs.build-frontend-pilot.outputs.changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-pilot-dist
+          path: dist-upload-pilot
 
       - name: Rsync frontend verso mirror
         if: needs.build-frontend.outputs.changed == 'true'
@@ -366,6 +458,42 @@ jobs:
           REMOTE_PREP
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
+
+      - name: Rsync console pilota verso mirror
+        if: needs.build-frontend-pilot.outputs.changed == 'true'
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
+          HOST: ${{ secrets.MIRROR_SERVER_HOST }}
+          USER: ${{ secrets.MIRROR_SERVER_USER }}
+          PORT: ${{ secrets.MIRROR_SERVER_SSH_PORT }}
+          ROOT_PATH: ${{ secrets.MIRROR_ROOT_PATH }}
+          BACKEND_PATH: ${{ secrets.MIRROR_BACKEND_PATH }}
+          MIRROR_COMPOSE_PROJECT_NAME: ${{ secrets.MIRROR_COMPOSE_PROJECT_NAME }}
+        run: |
+          set -euo pipefail
+          REMOTE_BASE="${ROOT_PATH:-${BACKEND_PATH:-/home/pi/kor35-replica}}"
+          REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot"
+          CPN="${MIRROR_COMPOSE_PROJECT_NAME:-kor35-replica}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          P="${PORT:-22}"
+          SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
+          ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          RB="${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot"
+          mkdir -p "$RB"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          if ! docker run --rm -v "${RB}:/mnt:rw" alpine:3.20 chown -R "$(id -u):$(id -g)" /mnt; then
+            echo "WARN: chown react_build_pilot via docker fallito; continuo." >&2
+          fi
+          REMOTE_PREP
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            dist-upload-pilot/ "${USER}@${HOST}:${REMOTE}/"
 
       - name: Rsync firmware OTA verso mirror
         env:

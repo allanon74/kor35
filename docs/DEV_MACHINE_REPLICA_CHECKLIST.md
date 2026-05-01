@@ -67,6 +67,7 @@ Questo crea/allinea `backend/.env.dev-home` e copia il profilo attivo in `backen
 Contiene almeno:
 - `EDGE_SYNC_URL`
 - `EDGE_SYNC_TOKEN`
+- `PILOT_CONSOLE_ENABLED=true` (se questa macchina deve esporre la console `/pilot/`)
 - eventuali variabili locali aggiuntive necessarie al tuo setup.
 
 ### 4.2 File consigliati (se usi sync media)

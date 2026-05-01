@@ -36,10 +36,12 @@ if [ -d "$ROOT_DIR/frontend" ]; then
 else
   FRONTEND_DIR="/home/django/progetti/kor35-app"
 fi
+FRONTEND_PILOT_DIR="$ROOT_DIR/frontend-pilot"
 
 echo "ROOT_DIR=$ROOT_DIR"
 echo "STACK_DIR=$STACK_DIR"
 echo "FRONTEND_DIR=$FRONTEND_DIR"
+echo "FRONTEND_PILOT_DIR=$FRONTEND_PILOT_DIR"
 
 if [ ! -d "$STACK_DIR" ]; then
   echo "Directory stack non trovata: $STACK_DIR" >&2
@@ -51,7 +53,7 @@ if [ ! -d "$FRONTEND_DIR" ]; then
   exit 1
 fi
 
-mkdir -p "$STACK_DIR/postgres_data" "$STACK_DIR/static_data" "$STACK_DIR/media_data" "$STACK_DIR/react_build"
+mkdir -p "$STACK_DIR/postgres_data" "$STACK_DIR/static_data" "$STACK_DIR/media_data" "$STACK_DIR/react_build" "$STACK_DIR/react_build_pilot"
 
 if [ ! -d "$BACKEND_DIR" ] || [ ! -f "$BACKEND_DIR/manage.py" ]; then
   echo "Backend non trovato in: $BACKEND_DIR" >&2
@@ -107,6 +109,23 @@ else
   echo "Aggiorno react_build..."
   find "$STACK_DIR/react_build" -mindepth 1 -delete 2>/dev/null || true
   cp -R "$FRONTEND_DIR/dist/." "$STACK_DIR/react_build/"
+
+  if [ -d "$FRONTEND_PILOT_DIR" ] && [ -f "$FRONTEND_PILOT_DIR/package.json" ]; then
+    echo "Build console pilota..."
+    cd "$FRONTEND_PILOT_DIR"
+    if [ -f "package-lock.json" ]; then
+      npm ci
+    else
+      npm install
+    fi
+    npm run build
+
+    echo "Aggiorno react_build_pilot..."
+    find "$STACK_DIR/react_build_pilot" -mindepth 1 -delete 2>/dev/null || true
+    cp -R "$FRONTEND_PILOT_DIR/dist/." "$STACK_DIR/react_build_pilot/"
+  else
+    echo "Frontend pilota non trovato in $FRONTEND_PILOT_DIR (skip)."
+  fi
 fi
 
 echo ""

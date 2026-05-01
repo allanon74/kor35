@@ -28,5 +28,6 @@ services:
     volumes:
       - ./nginx-docker/nginx_conf_wsl:/etc/nginx/conf.d
       - ./nginx-docker/react_build:/usr/share/nginx/html
+      - ./nginx-docker/react_build_pilot:/usr/share/nginx/pilot
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media

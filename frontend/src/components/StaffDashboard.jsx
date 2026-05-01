@@ -9,7 +9,7 @@ import {
     LayoutGrid, LogOut, ClipboardCheck,
     Skull, BookOpen, Menu, ChevronRight, Globe, // Aggiunto Globe
     Layers, Globe2, Image, Package, QrCode, Sparkles, Gem,
-    BookText,
+    BookText, Navigation,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BuildVersions from './BuildVersions';
@@ -41,6 +41,7 @@ const CampaignManager = lazy(() => import('./editors/CampaignManager'));
 const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
 const NodoManager = lazy(() => import('./editors/NodoManager'));
 const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
+const PilotaggioManager = lazy(() => import('./editors/PilotaggioManager'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -104,6 +105,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'manifesti', label: 'Manifesti (QR)', icon: <BookText size={24} />, color: 'bg-amber-900', component: ManifestoManager },
         { id: 'nodi', label: 'Nodi (QR)', icon: <Sparkles size={24} />, color: 'bg-cyan-900', component: NodoManager },
         { id: 'innesco-timer', label: 'Innesco timer (QR)', icon: <Sparkles size={24} />, color: 'bg-orange-900', component: InnescoTimerManager },
+        { id: 'pilotaggio', label: 'Console Pilotaggio', icon: <Navigation size={24} />, color: 'bg-sky-700', component: PilotaggioManager },
         { id: 'effetti-casuali', label: 'Effetti Casuali', icon: <Sparkles size={24} />, color: 'bg-amber-700', component: EffettiCasualiManager },
         { id: 'social-report', label: 'Report Social Eventi', icon: <Sparkles size={24} />, color: 'bg-fuchsia-700', component: SocialEventReportTab },
         { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: <Gem size={24} />, color: 'bg-amber-800', component: StaffRisorsaPoolTab },

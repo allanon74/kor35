@@ -486,9 +486,7 @@ export const getBodySlots = () => {
  * Recupera la lista dei personaggi associati all'utente.
  */
 export const getPersonaggiList = (onLogout, viewAll = false) => {
-  // Costruisci la query string se viewAll è true
   const queryParam = viewAll ? '?view_all=true' : '';
-  
   return fetchAuthenticated(`/api/personaggi/api/personaggi/${queryParam}`, { method: 'GET' }, onLogout);
 };
 
@@ -496,7 +494,11 @@ export const getPersonaggiList = (onLogout, viewAll = false) => {
  * Recupera i dettagli di un personaggio specifico.
  */
 export const getPersonaggioDetail = (id, onLogout) => {
-  return fetchAuthenticated(`/api/personaggi/api/personaggi/${id}/`, { method: 'GET' }, onLogout);
+  const cleanId = String(id ?? '').trim();
+  if (!cleanId) {
+    return Promise.reject(new Error('ID personaggio mancante.'));
+  }
+  return fetchAuthenticated(`/api/personaggi/api/personaggi/${cleanId}/`, { method: 'GET' }, onLogout);
 };
 
 export const getQrCodeData = (qrId, onLogout, personaggioId = null) => {
@@ -1832,6 +1834,65 @@ export const staffGetPrefetture = (onLogout) => {
 export const staffGetRegioni = (onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/staff/regioni/', { method: 'GET' }, onLogout);
 };
+
+// --- PILOTAGGIO (STAFF) ---
+export const staffGetPilotSottosistemi = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/sottosistemi/', { method: 'GET' }, onLogout);
+export const staffCreatePilotSottosistema = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/sottosistemi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotSottosistema = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/sottosistemi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotSottosistema = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/sottosistemi/${id}/`, { method: 'DELETE' }, onLogout);
+export const staffAssociaPilotSottosistemaAVista = (id, aVistaId, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/sottosistemi/${id}/associa-a-vista/`, { method: 'POST', body: JSON.stringify({ a_vista_id: aVistaId }) }, onLogout);
+
+/** Collega un QR al sottosistema (risolve/c crea la vista lato server). */
+export const staffAssociaPilotSottosistemaQr = (sottosistemaId, qrId, onLogout) =>
+  fetchAuthenticated(
+    `/api/pilot/staff/sottosistemi/${sottosistemaId}/associa-qr/`,
+    { method: 'POST', body: JSON.stringify({ qr_id: qrId }) },
+    onLogout
+  );
+
+export const staffGetPilotComandi = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/comandi/', { method: 'GET' }, onLogout);
+export const staffCreatePilotComando = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/comandi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotComando = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/comandi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotComando = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/comandi/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetPilotIntensita = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/intensita/', { method: 'GET' }, onLogout);
+export const staffCreatePilotIntensita = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/intensita/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotIntensita = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/intensita/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotIntensita = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/intensita/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetPilotEventi = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/eventi/', { method: 'GET' }, onLogout);
+export const staffCreatePilotEvento = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/eventi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotEvento = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/eventi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/eventi/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetPilotSequenze = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/sequenze/', { method: 'GET' }, onLogout);
+export const staffCreatePilotSequenza = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/sequenze/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const staffUpdatePilotSequenza = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/sequenze/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const staffDeletePilotSequenza = (id, onLogout) =>
+  fetchAuthenticated(`/api/pilot/staff/sequenze/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetPilotCatalog = (onLogout) =>
+  fetchAuthenticated('/api/pilot/catalog/', { method: 'GET' }, onLogout);
 
 export const staffGetKorps = (onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/korp/', { method: 'GET' }, onLogout);

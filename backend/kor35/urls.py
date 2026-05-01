@@ -75,6 +75,7 @@ urlpatterns = [
         path('auth/arcana/', include('personaggi.sso_urls')),
         path('plot/', include('gestione_plot.urls')),
         path('social/', include('social.urls')),
+        path('pilot/', include('pilotaggio.urls')),
         path('auth/', csrf_exempt(personaggi_views.MyAuthToken.as_view())),
         path('api-token-auth/', obtain_auth_token, name='api_token_auth'),
         path('icon-widget-api/', include('icon_widget.urls')),

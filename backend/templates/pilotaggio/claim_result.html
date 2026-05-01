@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .card {
+      max-width: 520px;
+      width: 100%;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      background: #111827;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .ok { background: #064e3b; color: #6ee7b7; }
+    .ko { background: #7f1d1d; color: #fecaca; }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+    p {
+      margin: 0;
+      color: #cbd5e1;
+      line-height: 1.45;
+    }
+    .actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-block;
+      text-decoration: none;
+      border: 1px solid #475569;
+      color: #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      background: #1e293b;
+    }
+    .btn:hover {
+      background: #334155;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    {% if ok %}
+      <span class="badge ok">OK</span>
+    {% else %}
+      <span class="badge ko">ERRORE</span>
+    {% endif %}
+    <h1>{{ title }}</h1>
+    <p>{{ message }}</p>
+    {% if return_url %}
+      <div class="actions">
+        <a class="btn" href="{{ return_url }}">Torna all'app KOR35</a>
+      </div>
+    {% endif %}
+  </main>
+</body>
+</html>

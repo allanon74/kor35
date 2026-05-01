@@ -10,7 +10,7 @@ RUN_COLLECTSTATIC ?= 0
 MAKEMIGRATIONS_APP ?=
 COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor35-replica,$(if $(filter prod,$(ENV)),COMPOSE_PROJECT_NAME=kor35-prod,))
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event cleanup-legacy backup-db
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event cleanup-legacy backup-db pilot-tick
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -40,6 +40,8 @@ help:
 	@echo "Dopo modifiche al codice (stack già avviato):"
 	@echo "  make restart-fe ENV=dev-home # rebuild React + riavvio container nginx (frontend)"
 	@echo "  make restart-fe ENV=prod     # su prod/mirror: niente npm locale; solo dir dati + restart frontend (statici da CI/rsync)"
+	@echo "  make restart-fe-pilot ENV=dev-home # build console pilota e reload nginx (no npm in prod)"
+	@echo "  make pilot-tick ENV=dev-home  # avanza motore pilotaggio (one-shot)"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make deploy-be ENV=prod      # rebuild backend/daphne + restart + migrate + collectstatic"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
@@ -98,6 +100,26 @@ migrate:
 makemigrations:
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py makemigrations $(MAKEMIGRATIONS_APP)
+
+# Build console pilota (frontend-pilot) → react_build_pilot, ricarica solo nginx.
+# In prod/mirror: skip npm (statici da CI), copia placeholder se serve.
+restart-fe-pilot:
+	@if [ -d "$(CURDIR)/frontend-pilot" ]; then \
+		if [ "$(ENV)" = "prod" ] || [ "$(ENV)" = "mirror" ]; then \
+			echo "ENV=$(ENV): skip npm pilota (build via CI)."; \
+		else \
+			cd $(CURDIR)/frontend-pilot && (npm ci || npm install) && npm run build; \
+			rm -rf $(CURDIR)/config/docker/nginx-docker/react_build_pilot/*; \
+			cp -R $(CURDIR)/frontend-pilot/dist/. $(CURDIR)/config/docker/nginx-docker/react_build_pilot/; \
+		fi; \
+	else \
+		echo "frontend-pilot/ non presente, skip."; \
+	fi
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T frontend nginx -s reload 2>/dev/null || true
+
+# Tick motore pilotaggio (one-shot, utile in dev / cron). Per loop continuo lanciare manualmente con --loop.
+pilot-tick:
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py pilot_tick
 
 # Build React → react_build, poi riavvio del servizio nginx (frontend).
 # ENV=prod|mirror: non esegue npm sul server (statici da GitHub Actions + rsync); evita EACCES su node_modules e allinea al runbook Docker-first.

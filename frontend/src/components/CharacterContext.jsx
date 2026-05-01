@@ -204,7 +204,9 @@ export const CharacterProvider = ({ children, onLogout }) => {
         await postEventoPremiApplica(onLogout);
         if (!cancelled) {
           await refetchPersonaggiList();
-          await refetchCharacterDetail();
+          if (selectedCharacterId) {
+            await refetchCharacterDetail();
+          }
         }
       } catch {
         /* Nessun premio applicabile o errore rete: non bloccare l'app */

@@ -84,6 +84,7 @@ INSTALLED_APPS = [
 	# 'oggetti.apps.OggettiConfig', #oggetti
     'gestione_plot.apps.GestionePlotConfig', #gestione plot
     'social.apps.SocialConfig', # social
+    'pilotaggio.apps.PilotaggioConfig', # console pilotaggio nave
 	'django.contrib.sites',
 	'cms', #cms
 	'menus', #cms
@@ -303,6 +304,11 @@ WATCH_WEAR_APK_PATH = env(
     "WATCH_WEAR_APK_PATH",
     default="/watch-apps/wearos-kor35/app-release.apk",
 ).strip()
+# Console pilotaggio frontend separato: attiva solo su mirror/evento (Pi) salvo override env.
+PILOT_CONSOLE_ENABLED = env.bool(
+    "PILOT_CONSOLE_ENABLED",
+    default=(CURRENT_ENV == "raspberry_docker"),
+)
 # Risposta JSON con messaggio errore DB completo (endpoint protetto da EdgeToken)
 EDGE_SYNC_VERBOSE_ERRORS = env.bool("EDGE_SYNC_VERBOSE_ERRORS", default=True)
 

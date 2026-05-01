@@ -1,0 +1,22 @@
+{
+  "name": "kor35-pilot-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Console di pilotaggio KOR-35 (build separata, target Raspberry kiosk).",
+  "scripts": {
+    "dev": "vite --host --port 5174",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "html5-qrcode": "^2.3.8",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^7.1.7"
+  }
+}
