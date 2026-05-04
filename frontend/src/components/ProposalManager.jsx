@@ -3,6 +3,7 @@ import { useCharacter } from './CharacterContext';
 import { getProposte } from '../api';
 import { FileEdit, Loader2, Plus } from 'lucide-react';
 import ProposalEditorModal from './ProposalEditorModal';
+import { getAuraName } from '../utils/auraDisplay';
 
 const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessitura'
     const { selectedCharacterId } = useCharacter();
@@ -84,7 +85,7 @@ const ProposalManager = ({ type, onClose }) => { // type = 'Infusione' | 'Tessit
                                     <h3 className="font-bold text-lg text-white mb-1 truncate">{p.personaggio_nome}</h3>
                                     <div className="text-sm text-gray-400 mb-3 flex items-center gap-2">
                                         <div className="w-2 h-2 rounded-full" style={{backgroundColor: p.aura_details?.colore || '#ccc'}}></div>
-                                        {p.aura_details?.nome || 'Aura sconosciuta'}
+                                        {getAuraName(p)}
                                         <span className="ml-auto text-xs bg-gray-900 px-2 py-0.5 rounded">Lv. {p.livello}</span>
                                     </div>
                                     {p.note_staff && (

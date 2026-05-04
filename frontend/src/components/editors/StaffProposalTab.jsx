@@ -4,6 +4,7 @@ import GenericHeader from '../GenericHeader';
 import { Eye, X, Check, ClipboardCheck, AlertCircle } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import ConfirmDialog from './ConfirmDialog';
+import { getAuraName } from '../../utils/auraDisplay';
 
 // Importazione degli Editor per la fase di approvazione/creazione finale
 import InfusioneEditor from './InfusioneEditor';
@@ -279,7 +280,7 @@ const StaffProposalTab = ({ onLogout }) => {
                                 <h3 className="text-cyan-500 font-black uppercase text-xs tracking-widest mb-4 border-b border-gray-700 pb-2">Specifiche Tecniche</h3>
                                 <div className="space-y-2 text-sm">
                                     <p><strong className="text-gray-400">Tipo:</strong> {selectedProposal.tipo}</p>
-                                    <p><strong className="text-gray-400">Aura Richiesta:</strong> {selectedProposal.aura_nome || (typeof selectedProposal.aura === 'object' ? selectedProposal.aura.nome : selectedProposal.aura)}</p>
+                                    <p><strong className="text-gray-400">Aura Richiesta:</strong> {getAuraName(selectedProposal)}</p>
                                     {selectedProposal.tipo === 'CER' && (
                                         <p><strong className="text-gray-400">Livello Proposto:</strong> {selectedProposal.livello_proposto}</p>
                                     )}
