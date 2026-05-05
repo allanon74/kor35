@@ -10,7 +10,7 @@ RUN_COLLECTSTATIC ?= 0
 MAKEMIGRATIONS_APP ?=
 COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor35-replica,$(if $(filter prod,$(ENV)),COMPOSE_PROJECT_NAME=kor35-prod,))
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event cleanup-legacy backup-db pilot-tick
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -42,6 +42,9 @@ help:
 	@echo "  make restart-fe ENV=prod     # su prod/mirror: niente npm locale; solo dir dati + restart frontend (statici da CI/rsync)"
 	@echo "  make restart-fe-pilot ENV=dev-home # build console pilota e reload nginx (no npm in prod)"
 	@echo "  make pilot-tick ENV=dev-home  # avanza motore pilotaggio (one-shot)"
+	@echo "  make pilot-tick-restart ENV=dev-home # restart servizio docker pilot_tick"
+	@echo "  make pilot-tick-loop ENV=dev-home # worker tick manuale foreground (debug)"
+	@echo "  make pilot-tick-stop ENV=dev-home # disabilita tick runtime (flag)"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make deploy-be ENV=prod      # rebuild backend/daphne + restart + migrate + collectstatic"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
@@ -120,6 +123,18 @@ restart-fe-pilot:
 # Tick motore pilotaggio (one-shot, utile in dev / cron). Per loop continuo lanciare manualmente con --loop.
 pilot-tick:
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py pilot_tick
+
+# Restart servizio docker dedicato al tick (avvio automatico con make up).
+pilot-tick-restart:
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml restart pilot_tick
+
+# Worker continuo del tick (resta in foreground: usare tmux/screen o service dedicato).
+pilot-tick-loop:
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec backend python manage.py pilot_tick --loop --interval 5
+
+# Stop logico: spegne il flag runtime (il worker resta in attesa).
+pilot-tick-stop:
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py shell -c "from pilotaggio.models import PilotRuntimeConfig; c=PilotRuntimeConfig.get_solo(); c.tick_enabled=False; c.save(update_fields=['tick_enabled','updated_at']); print('tick_enabled=False')"
 
 # Build React → react_build, poi riavvio del servizio nginx (frontend).
 # ENV=prod|mirror: non esegue npm sul server (statici da GitHub Actions + rsync); evita EACCES su node_modules e allinea al runbook Docker-first.

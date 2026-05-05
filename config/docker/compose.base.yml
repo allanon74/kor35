@@ -101,6 +101,33 @@ services:
       retries: 8
       start_period: 120s
 
+  pilot_tick:
+    build:
+      context: ../../backend
+    restart: unless-stopped
+    env_file:
+      - ${KOR35_BACKEND_ENV_FILE:-../../backend/.env}
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_HOST: redis
+      ENVIRONMENT: raspberry_docker
+      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
+      HTTP_PROXY: ${HTTP_PROXY-}
+      HTTPS_PROXY: ${HTTPS_PROXY-}
+      NO_PROXY: ${NO_PROXY-}
+      http_proxy: ${HTTP_PROXY-}
+      https_proxy: ${HTTPS_PROXY-}
+      no_proxy: ${NO_PROXY-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command: python manage.py pilot_tick --loop --interval 5
+
   frontend:
     image: nginx:alpine
     restart: unless-stopped

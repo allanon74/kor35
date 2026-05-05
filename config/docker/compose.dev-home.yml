@@ -21,6 +21,13 @@ services:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 
+  pilot_tick:
+    container_name: kor35_devhome_pilot_tick
+    volumes:
+      - ../../backend:/app
+      - ./nginx-docker/static_data:/app/static
+      - ./nginx-docker/media_data:/app/media
+
   frontend:
     container_name: kor35_devhome_frontend
     ports:

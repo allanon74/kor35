@@ -35,6 +35,7 @@ router.register(
 
 urlpatterns = [
     path("console-enabled/", views.PilotConsoleEnabledView.as_view(), name="pilot-console-enabled"),
+    path("auth/auto-login/", views.PilotConsoleAutoLoginView.as_view(), name="pilot-auto-login"),
     path("auth/console-ticket/", views.PilotConsoleTicketCreateView.as_view(), name="pilot-ticket-create"),
     path("auth/console-ticket/<uuid:ticket_id>/claim/", views.PilotConsoleTicketClaimView.as_view(), name="pilot-ticket-claim"),
     path("auth/console-ticket/<uuid:ticket_id>/status/", views.PilotConsoleTicketStatusView.as_view(), name="pilot-ticket-status"),
@@ -44,8 +45,11 @@ urlpatterns = [
     path("session/state/", views.PilotStateView.as_view(), name="pilot-state"),
     path("session/start/", views.PilotSessionStartView.as_view(), name="pilot-session-start"),
     path("session/command/", views.PilotSessionCommandView.as_view(), name="pilot-session-command"),
+    path("session/subsystem-set/", views.PilotSubsystemSetView.as_view(), name="pilot-session-subsystem-set"),
     path("session/abort/", views.PilotSessionAbortView.as_view(), name="pilot-session-abort"),
     path("session/history/", views.PilotSessionHistoryView.as_view(), name="pilot-session-history"),
+    path("runtime/tick-status/", views.PilotTickRuntimeStatusView.as_view(), name="pilot-runtime-tick-status"),
+    path("runtime/tick-control/", views.PilotTickRuntimeControlView.as_view(), name="pilot-runtime-tick-control"),
 
     path("subsystems/qr-action/", views.PilotSubsystemQrActionView.as_view(), name="pilot-subsystem-qr"),
 
@@ -53,5 +57,6 @@ urlpatterns = [
     path("prefetture/", views.PilotPrefettureView.as_view(), name="pilot-prefetture"),
 
     path("staff/sessioni/", views.StaffSessioneListView.as_view(), name="pilot-staff-sessioni"),
+    path("staff/runtime-config/", views.StaffPilotRuntimeConfigView.as_view(), name="pilot-staff-runtime-config"),
     path("", include(router.urls)),
 ]

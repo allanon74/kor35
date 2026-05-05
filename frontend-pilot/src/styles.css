@@ -58,6 +58,28 @@ main {
   flex-direction: column;
 }
 
+.console-viewport-wrap {
+  flex: 1;
+  overflow: auto;
+  display: grid;
+  place-items: center;
+  background: #06080f;
+  padding: 0.4rem;
+}
+
+.console-viewport-fixed {
+  width: 1920px;
+  height: 440px;
+  max-width: none;
+  max-height: none;
+  border: 1px solid #31384b;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0a0c12;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 6px 28px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
 .center-screen {
   flex: 1;
   display: flex;
@@ -197,6 +219,447 @@ select, input[type=text], input[type=number] {
   margin-bottom: 0.6rem;
 }
 
+.cockpit-control {
+  grid-template-rows: 1fr;
+  padding: 0.35rem;
+}
+
+.cockpit-control .panel {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #1e3f64;
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(0, 229, 255, 0.08), transparent 45%),
+    radial-gradient(120% 160% at 100% 100%, rgba(153, 102, 255, 0.08), transparent 45%),
+    rgba(6, 14, 24, 0.9);
+  box-shadow: inset 0 0 12px rgba(0, 229, 255, 0.08), 0 0 14px rgba(0, 0, 0, 0.35);
+}
+
+.control-deck h3 {
+  margin-bottom: 0.35rem;
+}
+
+.hud-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 78px) 1fr 1.1fr;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  border: 1px solid #2f5f7d;
+  border-radius: 8px;
+  padding: 0.3rem;
+  background: rgba(7, 20, 34, 0.75);
+}
+
+.gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.16rem;
+}
+
+.gauge-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 50%, #091826 58%, transparent 60%),
+    conic-gradient(var(--gauge-color) var(--gauge-value), rgba(60, 90, 120, 0.35) 0);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gauge-color) 35%, transparent);
+}
+
+.gauge-inner {
+  font-size: 0.56rem;
+  color: #dff7ff;
+}
+
+.gauge-label {
+  font-size: 0.5rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #87cce8;
+}
+
+.radar-box {
+  border: 1px solid #2f5f7d;
+  border-radius: 8px;
+  height: 100%;
+  min-height: 58px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0, 229, 255, 0.12), transparent 60%),
+    rgba(6, 19, 31, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.radar-ping {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid #5ab6d8;
+  box-shadow: 0 0 8px rgba(90, 182, 216, 0.35);
+}
+
+.radar-ping.alert {
+  border-color: #ff8f70;
+  box-shadow: 0 0 10px rgba(255, 143, 112, 0.7);
+  animation: pulse 0.9s infinite;
+}
+
+.radar-text {
+  font-size: 0.55rem;
+  color: #a8daef;
+}
+
+.distance-box {
+  border: 1px solid #2f5f7d;
+  border-radius: 8px;
+  min-height: 58px;
+  padding: 0.28rem 0.4rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: rgba(7, 20, 34, 0.9);
+}
+
+.distance-label {
+  color: #8fd8f0;
+  font-size: 0.52rem;
+  text-transform: uppercase;
+}
+
+.distance-values {
+  color: #d9f8ff;
+  font-size: 0.62rem;
+  margin: 0.08rem 0 0.22rem;
+}
+
+.distance-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(51, 79, 106, 0.9);
+  overflow: hidden;
+}
+
+.distance-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2fd3ff, #70ffb5);
+}
+
+.command-feedback {
+  border: 1px solid #2b5a86;
+  border-radius: 6px;
+  padding: 0.25rem 0.45rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  background: rgba(8, 28, 44, 0.85);
+}
+
+.command-feedback.ok { color: #79f2a1; }
+.command-feedback.ko {
+  color: #ff8f8f;
+  border-color: #7f3b49;
+  background: rgba(54, 15, 20, 0.7);
+}
+
+.command-clusters {
+  display: flex;
+  gap: 0.5rem;
+  height: calc(100% - 2rem);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.15rem;
+}
+
+.system-column {
+  min-width: 270px;
+  border: 1px solid #244d77;
+  border-radius: 14px;
+  padding: 0.4rem;
+  background: rgba(8, 18, 30, 0.75);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+}
+
+.system-column::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  pointer-events: none;
+  box-shadow: inset 0 0 18px rgba(0, 229, 255, 0.08);
+}
+
+.system-column.theme-propulsione {
+  border-color: #6aa6da;
+  background: linear-gradient(180deg, rgba(15, 33, 51, 0.95), rgba(9, 17, 30, 0.92));
+}
+
+.system-column.theme-difesa {
+  border-color: #967fdd;
+  background: linear-gradient(180deg, rgba(24, 20, 49, 0.95), rgba(12, 11, 30, 0.92));
+}
+
+.system-column.theme-alimentazione {
+  border-color: #68c891;
+  background: linear-gradient(180deg, rgba(16, 34, 24, 0.95), rgba(10, 22, 15, 0.92));
+}
+
+.system-column.theme-interni {
+  border-color: #d09a5b;
+  background: linear-gradient(180deg, rgba(38, 29, 16, 0.95), rgba(25, 17, 10, 0.92));
+}
+
+.system-column.theme-esotici {
+  border-color: #bf77d3;
+  background: linear-gradient(180deg, rgba(34, 18, 44, 0.95), rgba(19, 10, 29, 0.92));
+}
+
+.system-title {
+  color: #b7ecff;
+  text-transform: uppercase;
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  margin-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(111, 197, 230, 0.35);
+  padding-bottom: 0.22rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  justify-content: space-between;
+}
+
+.system-name {
+  flex: 1;
+}
+
+.system-icon {
+  font-size: 0.52rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(164, 226, 247, 0.45);
+  color: #dcf7ff;
+  background: rgba(20, 49, 69, 0.6);
+  min-width: 44px;
+  text-align: center;
+}
+
+.hex-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  overflow-y: auto;
+  align-content: flex-start;
+  padding-right: 0.15rem;
+}
+
+.subsystem-tile {
+  border: 1px solid #2a537d;
+  border-radius: 0;
+  background: linear-gradient(180deg, rgba(12, 31, 49, 0.95), rgba(8, 20, 34, 0.95));
+  color: #d6f7ff;
+  padding: 0.34rem 0.6rem;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+  min-height: 52px;
+  width: calc(50% - 0.24rem);
+  position: relative;
+  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.hex-cloud .subsystem-tile:nth-child(odd) {
+  margin-left: 12%;
+}
+
+.subsystem-tile:hover {
+  border-color: #00e5ff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.22);
+  transform: translateY(-1px);
+}
+
+.subsystem-tile:active {
+  transform: translateY(0);
+}
+
+.subsystem-tile.offline {
+  opacity: 0.55;
+  border-color: #6a2d37;
+}
+
+.subsystem-tile.lvl-off {
+  border-color: #47617a;
+  background: linear-gradient(180deg, rgba(22, 36, 52, 0.92), rgba(10, 20, 30, 0.92));
+}
+
+.subsystem-tile.lvl-low .tile-level-fill {
+  background: linear-gradient(90deg, #44d37a, #67f5a2);
+}
+
+.subsystem-tile.lvl-mid .tile-level-fill {
+  background: linear-gradient(90deg, #4ecbff, #79ddff);
+}
+
+.subsystem-tile.lvl-high {
+  border-color: #b39253;
+}
+
+.subsystem-tile.lvl-high .tile-level-fill {
+  background: linear-gradient(90deg, #f4c95d, #ffd978);
+}
+
+.subsystem-tile.lvl-critical {
+  border-color: #b24a54;
+  box-shadow: 0 0 12px rgba(237, 99, 99, 0.28);
+}
+
+.subsystem-tile.lvl-critical .tile-level-fill {
+  background: linear-gradient(90deg, #ff8b70, #ff5c77);
+}
+
+.subsystem-tile::before,
+.subsystem-tile::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: linear-gradient(180deg, rgba(173, 236, 255, 0.35), rgba(173, 236, 255, 0.05));
+}
+
+.subsystem-tile::before { left: 9px; }
+.subsystem-tile::after { right: 9px; }
+
+.subsystem-tile.tick-danger-ring::before,
+.subsystem-tile.tick-danger-ring::after {
+  background: linear-gradient(180deg, rgba(255, 153, 153, 0.9), rgba(255, 153, 153, 0.1));
+  animation: ringPulse 0.8s infinite;
+}
+
+.tile-name {
+  font-size: 0.62rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tile-meta {
+  font-size: 0.54rem;
+  color: #8ecfe3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.tile-level-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(40, 74, 104, 0.9);
+  overflow: hidden;
+}
+
+.tile-level-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ade80, #facc15, #fb7185);
+}
+
+.tile-badges {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.badge {
+  font-size: 0.46rem;
+  padding: 1px 4px;
+  border-radius: 999px;
+  border: 1px solid #2f6d8a;
+  color: #9cecff;
+  background: rgba(11, 43, 58, 0.9);
+}
+
+.control-deck .note {
+  align-self: center;
+  margin-top: 1.2rem;
+}
+
+.badge.warn {
+  color: #ffd670;
+  border-color: #8a6e2f;
+  background: rgba(66, 52, 14, 0.85);
+}
+
+.badge.danger {
+  color: #ff9696;
+  border-color: #8a2f3a;
+  background: rgba(65, 16, 22, 0.9);
+}
+
+.badge.repair {
+  color: #93f0b1;
+  border-color: #2f8a57;
+  background: rgba(14, 62, 38, 0.9);
+}
+
+.subsystem-tile.repairing {
+  border-color: #3b8f67;
+  box-shadow: 0 0 10px rgba(80, 201, 132, 0.22);
+}
+
+.subsystem-tile.danger-pulse {
+  animation: tilePulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.16); opacity: 0.55; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes tilePulse {
+  0% { box-shadow: 0 0 8px rgba(255, 93, 93, 0.22); }
+  50% { box-shadow: 0 0 16px rgba(255, 93, 93, 0.45); }
+  100% { box-shadow: 0 0 8px rgba(255, 93, 93, 0.22); }
+}
+
+@keyframes ringPulse {
+  0% { opacity: 0.45; }
+  50% { opacity: 1; }
+  100% { opacity: 0.45; }
+}
+
+.subsystem-modal {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1100px, 96vw);
+  z-index: 30;
+  border-width: 2px;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.25);
+}
+
+.modal-row {
+  align-items: flex-end;
+}
+
 .event-box.pending {
   border: 2px solid #ffa940;
   padding: 1rem;
@@ -221,6 +684,84 @@ select, input[type=text], input[type=number] {
   color: #d4f0ff;
   margin-top: 0.4rem;
   font-size: 1rem;
+}
+
+.event-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.45rem;
+  max-height: 32vh;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.event-summary {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.event-summary-critical,
+.event-summary-normal {
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+}
+
+.event-summary-critical {
+  background: rgba(255, 82, 82, 0.22);
+  color: #ff9d9d;
+  border: 1px solid rgba(255, 82, 82, 0.5);
+}
+
+.event-summary-normal {
+  background: rgba(255, 169, 64, 0.2);
+  color: #ffd1a1;
+  border: 1px solid rgba(255, 169, 64, 0.45);
+}
+
+.event-list .event-box.pending {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-radius: 12px;
+}
+
+.event-list .event-box.pending h2 {
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.event-list .event-box.pending .countdown {
+  font-size: 1.3rem;
+  margin-top: 0.15rem;
+}
+
+.event-list .event-box.pending .descr {
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+  line-height: 1.2;
+}
+
+.event-list .event-meta {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.92;
+}
+
+.event-list .event-box.event-normal {
+  border-color: #ffa940;
+  box-shadow: inset 0 0 0 1px rgba(255, 169, 64, 0.15);
+}
+
+.event-list .event-box.event-critical {
+  border-color: #ff5252;
+  background: linear-gradient(110deg, rgba(95, 18, 18, 0.65), rgba(32, 8, 8, 0.55));
+  box-shadow: inset 0 0 0 1px rgba(255, 120, 120, 0.28), 0 0 12px rgba(255, 86, 86, 0.18);
 }
 
 .subsys-list {
@@ -338,4 +879,951 @@ select, input[type=text], input[type=number] {
   font-size: 0.8rem;
   color: #5fa8d4;
   margin-top: 0.6rem;
+}
+
+/* -------- LCARS redesign -------- */
+.cockpit-lcars {
+  background:
+    radial-gradient(140% 120% at 0% 0%, rgba(255, 184, 107, 0.08), transparent 45%),
+    radial-gradient(130% 120% at 100% 100%, rgba(120, 157, 255, 0.08), transparent 45%),
+    #0b0f16;
+}
+
+.lcars-panel {
+  border-radius: 20px;
+  border-color: #2b3d58;
+  background: linear-gradient(180deg, rgba(21, 28, 40, 0.95), rgba(12, 17, 26, 0.95));
+}
+
+.lcars-hud {
+  border-radius: 18px;
+  border-color: #3b4d6a;
+  padding: 0.45rem;
+}
+
+.lcars-gauge {
+  position: relative;
+  width: 72px;
+  height: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lcars-gauge-svg {
+  width: 64px;
+  height: 64px;
+  transform: rotate(-90deg);
+}
+
+.lcars-gauge-bg {
+  fill: none;
+  stroke: rgba(103, 132, 168, 0.35);
+  stroke-width: 5;
+}
+
+.lcars-gauge-fg {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 180ms ease;
+}
+
+.lcars-gauge-center {
+  position: absolute;
+  top: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lcars-gauge-percent {
+  font-size: 0.62rem;
+  color: #f1f7ff;
+  font-weight: 700;
+}
+
+.lcars-gauge-unit {
+  font-size: 0.46rem;
+  color: #a8c7e5;
+}
+
+.lcars-gauge-label {
+  margin-top: 2px;
+  font-size: 0.52rem;
+  color: #b8d2ea;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.command-clusters {
+  gap: 0.8rem;
+}
+
+.system-column {
+  min-width: 320px;
+}
+
+.hex-cloud {
+  gap: 0.45rem;
+}
+
+.hex-cloud .subsystem-tile {
+  width: calc(50% - 0.3rem);
+}
+
+.tile-name {
+  font-size: 0.69rem;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1.2;
+  min-height: 2.3em;
+}
+
+.tile-meta {
+  font-size: 0.57rem;
+}
+
+.subsystem-modal .modal-row {
+  gap: 1rem;
+}
+
+.modal-lcars-grid {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 1rem;
+}
+
+.modal-rail {
+  border: 1px solid #52627e;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(34, 43, 63, 0.95), rgba(19, 25, 38, 0.95));
+  padding: 0.9rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.rail-chip {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.62rem;
+  color: #ffd69f;
+}
+
+.rail-level {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #d7f1ff;
+  line-height: 1;
+}
+
+.rail-label {
+  font-size: 0.65rem;
+  color: #9cb7d5;
+}
+
+.modal-core {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.modal-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  font-size: 0.78rem;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.8rem;
+}
+
+/* ----- LCARS visual pass 3 ----- */
+.cockpit-lcars {
+  background: #0a0c12;
+  color: #f1e3c6;
+}
+
+.cockpit-lcars .defcon-strip {
+  position: relative;
+  border: 0;
+  border-radius: 18px;
+  padding: 0.65rem 1.4rem;
+  background:
+    linear-gradient(90deg, #d38f44 0 13%, #c47f3f 13% 15%, #171b24 15% 85%, #8f6ec6 85% 100%);
+  color: #f5ead7;
+}
+
+.lcars-corner {
+  position: absolute;
+  top: 0;
+  width: 22px;
+  height: 100%;
+  background: #0a0c12;
+}
+
+.lcars-corner.left {
+  left: 0;
+  border-radius: 0 18px 18px 0;
+}
+
+.lcars-corner.right {
+  right: 0;
+  border-radius: 18px 0 0 18px;
+}
+
+.cockpit-lcars .defcon-strip .label {
+  color: #f7dcb8;
+  font-weight: 700;
+}
+
+.cockpit-lcars .panel.lcars-panel {
+  border: 0;
+  border-radius: 18px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.015) 0 1px,
+      transparent 1px 22px
+    ),
+    #171b24;
+  box-shadow: inset 0 0 0 1px #2a3040;
+}
+
+.lcars-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.45rem;
+}
+
+.lcars-title-pill {
+  background: #e0aa62;
+  color: #171b24;
+  border-radius: 999px;
+  padding: 0.22rem 0.8rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.cockpit-lcars .hud-strip {
+  border: 0;
+  background: linear-gradient(90deg, #5f4b8b 0 20%, #202532 20% 100%);
+}
+
+.station-card {
+  border-width: 2px;
+  border-radius: 20px;
+}
+
+.station-card .system-title {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  padding: 0.22rem 0.45rem;
+}
+
+.station-card .system-icon {
+  background: #e7a256;
+  color: #11141b;
+  border: 0;
+  font-weight: 700;
+}
+
+.lcars-button {
+  clip-path: none;
+  border-radius: 999px;
+  border: 2px solid #4b607f;
+  min-height: 76px;
+  padding: 0.38rem 0.62rem;
+  background: linear-gradient(180deg, #2b3344, #212735);
+  overflow: hidden;
+}
+
+.lcars-button::before,
+.lcars-button::after {
+  display: none;
+}
+
+.lcars-button:hover {
+  border-color: #f0b36b;
+  box-shadow: 0 0 0 2px rgba(240, 179, 107, 0.2);
+}
+
+.theme-propulsione .lcars-button {
+  border-color: #78a9d6;
+  background: linear-gradient(180deg, #273649, #1f2b3b);
+}
+
+.theme-difesa .lcars-button {
+  border-color: #9c8ad5;
+  background: linear-gradient(180deg, #302b4a, #25203a);
+}
+
+.theme-alimentazione .lcars-button {
+  border-color: #78c39a;
+  background: linear-gradient(180deg, #243a31, #1d2e27);
+}
+
+.theme-interni .lcars-button {
+  border-color: #d0a46b;
+  background: linear-gradient(180deg, #3e3325, #2f261c);
+}
+
+.theme-esotici .lcars-button {
+  border-color: #c885d4;
+  background: linear-gradient(180deg, #3a2841, #2d1f33);
+}
+
+.tile-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.38rem;
+}
+
+.lcars-button .tile-name {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #f6ecda;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lcars-button .tile-meta {
+  color: #d9c6a7;
+  font-size: 0.64rem;
+}
+
+.power-dial {
+  width: 38px;
+  height: 38px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.power-dial-svg {
+  width: 38px;
+  height: 38px;
+}
+
+.power-dial-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f5ebd6;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.tile-power-state {
+  font-size: 0.62rem;
+  color: #ffd8a7;
+}
+
+.tile-direction {
+  margin-top: 0.12rem;
+  font-size: 0.62rem;
+  color: #bcd7ff;
+}
+
+/* Dense TNG bridge fill layout */
+.cockpit-lcars .command-clusters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.65rem;
+  overflow: hidden;
+  height: calc(100% - 2rem);
+  padding-bottom: 0;
+}
+
+.cockpit-lcars .system-column {
+  min-width: 0;
+  height: 100%;
+}
+
+.cockpit-lcars .hex-cloud {
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.cockpit-lcars .hex-cloud .subsystem-tile {
+  width: calc(50% - 0.22rem);
+  min-height: 62px;
+}
+
+.cockpit-lcars .system-footer {
+  margin-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  padding-top: 0.28rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.cockpit-lcars .system-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.53rem;
+  color: #d7c3a0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cockpit-lcars .system-power-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(78, 96, 121, 0.7);
+  overflow: hidden;
+}
+
+.cockpit-lcars .system-power-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7cd4ff, #ffcb7f);
+}
+
+.cockpit-lcars .system-lcars-strips {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 0.8fr;
+  gap: 0.16rem;
+}
+
+.cockpit-lcars .system-lcars-strips span {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(222, 162, 96, 0.65);
+}
+
+.cockpit-lcars .theme-difesa .system-lcars-strips span { background: rgba(170, 147, 228, 0.65); }
+.cockpit-lcars .theme-alimentazione .system-lcars-strips span { background: rgba(120, 206, 160, 0.65); }
+.cockpit-lcars .theme-interni .system-lcars-strips span { background: rgba(226, 170, 106, 0.65); }
+.cockpit-lcars .theme-esotici .system-lcars-strips span { background: rgba(199, 131, 219, 0.65); }
+
+/* Compact fixed 1920x440 tuning */
+.app-shell .banner {
+  padding: 0.32rem 0.75rem;
+  font-size: 0.76rem;
+}
+
+.cockpit-control {
+  padding: 0.18rem;
+}
+
+.cockpit-control .control-deck {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+}
+
+.cockpit-control .control-deck h3 {
+  margin-bottom: 0.15rem;
+  font-size: 0.72rem;
+}
+
+.cockpit-control .command-feedback {
+  margin-bottom: 0.15rem;
+  padding: 0.18rem 0.4rem;
+  font-size: 0.56rem;
+}
+
+.cockpit-control .command-clusters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.3rem;
+  height: 100%;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+.cockpit-control .system-column {
+  min-width: 0;
+  height: 100%;
+  padding: 0.24rem;
+  border-radius: 10px;
+}
+
+.cockpit-control .system-title {
+  margin-bottom: 0.15rem;
+  font-size: 0.55rem;
+}
+
+.cockpit-control .system-icon {
+  min-width: 38px;
+  font-size: 0.46rem;
+  padding: 1px 5px;
+}
+
+.cockpit-control .hex-cloud {
+  gap: 0.16rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.cockpit-control .hex-cloud .subsystem-tile:nth-child(odd) {
+  margin-left: 0;
+}
+
+.cockpit-control .hex-cloud .subsystem-tile {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.2rem 0.34rem;
+}
+
+.cockpit-control .lcars-button .tile-name {
+  font-size: 0.62rem;
+  white-space: nowrap;
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  text-overflow: clip;
+}
+
+.cockpit-control .lcars-button .tile-meta {
+  font-size: 0.5rem;
+}
+
+.cockpit-control .power-dial {
+  width: 28px;
+  height: 28px;
+}
+
+.cockpit-control .power-dial-svg {
+  width: 28px;
+  height: 28px;
+}
+
+.cockpit-control .power-dial-center {
+  font-size: 0.52rem;
+}
+
+.cockpit-control .tile-power-state,
+.cockpit-control .tile-direction {
+  font-size: 0.48rem;
+}
+
+.cockpit-control .system-footer {
+  margin-top: 0.12rem;
+  padding-top: 0.12rem;
+  gap: 0.14rem;
+}
+
+.cockpit-control .system-summary-row {
+  font-size: 0.42rem;
+}
+
+.cockpit-control .system-power-track {
+  height: 3px;
+}
+
+.cockpit-control .system-lcars-strips span {
+  height: 3px;
+}
+
+/* Rebalance control density: fill space without tiny text */
+.cockpit-control .control-deck h3 {
+  font-size: 0.86rem;
+  margin-bottom: 0.28rem;
+}
+
+.cockpit-control .command-clusters {
+  gap: 0.44rem;
+}
+
+.cockpit-control .system-column {
+  padding: 0.34rem;
+}
+
+.cockpit-control .system-title {
+  font-size: 0.66rem;
+  margin-bottom: 0.25rem;
+}
+
+.cockpit-control .system-icon {
+  min-width: 42px;
+  font-size: 0.52rem;
+}
+
+.cockpit-control .hex-cloud {
+  gap: 0.26rem;
+}
+
+.cockpit-control .hex-cloud .subsystem-tile {
+  min-height: 74px;
+  padding: 0.34rem 0.5rem;
+}
+
+.cockpit-control .lcars-button .tile-name {
+  font-size: 0.74rem;
+}
+
+.tile-indicators {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.tile-mode-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(227, 171, 100, 0.22);
+  color: #ffd9a4;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.cockpit-control .power-dial {
+  width: 34px;
+  height: 34px;
+}
+
+.cockpit-control .power-dial-svg {
+  width: 34px;
+  height: 34px;
+}
+
+.cockpit-control .power-dial-center {
+  font-size: 0.63rem;
+}
+
+.cockpit-control .tile-level-track {
+  height: 5px;
+}
+
+/* Final control-tile layout overrides */
+.cockpit-control .tile-indicators {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.cockpit-control .tile-mode-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 0.96rem;
+  flex-shrink: 0;
+}
+
+.cockpit-control .power-dial {
+  width: 42px;
+  height: 42px;
+}
+
+.cockpit-control .power-dial-svg {
+  width: 42px;
+  height: 42px;
+}
+
+.cockpit-control .power-dial-center {
+  font-size: 0.78rem;
+}
+
+.cockpit-control .tile-power-state,
+.cockpit-control .tile-direction {
+  font-size: 0.54rem;
+}
+
+.cockpit-control .tile-level-track {
+  display: none;
+}
+
+/* Final fine-tuning: right aligned icons + lower height */
+.cockpit-control .hex-cloud .subsystem-tile {
+  min-height: 46px;
+  padding: 0.16rem 0.34rem;
+  display: grid;
+  align-items: center;
+}
+
+.cockpit-control .tile-head-row {
+  min-height: 100%;
+  gap: 0.22rem;
+}
+
+.cockpit-control .lcars-button .tile-name {
+  align-self: center;
+}
+
+.cockpit-control .tile-indicators {
+  justify-content: flex-end;
+  gap: 0.28rem;
+  flex: 0 0 auto;
+  min-width: auto;
+  margin-left: auto;
+}
+
+.cockpit-control .power-dial {
+  width: 34px;
+  height: 34px;
+}
+
+.cockpit-control .power-dial-svg {
+  width: 34px;
+  height: 34px;
+}
+
+.cockpit-control .power-dial-center {
+  font-size: 0.62rem;
+}
+
+.cockpit-control .tile-mode-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 0.96rem;
+}
+
+/* Hard override requested: full-height, less narrow, LCARS on black */
+.cockpit-control .command-clusters {
+  height: 100%;
+  gap: 0.5rem;
+}
+
+.cockpit-control .system-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.36rem;
+}
+
+.cockpit-control .hex-cloud {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-auto-rows: 1fr;
+  gap: 0.28rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cockpit-control .hex-cloud .subsystem-tile {
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  border-radius: 14px;
+  border-width: 2px;
+  padding: 0.26rem 0.5rem;
+}
+
+.cockpit-control .lcars-button {
+  background: #05070c;
+}
+
+.cockpit-control .theme-propulsione .lcars-button {
+  border-color: #7db8e8;
+  box-shadow: inset 0 0 0 1px rgba(125, 184, 232, 0.22);
+}
+
+.cockpit-control .theme-difesa .lcars-button {
+  border-color: #b19ae8;
+  box-shadow: inset 0 0 0 1px rgba(177, 154, 232, 0.22);
+}
+
+.cockpit-control .theme-alimentazione .lcars-button {
+  border-color: #86d9aa;
+  box-shadow: inset 0 0 0 1px rgba(134, 217, 170, 0.22);
+}
+
+.cockpit-control .theme-interni .lcars-button {
+  border-color: #e1b47f;
+  box-shadow: inset 0 0 0 1px rgba(225, 180, 127, 0.22);
+}
+
+.cockpit-control .theme-esotici .lcars-button {
+  border-color: #d79be6;
+  box-shadow: inset 0 0 0 1px rgba(215, 155, 230, 0.22);
+}
+
+.cockpit-control .tile-head-row {
+  align-items: center;
+}
+
+.cockpit-control .lcars-button .tile-name {
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.cockpit-control .tile-indicators {
+  align-items: center;
+}
+
+.cockpit-control .tile-mode-icon {
+  width: 26px;
+  height: 26px;
+  font-size: 1.05rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cockpit-control .power-dial-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 0.68rem;
+}
+
+/* User-requested hard layout + LCARS coloring overrides */
+.console-viewport-wrap {
+  padding: 0;
+  overflow: hidden;
+}
+
+.console-viewport-fixed {
+  border-radius: 0;
+}
+
+.console-viewport-fixed .app-shell {
+  height: 100%;
+}
+
+.app-shell-control {
+  height: 100%;
+}
+
+.app-shell-control > main {
+  height: 100%;
+}
+
+.console-viewport-fixed .app-shell > main {
+  min-height: 0;
+}
+
+.cockpit-control {
+  height: 100%;
+  gap: 0;
+  padding: 0.16rem 0.16rem 0.5rem;
+}
+
+.cockpit-control .control-deck {
+  height: 100%;
+  padding: 0.22rem 0.26rem;
+  grid-template-rows: 1fr;
+}
+
+.cockpit-control .command-clusters {
+  height: 100%;
+  align-items: stretch;
+}
+
+.cockpit-control .hex-cloud {
+  height: 100%;
+  align-content: stretch;
+}
+
+.cockpit-control .hex-cloud .subsystem-tile {
+  min-height: 0;
+  height: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.command-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  z-index: 40;
+  border-radius: 999px;
+  padding: 0.22rem 0.9rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  border: 1px solid #3f5f81;
+  background: rgba(12, 25, 40, 0.88);
+  color: #b8f6cc;
+  pointer-events: none;
+}
+
+.command-overlay.ko {
+  color: #ffb2b2;
+  border-color: #8b4653;
+  background: rgba(57, 15, 20, 0.88);
+}
+
+.cockpit-control .tile-head-row {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+}
+
+.cockpit-control .lcars-button .tile-name {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #101218;
+}
+
+.cockpit-control .tile-indicators {
+  align-items: center;
+}
+
+.cockpit-control .power-dial-center {
+  font-size: 0.84rem;
+  color: #f7f9ff;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  z-index: 2;
+}
+
+.cockpit-control .power-dial {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+
+.cockpit-control .theme-propulsione .lcars-button {
+  background: #90c6f2;
+}
+
+.cockpit-control .theme-difesa .lcars-button {
+  background: #c3afea;
+}
+
+.cockpit-control .theme-alimentazione .lcars-button {
+  background: #9ce2bb;
+}
+
+.cockpit-control .theme-interni .lcars-button {
+  background: #efbf86;
+}
+
+.cockpit-control .theme-esotici .lcars-button {
+  background: #d9a5eb;
+}
+
+.cockpit-control .lcars-button .tile-mode-icon {
+  background: rgba(0, 0, 0, 0.16);
+  color: #111319;
 }

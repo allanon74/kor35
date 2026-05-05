@@ -53,6 +53,7 @@ async function request(path, { method = 'GET', body = null, auth = true } = {}) 
 
 export const api = {
   consoleEnabled: () => request('/api/pilot/console-enabled/', { auth: false }),
+  autoLogin: () => request('/api/pilot/auth/auto-login/', { method: 'POST', body: {}, auth: false }),
   createConsoleTicket: () => request('/api/pilot/auth/console-ticket/', {
     method: 'POST', body: {}, auth: false,
   }),
@@ -73,6 +74,14 @@ export const api = {
   command: (codice) => request('/api/pilot/session/command/', {
     method: 'POST', body: { codice },
   }),
+  subsystemSet: (payload) => request('/api/pilot/session/subsystem-set/', {
+    method: 'POST', body: payload,
+  }),
   abort: () => request('/api/pilot/session/abort/', { method: 'POST' }),
   history: () => request('/api/pilot/session/history/'),
+  tickStatus: () => request('/api/pilot/runtime/tick-status/'),
+  tickControl: (action) => request('/api/pilot/runtime/tick-control/', {
+    method: 'POST',
+    body: { action },
+  }),
 };

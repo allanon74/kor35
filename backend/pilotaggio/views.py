@@ -9,11 +9,13 @@ Gruppi di endpoint:
 """
 from __future__ import annotations
 
+import random
 from datetime import timedelta
 from typing import Optional
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Sum
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -33,10 +35,13 @@ from personaggi.models import (
 
 from .auth import PilotConsoleTokenAuthentication, get_pilot_from_request
 from .engine import (
-    durata_viaggio_secondi,
+    _clamp_livello,
+    applica_effetto_espulsione,
+    applica_effetto_guasto,
+    applica_effetto_inversione,
     evento_attivo_corrente,
+    eventi_attivi_correnti,
     get_o_crea_stato_sottosistema,
-    processa_codice,
     tick_sessione,
 )
 from .models import (
@@ -47,10 +52,9 @@ from .models import (
     EventoNave,
     IntensitaComando,
     PilotConsoleToken,
+    PilotRuntimeConfig,
     PilotConsoleLoginTicket,
-    SESSIONE_STATO_ATTERRAGGIO,
     SESSIONE_STATO_CRASHED,
-    SESSIONE_STATO_DECOLLO,
     SESSIONE_STATO_IDLE,
     SESSIONE_STATO_VOLO,
     SequenzaVolo,
@@ -68,6 +72,7 @@ from .serializers import (
     EventoNaveSerializer,
     IntensitaComandoSerializer,
     PilotConsoleTokenSerializer,
+    PilotRuntimeConfigSerializer,
     SequenzaVoloSerializer,
     SessioneVoloSerializer,
     SottosistemaNaveSerializer,
@@ -115,6 +120,70 @@ def _request_prefers_html(request) -> bool:
     return "text/html" in accept
 
 
+def _ensure_runtime_subsystems(sessione: SessioneVolo) -> None:
+    """
+    Inizializza gli stati runtime sottosistema per la sessione corrente.
+    """
+    presenti = set(
+        StatoSottosistemaSessione.objects.filter(sessione=sessione).values_list(
+            "sottosistema_id", flat=True
+        )
+    )
+    to_create = []
+    for s in SottosistemaNave.objects.filter(attivo=True).order_by("ordine", "codice"):
+        if s.pk in presenti:
+            continue
+        to_create.append(
+            StatoSottosistemaSessione(
+                sessione=sessione,
+                sottosistema=s,
+                online=True,
+                livello_target=0,
+                livello_attuale=0,
+                direzione="avanti",
+            )
+        )
+    if to_create:
+        StatoSottosistemaSessione.objects.bulk_create(to_create)
+
+
+def _tick_runtime_payload() -> dict:
+    cfg = PilotRuntimeConfig.get_solo()
+    heartbeat = cfg.tick_last_heartbeat
+    alive = False
+    if heartbeat is not None:
+        delta = (timezone.now() - heartbeat).total_seconds()
+        alive = delta <= max(8.0, float(cfg.tick_interval_secondi or 5.0) * 2.5)
+    return {
+        "enabled": bool(cfg.tick_enabled),
+        "interval": float(cfg.tick_interval_secondi or 5.0),
+        "last_heartbeat": heartbeat.isoformat() if heartbeat else None,
+        "alive": alive,
+        "login_required_console": bool(cfg.login_required_console),
+        "alarm_audio_enabled": bool(cfg.alarm_audio_enabled),
+    }
+
+
+def _login_required_console() -> bool:
+    return bool(PilotRuntimeConfig.get_solo().login_required_console)
+
+
+def _ensure_tick_enabled() -> None:
+    cfg = PilotRuntimeConfig.get_solo()
+    if not cfg.tick_enabled:
+        cfg.tick_enabled = True
+        cfg.save(update_fields=["tick_enabled", "updated_at"])
+
+
+def _disable_tick_if_no_active_sessions() -> None:
+    if SessioneVolo.objects.exclude(stato__in=["arrivata", "crashed"]).exists():
+        return
+    cfg = PilotRuntimeConfig.get_solo()
+    if cfg.tick_enabled:
+        cfg.tick_enabled = False
+        cfg.save(update_fields=["tick_enabled", "updated_at"])
+
+
 # ---------------------------------------------------------------------------
 # 1) Autenticazione console
 # ---------------------------------------------------------------------------
@@ -136,6 +205,11 @@ class PilotQrLoginView(APIView):
     permission_classes: list = [permissions.AllowAny]
 
     def post(self, request):
+        if not _login_required_console():
+            return Response(
+                {"error": "Login console disattivato in questa configurazione."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         qr_id = (request.data.get("qr_id") or "").strip()
         if not qr_id:
             return Response(
@@ -190,7 +264,48 @@ class PilotConsoleEnabledView(APIView):
     permission_classes: list = [permissions.AllowAny]
 
     def get(self, request):
-        return Response({"enabled": bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False))})
+        return Response(
+            {
+                "enabled": bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False)),
+                "login_required": _login_required_console(),
+            }
+        )
+
+
+class PilotConsoleAutoLoginView(APIView):
+    """
+    Auto-login per ambienti non produzione quando login console e' disattivato.
+    """
+
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def post(self, request):
+        if _login_required_console():
+            return Response({"error": "Login obbligatorio: auto-login disabilitato."}, status=status.HTTP_403_FORBIDDEN)
+
+        pilota = None
+        candidati = Personaggio.objects.all().order_by("nome")
+        for pg in candidati:
+            if int(pg.get_valore_statistica(SIGLA_PILOTAGGIO) or 0) >= 1:
+                pilota = pg
+                break
+        if pilota is None:
+            pilota = candidati.first()
+        if pilota is None:
+            return Response({"error": "Nessun personaggio disponibile per auto-login."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            PilotConsoleToken.objects.filter(pilota=pilota, revocato_at__isnull=True).update(revocato_at=timezone.now())
+            token = PilotConsoleToken.objects.create(pilota=pilota, token=PilotConsoleToken.genera_token())
+        return Response(
+            {
+                "token": token.token,
+                "pilota": {"id": pilota.pk, "nome": getattr(pilota, "nome", str(pilota))},
+                "mode": "auto",
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class PilotConsoleTicketCreateView(APIView):
@@ -202,6 +317,8 @@ class PilotConsoleTicketCreateView(APIView):
     permission_classes: list = [permissions.AllowAny]
 
     def post(self, request):
+        if not _login_required_console():
+            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
         if not bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False)):
             return Response({"error": "Console pilota disabilitata su questo ambiente."}, status=status.HTTP_403_FORBIDDEN)
         durata_secondi = int(request.data.get("durata_secondi") or 120)
@@ -231,6 +348,8 @@ class PilotConsoleTicketClaimView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, ticket_id):
+        if not _login_required_console():
+            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
         wants_html = _request_prefers_html(request)
         return_url = "/app/start"
         codice = (request.query_params.get("c") or "").strip()
@@ -319,6 +438,8 @@ class PilotConsoleTicketStatusView(APIView):
     permission_classes: list = [permissions.AllowAny]
 
     def get(self, request, ticket_id):
+        if not _login_required_console():
+            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
         codice = (request.query_params.get("c") or "").strip()
         ticket = get_object_or_404(PilotConsoleLoginTicket, pk=ticket_id)
         if not codice or ticket.codice != codice:
@@ -378,30 +499,48 @@ class PilotLogoutView(APIView):
 
 def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
     """Stato runtime completo per la console pilota."""
+    if sessione is not None:
+        _ensure_runtime_subsystems(sessione)
     pending = evento_attivo_corrente(sessione) if sessione else None
+    pending_list = eventi_attivi_correnti(sessione) if sessione else []
 
     sub_serializer = StatoSottosistemaRuntimeSerializer(
-        StatoSottosistemaSessione.objects.filter(sessione=sessione).select_related(
-            "sottosistema"
-        )
+        StatoSottosistemaSessione.objects.filter(sessione=sessione)
+        .select_related("sottosistema")
+        .order_by("sottosistema__ordine", "sottosistema__nome", "sottosistema__codice")
         if sessione
         else [],
         many=True,
     )
 
-    decollo_seq = (
-        SequenzaVolo.objects.filter(tipo="decollo", attiva=True)
-        .order_by("-created_at")
-        .first()
-    )
-    atterraggio_seq = (
-        SequenzaVolo.objects.filter(tipo="atterraggio", attiva=True)
-        .order_by("-created_at")
-        .first()
-    )
 
     stati_qs = StatoAllertaPilot.objects.all().order_by("livello")
     stati_allerta = StatoAllertaPilotPublicSerializer(stati_qs, many=True).data
+
+    sistemi = {}
+    stati_runtime = {
+        str(st.pk): st
+        for st in (
+            sessione.stati_sottosistemi.select_related("sottosistema").all()
+            if sessione
+            else []
+        )
+    }
+    for row in sub_serializer.data:
+        match = stati_runtime.get(str(row["id"]))
+        gruppo = (match.sottosistema.gruppo if match else "Sistema").strip() or "Sistema"
+        sistemi.setdefault(gruppo, []).append(row)
+    evento_data = EventoAttivoSerializer(pending).data if pending else None
+    if evento_data and evento_data.get("direzione_evento"):
+        evento_data["descrizione"] = str(evento_data.get("descrizione") or "").replace(
+            "<direzione>", str(evento_data["direzione_evento"])
+        )
+    eventi_data = EventoAttivoSerializer(pending_list, many=True).data if pending_list else []
+    for row in eventi_data:
+        if row.get("direzione_evento"):
+            row["descrizione"] = str(row.get("descrizione") or "").replace(
+                "<direzione>", str(row["direzione_evento"])
+            )
 
     payload = {
         "pilota": {
@@ -409,22 +548,24 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
             "nome": getattr(pilota, "nome", str(pilota)),
         },
         "sessione": SessioneVoloSerializer(sessione).data if sessione else None,
-        "evento_attivo": EventoAttivoSerializer(pending).data if pending else None,
+        "evento_attivo": evento_data,
+        "eventi_attivi": eventi_data,
         "sottosistemi": sub_serializer.data,
         "stati_allerta": stati_allerta,
-        "sequenze": {
-            "decollo": {
-                "presente": bool(decollo_seq),
-                "lunghezza": len(decollo_seq.codici) if decollo_seq else 0,
-                "idx_corrente": sessione.decollo_idx if sessione else 0,
-            },
-            "atterraggio": {
-                "presente": bool(atterraggio_seq),
-                "lunghezza": len(atterraggio_seq.codici) if atterraggio_seq else 0,
-                "idx_corrente": sessione.atterraggio_idx if sessione else 0,
-            },
-        },
         "defcon_max": DEFCON_MAX,
+        "sistemi": sistemi,
+        "energia": {
+            "produzione": getattr(sessione, "produzione_ultimo_tick", 0.0) if sessione else 0.0,
+            "consumo": getattr(sessione, "consumo_ultimo_tick", 0.0) if sessione else 0.0,
+            "carburante_attuale": getattr(sessione, "carburante_attuale", 0.0) if sessione else 0.0,
+            "carburante_massimo": getattr(sessione, "carburante_massimo", 0.0) if sessione else 0.0,
+            "storage_attuale": getattr(sessione, "storage_energia_attuale", 0.0) if sessione else 0.0,
+            "storage_massimo": getattr(sessione, "storage_energia_massimo", 0.0) if sessione else 0.0,
+            "distanza_percorsa": getattr(sessione, "distanza_percorsa", 0.0) if sessione else 0.0,
+            "distanza_target": getattr(sessione, "distanza_target", 0.0) if sessione else 0.0,
+            "tick_secondi": getattr(sessione, "tick_secondi", 5) if sessione else 5,
+        },
+        "tick_runtime": _tick_runtime_payload(),
         "server_time": timezone.now().isoformat(),
     }
     return payload
@@ -448,8 +589,11 @@ class PilotStateView(APIView):
             .first()
         )
         if sessione is not None:
+            _ensure_runtime_subsystems(sessione)
             tick_sessione(sessione)
             sessione.refresh_from_db()
+            if sessione.stato in ("arrivata", "crashed"):
+                _disable_tick_if_no_active_sessions()
         return Response(_build_state_payload(sessione, pilota))
 
 
@@ -458,8 +602,8 @@ class PilotSessionStartView(APIView):
     POST /api/pilot/session/start/
     Body: {"prefettura_partenza_id": int, "prefettura_arrivo_id": int}
 
-    A nave ferma. Calcola durata viaggio e mette la sessione in fase di decollo
-    (richiede sequenza_decollo prima del volo vero).
+    A nave ferma (stato 0 disattiva). Premi decollo e la sessione entra in volo.
+    La distanza target e' temporaneamente randomica [1000..10000].
     """
 
     authentication_classes = [PilotConsoleTokenAuthentication]
@@ -489,7 +633,19 @@ class PilotSessionStartView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        durata = durata_viaggio_secondi(partenza, arrivo, defcon_iniziale=0)
+        distanza_target = random.randint(1000, 10000)
+        capacita_serbatoi = float(
+            SottosistemaNave.objects.filter(attivo=True, tipo="serbatoio").aggregate(
+                total=Sum("capacita_carburante")
+            )["total"]
+            or 0.0
+        )
+        capacita_batterie = float(
+            SottosistemaNave.objects.filter(attivo=True, tipo="batteria").aggregate(
+                total=Sum("capacita_storage")
+            )["total"]
+            or 0.0
+        )
 
         with transaction.atomic():
             if attiva is None:
@@ -497,29 +653,68 @@ class PilotSessionStartView(APIView):
                     pilota=pilota,
                     prefettura_partenza=partenza,
                     prefettura_arrivo=arrivo,
-                    stato=SESSIONE_STATO_DECOLLO,
-                    durata_pianificata_secondi=durata,
+                    stato=SESSIONE_STATO_VOLO,
+                    durata_pianificata_secondi=0,
+                    defcon=0,
+                    distanza_target=float(distanza_target),
+                    distanza_percorsa=0.0,
+                    carburante_massimo=max(0.0, capacita_serbatoi or 0.0) or 1000.0,
+                    carburante_attuale=max(0.0, capacita_serbatoi or 0.0) or 1000.0,
+                    storage_energia_massimo=max(0.0, capacita_batterie),
+                    storage_energia_attuale=max(0.0, capacita_batterie),
+                    crash_reason="",
                 )
             else:
                 attiva.prefettura_partenza = partenza
                 attiva.prefettura_arrivo = arrivo
-                attiva.stato = SESSIONE_STATO_DECOLLO
-                attiva.durata_pianificata_secondi = durata
-                attiva.decollo_idx = 0
-                attiva.atterraggio_idx = 0
+                attiva.stato = SESSIONE_STATO_VOLO
+                attiva.durata_pianificata_secondi = 0
+                attiva.defcon = 0
+                attiva.distanza_target = float(distanza_target)
+                attiva.distanza_percorsa = 0.0
+                attiva.carburante_massimo = max(0.0, capacita_serbatoi or 0.0) or 1000.0
+                attiva.carburante_attuale = max(0.0, capacita_serbatoi or 0.0) or 1000.0
+                attiva.storage_energia_massimo = max(0.0, capacita_batterie)
+                attiva.storage_energia_attuale = max(0.0, capacita_batterie)
+                attiva.crash_reason = ""
                 attiva.save()
             attiva.started_at = timezone.now()
-            attiva.save(update_fields=["started_at", "updated_at"])
+            attiva.save(update_fields=["started_at", "crash_reason", "updated_at"])
+            _ensure_runtime_subsystems(attiva)
+            _ensure_tick_enabled()
 
         return Response(_build_state_payload(attiva, pilota))
 
 
 class PilotSessionCommandView(APIView):
     """
-    POST /api/pilot/session/command/
-    Body: {"codice": "ABC"}
+    Endpoint legacy: sequenze/codici manuali dismessi.
+    """
 
-    Unico endpoint che accetta input dalla tastiera della console.
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        return Response(
+            {
+                "error": (
+                    "Input codici dismesso: la console usa regolazione energetica dei sottosistemi."
+                )
+            },
+            status=status.HTTP_410_GONE,
+        )
+
+
+class PilotSubsystemSetView(APIView):
+    """
+    POST /api/pilot/session/subsystem-set/
+    Body: {
+      "sottosistema_id": "...",
+      "livello": 0..9,
+      "direzione": "avanti|indietro|su|giu|destra|sinistra",
+      "invertito": bool,
+      "espulso": bool
+    }
     """
 
     authentication_classes = [PilotConsoleTokenAuthentication]
@@ -527,7 +722,6 @@ class PilotSessionCommandView(APIView):
 
     def post(self, request):
         pilota = get_pilot_from_request(request)
-        codice = (request.data.get("codice") or "").strip().upper()
         sessione = (
             SessioneVolo.objects.filter(pilota=pilota)
             .exclude(stato__in=["arrivata", "crashed"])
@@ -535,30 +729,46 @@ class PilotSessionCommandView(APIView):
             .first()
         )
         if sessione is None:
+            return Response({"error": "Nessuna sessione attiva."}, status=status.HTTP_400_BAD_REQUEST)
+
+        sottosistema_id = request.data.get("sottosistema_id")
+        sottosistema = SottosistemaNave.objects.filter(pk=sottosistema_id).first()
+        if not sottosistema:
+            return Response({"error": "Sottosistema non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        if sottosistema.tipo in {"batteria", "serbatoio"}:
             return Response(
-                {"error": "Nessuna sessione attiva."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        if sessione.stato == SESSIONE_STATO_IDLE:
-            return Response(
-                {"error": "Nave a terra: avvia un viaggio prima di inserire codici."},
+                {"error": "Sottosistema non comandabile dalla plancia."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        valutazione = processa_codice(sessione, codice)
-        sessione.refresh_from_db()
+        stato = get_o_crea_stato_sottosistema(sessione, sottosistema)
+        livello = _clamp_livello(request.data.get("livello", stato.livello_target))
+        direzione = str(request.data.get("direzione") or stato.direzione or "avanti")
+        if direzione not in {"avanti", "indietro", "su", "giu", "destra", "sinistra"}:
+            direzione = "avanti"
+        stato.livello_target = livello
+        invertito_pre = bool(stato.invertito)
+        espulso_pre = bool(stato.espulso)
+        if sottosistema.supporta_direzioni:
+            stato.direzione = direzione
+        if sottosistema.supporta_inversione:
+            stato.invertito = bool(request.data.get("invertito", stato.invertito))
+        if sottosistema.supporta_espulsione:
+            stato.espulso = bool(request.data.get("espulso", stato.espulso))
+            if stato.espulso:
+                stato.online = False
+                stato.livello_target = 0
+                stato.livello_attuale = 0
+        stato.save()
+        if bool(stato.invertito) and not invertito_pre:
+            applica_effetto_inversione(sessione, stato)
+        if bool(stato.espulso) and not espulso_pre:
+            applica_effetto_espulsione(sessione, stato)
+        if not stato.online:
+            applica_effetto_guasto(sessione, stato)
         tick_sessione(sessione)
         sessione.refresh_from_db()
-
-        body = _build_state_payload(sessione, pilota)
-        body["valutazione"] = {
-            "esito": valutazione.esito,
-            "delta_defcon": valutazione.delta_defcon,
-            "nuovo_defcon": valutazione.nuovo_defcon,
-            "descrizione": valutazione.descrizione,
-            "sequenza_avanzata": valutazione.sequenza_avanzata,
-            "sequenza_completa": valutazione.sequenza_completa,
-        }
-        return Response(body)
+        return Response(_build_state_payload(sessione, pilota), status=status.HTTP_200_OK)
 
 
 class PilotSessionAbortView(APIView):
@@ -583,8 +793,32 @@ class PilotSessionAbortView(APIView):
             return Response({"status": "no_session"}, status=status.HTTP_200_OK)
         sessione.stato = SESSIONE_STATO_CRASHED
         sessione.ended_at = timezone.now()
-        sessione.save(update_fields=["stato", "ended_at", "updated_at"])
+        sessione.crash_reason = "manual_abort"
+        sessione.save(update_fields=["stato", "ended_at", "crash_reason", "updated_at"])
+        _disable_tick_if_no_active_sessions()
         return Response(_build_state_payload(sessione, pilota))
+
+
+class PilotTickRuntimeStatusView(APIView):
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def get(self, request):
+        return Response(_tick_runtime_payload())
+
+
+class PilotTickRuntimeControlView(APIView):
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        action = str(request.data.get("action") or "").strip().lower()
+        if action not in {"start", "stop"}:
+            return Response({"error": "Azione non valida (start|stop)."}, status=status.HTTP_400_BAD_REQUEST)
+        cfg = PilotRuntimeConfig.get_solo()
+        cfg.tick_enabled = action == "start"
+        cfg.save(update_fields=["tick_enabled", "updated_at"])
+        return Response(_tick_runtime_payload(), status=status.HTTP_200_OK)
 
 
 class PilotSessionHistoryView(generics.ListAPIView):
@@ -696,6 +930,7 @@ class PilotSubsystemQrActionView(APIView):
                 stato.save(
                     update_fields=["online", "guasto_at", "recovery_at", "updated_at"]
                 )
+                applica_effetto_guasto(sessione, stato)
             else:
                 stato.recovery_at = now + timedelta(
                     seconds=int(sottosistema.durata_ripristino_secondi or 60)
@@ -906,7 +1141,11 @@ class StaffEventoViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsStaffUser]
 
 
-class StaffSequenzaViewSet(viewsets.ModelViewSet):
+class StaffSequenzaViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Legacy read-only: sequenze non piu' usate nel gameplay corrente.
+    """
+
     queryset = SequenzaVolo.objects.all().order_by("tipo", "-created_at")
     serializer_class = SequenzaVoloSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
@@ -926,3 +1165,18 @@ class StaffSessioneListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsStaffUser]
     serializer_class = SessioneVoloSerializer
     queryset = SessioneVolo.objects.all().order_by("-created_at")
+
+
+class StaffPilotRuntimeConfigView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        return Response(PilotRuntimeConfigSerializer(cfg).data)
+
+    def patch(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        serializer = PilotRuntimeConfigSerializer(cfg, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

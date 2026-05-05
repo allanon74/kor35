@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
 /**
- * Schermata "nave a terra": il pilota seleziona prefettura di partenza/arrivo
- * e avvia il viaggio. Il backend calcola la durata effettiva (10/30/60 min,
- * +20% per ogni livello DEFCON di partenza).
+ * Schermata "nave spenta": stato 0 (disattiva).
+ * Il pilota preme decollo e avvia il viaggio.
  */
 export default function IdleScreen({ prefetture, onStart, error, busy }) {
   const [partenzaId, setPartenzaId] = useState('');
@@ -17,7 +16,7 @@ export default function IdleScreen({ prefetture, onStart, error, busy }) {
   return (
     <div className="center-screen">
       <h1>KOR-35 // PRECONTROLLO</h1>
-      <p>Imposta rotta del viaggio. Lo stato della nave e' a terra.</p>
+      <p>Stato nave: 0 - DISATTIVA. Imposta rotta e premi decollo per iniziare.</p>
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         <label>
           <div className="banner" style={{ padding: 0, border: 0, marginBottom: '0.3rem' }}>
@@ -52,13 +51,12 @@ export default function IdleScreen({ prefetture, onStart, error, busy }) {
             disabled={busy || !partenzaId || !arrivoId}
             onClick={() => onStart(Number(partenzaId), Number(arrivoId))}
           >
-            Avvia decollo
+            Decollo
           </button>
         </div>
         {error && <div className="error">{error}</div>}
         <p className="note">
-          Durata viaggio = 10 min stessa prefettura, 30 min stessa regione,
-          60 min altrimenti. DEFCON al decollo allunga il volo.
+          Distanza viaggio iniziale randomica (1000..10000). Dopo il decollo, gestisci i sottosistemi dalla plancia.
         </p>
       </div>
     </div>

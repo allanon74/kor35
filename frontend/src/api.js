@@ -1912,6 +1912,14 @@ export const staffDeletePilotSequenza = (id, onLogout) =>
 export const staffGetPilotCatalog = (onLogout) =>
   fetchAuthenticated('/api/pilot/catalog/', { method: 'GET' }, onLogout);
 
+export const staffGetPilotRuntimeConfig = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/runtime-config/', { method: 'GET' }, onLogout);
+export const staffUpdatePilotRuntimeConfig = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/runtime-config/', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }, onLogout);
+
 export const staffGetKorps = (onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/korp/', { method: 'GET' }, onLogout);
 };

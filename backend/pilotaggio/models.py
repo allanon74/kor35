@@ -25,6 +25,60 @@ from kor35.syncing import SyncableModel
 # ---------------------------------------------------------------------------
 
 
+def _default_curve_zero() -> dict:
+    return {str(i): 0.0 for i in range(10)}
+
+
+def _default_curve_guasto() -> dict:
+    data = _default_curve_zero()
+    data["7"] = 1.0
+    data["8"] = 10.0
+    data["9"] = 25.0
+    return data
+
+
+def _default_colori_livello() -> dict:
+    # 0 bianco spento, 1..9 scala iride da violetto a rosso.
+    return {
+        "0": "#ffffff",
+        "1": "#8a2be2",
+        "2": "#4b5fd1",
+        "3": "#2f8cff",
+        "4": "#00b894",
+        "5": "#9ccc65",
+        "6": "#ffd54f",
+        "7": "#ffb74d",
+        "8": "#ff7043",
+        "9": "#ff3b30",
+    }
+
+
+def _default_effetti_guasto() -> dict:
+    return {
+        "tipo": "none",  # none|guasto_altro_percent|guasto_random_percent|riduci_carburante_percent|riduci_batterie_percent|allunga_distanza_percent|naufragio
+        "valore": 0.0,
+        "target_codice": "",
+    }
+
+
+def _default_effetti_inversione() -> dict:
+    return {
+        "tipo": "none",
+        "probabilita_percent": 0.0,
+        "valore": 0.0,
+        "target_codice": "",
+    }
+
+
+def _default_effetti_espulsione() -> dict:
+    return {
+        "tipo": "none",
+        "probabilita_percent": 0.0,
+        "valore": 0.0,
+        "target_codice": "",
+    }
+
+
 class SottosistemaNave(SyncableModel, models.Model):
     """
     Sottosistema della nave (primo carattere del codice comando).
@@ -55,6 +109,97 @@ class SottosistemaNave(SyncableModel, models.Model):
         help_text="Tempo di attesa dopo scansione 0RI prima che il sottosistema torni online.",
     )
     attivo = models.BooleanField(default=True)
+    gruppo = models.CharField(
+        max_length=80,
+        blank=True,
+        default="",
+        help_text="Nome del sistema di appartenenza (es. Difesa, Alimentazione).",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    tipo = models.CharField(
+        max_length=16,
+        choices=[
+            ("standard", "Standard"),
+            ("generatore", "Generatore"),
+            ("batteria", "Batteria"),
+            ("serbatoio", "Serbatoio carburante"),
+            ("motore", "Motore principale"),
+            ("portale", "Portale transdimensionale"),
+            ("manovra", "Propulsori di manovra"),
+        ],
+        default="standard",
+    )
+    coeff_produzione = models.FloatField(
+        default=0.0,
+        help_text="Energia prodotta per tick = livello * coeff_produzione.",
+    )
+    coeff_consumo_energia = models.FloatField(
+        default=1.0,
+        help_text="Energia assorbita per tick = livello * coeff_consumo_energia.",
+    )
+    coeff_consumo_carburante = models.FloatField(
+        default=0.0,
+        help_text="Carburante usato per tick = livello * coeff_consumo_carburante.",
+    )
+    coeff_effetto_speciale = models.FloatField(
+        default=1.0,
+        help_text="Coefficiente speciale (es. portale: moltiplicatore per livello).",
+    )
+    rampa_livelli_per_tick = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Variazione massima del livello attuale per tick verso il target (solo sistemi con inerzia).",
+    )
+    capacita_storage = models.FloatField(
+        default=0.0,
+        help_text="Capacita energetica (solo batterie).",
+    )
+    coeff_ricarica_storage = models.FloatField(
+        default=0.5,
+        help_text="Conversione energia->storage in riposo (es. 0.5 significa 2:1).",
+    )
+    capacita_carburante = models.FloatField(
+        default=0.0,
+        help_text="Capacita serbatoio carburante (solo tipo serbatoio).",
+    )
+    effetti_guasto_json = models.JSONField(
+        default=_default_effetti_guasto,
+        blank=True,
+        help_text=(
+            "Effetto applicato quando il sottosistema va guasto. "
+            "Chiavi: tipo, valore, target_codice."
+        ),
+    )
+    effetti_inversione_json = models.JSONField(
+        default=_default_effetti_inversione,
+        blank=True,
+        help_text="Effetti percentuali quando si attiva 'inverti'.",
+    )
+    effetti_espulsione_json = models.JSONField(
+        default=_default_effetti_espulsione,
+        blank=True,
+        help_text="Effetti percentuali quando si attiva 'espelli'.",
+    )
+    probabilita_guasto_7 = models.FloatField(default=0.01)
+    probabilita_guasto_8 = models.FloatField(default=0.10)
+    probabilita_guasto_9 = models.FloatField(default=0.25)
+    guasto_percent_per_livello = models.JSONField(
+        default=_default_curve_guasto,
+        blank=True,
+        help_text="Probabilita' guasto in percentuale per livello 0..9 (chiavi stringa).",
+    )
+    ripristino_percent_per_livello = models.JSONField(
+        default=_default_curve_zero,
+        blank=True,
+        help_text="Probabilita' ripristino automatico in percentuale per tick per livello 0..9.",
+    )
+    colori_per_livello = models.JSONField(
+        default=_default_colori_livello,
+        blank=True,
+        help_text="Colore HEX per ogni livello 0..9 (es. {'0':'#ffffff',...}).",
+    )
+    supporta_inversione = models.BooleanField(default=True)
+    supporta_espulsione = models.BooleanField(default=True)
+    supporta_direzioni = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Sottosistema nave"
@@ -169,9 +314,23 @@ class EventoNave(SyncableModel, models.Model):
             'Stessa sintassi dei parziali. Es. ["XX9","ZZ(8-9)"]. Valutati dopo la soluzione esatta.'
         ),
     )
+    regole_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Regole avanzate evento in formato JSON (opzionale, editable da staff).",
+    )
     durata_base_secondi = models.PositiveIntegerField(
         default=20,
         help_text="Tempo di countdown a DEFCON 0; ridotto man mano che la gravita' sale.",
+    )
+    durata_tick = models.CharField(
+        max_length=16,
+        default="4",
+        help_text=(
+            'Durata evento in tick: "N", "A-B", "-N" o "-". '
+            '-N: persiste e precipita se nessun ST entro N tick. '
+            '-: persiste finche non arriva ST.'
+        ),
     )
     peso_random = models.PositiveIntegerField(
         default=10,
@@ -279,6 +438,10 @@ class StatoAllertaPilot(SyncableModel, models.Model):
     tempo_risoluzione_secondi = models.PositiveIntegerField(
         default=20,
         help_text="Durata countdown (secondi) per risolvere un evento mentre si e' in questo livello.",
+    )
+    probabilita_evento_per_tick = models.FloatField(
+        default=0.15,
+        help_text="Probabilita' 0..1 che a ogni tick venga generato un evento (se non ce n'e' uno attivo).",
     )
     equivale_nave_abbattuta = models.BooleanField(
         default=False,
@@ -400,6 +563,22 @@ class SessioneVolo(SyncableModel, models.Model):
     decollo_idx = models.PositiveIntegerField(default=0)
     atterraggio_idx = models.PositiveIntegerField(default=0)
     next_event_at = models.DateTimeField(null=True, blank=True)
+    tick_secondi = models.PositiveIntegerField(default=5)
+    carburante_massimo = models.FloatField(default=1000.0)
+    carburante_attuale = models.FloatField(default=1000.0)
+    storage_energia_massimo = models.FloatField(default=0.0)
+    storage_energia_attuale = models.FloatField(default=0.0)
+    coeff_rigenerazione_carburante_riposo = models.FloatField(default=1.0)
+    produzione_ultimo_tick = models.FloatField(default=0.0)
+    consumo_ultimo_tick = models.FloatField(default=0.0)
+    distanza_target = models.FloatField(default=1000.0)
+    distanza_percorsa = models.FloatField(default=0.0)
+    crash_reason = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Motivo tecnico della precipitazione (es. defcon_overflow, end_of_energy, manual_abort).",
+    )
 
     class Meta:
         verbose_name = "Sessione di volo"
@@ -415,11 +594,7 @@ class SessioneVolo(SyncableModel, models.Model):
 
     @property
     def is_attiva(self) -> bool:
-        return self.stato in (
-            SESSIONE_STATO_DECOLLO,
-            SESSIONE_STATO_VOLO,
-            SESSIONE_STATO_ATTERRAGGIO,
-        )
+        return self.stato == SESSIONE_STATO_VOLO
 
     @property
     def is_terminata(self) -> bool:
@@ -458,6 +633,13 @@ class EventoAttivoSessione(SyncableModel, models.Model):
         EventoNave, on_delete=models.PROTECT, related_name="istanze"
     )
     deadline_at = models.DateTimeField()
+    ticks_rimanenti = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Tick rimanenti dell'evento; null = durata infinita.",
+    )
+    persiste_fino_st = models.BooleanField(default=False)
+    precipita_a_scadenza = models.BooleanField(default=False)
     esito = models.CharField(
         max_length=16,
         choices=EVENTO_ESITO_CHOICES,
@@ -466,6 +648,20 @@ class EventoAttivoSessione(SyncableModel, models.Model):
     )
     risolto_at = models.DateTimeField(null=True, blank=True)
     codice_inserito = models.CharField(max_length=8, blank=True, default="")
+    direzione_evento = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        choices=[
+            ("", "Nessuna"),
+            ("avanti", "Avanti"),
+            ("indietro", "Indietro"),
+            ("su", "Su"),
+            ("giu", "Giu"),
+            ("destra", "Destra"),
+            ("sinistra", "Sinistra"),
+        ],
+    )
 
     class Meta:
         verbose_name = "Evento attivo"
@@ -526,6 +722,22 @@ class StatoSottosistemaSessione(SyncableModel, models.Model):
     online = models.BooleanField(default=True)
     guasto_at = models.DateTimeField(null=True, blank=True)
     recovery_at = models.DateTimeField(null=True, blank=True)
+    livello_target = models.PositiveSmallIntegerField(default=0)
+    livello_attuale = models.PositiveSmallIntegerField(default=0)
+    invertito = models.BooleanField(default=False)
+    espulso = models.BooleanField(default=False)
+    direzione = models.CharField(
+        max_length=16,
+        default="avanti",
+        choices=[
+            ("avanti", "Avanti"),
+            ("indietro", "Indietro"),
+            ("su", "Su"),
+            ("giu", "Giu"),
+            ("destra", "Destra"),
+            ("sinistra", "Sinistra"),
+        ],
+    )
 
     class Meta:
         verbose_name = "Stato sottosistema in sessione"
@@ -614,3 +826,32 @@ class PilotConsoleLoginTicket(SyncableModel, models.Model):
     @property
     def scaduto(self) -> bool:
         return timezone.now() >= self.expires_at
+
+
+class PilotRuntimeConfig(models.Model):
+    """
+    Config runtime singleton per worker tick.
+    """
+
+    singleton_id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    tick_enabled = models.BooleanField(default=False)
+    tick_interval_secondi = models.FloatField(default=5.0)
+    tick_last_heartbeat = models.DateTimeField(null=True, blank=True)
+    login_required_console = models.BooleanField(
+        default=False,
+        help_text="Se attivo, la console richiede login ticket/QR. Default disattivo (utile in dev).",
+    )
+    alarm_audio_enabled = models.BooleanField(
+        default=False,
+        help_text="Abilita beep allarme lato console quando ci sono sottosistemi critici con tick attivo.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Runtime pilotaggio"
+        verbose_name_plural = "Runtime pilotaggio"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(singleton_id=1)
+        return obj

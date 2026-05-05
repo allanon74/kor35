@@ -15,6 +15,7 @@ from .models import (
     EventoNave,
     IntensitaComando,
     PilotConsoleToken,
+    PilotRuntimeConfig,
     SequenzaVolo,
     SessioneVolo,
     SottosistemaNave,
@@ -40,6 +41,29 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
             "descrizione",
             "durata_ripristino_secondi",
             "attivo",
+            "gruppo",
+            "ordine",
+            "tipo",
+            "coeff_produzione",
+            "coeff_consumo_energia",
+            "coeff_consumo_carburante",
+            "coeff_effetto_speciale",
+            "rampa_livelli_per_tick",
+            "capacita_storage",
+            "coeff_ricarica_storage",
+            "capacita_carburante",
+            "effetti_guasto_json",
+            "effetti_inversione_json",
+            "effetti_espulsione_json",
+            "probabilita_guasto_7",
+            "probabilita_guasto_8",
+            "probabilita_guasto_9",
+            "guasto_percent_per_livello",
+            "ripristino_percent_per_livello",
+            "colori_per_livello",
+            "supporta_inversione",
+            "supporta_espulsione",
+            "supporta_direzioni",
             "stato_qr",
         ]
         read_only_fields = ["id", "stato_qr"]
@@ -90,13 +114,33 @@ class EventoNaveSerializer(serializers.ModelSerializer):
             "codice_soluzione_esatta",
             "codici_soluzione_parziale",
             "codici_precipizio",
+            "regole_json",
             "durata_base_secondi",
+            "durata_tick",
             "peso_random",
             "sottosistema",
             "sottosistema_codice",
             "attivo",
         ]
         read_only_fields = ["id", "sottosistema_codice"]
+
+    def validate_durata_tick(self, value):
+        raw = str(value or "").strip()
+        if not raw:
+            raise serializers.ValidationError("Inserisci una durata in tick.")
+        import re
+        if not re.fullmatch(r"(\d+|\d+-\d+|-\d+|-)", raw):
+            raise serializers.ValidationError('Formato valido: N, A-B, -N oppure -')
+        if "-" in raw and raw not in ("-",) and raw.startswith("-"):
+            if int(raw[1:]) <= 0:
+                raise serializers.ValidationError("Nel formato -N, N deve essere > 0.")
+        if "-" in raw and not raw.startswith("-"):
+            a, b = raw.split("-", 1)
+            if int(a) <= 0 or int(b) <= 0 or int(a) > int(b):
+                raise serializers.ValidationError("Nel formato A-B servono A,B > 0 e A <= B.")
+        if raw.isdigit() and int(raw) <= 0:
+            raise serializers.ValidationError("La durata numerica deve essere > 0.")
+        return raw
 
 
 class SequenzaVoloSerializer(serializers.ModelSerializer):
@@ -117,6 +161,7 @@ class StatoAllertaPilotSerializer(serializers.ModelSerializer):
             "frequenza_evento_min_sec",
             "frequenza_evento_max_sec",
             "tempo_risoluzione_secondi",
+            "probabilita_evento_per_tick",
             "equivale_nave_abbattuta",
         ]
         read_only_fields = ["id"]
@@ -159,19 +204,51 @@ class StatoAllertaPilotPublicSerializer(serializers.ModelSerializer):
 
 
 class StatoSottosistemaRuntimeSerializer(serializers.ModelSerializer):
+    sottosistema_id = serializers.UUIDField(source="sottosistema.id", read_only=True)
     codice = serializers.CharField(source="sottosistema.codice", read_only=True)
     nome = serializers.CharField(source="sottosistema.nome", read_only=True)
+    tipo = serializers.CharField(source="sottosistema.tipo", read_only=True)
+    supporta_direzioni = serializers.BooleanField(
+        source="sottosistema.supporta_direzioni", read_only=True
+    )
+    supporta_inversione = serializers.BooleanField(
+        source="sottosistema.supporta_inversione", read_only=True
+    )
+    supporta_espulsione = serializers.BooleanField(
+        source="sottosistema.supporta_espulsione", read_only=True
+    )
+    colore_livello_attuale = serializers.SerializerMethodField()
+    durata_ripristino_secondi = serializers.IntegerField(
+        source="sottosistema.durata_ripristino_secondi", read_only=True
+    )
 
     class Meta:
         model = StatoSottosistemaSessione
         fields = [
             "id",
+            "sottosistema_id",
             "codice",
             "nome",
+            "tipo",
+            "supporta_direzioni",
+            "supporta_inversione",
+            "supporta_espulsione",
+            "colore_livello_attuale",
             "online",
             "guasto_at",
             "recovery_at",
+            "livello_target",
+            "livello_attuale",
+            "invertito",
+            "espulso",
+            "direzione",
+            "durata_ripristino_secondi",
         ]
+
+    def get_colore_livello_attuale(self, obj):
+        livello = int(obj.livello_attuale or 0)
+        colori = obj.sottosistema.colori_per_livello or {}
+        return str(colori.get(str(livello)) or "")
 
 
 class EventoAttivoSerializer(serializers.ModelSerializer):
@@ -185,8 +262,12 @@ class EventoAttivoSerializer(serializers.ModelSerializer):
             "nome",
             "descrizione",
             "deadline_at",
+            "ticks_rimanenti",
+            "persiste_fino_st",
+            "precipita_a_scadenza",
             "esito",
             "codice_inserito",
+            "direzione_evento",
             "risolto_at",
         ]
 
@@ -234,6 +315,17 @@ class SessioneVoloSerializer(serializers.ModelSerializer):
             "prefettura_arrivo",
             "partenza_nome",
             "arrivo_nome",
+            "tick_secondi",
+            "carburante_massimo",
+            "carburante_attuale",
+            "storage_energia_massimo",
+            "storage_energia_attuale",
+            "coeff_rigenerazione_carburante_riposo",
+            "produzione_ultimo_tick",
+            "consumo_ultimo_tick",
+            "distanza_target",
+            "distanza_percorsa",
+            "crash_reason",
         ]
         read_only_fields = fields
 
@@ -243,3 +335,17 @@ class PilotConsoleTokenSerializer(serializers.ModelSerializer):
         model = PilotConsoleToken
         fields = ["id", "token", "pilota", "created_at", "revocato_at"]
         read_only_fields = fields
+
+
+class PilotRuntimeConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PilotRuntimeConfig
+        fields = [
+            "tick_enabled",
+            "tick_interval_secondi",
+            "tick_last_heartbeat",
+            "login_required_console",
+            "alarm_audio_enabled",
+            "updated_at",
+        ]
+        read_only_fields = ["tick_last_heartbeat", "updated_at"]

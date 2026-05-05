@@ -40,3 +40,26 @@ wsl_pi_require_stack_dir
 
 echo "Stato stack [$WSL_PI_ENV_PROFILE] in $WSL_PI_STACK_DIR"
 wsl_pi_compose ps "${STATUS_EXTRA[@]}"
+
+echo ""
+echo "Diagnostica pilot_tick:"
+if wsl_pi_compose ps --services --filter status=running | rg "^pilot_tick$" >/dev/null 2>&1; then
+  echo "- servizio pilot_tick: RUNNING"
+else
+  echo "- servizio pilot_tick: NON RUNNING"
+fi
+
+if wsl_pi_compose ps --services --filter status=running | rg "^backend$" >/dev/null 2>&1; then
+  runtime_json="$(wsl_pi_compose exec -T backend python manage.py shell -c "import json; from django.utils import timezone; from pilotaggio.models import PilotRuntimeConfig; c=PilotRuntimeConfig.get_solo(); hb=c.tick_last_heartbeat; alive=False; delta=None; interval=float(c.tick_interval_secondi or 5.0); 
+if hb is not None:
+    delta=(timezone.now()-hb).total_seconds();
+    alive = delta <= max(8.0, interval*2.5);
+print(json.dumps({'tick_enabled': bool(c.tick_enabled), 'interval': interval, 'last_heartbeat': hb.isoformat() if hb else None, 'seconds_since_heartbeat': delta, 'alive': alive, 'login_required_console': bool(c.login_required_console)}))" 2>/dev/null || true)"
+  if [ -n "${runtime_json:-}" ]; then
+    echo "- runtime config: $runtime_json"
+  else
+    echo "- runtime config: non disponibile (backend non pronto?)"
+  fi
+else
+  echo "- backend non running: impossibile leggere heartbeat runtime"
+fi

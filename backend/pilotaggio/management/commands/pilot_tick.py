@@ -17,7 +17,9 @@ from typing import Optional
 from django.core.management.base import BaseCommand
 
 from pilotaggio.engine import tick_sessione
-from pilotaggio.models import SessioneVolo
+from django.utils import timezone
+
+from pilotaggio.models import PilotRuntimeConfig, SessioneVolo
 
 
 class Command(BaseCommand):
@@ -39,21 +41,44 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         loop = options["loop"]
-        interval = max(0.5, float(options["interval"]))
+        fallback_interval = max(0.5, float(options["interval"]))
         max_iter = int(options["max_iterations"] or 0)
+        last_interval: Optional[float] = None
 
         iterazione = 0
         while True:
             iterazione += 1
+            runtime = PilotRuntimeConfig.get_solo()
+            current_interval = max(
+                0.5, float(runtime.tick_interval_secondi or fallback_interval)
+            )
+            if loop and last_interval is not None and abs(current_interval - last_interval) > 1e-9:
+                self.stdout.write(
+                    f"[pilot_tick] interval changed: {last_interval:.3f}s -> {current_interval:.3f}s"
+                )
+            last_interval = current_interval
+            runtime.tick_last_heartbeat = timezone.now()
+            runtime.save(update_fields=["tick_last_heartbeat", "updated_at"])
+
+            if not runtime.tick_enabled:
+                if not loop:
+                    self.stdout.write("Tick disabilitato da runtime config.")
+                    return
+                time.sleep(current_interval)
+                continue
+
             attive = SessioneVolo.objects.exclude(stato__in=["arrivata", "crashed"])
             for sessione in attive:
                 try:
                     tick_sessione(sessione)
                 except Exception as exc:  # pragma: no cover - log informativo
                     self.stderr.write(self.style.ERROR(f"Tick errore {sessione.pk}: {exc}"))
+            if not attive.exists():
+                runtime.tick_enabled = False
+                runtime.save(update_fields=["tick_enabled", "updated_at"])
             if not loop:
                 self.stdout.write(self.style.SUCCESS(f"Tick eseguito ({attive.count()} sessioni)."))
                 return
             if max_iter and iterazione >= max_iter:
                 return
-            time.sleep(interval)
+            time.sleep(current_interval)
