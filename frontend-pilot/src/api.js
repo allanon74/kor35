@@ -77,6 +77,7 @@ export const api = {
   subsystemSet: (payload) => request('/api/pilot/session/subsystem-set/', {
     method: 'POST', body: payload,
   }),
+  emergencyLanding: () => request('/api/pilot/session/emergency-landing/', { method: 'POST' }),
   abort: () => request('/api/pilot/session/abort/', { method: 'POST' }),
   history: () => request('/api/pilot/session/history/'),
   tickStatus: () => request('/api/pilot/runtime/tick-status/'),

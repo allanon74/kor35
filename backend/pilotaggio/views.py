@@ -54,6 +54,7 @@ from .models import (
     PilotConsoleToken,
     PilotRuntimeConfig,
     PilotConsoleLoginTicket,
+    SESSIONE_STATO_ARRIVATA,
     SESSIONE_STATO_CRASHED,
     SESSIONE_STATO_IDLE,
     SESSIONE_STATO_VOLO,
@@ -86,6 +87,7 @@ from .serializers import (
 SIGLA_PILOTAGGIO = "0PI"
 SIGLA_SABOTAGGIO = "0SA"
 SIGLA_RIPARAZIONE = "0RI"
+RIGENERAZIONE_CARBURANTE_AL_MINUTO = 100.0
 
 
 def _personaggio_da_qr(qr: QrCode) -> Optional[Personaggio]:
@@ -182,6 +184,19 @@ def _disable_tick_if_no_active_sessions() -> None:
     if cfg.tick_enabled:
         cfg.tick_enabled = False
         cfg.save(update_fields=["tick_enabled", "updated_at"])
+
+
+def _calcola_carburante_con_rigenerazione(
+    base_carburante: float, carburante_massimo: float, riferimento_at, now
+) -> float:
+    if riferimento_at is None:
+        return max(0.0, min(float(carburante_massimo or 0.0), float(base_carburante or 0.0)))
+    elapsed_sec = max(0.0, float((now - riferimento_at).total_seconds()))
+    regen = (elapsed_sec / 60.0) * RIGENERAZIONE_CARBURANTE_AL_MINUTO
+    return max(
+        0.0,
+        min(float(carburante_massimo or 0.0), float(base_carburante or 0.0) + regen),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -634,6 +649,7 @@ class PilotSessionStartView(APIView):
             )
 
         distanza_target = random.randint(1000, 10000)
+        now = timezone.now()
         capacita_serbatoi = float(
             SottosistemaNave.objects.filter(attivo=True, tipo="serbatoio").aggregate(
                 total=Sum("capacita_carburante")
@@ -646,9 +662,29 @@ class PilotSessionStartView(APIView):
             )["total"]
             or 0.0
         )
+        carburante_max_target = max(0.0, capacita_serbatoi or 0.0) or 1000.0
 
         with transaction.atomic():
             if attiva is None:
+                precedente = (
+                    SessioneVolo.objects.filter(pilota=pilota).order_by("-created_at").first()
+                )
+                last_login = (
+                    PilotConsoleToken.objects.filter(pilota=pilota)
+                    .order_by("-created_at")
+                    .values_list("created_at", flat=True)
+                    .first()
+                )
+                riferimento = None
+                base_carburante = carburante_max_target
+                if precedente is not None:
+                    riferimento = precedente.ended_at or precedente.updated_at or precedente.created_at
+                    base_carburante = float(precedente.carburante_attuale or carburante_max_target)
+                if last_login is not None:
+                    riferimento = max(riferimento, last_login) if riferimento is not None else last_login
+                carburante_attuale = _calcola_carburante_con_rigenerazione(
+                    base_carburante, carburante_max_target, riferimento, now
+                )
                 attiva = SessioneVolo.objects.create(
                     pilota=pilota,
                     prefettura_partenza=partenza,
@@ -658,8 +694,8 @@ class PilotSessionStartView(APIView):
                     defcon=0,
                     distanza_target=float(distanza_target),
                     distanza_percorsa=0.0,
-                    carburante_massimo=max(0.0, capacita_serbatoi or 0.0) or 1000.0,
-                    carburante_attuale=max(0.0, capacita_serbatoi or 0.0) or 1000.0,
+                    carburante_massimo=carburante_max_target,
+                    carburante_attuale=carburante_attuale,
                     storage_energia_massimo=max(0.0, capacita_batterie),
                     storage_energia_attuale=max(0.0, capacita_batterie),
                     crash_reason="",
@@ -672,13 +708,27 @@ class PilotSessionStartView(APIView):
                 attiva.defcon = 0
                 attiva.distanza_target = float(distanza_target)
                 attiva.distanza_percorsa = 0.0
-                attiva.carburante_massimo = max(0.0, capacita_serbatoi or 0.0) or 1000.0
-                attiva.carburante_attuale = max(0.0, capacita_serbatoi or 0.0) or 1000.0
+                riferimento = attiva.ended_at or attiva.updated_at or attiva.created_at
+                last_login = (
+                    PilotConsoleToken.objects.filter(pilota=pilota)
+                    .order_by("-created_at")
+                    .values_list("created_at", flat=True)
+                    .first()
+                )
+                if last_login is not None:
+                    riferimento = max(riferimento, last_login) if riferimento is not None else last_login
+                attiva.carburante_massimo = carburante_max_target
+                attiva.carburante_attuale = _calcola_carburante_con_rigenerazione(
+                    float(attiva.carburante_attuale or 0.0),
+                    carburante_max_target,
+                    riferimento,
+                    now,
+                )
                 attiva.storage_energia_massimo = max(0.0, capacita_batterie)
                 attiva.storage_energia_attuale = max(0.0, capacita_batterie)
                 attiva.crash_reason = ""
                 attiva.save()
-            attiva.started_at = timezone.now()
+            attiva.started_at = now
             attiva.save(update_fields=["started_at", "crash_reason", "updated_at"])
             _ensure_runtime_subsystems(attiva)
             _ensure_tick_enabled()
@@ -795,6 +845,48 @@ class PilotSessionAbortView(APIView):
         sessione.ended_at = timezone.now()
         sessione.crash_reason = "manual_abort"
         sessione.save(update_fields=["stato", "ended_at", "crash_reason", "updated_at"])
+        _disable_tick_if_no_active_sessions()
+        return Response(_build_state_payload(sessione, pilota))
+
+
+class PilotSessionEmergencyLandingView(APIView):
+    """
+    POST /api/pilot/session/emergency-landing/
+    Atterraggio immediato se il motore principale e' a livello 0.
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        pilota = get_pilot_from_request(request)
+        sessione = (
+            SessioneVolo.objects.filter(pilota=pilota)
+            .exclude(stato__in=["arrivata", "crashed"])
+            .order_by("-created_at")
+            .first()
+        )
+        if sessione is None:
+            return Response({"error": "Nessuna sessione attiva."}, status=status.HTTP_400_BAD_REQUEST)
+
+        motore = (
+            StatoSottosistemaSessione.objects.select_related("sottosistema")
+            .filter(sessione=sessione, sottosistema__tipo="motore")
+            .order_by("sottosistema__ordine", "sottosistema__codice")
+            .first()
+        )
+        if motore is None:
+            return Response({"error": "Motore principale non configurato."}, status=status.HTTP_400_BAD_REQUEST)
+        if int(motore.livello_target or 0) != 0:
+            return Response(
+                {"error": "Atterraggio di emergenza disponibile solo con motore principale a 0."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sessione.stato = SESSIONE_STATO_ARRIVATA
+        sessione.ended_at = timezone.now()
+        sessione.distanza_percorsa = float(sessione.distanza_target or sessione.distanza_percorsa or 0.0)
+        sessione.save(update_fields=["stato", "ended_at", "distanza_percorsa", "updated_at"])
         _disable_tick_if_no_active_sessions()
         return Response(_build_state_payload(sessione, pilota))
 

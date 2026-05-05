@@ -152,20 +152,23 @@ function Subsystems({ sottosistemi, energia }) {
   return (
     <div className="subsys-list">
       {sottosistemi.map((s) => (
-        <div key={s.id} className={`subsys ${s.online ? 'online' : 'offline'}`}>
+        <div
+          key={s.id}
+          className={`subsys ${s.online ? 'online' : 'offline'} ${!s.online ? 'fault-pulse' : ''}`}
+          style={s.online && s.colore_livello_attuale ? { background: s.colore_livello_attuale } : undefined}
+        >
           <span>{s.nome}</span>
-          <div style={{ fontSize: '0.7rem', marginTop: '0.2rem' }}>
+          <div className="subsys-mid">
             {String(s.tipo || '').toLowerCase() === 'batteria' ? (
               <div>
-                Capacita residua: {Math.round(Number(energia?.storage_attuale || 0))} / {Math.round(Number(energia?.storage_massimo || 0))}
+                {Math.round(Number(energia?.storage_attuale || 0))} / {Math.round(Number(energia?.storage_massimo || 0))}
               </div>
             ) : null}
             {String(s.tipo || '').toLowerCase() === 'serbatoio' ? (
               <div>
-                Carburante residuo: {Math.round(Number(energia?.carburante_attuale || 0))} / {Math.round(Number(energia?.carburante_massimo || 0))}
+                {Math.round(Number(energia?.carburante_attuale || 0))} / {Math.round(Number(energia?.carburante_massimo || 0))}
               </div>
             ) : null}
-            {s.online ? 'ONLINE' : 'GUASTO'}
             {!s.online && s.recovery_at ? (() => {
               const remain = Math.max(0, Math.ceil((new Date(s.recovery_at).getTime() - now) / 1000));
               const total = Math.max(1, Number(s.durata_ripristino_secondi || 60));
@@ -180,6 +183,7 @@ function Subsystems({ sottosistemi, energia }) {
               );
             })() : null}
           </div>
+          <div className="subsys-status">{s.online ? 'ONLINE' : 'GUASTO'}</div>
         </div>
       ))}
     </div>
@@ -192,7 +196,7 @@ function Subsystems({ sottosistemi, energia }) {
  */
 export default function Cockpit({
   state, online,
-  onAbort, onLogout, mode = 'both', onSubsystemSet,
+  onAbort, onEmergencyLanding, onLogout, mode = 'both', onSubsystemSet,
   error, commandStatus,
 }) {
   const sessione = state.sessione || {};
@@ -430,6 +434,14 @@ export default function Cockpit({
               </div>
             </div>
           </div>
+          <div className="status-legend" aria-label="Legenda livelli sottosistemi">
+            <span><i style={{ background: '#ffffff' }} />OFF</span>
+            <span><i style={{ background: '#8a2be2' }} />L1</span>
+            <span><i style={{ background: '#2f8cff' }} />L3</span>
+            <span><i style={{ background: '#9ccc65' }} />L5</span>
+            <span><i style={{ background: '#ffb74d' }} />L7</span>
+            <span><i style={{ background: '#ff3b30' }} />L9</span>
+          </div>
           <h3>Stato Sottosistemi</h3>
           <Subsystems sottosistemi={state.sottosistemi} energia={energia} />
         </div>
@@ -568,6 +580,20 @@ export default function Cockpit({
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn primary" onClick={saveSubsystem}>Invia comando</button>
+                {(selectedSubsystem.tipo === 'motore' && Number(editingLevel || 0) === 0) ? (
+                  <button
+                    type="button"
+                    className="btn danger"
+                    onClick={async () => {
+                      if (!onEmergencyLanding) return;
+                      if (!window.confirm("Confermi l'atterraggio di emergenza?")) return;
+                      await onEmergencyLanding();
+                      setSelectedSubsystem(null);
+                    }}
+                  >
+                    Atterraggio di emergenza
+                  </button>
+                ) : null}
                 <button type="button" className="btn" onClick={() => setSelectedSubsystem(null)}>Chiudi</button>
               </div>
             </div>

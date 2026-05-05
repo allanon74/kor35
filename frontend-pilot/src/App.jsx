@@ -135,6 +135,20 @@ export default function App() {
     }
   }, []);
 
+  const handleEmergencyLanding = useCallback(async () => {
+    setError('');
+    try {
+      const res = await api.emergencyLanding();
+      setState(res);
+      saveCachedState(res);
+      setCommandStatus('Atterraggio di emergenza eseguito.');
+      await refreshState();
+    } catch (e) {
+      setError(e.message || "Errore atterraggio d'emergenza.");
+      setCommandStatus(`Errore atterraggio emergenza: ${e.message || 'non riuscito'}`);
+    }
+  }, [refreshState]);
+
   const handleSubsystemSet = useCallback(async (payload) => {
     setError('');
     setCommandStatus('Invio comando in corso...');
@@ -222,8 +236,8 @@ export default function App() {
         </div>
       ) : null}
       <main>
-        <div className="console-viewport-wrap">
-          <div className="console-viewport-fixed">
+        <div className={`console-viewport-wrap ${SCREEN_MODE === 'control' ? 'is-fixed' : ''}`}>
+          <div className={`console-viewport-fixed ${SCREEN_MODE === 'control' ? 'is-fixed' : ''}`}>
             {(!state || !state.sessione || state.sessione.stato === 'idle') ? (
               <IdleScreen
                 prefetture={prefetture}
@@ -236,6 +250,7 @@ export default function App() {
                 state={state}
                 online={online}
                 onAbort={handleAbort}
+                onEmergencyLanding={handleEmergencyLanding}
                 onLogout={handleLogout}
                 tentativi={tentativi}
                 mode={SCREEN_MODE}

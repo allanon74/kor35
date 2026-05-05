@@ -47,6 +47,7 @@ urlpatterns = [
     path("session/command/", views.PilotSessionCommandView.as_view(), name="pilot-session-command"),
     path("session/subsystem-set/", views.PilotSubsystemSetView.as_view(), name="pilot-session-subsystem-set"),
     path("session/abort/", views.PilotSessionAbortView.as_view(), name="pilot-session-abort"),
+    path("session/emergency-landing/", views.PilotSessionEmergencyLandingView.as_view(), name="pilot-session-emergency-landing"),
     path("session/history/", views.PilotSessionHistoryView.as_view(), name="pilot-session-history"),
     path("runtime/tick-status/", views.PilotTickRuntimeStatusView.as_view(), name="pilot-runtime-tick-status"),
     path("runtime/tick-control/", views.PilotTickRuntimeControlView.as_view(), name="pilot-runtime-tick-control"),
