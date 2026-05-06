@@ -2865,6 +2865,35 @@ class Oggetto(A_vista):
             return False
         return timezone.now() < self.data_fine_attivazione
 
+
+def aura_fonte_mattoni_per_infusione(infusione):
+    """Punteggio-aura la cui palette di Mattone definisce i componenti dell'infusione."""
+    if getattr(infusione, "aura_infusione_id", None):
+        return infusione.aura_infusione
+    return infusione.aura_richiesta
+
+
+def aura_fonte_mattoni_per_proposta(proposta):
+    """
+    Aura da usare per divieti/obblighi di mattone sulle proposte.
+    Cerimoniali: None (nessuna tessitura mattoni).
+    """
+    if proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
+        return None
+    if proposta.tipo == TIPO_PROPOSTA_INFUSIONE:
+        return proposta.aura_infusione or proposta.aura
+    return proposta.aura
+
+
+def aura_fonte_mattoni_per_tecnica(tecnica):
+    """Aura palette mattoni per catalogo tessiture / infusioni / cerimoniali."""
+    if isinstance(tecnica, Cerimoniale):
+        return None
+    if isinstance(tecnica, Infusione):
+        return aura_fonte_mattoni_per_infusione(tecnica)
+    return tecnica.aura_richiesta
+
+
 class Personaggio(Inventario):
     proprietario = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     tipologia = models.ForeignKey(TipologiaPersonaggio, on_delete=models.PROTECT, related_name="personaggi", default=get_default_tipologia)
@@ -3882,38 +3911,47 @@ class Personaggio(Inventario):
     def valida_acquisto_tecnica(self, t):
         if not t.aura_richiesta: return False, "Aura mancante."
         
-        # 1. Controllo Livello Aura
+        # 1. Controllo Livello Aura (sempre sull'aura richiesta della scheda tecnica)
         if t.livello > self.get_valore_aura_effettivo(t.aura_richiesta): 
             return False, "Livello tecnica superiore al valore Aura."
         
-        # 2. Controllo Specifico Cerimoniali (Coralità)
+        # 2. Cerimoniali: coralità, senza vincoli sui mattoni / caratteristiche dei componenti
         if isinstance(t, Cerimoniale):
-            # Recupera il valore della statistica 'CCO' (Coralità)
             valore_cco = self.get_valore_statistica('CCO')
             if valore_cco < t.livello:
                 return False, f"Coralità insufficiente per questo cerimoniale (Serve {t.livello}, hai {valore_cco})."
-        
-        # 3. Controllo Componenti (Mattoni)
+            return True, "OK"
+
+        # 3. Tessiture / Infusioni: componenti vs caratteristiche del PG
         base = self.caratteristiche_base
-        for comp in t.componenti.select_related('caratteristica').all():
+        componenti = list(t.componenti.select_related('caratteristica').all())
+        comp_vals = {c.caratteristica_id: c.valore for c in componenti}
+        for comp in componenti:
             nome_car = comp.caratteristica.nome
             val_richiesto = comp.valore
             val_posseduto = base.get(nome_car, 0)
             if val_richiesto > val_posseduto: 
                 return False, f"Requisito {nome_car} non soddisfatto (Serve {val_richiesto}, hai {val_posseduto})."
 
-        # 4. Controllo Modelli Aura (esistente)
-        modello = self.modelli_aura.filter(aura=t.aura_richiesta).first()
-        if modello:
-            caratteristiche_usate_ids = set(t.componenti.values_list('caratteristica_id', flat=True))
-            ids_proibiti = set(modello.mattoni_proibiti.values_list('id', flat=True))
-            if ids_proibiti:
-                mattoni_violati = Mattone.objects.filter(id__in=ids_proibiti, aura=t.aura_richiesta, caratteristica_associata__id__in=caratteristiche_usate_ids)
-                if mattoni_violati.exists(): return False, f"Usa combinazioni proibite dal modello: {', '.join([m.nome for m in mattoni_violati])}."
-            mattoni_obbligatori = modello.mattoni_obbligatori.all()
-            if mattoni_obbligatori.exists():
-                for m_obb in mattoni_obbligatori:
-                    if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids: return False, f"Manca componente obbligatorio: {m_obb.nome}."
+        # 4. Modelli Aura su palette mattoni (aura tessitura o aura infusione secondaria)
+        palette = aura_fonte_mattoni_per_tecnica(t)
+        if palette:
+            modello = self.modelli_aura.filter(aura=palette).first()
+            if modello:
+                caratteristiche_usate_ids = {cid for cid, v in comp_vals.items() if v > 0}
+                ids_proibiti = set(modello.mattoni_proibiti.values_list('id', flat=True))
+                if ids_proibiti:
+                    mattoni_violati = Mattone.objects.filter(
+                        id__in=ids_proibiti, aura=palette,
+                        caratteristica_associata__id__in=caratteristiche_usate_ids
+                    )
+                    if mattoni_violati.exists():
+                        return False, f"Usa combinazioni proibite dal modello: {', '.join([m.nome for m in mattoni_violati])}."
+                mattoni_obbligatori = modello.mattoni_obbligatori.all()
+                if mattoni_obbligatori.exists():
+                    for m_obb in mattoni_obbligatori:
+                        if comp_vals.get(m_obb.caratteristica_associata_id, 0) < 1:
+                            return False, f"Manca componente obbligatorio: {m_obb.nome}."
         
         return True, "OK"
 

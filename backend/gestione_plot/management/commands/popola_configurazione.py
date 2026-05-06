@@ -75,6 +75,23 @@ class Command(BaseCommand):
             
             if created:
                 self.stdout.write(self.style.SUCCESS(f'✓ Creato link {social.get_tipo_display()}: {social.nome_visualizzato}'))
+                continue
+
+            # Manteniamo i dati consistenti anche quando i record esistono già.
+            # In particolare evita il caso in cui il link WhatsApp punti per errore a Instagram.
+            updated_fields = []
+            for field in ['nome_visualizzato', 'url', 'descrizione', 'ordine']:
+                if getattr(social, field) != social_data[field]:
+                    setattr(social, field, social_data[field])
+                    updated_fields.append(field)
+
+            if updated_fields:
+                social.save(update_fields=updated_fields + ['updated_at'])
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f'↻ Aggiornato link {social.get_tipo_display()} (campi: {", ".join(updated_fields)})'
+                    )
+                )
             else:
                 self.stdout.write(self.style.WARNING(f'→ Link {social.get_tipo_display()} già esistente'))
         

@@ -72,6 +72,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const [availableInfusionAuras, setAvailableInfusionAuras] = useState([]); 
     const [availableCharacteristics, setAvailableCharacteristics] = useState([]);
     const [availableBricks, setAvailableBricks] = useState([]); 
+    const [obbligatorieCaratteristicaIds, setObbligatorieCaratteristicaIds] = useState([]);
     const [availableClassi, setAvailableClassi] = useState([]);   
     
     const [isLoadingData, setIsLoadingData] = useState(true);
@@ -139,12 +140,16 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     useEffect(() => {
         if (!auraIdForBricks) {
             setAvailableBricks([]);
+            setObbligatorieCaratteristicaIds([]);
             return;
         }
-        getMattoniAura(auraIdForBricks)
-            .then(data => setAvailableBricks(data || []))
+        getMattoniAura(auraIdForBricks, selectedCharacterId || undefined)
+            .then(({ mattoni, obbligatorie_caratteristica_ids }) => {
+                setAvailableBricks(mattoni || []);
+                setObbligatorieCaratteristicaIds(obbligatorie_caratteristica_ids || []);
+            })
             .catch(err => console.error("Errore recupero mattoni:", err));
-    }, [auraIdForBricks]);
+    }, [auraIdForBricks, selectedCharacterId]);
 
     // 3. LOGICA INFUSIONI (Tipi e Aure Secondarie)
     useEffect(() => {
@@ -181,6 +186,18 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     }, [isCerimoniale, auraLimit, char]);
 
     const estimatedCost = currentTotalCount * (isCerimoniale ? 100 : 10);
+
+    const paletteAuraNumericId = auraIdForBricks ? Number(auraIdForBricks) : null;
+    const paletteAuraMeta =
+        paletteAuraNumericId && allPunteggiCache.length > 0
+            ? allPunteggiCache.find((p) => p.id === paletteAuraNumericId)
+            : null;
+    const needsAuraModelSelection = Boolean(
+        !isCerimoniale &&
+            paletteAuraMeta?.has_models &&
+            char?.modelli_aura &&
+            !char.modelli_aura.some((m) => Number(m.aura) === paletteAuraNumericId),
+    );
 
     // --- HANDLERS ---
     const handleIncrement = (charId, charName) => {
@@ -262,6 +279,21 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
         setError(''); 
         if (!name) return setError("Nome della tecnica obbligatorio.");
         if (!selectedAuraId) return setError("Seleziona un'Aura di riferimento.");
+        if (send && needsAuraModelSelection) {
+            return setError(
+                "Per questa aura devi prima scegliere un modello dalla scheda personaggio prima di inviare la proposta.",
+            );
+        }
+        if (
+            send &&
+            !isCerimoniale &&
+            obbligatorieCaratteristicaIds.length > 0 &&
+            obbligatorieCaratteristicaIds.some((cid) => (componentsMap[cid] || 0) < 1)
+        ) {
+            return setError(
+                "La proposta deve allocare almeno un punto su ogni mattone obbligatorio del tuo modello di aura.",
+            );
+        }
         
         if (isCerimoniale) {
             if (!prerequisiti || !svolgimento || !effetto) {
@@ -336,6 +368,12 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin scrollbar-thumb-gray-700">
                     {error && <div className="p-3 bg-red-900/30 text-red-200 rounded-lg border border-red-800 flex items-center gap-2 animate-pulse"><AlertTriangle size={16}/> {error}</div>}
+                    {needsAuraModelSelection && (
+                        <div className="p-3 bg-amber-900/25 text-amber-100 rounded-lg border border-amber-700/50 flex items-center gap-2 text-sm">
+                            <AlertTriangle size={16} className="shrink-0" />
+                            Per questa aura è richiesto un modello di aura: selezionalo dalla scheda personaggio prima di procedere.
+                        </div>
+                    )}
 
                     {/* Identità e Aura */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -519,6 +557,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                     const count = componentsMap[charId] || 0;
                                     const isCompatible = isCharCompatible(charId);
                                     const pgMaxScore = char.punteggi_base[charName] || 0;
+                                    const isMandatoryBrick = obbligatorieCaratteristicaIds.includes(charId);
 
                                     return (
                                         <div key={item.id} className={`flex items-center justify-between bg-gray-900 p-3 rounded-xl border transition-all duration-300 ${count > 0 ? 'border-indigo-500/60 bg-indigo-500/5 shadow-lg shadow-indigo-900/10' : 'border-gray-700'} ${!isCompatible ? 'opacity-20 pointer-events-none grayscale' : ''}`}>
@@ -528,9 +567,12 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                                     {/* NOME MATTONE IN EVIDENZA */}
                                                     <span className="text-[11px] font-bold truncate text-gray-200" title={brickName}>{brickName}</span>
                                                     {/* SIGLA CARATTERISTICA ASSOCIATA SOTTO */}
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-1 flex-wrap">
                                                         <span className="text-[8px] uppercase text-gray-500 font-black tracking-tighter">{charSigla}</span>
                                                         {!isCerimoniale && <span className="text-[8px] text-gray-600 font-bold">• Max {pgMaxScore}</span>}
+                                                        {isMandatoryBrick && (
+                                                            <span className="text-[7px] uppercase font-black text-rose-400 tracking-tighter">Obbligo modello</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -575,7 +617,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                         {isDraft && (
                             <>
                                 <button onClick={() => handleSaveAction(false)} disabled={isSaving} className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-white rounded-xl text-xs font-black uppercase flex gap-2 items-center transition-all disabled:opacity-50">{isSaving ? <Loader2 className="animate-spin" size={14}/> : <Save size={15}/>} Salva Bozza</button>
-                                <button onClick={() => handleSaveAction(true)} disabled={isSaving || (currentTotalCount === 0 && !isCerimoniale)} className="px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl text-xs font-black uppercase flex gap-2 items-center shadow-lg shadow-green-900/30 transform hover:scale-105">{isSaving ? <Loader2 className="animate-spin" size={14}/> : <Send size={15}/>} Invia allo Staff</button>
+                                <button onClick={() => handleSaveAction(true)} disabled={isSaving || needsAuraModelSelection || (currentTotalCount === 0 && !isCerimoniale)} className="px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-xl text-xs font-black uppercase flex gap-2 items-center shadow-lg shadow-green-900/30 transform hover:scale-105">{isSaving ? <Loader2 className="animate-spin" size={14}/> : <Send size={15}/>} Invia allo Staff</button>
                             </>
                         )}
                         {!isDraft && (

@@ -29,7 +29,8 @@ from .models import (
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_IN_VALUTAZIONE, LetturaMessaggio, PersonaggioLog,
     STATO_TRANSAZIONE_IN_ATTESA, STATO_TRANSAZIONE_ACCETTATA, STATO_TRANSAZIONE_RIFIUTATA, STATO_TRANSAZIONE_CHOICES,
     PropostaTransazione,
-    Gruppo, Messaggio, Tabella, Mattone, 
+    Gruppo, Messaggio, Tabella, Mattone,
+    aura_fonte_mattoni_per_proposta,
     OggettoBase, ForgiaturaInCorso, 
     abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_prerequisito,
@@ -401,14 +402,30 @@ class PunteggioViewSet(viewsets.ModelViewSet):
         
     @action(detail=True, methods=['get'])
     def mattoni(self, request, pk=None):
-        """Restituisce solo i mattoni legati a questa specifica Aura."""
+        """Restituisce i mattoni dell'Aura; con ?personaggio_id= esclude i proibiti dal modello scelto."""
         aura = self.get_object()
-        # Filtriamo i mattoni dell'aura e carichiamo la caratteristica associata
-        mattoni = Mattone.objects.filter(aura=aura).select_related('caratteristica_associata')
-        
-        # Costruiamo una risposta semplice con i dati necessari al frontend
+        mattoni_qs = Mattone.objects.filter(aura=aura).select_related('caratteristica_associata')
+
+        obbligatorie_caratteristica_ids = []
+        personaggio_id = request.query_params.get('personaggio_id')
+        user = getattr(request, 'user', None)
+        if personaggio_id and user and user.is_authenticated:
+            try:
+                pg = Personaggio.objects.get(id=personaggio_id, proprietario=user)
+                modello = pg.modelli_aura.filter(aura=aura).first()
+                if modello:
+                    proibiti_ids = modello.mattoni_proibiti.filter(aura=aura).values_list('id', flat=True)
+                    mattoni_qs = mattoni_qs.exclude(id__in=proibiti_ids)
+                    obbligatorie_caratteristica_ids = list(
+                        modello.mattoni_obbligatori.filter(aura=aura).values_list(
+                            'caratteristica_associata_id', flat=True
+                        )
+                    )
+            except Personaggio.DoesNotExist:
+                pass
+
         data = []
-        for m in mattoni:
+        for m in mattoni_qs.order_by('ordine', 'nome'):
             data.append({
                 'id': m.id,
                 'nome': m.nome,
@@ -418,6 +435,12 @@ class PunteggioViewSet(viewsets.ModelViewSet):
                     'nome': m.caratteristica_associata.nome,
                     'sigla': m.caratteristica_associata.sigla, # Sigla caratteristica (es. MIR)
                 }
+            })
+
+        if personaggio_id and user and user.is_authenticated:
+            return Response({
+                'mattoni': data,
+                'obbligatorie_caratteristica_ids': obbligatorie_caratteristica_ids,
             })
         return Response(data)
 
@@ -777,12 +800,10 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
 
         acquistabili = []
         for infusione in tutte_infusioni:
-            aura_req = infusione.aura_richiesta
-            if aura_req:
-                if aura_req.modelli_definiti.exists():
-                    has_model_selected = personaggio.modelli_aura.filter(aura=aura_req).exists()
-                    if not has_model_selected:
-                        continue
+            aura_palette = infusione.aura_infusione or infusione.aura_richiesta
+            if aura_palette and aura_palette.modelli_definiti.exists():
+                if not personaggio.modelli_aura.filter(aura=aura_palette).exists():
+                    continue
             is_valid, _ = personaggio.valida_acquisto_tecnica(infusione)
             if is_valid:
                 acquistabili.append(infusione)
@@ -2849,51 +2870,77 @@ class PropostaTecnicaViewSet(viewsets.ModelViewSet):
             if valore_cco < livello:
                 return Response({"error": f"Coralità (CCO) insufficiente (Serve {livello}, hai {valore_cco})."}, status=400)
 
-        # CHECK CARATTERISTICHE
-        componenti = proposta.componenti.select_related('caratteristica').all()
-        punteggi_pg = personaggio.caratteristiche_base
-        
-        # Insieme dei mattoni virtuali usati (Aura Proposta + Caratteristica Componente)
-        # Ci serve per i check del Modello Aura
-        caratteristiche_usate_ids = set()
-
-        for comp in componenti:
-            caratt = comp.caratteristica
-            caratteristiche_usate_ids.add(caratt.id)
-            
-            val_richiesto = comp.valore
-            val_posseduto = punteggi_pg.get(caratt.nome, 0)
-            
-            if val_posseduto < val_richiesto:
-                return Response({"error": f"Non hai abbastanza {caratt.nome} per sostenere questa tecnica (Richiesto: {val_richiesto}, Hai: {val_posseduto})."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # CHECK MODELLO AURA
-        modello = personaggio.modelli_aura.filter(aura=proposta.aura).first()
-        if modello:
-            # 1. Mattoni Proibiti
-            # Se esiste un mattone proibito che corrisponde a (Aura Proposta, Caratteristica Usata) -> ERRORE
-            proibiti_ids = set(modello.mattoni_proibiti.values_list('id', flat=True))
-            if proibiti_ids:
-                # Troviamo se tra i componenti c'è una caratteristica che forma un mattone proibito
-                # Un mattone è definito da (aura, caratteristica_associata)
-                # Quindi cerchiamo Mattone where id in proibiti AND aura = proposta.aura AND caratt in usate
-                mattoni_violati = Mattone.objects.filter(
-                    id__in=proibiti_ids,
-                    aura=proposta.aura,
-                    caratteristica_associata__id__in=caratteristiche_usate_ids
+        palette = aura_fonte_mattoni_per_proposta(proposta)
+        if palette and palette.modelli_definiti.exists():
+            if not personaggio.modelli_aura.filter(aura=palette).exists():
+                return Response(
+                    {
+                        "error": (
+                            f"È obbligatorio selezionare un modello di aura per «{palette.nome}» "
+                            "prima di inviare questa proposta."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-                if mattoni_violati.exists():
-                    nomi = ", ".join([m.nome for m in mattoni_violati])
-                    return Response({"error": f"La proposta usa combinazioni (mattoni) proibite dal modello: {nomi}."}, status=status.HTTP_400_BAD_REQUEST)
 
-            # 2. Mattoni Obbligatori
-            # Per ogni mattone obbligatorio, deve esserci la caratteristica corrispondente nella proposta
-            mattoni_obbligatori = modello.mattoni_obbligatori.all()
-            if mattoni_obbligatori.exists():
-                for m_obb in mattoni_obbligatori:
-                    # Se il mattone obbligatorio richiede caratteristica X, la proposta deve avere X nei componenti
-                    if m_obb.caratteristica_associata.id not in caratteristiche_usate_ids:
-                        return Response({"error": f"La proposta manca di un componente obbligatorio: {m_obb.nome} ({m_obb.caratteristica_associata.nome})."}, status=status.HTTP_400_BAD_REQUEST)
+        componenti = list(proposta.componenti.select_related('caratteristica').all())
+        comp_vals = {c.caratteristica_id: c.valore for c in componenti}
+
+        # CHECK CARATTERISTICHE (tessiture / infusioni; mai per cerimoniali)
+        if proposta.tipo in ('TES', 'INF'):
+            punteggi_pg = personaggio.caratteristiche_base
+            for comp in componenti:
+                caratt = comp.caratteristica
+                val_richiesto = comp.valore
+                val_posseduto = punteggi_pg.get(caratt.nome, 0)
+                if val_posseduto < val_richiesto:
+                    return Response(
+                        {
+                            "error": (
+                                f"Non hai abbastanza {caratt.nome} per sostenere questa tecnica "
+                                f"(Richiesto: {val_richiesto}, Hai: {val_posseduto})."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        # CHECK MODELLO AURA (palette mattoni: aura tessitura o aura infusione usata nei componenti)
+        if palette:
+            modello = personaggio.modelli_aura.filter(aura=palette).first()
+            if modello:
+                caratteristiche_usate_ids = {cid for cid, v in comp_vals.items() if v > 0}
+                proibiti_ids = set(modello.mattoni_proibiti.values_list('id', flat=True))
+                if proibiti_ids:
+                    mattoni_violati = Mattone.objects.filter(
+                        id__in=proibiti_ids,
+                        aura=palette,
+                        caratteristica_associata__id__in=caratteristiche_usate_ids,
+                    )
+                    if mattoni_violati.exists():
+                        nomi = ", ".join([m.nome for m in mattoni_violati])
+                        return Response(
+                            {
+                                "error": (
+                                    "La proposta usa combinazioni (mattoni) proibite dal modello: "
+                                    f"{nomi}."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                mattoni_obbligatori = modello.mattoni_obbligatori.all()
+                if mattoni_obbligatori.exists():
+                    for m_obb in mattoni_obbligatori:
+                        if comp_vals.get(m_obb.caratteristica_associata_id, 0) < 1:
+                            return Response(
+                                {
+                                    "error": (
+                                        "La proposta manca di un componente obbligatorio: "
+                                        f"{m_obb.nome} ({m_obb.caratteristica_associata.nome})."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
 
         personaggio.modifica_crediti(-costo_invio, f"Invio proposta {proposta.tipo}: {proposta.nome}")
         proposta.costo_invio_pagato = costo_invio

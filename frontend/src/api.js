@@ -993,11 +993,22 @@ export const getAllPunteggi = async () => {
     });
 };
 
-export const getMattoniAura = async (auraId) => {
-    // Puntiamo all'endpoint corretto che restituisce i mattoni di quella specifica aura
-    return await fetchAuthenticated(`/api/personaggi/api/punteggio/${auraId}/mattoni/`, {
+/**
+ * Mattoni per aura; con personaggioId filtra i proibiti in base al modello di aura scelto dal PG.
+ * Risposta normalizzata: { mattoni, obbligatorie_caratteristica_ids }.
+ */
+export const getMattoniAura = async (auraId, personaggioId = null) => {
+    const q = personaggioId ? `?personaggio_id=${encodeURIComponent(personaggioId)}` : '';
+    const raw = await fetchAuthenticated(`/api/personaggi/api/punteggio/${auraId}/mattoni/${q}`, {
         method: 'GET'
     });
+    if (Array.isArray(raw)) {
+        return { mattoni: raw, obbligatorie_caratteristica_ids: [] };
+    }
+    return {
+        mattoni: raw?.mattoni ?? [],
+        obbligatorie_caratteristica_ids: raw?.obbligatorie_caratteristica_ids ?? [],
+    };
 };
 
 export const getAdminPendingProposalsCount = (onLogout) => {
