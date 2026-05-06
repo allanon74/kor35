@@ -155,6 +155,7 @@ config/docker/nginx-docker/certs_ddns/
 # Config Nginx attiva sul Pi per kor35.ddns.net (generata da ddns.conf.example)
 config/docker/nginx-docker/nginx_conf/ddns.conf
 .edge_sync_state.json
+.runtime-state/
 
 # Omada (mirror/Pi): volumi alla root monorepo, non in repo
 omada_data/

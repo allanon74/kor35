@@ -2,7 +2,7 @@ services:
   db:
     container_name: kor35_devoffice_db
     volumes:
-      - ./nginx-docker/postgres_data:/var/lib/postgresql/data
+      - kor35_devoffice_postgres_data:/var/lib/postgresql/data
 
   redis:
     container_name: kor35_devoffice_redis
@@ -38,3 +38,6 @@ services:
       - ./nginx-docker/react_build_pilot:/usr/share/nginx/pilot
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
+
+volumes:
+  kor35_devoffice_postgres_data:

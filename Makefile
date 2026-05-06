@@ -7,6 +7,8 @@ SYNC_SINCE ?=
 RUN_MIGRATIONS ?= 0
 RUN_PIP_INSTALL ?= 0
 RUN_COLLECTSTATIC ?= 0
+RECREATE_FRONTEND ?= 0
+ALLOW_DB_REINIT ?= 0
 MAKEMIGRATIONS_APP ?=
 COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor35-replica,$(if $(filter prod,$(ENV)),COMPOSE_PROJECT_NAME=kor35-prod,))
 
@@ -22,6 +24,9 @@ help:
 	@echo "    RUN_MIGRATIONS=1   # esegue migrate dopo restart backend/daphne"
 	@echo "    RUN_PIP_INSTALL=1  # esegue pip install -r requirements.txt nel container backend"
 	@echo "    RUN_COLLECTSTATIC=1 # esegue collectstatic nel container backend"
+	@echo "  opzionale up/up-no-build/up-no-static:"
+	@echo "    RECREATE_FRONTEND=1 # forza recreate del servizio frontend (utile dopo reboot)"
+	@echo "    ALLOW_DB_REINIT=1   # override guardrail: consenti ri-init DB se volume manca"
 	@echo ""
 	@echo "Target principali:"
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
@@ -70,15 +75,15 @@ env:
 
 up:
 	@if [ "$(CLEANUP_LEGACY)" = "1" ]; then ./scripts/cleanup_legacy_wsl_stack.sh; fi
-	./scripts/up_wsl_pi_like.sh --env "$(ENV)"
+	./scripts/up_wsl_pi_like.sh --env "$(ENV)" $(if $(filter 1,$(RECREATE_FRONTEND)),--recreate-frontend,) $(if $(filter 1,$(ALLOW_DB_REINIT)),--allow-db-reinit,)
 
 up-no-build:
 	@if [ "$(CLEANUP_LEGACY)" = "1" ]; then ./scripts/cleanup_legacy_wsl_stack.sh; fi
-	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build
+	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build $(if $(filter 1,$(RECREATE_FRONTEND)),--recreate-frontend,) $(if $(filter 1,$(ALLOW_DB_REINIT)),--allow-db-reinit,)
 
 up-no-static:
 	@if [ "$(CLEANUP_LEGACY)" = "1" ]; then ./scripts/cleanup_legacy_wsl_stack.sh; fi
-	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --skip-collectstatic
+	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --skip-collectstatic $(if $(filter 1,$(RECREATE_FRONTEND)),--recreate-frontend,) $(if $(filter 1,$(ALLOW_DB_REINIT)),--allow-db-reinit,)
 
 down:
 	./scripts/down_wsl_pi_like.sh --env "$(ENV)"
