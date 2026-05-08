@@ -327,14 +327,14 @@ EXCLUSIVE_FORMAT_GROUPS = {
     "formula_cura": {
         "entries": [
             {
-                "params": ["pfcura"],
+                "params": ["cura"],
                 "label": "Cura",
-                "extra": {"when": "pfcura > 0", "template": " {pfcura|L}!"},
+                "extra": {"when": "curapf > 1", "template": " {curapf|L}!"},
             }
         ],
         "separator": "/",
         "append_space": True,
-        "suffix": "",
+        "suffix": "!",
     },
     "formula_damage": {
         "entries": [
@@ -361,10 +361,15 @@ EXCLUSIVE_FORMAT_GROUPS = {
     },
 }
 DEFAULT_EXCLUSIVE_FORMULA_GROUP = "formula_prefix"
-DEFAULT_FORMULA_TEMPLATE = (
+DEFAULT_ATTACK_FORMULA_TEMPLATE = (
+    "{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
+    "{formula_source}{formula_status}{formula_cura}{formula_damage}"
+)
+DEFAULT_WEAVE_FORMULA_TEMPLATE = (
     "{formula_type}{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
     "{formula_source}{formula_status}{formula_cura}{formula_damage}"
 )
+DEFAULT_FORMULA_TEMPLATE = DEFAULT_WEAVE_FORMULA_TEMPLATE
 
 
 def _is_truthy_numeric(value):
@@ -434,6 +439,8 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
     active_parts = []
     seen = set()
 
+    source_label_overrides = value_map.get("__formula_source_labels__", {}) if isinstance(value_map, dict) else {}
+
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -449,6 +456,12 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
 
         is_active = any(_is_truthy_numeric(value_map.get(param, 0)) for param in params)
         if is_active and label not in seen:
+            if group_key == "formula_source":
+                for p in params:
+                    override_label = source_label_overrides.get(p)
+                    if override_label:
+                        label = str(override_label).strip()
+                        break
             part = label
 
             # Extra opzionale per entry (dict o lista di dict/stringhe).
@@ -765,6 +778,22 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         if 'caratteristica_associata_valore' in context:
              eval_context['caratt'] = context['caratteristica_associata_valore']
 
+    # Override semantici formula da abilita possedute (sorgente, aura, elemento).
+    if personaggio and hasattr(personaggio, "get_formula_semantic_overrides"):
+        semantic = personaggio.get_formula_semantic_overrides(context or {})
+        if semantic:
+            source_labels = semantic.get("source_labels") or {}
+            if source_labels:
+                eval_context["__formula_source_labels__"] = source_labels
+            aura_display = semantic.get("aura_display")
+            if aura_display:
+                object_context["aura"] = type("AuraDisplay", (), {"nome": aura_display})()
+            if semantic.get("elemento_display_override"):
+                eval_context["elemento_display_override"] = semantic["elemento_display_override"]
+                if context is None:
+                    context = {}
+                context["elemento_display_override"] = semantic["elemento_display_override"]
+
     # Configurazione gruppi esclusivi (override opzionale da context)
     exclusive_groups_config = EXCLUSIVE_FORMAT_GROUPS
     if context and isinstance(context.get('exclusive_groups'), dict):
@@ -842,7 +871,11 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     if context:
         if context.get('elemento'):
             elem_obj = context['elemento']
-            repl = getattr(elem_obj, 'dichiarazione', None) or (elem_obj.mattone.dichiarazione if hasattr(elem_obj, 'mattone') else elem_obj.nome)
+            repl = (
+                context.get("elemento_display_override")
+                or getattr(elem_obj, 'dichiarazione', None)
+                or (elem_obj.mattone.dichiarazione if hasattr(elem_obj, 'mattone') else elem_obj.nome)
+            )
             testo_completo = testo_completo.replace("{elem}", repl)
             formula_out = formula_out.replace("{elem}", repl)
         
@@ -1756,6 +1789,69 @@ class Abilita(A_modello):
     def __str__(self): 
         return self.nome
 
+
+FORMULA_SCOPE_ALL = "ALL"
+FORMULA_SCOPE_ATTACK = "ATT"
+FORMULA_SCOPE_WEAVE = "WEA"
+FORMULA_SCOPE_CHOICES = (
+    (FORMULA_SCOPE_ALL, "Tutto"),
+    (FORMULA_SCOPE_ATTACK, "Solo Attacchi"),
+    (FORMULA_SCOPE_WEAVE, "Solo Tessiture"),
+)
+
+FORMULA_RULE_SOURCE_OVERRIDE = "SOURCE_OVERRIDE"
+FORMULA_RULE_AURA_REPLACE = "AURA_REPLACE"
+FORMULA_RULE_AURA_APPEND = "AURA_APPEND"
+FORMULA_RULE_ELEMENT_REPLACE = "ELEMENT_REPLACE"
+FORMULA_RULE_CHOICES = (
+    (FORMULA_RULE_SOURCE_OVERRIDE, "Sostituisci sorgente"),
+    (FORMULA_RULE_AURA_REPLACE, "Sostituisci aura"),
+    (FORMULA_RULE_AURA_APPEND, "Aggiungi aura alternativa"),
+    (FORMULA_RULE_ELEMENT_REPLACE, "Sostituisci elemento"),
+)
+
+
+class AbilitaFormulaRule(A_modello):
+    abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE, related_name="formula_rules")
+    scope = models.CharField(max_length=3, choices=FORMULA_SCOPE_CHOICES, default=FORMULA_SCOPE_ALL)
+    rule_type = models.CharField(max_length=30, choices=FORMULA_RULE_CHOICES)
+    from_punteggio = models.ForeignKey(
+        Punteggio,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="formula_rule_from",
+    )
+    to_punteggio = models.ForeignKey(
+        Punteggio,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="formula_rule_to",
+    )
+    from_mattone = models.ForeignKey(
+        Mattone,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="formula_rule_from_mattone",
+    )
+    to_mattone = models.ForeignKey(
+        Mattone,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="formula_rule_to_mattone",
+    )
+    source_label = models.CharField(max_length=80, blank=True, null=True)
+    priority = models.IntegerField(default=100)
+
+    class Meta:
+        ordering = ["priority", "id"]
+
+    def __str__(self):
+        return f"{self.abilita.nome} - {self.rule_type}"
+
 class abilita_tier(A_modello):
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     tabella = models.ForeignKey(Tier, on_delete=models.CASCADE)
@@ -1877,7 +1973,7 @@ class Infusione(Tecnica):
         max_length=255,
         blank=True,
         null=True,
-        default=DEFAULT_FORMULA_TEMPLATE,
+        default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
     )
     statistiche_base = models.ManyToManyField(Statistica, through='InfusioneStatisticaBase', blank=True, related_name='infusione_statistiche_base')
     # Statistiche MODIFICATORI (Es. +1 Forza) - REINTRODOTTO
@@ -1926,7 +2022,7 @@ class Infusione(Tecnica):
         return base_text + genera_html_cariche(self, None)
     
 class Tessitura(Tecnica):
-    formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_FORMULA_TEMPLATE)
+    formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
     elemento_principale = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO})
     caratteristiche = models.ManyToManyField(Punteggio, through='TessituraCaratteristica', related_name="tessiture_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     statistiche_base = models.ManyToManyField(Statistica, through='TessituraStatisticaBase', blank=True, related_name='tessitura_statistiche_base')
@@ -2806,7 +2902,13 @@ class OggettoBase(SyncableModel, models.Model):
     classe_oggetto = models.ForeignKey(ClasseOggetto, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Classe (es. Fucile, Spada)")
     is_tecnologico = models.BooleanField(default=False)
     costo = models.IntegerField(default=0, verbose_name="Costo in Crediti")
-    attacco_base = models.CharField(max_length=200, blank=True, null=True, help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannigen+dannimis|:L}!")
+    attacco_base = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
+        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannigen+dannimis|:L}!",
+    )
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoBaseStatisticaBase', blank=True, related_name='template_base')
     statistiche_modificatori = models.ManyToManyField(Statistica, through='OggettoBaseModificatore', blank=True, related_name='template_modificatori')
     in_vendita = models.BooleanField(default=True, verbose_name="Visibile in Negozio")
@@ -2855,7 +2957,13 @@ class Oggetto(A_vista):
     is_tecnologico = models.BooleanField(default=False, verbose_name="È Tecnologico?")
     is_equipaggiato = models.BooleanField(default=False, verbose_name="Equipaggiato?")
     costo_acquisto = models.IntegerField(default=0, verbose_name="Costo (Crediti)")
-    attacco_base = models.CharField(max_length=200, blank=True, null=True, help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannigen+dannimis|:L}!")
+    attacco_base = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
+        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannigen+dannimis|:L}!",
+    )
     in_vendita = models.BooleanField(default=False, verbose_name="In vendita al negozio?")
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")
     ospitato_su = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='potenziamenti_installati', help_text="L'oggetto su cui questo potenziamento è montato.")
@@ -4553,6 +4661,91 @@ class Personaggio(Inventario):
 
         return mods
     
+    def get_formula_semantic_overrides(self, context=None):
+        context = context or {}
+        formula_kind = str(context.get("formula_kind") or FORMULA_SCOPE_ATTACK).upper()
+        aura_obj = context.get("aura")
+        elemento_obj = context.get("elemento")
+        rules = AbilitaFormulaRule.objects.filter(
+            abilita__personaggioabilita__personaggio=self
+        ).select_related("from_punteggio", "to_punteggio")
+
+        source_override = None
+        aura_labels = []
+        elemento_display_override = None
+
+        def _label(entity_obj):
+            if not entity_obj:
+                return ""
+            raw = getattr(entity_obj, "dichiarazione", None) or getattr(entity_obj, "nome", "") or ""
+            raw = str(raw).strip()
+            if not raw:
+                return ""
+            return raw.split()[-1]
+
+        def _element_label(el_obj):
+            if not el_obj:
+                return ""
+            raw = (
+                getattr(el_obj, "dichiarazione", None)
+                or (el_obj.mattone.dichiarazione if hasattr(el_obj, "mattone") else None)
+                or getattr(el_obj, "nome", "")
+            )
+            raw = str(raw or "").strip()
+            if not raw:
+                return ""
+            return raw.split()[-1]
+
+        if aura_obj:
+            base_label = _label(aura_obj)
+            if base_label:
+                aura_labels = [base_label]
+
+        for rule in rules:
+            if rule.scope == FORMULA_SCOPE_ATTACK and formula_kind == FORMULA_SCOPE_WEAVE:
+                continue
+            if rule.scope == FORMULA_SCOPE_WEAVE and formula_kind != FORMULA_SCOPE_WEAVE:
+                continue
+
+            to_label = _label(rule.to_mattone) or _label(rule.to_punteggio) or (rule.source_label or "").strip()
+
+            if rule.rule_type == FORMULA_RULE_SOURCE_OVERRIDE and to_label:
+                source_override = to_label
+                continue
+
+            if rule.rule_type == FORMULA_RULE_ELEMENT_REPLACE and to_label and elemento_obj:
+                if rule.from_mattone_id:
+                    current_el = _element_label(elemento_obj).lower()
+                    expected = _label(rule.from_mattone).lower()
+                    if expected and current_el != expected:
+                        continue
+                elif rule.from_punteggio_id and getattr(elemento_obj, "id", None) != rule.from_punteggio_id:
+                    continue
+                elemento_display_override = to_label
+                continue
+
+            if rule.rule_type in (FORMULA_RULE_AURA_REPLACE, FORMULA_RULE_AURA_APPEND) and to_label and aura_obj:
+                if rule.from_punteggio_id and getattr(aura_obj, "id", None) != rule.from_punteggio_id:
+                    continue
+                if rule.rule_type == FORMULA_RULE_AURA_REPLACE:
+                    aura_labels = [to_label]
+                elif to_label not in aura_labels:
+                    aura_labels.append(to_label)
+
+        out = {}
+        if source_override:
+            out["source_labels"] = {
+                "chop": source_override,
+                "blam": source_override,
+                "pierce": source_override,
+                "mental": source_override,
+            }
+        if aura_labels:
+            out["aura_display"] = "/".join(aura_labels)
+        if elemento_display_override:
+            out["elemento_display_override"] = elemento_display_override
+        return out
+
 
     def get_testo_formattato_per_item(self, item):
         if not item: return ""
@@ -4561,12 +4754,12 @@ class Personaggio(Inventario):
         if isinstance(item, Oggetto):
             stats = item.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             item_mods = item.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            ctx = {'livello': item.livello, 'aura': item.aura, 'item_modifiers': item_mods}
+            ctx = {'livello': item.livello, 'aura': item.aura, 'item_modifiers': item_mods, 'formula_kind': FORMULA_SCOPE_ATTACK}
             testo_finale = formatta_testo_generico(item.testo, formula=getattr(item, 'formula', None), statistiche_base=stats, personaggio=self, context=ctx)
             
         elif isinstance(item, Infusione):
             stats = item.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            ctx = {'livello': item.livello, 'aura': item.aura_richiesta}
+            ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'formula_kind': FORMULA_SCOPE_ATTACK}
             testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
             
         elif isinstance(item, Attivata):
@@ -4577,7 +4770,7 @@ class Personaggio(Inventario):
             stats = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             formula_text = item.formula or ""
             if "{elem}" not in formula_text:
-                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
                 testo_finale =  formatta_testo_generico(item.testo, formula=formula_text, statistiche_base=stats, personaggio=self, context=ctx)
             else:
                 modello = self.modelli_aura.filter(aura=item.aura_richiesta).first()
@@ -4615,17 +4808,17 @@ class Personaggio(Inventario):
 
                 elementi_da_calcolare = list(elementi_map.values())
                 if not elementi_da_calcolare:
-                    ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None}
+                    ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None, 'formula_kind': FORMULA_SCOPE_WEAVE}
                     return formatta_testo_generico(item.testo, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx)
 
-                ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+                ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
                 descrizione_html = formatta_testo_generico(item.testo, formula=None, statistiche_base=stats, personaggio=self, context=ctx_base)
                 
                 formule_html = []
                 for elem in elementi_da_calcolare:
                     val_caratt = 0
                     if elem.caratteristica_relativa: val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0)
-                    ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt}
+                    ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt, 'formula_kind': FORMULA_SCOPE_WEAVE}
                     risultato_formula = formatta_testo_generico(None, formula=item.formula, statistiche_base=stats, personaggio=self, context=ctx_loop, solo_formula=True)
                     valore_pura_formula = risultato_formula.replace("<strong>Formula:</strong>", "").strip()
                     if valore_pura_formula:
@@ -4672,7 +4865,7 @@ class Personaggio(Inventario):
             stats = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             formula_text = consumabile.formula or ""
             if "{elem}" not in formula_text:
-                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
                 desc = formatta_testo_generico(consumabile.descrizione, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx)
                 formula_out = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx, solo_formula=True)
                 formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
@@ -4706,17 +4899,17 @@ class Personaggio(Inventario):
                             elementi_map[el.id] = el
             elementi_da_calcolare = list(elementi_map.values())
             if not elementi_da_calcolare:
-                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None}
+                ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': None, 'formula_kind': FORMULA_SCOPE_WEAVE}
                 desc = formatta_testo_generico(consumabile.descrizione, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx)
                 formula_out = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx, solo_formula=True)
                 formula_out = formula_out.replace("<strong>Formula:</strong>", "").strip() if formula_out else ""
                 return desc, formula_out
-            ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale}
+            ctx_base = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': item.elemento_principale, 'formula_kind': FORMULA_SCOPE_WEAVE}
             descrizione_html = formatta_testo_generico(consumabile.descrizione, formula=None, statistiche_base=stats, personaggio=self, context=ctx_base)
             formule_html = []
             for elem in elementi_da_calcolare:
                 val_caratt = self.caratteristiche_base.get(elem.caratteristica_relativa.nome, 0) if elem.caratteristica_relativa else 0
-                ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt}
+                ctx_loop = {'livello': item.livello, 'aura': item.aura_richiesta, 'elemento': elem, 'caratteristica_associata_valore': val_caratt, 'formula_kind': FORMULA_SCOPE_WEAVE}
                 risultato = formatta_testo_generico(None, formula=consumabile.formula, statistiche_base=stats, personaggio=self, context=ctx_loop, solo_formula=True)
                 valore_pura = risultato.replace("<strong>Formula:</strong>", "").strip() if risultato else ""
                 if valore_pura:
@@ -4726,7 +4919,7 @@ class Personaggio(Inventario):
             return descrizione_html, formula_html
         if getattr(consumabile, 'effetto_casuale', None):
             ec = consumabile.effetto_casuale
-            ctx = {'aura': ec.tipologia.aura_collegata, 'elemento': ec.elemento_principale}
+            ctx = {'aura': ec.tipologia.aura_collegata, 'elemento': ec.elemento_principale, 'formula_kind': FORMULA_SCOPE_ATTACK}
             desc = formatta_testo_generico(consumabile.descrizione, personaggio=self, context=ctx)
             formula_out = ""
             if consumabile.formula:
@@ -5518,7 +5711,7 @@ class EffettoCasuale(SyncableModel, models.Model):
     formula = models.TextField(
         blank=True,
         null=True,
-        default=DEFAULT_FORMULA_TEMPLATE,
+        default=DEFAULT_WEAVE_FORMULA_TEMPLATE,
         help_text="Stesso formato della descrizione. Obbligatorio se tipologia=Tessitura.",
     )
 
@@ -5554,7 +5747,7 @@ class ConsumabilePersonaggio(SyncableModel, models.Model):
     )
     nome = models.CharField(max_length=200)
     descrizione = models.TextField()
-    formula = models.TextField(blank=True, null=True, default=DEFAULT_FORMULA_TEMPLATE)
+    formula = models.TextField(blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
     utilizzi_rimanenti = models.PositiveIntegerField(default=1)
     data_scadenza = models.DateField()
     data_creazione = models.DateTimeField(auto_now_add=True)

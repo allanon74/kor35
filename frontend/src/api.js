@@ -1737,6 +1737,9 @@ export const staffPreviewFormulaBuilder = (payload, onLogout) =>
     onLogout
   );
 
+export const staffGetFormulaSemanticOptions = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/formula-semantic-options/', { method: 'GET' }, onLogout);
+
 // --- INFUSIONI ---
 export const staffGetInfusioni = (onLogout, params = {}) => {
   // Costruiamo la query string (es: ?page=1&search=pippo)

@@ -10,6 +10,11 @@ FORMULA_BUILDER_SCHEMA = {
         {"id": "weave", "label": "Tessitura"},
         {"id": "capacity", "label": "Capacita"},
     ],
+    "type_templates": {
+        "attack": ["rango", "molt", "formula_prefix", "formula_source", "formula_status"],
+        "weave": ["formula_type", "rango", "molt", "formula_prefix", "formula_source", "formula_status"],
+        "capacity": ["formula_type", "formula_prefix", "formula_source", "formula_status"],
+    },
     "sections": [
         {
             "id": "formula_type",
@@ -118,6 +123,7 @@ FORMULA_CONTROLLED_PARAMS = {
     "ripara",
     "dannimis",
     "dannidis",
+    "cura",
 }
 
 
@@ -175,3 +181,58 @@ def render_formula_preview(formula, stats_by_param, context=None):
         context=context or {},
         solo_formula=True,
     )
+
+
+def build_formula_template(formula_type, selections):
+    templates = FORMULA_BUILDER_SCHEMA.get("type_templates") or {}
+    blocks = templates.get(formula_type) or templates.get("attack") or []
+    if not blocks:
+        return DEFAULT_FORMULA_TEMPLATE
+
+    selected_map = selections if isinstance(selections, dict) else {}
+
+    def _section_selected(section_id):
+        selected = selected_map.get(section_id)
+        if selected is None:
+            return False
+        if isinstance(selected, list):
+            return any(str(x).strip().lower() != "none" for x in selected)
+        return str(selected).strip().lower() != "none"
+
+    placeholder_by_block = {
+        "formula_type": "{formula_type}",
+        "rango": "{rango|:RANGO}",
+        "molt": "{molt|:MOLT}",
+        "formula_prefix": "{formula_prefix}",
+        "formula_target": "{formula_target}",
+        "formula_source": "{formula_source}",
+        "formula_status": "{formula_status}",
+        "formula_cura": "{formula_cura}",
+        "formula_damage": "{formula_damage}",
+    }
+
+    include_cura = bool(selected_map.get("include_cura"))
+    include_danni = bool(selected_map.get("include_danni"))
+    damage_mode = str(selected_map.get("damage_mode") or "").strip().lower()
+
+    out = []
+    for block in blocks:
+        placeholder = placeholder_by_block.get(block)
+        if not placeholder:
+            continue
+        if block in ("rango", "molt"):
+            out.append(placeholder)
+            continue
+        if _section_selected(block):
+            out.append(placeholder)
+
+    if include_cura:
+        out.append("{formula_cura}")
+
+    if include_danni:
+        if damage_mode == "distanza":
+            out.append("{dannidis + dannigen|L}")
+        else:
+            out.append("{dannimis + dannigen|L}")
+
+    return "".join(out) or DEFAULT_FORMULA_TEMPLATE

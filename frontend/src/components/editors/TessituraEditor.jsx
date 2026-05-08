@@ -184,6 +184,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statsOptions={statsOptions}
         statisticheBase={formData.statistiche_base || []}
         formulaValue={formData.formula}
+        defaultFormulaType="weave"
       />
     </div>
   );

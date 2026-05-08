@@ -9,8 +9,10 @@ const FormulaBuilderModal = ({
   statsOptions = [],
   statisticheBase = [],
   formulaValue = '',
+  defaultFormulaType = 'attack',
 }) => {
   const [schema, setSchema] = useState(null);
+  const [formulaType, setFormulaType] = useState(defaultFormulaType);
   const [selections, setSelections] = useState({});
   const [customText, setCustomText] = useState('');
   const [preview, setPreview] = useState('');
@@ -19,7 +21,8 @@ const FormulaBuilderModal = ({
     rango: 1,
     molt: 1,
     durata: 10,
-    pfcura: 0,
+    cura: 0,
+    curapf: 0,
     livello: 1,
     gittata: 3,
     dcono: 10,
@@ -28,6 +31,9 @@ const FormulaBuilderModal = ({
     dannimis: 0,
     dannidis: 0,
   });
+  const [includeCura, setIncludeCura] = useState(false);
+  const [includeDanni, setIncludeDanni] = useState(false);
+  const [damageMode, setDamageMode] = useState('mischia');
 
   const statsByParamFromForm = useMemo(() => {
     const byId = new Map(statsOptions.map((s) => [String(s.id), s]));
@@ -47,10 +53,11 @@ const FormulaBuilderModal = ({
     if (!open) {
       return;
     }
+    setFormulaType(defaultFormulaType || 'attack');
     staffGetFormulaBuilderSchema(onLogout)
       .then((data) => setSchema(data || null))
       .catch((err) => console.error('Errore schema formula builder:', err));
-  }, [open, onLogout]);
+  }, [open, onLogout, defaultFormulaType]);
 
   useEffect(() => {
     if (!open || !schema) {
@@ -59,9 +66,10 @@ const FormulaBuilderModal = ({
     setLoadingPreview(true);
     staffPreviewFormulaBuilder(
       {
-        formula: formulaValue || schema.default_template,
-          stats_by_param: { ...statsByParamFromForm, ...numericValues },
-        selections,
+        formula: '',
+        formula_type: formulaType,
+        stats_by_param: { ...statsByParamFromForm, ...numericValues },
+        selections: { ...selections, include_cura: includeCura, include_danni: includeDanni, damage_mode: damageMode },
         custom_text: customText,
       },
       onLogout
@@ -72,7 +80,7 @@ const FormulaBuilderModal = ({
         setPreview('Errore preview formula.');
       })
       .finally(() => setLoadingPreview(false));
-  }, [open, schema, selections, customText, formulaValue, statsByParamFromForm, onLogout]);
+  }, [open, schema, formulaType, selections, includeCura, includeDanni, damageMode, customText, formulaValue, statsByParamFromForm, numericValues, onLogout]);
 
   if (!open) {
     return null;
@@ -95,16 +103,17 @@ const FormulaBuilderModal = ({
     try {
       const res = await staffPreviewFormulaBuilder(
         {
-          formula: formulaValue || schema?.default_template,
+          formula: '',
+          formula_type: formulaType,
           stats_by_param: { ...statsByParamFromForm, ...numericValues },
-          selections,
+          selections: { ...selections, include_cura: includeCura, include_danni: includeDanni, damage_mode: damageMode },
           custom_text: customText,
         },
         onLogout
       );
       onApply?.({
         statsByParam: res?.stats_by_param || {},
-        formulaText: (res?.formula_template || formulaValue || schema?.default_template || '').trim(),
+        formulaText: (res?.formula_template || schema?.default_template || '').trim(),
         customText: customText.trim(),
         controlledParams: [...getControlledParams(schema), ...NUMERIC_CONTROLLED_PARAMS],
       });
@@ -122,6 +131,20 @@ const FormulaBuilderModal = ({
           <button onClick={onClose} className="px-3 py-1 rounded bg-gray-700 text-white text-sm">Chiudi</button>
         </div>
         <div className="p-4 space-y-4">
+          <div className="border border-gray-700 rounded-lg p-3">
+            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Tipo formula</div>
+            <select
+              value={formulaType}
+              onChange={(e) => setFormulaType(e.target.value)}
+              className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
+            >
+              {(schema?.types || []).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
           {schema?.sections?.map((section) => {
             const isMulti = section.kind === 'multi';
             const selected = selections[section.id];
@@ -171,6 +194,30 @@ const FormulaBuilderModal = ({
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3">
+            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Sezioni opzionali</div>
+            <div className="flex flex-col gap-3 text-sm text-gray-200">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={includeCura} onChange={(e) => setIncludeCura(e.target.checked)} />
+                Inserisci cura
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={includeDanni} onChange={(e) => setIncludeDanni(e.target.checked)} />
+                Inserisci danni
+              </label>
+              {includeDanni && (
+                <select
+                  value={damageMode}
+                  onChange={(e) => setDamageMode(e.target.value)}
+                  className="max-w-xs bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
+                >
+                  <option value="mischia">In mischia</option>
+                  <option value="distanza">A distanza</option>
+                </select>
+              )}
+            </div>
+          </div>
+
+          <div className="border border-gray-700 rounded-lg p-3">
             <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Testo custom</div>
             <input
               type="text"
@@ -215,7 +262,8 @@ const NUMERIC_CONTROLLED_PARAMS = [
   'rango',
   'molt',
   'durata',
-  'pfcura',
+  'cura',
+  'curapf',
   'livello',
   'gittata',
   'dcono',
