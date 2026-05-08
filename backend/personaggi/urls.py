@@ -210,6 +210,7 @@ urlpatterns = [
     path('api/oggetti/equipaggia/', views.equipaggia_item_view, name='api_equipaggia_item'),
     path('api/oggetti/danneggia/', views.danneggia_item_view, name='api_danneggia_item'),
     path('api/oggetti/ripara/', views.ripara_item_view, name='api_ripara_item'),
+    path('api/oggetti/scarta/', views.scarta_item_view, name='api_scarta_item'),
     path('api/oggetti/assembla/', views.assembla_item_view, name='api_assembla_item'),
     path('api/oggetti/smonta/', views.smonta_item_view, name='smonta_item'),
     path('api/oggetti/forgia/', views.forgia_item_view, name='forgia_item'),

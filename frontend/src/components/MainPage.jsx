@@ -49,7 +49,7 @@ const BUILD_SHA = (import.meta.env.VITE_BUILD_SHA || '').trim();
 
 // CONFIGURAZIONE TAB DISPONIBILI
 const AVAILABLE_TABS = [
-    { id: 'inventario', label: 'Zaino', icon: Backpack, component: InventoryTab },
+    { id: 'inventario', label: 'Inventario', icon: Backpack, component: InventoryTab },
     { id: 'abilita', label: 'Abilità', icon: Zap, component: AbilitaTab },
     { id: 'tessiture', label: 'Tessiture', icon: Scroll, component: TessitureTab },
     { id: 'infusioni', label: 'Infusioni', icon: TestTube2, component: InfusioniTab },

@@ -1290,6 +1290,20 @@ export const riparaOggetto = (itemId, characterId, onLogout) => {
   );
 };
 
+export const scartaOggetto = (itemId, characterId, onLogout) => {
+  return fetchAuthenticated(
+    '/api/personaggi/api/oggetti/scarta/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        item_id: itemId,
+        char_id: characterId,
+      }),
+    },
+    onLogout
+  );
+};
+
 export const assemblaOggetto = (hostId, modId, characterId, useAcademy = false, onLogout) => {
   return fetchAuthenticated(
     '/api/personaggi/api/oggetti/assembla/', 

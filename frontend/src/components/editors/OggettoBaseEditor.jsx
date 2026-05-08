@@ -11,6 +11,18 @@ const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
     {id:'INN', nome:'Innesto'}, {id:'MUT', nome:'Mutazione'}, {id:'AUM', nome:'Aumento'}, {id:'POT', nome:'Potenziamento'}
 ];
+const SLOT_FISICI_CHOICES = [
+  { id: 'head', nome: 'Testa' }, { id: 'neck', nome: 'Collo' }, { id: 'vest', nome: 'Veste' },
+  { id: 'shoulders', nome: 'Spalle' }, { id: 'arms', nome: 'Braccia' }, { id: 'fingers', nome: 'Dita' },
+  { id: 'feet', nome: 'Piedi' }, { id: 'belt', nome: 'Cintura' }, { id: 'armor', nome: 'Armatura' },
+  { id: 'melee', nome: 'Armi Mischia' }, { id: 'ranged', nome: 'Armi Distanza' },
+  { id: 'focus', nome: 'Focus' }, { id: 'shield', nome: 'Scudo' },
+];
+const parseSlots = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  return String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+};
 
 const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -28,10 +40,20 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
     is_tecnologico: false, 
     is_pesante: false, 
     attacco_base: '',
+    slot_fisici_possibili: [],
     in_vendita: true,
     statistiche_base: [], 
     statistiche_modificatori: []
   });
+
+  useEffect(() => {
+    if (!initialData) return;
+    setFormData((prev) => ({
+      ...prev,
+      ...initialData,
+      slot_fisici_possibili: parseSlots(initialData.slot_fisici_possibili),
+    }));
+  }, [initialData]);
 
   useEffect(() => { staffGetClassiOggetto(onLogout).then(setClassi); }, []);
 
@@ -83,6 +105,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
         const data = { 
             ...formData, 
             classe_oggetto: getId(formData.classe_oggetto),
+            slot_fisici_possibili: (formData.slot_fisici_possibili || []).join(','),
             statistiche_base: prepareStats(formData.statistiche_base, false),
             statistiche_modificatori: prepareStats(formData.statistiche_modificatori, true)
         };
@@ -99,13 +122,18 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
             setFormData({
                 nome: '', descrizione: '', tipo_oggetto: 'FIS', classe_oggetto: null, costo: 0,
                 is_tecnologico: false, is_pesante: false, attacco_base: '', in_vendita: true,
+                slot_fisici_possibili: [],
                 statistiche_base: [], statistiche_modificatori: [],
             });
             setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
         }
         if (mode === 'save_close') onBack();
         if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
-            setFormData((prev) => ({ ...prev, ...saved }));
+            setFormData((prev) => ({
+              ...prev,
+              ...saved,
+              slot_fisici_possibili: parseSlots(saved.slot_fisici_possibili),
+            }));
         }
     } catch (e) { 
         console.error("Errore Salvataggio:", e);
@@ -190,6 +218,32 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
                     value={formData.costo} onChange={e => setFormData({...formData, costo: e.target.value})} />
             </div>
         </div>
+        {formData.tipo_oggetto === 'FIS' && (
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase font-black block mb-2">Slot fisici consentiti</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              {SLOT_FISICI_CHOICES.map((slot) => {
+                const checked = (formData.slot_fisici_possibili || []).includes(slot.id);
+                return (
+                  <label key={slot.id} className="flex items-center gap-2 p-2 rounded border border-gray-700 bg-gray-950 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="accent-blue-500 w-4 h-4"
+                      checked={checked}
+                      onChange={(e) => {
+                        const current = new Set(formData.slot_fisici_possibili || []);
+                        if (e.target.checked) current.add(slot.id);
+                        else current.delete(slot.id);
+                        setFormData({ ...formData, slot_fisici_possibili: Array.from(current) });
+                      }}
+                    />
+                    {slot.nome}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Riga 3: Flags */}
         <div className="flex flex-wrap gap-6 pt-2 border-t border-gray-800 mt-2">

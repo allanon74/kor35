@@ -3,13 +3,13 @@ import { useCharacter } from './CharacterContext';
 import { 
     ShoppingBag, Box, Shield, Zap, Loader2, Wrench, 
     Info, ChevronUp, ChevronDown, Activity, Power, Battery, 
-    Clock, RefreshCw, Sparkles, Swords, Lock, User, Backpack, Weight
+    Clock, RefreshCw, Sparkles, Swords, Lock, User, Backpack, Weight, X, Trash2
 } from 'lucide-react';
 import ShopModal from './ShopModal';
 import ItemAssemblyModal from './ItemAssemblyModal';
 import ModuloDetailModal from './ModuloDetailModal';
 import PunteggioDisplay from './PunteggioDisplay';
-import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair } from '../hooks/useGameData';
+import { useOptimisticEquip, useOptimisticRecharge, useOptimisticDamage, useOptimisticRepair, useOptimisticDiscard } from '../hooks/useGameData';
 import { emitToast } from '../utils/toastBus';
 
 // --- UTILS ---
@@ -36,7 +36,7 @@ const PHYSICAL_SLOT_CONFIG = [
     { key: 'fingers', label: 'Dita', shortLabel: 'DIT', capacity: 2, aliases: ['dita', 'anello', 'ring', 'finger'] },
     { key: 'feet', label: 'Piedi', shortLabel: 'PIE', capacity: 1, aliases: ['piedi', 'stivali', 'feet', 'boots'] },
     { key: 'belt', label: 'Cintura', shortLabel: 'CIN', capacity: 1, aliases: ['cintura', 'belt'] },
-    { key: 'armor', label: 'Armatura', shortLabel: 'ARM', capacity: 1, aliases: ['armatura', 'armor'] },
+    { key: 'armor', label: 'Armatura', shortLabel: 'ARM', capacity: 1, aliases: ['armatura', 'armor', 'corazza'] },
     { key: 'melee', label: 'Armi Mischia', shortLabel: 'MIS', capacity: 1, aliases: ['mischia', 'melee', 'spada', 'arma'] },
     { key: 'ranged', label: 'Armi Distanza', shortLabel: 'DIS', capacity: 1, aliases: ['distanza', 'ranged', 'arco', 'fucile'] },
     { key: 'focus', label: 'Focus', shortLabel: 'FOC', capacity: 1, aliases: ['focus'] },
@@ -411,12 +411,13 @@ const InventoryBodyWidget = ({ slots, onSlotClick, selectedItemId }) => {
 
 // --- COMPONENTE CARD INVENTARIO (MEMOIZED PER PERFORMANCE) ---
 // Usa memo per evitare re-render dell'intera lista quando cambia lo stato di un solo elemento
-const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onRecharge, onAssembly, onModuloClick, onDamage, onRepair, preferredSlotKey = null, isDraggable = false, onDragStartCard = null, onDragEndCard = null, onTouchPickCard = null, onTouchReleaseCard = null }) => {
+const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onRecharge, onAssembly, onModuloClick, onDamage, onRepair, onDiscard, preferredSlotKey = null, isDraggable = false, onDragStartCard = null, onDragEndCard = null, onTouchPickCard = null, onTouchReleaseCard = null }) => {
     const isPhysical = item.tipo_oggetto === 'FIS';
     const canBeModified = (isPhysical || ['INN', 'MUT'].includes(item.tipo_oggetto)) && (item.classe_oggetto_nome || item.tipo_oggetto === 'INN');
     const isActive = item.is_active;
     const installedModsCount = item.potenziamenti_installati?.length || 0;
     const isModifiedObject = isPhysical && installedModsCount > 0;
+    const availableEquipSlots = isPhysical && !item.is_equipaggiato ? inferPhysicalSlots(item).length : 0;
 
     // Render Statistiche (Solo != 0)
     const renderStats = (statistiche) => {
@@ -575,6 +576,7 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
                                 <span>{item.tipo_oggetto_display}</span>
                                 {item.classe_oggetto_nome && <span>• {item.classe_oggetto_nome}</span>}
                                 {item.slot_equip && <span>• slot {item.slot_equip}</span>}
+                                {availableEquipSlots > 1 && <span className="text-indigo-300">• {availableEquipSlots} slot disp.</span>}
                                 {item.is_danneggiato && <span className="text-red-400">• DANNEGGIATO</span>}
                             </div>
                             
@@ -669,22 +671,31 @@ const InventoryItemCard = memo(({ item, isExpanded, onToggleExpand, onEquip, onR
                                 {item.is_equipaggiato ? <><Power size={14}/> Rimuovi</> : <><Shield size={14}/> Equipaggia</>}
                             </button>
                         )}
-                        {isPhysical && !item.is_danneggiato && (
+                        {!item.is_danneggiato && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onDamage(item.id); }}
                                 className="py-2 px-2 rounded text-xs font-bold bg-red-950 hover:bg-red-900 text-red-200 border border-red-700"
                                 title="Danneggia"
                             >
-                                D
+                                Danneggia
                             </button>
                         )}
-                        {isPhysical && item.is_danneggiato && (
+                        {item.is_danneggiato && (
                             <button
                                 onClick={(e) => { e.stopPropagation(); onRepair(item.id); }}
                                 className="py-2 px-2 rounded text-xs font-bold bg-blue-950 hover:bg-blue-900 text-blue-200 border border-blue-700"
                                 title="Ripara"
                             >
-                                R
+                                Ripara
+                            </button>
+                        )}
+                        {isPhysical && !item.is_danneggiato && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onDiscard && onDiscard(item); }}
+                                className="py-2 px-2 rounded text-xs font-bold bg-red-950 hover:bg-red-900 text-red-200 border border-red-700 flex items-center justify-center"
+                                title="Scarta"
+                            >
+                                <Trash2 size={14} />
                             </button>
                         )}
                     </div>
@@ -734,6 +745,7 @@ const InventoryTab = ({ onLogout }) => {
   
   const [items, setItems] = useState([]);
   const [showShop, setShowShop] = useState(false);
+  const [shopSearchTerm, setShopSearchTerm] = useState('');
   const [showAssembly, setShowAssembly] = useState(false);
   const [assemblyHost, setAssemblyHost] = useState(null);
   const [selectedBodyItem, setSelectedBodyItem] = useState(null);
@@ -746,18 +758,20 @@ const InventoryTab = ({ onLogout }) => {
   const [expandedItems, setExpandedItems] = useState({});
   const [showModuloDetail, setShowModuloDetail] = useState(false);
   const [selectedModuloId, setSelectedModuloId] = useState(null);
+  const [equipSlotModal, setEquipSlotModal] = useState({ open: false, itemId: null, itemName: '', slots: [] });
 
   const equipMutation = useOptimisticEquip();
   const rechargeMutation = useOptimisticRecharge();
   const damageMutation = useOptimisticDamage();
   const repairMutation = useOptimisticRepair();
+  const discardMutation = useOptimisticDiscard();
 
   useEffect(() => {
     if (characterData?.oggetti) setItems(characterData.oggetti);
     else setItems([]);
   }, [characterData]);
 
-  const handleToggleEquip = (itemId, slotKey = null) => equipMutation.mutate(
+  const executeEquipMutation = (itemId, slotKey = null) => equipMutation.mutate(
       { itemId, slotKey, charId: characterData.id },
       {
           onError: (err) => {
@@ -771,6 +785,34 @@ const InventoryTab = ({ onLogout }) => {
   );
   const handleDamage = (itemId) => damageMutation.mutate({ itemId, charId: characterData.id });
   const handleRepair = (itemId) => repairMutation.mutate({ itemId, charId: characterData.id });
+  const handleDiscard = (item) => {
+      const isBase = !!item.oggetto_base_generatore;
+      const rimborso = isBase ? Math.max(0, Math.floor((item.costo_acquisto || 0) / 2)) : 0;
+      const confirmMsg = isBase
+          ? `Scartare ${item.nome}?\nRiceverai ${rimborso} CR di rimborso (50% del costo base).`
+          : `Scartare ${item.nome}?`;
+      if (!window.confirm(confirmMsg)) return;
+      discardMutation.mutate(
+          { itemId: item.id, charId: characterData.id },
+          {
+              onSuccess: (res) => {
+                  const refunded = Number(res?.rimborso_crediti || 0);
+                  emitToast({
+                      type: 'success',
+                      title: 'Oggetto scartato',
+                      message: refunded > 0 ? `Rimborso ricevuto: +${refunded} CR.` : 'Oggetto rimosso dall\'inventario.',
+                  });
+              },
+              onError: (err) => {
+                  emitToast({
+                      type: 'error',
+                      title: 'Scarto fallito',
+                      message: err?.message || 'Impossibile scartare l\'oggetto.',
+                  });
+              },
+          }
+      );
+  };
 
   const handleRecharge = (item) => {
       const costo = item.costo_ricarica || 0;
@@ -800,7 +842,10 @@ const InventoryTab = ({ onLogout }) => {
   // Calcolo Capacità Oggetti
   const statCog = characterData?.statistiche_primarie?.find(s => s.sigla === 'COG');
   const capacityMax = statCog ? statCog.valore_max : 10;
-  const capacityConsumers = items.filter(i => i.is_equipaggiato && i.tipo_oggetto === 'FIS' && ((i.potenziamenti_installati?.length || 0) > 0 || !i.oggetto_base_generatore));
+  // COG consumata solo da oggetti fisici equipaggiati e realmente modificati (con mod/materia installate).
+  const capacityConsumers = items.filter(
+      (i) => i.is_equipaggiato && i.tipo_oggetto === 'FIS' && (i.potenziamenti_installati?.length || 0) > 0
+  );
   const capacityUsed = capacityConsumers.length;
   
   const statOgp = characterData?.statistiche_primarie?.find(s => s.sigla === 'OGP');
@@ -815,6 +860,53 @@ const InventoryTab = ({ onLogout }) => {
       const val = stat ? (stat.valore_corrente ?? stat.valore_max) : null;
       if (val && val > 0) return val;
       return defaultCap;
+  };
+
+  const handleToggleEquip = (itemId, preferredSlotKey = null) => {
+      const item = items.find((i) => String(i.id) === String(itemId));
+      if (!item) return;
+
+      if (item.is_equipaggiato) {
+          executeEquipMutation(item.id, item.slot_equip || preferredSlotKey || null);
+          return;
+      }
+
+      if (preferredSlotKey) {
+          executeEquipMutation(item.id, preferredSlotKey);
+          return;
+      }
+
+      const possibleSlots = inferPhysicalSlots(item);
+      const availableSlots = possibleSlots.filter((slotKey) => {
+          const cfg = PHYSICAL_SLOT_CONFIG.find((s) => s.key === slotKey);
+          const occupied = items.filter(
+              (i) => i.is_equipaggiato && i.tipo_oggetto === 'FIS' && i.slot_equip === slotKey
+          ).length;
+          const cap = getSlotCapacity(slotKey, cfg?.capacity || 1);
+          return occupied < cap;
+      });
+
+      if (availableSlots.length === 0) {
+          emitToast({
+              type: 'warning',
+              title: 'Nessuno slot disponibile',
+              message: 'Tutti gli slot compatibili risultano pieni.',
+              durationMs: 1800,
+          });
+          return;
+      }
+
+      if (availableSlots.length === 1) {
+          executeEquipMutation(item.id, availableSlots[0]);
+          return;
+      }
+
+      setEquipSlotModal({
+          open: true,
+          itemId: item.id,
+          itemName: item.nome,
+          slots: availableSlots,
+      });
   };
 
   // Render Helper per liste (utilizza il componente Memoizzato)
@@ -834,10 +926,11 @@ const InventoryTab = ({ onLogout }) => {
                     onModuloClick={handleModuloClick}
                     onDamage={handleDamage}
                     onRepair={handleRepair}
+                    onDiscard={handleDiscard}
                     preferredSlotKey={preferredSlotKey}
                     isDraggable={item.tipo_oggetto === 'FIS' && !item.is_equipaggiato}
                     onDragStartCard={(e, draggedItem) => {
-                        e.dataTransfer.setData('application/x-kor35-item-id', draggedItem.id);
+                        e.dataTransfer.setData('application/x-kor35-item-id', String(draggedItem.id));
                         setDraggingItemId(draggedItem.id);
                     }}
                     onDragEndCard={() => setDraggingItemId(null)}
@@ -896,7 +989,7 @@ const InventoryTab = ({ onLogout }) => {
   const handleSlotDrop = (event, slot) => {
       event.preventDefault();
       const droppedId = event.dataTransfer.getData('application/x-kor35-item-id') || draggingItemId;
-      const dragged = zainoItems.find((i) => i.id === droppedId && i.tipo_oggetto === 'FIS' && !i.is_danneggiato);
+      const dragged = zainoItems.find((i) => String(i.id) === String(droppedId) && i.tipo_oggetto === 'FIS' && !i.is_danneggiato);
       if (!dragged) return;
       if (!inferPhysicalSlots(dragged).includes(slot.key)) return;
       if (slot.equippedInSlot.length >= slot.capacity) return;
@@ -907,7 +1000,7 @@ const InventoryTab = ({ onLogout }) => {
 
   const handleTouchSlotSelect = (slot) => {
       if (!touchDragMode || !draggingItemId) return false;
-      const dragged = zainoItems.find((i) => i.id === draggingItemId && i.tipo_oggetto === 'FIS' && !i.is_danneggiato);
+      const dragged = zainoItems.find((i) => String(i.id) === String(draggingItemId) && i.tipo_oggetto === 'FIS' && !i.is_danneggiato);
       if (!dragged) {
           setTouchDragMode(false);
           setDraggingItemId(null);
@@ -944,7 +1037,7 @@ const InventoryTab = ({ onLogout }) => {
           setTouchDragMode(false);
           return;
       }
-      const dragged = zainoItems.find((i) => i.id === draggingItemId && i.tipo_oggetto === 'FIS');
+      const dragged = zainoItems.find((i) => String(i.id) === String(draggingItemId) && i.tipo_oggetto === 'FIS');
       if (!dragged) {
           setDragHintBySlot({});
           return;
@@ -1032,6 +1125,7 @@ const InventoryTab = ({ onLogout }) => {
                                     onModuloClick={handleModuloClick}
                                     onDamage={handleDamage}
                                     onRepair={handleRepair}
+                                    onDiscard={handleDiscard}
                                 />
                             </div>
                         )}
@@ -1054,7 +1148,7 @@ const InventoryTab = ({ onLogout }) => {
                     <span className="px-2 py-1 rounded border border-red-500/70 bg-red-900/25 text-red-200">Drop bloccato</span>
                     <span className="px-2 py-1 rounded border border-indigo-500/70 bg-indigo-900/25 text-indigo-200">Slot selezionato</span>
                 </div>
-                <p className="text-xs text-gray-500">Trascina dallo zaino verso uno slot compatibile oppure clicca lo slot e usa “Equipaggia”.</p>
+                <p className="text-xs text-gray-500">Trascina dall'inventario verso uno slot compatibile oppure clicca lo slot e usa “Equipaggia”.</p>
                 {touchDragMode && (
                     <div className="flex items-center justify-between gap-2">
                         <p className="text-xs text-indigo-300 font-semibold">
@@ -1088,7 +1182,7 @@ const InventoryTab = ({ onLogout }) => {
                             renderList(selectedPhysicalSlot.equippedInSlot, selectedPhysicalSlot.key)
                         ) : (
                             <div className="space-y-2">
-                                <p className="text-xs text-gray-500">Slot vuoto. Oggetti compatibili nello zaino:</p>
+                                <p className="text-xs text-gray-500">Slot vuoto. Oggetti compatibili nell'inventario:</p>
                                 {selectedPhysicalSlot.compatibleFromBackpack.length > 0 ? (
                                     renderList(selectedPhysicalSlot.compatibleFromBackpack, selectedPhysicalSlot.key)
                                 ) : (
@@ -1108,11 +1202,59 @@ const InventoryTab = ({ onLogout }) => {
       </section>
 
       <section>
-        <h3 className="text-sm font-bold text-gray-400 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1"><Box size={16} /> Zaino</h3>
-        {zainoItems.length > 0 ? renderList(zainoItems) : <p className="text-gray-600 italic text-sm p-4 text-center border border-dashed border-gray-700 rounded-lg bg-gray-800/30">Zaino vuoto.</p>}
+        <h3 className="text-sm font-bold text-gray-400 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1"><Box size={16} /> Inventario</h3>
+        {zainoItems.length > 0 ? renderList(zainoItems) : <p className="text-gray-600 italic text-sm p-4 text-center border border-dashed border-gray-700 rounded-lg bg-gray-800/30">Inventario vuoto.</p>}
       </section>
 
-      {showShop && <ShopModal onClose={() => setShowShop(false)} />}
+      {showShop && (
+        <ShopModal
+          onClose={() => setShowShop(false)}
+          searchTerm={shopSearchTerm}
+          onSearchTermChange={setShopSearchTerm}
+        />
+      )}
+      {equipSlotModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setEquipSlotModal({ open: false, itemId: null, itemName: '', slots: [] })}
+          />
+          <div className="relative w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 shadow-2xl p-4 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wide">Scegli slot equip</h3>
+              <button
+                type="button"
+                className="text-gray-400 hover:text-white"
+                onClick={() => setEquipSlotModal({ open: false, itemId: null, itemName: '', slots: [] })}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-gray-300">
+              <span className="font-semibold text-white">{equipSlotModal.itemName}</span> puo essere equipaggiato in piu slot.
+              Seleziona dove montarlo:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {equipSlotModal.slots.map((slotKey) => {
+                const slotCfg = PHYSICAL_SLOT_CONFIG.find((s) => s.key === slotKey);
+                return (
+                  <button
+                    key={slotKey}
+                    type="button"
+                    className="rounded-lg border border-indigo-500/40 bg-indigo-900/20 hover:bg-indigo-800/40 px-3 py-2 text-xs font-bold text-indigo-100 text-left"
+                    onClick={() => {
+                      executeEquipMutation(equipSlotModal.itemId, slotKey);
+                      setEquipSlotModal({ open: false, itemId: null, itemName: '', slots: [] });
+                    }}
+                  >
+                    {slotCfg?.label || slotKey}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       {showAssembly && assemblyHost && <ItemAssemblyModal hostItem={assemblyHost} inventory={items} onClose={() => { setShowAssembly(false); setAssemblyHost(null); }} onRefresh={handleAssemblyComplete} />}
       {showModuloDetail && selectedModuloId && <ModuloDetailModal moduloId={selectedModuloId} onClose={() => { setShowModuloDetail(false); setSelectedModuloId(null); }} onLogout={onLogout} />}
     </div>

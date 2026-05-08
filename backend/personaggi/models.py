@@ -246,7 +246,7 @@ EXCLUSIVE_FORMAT_GROUPS = {
             {"params": ["elemento_src"], "label": "Elemento"},
         ],
         "separator": "/",
-        "suffix": "!",
+        "suffix": "",
         "append_space": True,
     },
     "formula_type": {
@@ -342,18 +342,18 @@ EXCLUSIVE_FORMAT_GROUPS = {
         "entries": [
             {
                 "params": ["dannimis", "dannigen"],
-                "label": "Danni",
+                "label": "",
                 "extra": {
                     "when": "dannimis + dannigen > 0",
-                    "template": " {dannimis + dannigen|L} in Mischia!",
+                    "template": "{dannimis + dannigen|:N}!",
                 },
             },
             {
                 "params": ["dannidis", "dannigen"],
-                "label": "Danni",
+                "label": "",
                 "extra": {
-                    "when": "dannidis + dannigen > 0",
-                    "template": " {dannidis + dannigen|L} a Distanza!",
+                    "when": "dannidis + dannigen > 0 and dannimis + dannigen <= 0",
+                    "template": "{dannidis + dannigen|:N}!",
                 },
             },
         ],
@@ -447,7 +447,7 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
         if not isinstance(entry, dict):
             continue
         label = (entry.get("label") or "").strip()
-        if not label:
+        if not label and group_key != "formula_damage":
             continue
         params = []
         if entry.get("param"):
@@ -498,8 +498,12 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
                     tmpl = extra.get("template") or ""
                     part += _render_exclusive_template(tmpl, value_map, object_map)
 
-            active_parts.append(part)
-            seen.add(label)
+            if part and not part.endswith(" "):
+                part = f"{part} "
+            part = re.sub(r"\s{2,}", " ", part).strip()
+            if part:
+                active_parts.append(part)
+            seen.add(label or str(entry.get("params") or entry.get("param") or ""))
 
     # Extra a livello gruppo (utile per appendere durata o altri dettagli condivisi).
     group_extras = config.get("extras")
@@ -588,6 +592,14 @@ FORMAT_COLLECTIONS = {
         16: 'sedici', 17: 'diciassette', 18: 'diciotto', 19: 'diciannove', 20: 'venti', 
         'DEFAULT' : '{n}'    
         },
+    # Numeri letterali completi (1 -> uno), usato per i danni.
+    'N': {
+        0: 'zero', 1: 'uno', 2: 'due', 3: 'tre', 4: 'quattro', 5: 'cinque',
+        6: 'sei', 7: 'sette', 8: 'otto', 9: 'nove', 10: 'dieci',
+        11: 'undici', 12: 'dodici', 13: 'tredici', 14: 'quattordici', 15: 'quindici',
+        16: 'sedici', 17: 'diciassette', 18: 'diciotto', 19: 'diciannove', 20: 'venti',
+        'DEFAULT': '{n}'
+    },
     # Ordinali Maschili
     'OM': {
         1: 'primo', 2: 'secondo', 3: 'terzo', 4: 'quarto', 5: 'quinto',
@@ -782,6 +794,19 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         # Helper legacy per le formule tessitura che usano "caratt"
         if 'caratteristica_associata_valore' in context:
              eval_context['caratt'] = context['caratteristica_associata_valore']
+
+    # Placeholder formula: variabili mancanti devono valere 0 (evita NameError
+    # in espressioni come "dannimis + dannigen" quando uno dei due non esiste).
+    for _k in (
+        "rango", "molt",
+        "dannimis", "dannidis", "dannigen",
+        "curapf", "cura",
+        "chop", "blam", "pierce", "mental", "elemento_src",
+        "flusso", "dardo", "tocco", "cono", "esplos", "tutti",
+        "aterra", "paralisi", "repuls", "richiamo", "esilio", "confus", "silenzio", "spacca", "nega", "disint", "ripara",
+    ):
+        if _k not in eval_context:
+            eval_context[_k] = 0
 
     # Override semantici formula da abilita possedute (sorgente, aura, elemento).
     if personaggio and hasattr(personaggio, "get_formula_semantic_overrides"):
@@ -1800,6 +1825,11 @@ class Abilita(A_modello):
         verbose_name="Recupero risorsa",
         help_text='Opzionale. Es. {"rigenerazioni":[{"stat_sigla":"CHA","ogni_minuti":10,"step":1}]} — '
         'stat_sigla = risorsa pool (PV, PA, PS, CHA, FRT, …). CHK in JSON è accettato come alias di CHA.',
+    )
+    nascondi_in_scheda_abilita = models.BooleanField(
+        default=False,
+        verbose_name='Nascondi nella scheda "Abilità"',
+        help_text="Se attivo, questa abilità non viene mostrata nella tab Abilità ma i suoi effetti restano applicati.",
     )
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="abilita", default=get_default_campagna_id, db_index=True)
 
@@ -2932,6 +2962,12 @@ class OggettoBase(SyncableModel, models.Model):
     )
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoBaseStatisticaBase', blank=True, related_name='template_base')
     statistiche_modificatori = models.ManyToManyField(Statistica, through='OggettoBaseModificatore', blank=True, related_name='template_modificatori')
+    slot_fisici_possibili = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Solo FIS: lista slot equipaggiabili separati da virgola (es. armor,vest).",
+    )
     in_vendita = models.BooleanField(default=True, verbose_name="Visibile in Negozio")
     is_pesante = models.BooleanField(
         default=False, 
@@ -2989,6 +3025,12 @@ class Oggetto(A_vista):
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")
     ospitato_su = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='potenziamenti_installati', help_text="L'oggetto su cui questo potenziamento è montato.")
     slot_corpo = models.CharField(max_length=3, choices=SLOT_CORPO_CHOICES, blank=True, null=True, help_text="Solo per Innesti e Mutazioni")
+    slot_fisici_possibili = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Solo FIS: lista slot equipaggiabili separati da virgola (es. armor,vest).",
+    )
     slot_equip = models.CharField(
         max_length=20,
         choices=SLOT_FISICO_CHOICES,

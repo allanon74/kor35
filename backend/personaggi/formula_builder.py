@@ -211,6 +211,12 @@ def build_formula_template(formula_type, selections):
         "formula_cura": "{formula_cura}",
         "formula_damage": "{formula_damage}",
     }
+    source_map = {
+        "chop": "Chop! ",
+        "blam": "Blam! ",
+        "pierce": "Pierce! ",
+        "mental": "Mental! ",
+    }
 
     out = []
     for block in blocks:
@@ -220,6 +226,12 @@ def build_formula_template(formula_type, selections):
         if block in ("rango", "molt"):
             out.append(placeholder)
             continue
+        if block == "formula_source":
+            selected_source = str(selected_map.get("formula_source") or "").strip().lower()
+            if selected_source in source_map:
+                # Persisti la sorgente selezionata nel template finale.
+                out.append(source_map[selected_source])
+                continue
         if _section_selected(block):
             out.append(placeholder)
 

@@ -17,6 +17,7 @@ import {
   equipaggiaOggetto,
   danneggiaOggetto,
   riparaOggetto,
+  scartaOggetto,
   assemblaOggetto,
   smontaOggetto,
   completeForging,
@@ -460,6 +461,23 @@ export const useOptimisticRepair = () => {
                 oggetti: oldData.oggetti.map((obj) =>
                     obj.id === itemId ? { ...obj, is_danneggiato: false } : obj
                 ),
+            };
+        }
+    );
+};
+
+export const useOptimisticDiscard = () => {
+    return useOptimisticAction(
+        ['personaggio'],
+        ({ itemId, charId }) => scartaOggetto(itemId, charId),
+        (oldData, { itemId }) => {
+            if (!oldData.oggetti) return oldData;
+            const target = oldData.oggetti.find((obj) => String(obj.id) === String(itemId));
+            const rimborso = target?.oggetto_base_generatore ? Math.max(0, Math.floor((target.costo_acquisto || 0) / 2)) : 0;
+            return {
+                ...oldData,
+                crediti: (oldData.crediti || 0) + rimborso,
+                oggetti: oldData.oggetti.filter((obj) => String(obj.id) !== String(itemId)),
             };
         }
     );

@@ -67,7 +67,7 @@ class GestioneOggettiService:
         'fingers': ['dita', 'anello', 'ring', 'finger'],
         'feet': ['piedi', 'stivali', 'feet', 'boots'],
         'belt': ['cintura', 'belt'],
-        'armor': ['armatura', 'armor'],
+        'armor': ['armatura', 'armor', 'corazza'],
         'melee': ['mischia', 'melee', 'spada', 'arma'],
         'ranged': ['distanza', 'ranged', 'arco', 'fucile'],
         'focus': ['focus'],
@@ -76,9 +76,10 @@ class GestioneOggettiService:
 
     @staticmethod
     def _infer_physical_slots(oggetto: Oggetto):
+        valid_slots = set(GestioneOggettiService.PHYSICAL_SLOT_DEFAULTS.keys())
         raw = getattr(oggetto, 'slot_fisici_possibili', None)
         if raw:
-            vals = [v.strip() for v in str(raw).split(',') if v.strip()]
+            vals = [v.strip() for v in str(raw).split(',') if v.strip() and v.strip() in valid_slots]
             if vals:
                 if 'focus' in vals or 'shield' in vals:
                     return list(dict.fromkeys([*vals, 'melee', 'ranged']))
@@ -1096,6 +1097,7 @@ class GestioneCraftingService:
                 testo=template.descrizione,
                 tipo_oggetto=template.tipo_oggetto,
                 classe_oggetto=template.classe_oggetto,
+                slot_fisici_possibili=template.slot_fisici_possibili,
                 is_tecnologico=template.is_tecnologico,
                 costo_acquisto=costo,
                 attacco_base=template.attacco_base,

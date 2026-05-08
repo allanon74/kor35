@@ -75,17 +75,22 @@ const AbilitaTab = ({ onLogout }) => {
     [revokeMutation, selectedCharacterId, onLogout, refreshCharacterData]
   );
 
-  // Rimuovi SEMPRE i tratti d'aura dalla tab Abilità (devono restare solo nella gestione Aura/Razza)
+  // Rimuovi SEMPRE i tratti d'aura e le abilità marcate come "nascoste" dalla tab Abilità.
   const possessedSkills = useMemo(
-    () => (char?.abilita_possedute || []).filter((s) => !s?.is_tratto_aura),
+    () =>
+      (char?.abilita_possedute || []).filter(
+        (s) => !s?.is_tratto_aura && !s?.nascondi_in_scheda_abilita
+      ),
     [char?.abilita_possedute]
   );
 
-  // --- FILTRO MODIFICA: Rimuovo i tratti speciali dalla lista acquistabili ---
+  // --- FILTRO MODIFICA: Rimuovo i tratti speciali e le abilità nascoste dalla lista acquistabili ---
   // Questi verranno gestiti tramite il modale in PunteggioDisplay
   const filteredAcquirableSkills = useMemo(() => 
     acquirableSkills 
-      ? acquirableSkills.filter(skill => !skill.is_tratto_aura) 
+      ? acquirableSkills.filter(
+          (skill) => !skill.is_tratto_aura && !skill.nascondi_in_scheda_abilita
+        )
       : [],
     [acquirableSkills]
   );

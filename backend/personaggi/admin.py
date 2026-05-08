@@ -1424,7 +1424,7 @@ class OggettoBaseAdmin(admin.ModelAdmin):
             'fields': ('nome', 'descrizione', 'costo', 'in_vendita')
         }),
         ('Scheda Tecnica', {
-            'fields': ('tipo_oggetto', 'classe_oggetto', 'is_tecnologico', 'attacco_base')
+            'fields': ('tipo_oggetto', 'classe_oggetto', 'slot_fisici_possibili', 'is_tecnologico', 'attacco_base')
         }),
     )
     

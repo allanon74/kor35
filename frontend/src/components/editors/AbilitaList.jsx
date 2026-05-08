@@ -80,7 +80,24 @@ const AbilitaList = ({ onAdd, onEdit, onLogout }) => {
     };
 
     const columns = [
-        { key: 'nome', header: 'Nome', width: '30%', render: (row) => <span className="font-bold text-white">{row.nome}</span> },
+        {
+            key: 'nome',
+            header: 'Nome',
+            width: '30%',
+            render: (row) => (
+                <div className="flex items-center gap-2">
+                    <span className="font-bold text-white">{row.nome}</span>
+                    {row.nascondi_in_scheda_abilita && (
+                        <span
+                            className="text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/40 bg-amber-900/40 text-amber-200 uppercase tracking-wide"
+                            title='Nascosta nella scheda "Abilità" del personaggio'
+                        >
+                            Nascosta in scheda
+                        </span>
+                    )}
+                </div>
+            ),
+        },
         { key: 'costo_pc', header: 'Costo PC', width: '15%', align: 'center', render: (row) => row.costo_pc },
         { key: 'costo_crediti', header: 'Crediti', width: '15%', align: 'center', render: (row) => row.costo_crediti },
         {

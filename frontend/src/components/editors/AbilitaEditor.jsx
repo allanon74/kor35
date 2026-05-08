@@ -18,6 +18,7 @@ const EMPTY_ABILITA_FORM = {
     costo_pc: 0,
     costo_crediti: 0,
     is_tratto_aura: false,
+    nascondi_in_scheda_abilita: false,
     aura_riferimento: null,
     livello_riferimento: 0,
     tiers: [],
@@ -383,6 +384,24 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    <div className="bg-gray-900/30 p-3 rounded border border-indigo-900/30">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={!!formData.nascondi_in_scheda_abilita}
+                                onChange={(e) =>
+                                    setFormData({ ...formData, nascondi_in_scheda_abilita: e.target.checked })
+                                }
+                            />
+                            <span className="text-xs font-bold text-indigo-300 uppercase">
+                                Nascondi nella scheda Abilita
+                            </span>
+                        </label>
+                        <p className="text-[11px] text-gray-400 mt-2">
+                            L&apos;abilita resta applicata al personaggio (statistiche, prerequisiti, sblocchi), ma non viene mostrata nella tab Abilita.
+                        </p>
                     </div>
                 </div>
 

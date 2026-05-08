@@ -12,6 +12,18 @@ const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
     {id:'INN', nome:'Innesto'}, {id:'MUT', nome:'Mutazione'}, {id:'AUM', nome:'Aumento'}, {id:'POT', nome:'Potenziamento'}
 ];
+const SLOT_FISICI_CHOICES = [
+  { id: 'head', nome: 'Testa' }, { id: 'neck', nome: 'Collo' }, { id: 'vest', nome: 'Veste' },
+  { id: 'shoulders', nome: 'Spalle' }, { id: 'arms', nome: 'Braccia' }, { id: 'fingers', nome: 'Dita' },
+  { id: 'feet', nome: 'Piedi' }, { id: 'belt', nome: 'Cintura' }, { id: 'armor', nome: 'Armatura' },
+  { id: 'melee', nome: 'Armi Mischia' }, { id: 'ranged', nome: 'Armi Distanza' },
+  { id: 'focus', nome: 'Focus' }, { id: 'shield', nome: 'Scudo' },
+];
+const parseSlots = (raw) => {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  return String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+};
 
 const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -25,8 +37,17 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
     nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
     is_tecnologico: false, is_equipaggiato: false, is_pesante: false,
     inventario_corrente: null,
-    attacco_base: '', componenti: [], statistiche_base: [], statistiche: []
+    attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: []
   });
+
+  useEffect(() => {
+    if (!initialData) return;
+    setFormData((prev) => ({
+      ...prev,
+      ...initialData,
+      slot_fisici_possibili: parseSlots(initialData.slot_fisici_possibili),
+    }));
+  }, [initialData]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -86,6 +107,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
           aura: getId(formData.aura), 
           classe_oggetto: getId(formData.classe_oggetto),
           inventario_corrente: formData.inventario_corrente ? parseInt(formData.inventario_corrente) : null,
+          slot_fisici_possibili: (formData.slot_fisici_possibili || []).join(','),
           
           statistiche_base: cleanAndDeduplicate(formData.statistiche_base, 'statistica'),
           statistiche: cleanAndDeduplicate(formData.statistiche, 'statistica'),
@@ -104,13 +126,17 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
         setFormData({
           nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
           is_tecnologico: false, is_equipaggiato: false, is_pesante: false,
-          inventario_corrente: null, attacco_base: '', componenti: [], statistiche_base: [], statistiche: [],
+          inventario_corrente: null, attacco_base: '', slot_fisici_possibili: [], componenti: [], statistiche_base: [], statistiche: [],
         });
         setStatus({ type: 'success', message: `"${recordName}" salvato. Pronto per un nuovo inserimento.` });
       }
       if (mode === 'save_close') onBack();
       if (mode !== 'save_close' && mode !== 'save_new_blank' && saved?.id) {
-        setFormData((prev) => ({ ...prev, ...saved }));
+        setFormData((prev) => ({
+          ...prev,
+          ...saved,
+          slot_fisici_possibili: parseSlots(saved.slot_fisici_possibili),
+        }));
       }
     } catch (e) { 
         console.error(e);
@@ -186,6 +212,32 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
 
         <Select label="Aura" value={formData.aura?.id || formData.aura} options={punteggiList.filter(p => p.tipo === 'AU')} onChange={v => setFormData({...formData, aura: v})} />
         <Select label="Classe" value={formData.classe_oggetto?.id || formData.classe_oggetto} options={classi} onChange={v => setFormData({...formData, classe_oggetto: v})} />
+        {formData.tipo_oggetto === 'FIS' && (
+          <div className="md:col-span-2">
+            <label className="text-[10px] text-gray-500 uppercase font-black block mb-2">Slot fisici consentiti</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              {SLOT_FISICI_CHOICES.map((slot) => {
+                const checked = (formData.slot_fisici_possibili || []).includes(slot.id);
+                return (
+                  <label key={slot.id} className="flex items-center gap-2 p-2 rounded border border-gray-700 bg-gray-950 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="accent-emerald-500 w-4 h-4"
+                      checked={checked}
+                      onChange={(e) => {
+                        const current = new Set(formData.slot_fisici_possibili || []);
+                        if (e.target.checked) current.add(slot.id);
+                        else current.delete(slot.id);
+                        setFormData({ ...formData, slot_fisici_possibili: Array.from(current) });
+                      }}
+                    />
+                    {slot.nome}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
         <div className="flex flex-col gap-2 pt-2">
             <label className="flex items-center gap-2 text-xs font-bold cursor-pointer"><input type="checkbox" checked={formData.is_tecnologico} onChange={e => setFormData({...formData, is_tecnologico: e.target.checked})} /> Tecnologico</label>

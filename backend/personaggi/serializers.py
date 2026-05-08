@@ -229,8 +229,28 @@ class PrefetturaSerializer(serializers.ModelSerializer):
         fields = ("id", "era", "era_nome", "era_abbreviazione", "regione", "regione_nome", "regione_sigla", "nome", "descrizione", "ordine")
 
 
+class EraAbilitaObbligatoriaSerializer(serializers.ModelSerializer):
+    caratteristica = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Abilita
+        fields = ("id", "nome", "descrizione", "caratteristica")
+
+    def get_caratteristica(self, obj):
+        if not obj.caratteristica_id:
+            return None
+        return {
+            "id": obj.caratteristica_id,
+            "nome": obj.caratteristica.nome,
+            "sigla": obj.caratteristica.sigla,
+            "colore": obj.caratteristica.colore,
+            "icona_url": obj.caratteristica.icona_url,
+        }
+
+
 class EraSerializer(serializers.ModelSerializer):
     prefetture = PrefetturaSerializer(many=True, read_only=True)
+    abilita_obbligatorie = serializers.SerializerMethodField()
 
     class Meta:
         model = Era
@@ -242,10 +262,19 @@ class EraSerializer(serializers.ModelSerializer):
             "descrizione",
             "difetto_interpretativo_titolo",
             "difetto_interpretativo_testo",
+            "abilita_obbligatorie",
             "ordine",
             "attiva",
             "prefetture",
         )
+
+    def get_abilita_obbligatorie(self, obj):
+        qs = (
+            Abilita.objects.filter(abilita_era__era=obj, abilita_era__is_default=True)
+            .select_related("caratteristica")
+            .order_by("abilita_era__ordine", "nome")
+        )
+        return EraAbilitaObbligatoriaSerializer(qs, many=True).data
 
 
 class RegioneSerializer(serializers.ModelSerializer):
@@ -698,7 +727,7 @@ class AbilitaMasterListSerializer(serializers.ModelSerializer):
             'caratteristica', 'caratteristica_2', 'aura_riferimento', 'livello_riferimento',
             'requisiti', 'prerequisiti',
             'punteggi_assegnati', 'statistiche_modificate',
-            'costo_pieno', 'costo_effettivo', 'is_tratto_aura',
+            'costo_pieno', 'costo_effettivo', 'is_tratto_aura', 'nascondi_in_scheda_abilita',
         )
 
     def get_costo_effettivo(self, obj):
@@ -1036,6 +1065,7 @@ class OggettoSerializer(serializers.ModelSerializer):
 
             # Gestione Cariche e Origine
             'cariche_attuali',
+            'oggetto_base_generatore',
             'infusione_generatrice',
             'infusione_nome',
 
@@ -1599,8 +1629,6 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
 
     def get_stats_text(self, obj):
         parts = []
-        if obj.attacco_base:
-            parts.append(f"Attacco: {obj.attacco_base}")
         for s in obj.oggettobasestatisticabase_set.select_related('statistica').all():
             parts.append(f"{s.statistica.nome}: {s.valore_base}")
         for m in obj.oggettobasemodificatore_set.select_related('statistica').all():
@@ -3200,6 +3228,7 @@ class AbilitaStaffListSerializer(serializers.ModelSerializer):
             'costo_pc',
             'costo_crediti',
             'is_tratto_aura',
+            'nascondi_in_scheda_abilita',
             'aura_riferimento',
             'livello_riferimento',
         ]

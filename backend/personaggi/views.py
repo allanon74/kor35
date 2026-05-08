@@ -3229,7 +3229,8 @@ def danneggia_item_view(request):
     ):
         return Response({"error": "Non autorizzato."}, status=403)
     oggetto = get_object_or_404(Oggetto, pk=item_id)
-    if oggetto.inventario_corrente_id != pg.id:
+    inventario_corrente = oggetto.inventario_corrente
+    if not inventario_corrente or inventario_corrente.id != pg.id:
         return Response({"error": "Oggetto non presente nell'inventario del personaggio."}, status=400)
     oggetto.is_danneggiato = True
     oggetto.save(update_fields=['is_danneggiato', 'updated_at'])
@@ -3248,11 +3249,40 @@ def ripara_item_view(request):
     ):
         return Response({"error": "Non autorizzato."}, status=403)
     oggetto = get_object_or_404(Oggetto, pk=item_id)
-    if oggetto.inventario_corrente_id != pg.id:
+    inventario_corrente = oggetto.inventario_corrente
+    if not inventario_corrente or inventario_corrente.id != pg.id:
         return Response({"error": "Oggetto non presente nell'inventario del personaggio."}, status=400)
     oggetto.is_danneggiato = False
     oggetto.save(update_fields=['is_danneggiato', 'updated_at'])
     return Response({"status": "success", "is_danneggiato": False})
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def scarta_item_view(request):
+    char_id = request.data.get('char_id')
+    item_id = request.data.get('item_id')
+    pg = get_object_or_404(Personaggio, id=char_id)
+    if pg.proprietario != request.user and not (
+        request.user.is_superuser or _can_operate_in_campaign(request.user, pg.campagna, needs_master=True)
+    ):
+        return Response({"error": "Non autorizzato."}, status=403)
+    oggetto = get_object_or_404(Oggetto, pk=item_id)
+    inventario_corrente = oggetto.inventario_corrente
+    if not inventario_corrente or inventario_corrente.id != pg.id:
+        return Response({"error": "Oggetto non presente nell'inventario del personaggio."}, status=400)
+
+    rimborso = 0
+    with transaction.atomic():
+        if oggetto.oggetto_base_generatore_id:
+            rimborso = max(0, int((oggetto.costo_acquisto or 0) // 2))
+            if rimborso > 0:
+                pg.modifica_crediti(rimborso, f"Rimborso scarto oggetto base: {oggetto.nome}")
+        oggetto.potenziamenti_installati.all().delete()
+        oggetto.delete()
+
+    return Response({"status": "success", "rimborso_crediti": rimborso})
 
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication]) 

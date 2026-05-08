@@ -708,6 +708,7 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
                     'costo_pc',
                     'costo_crediti',
                     'is_tratto_aura',
+                    'nascondi_in_scheda_abilita',
                     'aura_riferimento__id',
                     'aura_riferimento__nome',
                     'aura_riferimento__sigla',

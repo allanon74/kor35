@@ -647,6 +647,32 @@ const CharacterSheet = memo(({ data, onLogout }) => {
         </div>
       )}
 
+      {Array.isArray(data?.era?.abilita_obbligatorie) && data.era.abilita_obbligatorie.length > 0 && (
+        <div className="mt-4 bg-indigo-950/30 border border-indigo-700/45 rounded-xl p-4">
+          <div className="text-[10px] uppercase tracking-wider text-indigo-300 font-bold">Abilita obbligatorie (era)</div>
+          <div className="mt-2 space-y-2">
+            {data.era.abilita_obbligatorie.map((abilita) => (
+              <div key={abilita.id} className="rounded-lg border border-indigo-800/40 bg-indigo-950/20 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-indigo-100">{abilita.nome}</span>
+                  {abilita?.caratteristica?.nome && (
+                    <span className="text-[10px] uppercase tracking-wide text-indigo-300/90">
+                      {abilita.caratteristica.nome}
+                    </span>
+                  )}
+                </div>
+                {abilita?.descrizione && (
+                  <div
+                    className="text-xs text-indigo-100/90 mt-2 prose prose-invert prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: abilita.descrizione }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <details className="mt-6 bg-gray-800 rounded-lg shadow-inner">
         <summary className="text-xl font-semibold text-gray-200 p-3 cursor-pointer select-none">
           Background

@@ -1,13 +1,28 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Dialog } from '@headlessui/react';
 import { X, ShoppingBag, Loader2, Info } from 'lucide-react';
 import { useShopItems, useOptimisticBuyShopItem } from '../hooks/useGameData';
 import { useCharacter } from './CharacterContext';
 
-const ShopModal = ({ onClose }) => {
+const ShopModal = ({ onClose, searchTerm: externalSearchTerm, onSearchTermChange }) => {
   const { onLogout, selectedCharacterData: char, refreshCharacterData } = useCharacter();
   const { data: items, isLoading } = useShopItems(onLogout);
   const buyMutation = useOptimisticBuyShopItem();
+  const [internalSearchTerm, setInternalSearchTerm] = useState('');
+  const searchTerm = typeof externalSearchTerm === 'string' ? externalSearchTerm : internalSearchTerm;
+  const setSearchTerm = onSearchTermChange || setInternalSearchTerm;
+
+  const filteredItems = useMemo(() => {
+    const list = Array.isArray(items) ? items : [];
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((item) => {
+      const nome = String(item?.nome || '').toLowerCase();
+      const classe = String(item?.classe_oggetto_nome || '').toLowerCase();
+      const descrizione = String(item?.descrizione || '').toLowerCase();
+      return nome.includes(q) || classe.includes(q) || descrizione.includes(q);
+    });
+  }, [items, searchTerm]);
 
   const handleBuy = useCallback(async (item) => {
     // Nota: OggettoBase usa 'costo', non 'costo_acquisto'
@@ -55,11 +70,20 @@ const ShopModal = ({ onClose }) => {
 
             {/* Content */}
             <div className="p-4 overflow-y-auto grow custom-scrollbar">
+                <div className="mb-4">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Filtra per nome, classe o descrizione..."
+                        className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                    />
+                </div>
                 {isLoading ? (
                     <div className="flex justify-center p-8"><Loader2 className="animate-spin text-indigo-500" size={32} /></div>
                 ) : (
                     <div className="grid gap-3 sm:grid-cols-2">
-                        {items?.map((item) => (
+                        {filteredItems.map((item) => (
                             <div key={item.id} className="bg-gray-800 p-3 rounded-lg border border-gray-700 flex flex-col justify-between hover:border-gray-600 transition-colors group">
                                 <div>
                                     <div className="flex justify-between items-start mb-1">
@@ -75,10 +99,10 @@ const ShopModal = ({ onClose }) => {
                                     </div>
                                     
                                     {/* Statistiche Tecniche (es. Danni, Bonus) */}
-                                    {item.stats_text && (
-                                        <div className="mb-3 text-[10px] text-indigo-300 bg-indigo-900/20 px-2 py-1 rounded border border-indigo-500/20 flex items-start gap-1">
+                                    {item.attacco_formattato && (
+                                        <div className="mb-2 text-[10px] text-emerald-200 bg-emerald-900/20 px-2 py-1 rounded border border-emerald-500/20 flex items-start gap-1">
                                             <Info size={12} className="shrink-0 mt-0.5" />
-                                            <span>{item.stats_text}</span>
+                                            <span>Attacco: {item.attacco_formattato}</span>
                                         </div>
                                     )}
                                 </div>
@@ -99,9 +123,9 @@ const ShopModal = ({ onClose }) => {
                                 </div>
                             </div>
                         ))}
-                        {(!items || items.length === 0) && (
+                        {filteredItems.length === 0 && (
                             <div className="col-span-full text-center text-gray-500 py-12 border border-dashed border-gray-700 rounded-xl">
-                                Nessun oggetto attualmente in vendita.
+                                Nessun oggetto trovato con questo filtro.
                             </div>
                         )}
                     </div>
