@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useCharacter } from '../components/CharacterContext';
-import { getWikiMenu } from '../api';
+import { getWikiMenu, getConfigurazioneSito } from '../api';
 import WikiPageEditorModal from '../components/wiki/WikiPageEditorModal';
 import { 
     Menu, X, Search, 
@@ -15,6 +15,7 @@ export default function PublicLayout({ token }) {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isEditorOpen, setEditorOpen] = useState(false);
   const [newParentId, setNewParentId] = useState(null);
+  const [siteConfig, setSiteConfig] = useState(null);
   
   // --- STATI DATI & RICERCA ---
   const [flatMenu, setFlatMenu] = useState([]); 
@@ -108,6 +109,22 @@ export default function PublicLayout({ token }) {
     };
     fetchMenu();
   }, [token]); // Ricarica se cambia il token (login/logout)
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cfg = await getConfigurazioneSito();
+        if (cancelled) return;
+        setSiteConfig(cfg);
+      } catch (e) {
+        if (!cancelled) setSiteConfig(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   
   // --- RICALCOLO ALBERO quando cambiano dati o filtri ---
   useEffect(() => {
@@ -295,12 +312,18 @@ export default function PublicLayout({ token }) {
         nav::-webkit-scrollbar-thumb:hover {
           background: #4b5563;
         }
+
+        @keyframes kor35-marquee {
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
+        }
       `}</style>
       
       <div className="flex flex-col h-screen bg-gray-100 text-gray-900 font-sans overflow-hidden">
       
       {/* HEADER */}
-      <header className="bg-red-900 text-white shadow-md flex items-center justify-between px-4 py-3 z-20 shrink-0">
+      <header className="bg-red-900 text-white shadow-md z-20 shrink-0">
+        <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
           <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="md:hidden p-1 hover:bg-red-800 rounded focus:outline-none">
             {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
@@ -311,6 +334,21 @@ export default function PublicLayout({ token }) {
             <span className="hidden xs:inline">KOR35 WIKI</span>
           </Link>
         </div>
+
+        {/* Maintenance message ticker (tra logo e pulsanti) */}
+        {siteConfig?.maintenance_mode && (
+          <div className="hidden sm:flex flex-1 mx-4 overflow-hidden">
+            <div
+              className="whitespace-nowrap text-sm font-black text-amber-200/95"
+              style={{
+                animation: 'kor35-marquee 18s linear infinite',
+              }}
+              title={String(siteConfig?.maintenance_public_message || '').trim()}
+            >
+              {String(siteConfig?.maintenance_public_message || '').trim() || 'Sistema in manutenzione.'}
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center gap-3">
           {token ? (
@@ -339,6 +377,24 @@ export default function PublicLayout({ token }) {
              </div>
           )}
         </div>
+        </div>
+
+        {/* Mobile ticker: riga dedicata sotto la barra (non schiaccia i pulsanti) */}
+        {siteConfig?.maintenance_mode && (
+          <div className="sm:hidden px-4 pb-2">
+            <div className="w-full overflow-hidden rounded bg-red-950/35 border border-amber-400/30">
+              <div
+                className="whitespace-nowrap text-xs font-black text-amber-200/95 px-3 py-1"
+                style={{
+                  animation: 'kor35-marquee 16s linear infinite',
+                }}
+                title={String(siteConfig?.maintenance_public_message || '').trim()}
+              >
+                {String(siteConfig?.maintenance_public_message || '').trim() || 'Sistema in manutenzione.'}
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">

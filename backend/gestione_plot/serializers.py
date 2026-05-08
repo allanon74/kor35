@@ -562,7 +562,9 @@ class ConfigurazioneSitoSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'nome_associazione', 'descrizione_breve', 'anno_fondazione',
             'indirizzo', 'citta', 'cap', 'provincia', 'nazione',
-            'email', 'pec', 'telefono', 'ultima_modifica'
+            'email', 'pec', 'telefono',
+            'maintenance_mode', 'maintenance_public_message', 'maintenance_admin_note',
+            'ultima_modifica'
         ]
         read_only_fields = ['id', 'ultima_modifica']
 

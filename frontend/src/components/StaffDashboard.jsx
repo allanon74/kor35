@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BuildVersions from './BuildVersions';
+import MaintenanceModePanel from './MaintenanceModePanel';
 
 // Import diretto di PlotTab per debug
 import PlotTab from './PlotTab';
@@ -113,13 +114,14 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e Glossario', icon: <BookText size={24} />, color: 'bg-emerald-700', component: DichiarazioniGlossarioManager },
         { id: 'arcana-profiles', label: 'Profili Arcana SSO', icon: <Shield size={24} />, color: 'bg-indigo-800', component: ArcanaProfilesTab },
         { id: 'campagne', label: 'Campagne', icon: <Globe2 size={24} />, color: 'bg-emerald-800', component: CampaignManager },
+        { id: 'maintenance', label: 'Maintenance Mode', icon: <Shield size={24} />, color: 'bg-amber-700', component: MaintenanceModePanel },
         { id: 'messaggi', label: 'Messaggi Staff', icon: <MessageSquare size={24} />, color: 'bg-emerald-600', component: AdminMessageTab },        
     ], []);
 
     const visibleTools = useMemo(() => {
         // Admin globale senza ruolo campagna: solo strumenti globali.
         if (isGlobalSuperuser && !isCampaignStaffer) {
-            return toolsConfig.filter((t) => ['arcana-profiles', 'campagne'].includes(t.id));
+            return toolsConfig.filter((t) => ['arcana-profiles', 'campagne', 'maintenance'].includes(t.id));
         }
 
         // Staffer: solo Messaggi Staff + Plot.
@@ -129,12 +131,12 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
 
         // Master: tutte le schede eccetto Campagne e Arcana SSO.
         if (isCampaignMaster && !isCampaignHeadMaster && !isGlobalSuperuser) {
-            return toolsConfig.filter((t) => !['campagne', 'arcana-profiles'].includes(t.id));
+            return toolsConfig.filter((t) => !['campagne', 'arcana-profiles', 'maintenance'].includes(t.id));
         }
 
         // Head Master: tutte tranne Arcana SSO.
         if (isCampaignHeadMaster && !isGlobalSuperuser) {
-            return toolsConfig.filter((t) => t.id !== 'arcana-profiles');
+            return toolsConfig.filter((t) => !['arcana-profiles', 'maintenance'].includes(t.id));
         }
 
         // Superuser con ruolo campagna o fallback: tutto.

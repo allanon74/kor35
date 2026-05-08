@@ -11,10 +11,12 @@ import WidgetSocial from './wg/WidgetSocial';
  * HomePage - Layout speciale per la pagina home della Wiki
  * Mostra un layout a griglia con pulsanti e widget personalizzati
  */
-export default function HomePage({ pageData }) {
+export default function HomePage({ pageData, siteConfig }) {
   const navigate = useNavigate();
-  const { character } = useCharacter();
+  const { character, isAdmin } = useCharacter();
   const isLogged = !!character;
+  const isMaintenanceMode = !!siteConfig?.maintenance_mode;
+  const maintenanceMessage = String(siteConfig?.maintenance_public_message || '').trim();
 
   // Gestisce il click sul pulsante "Veterano"
   const handleVeteranoClick = () => {
@@ -79,7 +81,6 @@ export default function HomePage({ pageData }) {
             <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform"></div>
           </Link>
 
-          {/* Pulsante "Veterano? Accedi al Profilo" */}
           <button
             onClick={handleVeteranoClick}
             className="group relative overflow-hidden bg-gradient-to-br from-red-600 to-orange-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl transition-all transform hover:scale-105 text-left"
@@ -102,6 +103,24 @@ export default function HomePage({ pageData }) {
           </button>
 
         </div>
+
+        {isMaintenanceMode && (
+          <div className="mb-8 rounded-xl border border-amber-500/40 bg-amber-950/30 p-5 text-amber-100">
+            <h3 className="text-lg font-black mb-1">Maintenance mode attiva</h3>
+            <p className="text-sm opacity-95 mb-3">
+              {maintenanceMessage || 'Il sistema e temporaneamente in manutenzione.'}
+            </p>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => navigate('/app/maintenance')}
+                className="px-4 py-2 rounded-lg bg-amber-500 text-gray-900 font-bold hover:bg-amber-400"
+              >
+                Apri console maintenance
+              </button>
+            )}
+          </div>
+        )}
 
         {/* SEZIONE AMBIENTAZIONE E REGOLAMENTO */}
         <div className="grid md:grid-cols-2 gap-4 mb-8">

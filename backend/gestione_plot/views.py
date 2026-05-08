@@ -1,4 +1,5 @@
 from rest_framework import mixins, viewsets, permissions, status
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
@@ -551,6 +552,37 @@ class PublicConfigurazioneSitoViewSet(viewsets.ReadOnlyModelViewSet):
         # Assicura che il record esista
         ConfigurazioneSito.get_config()
         return ConfigurazioneSito.objects.all()
+
+
+class AdminMaintenanceConfigView(APIView):
+    """
+    Console maintenance mode riservata ai soli superuser Django.
+    """
+
+    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+
+    def _ensure_superuser(self, request):
+        if not bool(request.user and request.user.is_superuser):
+            return Response({"detail": "Accesso riservato agli admin generali Django."}, status=403)
+        return None
+
+    def get(self, request):
+        denied = self._ensure_superuser(request)
+        if denied is not None:
+            return denied
+        config = ConfigurazioneSito.get_config()
+        data = ConfigurazioneSitoSerializer(config).data
+        return Response(data)
+
+    def patch(self, request):
+        denied = self._ensure_superuser(request)
+        if denied is not None:
+            return denied
+        config = ConfigurazioneSito.get_config()
+        serializer = ConfigurazioneSitoSerializer(config, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class PublicLinkSocialViewSet(viewsets.ReadOnlyModelViewSet):

@@ -29,6 +29,12 @@ from .models import (
 )
 
 from .qr_logic import annotate_has_qrcode_avista
+from .formula_builder import (
+    FORMULA_BUILDER_SCHEMA,
+    build_formula_template,
+    build_stats_by_selection,
+    render_formula_preview,
+)
 
 from .serializers import (
     InfusioneFullEditorSerializer,
@@ -960,3 +966,59 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             obj = serializer.save()
             self._apply_target_lists(obj, self.request.data)
+
+
+class FormulaBuilderSchemaView(APIView):
+    permission_classes = [IsStaffOrMaster]
+
+    def get(self, request):
+        return Response(FORMULA_BUILDER_SCHEMA)
+
+
+class FormulaBuilderPreviewView(APIView):
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request):
+        payload = request.data if isinstance(request.data, dict) else {}
+        formula = payload.get("formula")
+        formula_type = payload.get("formula_type") or "attack"
+        current_stats = payload.get("stats_by_param") or {}
+        selections = payload.get("selections") or {}
+        context = payload.get("context") or {}
+        custom_text = payload.get("custom_text") or ""
+
+        formula_template = (formula or "").strip() or build_formula_template(formula_type, selections)
+        merged_stats = build_stats_by_selection(current_stats=current_stats, selections=selections)
+        rendered = render_formula_preview(formula=formula_template, stats_by_param=merged_stats, context=context)
+        if custom_text:
+            rendered = f"{rendered} {custom_text}".strip()
+
+        return Response(
+            {
+                "formula_rendered": rendered,
+                "stats_by_param": merged_stats,
+                "formula_template": formula_template,
+                "custom_text": custom_text,
+            }
+        )
+
+
+class FormulaSemanticOptionsView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        mattoni = (
+            Mattone.objects.filter(aura__sigla__iexact="AMA")
+            .select_related("aura")
+            .order_by("nome")
+        )
+        data = [
+            {
+                "id": m.id,
+                "nome": m.nome,
+                "dichiarazione": m.dichiarazione or "",
+                "label": (m.dichiarazione or m.nome or "").strip(),
+            }
+            for m in mattoni
+        ]
+        return Response({"elementi_mattoni": data})

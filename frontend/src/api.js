@@ -24,6 +24,75 @@ export const setActiveCampaignSlug = (slug) => {
 export const normCampaignSlug = (s) => String(s || '').trim().toLowerCase();
 
 /**
+ * Stato globale maintenance: quando attivo, i client API evitano di chiamare
+ * gli endpoint applicativi bloccati dal middleware (silenzioso, niente console.error).
+ * Allowlist: pubblica config, healthz, login, console maintenance admin.
+ *
+ * Bootstrap SINCRONO da localStorage: alla seconda visita parte già con il flag
+ * coerente, evitando una raffica di 503 prima che il config pubblico arrivi.
+ */
+let __kor35MaintenanceMode = false;
+try {
+  __kor35MaintenanceMode =
+    String(localStorage.getItem('kor35_maintenance_mode') || '').toLowerCase() === 'true';
+} catch (_e) {
+  __kor35MaintenanceMode = false;
+}
+
+export const setApiMaintenanceMode = (v) => {
+  const next = !!v;
+  __kor35MaintenanceMode = next;
+  try {
+    localStorage.setItem('kor35_maintenance_mode', next ? 'true' : 'false');
+  } catch (_e) {
+    /* storage non disponibile: ignoriamo */
+  }
+};
+
+export const isApiMaintenanceMode = () => __kor35MaintenanceMode;
+
+export class MaintenanceSkipError extends Error {
+  constructor(endpoint) {
+    super('Sistema in manutenzione: chiamata sospesa lato client.');
+    this.name = 'MaintenanceSkipError';
+    this.endpoint = endpoint;
+    this.maintenanceSkipped = true;
+  }
+}
+
+const __MAINTENANCE_BLOCKED_PREFIXES = [
+  '/api/personaggi/',
+  '/api/social/',
+  '/api/pilot/',
+  '/api/plot/api/staff/',
+  '/api/plot/api/eventi',
+  '/api/plot/api/giorni',
+  '/api/plot/api/quests',
+  '/api/plot/api/mostri-istanza',
+  '/api/plot/api/viste-setup',
+  '/api/plot/api/png-assegnati',
+  '/api/plot/api/fasi',
+  '/api/plot/api/tasks',
+  '/api/plot/iscrizioni-evento/',
+  '/api/auth/arcana/password-status/',
+];
+
+const __MAINTENANCE_ALLOW_PREFIXES = [
+  '/api/healthz',
+  '/api/version',
+  '/api/plot/api/public/',
+  '/api/plot/api/admin/maintenance-config/',
+  '/api/auth/',
+];
+
+const isBlockedDuringMaintenance = (endpoint) => {
+  if (!__kor35MaintenanceMode) return false;
+  const path = String(endpoint || '');
+  if (__MAINTENANCE_ALLOW_PREFIXES.some((p) => path.startsWith(p))) return false;
+  return __MAINTENANCE_BLOCKED_PREFIXES.some((p) => path.startsWith(p));
+};
+
+/**
  * Helper generico per le chiamate API autenticate.
  * Gestisce l'header Authorization e il caso di token non valido.
  * @param {string} endpoint - L'endpoint API (es. /api/personaggi/api/personaggi/)
@@ -31,6 +100,10 @@ export const normCampaignSlug = (s) => String(s || '').trim().toLowerCase();
  * @param {function} onLogout - La funzione di logout da App.jsx
  */
 export const fetchAuthenticated = async (endpoint, options = {}, onLogout) => {
+  if (isBlockedDuringMaintenance(endpoint)) {
+    return Promise.reject(new MaintenanceSkipError(endpoint));
+  }
+
   const token = localStorage.getItem('kor35_token');
   
   if (!token) {
@@ -84,10 +157,16 @@ export const fetchAuthenticated = async (endpoint, options = {}, onLogout) => {
         }
         
         // Ora lanciamo l'errore con status e data per gestione avanzata (es. 409 Conflict)
-        console.error(`Errore API ${response.status} (${response.statusText}) per ${endpoint}:`, errorMsg);
+        const isMaintenance503 = response.status === 503 && (errorData?.maintenance_mode === true);
+        if (!isMaintenance503) {
+          console.error(`Errore API ${response.status} (${response.statusText}) per ${endpoint}:`, errorMsg);
+        }
         const error = new Error(`Errore API (${response.status}): ${errorMsg}`);
         error.status = response.status;
         error.data = errorData;
+        if (isMaintenance503) {
+          error.maintenanceSkipped = true;
+        }
         throw error;
     }
 
@@ -131,6 +210,10 @@ export const validateActiveCampaign = (slug, onLogout) =>
   );
 
 export const fetchPublic = async (endpoint, options = {}) => {
+  if (isBlockedDuringMaintenance(endpoint)) {
+    return Promise.reject(new MaintenanceSkipError(endpoint));
+  }
+
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -149,11 +232,15 @@ export const fetchPublic = async (endpoint, options = {}) => {
     
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Errore API Public (${response.status}): ${errorText}`);
+        const err = new Error(`Errore API Public (${response.status}): ${errorText}`);
+        err.status = response.status;
+        throw err;
     }
     return await response.json();
   } catch (error) {
-    console.error(`Errore fetch public ${endpoint}:`, error);
+    if (!error?.maintenanceSkipped) {
+      console.error(`Errore fetch public ${endpoint}:`, error);
+    }
     throw error;
   }
 };
@@ -1640,6 +1727,19 @@ export const getStatisticheList = (onLogout) => {
   return fetchAuthenticated('/api/personaggi/api/statistiche/', { method: 'GET' }, onLogout);
 };
 
+export const staffGetFormulaBuilderSchema = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/formula-builder/schema/', { method: 'GET' }, onLogout);
+
+export const staffPreviewFormulaBuilder = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/formula-builder/preview/',
+    { method: 'POST', body: JSON.stringify(payload || {}) },
+    onLogout
+  );
+
+export const staffGetFormulaSemanticOptions = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/formula-semantic-options/', { method: 'GET' }, onLogout);
+
 // --- INFUSIONI ---
 export const staffGetInfusioni = (onLogout, params = {}) => {
   // Costruiamo la query string (es: ?page=1&search=pippo)
@@ -2524,6 +2624,17 @@ export const getEventiPubblici = () => {
 // --- CONFIGURAZIONE SITO ---
 export const getConfigurazioneSito = () => {
   return fetchPublic('/api/plot/api/public/configurazione-sito/1/');
+};
+
+export const getAdminMaintenanceConfig = (onLogout) => {
+  return fetchAuthenticated('/api/plot/api/admin/maintenance-config/', { method: 'GET' }, onLogout);
+};
+
+export const updateAdminMaintenanceConfig = (data, onLogout) => {
+  return fetchAuthenticated('/api/plot/api/admin/maintenance-config/', {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }, onLogout);
 };
 
 // --- LINK SOCIAL ---

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { staffCreateAbilita, staffUpdateAbilita, staffGetAbilita, getAbilitaEditorResources } from '../../api';
+import { staffCreateAbilita, staffUpdateAbilita, staffGetAbilita, getAbilitaEditorResources, staffGetFormulaSemanticOptions } from '../../api';
 import RichTextEditor from '../RichTextEditor';
 import StatModInline from './inlines/StatModInline';
 import GenericRelationInline from './inlines/GenericRelationInline';
@@ -26,6 +26,7 @@ const EMPTY_ABILITA_FORM = {
     punteggi_dipendenti: [],
     prerequisiti: [],
     statistiche: [],
+    formula_rules: [],
     effetto_uso_risorsa_str: '',
     recupero_risorsa_str: '',
 };
@@ -54,6 +55,7 @@ function mergeAbilitaFormState(initialData) {
         punteggi_dipendenti: Array.isArray(initialData.punteggi_dipendenti) ? initialData.punteggi_dipendenti : [],
         prerequisiti: Array.isArray(initialData.prerequisiti) ? initialData.prerequisiti : [],
         statistiche: Array.isArray(initialData.statistiche) ? initialData.statistiche : [],
+        formula_rules: Array.isArray(initialData.formula_rules) ? initialData.formula_rules : [],
         effetto_uso_risorsa_str:
             initialData.effetto_uso_risorsa != null
                 ? JSON.stringify(initialData.effetto_uso_risorsa, null, 2)
@@ -69,17 +71,19 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
     const [punteggi, setPunteggi] = useState([]); 
     const [abilitaList, setAbilitaList] = useState([]); 
     const [tiersList, setTiersList] = useState([]); 
+    const [semanticMattoniOptions, setSemanticMattoniOptions] = useState([]);
     const [effettoWizard, setEffettoWizard] = useState(EMPTY_EFFETTO_WIZARD);
     const [recuperoWizard, setRecuperoWizard] = useState(EMPTY_RECUPERO_WIZARD);
 
     const statsOptions = punteggi.filter(p => p.tipo === 'ST');
     const auraOptions = punteggi.filter(p => p.tipo === 'AU');
-    const elementOptions = punteggi.filter(p => p.tipo === 'EL' || p.tipo === 'MA'); // 'EL' o 'MA' a seconda di come codifichi gli elementi/materie nel DB
+    const elementOptions = resolveSemanticElementOptions(punteggi);
 
     const initialKey = initialData?.id ?? 'new';
     const [formData, setFormData] = useState(() => mergeAbilitaFormState(initialData));
     const [saving, setSaving] = useState(false);
     const [status, setStatus] = useState({ type: 'success', message: '' });
+    const [ruleModalOpen, setRuleModalOpen] = useState(false);
 
     useEffect(() => {
         setFormData(mergeAbilitaFormState(initialData));
@@ -110,6 +114,8 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                 setPunteggi(resources?.punteggi || []);
                 setAbilitaList(resources?.abilita || []);
                 setTiersList(resources?.tiers || []);
+                const semantic = await staffGetFormulaSemanticOptions(onLogout);
+                setSemanticMattoniOptions((semantic?.elementi_mattoni || []).map((m) => ({ ...m, nome: m.label || m.nome })));
             } catch (err) {
                 console.error("Errore caricamento risorse editor", err);
             }
@@ -142,6 +148,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
             const punteggiAssegnati = formData.punteggi_assegnati || [];
             const punteggiDipendenti = formData.punteggi_dipendenti || [];
             const prerequisiti = formData.prerequisiti || [];
+            const formulaRules = formData.formula_rules || [];
 
             const {
                 effetto_uso_risorsa_str: _s1,
@@ -170,6 +177,14 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     ogni_x: Math.max(1, parseInt(p.ogni_x || 1)),
                 })),
                 prerequisiti: prerequisiti.map(p => ({...p, prerequisito: parseInt(p.prerequisito)})),
+                formula_rules: formulaRules.map((r) => ({
+                    ...r,
+                    from_punteggio: r.from_punteggio ? parseInt(r.from_punteggio) : null,
+                    to_punteggio: r.to_punteggio ? parseInt(r.to_punteggio) : null,
+                    from_mattone: r.from_mattone ? parseInt(r.from_mattone) : null,
+                    to_mattone: r.to_mattone ? parseInt(r.to_mattone) : null,
+                    priority: parseInt(r.priority || 100),
+                })),
                 // Statistiche è già gestito come array di oggetti da StatModInline
             };
 
@@ -807,9 +822,274 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     />
                 </div>
 
+                <div className="md:col-span-2 lg:col-span-3 bg-violet-900/20 p-4 rounded-lg border border-violet-700/40">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-violet-300 uppercase">Regole semantiche formula</h4>
+                        <button
+                            type="button"
+                            onClick={() => setRuleModalOpen(true)}
+                            className="bg-violet-700 hover:bg-violet-600 text-white text-xs font-bold px-3 py-1 rounded"
+                        >
+                            + Aggiungi regola
+                        </button>
+                    </div>
+                    {(formData.formula_rules || []).length === 0 ? (
+                        <p className="text-xs text-gray-400">Nessuna regola. Usa questa sezione per override di sorgente, aura o elemento.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {(formData.formula_rules || []).map((rule, idx) => (
+                                <div key={`fr-${idx}`} className="bg-gray-950/70 border border-gray-700 rounded p-3 flex items-center justify-between gap-3">
+                                    <div className="text-xs text-gray-200">
+                                        <div><strong>Tipo:</strong> {rule.rule_type}</div>
+                                        <div><strong>Scope:</strong> {rule.scope}</div>
+                                        <div><strong>Da:</strong> {findPunteggioName(punteggi, rule.from_punteggio) || findMattoneName(semanticMattoniOptions, rule.from_mattone) || '-'}</div>
+                                        <div><strong>A:</strong> {findPunteggioName(punteggi, rule.to_punteggio) || findMattoneName(semanticMattoniOptions, rule.to_mattone) || rule.source_label || '-'}</div>
+                                        <div><strong>Priorità:</strong> {rule.priority ?? 100}</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, formula_rules: formData.formula_rules.filter((_, i) => i !== idx) })}
+                                        className="bg-red-800 hover:bg-red-700 text-white text-xs font-bold px-3 py-1 rounded"
+                                    >
+                                        Rimuovi
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
             </div>
+
+            <FormulaRuleModal
+                open={ruleModalOpen}
+                onClose={() => setRuleModalOpen(false)}
+                punteggi={punteggi}
+                semanticMattoniOptions={semanticMattoniOptions}
+                onSave={(rule) => {
+                    setFormData((prev) => ({ ...prev, formula_rules: [...(prev.formula_rules || []), rule] }));
+                    setRuleModalOpen(false);
+                }}
+            />
         </div>
     );
 };
+
+function findPunteggioName(punteggi, id) {
+    if (!id) return '';
+    const found = (punteggi || []).find((p) => String(p.id) === String(id));
+    return found?.nome || '';
+}
+
+function findMattoneName(mattoni, id) {
+    if (!id) return '';
+    const found = (mattoni || []).find((m) => String(m.id) === String(id));
+    return found?.label || found?.nome || '';
+}
+
+function buildSemanticMattoneOptions(mattoni) {
+    return (mattoni || []).map((m) => ({
+        ...m,
+        nome: m.label || m.nome,
+        search_blob: `${m.label || ''} ${m.nome || ''} ${m.dichiarazione || ''}`.toLowerCase(),
+    }));
+}
+
+function resolveSemanticElementOptions(punteggi = []) {
+    const strict = (punteggi || []).filter((p) => p.tipo === 'EL' || p.tipo === 'MA');
+    if (strict.length > 0) {
+        return strict;
+    }
+    return (punteggi || []).filter((p) => p.tipo !== 'AU');
+}
+
+const FORMULA_SCOPE_OPTIONS = [
+    { id: 'ALL', nome: 'Tutto' },
+    { id: 'ATT', nome: 'Solo Attacchi' },
+    { id: 'WEA', nome: 'Solo Tessiture' },
+];
+
+const FORMULA_RULE_OPTIONS = [
+    { id: 'SOURCE_OVERRIDE', nome: 'Sostituisci sorgente' },
+    { id: 'AURA_REPLACE', nome: 'Sostituisci aura' },
+    { id: 'AURA_APPEND', nome: 'Aggiungi aura alternativa' },
+    { id: 'ELEMENT_REPLACE', nome: 'Sostituisci elemento' },
+];
+
+const SOURCE_KEYWORD_OPTIONS = [
+    { id: 'Chop!', nome: 'Chop!' },
+    { id: 'Blam!', nome: 'Blam!' },
+    { id: 'Pierce!', nome: 'Pierce!' },
+    { id: 'Mental!', nome: 'Mental!' },
+];
+
+function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOptions }) {
+    const [draft, setDraft] = useState({
+        scope: 'ALL',
+        rule_type: 'SOURCE_OVERRIDE',
+        from_punteggio: null,
+        to_punteggio: null,
+        from_mattone: null,
+        to_mattone: null,
+        source_label: '',
+        priority: 100,
+    });
+    const [elementSearch, setElementSearch] = useState('');
+
+    useEffect(() => {
+        if (open) {
+            setDraft({
+                scope: 'ALL',
+                rule_type: 'SOURCE_OVERRIDE',
+                from_punteggio: null,
+                to_punteggio: null,
+                from_mattone: null,
+                to_mattone: null,
+                source_label: '',
+                priority: 100,
+            });
+            setElementSearch('');
+        }
+    }, [open]);
+
+    if (!open) return null;
+
+    const auraOptions = (punteggi || []).filter((p) => p.tipo === 'AU');
+    const elementOptions = buildSemanticMattoneOptions(semanticMattoniOptions);
+    const filteredElementOptions = !elementSearch.trim()
+        ? elementOptions
+        : elementOptions.filter((o) => (o.search_blob || '').includes(elementSearch.trim().toLowerCase()));
+    const previewText = buildFormulaRulePreview(draft, punteggi);
+
+    return (
+        <div className="fixed inset-0 z-10000 bg-black/70 flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl bg-gray-900 border border-gray-700 rounded-xl shadow-2xl">
+                <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+                    <h3 className="text-white font-bold">Nuova regola semantica</h3>
+                    <button type="button" onClick={onClose} className="px-3 py-1 bg-gray-700 rounded text-white text-sm">Chiudi</button>
+                </div>
+                <div className="p-4 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase font-bold">Scope</label>
+                            <SearchableSelect options={FORMULA_SCOPE_OPTIONS} value={draft.scope} onChange={(v) => setDraft({ ...draft, scope: v || 'ALL' })} minOptionsForSearch={99} />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase font-bold">Tipo regola</label>
+                            <SearchableSelect options={FORMULA_RULE_OPTIONS} value={draft.rule_type} onChange={(v) => setDraft({ ...draft, rule_type: v || 'SOURCE_OVERRIDE' })} minOptionsForSearch={99} />
+                        </div>
+                    </div>
+
+                    {draft.rule_type === 'SOURCE_OVERRIDE' && (
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase font-bold">Parola chiave sorgente</label>
+                            <SearchableSelect
+                                options={SOURCE_KEYWORD_OPTIONS}
+                                value={draft.source_label}
+                                onChange={(v) => setDraft({ ...draft, source_label: v || '' })}
+                                minOptionsForSearch={99}
+                            />
+                        </div>
+                    )}
+
+                    {(draft.rule_type === 'AURA_REPLACE' || draft.rule_type === 'AURA_APPEND') && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold">Aura origine (opzionale)</label>
+                                <SearchableSelect options={auraOptions} value={draft.from_punteggio} onChange={(v) => setDraft({ ...draft, from_punteggio: v || null })} />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold">Aura destinazione</label>
+                                <SearchableSelect options={auraOptions} value={draft.to_punteggio} onChange={(v) => setDraft({ ...draft, to_punteggio: v || null })} />
+                            </div>
+                        </div>
+                    )}
+
+                    {draft.rule_type === 'ELEMENT_REPLACE' && (
+                        <div className="space-y-2">
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold">Cerca elemento (dichiarazione)</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-white"
+                                    placeholder="Es. Chop, Fuoco, Mentale..."
+                                    value={elementSearch}
+                                    onChange={(e) => setElementSearch(e.target.value)}
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold">Elemento origine (opzionale)</label>
+                                <SearchableSelect
+                                    options={filteredElementOptions}
+                                    value={draft.from_mattone}
+                                    onChange={(v) => setDraft({ ...draft, from_mattone: v || null, from_punteggio: null })}
+                                    minOptionsForSearch={1}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold">Elemento destinazione</label>
+                                <SearchableSelect
+                                    options={filteredElementOptions}
+                                    value={draft.to_mattone}
+                                    onChange={(v) => setDraft({ ...draft, to_mattone: v || null, to_punteggio: null })}
+                                    minOptionsForSearch={1}
+                                />
+                            </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="text-xs text-gray-500 uppercase font-bold">Priorità</label>
+                        <input
+                            type="number"
+                            className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-white"
+                            value={draft.priority}
+                            onChange={(e) => setDraft({ ...draft, priority: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="bg-gray-950/70 border border-gray-700 rounded p-3">
+                        <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Anteprima regola</div>
+                        <div className="text-sm text-emerald-300">{previewText}</div>
+                    </div>
+                </div>
+                <div className="p-4 border-t border-gray-700 flex justify-end gap-2">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-700 rounded text-white text-sm">Annulla</button>
+                    <button
+                        type="button"
+                        onClick={() => onSave({ ...draft, priority: parseInt(draft.priority || 100) })}
+                        className="px-4 py-2 bg-violet-700 rounded text-white text-sm font-bold"
+                    >
+                        Aggiungi
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function buildFormulaRulePreview(rule, punteggi) {
+    const scopeLabel =
+        rule.scope === 'ATT' ? 'solo attacchi' : rule.scope === 'WEA' ? 'solo tessiture' : 'tutte le formule';
+    const fromName = findPunteggioName(punteggi, rule.from_punteggio) || 'qualunque';
+    const toName = findPunteggioName(punteggi, rule.to_punteggio) || rule.source_label || 'destinazione';
+
+    if (rule.rule_type === 'SOURCE_OVERRIDE') {
+        return `Usa "${toName}" al posto della sorgente base su ${scopeLabel}.`;
+    }
+    if (rule.rule_type === 'AURA_REPLACE') {
+        return `Sostituisci aura "${fromName}" con "${toName}" su ${scopeLabel}.`;
+    }
+    if (rule.rule_type === 'AURA_APPEND') {
+        return `Aggiungi aura alternativa "${toName}" (es. Aura Base/${toName}) su ${scopeLabel}.`;
+    }
+    if (rule.rule_type === 'ELEMENT_REPLACE') {
+        return `Sostituisci elemento "${fromName}" con "${toName}" su ${scopeLabel}.`;
+    }
+    return 'Configura i campi per vedere l’anteprima.';
+}
+
 
 export default AbilitaEditor;

@@ -7,6 +7,7 @@ import StatModInline from './inlines/StatModInline';
 import MultiSelectBodySlots from './MultiSelectBodySlots';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import FormulaBuilderModal from './FormulaBuilderModal';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -29,6 +30,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
+  const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
@@ -127,6 +129,28 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
   const currentCaricheId = formData.statistica_cariche?.id || formData.statistica_cariche;
 
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+    const controlledSet = new Set(controlledParams || []);
+    const byParam = new Map((statsOptions || []).map((s) => [s.parametro, s]));
+    const current = formData.statistiche_base || [];
+    const kept = current.filter((item) => {
+      const statId = item.statistica?.id || item.statistica;
+      const stat = (statsOptions || []).find((s) => String(s.id) === String(statId));
+      return !(stat?.parametro && controlledSet.has(stat.parametro));
+    });
+
+    const fromBuilder = Object.entries(statsByParam || {})
+      .filter(([param, value]) => byParam.get(param) && Number(value) > 0)
+      .map(([param, value]) => ({ statistica: byParam.get(param).id, valore_base: Number(value) }));
+
+    const mergedFormula = [formulaText, customText].filter(Boolean).join(' ').trim();
+    setFormData((prev) => ({
+      ...prev,
+      formula_attacco: mergedFormula,
+      statistiche_base: [...kept, ...fromBuilder],
+    }));
+  };
+
   return (
     <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] text-white shadow-2xl border border-gray-700">
       
@@ -170,6 +194,15 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         {/* RIGA 2: Formula Attacco */}
         <div className="bg-indigo-500/5 p-3 rounded-lg border border-indigo-500/20">
             <Input label="Formula Attacco (Parametri e Dadi)" placeholder="es. @for + 1d10 + @potenza_materia" value={formData.formula_attacco} onChange={v => setFormData({...formData, formula_attacco: v})} />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsFormulaBuilderOpen(true)}
+                className="px-3 py-1 rounded bg-indigo-700 hover:bg-indigo-600 text-xs font-bold uppercase tracking-wide"
+              >
+                Costruisci formula
+              </button>
+            </div>
         </div>
         
         {/* RIGA 3: Nome, Tipo e Flag */}
@@ -240,6 +273,17 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         onAdd={() => setFormData({...formData, modificatori: [...(formData.modificatori || []), {statistica: null, valore: 0, tipo_modificatore:'ADD', usa_limitazione_aura: false, limit_a_aure: [], usa_limitazione_elemento: false, limit_a_elementi: [], usa_condizione_text: false, condizione_text: ''}]})}
         onChange={(i, f, v) => updateInline('modificatori', i, f, v)}
         onRemove={(i) => setFormData({...formData, modificatori: formData.modificatori.filter((_, idx) => idx !== i)})}
+      />
+
+      <FormulaBuilderModal
+        open={isFormulaBuilderOpen}
+        onClose={() => setIsFormulaBuilderOpen(false)}
+        onApply={handleApplyFormulaBuilder}
+        onLogout={onLogout}
+        statsOptions={statsOptions}
+        statisticheBase={formData.statistiche_base || []}
+        formulaValue={formData.formula_attacco}
+        defaultFormulaType="attack"
       />
     </div>
   );

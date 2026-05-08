@@ -1,5 +1,13 @@
 {% extends "admin/base_site.html" %}
 
+{% block content %}
+  {% if KOR35_MAINTENANCE_MODE %}
+    <div style="margin: 0 0 16px; padding: 14px 16px; border: 2px solid #b91c1c; border-radius: 8px; background: #fee2e2; color: #7f1d1d; font-weight: 700; line-height: 1.4;">
+      {{ KOR35_MAINTENANCE_ADMIN_NOTE|default:"MODALITA MANUTENZIONE ATTIVA: non effettuare modifiche dati." }}
+    </div>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
 {% block footer %}
   {{ block.super }}
   <div style="padding: 12px 20px; opacity: .75; font-size: 12px;">

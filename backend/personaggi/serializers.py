@@ -26,7 +26,7 @@ from .models import ConfigurazioneLivelloAura, formatta_testo_generico, Consumab
 from . import qr_logic
 # Importa i modelli e le funzioni helper
 from .models import (
-    AbilitaStatistica, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
+    AbilitaStatistica, AbilitaFormulaRule, ModelloAuraRequisitoDoppia, _get_icon_color_from_bg, 
     QrCode, Abilita, PuntiCaratteristicaMovimento, Tier, Punteggio, Tabella, 
     TipologiaPersonaggio, abilita_tier, abilita_requisito, abilita_sbloccata, 
     abilita_punteggio, abilita_punteggio_dipendente, abilita_prerequisito, Attivata, Manifesto, Nodo, NodoRewardConfig, A_vista, Mattone, InnescoTimer,
@@ -3023,6 +3023,14 @@ class AbilitaStatisticaEditorSerializer(serializers.ModelSerializer):
         read_only_fields = ['abilita'] # FIX ERRORE "Campo obbligatorio"
         validators = [] 
 
+
+class AbilitaFormulaRuleEditorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AbilitaFormulaRule
+        fields = "__all__"
+        read_only_fields = ["abilita"]
+        validators = []
+
 class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     """
     Serializer completo per CRUD Abilità lato Staff.
@@ -3034,6 +3042,7 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
     punteggi_dipendenti = AbilitaPunteggioDipendenteEditorSerializer(many=True, required=False)
     prerequisiti = AbilitaPrerequisitoEditorSerializer(source='abilita_prerequisiti', many=True, required=False)
     statistiche = AbilitaStatisticaEditorSerializer(source='abilitastatistica_set', many=True, required=False)
+    formula_rules = AbilitaFormulaRuleEditorSerializer(many=True, required=False)
 
     class Meta:
         model = Abilita
@@ -3052,9 +3061,10 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
         punt_dep_data = validated_data.pop('punteggi_dipendenti', [])
         pre_data = validated_data.pop('abilita_prerequisiti', [])
         stat_data = validated_data.pop('abilitastatistica_set', [])
+        formula_rules_data = validated_data.pop('formula_rules', [])
 
         abilita = Abilita.objects.create(**validated_data)
-        self._save_inlines(abilita, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data)
+        self._save_inlines(abilita, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data, formula_rules_data)
         return abilita
 
     @transaction.atomic
@@ -3065,15 +3075,16 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
         punt_dep_data = validated_data.pop('punteggi_dipendenti', None)
         pre_data = validated_data.pop('abilita_prerequisiti', None)
         stat_data = validated_data.pop('abilitastatistica_set', None)
+        formula_rules_data = validated_data.pop('formula_rules', None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        self._save_inlines(instance, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data)
+        self._save_inlines(instance, tiers_data, req_data, punt_data, punt_dep_data, pre_data, stat_data, formula_rules_data)
         return instance
 
-    def _save_inlines(self, instance, tiers, reqs, punts, punt_deps, pres, stats):
+    def _save_inlines(self, instance, tiers, reqs, punts, punt_deps, pres, stats, formula_rules):
         # 1. Tiers
         if tiers is not None:
             instance.abilita_tier_set.all().delete()
@@ -3113,6 +3124,12 @@ class AbilitaFullEditorSerializer(serializers.ModelSerializer):
                 new_stat = AbilitaStatistica.objects.create(abilita=instance, **item)
                 if aure: new_stat.limit_a_aure.set(aure)
                 if elementi: new_stat.limit_a_elementi.set(elementi)
+
+        # 7. Regole semantiche formula
+        if formula_rules is not None:
+            instance.formula_rules.all().delete()
+            for item in formula_rules:
+                AbilitaFormulaRule.objects.create(abilita=instance, **item)
                 
 # SSO per OSSN 
 
