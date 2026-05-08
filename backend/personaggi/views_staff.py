@@ -7,7 +7,7 @@ from gestione_plot.permissions import IsStaffOrMaster
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import re
@@ -48,6 +48,9 @@ from .serializers import (
     InfusioneSerializer,
     TessituraSerializer,
     CerimonialeSerializer,
+    InfusioneStaffListSerializer,
+    TessituraStaffListSerializer,
+    CerimonialeStaffListSerializer,
     PropostaTecnicaSerializer,
     AbilitaFullEditorSerializer,
     AbilitaStaffListSerializer,
@@ -398,7 +401,32 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
     serializer_class = InfusioneFullEditorSerializer
     permission_classes = [IsAdminUser]
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return InfusioneStaffListSerializer
+        return InfusioneFullEditorSerializer
+
     def get_queryset(self):
+        if self.action == 'list':
+            qs = (
+                Infusione.objects
+                .select_related('aura_richiesta')
+                .annotate(livello_calc=Sum('componenti__valore'))
+                .only(
+                    'id',
+                    'nome',
+                    'aura_richiesta__id',
+                    'aura_richiesta__nome',
+                    'aura_richiesta__sigla',
+                    'aura_richiesta__colore',
+                    'aura_richiesta__icona',
+                    'aura_richiesta__icona_nome_originale',
+                    'aura_richiesta__ordine',
+                )
+            )
+            qs = _campaign_feature_filter(self.request, qs, FEATURE_INFUSIONI)
+            return annotate_has_qrcode_avista(qs)
+
         qs = _campaign_feature_filter(self.request, Infusione.objects.all(), FEATURE_INFUSIONI)
         return annotate_has_qrcode_avista(qs)
 
@@ -413,7 +441,32 @@ class TessituraMasterViewSet(viewsets.ModelViewSet):
     serializer_class = TessituraFullEditorSerializer
     permission_classes = [IsAdminUser]
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return TessituraStaffListSerializer
+        return TessituraFullEditorSerializer
+
     def get_queryset(self):
+        if self.action == 'list':
+            qs = (
+                Tessitura.objects
+                .select_related('aura_richiesta')
+                .annotate(livello_calc=Sum('componenti__valore'))
+                .only(
+                    'id',
+                    'nome',
+                    'aura_richiesta__id',
+                    'aura_richiesta__nome',
+                    'aura_richiesta__sigla',
+                    'aura_richiesta__colore',
+                    'aura_richiesta__icona',
+                    'aura_richiesta__icona_nome_originale',
+                    'aura_richiesta__ordine',
+                )
+            )
+            qs = _campaign_feature_filter(self.request, qs, FEATURE_TESSITURE)
+            return annotate_has_qrcode_avista(qs)
+
         qs = _campaign_feature_filter(self.request, Tessitura.objects.all(), FEATURE_TESSITURE)
         return annotate_has_qrcode_avista(qs)
 
@@ -428,7 +481,32 @@ class CerimonialeMasterViewSet(viewsets.ModelViewSet):
     serializer_class = CerimonialeFullEditorSerializer
     permission_classes = [IsAdminUser]
 
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return CerimonialeStaffListSerializer
+        return CerimonialeFullEditorSerializer
+
     def get_queryset(self):
+        if self.action == 'list':
+            qs = (
+                Cerimoniale.objects
+                .select_related('aura_richiesta')
+                .only(
+                    'id',
+                    'nome',
+                    'liv',
+                    'aura_richiesta__id',
+                    'aura_richiesta__nome',
+                    'aura_richiesta__sigla',
+                    'aura_richiesta__colore',
+                    'aura_richiesta__icona',
+                    'aura_richiesta__icona_nome_originale',
+                    'aura_richiesta__ordine',
+                )
+            )
+            qs = _campaign_feature_filter(self.request, qs, FEATURE_CERIMONIALI)
+            return annotate_has_qrcode_avista(qs)
+
         qs = _campaign_feature_filter(self.request, Cerimoniale.objects.all(), FEATURE_CERIMONIALI)
         return annotate_has_qrcode_avista(qs)
 

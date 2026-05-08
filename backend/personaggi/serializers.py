@@ -1265,6 +1265,45 @@ class CerimonialeSerializer(serializers.ModelSerializer):
             'TestoFormattato', 'costo_crediti', 'componenti'
         )
 
+
+class InfusioneStaffListSerializer(serializers.ModelSerializer):
+    """
+    Payload leggero per lista staff infusioni.
+    """
+    aura_richiesta = PunteggioSmallSerializer(read_only=True)
+    has_qrcode = serializers.BooleanField(read_only=True)
+    livello = serializers.IntegerField(source='livello_calc', read_only=True)
+
+    class Meta:
+        model = Infusione
+        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode')
+
+
+class TessituraStaffListSerializer(serializers.ModelSerializer):
+    """
+    Payload leggero per lista staff tessiture.
+    """
+    aura_richiesta = PunteggioSmallSerializer(read_only=True)
+    has_qrcode = serializers.BooleanField(read_only=True)
+    livello = serializers.IntegerField(source='livello_calc', read_only=True)
+
+    class Meta:
+        model = Tessitura
+        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode')
+
+
+class CerimonialeStaffListSerializer(serializers.ModelSerializer):
+    """
+    Payload leggero per lista staff cerimoniali.
+    """
+    aura_richiesta = PunteggioSmallSerializer(read_only=True)
+    has_qrcode = serializers.BooleanField(read_only=True)
+    livello = serializers.IntegerField(source='liv', read_only=True)
+
+    class Meta:
+        model = Cerimoniale
+        fields = ('id', 'nome', 'liv', 'livello', 'aura_richiesta', 'has_qrcode')
+
 class TecnicaBaseMasterMixin:
     """Mixin aggiornato per gestire M2M e update annidati"""
     def handle_nested_data(self, instance, components_data, stats_base_data, modifiers_data=None):

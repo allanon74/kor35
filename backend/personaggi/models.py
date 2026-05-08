@@ -243,6 +243,7 @@ EXCLUSIVE_FORMAT_GROUPS = {
             {"params": ["blam"], "label": "Blam"},
             {"params": ["pierce"], "label": "Pierce"},
             {"params": ["mental"], "label": "Mental"},
+            {"params": ["elemento_src"], "label": "Elemento"},
         ],
         "separator": "/",
         "suffix": "!",
@@ -255,7 +256,7 @@ EXCLUSIVE_FORMAT_GROUPS = {
                 "label": "Aura",
                 "extra": {
                     "when": "aura > 0",
-                    "template": " {aura|NAME|LASTWORD:'a'} {livello|L}:"
+                    "template": " {aura|NAME|LASTWORD:'a'} {livello}"
                 }
                 },
             {
@@ -263,7 +264,7 @@ EXCLUSIVE_FORMAT_GROUPS = {
                 "label": "Proiettile",
                 "extra": {
                     "when": "proiett > 0",
-                    "template": " {aura|NAME|LASTWORD:'o'} {livello|L}:"
+                    "template": " {aura|NAME|LASTWORD:'o'} {livello}"
                 }
                 },
             {
@@ -271,12 +272,12 @@ EXCLUSIVE_FORMAT_GROUPS = {
                 "label": "Manovra",
                 "extra": {
                     "when": "manovra > 0",
-                    "template": " {aura|NAME|LASTWORD:'a'} {livello|L}:"
+                    "template": " {aura|NAME|LASTWORD:'a'} {livello}"
                 }
                 },
         ],
         "separator": "/",
-        # "suffix": "{ aura|LASTWORD} {livello|L}:",
+        "suffix": ":",
         "append_space": True,
     },
     "formula_status": {
@@ -364,11 +365,11 @@ EXCLUSIVE_FORMAT_GROUPS = {
 DEFAULT_EXCLUSIVE_FORMULA_GROUP = "formula_prefix"
 DEFAULT_ATTACK_FORMULA_TEMPLATE = (
     "{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
-    "{formula_source}{formula_status}{formula_cura}{formula_damage}"
+    "{formula_source}{formula_damage}{formula_cura}{formula_status}"
 )
 DEFAULT_WEAVE_FORMULA_TEMPLATE = (
     "{formula_type}{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
-    "{formula_source}{formula_status}{formula_cura}{formula_damage}"
+    "{formula_source}{formula_damage}{formula_cura}{formula_status}"
 )
 DEFAULT_FORMULA_TEMPLATE = DEFAULT_WEAVE_FORMULA_TEMPLATE
 
@@ -772,6 +773,9 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
             # Se è un oggetto Django, lo salviamo in object_context per i nomi
             if hasattr(v, 'pk') or hasattr(v, 'nome'):
                 object_context[k] = v
+                if k == "elemento":
+                    # Sorgente elemento nelle formule (senza label "Elemento").
+                    eval_context["elemento_src"] = 1
             # Se è un valore semplice, aggiorniamo il contesto matematico
             else:
                 eval_context[k] = v
@@ -794,6 +798,15 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 if context is None:
                     context = {}
                 context["elemento_display_override"] = semantic["elemento_display_override"]
+
+    # Legacy weaves: se c'è status ma manca source, inietta source prima di status.
+    if (
+        context
+        and str(context.get("formula_kind") or "").upper() == FORMULA_SCOPE_WEAVE
+        and "{formula_status}" in formula_out
+        and "{formula_source}" not in formula_out
+    ):
+        formula_out = formula_out.replace("{formula_status}", "{formula_source}{formula_status}")
 
     # Configurazione gruppi esclusivi (override opzionale da context)
     exclusive_groups_config = EXCLUSIVE_FORMAT_GROUPS
@@ -857,6 +870,13 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
              except: pass
 
         # D. Formattazione Finale
+        # Il livello deve essere esplicito in formula: evita che {livello|L}
+        # diventi vuoto quando livello=1 per via del mapping legacy di L.
+        if expr in ("livello", "liv") and formato == "L":
+            try:
+                return str(int(round(float(val_math))))
+            except (TypeError, ValueError):
+                return str(val_math)
         return formatta_valore_avanzato(val_math, formato)
 
     # Regex aggiornata: cerca {contenuto} con opzionale |formato
@@ -4734,13 +4754,19 @@ class Personaggio(Inventario):
                     aura_labels.append(to_label)
 
         out = {}
+        if formula_kind == FORMULA_SCOPE_WEAVE and elemento_obj:
+            source_label = _element_label(elemento_obj)
+            if source_label:
+                out["source_labels"] = {"elemento_src": source_label}
         if source_override:
-            out["source_labels"] = {
+            labels = out.get("source_labels", {})
+            labels.update({
                 "chop": source_override,
                 "blam": source_override,
                 "pierce": source_override,
                 "mental": source_override,
-            }
+            })
+            out["source_labels"] = labels
         if aura_labels:
             out["aura_display"] = "/".join(aura_labels)
         if elemento_display_override:

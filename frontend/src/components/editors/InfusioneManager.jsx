@@ -2,7 +2,7 @@ import React, { useState, useCallback, memo } from 'react';
 import InfusioneList from './InfusioneList';
 import InfusioneEditor from './InfusioneEditor';
 import StaffQrTab from '../StaffQrTab';
-import { associaQrDiretto } from '../../api';
+import { associaQrDiretto, staffGetInfusioneDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 
@@ -13,11 +13,20 @@ const InfusioneManager = ({ onBack, onLogout }) => {
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
   const [listVersion, setListVersion] = useState(0);
+  const [isLoadingEditorData, setIsLoadingEditorData] = useState(false);
 
-  const handleEdit = useCallback((item) => {
-    setSelectedItem(item);
-    setView('edit');
-  }, []);
+  const handleEdit = useCallback(async (item) => {
+    try {
+      setIsLoadingEditorData(true);
+      const fullItem = await staffGetInfusioneDetail(item.id, onLogout);
+      setSelectedItem(fullItem || item);
+      setView('edit');
+    } catch (error) {
+      setQrStatus({ type: 'error', message: `Errore caricamento infusione: ${error.message || 'Errore sconosciuto'}` });
+    } finally {
+      setIsLoadingEditorData(false);
+    }
+  }, [onLogout]);
 
   const handleNew = useCallback(() => {
     setSelectedItem(null);
@@ -51,13 +60,18 @@ const InfusioneManager = ({ onBack, onLogout }) => {
       </div>
 
       {view === 'list' ? (
-        <InfusioneList 
-          onSelect={handleEdit} 
-          onNew={handleNew} 
-          onScanQr={handleScanQr}
-          onLogout={onLogout}
-          listVersion={listVersion}
-        />
+        <>
+          <InfusioneList 
+            onSelect={handleEdit} 
+            onNew={handleNew} 
+            onScanQr={handleScanQr}
+            onLogout={onLogout}
+            listVersion={listVersion}
+          />
+          {isLoadingEditorData && (
+            <div className="text-xs text-gray-400 mt-2">Caricamento dettaglio infusione...</div>
+          )}
+        </>
       ) : (
         <InfusioneEditor 
           initialData={selectedItem} 

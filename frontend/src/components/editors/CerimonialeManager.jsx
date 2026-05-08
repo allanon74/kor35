@@ -2,7 +2,7 @@ import React, { useState, useCallback, memo } from 'react';
 import CerimonialeList from './CerimonialeList';
 import CerimonialeEditor from './CerimonialeEditor';
 import StaffQrTab from '../StaffQrTab';
-import { associaQrDiretto } from '../../api';
+import { associaQrDiretto, staffGetCerimonialeDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 
@@ -13,16 +13,25 @@ const CerimonialeManager = ({ onBack, onLogout }) => {
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [qrStatus, setQrStatus] = useState({ type: '', message: '' });
   const [listVersion, setListVersion] = useState(0);
+  const [isLoadingEditorData, setIsLoadingEditorData] = useState(false);
 
   const handleAdd = useCallback(() => {
     setEditingItem(null);
     setView('edit');
   }, []);
 
-  const handleEdit = useCallback((item) => {
-    setEditingItem(item);
-    setView('edit');
-  }, []);
+  const handleEdit = useCallback(async (item) => {
+    try {
+      setIsLoadingEditorData(true);
+      const fullItem = await staffGetCerimonialeDetail(item.id, onLogout);
+      setEditingItem(fullItem || item);
+      setView('edit');
+    } catch (error) {
+      setQrStatus({ type: 'error', message: `Errore caricamento cerimoniale: ${error.message || 'Errore sconosciuto'}` });
+    } finally {
+      setIsLoadingEditorData(false);
+    }
+  }, [onLogout]);
 
   const handleBackToList = useCallback(() => {
     setEditingItem(null);
@@ -70,6 +79,9 @@ const CerimonialeManager = ({ onBack, onLogout }) => {
         onLogout={onLogout}
         listVersion={listVersion}
       />
+      {isLoadingEditorData && (
+        <div className="text-xs text-gray-400">Caricamento dettaglio cerimoniale...</div>
+      )}
 
       {scanningForElement && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">

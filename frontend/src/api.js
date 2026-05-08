@@ -1753,6 +1753,9 @@ export const staffCreateInfusione = (data, onLogout) =>
 export const staffUpdateInfusione = (id, data, onLogout) => 
   fetchAuthenticated(`/api/personaggi/api/staff/infusioni/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 
+export const staffGetInfusioneDetail = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/infusioni/${id}/`, { method: 'GET' }, onLogout);
+
 export const staffDeleteInfusione = (id, onLogout) => 
   fetchAuthenticated(`/api/personaggi/api/staff/infusioni/${id}/`, { method: 'DELETE' }, onLogout);
 
@@ -1769,6 +1772,9 @@ export const staffCreateTessitura = (data, onLogout) =>
 export const staffUpdateTessitura = (id, data, onLogout) => 
   fetchAuthenticated(`/api/personaggi/api/staff/tessiture/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 
+export const staffGetTessituraDetail = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/tessiture/${id}/`, { method: 'GET' }, onLogout);
+
 export const staffDeleteTessitura = (id, onLogout) => 
   fetchAuthenticated(`/api/personaggi/api/staff/tessiture/${id}/`, { method: 'DELETE' }, onLogout);
 
@@ -1784,6 +1790,9 @@ export const staffCreateCerimoniale = (data, onLogout) =>
 
 export const staffUpdateCerimoniale = (id, data, onLogout) => 
   fetchAuthenticated(`/api/personaggi/api/staff/cerimoniali/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+
+export const staffGetCerimonialeDetail = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/cerimoniali/${id}/`, { method: 'GET' }, onLogout);
 
 export const staffDeleteCerimoniale = (id, onLogout) => 
   fetchAuthenticated(`/api/personaggi/api/staff/cerimoniali/${id}/`, { method: 'DELETE' }, onLogout);

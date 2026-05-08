@@ -11,8 +11,8 @@ FORMULA_BUILDER_SCHEMA = {
         {"id": "capacity", "label": "Capacita"},
     ],
     "type_templates": {
-        "attack": ["rango", "molt", "formula_prefix", "formula_source", "formula_status"],
-        "weave": ["formula_type", "rango", "molt", "formula_prefix", "formula_source", "formula_status"],
+        "attack": ["rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage", "formula_cura", "formula_status"],
+        "weave": ["formula_type", "rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage", "formula_cura", "formula_status"],
         "capacity": ["formula_type", "formula_prefix", "formula_source", "formula_status"],
     },
     "sections": [
@@ -41,6 +41,7 @@ FORMULA_BUILDER_SCHEMA = {
             "label": "Bersaglio",
             "kind": "single",
             "options": [
+                {"id": "none", "label": "-", "stats": {}},
                 {"id": "flusso", "label": "Flusso", "stats": {"flusso": 1}},
                 {"id": "dardo", "label": "Dardo", "stats": {"dardo": 1, "gittata": 3}},
                 {"id": "tocco", "label": "Tocco", "stats": {"tocco": 1}},
@@ -54,7 +55,7 @@ FORMULA_BUILDER_SCHEMA = {
             "label": "Sorgente",
             "kind": "single",
             "options": [
-                {"id": "none", "label": "Nessuna", "stats": {}},
+                {"id": "none", "label": "-", "stats": {}},
                 {"id": "chop", "label": "Chop", "stats": {"chop": 1}},
                 {"id": "blam", "label": "Blam", "stats": {"blam": 1}},
                 {"id": "pierce", "label": "Pierce", "stats": {"pierce": 1}},
@@ -211,10 +212,6 @@ def build_formula_template(formula_type, selections):
         "formula_damage": "{formula_damage}",
     }
 
-    include_cura = bool(selected_map.get("include_cura"))
-    include_danni = bool(selected_map.get("include_danni"))
-    damage_mode = str(selected_map.get("damage_mode") or "").strip().lower()
-
     out = []
     for block in blocks:
         placeholder = placeholder_by_block.get(block)
@@ -225,14 +222,5 @@ def build_formula_template(formula_type, selections):
             continue
         if _section_selected(block):
             out.append(placeholder)
-
-    if include_cura:
-        out.append("{formula_cura}")
-
-    if include_danni:
-        if damage_mode == "distanza":
-            out.append("{dannidis + dannigen|L}")
-        else:
-            out.append("{dannimis + dannigen|L}")
 
     return "".join(out) or DEFAULT_FORMULA_TEMPLATE
