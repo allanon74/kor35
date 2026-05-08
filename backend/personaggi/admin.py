@@ -1006,7 +1006,7 @@ class TessituraAdmin(SModelAdmin):
     
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        extras = [('{elem}', 'Elemento Principale'), ('{liv}', 'Livello Tessitura'), ('aura}', 'Aura Richiesta')]
+        extras = [('{elem}', 'Elemento Principale'), ('{livello|L}', 'Livello Tessitura'), ('{aura}', 'Aura Richiesta')]
         help_txt = Statistica.get_help_text_parametri(extras)
         if 'testo' in form.base_fields: form.base_fields['testo'].help_text = help_txt
         if 'formula' in form.base_fields: form.base_fields['formula'].help_text = help_txt

@@ -194,7 +194,8 @@ EXCLUSIVE_FORMAT_GROUPS = {
             {"params": ["prefisso_ineluttabile", "inelutt"], "label": "Ineluttabile"},
         ],
         "separator": "/",
-        "suffix": "!",
+        # Il punto esclamativo resta sul target finale per evitare doppia punteggiatura.
+        "suffix": "",
         "append_space": True,
     },
     "formula_target": {
