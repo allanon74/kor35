@@ -12,11 +12,17 @@ import PublicLayout from './layouts/PublicLayout';
 import WikiPage from './pages/WikiPage';
 import SocialPublicPostPage from './pages/SocialPublicPostPage';
 import SocialPage from './pages/SocialPage';
-import { API_BASE_URL } from './api';
+import MaintenanceConsolePage from './pages/MaintenanceConsolePage';
+import { API_BASE_URL, getConfigurazioneSito, setApiMaintenanceMode, isApiMaintenanceMode } from './api';
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('kor35_token'));
   const [isLoading, setIsLoading] = useState(true);
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(() => isApiMaintenanceMode());
+  const [maintenanceChecked, setMaintenanceChecked] = useState(false);
+  const [isDjangoAdmin, setIsDjangoAdmin] = useState(
+    String(localStorage.getItem('kor35_is_admin') || '').toLowerCase() === 'true'
+  );
   const searchParams = new URLSearchParams(window.location.search);
   const hasArcanaFlowParams = searchParams.has('arcana_ticket') || searchParams.has('arcana_error');
 
@@ -25,12 +31,52 @@ export default function App() {
     if (storedToken) {
       setToken(storedToken);
     }
+    setIsDjangoAdmin(String(localStorage.getItem('kor35_is_admin') || '').toLowerCase() === 'true');
     setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const cfg = await getConfigurazioneSito();
+        if (cancelled) return;
+        const active = !!cfg?.maintenance_mode;
+        setIsMaintenanceMode(active);
+        setApiMaintenanceMode(active);
+      } catch {
+        if (cancelled) return;
+      } finally {
+        if (!cancelled) setMaintenanceChecked(true);
+      }
+    };
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleLoginSuccess = (newToken) => {
     localStorage.setItem('kor35_token', newToken);
     setToken(newToken);
+    setIsDjangoAdmin(String(localStorage.getItem('kor35_is_admin') || '').toLowerCase() === 'true');
+    // Forza una rilettura del config sito subito dopo il login:
+    // se la maintenance e' stata appena attivata, il flag globale lato API
+    // deve aggiornarsi prima che CharacterProvider lanci nuove chiamate.
+    (async () => {
+      try {
+        const cfg = await getConfigurazioneSito();
+        const active = !!cfg?.maintenance_mode;
+        setIsMaintenanceMode(active);
+        setApiMaintenanceMode(active);
+      } catch {
+        /* fallback: stato attuale */
+      } finally {
+        setMaintenanceChecked(true);
+      }
+    })();
   };
 
   const handleLogout = () => {
@@ -48,6 +94,7 @@ export default function App() {
     localStorage.removeItem('kor35_active_campaign');
     localStorage.removeItem('kor35_login_method');
     setToken(null);
+    setIsDjangoAdmin(false);
     if (loginMethod === 'arcana') {
       window.location.href = `${API_BASE_URL}/api/auth/arcana/frontchannel-logout/?return_to=${encodeURIComponent('/login')}`;
       return;
@@ -56,6 +103,14 @@ export default function App() {
   };
 
   if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">Caricamento...</div>;
+  }
+
+  // Prima del primo check del config sito non montiamo i provider applicativi:
+  // se il sito e' in manutenzione, evitiamo che CharacterProvider faccia
+  // partire le sue chiamate API (che verrebbero bloccate dal middleware con 503).
+  // Bypass: se l'utente non e' loggato non c'e' nulla da pollerare.
+  if (token && !maintenanceChecked) {
     return <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">Caricamento...</div>;
   }
 
@@ -116,9 +171,21 @@ export default function App() {
 
           {/* --- ROTTE APP (PROTETTE) --- */}
           <Route
-            path="/app/social"
+            path="/app/maintenance"
             element={
               token ? (
+                <MaintenanceConsolePage onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/app/social"
+            element={
+              isMaintenanceMode ? (
+                isDjangoAdmin ? <Navigate to="/app/maintenance" replace /> : <Navigate to="/" replace />
+              ) : token ? (
                 <SocialPage onLogout={handleLogout} />
               ) : (
                 <Navigate to="/login" replace />
@@ -128,7 +195,9 @@ export default function App() {
           <Route 
             path="/app/*" 
             element={
-              token ? (
+              isMaintenanceMode ? (
+                isDjangoAdmin ? <Navigate to="/app/maintenance" replace /> : <Navigate to="/" replace />
+              ) : token ? (
                 <AppLayout token={token} onLogout={handleLogout} />
               ) : (
                 <Navigate to="/login" replace />

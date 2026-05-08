@@ -381,7 +381,14 @@ class ConfigurazioneSitoAdmin(admin.ModelAdmin):
     """
     Admin per la configurazione del sito (Singleton).
     """
-    list_display = ('nome_associazione', 'email', 'citta', 'anno_fondazione', 'ultima_modifica')
+    list_display = (
+        'nome_associazione',
+        'email',
+        'citta',
+        'anno_fondazione',
+        'maintenance_mode',
+        'ultima_modifica',
+    )
     readonly_fields = ('ultima_modifica',)
     
     fieldsets = (
@@ -393,6 +400,10 @@ class ConfigurazioneSitoAdmin(admin.ModelAdmin):
         }),
         ('Contatti', {
             'fields': ('email', 'pec', 'telefono')
+        }),
+        ('Maintenance Mode', {
+            'fields': ('maintenance_mode', 'maintenance_public_message', 'maintenance_admin_note'),
+            'description': 'Controllo globale accessi durante manutenzione.',
         }),
         ('Metadata', {
             'fields': ('ultima_modifica',),

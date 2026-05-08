@@ -5,6 +5,7 @@ import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import FormulaBuilderModal from './FormulaBuilderModal';
 
 const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -22,6 +23,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
+  const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
@@ -87,6 +89,26 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     }
   };
 
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+    const controlledSet = new Set(controlledParams || []);
+    const byParam = new Map((statsOptions || []).map((s) => [s.parametro, s]));
+    const current = formData.statistiche_base || [];
+    const kept = current.filter((item) => {
+      const statId = item.statistica?.id || item.statistica;
+      const stat = (statsOptions || []).find((s) => String(s.id) === String(statId));
+      return !(stat?.parametro && controlledSet.has(stat.parametro));
+    });
+    const fromBuilder = Object.entries(statsByParam || {})
+      .filter(([param, value]) => byParam.get(param) && Number(value) > 0)
+      .map(([param, value]) => ({ statistica: byParam.get(param).id, valore_base: Number(value) }));
+    const mergedFormula = [formulaText, customText].filter(Boolean).join(' ').trim();
+    setFormData((prev) => ({
+      ...prev,
+      formula: mergedFormula,
+      statistiche_base: [...kept, ...fromBuilder],
+    }));
+  };
+
   return (
     <div className="bg-gray-800 p-6 rounded-xl space-y-6 max-w-7xl mx-auto overflow-y-auto max-h-[92vh] text-white border border-gray-700 shadow-2xl">
       <div className="flex justify-between items-center border-b border-gray-700 pb-4">
@@ -115,7 +137,18 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
                   options={punteggiList.filter(p => p.tipo === 'EL')} 
                   onChange={v => setFormData({...formData, elemento_principale: v ? parseInt(v, 10) : null})} />
         </div>
-        <Input label="Formula Tessitura (es. {caratt} + 1d10)" value={formData.formula} onChange={v => setFormData({...formData, formula: v})} />
+        <div>
+          <Input label="Formula Tessitura (es. {caratt} + 1d10)" value={formData.formula} onChange={v => setFormData({...formData, formula: v})} />
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setIsFormulaBuilderOpen(true)}
+              className="px-3 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-xs font-bold uppercase tracking-wide"
+            >
+              Costruisci formula
+            </button>
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="md:col-span-3">
             <Input label="Nome" value={formData.nome} onChange={v => setFormData({...formData, nome: v})} />
@@ -141,6 +174,16 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         items={formData.statistiche_base || []} 
         options={statsOptions} 
         onChange={(i, f, v) => updateInline('statistiche_base', i, f, v)} 
+      />
+
+      <FormulaBuilderModal
+        open={isFormulaBuilderOpen}
+        onClose={() => setIsFormulaBuilderOpen(false)}
+        onApply={handleApplyFormulaBuilder}
+        onLogout={onLogout}
+        statsOptions={statsOptions}
+        statisticheBase={formData.statistiche_base || []}
+        formulaValue={formData.formula}
       />
     </div>
   );

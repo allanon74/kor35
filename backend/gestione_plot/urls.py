@@ -22,6 +22,7 @@ from .views import(
     PublicWikiButtonWidgetViewSet, StaffWikiButtonWidgetViewSet,
     PublicWikiMattoniWidgetViewSet, StaffWikiMattoniWidgetViewSet,
     PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet, PublicWikiGlossarioViewSet,
+    AdminMaintenanceConfigView,
     download_wiki_manual_pdf, generate_wiki_manual_snapshot, download_latest_wiki_manual_pdf,
                    )
 from personaggi.views_staff import(
@@ -82,6 +83,7 @@ router.register(r'public/link-social', PublicLinkSocialViewSet, basename='public
 router.register(r'public/wiki-glossario', PublicWikiGlossarioViewSet, basename='public-wiki-glossario')
 
 urlpatterns = [
+    path('api/admin/maintenance-config/', AdminMaintenanceConfigView.as_view(), name='admin_maintenance_config'),
     path('iscrizioni-evento/eligibility/', iscrizioni_evento_eligibility),
     path('iscrizioni-evento/crea-ordine/', iscrizioni_evento_crea_ordine),
     path('iscrizioni-evento/cattura/', iscrizioni_evento_cattura),

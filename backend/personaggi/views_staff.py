@@ -29,6 +29,7 @@ from .models import (
 )
 
 from .qr_logic import annotate_has_qrcode_avista
+from .formula_builder import FORMULA_BUILDER_SCHEMA, build_stats_by_selection, render_formula_preview
 
 from .serializers import (
     InfusioneFullEditorSerializer,
@@ -960,3 +961,36 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             obj = serializer.save()
             self._apply_target_lists(obj, self.request.data)
+
+
+class FormulaBuilderSchemaView(APIView):
+    permission_classes = [IsStaffOrMaster]
+
+    def get(self, request):
+        return Response(FORMULA_BUILDER_SCHEMA)
+
+
+class FormulaBuilderPreviewView(APIView):
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request):
+        payload = request.data if isinstance(request.data, dict) else {}
+        formula = payload.get("formula")
+        current_stats = payload.get("stats_by_param") or {}
+        selections = payload.get("selections") or {}
+        context = payload.get("context") or {}
+        custom_text = payload.get("custom_text") or ""
+
+        merged_stats = build_stats_by_selection(current_stats=current_stats, selections=selections)
+        rendered = render_formula_preview(formula=formula, stats_by_param=merged_stats, context=context)
+        if custom_text:
+            rendered = f"{rendered} {custom_text}".strip()
+
+        return Response(
+            {
+                "formula_rendered": rendered,
+                "stats_by_param": merged_stats,
+                "formula_template": formula,
+                "custom_text": custom_text,
+            }
+        )

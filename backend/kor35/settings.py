@@ -171,6 +171,7 @@ MIDDLEWARE = [
 	'cms.middleware.toolbar.ToolbarMiddleware', #cms
 	'cms.middleware.language.LanguageCookieMiddleware', #cms
     'allauth.account.middleware.AccountMiddleware', #allauth
+    'kor35.maintenance.MaintenanceModeMiddleware',
 ]
 
 ROOT_URLCONF = 'kor35.urls'
@@ -236,6 +237,7 @@ TEMPLATES = [
                 'cms.context_processors.cms_settings',
                 'django.template.context_processors.i18n',
                 'kor35.context_processors.build_info',
+                'kor35.context_processors.maintenance_context',
             ],
         },
     },

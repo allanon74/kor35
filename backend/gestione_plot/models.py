@@ -765,6 +765,24 @@ class ConfigurazioneSito(SyncableModel, models.Model):
     email = models.EmailField(default="info@kor35.it", help_text="Email principale")
     pec = models.EmailField(blank=True, help_text="Email PEC (opzionale)")
     telefono = models.CharField(max_length=50, blank=True, help_text="Telefono (opzionale)")
+
+    maintenance_mode = models.BooleanField(
+        default=False,
+        verbose_name="Modalita manutenzione attiva",
+        help_text="Quando attiva, blocca l'app di gioco/social/staff/pilotaggio e lascia solo la console admin Django.",
+    )
+    maintenance_public_message = models.TextField(
+        blank=True,
+        default="Sistema temporaneamente in manutenzione. Riprova tra pochi minuti.",
+        verbose_name="Messaggio pubblico manutenzione",
+        help_text="Messaggio mostrato in alto nella Wiki al posto dell'accesso alla sezione gioco.",
+    )
+    maintenance_admin_note = models.TextField(
+        blank=True,
+        default="MODALITA MANUTENZIONE ATTIVA: non effettuare modifiche ai dati applicativi. Usare solo questa console per riattivare il sistema.",
+        verbose_name="Nota visibile in Admin durante manutenzione",
+        help_text="Avviso evidenziato in tutte le pagine Admin quando la manutenzione e attiva.",
+    )
     
     # Metadata
     ultima_modifica = models.DateTimeField(auto_now=True)

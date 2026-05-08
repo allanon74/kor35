@@ -15,6 +15,7 @@ from .views_staff import (
     MattoniMagiciListView,
     DichiarazioneStaffViewSet,
     StaffQrInventoryScanView,
+    FormulaBuilderSchemaView, FormulaBuilderPreviewView,
 )
 
 
@@ -230,6 +231,8 @@ urlpatterns = [
     path('api/staff/oggetti-senza-posizione/', views_staff.OggettiSenzaPosizioneView.as_view(), name='staff-oggetti-senza-posizione'),
     path('api/staff/seleziona-effetto-casuale/', SelezionaEffettoCasualeView.as_view(), name='staff-seleziona-effetto-casuale'),
     path('api/staff/mattoni-magici/', MattoniMagiciListView.as_view(), name='staff-mattoni-magici'),
+    path('api/staff/formula-builder/schema/', FormulaBuilderSchemaView.as_view(), name='staff-formula-builder-schema'),
+    path('api/staff/formula-builder/preview/', FormulaBuilderPreviewView.as_view(), name='staff-formula-builder-preview'),
     path('api/staff/risorse-pool/', views.StaffRisorsaPoolListView.as_view(), name='staff-risorse-pool-list'),
     path('api/staff/risorse-pool/incrementa/', views.StaffRisorsaIncrementView.as_view(), name='staff-risorse-pool-incrementa'),
     

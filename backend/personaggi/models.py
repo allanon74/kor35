@@ -236,6 +236,17 @@ EXCLUSIVE_FORMAT_GROUPS = {
         "suffix": "!",
         "append_space": True,
     },
+    "formula_source": {
+        "entries": [
+            {"params": ["chop"], "label": "Chop"},
+            {"params": ["blam"], "label": "Blam"},
+            {"params": ["pierce"], "label": "Pierce"},
+            {"params": ["mental"], "label": "Mental"},
+        ],
+        "separator": "/",
+        "suffix": "!",
+        "append_space": True,
+    },
     "formula_type": {
         "entries": [
             {
@@ -267,9 +278,93 @@ EXCLUSIVE_FORMAT_GROUPS = {
         # "suffix": "{ aura|LASTWORD} {livello|L}:",
         "append_space": True,
     },
+    "formula_status": {
+        "entries": [
+            {
+                "params": ["aterra"],
+                "label": "A Terra",
+                "extra": {"when": "durata > 0 and durata != 10", "template": " {durata} secondi"},
+            },
+            {
+                "params": ["paralisi"],
+                "label": "Paralisi",
+                "extra": {"when": "durata > 0 and durata != 10", "template": " {durata} secondi"},
+            },
+            {
+                "params": ["repuls"],
+                "label": "Repulsione",
+                "extra": {"when": "durata > 0 and durata != 10", "template": " {durata} secondi"},
+            },
+            {
+                "params": ["richiamo"],
+                "label": "Richiamo",
+                "extra": {"when": "durata > 0 and durata != 10", "template": " {durata} secondi"},
+            },
+            {
+                "params": ["esilio"],
+                "label": "Esilio",
+                "extra": {"when": "durata > 0 and durata != 10", "template": " {durata} secondi"},
+            },
+            {
+                "params": ["confus"],
+                "label": "Confusione",
+                "extra": {"when": "durata > 0 and durata != 10", "template": " {durata} secondi"},
+            },
+            {
+                "params": ["silenzio"],
+                "label": "Silenzio",
+                "extra": {"when": "durata > 0 and durata != 10", "template": " {durata} secondi"},
+            },
+            {"params": ["spacca"], "label": "Spacca"},
+            {"params": ["nega"], "label": "Nega"},
+            {"params": ["disint"], "label": "Disintegrazione"},
+            {"params": ["ripara"], "label": "Ripara"},
+        ],
+        "separator": "/",
+        "suffix": "!",
+        "append_space": True,
+    },
+    "formula_cura": {
+        "entries": [
+            {
+                "params": ["pfcura"],
+                "label": "Cura",
+                "extra": {"when": "pfcura > 0", "template": " {pfcura|L}!"},
+            }
+        ],
+        "separator": "/",
+        "append_space": True,
+        "suffix": "",
+    },
+    "formula_damage": {
+        "entries": [
+            {
+                "params": ["dannimis", "dannigen"],
+                "label": "Danni",
+                "extra": {
+                    "when": "dannimis + dannigen > 0",
+                    "template": " {dannimis + dannigen|L} in Mischia!",
+                },
+            },
+            {
+                "params": ["dannidis", "dannigen"],
+                "label": "Danni",
+                "extra": {
+                    "when": "dannidis + dannigen > 0",
+                    "template": " {dannidis + dannigen|L} a Distanza!",
+                },
+            },
+        ],
+        "separator": "/",
+        "append_space": True,
+        "suffix": "",
+    },
 }
 DEFAULT_EXCLUSIVE_FORMULA_GROUP = "formula_prefix"
-DEFAULT_FORMULA_TEMPLATE = "{formula_type}{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
+DEFAULT_FORMULA_TEMPLATE = (
+    "{formula_type}{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
+    "{formula_source}{formula_status}{formula_cura}{formula_damage}"
+)
 
 
 def _is_truthy_numeric(value):
@@ -390,6 +485,33 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
 
             active_parts.append(part)
             seen.add(label)
+
+    # Extra a livello gruppo (utile per appendere durata o altri dettagli condivisi).
+    group_extras = config.get("extras")
+    if group_extras is not None:
+        if not isinstance(group_extras, list):
+            group_extras = [group_extras]
+        for extra in group_extras:
+            if isinstance(extra, str):
+                if active_parts:
+                    active_parts[-1] += extra
+                continue
+            if not isinstance(extra, dict):
+                continue
+            when_expr = (extra.get("when") or "").strip()
+            if when_expr:
+                if "," in when_expr:
+                    continue
+                if not evaluate_expression(when_expr, value_map):
+                    continue
+            tmpl = extra.get("template") or ""
+            rendered = _render_exclusive_template(tmpl, value_map, object_map)
+            if not rendered:
+                continue
+            if active_parts:
+                active_parts[-1] += rendered
+            else:
+                active_parts.append(rendered.strip())
 
     if not active_parts:
         return ""

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import WikiRenderer from '../components/WikiRenderer';
 import WikiPageEditorModal from '../components/wiki/WikiPageEditorModal'; // Importiamo il modale
 import HomePage from '../components/HomePage'; // Importiamo il componente HomePage speciale
-import { getWikiPage, getWikiGlossario, getWikiImageUrl, getMediaUrl } from '../api';
+import { getWikiPage, getWikiGlossario, getWikiImageUrl, getMediaUrl, getConfigurazioneSito } from '../api';
 import { useCharacter } from '../components/CharacterContext'; // Per i permessi
 import { EyeOff } from 'lucide-react';
 
@@ -14,7 +14,8 @@ export default function WikiPage({ slug: propSlug }) {
   
   // Permessi wiki basati su ruoli campagna (+ admin generale).
   const { isCampaignRedactor, isCampaignMaster } = useCharacter();
-  const canEdit = isCampaignRedactor || isCampaignMaster;
+  const [siteConfig, setSiteConfig] = useState(null);
+  const canEdit = (isCampaignRedactor || isCampaignMaster) && !siteConfig?.maintenance_mode;
 
   const [pageData, setPageData] = useState(null);
   const [wikiGlossary, setWikiGlossary] = useState([]);
@@ -29,12 +30,14 @@ export default function WikiPage({ slug: propSlug }) {
     setLoading(true);
     setError(null);
     try {
-      const [data, gloss] = await Promise.all([
+      const [data, gloss, config] = await Promise.all([
         getWikiPage(currentSlug),
         getWikiGlossario().catch(() => []),
+        getConfigurazioneSito().catch(() => null),
       ]);
       setPageData(data);
       setWikiGlossary(Array.isArray(gloss) ? gloss : []);
+      setSiteConfig(config);
     } catch (err) {
       console.error("Errore fetch pagina:", err);
       setError("Pagina non trovata.");
@@ -104,7 +107,7 @@ export default function WikiPage({ slug: propSlug }) {
         )}
 
         {/* Componente HomePage speciale */}
-        <HomePage pageData={pageData} />
+        <HomePage pageData={pageData} siteConfig={siteConfig} />
 
         {/* MODALE EDITOR */}
         {isEditorOpen && (

@@ -6,6 +6,7 @@ import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import FormulaBuilderModal from './FormulaBuilderModal';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -18,6 +19,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
   const [personaggi, setPersonaggi] = useState([]);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
+  const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
 
   const [formData, setFormData] = useState(initialData || {
     nome: '', testo: '', tipo_oggetto: 'FIS', aura: null, classe_oggetto: null,
@@ -118,6 +120,27 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
     }
   };
 
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+    const statsOptions = (punteggiList || []).filter((p) => p.tipo === 'ST');
+    const controlledSet = new Set(controlledParams || []);
+    const byParam = new Map(statsOptions.map((s) => [s.parametro, s]));
+    const current = formData.statistiche_base || [];
+    const kept = current.filter((item) => {
+      const statId = item.statistica?.id || item.statistica;
+      const stat = statsOptions.find((s) => String(s.id) === String(statId));
+      return !(stat?.parametro && controlledSet.has(stat.parametro));
+    });
+    const fromBuilder = Object.entries(statsByParam || {})
+      .filter(([param, value]) => byParam.get(param) && Number(value) > 0)
+      .map(([param, value]) => ({ statistica: byParam.get(param).id, valore_base: Number(value) }));
+    const mergedFormula = [formulaText, customText].filter(Boolean).join(' ').trim();
+    setFormData((prev) => ({
+      ...prev,
+      attacco_base: mergedFormula,
+      statistiche_base: [...kept, ...fromBuilder],
+    }));
+  };
+
   const Select = ({ label, value, options, onChange }) => (
     <div className="w-full">
       <label className="text-[10px] text-gray-500 uppercase font-black block mb-1">{label}</label>
@@ -172,6 +195,15 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
         <div className="md:col-span-2">
             <label className="text-[10px] text-gray-500 uppercase font-black block mb-1">Formula Attacco</label>
             <input className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm font-mono" value={formData.attacco_base} onChange={e => setFormData({...formData, attacco_base: e.target.value})} />
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsFormulaBuilderOpen(true)}
+                className="px-3 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-xs font-bold uppercase tracking-wide"
+              >
+                Costruisci formula
+              </button>
+            </div>
         </div>
       </div>
 
@@ -196,6 +228,16 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       </div>
 
       <CharacteristicInline items={formData.componenti} options={punteggiList.filter(p => p.tipo === 'CA')} onAdd={() => setFormData({...formData, componenti: [...formData.componenti, {caratteristica:'', valore:1}]})} onChange={(i,f,v) => {const n=[...formData.componenti]; n[i][f]=v; setFormData({...formData, componenti:n});}} onRemove={i => setFormData({...formData, componenti: formData.componenti.filter((_,idx)=>idx!==i)})} />
+
+      <FormulaBuilderModal
+        open={isFormulaBuilderOpen}
+        onClose={() => setIsFormulaBuilderOpen(false)}
+        onApply={handleApplyFormulaBuilder}
+        onLogout={onLogout}
+        statsOptions={punteggiList.filter((p) => p.tipo === 'ST')}
+        statisticheBase={formData.statistiche_base || []}
+        formulaValue={formData.attacco_base}
+      />
     </div>
   );
 };
