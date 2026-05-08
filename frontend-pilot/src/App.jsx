@@ -32,8 +32,8 @@ export default function App() {
 
   const refreshState = useCallback(async () => {
     if (!getToken()) return;
-    try {
-      const data = await api.state();
+
+    const applyStatePayload = async (data) => {
       setState(data);
       setTickRuntime(data?.tick_runtime || null);
       saveCachedState(data);
@@ -41,16 +41,43 @@ export default function App() {
       try {
         const hist = await api.history();
         setTentativi(hist || []);
-      } catch (_) { /* non bloccante */ }
+      } catch (_) {
+        /* cronologia non bloccante */
+      }
+    };
+
+    try {
+      const data = await api.state();
+      await applyStatePayload(data);
     } catch (e) {
       if (e.network) setOnline(false);
       if (e.status === 401) {
-        setToken('');
-        setAuthToken('');
-        setAuthError('Sessione console scaduta, riautenticarsi.');
+        /* Evita il lampeggio su kiosk: il poll ogni pochi secondi può ricevere 401
+           transitori; se il backend consente auto-login, rinnoviamo il token senza
+           smontare la UI (stesso comportamento atteso da una sessione pilota fissa). */
+        let recovered = false;
+        if (!loginRequired) {
+          try {
+            const res = await api.autoLogin();
+            if (res?.token) {
+              setToken(res.token);
+              setAuthToken(res.token);
+              const data = await api.state();
+              await applyStatePayload(data);
+              recovered = true;
+            }
+          } catch (_) {
+            /* fallback sotto */
+          }
+        }
+        if (!recovered) {
+          setToken('');
+          setAuthToken('');
+          setAuthError('Sessione console scaduta, riautenticarsi.');
+        }
       }
     }
-  }, []);
+  }, [loginRequired]);
 
   useEffect(() => {
     api.consoleEnabled()

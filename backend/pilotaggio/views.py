@@ -310,14 +310,32 @@ class PilotConsoleAutoLoginView(APIView):
         if pilota is None:
             return Response({"error": "Nessun personaggio disponibile per auto-login."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Kiosk con due finestre Chromium (profili separati): ognuna chiama auto-login e
+        # ha il suo localStorage. Revocare qui tutti i token del pilota invalidava l'altra
+        # finestra → loop continuo di 401 su /session/state/. Riutilizziamo un token attivo
+        # se esiste; altrimenti ne creiamo uno nuovo senza revocare gli altri (logout revoca
+        # solo il token usato).
         with transaction.atomic():
-            PilotConsoleToken.objects.filter(pilota=pilota, revocato_at__isnull=True).update(revocato_at=timezone.now())
-            token = PilotConsoleToken.objects.create(pilota=pilota, token=PilotConsoleToken.genera_token())
+            existing = (
+                PilotConsoleToken.objects.select_for_update()
+                .filter(pilota=pilota, revocato_at__isnull=True)
+                .order_by("-created_at")
+                .first()
+            )
+            if existing:
+                token_obj = existing
+                mode = "auto_reuse"
+            else:
+                token_obj = PilotConsoleToken.objects.create(
+                    pilota=pilota, token=PilotConsoleToken.genera_token()
+                )
+                mode = "auto"
+
         return Response(
             {
-                "token": token.token,
+                "token": token_obj.token,
                 "pilota": {"id": pilota.pk, "nome": getattr(pilota, "nome", str(pilota))},
-                "mode": "auto",
+                "mode": mode,
             },
             status=status.HTTP_200_OK,
         )

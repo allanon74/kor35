@@ -44,19 +44,19 @@ class GestioneOggettiService:
     }
 
     PHYSICAL_SLOT_STAT_SIGLE = {
-        'head': 'SLOT_HEAD',
-        'neck': 'SLOT_NECK',
-        'vest': 'SLOT_VEST',
-        'shoulders': 'SLOT_SHOULDERS',
-        'arms': 'SLOT_ARMS',
-        'fingers': 'SLOT_FINGERS',
-        'feet': 'SLOT_FEET',
-        'belt': 'SLOT_BELT',
-        'armor': 'SLOT_ARMOR',
-        'melee': 'SLOT_MELEE',
-        'ranged': 'SLOT_RANGED',
-        'focus': 'SLOT_FOCUS',
-        'shield': 'SLOT_SHIELD',
+        'head': 'SHD',
+        'neck': 'SNK',
+        'vest': 'SVE',
+        'shoulders': 'SSH',
+        'arms': 'SAR',
+        'fingers': 'SFI',
+        'feet': 'SFT',
+        'belt': 'SBL',
+        'armor': 'SAM',
+        'melee': 'SLM',
+        'ranged': 'SLR',
+        'focus': 'SLF',
+        'shield': 'SLS',
     }
 
     PHYSICAL_SLOT_ALIASES = {
