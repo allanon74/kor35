@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useCharacter } from '../CharacterContext';
-import { getStatisticheList, staffUpdateTessitura, staffCreateTessitura } from '../../api';
+import { getStatisticheList, staffUpdateTessitura, staffCreateTessitura, staffGetAbilitaList } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import RichTextEditor from '../RichTextEditor';
@@ -10,6 +10,7 @@ import FormulaBuilderModal from './FormulaBuilderModal';
 const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
   const [statsOptions, setStatsOptions] = useState([]);
+  const [abilitaOptions, setAbilitaOptions] = useState([]);
   
   // FIX: Default Data Merging
   const defaultData = {
@@ -17,20 +18,41 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     aura_richiesta: null,
     elemento_principale: null,
     componenti: [],
-    statistiche_base: []
+    statistiche_base: [],
+    non_acquistabile: false,
+    usa_effetto_temporaneo: false,
+    abilita_temporanea: null,
+    durata_effetto_secondi: 0,
+    oggetto_runtime_config_str: '',
   };
 
-  const [formData, setFormData] = useState({ ...defaultData, ...initialData });
+  const hydrateForm = (data) => {
+    const merged = { ...defaultData, ...(data || {}) };
+    if (merged.oggetto_runtime_config && !merged.oggetto_runtime_config_str) {
+      merged.oggetto_runtime_config_str = JSON.stringify(merged.oggetto_runtime_config, null, 2);
+    }
+    return merged;
+  };
+  const [formData, setFormData] = useState(hydrateForm(initialData));
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
   const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
+  const [isRuntimeWizardOpen, setIsRuntimeWizardOpen] = useState(false);
 
   // Alias per chiusura
   const handleClose = onCancel || onBack;
 
   useEffect(() => {
     getStatisticheList(onLogout).then(setStatsOptions);
+    staffGetAbilitaList(onLogout, { pageSize: 500 }).then((data) => {
+      const rows = Array.isArray(data) ? data : (data?.results || []);
+      setAbilitaOptions(rows || []);
+    });
   }, [onLogout]);
+
+  useEffect(() => {
+    setFormData(hydrateForm(initialData));
+  }, [initialData]);
 
   // Calcolo livello property (numero componenti)
   const calculatedLevel = (formData.componenti || []).reduce((acc, curr) => acc + (parseInt(curr.valore) || 0), 0);
@@ -53,11 +75,23 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         ...formData,
         aura_richiesta: formData.aura_richiesta?.id || formData.aura_richiesta || null,
         elemento_principale: formData.elemento_principale?.id || formData.elemento_principale || null,
+        abilita_temporanea: formData.abilita_temporanea?.id || formData.abilita_temporanea || null,
         statistiche_base: (formData.statistiche_base || []).map(sb => ({
           ...sb,
           statistica: sb.statistica?.id || sb.statistica
         }))
       };
+      if (formData.oggetto_runtime_config_str && String(formData.oggetto_runtime_config_str).trim()) {
+        try {
+          dataToSend.oggetto_runtime_config = JSON.parse(formData.oggetto_runtime_config_str);
+        } catch (_e) {
+          setStatus({ type: 'warning', message: 'JSON non valido in Oggetto runtime config.' });
+          return;
+        }
+      } else {
+        dataToSend.oggetto_runtime_config = null;
+      }
+      delete dataToSend.oggetto_runtime_config_str;
       
       if (onSave) {
         // APPROVAL MODE
@@ -130,12 +164,58 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
       <div className="bg-gray-900/40 p-5 rounded-xl border border-gray-700/50 space-y-5 shadow-inner">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select label="Aura Richiesta" value={formData.aura_richiesta?.id || formData.aura_richiesta} 
+          <SearchableSelect label="Aura Richiesta" value={formData.aura_richiesta?.id || formData.aura_richiesta} 
                   options={punteggiList.filter(p => p.tipo === 'AU')} 
                   onChange={v => setFormData({...formData, aura_richiesta: v ? parseInt(v, 10) : null})} />
-          <Select label="Elemento Principale" value={formData.elemento_principale?.id || formData.elemento_principale} 
+          <SearchableSelect label="Elemento Principale" value={formData.elemento_principale?.id || formData.elemento_principale} 
                   options={punteggiList.filter(p => p.tipo === 'EL')} 
                   onChange={v => setFormData({...formData, elemento_principale: v ? parseInt(v, 10) : null})} />
+        </div>
+        <div className="border border-purple-800/40 rounded-lg p-3 bg-purple-950/20 space-y-3">
+          <label className="flex items-center gap-2 text-xs uppercase font-bold text-purple-200 tracking-wide">
+            <input
+              type="checkbox"
+              checked={!!formData.usa_effetto_temporaneo}
+              onChange={(e) => setFormData({ ...formData, usa_effetto_temporaneo: e.target.checked })}
+            />
+            Effetto temporaneo runtime
+          </label>
+          {formData.usa_effetto_temporaneo && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SearchableSelect
+                  label="Abilita temporanea"
+                  value={formData.abilita_temporanea?.id || formData.abilita_temporanea}
+                  options={abilitaOptions}
+                  onChange={(v) => setFormData({ ...formData, abilita_temporanea: v ? parseInt(v, 10) : null })}
+                />
+                <Input
+                  label="Durata effetto (secondi)"
+                  type="number"
+                  value={formData.durata_effetto_secondi}
+                  onChange={(v) => setFormData({ ...formData, durata_effetto_secondi: parseInt(v || '0', 10) || 0 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRuntimeWizardOpen(true)}
+                  className="px-3 py-1 rounded bg-purple-700 hover:bg-purple-600 text-xs font-bold uppercase tracking-wide"
+                >
+                  Configura oggetto runtime (wizard)
+                </button>
+                <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">
+                  Preview JSON (auto)
+                </label>
+                <textarea
+                  className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-xs text-white font-mono min-h-[110px]"
+                  value={formData.oggetto_runtime_config_str || ''}
+                  readOnly
+                  placeholder='Il wizard popola automaticamente questo JSON.'
+                />
+              </div>
+            </>
+          )}
         </div>
         <div>
           <Input label="Formula Tessitura (es. {caratt} + 1d10)" value={formData.formula} onChange={v => setFormData({...formData, formula: v})} />
@@ -153,9 +233,19 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
           <div className="md:col-span-3">
             <Input label="Nome" value={formData.nome} onChange={v => setFormData({...formData, nome: v})} />
           </div>
-          <div className="bg-black/20 p-2 rounded flex flex-col items-center justify-center">
-             <span className="text-[9px] text-gray-500 uppercase font-black">Livello</span>
-             <span className="text-xl font-bold text-cyan-400">{calculatedLevel}</span>
+          <div className="bg-black/20 p-2 rounded flex flex-col items-center justify-center gap-2">
+             <div className="flex flex-col items-center">
+               <span className="text-[9px] text-gray-500 uppercase font-black">Livello</span>
+               <span className="text-xl font-bold text-cyan-400">{calculatedLevel}</span>
+             </div>
+             <label className="text-[10px] uppercase font-bold text-gray-300 flex items-center gap-2 cursor-pointer">
+               <input
+                 type="checkbox"
+                 checked={!!formData.non_acquistabile}
+                 onChange={(e) => setFormData({ ...formData, non_acquistabile: e.target.checked })}
+               />
+               Non acquistabile
+             </label>
           </div>
         </div>
       </div>
@@ -186,6 +276,362 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         formulaValue={formData.formula}
         defaultFormulaType="weave"
       />
+      <RuntimeObjectWizardModal
+        open={isRuntimeWizardOpen}
+        onClose={() => setIsRuntimeWizardOpen(false)}
+        onApply={(cfg) =>
+          setFormData((prev) => ({
+            ...prev,
+            oggetto_runtime_config_str: JSON.stringify(cfg, null, 2),
+          }))
+        }
+        onLogout={onLogout}
+        statsOptions={statsOptions}
+        initialConfigStr={formData.oggetto_runtime_config_str || ''}
+      />
+    </div>
+  );
+};
+
+const SLOT_OPTIONS = [
+  'head', 'neck', 'vest', 'shoulders', 'arms', 'fingers', 'feet',
+  'belt', 'armor', 'melee', 'ranged', 'focus', 'shield',
+];
+
+const TIPO_OGGETTO_OPTIONS = [
+  { id: 'FIS', nome: 'Fisico' },
+  { id: 'MOD', nome: 'Mod' },
+  { id: 'MAT', nome: 'Materia' },
+  { id: 'INN', nome: 'Innesto' },
+  { id: 'MUT', nome: 'Mutazione' },
+  { id: 'POT', nome: 'Potenziamento' },
+  { id: 'AUM', nome: 'Aumento' },
+];
+
+const RuntimeObjectWizardModal = ({
+  open,
+  onClose,
+  onApply,
+  onLogout,
+  statsOptions = [],
+  initialConfigStr = '',
+}) => {
+  const [draft, setDraft] = useState({
+    nome: '',
+    slot_key: 'melee',
+    tipo_oggetto: 'FIS',
+    descrizione_effetto: '',
+    formula: '',
+    statistiche_base: [],
+    modificatori: [],
+    cariche_massime: 0,
+    durata_totale: 0,
+  });
+  const [isObjFormulaBuilderOpen, setIsObjFormulaBuilderOpen] = useState(false);
+  const [wizardError, setWizardError] = useState('');
+
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const parsed = initialConfigStr ? JSON.parse(initialConfigStr) : null;
+      if (parsed && typeof parsed === 'object') {
+        setDraft((prev) => ({
+          ...prev,
+          ...parsed,
+          statistiche_base: Array.isArray(parsed.statistiche_base) ? parsed.statistiche_base : [],
+          modificatori: Array.isArray(parsed.modificatori) ? parsed.modificatori : [],
+        }));
+      }
+    } catch (_e) {
+      // Se JSON invalido/non parsabile, manteniamo il draft vuoto.
+    }
+  }, [open, initialConfigStr]);
+
+  if (!open) return null;
+
+  const validateDraft = () => {
+    if (!String(draft.nome || '').trim()) return 'Il nome oggetto runtime è obbligatorio.';
+    if (!String(draft.slot_key || '').trim()) return 'Lo slot è obbligatorio.';
+    if (!SLOT_OPTIONS.includes(String(draft.slot_key || '').trim())) return 'Lo slot selezionato non è valido.';
+    if (!String(draft.tipo_oggetto || '').trim()) return 'La tipologia è obbligatoria.';
+    const invalidBase = (draft.statistiche_base || []).some((x) => !x.stat_sigla);
+    if (invalidBase) return 'Ogni statistica base deve avere una statistica selezionata.';
+    const invalidMods = (draft.modificatori || []).some((x) => !x.stat_sigla);
+    if (invalidMods) return 'Ogni modificatore deve avere una statistica selezionata.';
+    return '';
+  };
+
+  const addStatBase = () => {
+    setDraft((p) => ({
+      ...p,
+      statistiche_base: [...(p.statistiche_base || []), { stat_sigla: '', valore_base: 0 }],
+    }));
+  };
+
+  const addMod = () => {
+    setDraft((p) => ({
+      ...p,
+      modificatori: [...(p.modificatori || []), { stat_sigla: '', valore: 0, tipo_modificatore: 'ADD' }],
+    }));
+  };
+
+  const updateListItem = (key, idx, patch) => {
+    const list = [...(draft[key] || [])];
+    list[idx] = { ...list[idx], ...patch };
+    setDraft((p) => ({ ...p, [key]: list }));
+  };
+
+  const removeListItem = (key, idx) => {
+    const list = (draft[key] || []).filter((_, i) => i !== idx);
+    setDraft((p) => ({ ...p, [key]: list }));
+  };
+
+  const handleApplyObjectFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+    const controlled = new Set(controlledParams || []);
+    const byParam = new Map((statsOptions || []).map((s) => [s.parametro, s]));
+    const keptStats = (draft.statistiche_base || []).filter((row) => {
+      const s = (statsOptions || []).find((x) => x.sigla === row.stat_sigla);
+      return !(s?.parametro && controlled.has(s.parametro));
+    });
+    const builtStats = Object.entries(statsByParam || {})
+      .filter(([param, value]) => byParam.get(param) && Number(value) > 0)
+      .map(([param, value]) => ({
+        stat_sigla: byParam.get(param).sigla,
+        valore_base: Number(value),
+      }));
+    setDraft((p) => ({
+      ...p,
+      formula: [formulaText, customText].filter(Boolean).join(' ').trim(),
+      statistiche_base: [...keptStats, ...builtStats],
+    }));
+  };
+
+  return (
+    <div className="fixed inset-0 z-11000 bg-black/75 flex items-center justify-center p-4">
+      <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-900 border border-purple-700/50 rounded-xl shadow-2xl">
+        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
+          <h3 className="text-lg font-bold text-white">Wizard Oggetto Runtime</h3>
+          <button onClick={onClose} className="px-3 py-1 rounded bg-gray-700 text-white text-sm">Chiudi</button>
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Input label="Nome oggetto" value={draft.nome} onChange={(v) => setDraft((p) => ({ ...p, nome: v }))} />
+            <SearchableSelect
+              label="Slot"
+              value={draft.slot_key}
+              options={SLOT_OPTIONS.map((x) => ({ id: x, nome: x }))}
+              onChange={(v) => setDraft((p) => ({ ...p, slot_key: v || 'melee' }))}
+            />
+            <Select
+              label="Tipologia"
+              value={draft.tipo_oggetto}
+              options={TIPO_OGGETTO_OPTIONS}
+              onChange={(v) => setDraft((p) => ({ ...p, tipo_oggetto: v || 'FIS' }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Input
+              label="Cariche massime (opz.)"
+              type="number"
+              value={draft.cariche_massime}
+              onChange={(v) => setDraft((p) => ({ ...p, cariche_massime: parseInt(v || '0', 10) || 0 }))}
+            />
+            <Input
+              label="Durata totale sec (opz.)"
+              type="number"
+              value={draft.durata_totale}
+              onChange={(v) => setDraft((p) => ({ ...p, durata_totale: parseInt(v || '0', 10) || 0 }))}
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">Descrizione effetto</label>
+            <textarea
+              className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white min-h-[90px]"
+              value={draft.descrizione_effetto || ''}
+              onChange={(e) => setDraft((p) => ({ ...p, descrizione_effetto: e.target.value }))}
+            />
+          </div>
+
+          <div className="border border-gray-700 rounded-lg p-3">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-gray-500 uppercase font-black tracking-tighter">Formula</label>
+              <button
+                type="button"
+                onClick={() => setIsObjFormulaBuilderOpen(true)}
+                className="px-2 py-1 rounded bg-cyan-700 hover:bg-cyan-600 text-xs font-bold uppercase"
+              >
+                Builder formula oggetto
+              </button>
+            </div>
+            <input
+              className="w-full mt-2 bg-gray-950 p-2 rounded border border-gray-700 text-sm font-mono text-white"
+              value={draft.formula || ''}
+              onChange={(e) => setDraft((p) => ({ ...p, formula: e.target.value }))}
+            />
+          </div>
+
+          <div className="border border-gray-700 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Statistiche base oggetto</span>
+              <button type="button" onClick={addStatBase} className="px-2 py-1 rounded bg-emerald-700 text-xs font-bold">+ Aggiungi</button>
+            </div>
+            {(draft.statistiche_base || []).map((row, idx) => (
+              <div key={`sb-${idx}`} className="grid grid-cols-12 gap-2 items-center">
+                <div className="col-span-7">
+                  <SearchableSelect
+                    label=""
+                    value={row.stat_sigla}
+                    options={(statsOptions || []).map((s) => ({ id: s.sigla, nome: `${s.sigla} - ${s.nome}` }))}
+                    onChange={(v) => updateListItem('statistiche_base', idx, { stat_sigla: v })}
+                  />
+                </div>
+                <div className="col-span-3">
+                  <Input
+                    label=""
+                    type="number"
+                    value={row.valore_base}
+                    onChange={(v) => updateListItem('statistiche_base', idx, { valore_base: parseInt(v || '0', 10) || 0 })}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <button type="button" onClick={() => removeListItem('statistiche_base', idx)} className="w-full px-2 py-2 rounded bg-red-700 text-xs font-bold">Rimuovi</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border border-gray-700 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Modificatori statistiche</span>
+              <button type="button" onClick={addMod} className="px-2 py-1 rounded bg-amber-700 text-xs font-bold">+ Aggiungi</button>
+            </div>
+            {(draft.modificatori || []).map((row, idx) => (
+              <div key={`mod-${idx}`} className="grid grid-cols-12 gap-2 items-center">
+                <div className="col-span-5">
+                  <SearchableSelect
+                    label=""
+                    value={row.stat_sigla}
+                    options={(statsOptions || []).map((s) => ({ id: s.sigla, nome: `${s.sigla} - ${s.nome}` }))}
+                    onChange={(v) => updateListItem('modificatori', idx, { stat_sigla: v })}
+                  />
+                </div>
+                <div className="col-span-3">
+                  <Input
+                    label=""
+                    type="number"
+                    value={row.valore}
+                    onChange={(v) => updateListItem('modificatori', idx, { valore: Number(v || 0) })}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <Select
+                    label=""
+                    value={row.tipo_modificatore || 'ADD'}
+                    options={[{ id: 'ADD', nome: 'ADD' }, { id: 'MOL', nome: 'MOL' }]}
+                    onChange={(v) => updateListItem('modificatori', idx, { tipo_modificatore: v || 'ADD' })}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <button type="button" onClick={() => removeListItem('modificatori', idx)} className="w-full px-2 py-2 rounded bg-red-700 text-xs font-bold">Rimuovi</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border border-indigo-800/50 rounded-lg p-3 bg-indigo-950/20">
+            <div className="text-[10px] uppercase tracking-wider text-indigo-300 font-bold mb-2">Anteprima in Game</div>
+            <div className="rounded-lg border border-indigo-700/40 bg-black/25 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-bold text-indigo-100">{draft.nome || 'Oggetto runtime'}</div>
+                <div className="text-[10px] uppercase tracking-wide text-indigo-300/90">
+                  {draft.tipo_oggetto || 'FIS'} · slot {draft.slot_key || '-'}
+                </div>
+              </div>
+              {draft.descrizione_effetto ? (
+                <div className="text-xs text-gray-300 whitespace-pre-wrap">{draft.descrizione_effetto}</div>
+              ) : (
+                <div className="text-xs text-gray-500 italic">Nessuna descrizione effetto.</div>
+              )}
+              {draft.formula ? (
+                <div className="text-xs font-mono text-emerald-300 break-all">Formula: {draft.formula}</div>
+              ) : null}
+              {Array.isArray(draft.modificatori) && draft.modificatori.length > 0 ? (
+                <div className="text-xs text-gray-200">
+                  <div className="font-bold text-gray-100 mb-1">Modificatori</div>
+                  <ul className="space-y-1">
+                    {draft.modificatori
+                      .filter((m) => m.stat_sigla)
+                      .map((m, i) => (
+                        <li key={`prev-mod-${i}`} className="font-mono">
+                          {m.stat_sigla} {m.tipo_modificatore || 'ADD'} {m.valore}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500 italic">Nessun modificatore statistico.</div>
+              )}
+              <div className="text-[11px] text-gray-400">
+                Cariche max: <span className="font-mono text-gray-200">{Number(draft.cariche_massime || 0)}</span> · Durata:
+                <span className="font-mono text-gray-200"> {Number(draft.durata_totale || 0)}s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 border-t border-gray-700 flex justify-end gap-2">
+          {wizardError ? (
+            <div className="mr-auto text-xs text-red-300 bg-red-900/30 border border-red-700/40 rounded px-2 py-1">
+              {wizardError}
+            </div>
+          ) : null}
+          <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-700 rounded text-white text-sm">Annulla</button>
+          <button
+            type="button"
+            onClick={() => {
+              const err = validateDraft();
+              if (err) {
+                setWizardError(err);
+                return;
+              }
+              setWizardError('');
+              const cleaned = {
+                nome: draft.nome || '',
+                slot_key: draft.slot_key || 'melee',
+                tipo_oggetto: draft.tipo_oggetto || 'FIS',
+                descrizione_effetto: draft.descrizione_effetto || '',
+                formula: draft.formula || '',
+                statistiche_base: (draft.statistiche_base || []).filter((x) => x.stat_sigla),
+                modificatori: (draft.modificatori || []).filter((x) => x.stat_sigla),
+                cariche: { cariche_massime: Number(draft.cariche_massime || 0) },
+                durata_totale: Number(draft.durata_totale || 0),
+              };
+              onApply?.(cleaned);
+              onClose?.();
+            }}
+            className="px-4 py-2 bg-indigo-600 rounded text-white text-sm font-bold"
+          >
+            Applica al JSON runtime
+          </button>
+        </div>
+      </div>
+      <FormulaBuilderModal
+        open={isObjFormulaBuilderOpen}
+        onClose={() => setIsObjFormulaBuilderOpen(false)}
+        onApply={handleApplyObjectFormulaBuilder}
+        onLogout={onLogout}
+        statsOptions={statsOptions}
+        statisticheBase={(draft.statistiche_base || [])
+          .map((row) => {
+            const st = (statsOptions || []).find((s) => s.sigla === row.stat_sigla);
+            if (!st) return null;
+            return { statistica: st.id, valore_base: row.valore_base };
+          })
+          .filter(Boolean)}
+        formulaValue={draft.formula}
+        defaultFormulaType="attack"
+      />
     </div>
   );
 };
@@ -206,5 +652,80 @@ const Select = ({ label, value, options, onChange }) => (
       </select>
     </div>
 );
+
+const SearchableSelect = ({ label, value, options = [], onChange, placeholder = 'Cerca...' }) => {
+    const wrapRef = useRef(null);
+    const selectedOption = useMemo(
+      () => (options || []).find((o) => String(o.id) === String(value ?? '')) || null,
+      [options, value]
+    );
+    const [query, setQuery] = useState(selectedOption?.nome || '');
+    const [open, setOpen] = useState(false);
+
+    useEffect(() => {
+      setQuery(selectedOption?.nome || '');
+    }, [selectedOption?.id, selectedOption?.nome]);
+
+    useEffect(() => {
+      const onDocClick = (ev) => {
+        if (!wrapRef.current) return;
+        if (!wrapRef.current.contains(ev.target)) setOpen(false);
+      };
+      document.addEventListener('mousedown', onDocClick);
+      return () => document.removeEventListener('mousedown', onDocClick);
+    }, []);
+
+    const filtered = useMemo(() => {
+      const q = String(query || '').trim().toLowerCase();
+      if (!q) return options;
+      return (options || []).filter((o) => String(o.nome || '').toLowerCase().includes(q));
+    }, [options, query]);
+
+    const pick = (opt) => {
+      setQuery(opt?.nome || '');
+      onChange?.(opt ? String(opt.id) : '');
+      setOpen(false);
+    };
+
+    return (
+      <div className="w-full text-left" ref={wrapRef}>
+        <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">{label}</label>
+        <div className="relative">
+          <input
+            type="text"
+            className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white focus:border-cyan-500 outline-none"
+            value={query}
+            placeholder={placeholder}
+            onFocus={() => setOpen(true)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+              if (!e.target.value) onChange?.('');
+            }}
+          />
+          {open && (
+            <div className="absolute z-30 mt-1 w-full rounded border border-gray-700 bg-gray-950 max-h-52 overflow-y-auto shadow-xl">
+              {filtered.length === 0 ? (
+                <div className="px-2 py-2 text-xs text-gray-500">Nessun risultato</div>
+              ) : (
+                filtered.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`w-full text-left px-2 py-2 text-xs border-b border-gray-800 last:border-b-0 hover:bg-gray-800 ${
+                      String(opt.id) === String(value ?? '') ? 'bg-cyan-900/25 text-cyan-100' : 'text-gray-200'
+                    }`}
+                    onClick={() => pick(opt)}
+                  >
+                    {opt.nome}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+};
 
 export default TessituraEditor;

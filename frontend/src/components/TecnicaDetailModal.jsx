@@ -36,9 +36,16 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica' }) => {
                 <h2 className="text-2xl font-bold text-indigo-400 leading-tight mb-1">
                 {tecnica.nome}
                 </h2>
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider border border-gray-600 px-2 py-0.5 rounded">
-                    {type} - Livello {tecnica.livello}
-                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wider border border-gray-600 px-2 py-0.5 rounded">
+                      {type} - Livello {tecnica.livello}
+                  </span>
+                  {tecnica.non_acquistabile && (
+                    <span className="text-xs font-bold uppercase tracking-wider border border-sky-500/70 bg-sky-900/30 text-sky-100 px-2 py-0.5 rounded">
+                      Solo QR/Master
+                    </span>
+                  )}
+                </div>
             </div>
             {tecnica.aura_richiesta && (
                 <div className="shrink-0 ml-3">

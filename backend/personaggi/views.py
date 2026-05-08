@@ -48,6 +48,7 @@ from .models import (
     UserSocialPreference,
     StatisticaContainer,
     PersonaggioInfusione, PersonaggioCerimoniale,
+    TessituraEffettoRuntime, TessituraOggettoRuntime,
     PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
     Campagna, CampagnaUtente, CampagnaFeaturePolicy,
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI, FEATURE_SOCIAL,
@@ -88,7 +89,7 @@ from . import qr_logic
 # --- IMPORT SERVICES ---
 from .services import (
     # monta_potenziamento, crea_oggetto_da_infusione, 
-    GestioneOggettiService, GestioneCraftingService, CreazioneConsumabileService,
+    GestioneOggettiService, GestioneCraftingService, CreazioneConsumabileService, TessituraRuntimeService,
 )
 from .campaigns import ensure_user_in_base_campaign
 
@@ -118,6 +119,7 @@ from .serializers import (
     KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
     CaricaKorpSerializer, CaricaCarrieraSerializer,
     PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
+    TessituraEffettoRuntimeSerializer,
     StatisticaContainerSerializer,
     CampagnaSerializer, CampagnaUtenteSerializer, CampagnaFeaturePolicySerializer,
 )
@@ -800,6 +802,8 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
 
         acquistabili = []
         for infusione in tutte_infusioni:
+            if getattr(infusione, "non_acquistabile", False):
+                continue
             aura_palette = infusione.aura_infusione or infusione.aura_richiesta
             if aura_palette and aura_palette.modelli_definiti.exists():
                 if not personaggio.modelli_aura.filter(aura=aura_palette).exists():
@@ -829,6 +833,11 @@ class AcquisisciInfusioneView(APIView):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
         if not _campaign_feature_filter(request, Infusione.objects.filter(id=infusione.id), FEATURE_INFUSIONI).exists():
             return Response({"error": "Infusione non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
+        if getattr(infusione, "non_acquistabile", False):
+            return Response(
+                {"error": "Questa infusione non e acquistabile da tab: usa QR-code o assegnazione master."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(infusione)
         if not is_valid: return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -888,6 +897,8 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
 
         acquistabili = []
         for tessitura in tutte_tessiture:
+            if getattr(tessitura, "non_acquistabile", False):
+                continue
             aura_req = tessitura.aura_richiesta
             if aura_req:
                 if aura_req.modelli_definiti.exists():
@@ -920,6 +931,11 @@ class AcquisisciTessituraView(APIView):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
         if not _campaign_feature_filter(request, Tessitura.objects.filter(id=tessitura.id), FEATURE_TESSITURE).exists():
             return Response({"error": "Tessitura non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
+        if getattr(tessitura, "non_acquistabile", False):
+            return Response(
+                {"error": "Questa tessitura non e acquistabile da tab: usa QR-code o assegnazione master."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(tessitura)
         if not is_valid: return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -1082,6 +1098,8 @@ class CerimonialiAcquistabiliView(generics.GenericAPIView):
 
         acquistabili = []
         for cer in tutti_cerimoniali:
+            if getattr(cer, "non_acquistabile", False):
+                continue
             # Usa il metodo di validazione che abbiamo aggiornato nel modello Personaggio
             is_valid, _ = personaggio.valida_acquisto_tecnica(cer)
             if is_valid:
@@ -1111,6 +1129,11 @@ class AcquisisciCerimonialeView(APIView):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
         if not _campaign_feature_filter(request, Cerimoniale.objects.filter(id=cerimoniale.id), FEATURE_CERIMONIALI).exists():
             return Response({"error": "Cerimoniale non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
+        if getattr(cerimoniale, "non_acquistabile", False):
+            return Response(
+                {"error": "Questo cerimoniale non e acquistabile da tab: usa QR-code o assegnazione master."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Verifica requisiti
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(cerimoniale)
@@ -4439,6 +4462,62 @@ class GameActionsViewSet(viewsets.ViewSet):
                 'interval_seconds': rec.get('interval_seconds'),
             },
         })
+
+    @action(detail=False, methods=['post'])
+    def attiva_tessitura_runtime(self, request):
+        char_id = request.data.get('char_id')
+        tessitura_id = request.data.get('tessitura_id')
+        if not char_id or not tessitura_id:
+            return Response({'error': 'char_id e tessitura_id sono obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        tessitura = get_object_or_404(Tessitura, pk=tessitura_id)
+        if not pg.tessiture_possedute.filter(id=tessitura.id).exists():
+            return Response({'error': 'Tessitura non posseduta dal personaggio.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            with transaction.atomic():
+                runtime = TessituraRuntimeService.attiva_tessitura_effetto_temporaneo(
+                    personaggio=pg,
+                    tessitura=tessitura,
+                    attivata_da=request.user,
+                )
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        pg.refresh_from_db()
+        serializer = TessituraEffettoRuntimeSerializer(runtime)
+        detail = PersonaggioDetailSerializer(pg, context={'request': request})
+        return Response({'status': 'ok', 'runtime': serializer.data, 'personaggio': detail.data}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'])
+    def stop_tessitura_runtime(self, request):
+        char_id = request.data.get('char_id')
+        runtime_id = request.data.get('runtime_id')
+        if not char_id or not runtime_id:
+            return Response({'error': 'char_id e runtime_id sono obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        try:
+            with transaction.atomic():
+                TessituraRuntimeService.termina_tessitura_effetto_runtime(pg, runtime_id, motivo='manual_stop')
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        pg.refresh_from_db()
+        detail = PersonaggioDetailSerializer(pg, context={'request': request})
+        return Response({'status': 'ok', 'personaggio': detail.data}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'])
+    def disequip_tessitura_runtime_object(self, request):
+        char_id = request.data.get('char_id')
+        runtime_object_id = request.data.get('runtime_object_id')
+        if not char_id or not runtime_object_id:
+            return Response({'error': 'char_id e runtime_object_id sono obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
+        pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        try:
+            with transaction.atomic():
+                TessituraRuntimeService.disequip_oggetto_runtime(pg, runtime_object_id)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        pg.refresh_from_db()
+        detail = PersonaggioDetailSerializer(pg, context={'request': request})
+        return Response({'status': 'ok', 'personaggio': detail.data}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'])
     def coma_control(self, request):

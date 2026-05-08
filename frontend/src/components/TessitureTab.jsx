@@ -4,7 +4,13 @@ import { useCharacter } from './CharacterContext';
 import { Loader2, ShoppingCart, Info, CheckCircle2, PlusCircle, FileEdit, Star, FlaskConical, PackageCheck, Timer, Trash2 } from 'lucide-react';
 import TecnicaDetailModal from './TecnicaDetailModal';
 import { avviaCreazioneConsumabile, completaCreazioneConsumabile } from '../api.js';
-import { useOptimisticAcquireTessitura, useOptimisticToggleTessituraFavorite, useRevokeTessitura } from '../hooks/useGameData';
+import {
+  useOptimisticAcquireTessitura,
+  useOptimisticToggleTessituraFavorite,
+  useRevokeTessitura,
+  useAttivaTessituraRuntime,
+  useStopTessituraRuntime,
+} from '../hooks/useGameData';
 import GenericGroupedList from './GenericGroupedList';
 import PunteggioDisplay from './PunteggioDisplay';     
 import IconaPunteggio from './IconaPunteggio';
@@ -81,6 +87,8 @@ const TessitureTab = ({ onLogout }) => {
   const acquireMutation = useOptimisticAcquireTessitura();
   const toggleFavoriteMutation = useOptimisticToggleTessituraFavorite();
   const revokeMutation = useRevokeTessitura();
+  const attivaRuntimeMutation = useAttivaTessituraRuntime();
+  const stopRuntimeMutation = useStopTessituraRuntime();
 
   const handleOpenModal = (item) => setModalItem(item);
   
@@ -156,7 +164,13 @@ const TessitureTab = ({ onLogout }) => {
   const allPossessed = char?.tessiture_possedute || [];
   const favorites = sortItems(allPossessed.filter(t => t.is_favorite));
   const possessed = sortItems(allPossessed.filter(t => !t.is_favorite));
-  const acquirable = sortItems(acquirableTessiture || []);
+  const acquirable = sortItems((acquirableTessiture || []).filter((t) => !t?.non_acquistabile));
+  const runtimeAttivi = Array.isArray(char?.tessiture_attive_runtime) ? char.tessiture_attive_runtime : [];
+  const runtimeByTessitura = useMemo(() => {
+    const map = new Map();
+    runtimeAttivi.forEach((rt) => map.set(String(rt.tessitura), rt));
+    return map;
+  }, [runtimeAttivi]);
 
   if (isLoadingAcquirable || isLoadingDetail || !char) {
     return (
@@ -196,6 +210,8 @@ const TessitureTab = ({ onLogout }) => {
     const creazioneInCorso = creazioniInCorso.find((c) => c.tessitura_id === item.id);
     const creazionePronta = creazioniPronte.find((c) => c.tessitura_id === item.id);
     const secondi = creazioneInCorso ? (countdowns[creazioneInCorso.id] ?? creazioneInCorso.secondi_rimanenti ?? 0) : 0;
+    const hasRuntimeConfig = !!item.usa_effetto_temporaneo && Number(item.durata_effetto_secondi || 0) > 0;
+    const runtimeAttivo = runtimeByTessitura.get(String(item.id));
 
     return (
       <li className="flex justify-between items-center py-2 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
@@ -235,6 +251,28 @@ const TessitureTab = ({ onLogout }) => {
               >
                 {isCreatingConsumable === item.id ? <Loader2 className="animate-spin" size={14} /> : <FlaskConical size={14} />}
                 Crea consumabile
+              </button>
+            )}
+            {hasRuntimeConfig && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (runtimeAttivo) {
+                    stopRuntimeMutation.mutate({ charId: selectedCharacterId, runtimeId: runtimeAttivo.id });
+                  } else {
+                    attivaRuntimeMutation.mutate({ charId: selectedCharacterId, tessituraId: item.id });
+                  }
+                }}
+                disabled={attivaRuntimeMutation.isPending || stopRuntimeMutation.isPending}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                  runtimeAttivo
+                    ? 'bg-rose-800 hover:bg-rose-700 text-white'
+                    : 'bg-purple-700 hover:bg-purple-600 text-white'
+                }`}
+                title={runtimeAttivo ? 'Ferma effetto temporaneo' : 'Attiva effetto temporaneo'}
+              >
+                <Timer size={14} />
+                {runtimeAttivo ? `Stop (${runtimeAttivo.secondi_rimanenti || 0}s)` : 'Attiva'}
               </button>
             )}
             <button

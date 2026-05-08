@@ -40,6 +40,7 @@ from .models import (
     ForgiaturaInCorso, 
     Inventario, OggettoStatistica, OggettoStatisticaBase, AttivataStatisticaBase, 
     AttivataElemento, OggettoInInventario,     Statistica, Personaggio, EffettoRisorsaTemporaneo,
+    TessituraEffettoRuntime, TessituraOggettoRuntime,
     CreditoMovimento, PersonaggioLog, TransazioneSospesa, PropostaTransazione,
     Gruppo, Messaggio,
     ModelloAuraRequisitoCaratt, ModelloAuraRequisitoMattone,
@@ -1236,7 +1237,7 @@ class InfusioneSerializer(serializers.ModelSerializer):
             'componenti', # NEW
             'statistiche_base',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
-            'tipo_risultato',
+            'tipo_risultato', 'non_acquistabile',
         )
 
     def get_costo_effettivo(self, obj):
@@ -1272,6 +1273,8 @@ class TessituraSerializer(serializers.ModelSerializer):
             'componenti', # NEW
             'statistiche_base',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
+            'usa_effetto_temporaneo', 'abilita_temporanea', 'durata_effetto_secondi', 'oggetto_runtime_config',
+            'non_acquistabile',
         )
 
     def get_costo_effettivo(self, obj):
@@ -1279,6 +1282,48 @@ class TessituraSerializer(serializers.ModelSerializer):
         if personaggio:
             return personaggio.get_costo_item_scontato(obj)
         return obj.costo_crediti
+
+
+class TessituraOggettoRuntimeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TessituraOggettoRuntime
+        fields = (
+            'id',
+            'nome',
+            'slot_key',
+            'equipaggiato',
+            'config_modificatori',
+            'config_formule',
+            'config_cariche',
+        )
+
+
+class TessituraEffettoRuntimeSerializer(serializers.ModelSerializer):
+    tessitura_nome = serializers.CharField(source='tessitura.nome', read_only=True)
+    abilita_temporanea_nome = serializers.CharField(source='abilita_temporanea.nome', read_only=True)
+    oggetto_runtime = TessituraOggettoRuntimeSerializer(read_only=True)
+    secondi_rimanenti = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TessituraEffettoRuntime
+        fields = (
+            'id',
+            'tessitura',
+            'tessitura_nome',
+            'abilita_temporanea',
+            'abilita_temporanea_nome',
+            'inizio',
+            'fine',
+            'is_attivo',
+            'motivo_fine',
+            'metadata',
+            'secondi_rimanenti',
+            'oggetto_runtime',
+        )
+
+    def get_secondi_rimanenti(self, obj):
+        delta = (obj.fine - timezone.now()).total_seconds()
+        return max(0, int(delta))
 
 class CerimonialeSerializer(serializers.ModelSerializer):
     # Serializer per lista/dettaglio cerimoniali
@@ -1292,7 +1337,7 @@ class CerimonialeSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'nome', 'liv', 'livello', 'aura_richiesta',
             'prerequisiti', 'svolgimento', 'effetto',
-            'TestoFormattato', 'costo_crediti', 'componenti'
+            'TestoFormattato', 'costo_crediti', 'componenti', 'non_acquistabile'
         )
 
 
@@ -1306,7 +1351,7 @@ class InfusioneStaffListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Infusione
-        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode')
+        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode', 'non_acquistabile')
 
 
 class TessituraStaffListSerializer(serializers.ModelSerializer):
@@ -1319,7 +1364,7 @@ class TessituraStaffListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Tessitura
-        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode')
+        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode', 'non_acquistabile')
 
 
 class CerimonialeStaffListSerializer(serializers.ModelSerializer):
@@ -1332,7 +1377,7 @@ class CerimonialeStaffListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Cerimoniale
-        fields = ('id', 'nome', 'liv', 'livello', 'aura_richiesta', 'has_qrcode')
+        fields = ('id', 'nome', 'liv', 'livello', 'aura_richiesta', 'has_qrcode', 'non_acquistabile')
 
 class TecnicaBaseMasterMixin:
     """Mixin aggiornato per gestire M2M e update annidati"""
@@ -1430,6 +1475,7 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         # Per la lista nel frontend servono gli oggetti completi, non solo gli ID
         rep['aura_richiesta'] = PunteggioSmallSerializer(instance.aura_richiesta).data if instance.aura_richiesta else None
         rep['elemento_principale'] = PunteggioSmallSerializer(instance.elemento_principale).data if instance.elemento_principale else None
+        rep['abilita_temporanea'] = AbilitaSmallForPrereqSerializer(instance.abilita_temporanea).data if instance.abilita_temporanea else None
         if hasattr(instance, "has_qrcode"):
             rep["has_qrcode"] = bool(instance.has_qrcode)
         else:
@@ -1942,6 +1988,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     risorse_consumabili = serializers.JSONField(read_only=True)
     risorse_pool_ui = serializers.SerializerMethodField()
     effetti_risorsa_attivi = serializers.SerializerMethodField()
+    tessiture_attive_runtime = serializers.SerializerMethodField()
+    tessiture_runtime_slots_occupati = serializers.SerializerMethodField()
     rigenerazioni_auto_ui = serializers.SerializerMethodField()
     
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
@@ -1969,7 +2017,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'is_staff', 'modelli_aura',
             'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
-            'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi', 'rigenerazioni_auto_ui',
+            'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi', 'tessiture_attive_runtime', 'tessiture_runtime_slots_occupati', 'rigenerazioni_auto_ui',
             'impostazioni_ui',
             'can_edit_razza',
             'can_edit_era',
@@ -2295,6 +2343,19 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             }
             for e in qs
         ]
+
+    def get_tessiture_attive_runtime(self, obj):
+        runtime_qs = obj.get_tessiture_runtime_attive()
+        return TessituraEffettoRuntimeSerializer(runtime_qs, many=True).data
+
+    def get_tessiture_runtime_slots_occupati(self, obj):
+        runtime_qs = obj.get_tessiture_runtime_attive()
+        slots = []
+        for rt in runtime_qs:
+            rt_obj = getattr(rt, 'oggetto_runtime', None)
+            if rt_obj and rt_obj.equipaggiato and rt_obj.slot_key:
+                slots.append(rt_obj.slot_key)
+        return sorted(set(slots))
 
     def get_rigenerazioni_auto_ui(self, obj):
         rec_map = obj.get_recuperi_risorsa_stato()

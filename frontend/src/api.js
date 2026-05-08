@@ -2170,6 +2170,24 @@ export const gameConsumaRisorsa = (charId, statSigla, onLogout) =>
         body: JSON.stringify({ char_id: charId, stat_sigla: statSigla }),
     }, onLogout);
 
+export const gameAttivaTessituraRuntime = (charId, tessituraId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/game/attiva_tessitura_runtime/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, tessitura_id: tessituraId }),
+    }, onLogout);
+
+export const gameStopTessituraRuntime = (charId, runtimeId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/game/stop_tessitura_runtime/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, runtime_id: runtimeId }),
+    }, onLogout);
+
+export const gameDisequipTessituraRuntimeObject = (charId, runtimeObjectId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/game/disequip_tessitura_runtime_object/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, runtime_object_id: runtimeObjectId }),
+    }, onLogout);
+
 export const gameComaControl = (charId, action, onLogout) =>
     fetchAuthenticated('/api/personaggi/api/game/coma_control/', {
         method: 'POST',

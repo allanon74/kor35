@@ -3,7 +3,22 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
 
-from .models import Abilita, Campagna, CampagnaUtente, Personaggio, Punteggio, TipologiaPersonaggio
+from .models import (
+    Abilita,
+    AbilitaStatistica,
+    Campagna,
+    CampagnaUtente,
+    MODIFICATORE_ADDITIVO,
+    Oggetto,
+    OggettoInInventario,
+    Personaggio,
+    Punteggio,
+    Statistica,
+    Tessitura,
+    TessituraEffettoRuntime,
+    TipologiaPersonaggio,
+    CARATTERISTICA,
+)
 from .sso import _upsert_local_user
 
 
@@ -324,3 +339,128 @@ class AINTraitPcDeltaTests(APITestCase):
         self.assertEqual(r2.status_code, status.HTTP_200_OK)
         self.personaggio.refresh_from_db()
         self.assertEqual(self.personaggio.punti_caratteristica, 8)
+
+
+class TessituraRuntimeTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="runtime-user", password="x")
+        self.client.force_authenticate(user=self.user)
+        self.pg = Personaggio.objects.create(nome="PG Runtime", proprietario=self.user)
+        self.stat_rpg = Statistica.objects.create(nome="Rango Guscio Runtime", sigla="RGR", parametro="RGR")
+        self.caratt = Punteggio.objects.create(nome="Forza Runtime", sigla="FRT", tipo=CARATTERISTICA)
+        self.aura_runtime = Punteggio.objects.create(nome="Aura Runtime", sigla="ART", tipo="AU")
+
+    def test_attiva_runtime_abilita_applica_modificatore_finche_attivo(self):
+        abilita = Abilita.objects.create(
+            nome="Aura Guard Runtime",
+            caratteristica=self.caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        AbilitaStatistica.objects.create(
+            abilita=abilita,
+            statistica=self.stat_rpg,
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+            valore=2,
+        )
+        tessitura = Tessitura.objects.create(
+            nome="Tessitura Guard Runtime",
+            aura_richiesta=self.aura_runtime,
+            usa_effetto_temporaneo=True,
+            abilita_temporanea=abilita,
+            durata_effetto_secondi=120,
+            formula="1d10",
+        )
+        self.pg.tessiture_possedute.add(tessitura)
+
+        r = self.client.post(
+            "/api/personaggi/api/game/attiva_tessitura_runtime/",
+            {"char_id": self.pg.id, "tessitura_id": tessitura.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.pg.refresh_from_db()
+        mods = self.pg.modificatori_calcolati
+        self.assertIn("RGR", mods)
+        self.assertGreaterEqual(mods["RGR"]["add"], 2.0)
+
+    def test_attiva_runtime_slot_disequippa_oggetto_reale_stesso_slot(self):
+        obj = Oggetto.objects.create(
+            nome="Spada Runtime",
+            tipo_oggetto="FIS",
+            is_equipaggiato=True,
+            slot_equip="melee",
+        )
+        OggettoInInventario.objects.create(oggetto=obj, inventario=self.pg.inventario_ptr)
+        tessitura = Tessitura.objects.create(
+            nome="Arma Arcana Runtime",
+            aura_richiesta=self.aura_runtime,
+            usa_effetto_temporaneo=True,
+            durata_effetto_secondi=120,
+            oggetto_runtime_config={
+                "nome": "Lama Arcana Runtime",
+                "slot_key": "melee",
+                "modificatori": [{"stat_sigla": "RGR", "valore": 1, "tipo_modificatore": "ADD"}],
+            },
+            formula="1d10",
+        )
+        self.pg.tessiture_possedute.add(tessitura)
+        r = self.client.post(
+            "/api/personaggi/api/game/attiva_tessitura_runtime/",
+            {"char_id": self.pg.id, "tessitura_id": tessitura.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        obj.refresh_from_db()
+        self.assertFalse(obj.is_equipaggiato)
+        self.assertIsNone(obj.slot_equip)
+        runtime = TessituraEffettoRuntime.objects.filter(personaggio=self.pg, tessitura=tessitura, is_attivo=True).first()
+        self.assertIsNotNone(runtime)
+        self.assertTrue(runtime.oggetto_runtime.equipaggiato)
+
+    def test_disequip_runtime_object_termina_effetto(self):
+        tessitura = Tessitura.objects.create(
+            nome="Arma Arcana Runtime",
+            aura_richiesta=self.aura_runtime,
+            usa_effetto_temporaneo=True,
+            durata_effetto_secondi=120,
+            oggetto_runtime_config={"nome": "Lama Arcana Runtime", "slot_key": "melee", "modificatori": []},
+            formula="1d10",
+        )
+        self.pg.tessiture_possedute.add(tessitura)
+        act = self.client.post(
+            "/api/personaggi/api/game/attiva_tessitura_runtime/",
+            {"char_id": self.pg.id, "tessitura_id": tessitura.id},
+            format="json",
+        )
+        self.assertEqual(act.status_code, status.HTTP_200_OK)
+        runtime_id = act.data["runtime"]["id"]
+        runtime_obj_id = act.data["runtime"]["oggetto_runtime"]["id"]
+        stop = self.client.post(
+            "/api/personaggi/api/game/disequip_tessitura_runtime_object/",
+            {"char_id": self.pg.id, "runtime_object_id": runtime_obj_id},
+            format="json",
+        )
+        self.assertEqual(stop.status_code, status.HTTP_200_OK)
+        rt = TessituraEffettoRuntime.objects.get(id=runtime_id)
+        self.assertFalse(rt.is_attivo)
+        self.assertEqual(rt.motivo_fine, "manual_disequip")
+
+    @patch("personaggi.services.GestioneOggettiService.calcola_cog_utilizzata", return_value=1)
+    @patch("personaggi.models.Personaggio.get_valore_statistica", return_value=1)
+    def test_attiva_runtime_bloccata_se_cog_pieno(self, _mock_cog_max, _mock_cog_used):
+        tessitura = Tessitura.objects.create(
+            nome="Runtime COG Block",
+            aura_richiesta=self.aura_runtime,
+            usa_effetto_temporaneo=True,
+            durata_effetto_secondi=60,
+            formula="1d10",
+        )
+        self.pg.tessiture_possedute.add(tessitura)
+        r = self.client.post(
+            "/api/personaggi/api/game/attiva_tessitura_runtime/",
+            {"char_id": self.pg.id, "tessitura_id": tessitura.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("COG", str(r.data))

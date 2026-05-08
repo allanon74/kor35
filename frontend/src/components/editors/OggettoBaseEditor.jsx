@@ -6,6 +6,7 @@ import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor'; // Importazione corretta
 import EditorSaveActions from './EditorSaveActions';
 import FormulaBuilderModal from './FormulaBuilderModal';
+import SearchableSelect from './SearchableSelect';
 
 const TIPO_CHOICES = [
     {id:'FIS', nome:'Fisico'}, {id:'MAT', nome:'Materia'}, {id:'MOD', nome:'Mod'},
@@ -164,14 +165,15 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
     }));
   };
 
-  const Select = ({ label, value, options, onChange }) => (
+  const Select = ({ label, value, options, onChange, placeholder = '- SELEZIONA -' }) => (
     <div className="w-full">
       <label className="text-[10px] text-gray-500 uppercase font-black block mb-1">{label}</label>
-      <select className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white focus:border-blue-500 outline-none" 
-        value={value || ""} onChange={e => onChange(e.target.value)}>
-        <option value="">- SELEZIONA -</option>
-        {options.map(o => <option key={o.id} value={o.id}>{o.nome || o.label}</option>)}
-      </select>
+      <SearchableSelect
+        options={options}
+        value={value || ''}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
     </div>
   );
 

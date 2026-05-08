@@ -17,6 +17,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
     svolgimento: '',
     effetto: '',
     liv: 1,
+    non_acquistabile: false,
     componenti: []
   };
 
@@ -100,6 +101,16 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
                 <Input label="Nome Cerimoniale" value={formData.nome} onChange={v => setFormData({...formData, nome: v})} />
             </div>
             <Input label="Livello (liv)" type="number" value={formData.liv} onChange={v => setFormData({...formData, liv: v})} />
+        </div>
+        <div className="flex items-center justify-end">
+          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={!!formData.non_acquistabile}
+              onChange={(e) => setFormData({ ...formData, non_acquistabile: e.target.checked })}
+            />
+            Non acquistabile
+          </label>
         </div>
       </div>
 

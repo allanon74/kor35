@@ -9,6 +9,9 @@ import {
 import { 
     useOptimisticStatChange,
     useConsumaRisorsa,
+    useAttivaTessituraRuntime,
+    useStopTessituraRuntime,
+    useDisequipTessituraRuntimeObject,
 } from '../hooks/useGameData';
 import { gameComaControl } from '../api';
 
@@ -340,7 +343,12 @@ const CapacityDashboard = ({ capacityUsed, capacityMax, capacityConsumers, heavy
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                     {capacityConsumers.length > 0 ? capacityConsumers.map((item) => (
-                        <div key={item.id} className="flex items-center gap-1.5 bg-gray-800 px-2 py-1 rounded border border-gray-600 shadow-sm"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></div><span className="text-[10px] text-gray-300 truncate font-mono max-w-[120px]">{item.nome}</span></div>
+                        <div key={item.id} className="flex items-center gap-1.5 bg-gray-800 px-2 py-1 rounded border border-gray-600 shadow-sm">
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.isRuntime ? 'bg-sky-400' : 'bg-indigo-500'}`}></div>
+                            <span className={`text-[10px] truncate font-mono max-w-[120px] ${item.isRuntime ? 'text-sky-300' : 'text-gray-300'}`}>
+                                {item.isRuntime ? `🕒 ${item.nome}` : item.nome}
+                            </span>
+                        </div>
                     )) : <span className="text-[10px] text-gray-600 italic px-1">Nessuno</span>}
                 </div>
             </div>
@@ -381,6 +389,11 @@ const LiveComaCountdown = ({ endAtIso, pausedAtIso, isPaused, fallbackSeconds = 
     );
 };
 
+const formatCountdown = (seconds) => {
+    const s = Math.max(0, Number(seconds || 0));
+    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+};
+
 // --- MAIN GAMETAB ---
 const GameTab = ({ onNavigate }) => {
     const { selectedCharacterData: char, unreadCount, refreshCharacterData, onLogout } = useCharacter();
@@ -389,10 +402,19 @@ const GameTab = ({ onNavigate }) => {
     
     const statMutation = useOptimisticStatChange();
     const risorsaMutation = useConsumaRisorsa();
+    const attivaRuntimeMutation = useAttivaTessituraRuntime();
+    const stopRuntimeMutation = useStopTessituraRuntime();
+    const disequipRuntimeObjMutation = useDisequipTessituraRuntimeObject();
+    const [runtimeDetail, setRuntimeDetail] = useState(null);
+    const [runtimeNowTs, setRuntimeNowTs] = useState(() => Date.now());
 
     useEffect(() => {
         const savedFavs = JSON.parse(localStorage.getItem('kor35_favorites') || '[]');
         setFavorites(savedFavs);
+    }, []);
+    useEffect(() => {
+        const id = window.setInterval(() => setRuntimeNowTs(Date.now()), 1000);
+        return () => window.clearInterval(id);
     }, []);
 
     // --- FUNZIONI HELPER PER VISUALIZZAZIONE ---
@@ -552,6 +574,15 @@ const GameTab = ({ onNavigate }) => {
         localStorage.setItem('kor35_favorites', JSON.stringify(newFavs));
     };
 
+    const runtimeAttivi = Array.isArray(char?.tessiture_attive_runtime) ? char.tessiture_attive_runtime : [];
+    const runtimeByTessitura = useMemo(() => {
+        const map = new Map();
+        runtimeAttivi.forEach((rt) => {
+            map.set(String(rt.tessitura), rt);
+        });
+        return map;
+    }, [runtimeAttivi]);
+
     if (!char) return <div className="p-8 text-center text-white">Caricamento...</div>;
 
     // Statistiche Tattiche
@@ -604,7 +635,13 @@ const GameTab = ({ onNavigate }) => {
     const capacityConsumers = char.oggetti.filter(
         (i) => i.is_equipaggiato && i.tipo_oggetto === 'FIS' && ((i.potenziamenti_installati?.length || 0) > 0 || !i.oggetto_base_generatore)
     );
-    const capacityUsed = capacityConsumers.length;
+    const runtimeCogConsumers = runtimeAttivi.map((rt) => ({
+        id: `runtime-${rt.id}`,
+        nome: `Runtime: ${rt.tessitura_nome || 'Tessitura'}`,
+        isRuntime: true,
+    }));
+    const capacityConsumersAll = [...capacityConsumers, ...runtimeCogConsumers];
+    const capacityUsed = capacityConsumersAll.length;
     
     const statOgp = primary.find((s) => s.sigla === 'OGP');
     const heavyMax = statOgp ? statOgp.valore_max : 0;
@@ -615,7 +652,7 @@ const GameTab = ({ onNavigate }) => {
         <div className="pb-24 px-2 space-y-6 animate-fadeIn text-gray-100 pt-2">
             
             <CapacityDashboard 
-                capacityUsed={capacityUsed} capacityMax={capacityMax} capacityConsumers={capacityConsumers}
+                capacityUsed={capacityUsed} capacityMax={capacityMax} capacityConsumers={capacityConsumersAll}
                 heavyUsed={heavyUsed} heavyMax={heavyMax} heavyConsumers={heavyConsumers}
             />
 
@@ -717,6 +754,39 @@ const GameTab = ({ onNavigate }) => {
                             </ul>
                         </div>
                     )}
+                    {runtimeAttivi.length > 0 && (
+                        <div className="bg-gray-900/50 rounded-lg p-2 border border-purple-700/40 text-[10px] text-gray-400">
+                            <span className="font-bold text-purple-300 uppercase tracking-wider">Effetti tessitura attivi</span>
+                            <ul className="mt-1 space-y-1">
+                                {runtimeAttivi.map((rt) => (
+                                    <li key={rt.id} className="font-mono text-gray-200 flex items-center justify-between gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setRuntimeDetail(rt)}
+                                            className="text-left underline decoration-dotted hover:text-purple-200"
+                                        >
+                                            {rt.tessitura_nome} · {formatCountdown(rt?.fine ? Math.max(0, Math.floor((new Date(rt.fine).getTime() - runtimeNowTs) / 1000)) : (rt.secondi_rimanenti || 0))}
+                                        </button>
+                                        {rt.oggetto_runtime?.equipaggiato && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    disequipRuntimeObjMutation.mutate({
+                                                        charId: char.id,
+                                                        runtimeObjectId: rt.oggetto_runtime.id,
+                                                    })
+                                                }
+                                                disabled={disequipRuntimeObjMutation.isPending}
+                                                className="px-2 py-1 rounded bg-rose-900/50 hover:bg-rose-800/60 disabled:opacity-40 text-[9px] uppercase tracking-wide font-bold text-rose-100"
+                                            >
+                                                Disequip runtime
+                                            </button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -798,6 +868,9 @@ const GameTab = ({ onNavigate }) => {
                         )}
                         {tessituraAttacks.map((attack) => {
                             const tessitura = attack.source;
+                            const runtimeAttivo = runtimeByTessitura.get(String(tessitura.id));
+                            const canActivateRuntime =
+                                !!tessitura.usa_effetto_temporaneo && Number(tessitura.durata_effetto_secondi || 0) > 0;
                             return (
                                 <div key={`tessitura-${tessitura.id}`} className="bg-linear-to-r from-purple-900/20 to-gray-900/20 border border-purple-500/30 p-3 rounded-lg shadow-sm">
                                     <div className="flex justify-between items-start mb-2">
@@ -808,6 +881,38 @@ const GameTab = ({ onNavigate }) => {
                                             </div>
                                             <div className="text-[10px] text-purple-300/60 uppercase">Tessitura • Lv.{tessitura.livello}</div>
                                         </div>
+                                        {canActivateRuntime && (
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        attivaRuntimeMutation.mutate({
+                                                            charId: char.id,
+                                                            tessituraId: tessitura.id,
+                                                        })
+                                                    }
+                                                    disabled={attivaRuntimeMutation.isPending}
+                                                    className="px-2 py-1 rounded bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
+                                                >
+                                                    {runtimeAttivo ? 'Riattiva' : 'Attiva'}
+                                                </button>
+                                                {runtimeAttivo && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            stopRuntimeMutation.mutate({
+                                                                charId: char.id,
+                                                                runtimeId: runtimeAttivo.id,
+                                                            })
+                                                        }
+                                                        disabled={stopRuntimeMutation.isPending}
+                                                        className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
+                                                    >
+                                                        Stop
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="bg-black/30 rounded p-2 mt-2 border-l-2 border-purple-500">
                                         <div
@@ -817,6 +922,11 @@ const GameTab = ({ onNavigate }) => {
                                             }}
                                         />
                                     </div>
+                                    {runtimeAttivo && (
+                                        <div className="mt-2 text-[10px] text-purple-200/90 font-mono">
+                                            Runtime attivo: {runtimeAttivo.secondi_rimanenti || 0}s
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
@@ -888,6 +998,49 @@ const GameTab = ({ onNavigate }) => {
                         ))}
                     </div>
                 </section>
+            )}
+            {runtimeDetail && (
+                <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-[1px] p-4 flex items-center justify-center">
+                    <div className="w-full max-w-xl bg-gray-900 border border-purple-700/40 rounded-xl p-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                            <h4 className="text-sm font-bold text-purple-200 uppercase tracking-wider">
+                                Dettaglio effetto tessitura
+                            </h4>
+                            <button
+                                type="button"
+                                onClick={() => setRuntimeDetail(null)}
+                                className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs"
+                            >
+                                Chiudi
+                            </button>
+                        </div>
+                        <div className="text-sm text-white font-bold">{runtimeDetail.tessitura_nome}</div>
+                        {runtimeDetail.abilita_temporanea_nome && (
+                            <div className="text-xs text-purple-200">
+                                Abilita temporanea: {runtimeDetail.abilita_temporanea_nome}
+                            </div>
+                        )}
+                        {runtimeDetail.oggetto_runtime && (
+                            <div className="text-xs text-gray-300">
+                                Oggetto runtime: <span className="font-bold">{runtimeDetail.oggetto_runtime.nome}</span> · slot{' '}
+                                <span className="font-mono">{runtimeDetail.oggetto_runtime.slot_key}</span>
+                            </div>
+                        )}
+                        {Array.isArray(runtimeDetail.oggetto_runtime?.config_modificatori) &&
+                            runtimeDetail.oggetto_runtime.config_modificatori.length > 0 && (
+                                <div className="text-xs text-gray-300">
+                                    <div className="font-bold text-gray-200 mb-1">Modificatori</div>
+                                    <ul className="space-y-1">
+                                        {runtimeDetail.oggetto_runtime.config_modificatori.map((m, i) => (
+                                            <li key={`mod-${i}`} className="font-mono">
+                                                {m.stat_sigla} {m.tipo_modificatore || 'ADD'} {m.valore}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                    </div>
+                </div>
             )}
         </div>
     );

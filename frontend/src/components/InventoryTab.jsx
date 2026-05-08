@@ -27,6 +27,13 @@ const formatDuration = (seconds) => {
     return parts.join(' ');
 };
 
+const formatCountdown = (totalSeconds) => {
+    const safe = Math.max(0, Number(totalSeconds || 0));
+    const minutes = Math.floor(safe / 60);
+    const seconds = safe % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
 const PHYSICAL_SLOT_CONFIG = [
     { key: 'head', label: 'Testa', shortLabel: 'TES', capacity: 1, aliases: ['testa', 'elmo', 'helm', 'head'] },
     { key: 'neck', label: 'Collo', shortLabel: 'COL', capacity: 1, aliases: ['collo', 'neck', 'collana', 'amulet'] },
@@ -95,7 +102,7 @@ const inferPhysicalSlots = (item) => {
     return ['vest'];
 };
 
-const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotDrop, onSlotDragOver, dragHintBySlot, isDragging, onTouchSlotSelect }) => {
+const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotDrop, onSlotDragOver, dragHintBySlot, isDragging, onTouchSlotSelect, runtimeBySlot = {} }) => {
     const CANVAS_W = 520;
     const CANVAS_H = 430;
     const bodySlots = slots.filter((s) => !['melee', 'ranged', 'focus', 'shield'].includes(s.key));
@@ -190,8 +197,11 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
 
                 {bodySingleSlots.map((slot) => {
                     const occupied = slot.equippedInSlot.length;
+                    const runtimeOccupied = (runtimeBySlot[slot.key] || []).length;
+                    const occupiedTotal = occupied + runtimeOccupied;
                     const isSelected = selectedSlotKey === slot.key;
-                    const isFull = occupied >= slot.capacity;
+                    const isFull = occupiedTotal >= slot.capacity;
+                    const hasRuntime = runtimeOccupied > 0;
                     const dragHint = dragHintBySlot?.[slot.key] || null;
                     const canDrop = dragHint?.canDrop === true;
                     const isBlockedByDrag = dragHint && !dragHint.canDrop;
@@ -210,6 +220,7 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                 canDrop ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
                                 isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
                                 isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                                hasRuntime ? 'border-sky-500/80 bg-sky-900/35 text-sky-100 shadow-[0_0_10px_rgba(56,189,248,0.25)]' :
                                 occupied > 0 ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
                                 'border-gray-700 bg-gray-900/80 text-gray-300'
                             }`}
@@ -220,7 +231,7 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                 <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
                                 <span>{slot.shortLabel || slot.label}</span>
                             </div>
-                            <div className={`font-mono ${isFull ? 'text-emerald-300' : 'text-gray-500'}`}>{occupied}/{slot.capacity}</div>
+                            <div className={`font-mono ${isFull ? (hasRuntime ? 'text-sky-200' : 'text-emerald-300') : 'text-gray-500'}`}>{occupiedTotal}/{slot.capacity}</div>
                         </button>
                     );
                 })}
@@ -229,10 +240,13 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                     const { slot, index, key, item } = cell;
                     const coords = (bodyCellCoords[slot.key] || [])[index] || { x: 72, y: 120 + (index * 68) };
                     const occupied = slot.equippedInSlot.length;
+                    const runtimeOccupied = (runtimeBySlot[slot.key] || []).length;
+                    const occupiedTotal = occupied + runtimeOccupied;
                     const isSelected = selectedSlotKey === slot.key;
                     const dragHint = dragHintBySlot?.[slot.key] || null;
                     const canDropInSlot = dragHint?.canDrop === true;
                     const cellIsFilled = !!item;
+                    const runtimeCellFilled = !cellIsFilled && index < occupiedTotal;
                     const canDropInThisCell = canDropInSlot && !cellIsFilled && index >= occupied;
                     const isBlockedByDrag = dragHint && !canDropInThisCell;
                     return (
@@ -248,6 +262,7 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                 canDropInThisCell ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
                                 isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
                                 isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                                runtimeCellFilled ? 'border-sky-500/80 bg-sky-900/35 text-sky-100 shadow-[0_0_10px_rgba(56,189,248,0.25)]' :
                                 cellIsFilled ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
                                 'border-gray-700 bg-gray-900/80 text-gray-300'
                             }`}
@@ -258,8 +273,8 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                 <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
                                 <span>{slot.shortLabel || slot.label} #{index + 1}</span>
                             </div>
-                            <div className={`font-mono ${cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
-                                {cellIsFilled ? 'OK' : 'VUOTO'}
+                            <div className={`font-mono ${runtimeCellFilled ? 'text-sky-200' : cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
+                                {runtimeCellFilled ? 'AZZ' : cellIsFilled ? 'OK' : 'VUOTO'}
                             </div>
                         </button>
                     );
@@ -272,10 +287,13 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                     {weaponCells.map((cell) => {
                         const { slot, index, key, item } = cell;
                         const occupied = slot.equippedInSlot.length;
+                        const runtimeOccupied = (runtimeBySlot[slot.key] || []).length;
+                        const occupiedTotal = occupied + runtimeOccupied;
                         const isSelected = selectedSlotKey === slot.key;
                         const dragHint = dragHintBySlot?.[slot.key] || null;
                         const canDropInSlot = dragHint?.canDrop === true;
                         const cellIsFilled = !!item;
+                        const runtimeCellFilled = !cellIsFilled && index < occupiedTotal;
                         const canDropInThisCell = canDropInSlot && !cellIsFilled && index >= occupied;
                         const isBlockedByDrag = dragHint && !canDropInThisCell;
                         return (
@@ -294,6 +312,7 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                     canDropInThisCell ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
                                     isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
                                     isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                                    runtimeCellFilled ? 'border-sky-500/80 bg-sky-900/35 text-sky-100 shadow-[0_0_10px_rgba(56,189,248,0.25)]' :
                                     cellIsFilled ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
                                     'border-gray-700 bg-gray-900/80 text-gray-300'
                                 }`}
@@ -303,8 +322,8 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                     <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
                                     <span>{slot.shortLabel || slot.label} #{index + 1}</span>
                                 </div>
-                                <div className={`font-mono ${cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
-                                    {cellIsFilled ? 'OK' : 'VUOTO'}
+                                <div className={`font-mono ${runtimeCellFilled ? 'text-sky-200' : cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
+                                    {runtimeCellFilled ? 'AZZ' : cellIsFilled ? 'OK' : 'VUOTO'}
                                 </div>
                             </button>
                         );
@@ -720,7 +739,12 @@ const CapacityDashboard = ({ capacityUsed, capacityMax, capacityConsumers, heavy
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                     {capacityConsumers.length > 0 ? capacityConsumers.map((item) => (
-                        <div key={item.id} className="flex items-center gap-1.5 bg-gray-800 px-2 py-1 rounded border border-gray-600 shadow-sm"><div className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></div><span className="text-[10px] text-gray-300 truncate font-mono max-w-[120px]">{item.nome}</span></div>
+                        <div key={item.id} className="flex items-center gap-1.5 bg-gray-800 px-2 py-1 rounded border border-gray-600 shadow-sm">
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.isRuntime ? 'bg-sky-400' : 'bg-indigo-500'}`}></div>
+                            <span className={`text-[10px] truncate font-mono max-w-[120px] ${item.isRuntime ? 'text-sky-300' : 'text-gray-300'}`}>
+                                {item.isRuntime ? `🕒 ${item.nome}` : item.nome}
+                            </span>
+                        </div>
                     )) : <span className="text-[10px] text-gray-600 italic px-1">Nessuno</span>}
                 </div>
             </div>
@@ -759,6 +783,7 @@ const InventoryTab = ({ onLogout }) => {
   const [showModuloDetail, setShowModuloDetail] = useState(false);
   const [selectedModuloId, setSelectedModuloId] = useState(null);
   const [equipSlotModal, setEquipSlotModal] = useState({ open: false, itemId: null, itemName: '', slots: [] });
+  const [nowTs, setNowTs] = useState(() => Date.now());
 
   const equipMutation = useOptimisticEquip();
   const rechargeMutation = useOptimisticRecharge();
@@ -770,6 +795,11 @@ const InventoryTab = ({ onLogout }) => {
     if (characterData?.oggetti) setItems(characterData.oggetti);
     else setItems([]);
   }, [characterData]);
+
+  useEffect(() => {
+      const timer = window.setInterval(() => setNowTs(Date.now()), 1000);
+      return () => window.clearInterval(timer);
+  }, []);
 
   const executeEquipMutation = (itemId, slotKey = null) => equipMutation.mutate(
       { itemId, slotKey, charId: characterData.id },
@@ -838,6 +868,42 @@ const InventoryTab = ({ onLogout }) => {
   const corpoItems = items.filter(i => ['INN', 'MUT'].includes(i.tipo_oggetto));
   const equipItems = items.filter(i => i.is_equipaggiato && i.tipo_oggetto === 'FIS');
   const zainoItems = items.filter(i => !i.is_equipaggiato && !['INN', 'MUT'].includes(i.tipo_oggetto));
+  const runtimeObjects = (characterData?.tessiture_attive_runtime || [])
+      .map((rt) => {
+          const tessituraCfg = (characterData?.tessiture_possedute || []).find(
+              (t) => String(t?.id) === String(rt?.tessitura)
+          )?.oggetto_runtime_config;
+          return { rt, tessituraCfg };
+      })
+      .map(({ rt, tessituraCfg }) => {
+          const obj = rt?.oggetto_runtime;
+          if (!obj || obj.equipaggiato === false) return null;
+          const fineTs = rt?.fine ? new Date(rt.fine).getTime() : null;
+          const secondiRimanenti = fineTs ? Math.max(0, Math.floor((fineTs - nowTs) / 1000)) : 0;
+          return {
+              runtimeId: rt.id,
+              tessituraNome: rt.tessitura_nome || 'Tessitura',
+              nome: obj.nome || 'Oggetto runtime',
+              slotKey: obj.slot_key || 'vest',
+              descrizione:
+                  obj?.metadata?.descrizione_effetto ||
+                  obj?.metadata?.descrizione ||
+                  rt?.metadata?.descrizione_effetto ||
+                  rt?.metadata?.descrizione ||
+                  tessituraCfg?.descrizione_effetto ||
+                  tessituraCfg?.descrizione ||
+                  '',
+              secondiRimanenti,
+              fine: rt.fine || null,
+          };
+      })
+      .filter(Boolean);
+  const runtimeBySlot = runtimeObjects.reduce((acc, obj) => {
+      const key = obj.slotKey || 'vest';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(obj);
+      return acc;
+  }, {});
 
   // Calcolo Capacità Oggetti
   const statCog = characterData?.statistiche_primarie?.find(s => s.sigla === 'COG');
@@ -846,7 +912,13 @@ const InventoryTab = ({ onLogout }) => {
   const capacityConsumers = items.filter(
       (i) => i.is_equipaggiato && i.tipo_oggetto === 'FIS' && (i.potenziamenti_installati?.length || 0) > 0
   );
-  const capacityUsed = capacityConsumers.length;
+  const runtimeCogConsumers = (characterData?.tessiture_attive_runtime || []).map((rt) => ({
+      id: `runtime-${rt.id}`,
+      nome: `Runtime: ${rt.tessitura_nome || 'Tessitura'}`,
+      isRuntime: true,
+  }));
+  const capacityConsumersAll = [...capacityConsumers, ...runtimeCogConsumers];
+  const capacityUsed = capacityConsumersAll.length;
   
   const statOgp = characterData?.statistiche_primarie?.find(s => s.sigla === 'OGP');
   const heavyMax = statOgp ? statOgp.valore_max : 0;
@@ -971,7 +1043,8 @@ const InventoryTab = ({ onLogout }) => {
   const physicalSlots = PHYSICAL_SLOT_CONFIG.map((slot) => {
       const equippedInSlot = equipItems.filter((item) => item.slot_equip === slot.key);
       const compatibleFromBackpack = zainoItems.filter((item) => item.tipo_oggetto === 'FIS' && inferPhysicalSlots(item).includes(slot.key));
-      return { ...slot, capacity: getSlotCapacity(slot.key, slot.capacity), equippedInSlot, compatibleFromBackpack };
+      const runtimeInSlot = runtimeBySlot[slot.key] || [];
+      return { ...slot, capacity: getSlotCapacity(slot.key, slot.capacity), equippedInSlot, compatibleFromBackpack, runtimeInSlot };
   });
 
   useEffect(() => {
@@ -1077,7 +1150,7 @@ const InventoryTab = ({ onLogout }) => {
       <CapacityDashboard 
         capacityUsed={capacityUsed} 
         capacityMax={capacityMax} 
-        capacityConsumers={capacityConsumers}
+        capacityConsumers={capacityConsumersAll}
         heavyUsed={heavyUsed} 
         heavyMax={heavyMax} 
         heavyConsumers={heavyConsumers}
@@ -1147,6 +1220,7 @@ const InventoryTab = ({ onLogout }) => {
                     <span className="px-2 py-1 rounded border border-emerald-500/70 bg-emerald-900/30 text-emerald-200">Drop valido</span>
                     <span className="px-2 py-1 rounded border border-red-500/70 bg-red-900/25 text-red-200">Drop bloccato</span>
                     <span className="px-2 py-1 rounded border border-indigo-500/70 bg-indigo-900/25 text-indigo-200">Slot selezionato</span>
+                    <span className="px-2 py-1 rounded border border-sky-500/70 bg-sky-900/30 text-sky-100">Oggetti temporanei</span>
                 </div>
                 <p className="text-xs text-gray-500">Trascina dall'inventario verso uno slot compatibile oppure clicca lo slot e usa “Equipaggia”.</p>
                 {touchDragMode && (
@@ -1172,14 +1246,40 @@ const InventoryTab = ({ onLogout }) => {
                     dragHintBySlot={dragHintBySlot}
                     isDragging={!!draggingItemId}
                     onTouchSlotSelect={handleTouchSlotSelect}
+                    runtimeBySlot={runtimeBySlot}
                 />
                 {selectedPhysicalSlot && (
                     <div className="border-t border-gray-700 pt-3">
                         <div className="text-xs uppercase tracking-wider text-indigo-300 font-bold mb-2">
                             Slot: {selectedPhysicalSlot.label}
                         </div>
-                        {selectedPhysicalSlot.equippedInSlot.length > 0 ? (
-                            renderList(selectedPhysicalSlot.equippedInSlot, selectedPhysicalSlot.key)
+                        {selectedPhysicalSlot.equippedInSlot.length > 0 || (selectedPhysicalSlot.runtimeInSlot?.length || 0) > 0 ? (
+                            <div className="space-y-2">
+                                {selectedPhysicalSlot.equippedInSlot.length > 0 && renderList(selectedPhysicalSlot.equippedInSlot, selectedPhysicalSlot.key)}
+                                {(selectedPhysicalSlot.runtimeInSlot || []).map((rtObj) => (
+                                    <div
+                                        key={`runtime-slot-${rtObj.runtimeId}-${rtObj.slotKey}`}
+                                        className="rounded-lg border border-sky-500/60 bg-sky-900/20 p-3 shadow-[0_0_14px_rgba(56,189,248,0.22)]"
+                                    >
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div>
+                                                <div className="text-xs uppercase tracking-wider text-sky-200 font-bold">Placeholder oggetto temporaneo</div>
+                                                <div className="text-sm font-semibold text-sky-50">{rtObj.nome}</div>
+                                                <div className="text-[10px] text-sky-300/80">Origine: {rtObj.tessituraNome}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[10px] uppercase tracking-wider text-sky-300">Durata residua</div>
+                                                <div className="font-mono text-sky-100">{formatCountdown(rtObj.secondiRimanenti)}</div>
+                                            </div>
+                                        </div>
+                                        {rtObj.descrizione ? (
+                                            <div className="mt-2 text-xs text-sky-100/90 border-t border-sky-600/30 pt-2">
+                                                {rtObj.descrizione}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ))}
+                            </div>
                         ) : (
                             <div className="space-y-2">
                                 <p className="text-xs text-gray-500">Slot vuoto. Oggetti compatibili nell'inventario:</p>
@@ -1198,7 +1298,34 @@ const InventoryTab = ({ onLogout }) => {
 
       <section>
         <h3 className="text-sm font-bold text-emerald-300 mb-3 flex items-center gap-2 uppercase tracking-wider pl-1"><Shield size={16} /> Equipaggiamento Attivo</h3>
-        {equipItems.length > 0 ? renderList(equipItems) : <p className="text-gray-600 italic text-sm p-4 text-center border border-dashed border-gray-700 rounded-lg bg-gray-800/30">Mani vuote.</p>}
+        {equipItems.length > 0 || runtimeObjects.length > 0 ? (
+            <div className="space-y-2">
+                {equipItems.length > 0 ? renderList(equipItems) : null}
+                {runtimeObjects.map((rtObj) => (
+                    <div
+                        key={`runtime-equipped-${rtObj.runtimeId}-${rtObj.slotKey}`}
+                        className="rounded-lg border border-sky-500/60 bg-sky-900/20 p-3 shadow-[0_0_14px_rgba(56,189,248,0.22)]"
+                    >
+                        <div className="flex items-center justify-between gap-2">
+                            <div>
+                                <div className="text-xs uppercase tracking-wider text-sky-200 font-bold">Oggetto temporaneo</div>
+                                <div className="text-sm font-semibold text-sky-50">{rtObj.nome}</div>
+                                <div className="text-[10px] text-sky-300/80">Slot: {(PHYSICAL_SLOT_CONFIG.find((s) => s.key === rtObj.slotKey)?.label || rtObj.slotKey)} • Origine: {rtObj.tessituraNome}</div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-sky-300">Countdown</div>
+                                <div className="font-mono text-sky-100">{formatCountdown(rtObj.secondiRimanenti)}</div>
+                            </div>
+                        </div>
+                        {rtObj.descrizione ? (
+                            <div className="mt-2 text-xs text-sky-100/90 border-t border-sky-600/30 pt-2">
+                                {rtObj.descrizione}
+                            </div>
+                        ) : null}
+                    </div>
+                ))}
+            </div>
+        ) : <p className="text-gray-600 italic text-sm p-4 text-center border border-dashed border-gray-700 rounded-lg bg-gray-800/30">Mani vuote.</p>}
       </section>
 
       <section>

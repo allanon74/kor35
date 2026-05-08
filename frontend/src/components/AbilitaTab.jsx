@@ -1,7 +1,7 @@
-import React, { useState, Fragment, useMemo, useCallback } from 'react';
+import React, { useState, Fragment, useMemo, useCallback, useEffect } from 'react';
 import { Tab } from '@headlessui/react';
 import { useCharacter } from './CharacterContext';
-import { Loader2, ShoppingCart, Info, CheckCircle2, PlusCircle, Trash2 } from 'lucide-react'; 
+import { Loader2, ShoppingCart, Info, CheckCircle2, PlusCircle, Trash2, Clock } from 'lucide-react'; 
 import AbilitaDetailModal from './AbilitaDetailModal.jsx';
 import GenericGroupedList from './GenericGroupedList';
 import PunteggioDisplay from './PunteggioDisplay';     
@@ -23,10 +23,15 @@ const AbilitaTab = ({ onLogout }) => {
   } = useCharacter();
   
   const [modalSkill, setModalSkill] = useState(null);
+  const [nowTs, setNowTs] = useState(() => Date.now());
   const acquireMutation = useOptimisticAcquireAbilita();
   const revokeMutation = useRevokeAbilita();
 
   const handleOpenModal = useCallback((skill) => setModalSkill(skill), []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleAcquire = useCallback(async (skill, e) => {
     e.stopPropagation(); 
@@ -75,13 +80,51 @@ const AbilitaTab = ({ onLogout }) => {
     [revokeMutation, selectedCharacterId, onLogout, refreshCharacterData]
   );
 
-  // Rimuovi SEMPRE i tratti d'aura e le abilità marcate come "nascoste" dalla tab Abilità.
+  const runtimeAbilityIds = useMemo(() => {
+    const ids = new Set();
+    (char?.tessiture_attive_runtime || []).forEach((rt) => {
+      if (rt?.abilita_temporanea) ids.add(String(rt.abilita_temporanea));
+    });
+    return ids;
+  }, [char?.tessiture_attive_runtime]);
+
+  const temporaryAbilities = useMemo(() => {
+    const byId = new Map((char?.abilita_possedute || []).map((s) => [String(s.id), s]));
+    return (char?.tessiture_attive_runtime || [])
+      .filter((rt) => !!rt?.abilita_temporanea)
+      .map((rt) => {
+        const skill = byId.get(String(rt.abilita_temporanea));
+        const fallbackSeconds = Number(rt?.secondi_rimanenti || 0);
+        const seconds = rt?.fine
+          ? Math.max(0, Math.floor((new Date(rt.fine).getTime() - nowTs) / 1000))
+          : fallbackSeconds;
+        const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const ss = String(seconds % 60).padStart(2, '0');
+        return {
+          id: String(rt.id),
+          nome: skill?.nome || rt?.abilita_temporanea_nome || 'Abilita temporanea',
+          tessituraNome: rt?.tessitura_nome || 'Tessitura',
+          descrizioneHtml:
+            skill?.testo_formattato_personaggio ||
+            skill?.TestoFormattato ||
+            skill?.descrizione ||
+            skill?.testo ||
+            '<em>Nessuna descrizione disponibile.</em>',
+          countdown: `${mm}:${ss}`,
+        };
+      });
+  }, [char?.abilita_possedute, char?.tessiture_attive_runtime, nowTs]);
+
+  // Rimuovi i tratti d'aura. Le abilita "nascoste" si vedono solo se sono temporanee attive.
   const possessedSkills = useMemo(
     () =>
       (char?.abilita_possedute || []).filter(
-        (s) => !s?.is_tratto_aura && !s?.nascondi_in_scheda_abilita
+        (s) =>
+          !s?.is_tratto_aura &&
+          !runtimeAbilityIds.has(String(s?.id)) &&
+          !s?.nascondi_in_scheda_abilita
       ),
-    [char?.abilita_possedute]
+    [char?.abilita_possedute, runtimeAbilityIds]
   );
 
   // --- FILTRO MODIFICA: Rimuovo i tratti speciali e le abilità nascoste dalla lista acquistabili ---
@@ -315,6 +358,35 @@ const AbilitaTab = ({ onLogout }) => {
                 </div>
             </div>
         </div>
+
+        {temporaryAbilities.length > 0 && (
+          <div className="mb-6 rounded-lg border border-sky-500/50 bg-sky-950/20 p-3 shadow-[0_0_16px_rgba(56,189,248,0.14)]">
+            <div className="flex items-center gap-2 text-sky-200 font-bold uppercase tracking-wider text-xs mb-2">
+              <Clock size={14} className="text-sky-300" />
+              Abilita temporanee
+            </div>
+            <div className="space-y-2">
+              {temporaryAbilities.map((tmp) => (
+                <div key={tmp.id} className="rounded-lg border border-sky-500/50 bg-gray-900/50 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sky-100 font-bold">{tmp.nome}</div>
+                      <div className="text-[11px] text-sky-300/80">Origine: {tmp.tessituraNome}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] uppercase tracking-wide text-sky-300">Timer</div>
+                      <div className="font-mono text-sky-100">{tmp.countdown}</div>
+                    </div>
+                  </div>
+                  <div
+                    className="mt-2 text-xs text-sky-50/90 rounded border border-sky-700/40 bg-sky-950/20 p-2 prose prose-invert prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: tmp.descrizioneHtml }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* --- LAYOUT MOBILE: TABS --- */}
         <div className="md:hidden">

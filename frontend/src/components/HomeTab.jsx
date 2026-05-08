@@ -649,7 +649,7 @@ const CharacterSheet = memo(({ data, onLogout }) => {
 
       {Array.isArray(data?.era?.abilita_obbligatorie) && data.era.abilita_obbligatorie.length > 0 && (
         <div className="mt-4 bg-indigo-950/30 border border-indigo-700/45 rounded-xl p-4">
-          <div className="text-[10px] uppercase tracking-wider text-indigo-300 font-bold">Abilita obbligatorie (era)</div>
+          <div className="text-[10px] uppercase tracking-wider text-indigo-300 font-bold">Abilita automatiche (Era)</div>
           <div className="mt-2 space-y-2">
             {data.era.abilita_obbligatorie.map((abilita) => (
               <div key={abilita.id} className="rounded-lg border border-indigo-800/40 bg-indigo-950/20 p-3">

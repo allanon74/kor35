@@ -14,6 +14,9 @@ import {
   fetchAuthenticated,
   fetchCacheRevision,
   gameConsumaRisorsa,
+  gameAttivaTessituraRuntime,
+  gameStopTessituraRuntime,
+  gameDisequipTessituraRuntimeObject,
   equipaggiaOggetto,
   danneggiaOggetto,
   riparaOggetto,
@@ -403,6 +406,36 @@ export const useConsumaRisorsa = () => {
             return { ...oldData, risorse_pool_ui: pools, risorse_consumabili: rc };
         }
     );
+};
+
+export const useAttivaTessituraRuntime = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ charId, tessituraId }) => gameAttivaTessituraRuntime(charId, tessituraId),
+        onSuccess: (_data, vars) => {
+            queryClient.invalidateQueries({ queryKey: ['personaggio', String(vars.charId)] });
+        },
+    });
+};
+
+export const useStopTessituraRuntime = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ charId, runtimeId }) => gameStopTessituraRuntime(charId, runtimeId),
+        onSuccess: (_data, vars) => {
+            queryClient.invalidateQueries({ queryKey: ['personaggio', String(vars.charId)] });
+        },
+    });
+};
+
+export const useDisequipTessituraRuntimeObject = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ charId, runtimeObjectId }) => gameDisequipTessituraRuntimeObject(charId, runtimeObjectId),
+        onSuccess: (_data, vars) => {
+            queryClient.invalidateQueries({ queryKey: ['personaggio', String(vars.charId)] });
+        },
+    });
 };
 
 // B. EQUIPAGGIA / DISEQUIPAGGIA

@@ -2050,6 +2050,11 @@ class Infusione(Tecnica):
         verbose_name="Genera un oggetto Pesante?", 
         help_text="Se attivo, L'oggetto generato conta per il limite OGP (Oggetti Pesanti)."
     )
+    non_acquistabile = models.BooleanField(
+        default=False,
+        verbose_name="Non acquistabile",
+        help_text="Se attivo, la tecnica non compare tra quelle acquistabili dalle tab giocatore.",
+    )
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="infusioni", default=get_default_campagna_id, db_index=True)
 
     class Meta: verbose_name = "Infusione"; verbose_name_plural = "Infusioni"
@@ -2077,6 +2082,36 @@ class Tessitura(Tecnica):
     elemento_principale = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO})
     caratteristiche = models.ManyToManyField(Punteggio, through='TessituraCaratteristica', related_name="tessiture_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     statistiche_base = models.ManyToManyField(Statistica, through='TessituraStatisticaBase', blank=True, related_name='tessitura_statistiche_base')
+    usa_effetto_temporaneo = models.BooleanField(
+        default=False,
+        help_text="Se attivo, la tessitura puo generare un effetto runtime temporaneo in Game.",
+    )
+    abilita_temporanea = models.ForeignKey(
+        "Abilita",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tessiture_che_attivano_abilita_temporanea",
+        help_text="Abilita da applicare temporaneamente quando la tessitura viene attivata in Game.",
+    )
+    durata_effetto_secondi = models.PositiveIntegerField(
+        default=0,
+        help_text="Durata in secondi dell'effetto temporaneo (0 = non attivabile).",
+    )
+    oggetto_runtime_config = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Configurazione oggetto runtime leggero: "
+            '{"nome":"...", "slot_key":"melee", "modificatori":[{"stat_sigla":"PV","valore":1,"tipo_modificatore":"ADD"}], '
+            '"formula_rules":[]}.'
+        ),
+    )
+    non_acquistabile = models.BooleanField(
+        default=False,
+        verbose_name="Non acquistabile",
+        help_text="Se attivo, la tecnica non compare tra quelle acquistabili dalle tab giocatore.",
+    )
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='tessitura_generata', verbose_name="Proposta Originale")
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="tessiture", default=get_default_campagna_id, db_index=True)
     class Meta: verbose_name = "Tessitura"; verbose_name_plural = "Tessiture"
@@ -2106,6 +2141,11 @@ class Cerimoniale(Tecnica):
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='cerimoniale_generato', verbose_name="Proposta Originale")
     
     liv = models.IntegerField(default=1, verbose_name="Livello")
+    non_acquistabile = models.BooleanField(
+        default=False,
+        verbose_name="Non acquistabile",
+        help_text="Se attivo, la tecnica non compare tra quelle acquistabili dalle tab giocatore.",
+    )
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="cerimoniali", default=get_default_campagna_id, db_index=True)
     
     class Meta: 
@@ -2601,6 +2641,56 @@ class EffettoRisorsaTemporaneo(SyncableModel, models.Model):
         ordering = ['-scadenza']
         verbose_name = 'Effetto risorsa temporaneo'
         verbose_name_plural = 'Effetti risorsa temporanei'
+
+
+class TessituraEffettoRuntime(SyncableModel, models.Model):
+    """Runtime temporaneo attivato da una tessitura posseduta dal personaggio."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name='tessiture_runtime_attive')
+    tessitura = models.ForeignKey('Tessitura', on_delete=models.CASCADE, related_name='runtime_attivi')
+    abilita_temporanea = models.ForeignKey(
+        'Abilita',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='runtime_tessitura_generati',
+    )
+    attivata_da = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='runtime_tessitura_attivati')
+    inizio = models.DateTimeField(default=timezone.now, db_index=True)
+    fine = models.DateTimeField(db_index=True)
+    is_attivo = models.BooleanField(default=True, db_index=True)
+    motivo_fine = models.CharField(max_length=40, blank=True, default="")
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-fine']
+        verbose_name = 'Runtime tessitura'
+        verbose_name_plural = 'Runtime tessiture'
+
+
+class TessituraOggettoRuntime(SyncableModel, models.Model):
+    """Oggetto leggero runtime agganciato a un effetto tessitura."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    effetto_runtime = models.OneToOneField(
+        'TessituraEffettoRuntime',
+        on_delete=models.CASCADE,
+        related_name='oggetto_runtime',
+    )
+    nome = models.CharField(max_length=120)
+    slot_key = models.CharField(max_length=20, db_index=True)
+    equipaggiato = models.BooleanField(default=True, db_index=True)
+    config_modificatori = models.JSONField(default=list, blank=True)
+    config_formule = models.JSONField(default=list, blank=True)
+    config_cariche = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        verbose_name = 'Oggetto runtime tessitura'
+        verbose_name_plural = 'Oggetti runtime tessitura'
 
 
 class RecuperoRisorsaAttivo(SyncableModel, models.Model):
@@ -3836,6 +3926,39 @@ class Personaggio(Inventario):
                 modifiche=modifiche,
             )
 
+    def _expire_tessiture_runtime(self, now_ts=None):
+        """
+        Disattiva runtime tessiture scaduti.
+        Se il runtime ha un oggetto associato, lo marca disequipaggiato.
+        """
+        now_ts = now_ts or timezone.now()
+        scaduti = TessituraEffettoRuntime.objects.filter(personaggio=self, is_attivo=True, fine__lte=now_ts)
+        if not scaduti.exists():
+            return 0
+        updated = 0
+        for runtime in scaduti.select_related('oggetto_runtime'):
+            runtime.is_attivo = False
+            runtime.motivo_fine = runtime.motivo_fine or 'expired'
+            runtime.save(update_fields=['is_attivo', 'motivo_fine', 'updated_at'])
+            if hasattr(runtime, 'oggetto_runtime'):
+                obj = runtime.oggetto_runtime
+                if obj.equipaggiato:
+                    obj.equipaggiato = False
+                    obj.save(update_fields=['equipaggiato', 'updated_at'])
+            updated += 1
+        if updated and hasattr(self, '_modificatori_calcolati_cache'):
+            delattr(self, '_modificatori_calcolati_cache')
+        return updated
+
+    def get_tessiture_runtime_attive(self, now_ts=None):
+        now_ts = now_ts or timezone.now()
+        self._expire_tessiture_runtime(now_ts=now_ts)
+        return TessituraEffettoRuntime.objects.filter(
+            personaggio=self,
+            is_attivo=True,
+            fine__gt=now_ts,
+        ).select_related('tessitura', 'abilita_temporanea').prefetch_related('oggetto_runtime')
+
     def _build_punteggi_base_indipendenti(self, exclude_abilita_ids=None):
         exclude_abilita_ids = set(exclude_abilita_ids or [])
         links = abilita_punteggio.objects.filter(
@@ -4448,6 +4571,36 @@ class Personaggio(Inventario):
                 if not st_obj or not st_obj.parametro:
                     continue
                 tmod = m.get('tipo_modificatore') or MODIFICATORE_ADDITIVO
+                if tmod not in (MODIFICATORE_ADDITIVO, MODIFICATORE_MOLTIPLICATIVO):
+                    tmod = MODIFICATORE_ADDITIVO
+                try:
+                    val = float(m.get('valore', 0))
+                except (TypeError, ValueError):
+                    val = 0.0
+                _add(st_obj.parametro, tmod, val)
+
+        # 5. Effetti temporanei da tessitura (abilita + oggetto runtime)
+        runtime_qs = self.get_tessiture_runtime_attive(now_ts=now_ts)
+        runtime_abilita_ids = [rt.abilita_temporanea_id for rt in runtime_qs if rt.abilita_temporanea_id]
+        if runtime_abilita_ids:
+            for l in AbilitaStatistica.objects.filter(abilita_id__in=runtime_abilita_ids).select_related('statistica'):
+                if _is_global(l):
+                    _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+
+        for runtime in runtime_qs:
+            runtime_obj = getattr(runtime, 'oggetto_runtime', None)
+            if not runtime_obj or not runtime_obj.equipaggiato:
+                continue
+            for m in runtime_obj.config_modificatori or []:
+                s_sig = (m.get('stat_sigla') or '').strip().upper()
+                if not s_sig:
+                    continue
+                if s_sig not in stat_cache:
+                    stat_cache[s_sig] = Statistica.objects.filter(sigla=s_sig).first()
+                st_obj = stat_cache[s_sig]
+                if not st_obj or not st_obj.parametro:
+                    continue
+                tmod = (m.get('tipo_modificatore') or MODIFICATORE_ADDITIVO).upper()
                 if tmod not in (MODIFICATORE_ADDITIVO, MODIFICATORE_MOLTIPLICATIVO):
                     tmod = MODIFICATORE_ADDITIVO
                 try:

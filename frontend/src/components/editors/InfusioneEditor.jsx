@@ -8,6 +8,7 @@ import MultiSelectBodySlots from './MultiSelectBodySlots';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
 import FormulaBuilderModal from './FormulaBuilderModal';
+import SearchableSelect from './SearchableSelect';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -18,7 +19,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
   const defaultData = {
     nome: '', testo: '', formula_attacco: '',
     aura_richiesta: null, aura_infusione: null,
-    tipo_risultato: 'POT', is_pesante: false,
+    tipo_risultato: 'POT', is_pesante: false, non_acquistabile: false,
     statistica_cariche: null, metodo_ricarica: '',
     costo_ricarica_crediti: 0, durata_attivazione: 0,
     slot_corpo_permessi: '', 
@@ -218,6 +219,17 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
               <label htmlFor="is_pesante" className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer">Oggetto Pesante</label>
           </div>
         </div>
+        <div className="flex items-center justify-end">
+          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
+              checked={!!formData.non_acquistabile}
+              onChange={(e) => setFormData({ ...formData, non_acquistabile: e.target.checked })}
+            />
+            Non acquistabile
+          </label>
+        </div>
       </div>
 
       {/* 3. DESCRIZIONE */}
@@ -299,10 +311,12 @@ const Input = ({ label, value, onChange, type="text", placeholder="" }) => (
 const Select = ({ label, value, options, onChange }) => (
   <div className="w-full text-left">
     <label className="text-[10px] text-gray-500 uppercase font-black block mb-1 tracking-tighter">{label}</label>
-    <select className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white cursor-pointer focus:border-indigo-500 outline-none" value={value ? String(value) : ""} onChange={e => onChange(e.target.value)}>
-      <option value="">- SELEZIONA -</option>
-      {options.map(o => <option key={o.id} value={String(o.id)}>{o.nome}</option>)}
-    </select>
+    <SearchableSelect
+      options={options}
+      value={value ? String(value) : ''}
+      onChange={onChange}
+      placeholder="- SELEZIONA -"
+    />
   </div>
 );
 

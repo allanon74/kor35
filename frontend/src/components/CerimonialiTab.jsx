@@ -42,6 +42,7 @@ const CerimonialiTab = ({ onLogout }) => {
   const filteredAcquirable = useMemo(() => {
     if (!acquirableCerimoniali || !char) return [];
     return acquirableCerimoniali.filter(cer => {
+      if (cer?.non_acquistabile) return false;
       const auraScore = char.punteggi_base?.[cer.aura_richiesta_nome] || 0;
       const limit = Math.min(ccoValue, auraScore);
       return cer.livello <= limit;
@@ -185,6 +186,11 @@ const CerimonialiTab = ({ onLogout }) => {
                 <div>
                     <h3 className="text-xl font-black text-purple-400 uppercase">{modalItem.nome}</h3>
                     <p className="text-[10px] text-gray-500 uppercase font-bold">Livello {modalItem.livello} • {modalItem.aura_richiesta_nome}</p>
+                    {modalItem.non_acquistabile && (
+                      <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wider border border-sky-500/70 bg-sky-900/30 text-sky-100 px-2 py-0.5 rounded">
+                        Solo QR/Master
+                      </span>
+                    )}
                 </div>
                 <button onClick={() => setModalItem(null)} className="text-gray-400 hover:text-white transition-colors">✕</button>
              </div>

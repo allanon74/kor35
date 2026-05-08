@@ -23,6 +23,7 @@ from .models import (
     Tessitura, CreazioneConsumabileInCorso, Punteggio, AURA,
     FALLBACK_STAT_COSTO_CONSUMABILI, FALLBACK_STAT_NUMERO_CONSUMABILI,
     FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI, FALLBACK_STAT_DURATA_CONSUMABILI,
+    TessituraEffettoRuntime, TessituraOggettoRuntime, AbilitaStatistica,
 )
 
 class GestioneOggettiService:
@@ -110,6 +111,7 @@ class GestioneOggettiService:
         Include solo oggetti fisici equipaggiati di tipo "speciale o modificato":
         - modificato: ha almeno un potenziamento installato
         - speciale: non derivato da template base (oggetto_base_generatore nullo)
+        - runtime tessiture attive: ogni effetto temporaneo attivo occupa 1 slot COG
         + 1 slot se il personaggio ha almeno un consumabile valido (regola legacy).
         """
         cog_qs = pg.get_oggetti().filter(
@@ -125,7 +127,12 @@ class GestioneOggettiService:
             utilizzi_rimanenti__gt=0,
             data_scadenza__gte=oggi
         ).exists()
-        return cog_oggetti + (1 if has_consumabili else 0)
+        runtime_attivi = TessituraEffettoRuntime.objects.filter(
+            personaggio=pg,
+            is_attivo=True,
+            fine__gt=timezone.now(),
+        ).count()
+        return cog_oggetti + runtime_attivi + (1 if has_consumabili else 0)
     
     @staticmethod
     def calcola_ingombranti_utilizzata(pg: Personaggio):
@@ -1272,3 +1279,134 @@ class CreazioneConsumabileService:
         return True, {"consumabile_creato": True, "utilizzi": utilizzi, "data_scadenza": data_scadenza.isoformat()}
 
     
+class TessituraRuntimeService:
+    @staticmethod
+    def _normalize_slot(slot_key):
+        key = str(slot_key or "").strip().lower()
+        if key not in GestioneOggettiService.PHYSICAL_SLOT_DEFAULTS:
+            raise ValidationError("Slot runtime non valido.")
+        return key
+
+    @staticmethod
+    def _close_runtime(runtime, reason="replaced"):
+        if not runtime.is_attivo:
+            return
+        runtime.is_attivo = False
+        runtime.motivo_fine = reason
+        runtime.save(update_fields=["is_attivo", "motivo_fine", "updated_at"])
+        runtime_obj = getattr(runtime, "oggetto_runtime", None)
+        if runtime_obj and runtime_obj.equipaggiato:
+            runtime_obj.equipaggiato = False
+            runtime_obj.save(update_fields=["equipaggiato", "updated_at"])
+
+    @staticmethod
+    @transaction.atomic
+    def attiva_tessitura_effetto_temporaneo(personaggio, tessitura, attivata_da=None):
+        if not tessitura.usa_effetto_temporaneo:
+            raise ValidationError("Questa tessitura non ha effetti temporanei attivi.")
+        durata = int(getattr(tessitura, "durata_effetto_secondi", 0) or 0)
+        if durata <= 0:
+            raise ValidationError("Durata effetto non configurata.")
+
+        now_ts = timezone.now()
+        personaggio._expire_tessiture_runtime(now_ts=now_ts)
+        fine_ts = now_ts + timedelta(seconds=durata)
+
+        cfg = tessitura.oggetto_runtime_config or {}
+        slot_key = None
+        if isinstance(cfg, dict) and cfg.get("slot_key"):
+            slot_key = TessituraRuntimeService._normalize_slot(cfg.get("slot_key"))
+
+        # Sostituzione runtime pre-esistenti: stessa tessitura o stesso slot runtime.
+        existing = TessituraEffettoRuntime.objects.filter(personaggio=personaggio, is_attivo=True, fine__gt=now_ts)
+        for runtime in existing.select_related("oggetto_runtime"):
+            same_tessitura = runtime.tessitura_id == tessitura.id
+            same_slot = bool(
+                slot_key
+                and getattr(runtime, "oggetto_runtime", None)
+                and runtime.oggetto_runtime.slot_key == slot_key
+                and runtime.oggetto_runtime.equipaggiato
+            )
+            if same_tessitura or same_slot:
+                TessituraRuntimeService._close_runtime(runtime, reason="replaced")
+
+        # Ogni effetto runtime di tessitura occupa 1 slot COG.
+        cog_used = GestioneOggettiService.calcola_cog_utilizzata(personaggio)
+        cog_max = personaggio.get_valore_statistica('COG')
+        if cog_used >= cog_max:
+            raise ValidationError(
+                f"Nessuno slot COG libero: {cog_used}/{cog_max}. "
+                "Disattiva un effetto temporaneo o libera un oggetto speciale."
+            )
+
+        # Slot runtime: se presente, disequip oggetti fisici reali nello stesso slot.
+        if slot_key:
+            for obj in personaggio.get_oggetti().filter(
+                tipo_oggetto=TIPO_OGGETTO_FISICO,
+                is_equipaggiato=True,
+                slot_equip=slot_key,
+            ):
+                obj.is_equipaggiato = False
+                obj.slot_equip = None
+                obj.save(update_fields=["is_equipaggiato", "slot_equip", "updated_at"])
+
+        runtime = TessituraEffettoRuntime.objects.create(
+            personaggio=personaggio,
+            tessitura=tessitura,
+            abilita_temporanea=tessitura.abilita_temporanea,
+            attivata_da=attivata_da,
+            inizio=now_ts,
+            fine=fine_ts,
+            is_attivo=True,
+            metadata={
+                "durata_effetto_secondi": durata,
+                "slot_key": slot_key,
+            },
+        )
+
+        if slot_key:
+            TessituraOggettoRuntime.objects.create(
+                effetto_runtime=runtime,
+                nome=str(cfg.get("nome") or tessitura.nome or "Oggetto runtime"),
+                slot_key=slot_key,
+                equipaggiato=True,
+                config_modificatori=cfg.get("modificatori") or [],
+                config_formule=cfg.get("formula_rules") or [],
+                config_cariche=cfg.get("cariche") or {},
+            )
+
+        if hasattr(personaggio, "_modificatori_calcolati_cache"):
+            delattr(personaggio, "_modificatori_calcolati_cache")
+        return runtime
+
+    @staticmethod
+    @transaction.atomic
+    def termina_tessitura_effetto_runtime(personaggio, runtime_id, motivo="manual_stop"):
+        runtime = TessituraEffettoRuntime.objects.select_related("oggetto_runtime").filter(
+            id=runtime_id,
+            personaggio=personaggio,
+        ).first()
+        if not runtime:
+            raise ValidationError("Runtime non trovato.")
+        TessituraRuntimeService._close_runtime(runtime, reason=motivo)
+        if hasattr(personaggio, "_modificatori_calcolati_cache"):
+            delattr(personaggio, "_modificatori_calcolati_cache")
+        return runtime
+
+    @staticmethod
+    @transaction.atomic
+    def disequip_oggetto_runtime(personaggio, runtime_object_id):
+        runtime_obj = TessituraOggettoRuntime.objects.select_related("effetto_runtime").filter(
+            id=runtime_object_id,
+            effetto_runtime__personaggio=personaggio,
+        ).first()
+        if not runtime_obj:
+            raise ValidationError("Oggetto runtime non trovato.")
+        runtime = runtime_obj.effetto_runtime
+        if runtime_obj.equipaggiato:
+            runtime_obj.equipaggiato = False
+            runtime_obj.save(update_fields=["equipaggiato", "updated_at"])
+        TessituraRuntimeService._close_runtime(runtime, reason="manual_disequip")
+        if hasattr(personaggio, "_modificatori_calcolati_cache"):
+            delattr(personaggio, "_modificatori_calcolati_cache")
+        return runtime

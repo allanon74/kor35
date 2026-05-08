@@ -94,7 +94,7 @@ const InfusioniTab = ({ onLogout }) => {
   const sortItems = (items) => [...items].sort((a, b) => a.livello - b.livello);
   
   const possessed = sortItems(char?.infusioni_possedute || []);
-  const acquirable = sortItems(acquirableInfusioni || []);
+  const acquirable = sortItems((acquirableInfusioni || []).filter((i) => !i?.non_acquistabile));
 
   if (isLoadingAcquirable || isLoadingDetail || !char) {
     return (
