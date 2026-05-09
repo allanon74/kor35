@@ -38,13 +38,23 @@ class StatoAllertaPilotAdmin(admin.ModelAdmin):
 class SottosistemaNaveAdmin(admin.ModelAdmin):
     """Il collegamento QR/vista si gestisce dall'app staff (Scansiona QR), non da qui."""
 
-    list_display = ("codice", "nome", "gruppo", "tipo", "attivo", "durata_ripristino_secondi")
+    list_display = (
+        "codice",
+        "nome",
+        "gruppo",
+        "ordine_gruppo",
+        "ordine",
+        "tipo",
+        "attivo",
+        "durata_ripristino_secondi",
+    )
     search_fields = ("codice", "nome")
     # a_vista / QR: solo API staff (associa-qr), non form admin
     fields = (
         "codice",
         "nome",
         "gruppo",
+        "ordine_gruppo",
         "ordine",
         "tipo",
         "descrizione",

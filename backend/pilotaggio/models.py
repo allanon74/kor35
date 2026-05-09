@@ -115,7 +115,17 @@ class SottosistemaNave(SyncableModel, models.Model):
         default="",
         help_text="Nome del sistema di appartenenza (es. Difesa, Alimentazione).",
     )
-    ordine = models.PositiveIntegerField(default=0)
+    ordine_gruppo = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Ordine della colonna 'sistema' nella console pilota. "
+            "Usa lo stesso valore per tutti i sottosistemi appartenenti allo stesso gruppo."
+        ),
+    )
+    ordine = models.PositiveIntegerField(
+        default=0,
+        help_text="Ordine dei riquadri sottosistema all'interno del gruppo nella console pilota.",
+    )
     tipo = models.CharField(
         max_length=16,
         choices=[

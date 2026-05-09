@@ -91,6 +91,7 @@ main {
   max-width: none;
   max-height: none;
   border-radius: 0;
+  box-sizing: border-box;
 }
 
 .center-screen {
@@ -663,10 +664,368 @@ select, input[type=text], input[type=number] {
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(1100px, 96vw);
+  width: min(1220px, 98vw);
+  max-height: min(900px, 92vh);
+  overflow-y: auto;
   z-index: 30;
   border-width: 2px;
-  box-shadow: 0 0 20px rgba(0, 229, 255, 0.25);
+  box-shadow: 0 0 28px rgba(0, 229, 255, 0.28);
+  padding: 1rem 1.25rem 1.35rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.subsystem-modal-touch h3 {
+  font-size: clamp(1.15rem, 2.8vw, 1.55rem);
+  margin: 0 0 0.35rem;
+  line-height: 1.2;
+}
+
+.subsystem-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: rgba(4, 8, 14, 0.82);
+  backdrop-filter: blur(4px);
+}
+
+.modal-touch-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.modal-touch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 184, 107, 0.35);
+}
+
+.modal-touch-title-block {
+  flex: 1;
+  min-width: min(100%, 280px);
+}
+
+.modal-touch-chip {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.28rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffd69f;
+  border: 1px solid rgba(255, 214, 159, 0.45);
+  background: rgba(40, 52, 72, 0.75);
+}
+
+.modal-touch-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.modal-touch-level-readout {
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  font-weight: 800;
+  color: #e8f4ff;
+  min-width: 2.5rem;
+  text-align: center;
+}
+
+.modal-touch-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.modal-touch-section-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #a9c4e6;
+}
+
+.power-level-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.power-level-btn {
+  min-height: 62px;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  font-size: clamp(1rem, 2.8vw, 1.25rem);
+  font-weight: 800;
+  color: #f2f6fc;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  padding: 0.35rem 0.25rem;
+}
+
+.power-level-btn:active {
+  transform: scale(0.97);
+}
+
+.power-btn-tier-off {
+  background: linear-gradient(180deg, #3a4558, #252d3a);
+}
+
+.power-btn-tier-low {
+  background: linear-gradient(180deg, #2d6b4f, #1a4534);
+}
+
+.power-btn-tier-mid {
+  background: linear-gradient(180deg, #2a5f8f, #1a3d63);
+}
+
+.power-btn-tier-high {
+  background: linear-gradient(180deg, #9a7238, #6b4f22);
+}
+
+.power-btn-tier-crit {
+  background: linear-gradient(180deg, #9a3540, #6b222a);
+}
+
+.power-level-btn.active {
+  border-width: 3px;
+  border-color: #ffb86b;
+  box-shadow:
+    0 0 0 2px rgba(255, 184, 107, 0.35),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+  transform: scale(1.02);
+  color: #fff;
+}
+
+/* Sei direzioni: una riga orizzontale (marca → rollio → assetto), massima leggibilità senza D-pad */
+.direction-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.direction-touch-btn {
+  min-height: 48px;
+  padding: 0.35rem 0.3rem;
+  border-radius: 10px;
+  border: 2px solid rgba(120, 180, 220, 0.35);
+  background: linear-gradient(180deg, rgba(30, 44, 68, 0.95), rgba(18, 26, 40, 0.98));
+  color: #dce9ff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+
+.direction-strip-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.12rem;
+  min-height: 58px;
+  text-align: center;
+}
+
+.direction-strip-arrow {
+  font-size: 1.15rem;
+  line-height: 1;
+  font-weight: 800;
+  color: inherit;
+}
+
+.direction-strip-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  hyphens: auto;
+  overflow-wrap: anywhere;
+}
+
+.direction-touch-btn.active {
+  border-color: #6bdcff;
+  box-shadow: 0 0 14px rgba(107, 220, 255, 0.35);
+  background: linear-gradient(180deg, rgba(40, 78, 112, 0.98), rgba(24, 48, 72, 0.98));
+  color: #fff;
+}
+
+.direction-touch-btn:active {
+  transform: scale(0.98);
+}
+
+.direction-strip-btn[aria-pressed="true"] .direction-strip-arrow {
+  transform: scale(1.05);
+}
+
+/* Footer modal: inverti / espulsione / chiudi in riga + Invia comando alto a destra */
+.modal-touch-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.modal-touch-footer-main {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.modal-touch-toggles-line {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.modal-touch-close-btn {
+  min-height: 58px;
+  height: 100%;
+  border-radius: 14px;
+  border: 2px solid rgba(130, 150, 175, 0.45);
+  background: linear-gradient(180deg, rgba(42, 54, 72, 0.95), rgba(24, 30, 40, 0.98));
+  color: #d5e5f5;
+  font-size: clamp(0.88rem, 2vw, 1.02rem);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.4rem 0.55rem;
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.1s ease;
+}
+
+.modal-touch-close-btn:active {
+  transform: scale(0.98);
+}
+
+.modal-touch-send-tall {
+  flex: 0 0 clamp(168px, 20vw, 280px);
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: clamp(1.08rem, 2.8vw, 1.42rem);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 2px solid rgba(140, 235, 255, 0.55);
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(165deg, #1fb8e6 0%, #1180b0 42%, #0a5f82 100%);
+  box-shadow:
+    0 0 0 2px rgba(0, 229, 255, 0.22),
+    0 8px 32px rgba(0, 160, 210, 0.35);
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+.modal-touch-send-tall:active {
+  transform: scale(0.985);
+}
+
+.modal-touch-emergency-bar {
+  width: 100%;
+  min-height: 46px;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+}
+
+.touch-latch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.touch-latch-row.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.touch-latch-hint {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9cb7d5;
+}
+
+.touch-latch-btn {
+  min-height: 58px;
+  width: 100%;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, rgba(36, 48, 66, 0.92), rgba(22, 30, 44, 0.96));
+  color: #e8f0ff;
+  font-size: clamp(0.88rem, 2.2vw, 1.05rem);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.45rem 0.65rem;
+  text-align: center;
+  line-height: 1.2;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.touch-latch-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.touch-latch-btn.pressed {
+  border-color: #c62828;
+  background: linear-gradient(180deg, #c62828 0%, #8e1616 55%, #6b0f0f 100%);
+  color: #fff;
+  box-shadow:
+    inset 0 4px 10px rgba(0, 0, 0, 0.42),
+    0 0 14px rgba(244, 67, 54, 0.4);
+}
+
+.touch-latch-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.modal-touch-actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.modal-touch-actions .touch-action-btn {
+  width: 100%;
+  min-height: 54px;
+  font-size: clamp(1rem, 2.6vw, 1.12rem);
+  border-radius: 12px;
+}
+
+@media (min-width: 720px) {
+  .modal-touch-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .modal-touch-actions .touch-action-btn {
+    width: auto;
+    flex: 1;
+    min-width: min(100%, 200px);
+  }
 }
 
 .modal-row {
@@ -812,7 +1171,7 @@ select, input[type=text], input[type=number] {
   border: 1px solid #1c3a5c;
   padding: 0.62rem 0.72rem;
   border-radius: 14px;
-  font-size: 0.92rem;
+  font-size: 1.05rem;
   text-align: center;
   color: #111319;
   font-weight: 600;
@@ -1324,7 +1683,7 @@ select, input[type=text], input[type=number] {
 }
 
 .lcars-button .tile-name {
-  font-size: 0.76rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: #f6ecda;
   flex: 1;
@@ -1521,7 +1880,7 @@ select, input[type=text], input[type=number] {
 }
 
 .cockpit-control .lcars-button .tile-name {
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   white-space: nowrap;
   display: block;
   -webkit-line-clamp: unset;
@@ -1899,7 +2258,7 @@ select, input[type=text], input[type=number] {
 }
 
 .cockpit-control .lcars-button .tile-name {
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #101218;
@@ -1944,4 +2303,154 @@ select, input[type=text], input[type=number] {
 .cockpit-control .lcars-button .tile-mode-icon {
   background: rgba(0, 0, 0, 0.16);
   color: #111319;
+}
+
+/* ========== Viewport kiosk fisso 1920×440 (`?screen=control`): nulla esce dal riquadro ========== */
+.console-viewport-wrap.is-fixed {
+  overflow: hidden;
+}
+
+.console-viewport-fixed.is-fixed .cockpit.cockpit-control {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  padding: 0.1rem 0.14rem;
+}
+
+/* Overlay e modal ancorati al riquadro 1920×440, non all'intera finestra del browser */
+.console-viewport-fixed.is-fixed .subsystem-modal-backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.console-viewport-fixed.is-fixed .subsystem-modal {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1180px, calc(100% - 8px));
+  max-width: calc(100% - 8px);
+  max-height: calc(100% - 8px);
+  box-sizing: border-box;
+}
+
+.console-viewport-fixed.is-fixed .subsystem-modal-touch h3 {
+  font-size: 0.88rem;
+  letter-spacing: 0.12em;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-layout {
+  gap: 0.32rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-header {
+  flex-wrap: nowrap;
+  padding-bottom: 0.28rem;
+  gap: 0.35rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-title-block {
+  min-width: 0;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-chip {
+  font-size: 0.58rem;
+  padding: 0.14rem 0.45rem;
+  margin-top: 0.15rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-preview .power-dial {
+  width: 36px;
+  height: 36px;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-preview .power-dial-svg {
+  width: 36px;
+  height: 36px;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-preview .power-dial-center {
+  font-size: 0.58rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-level-readout {
+  font-size: 1.2rem;
+  min-width: 2rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-section {
+  gap: 0.28rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-section-label {
+  font-size: 0.62rem;
+}
+
+/* Livelli 0–9 su una riga: usa la larghezza orizzontale, limita l'altezza del pannello */
+.console-viewport-fixed.is-fixed .power-level-grid {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.2rem;
+}
+
+.console-viewport-fixed.is-fixed .power-level-btn {
+  min-height: 34px;
+  font-size: 0.76rem;
+  padding: 0.1rem 0.08rem;
+}
+
+.console-viewport-fixed.is-fixed .direction-strip {
+  gap: 0.18rem;
+}
+
+.console-viewport-fixed.is-fixed .direction-strip-btn {
+  min-height: 44px;
+  padding: 0.14rem 0.12rem;
+}
+
+.console-viewport-fixed.is-fixed .direction-strip-arrow {
+  font-size: 0.95rem;
+}
+
+.console-viewport-fixed.is-fixed .direction-strip-label {
+  font-size: 0.68rem;
+}
+
+.console-viewport-fixed.is-fixed .touch-latch-btn {
+  min-height: 42px;
+  font-size: 0.78rem;
+  padding: 0.22rem 0.4rem;
+}
+
+.console-viewport-fixed.is-fixed .touch-latch-hint {
+  font-size: 0.56rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-footer-main {
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-toggles-line {
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
+  gap: 0.22rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-close-btn {
+  min-height: 42px;
+  font-size: 0.68rem;
+  padding: 0.2rem 0.35rem;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-send-tall {
+  flex: 0 0 min(210px, 28%);
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  padding: 0.5rem 0.45rem;
+  line-height: 1.2;
+}
+
+.console-viewport-fixed.is-fixed .modal-touch-emergency-bar {
+  min-height: 34px;
+  font-size: 0.68rem;
+  margin-top: 0.28rem;
 }

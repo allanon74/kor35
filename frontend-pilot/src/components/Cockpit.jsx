@@ -70,6 +70,53 @@ function tileLevelClass(level) {
   return 'lvl-mid';
 }
 
+/** Classe colore per pulsanti livello nel modal (touch). */
+function powerButtonTierClass(level) {
+  const l = Number(level || 0);
+  if (l <= 0) return 'power-btn-tier-off';
+  if (l <= 3) return 'power-btn-tier-low';
+  if (l <= 6) return 'power-btn-tier-mid';
+  if (l === 7) return 'power-btn-tier-high';
+  return 'power-btn-tier-crit';
+}
+
+const POWER_LEVELS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/** Sei direzioni in una sola riga: marcia, rollio, assetto verticale (usa tutta la larghezza del modal). */
+const PROPULSOR_DIRECTIONS = [
+  { value: 'avanti', label: 'Avanti', arrow: '↑' },
+  { value: 'indietro', label: 'Indietro', arrow: '↓' },
+  { value: 'sinistra', label: 'Sinistra', arrow: '←' },
+  { value: 'destra', label: 'Destra', arrow: '→' },
+  { value: 'su', label: 'Su', arrow: '⇑' },
+  { value: 'giu', label: 'Giù', arrow: '⇓' },
+];
+
+/** Un solo pulsante: tap alterna stato, etichetta e aspetto “premuto” rosso quando attivo. */
+function TouchLatchToggle({
+  pressed,
+  onToggle,
+  labelIdle,
+  labelActive,
+  hint,
+  disabled,
+}) {
+  return (
+    <div className={`touch-latch-row ${disabled ? 'disabled' : ''}`}>
+      {hint ? <span className="touch-latch-hint">{hint}</span> : null}
+      <button
+        type="button"
+        className={`touch-latch-btn ${pressed ? 'pressed' : ''}`}
+        aria-pressed={pressed}
+        disabled={disabled}
+        onClick={() => onToggle(!pressed)}
+      >
+        {pressed ? labelActive : labelIdle}
+      </button>
+    </div>
+  );
+}
+
 function levelColor(level) {
   const l = Number(level || 0);
   if (l <= 0) return '#f2f4f8'; // spento
@@ -450,12 +497,19 @@ export default function Cockpit({
       {showControl ? (
         <div className="panel control-deck lcars-panel">
           <div className="command-clusters">
-            {Object.entries(groupedSystems)
-              .sort(([a], [b]) => String(a).localeCompare(String(b)))
-              .map(([groupName, subs]) => {
-                const clickableSubs = (subs || []).filter(
-                  (s) => !['batteria', 'serbatoio'].includes(String(s.tipo || '').toLowerCase())
-                );
+            {Object.entries(groupedSystems).map(([groupName, subs]) => {
+                const clickableSubs = (subs || [])
+                  .filter(
+                    (s) => !['batteria', 'serbatoio'].includes(String(s.tipo || '').toLowerCase())
+                  )
+                  .sort((a, b) => {
+                    const oa = Number(a.ordine ?? 0);
+                    const ob = Number(b.ordine ?? 0);
+                    if (oa !== ob) return oa - ob;
+                    return String(a.nome || '').localeCompare(String(b.nome || ''), 'it', {
+                      sensitivity: 'base',
+                    });
+                  });
                 if (!clickableSubs.length) return null;
                 return (
               <div key={groupName} className={`system-column station-card ${groupTheme(groupName).theme}`}>
@@ -464,7 +518,7 @@ export default function Cockpit({
                   <span className="system-name">{groupName}</span>
                 </div>
                 <div className="hex-cloud">
-                  {[...clickableSubs].sort((a, b) => String(a.nome || '').localeCompare(String(b.nome || ''))).map((s) => (
+                  {clickableSubs.map((s) => (
                     (() => {
                       const lvl = Number(s.livello_target || 0);
                       const inRepair = Boolean(!s.online && s.recovery_at);
@@ -538,52 +592,114 @@ export default function Cockpit({
       </div> : null}
 
       {selectedSubsystem ? (
-        <div className="panel subsystem-modal lcars-panel" style={{ borderColor: '#ffb86b' }}>
-          <h3>Regolazione {selectedSubsystem.nome}</h3>
-          <div className="modal-lcars-grid">
-            <div className="modal-rail">
-              <div className="rail-chip">{selectedSubsystem.tipo || 'standard'}</div>
-              <div className="rail-level">{editingLevel}</div>
-              <div className="rail-label">Potenza</div>
-            </div>
-            <div className="modal-core">
-              <label className="modal-field">
-                Livello potenza
-                <input
-                  type="range"
-                  min={0}
-                  max={9}
-                  value={editingLevel}
-                  onChange={(e) => setEditingLevel(Number(e.target.value))}
-                />
-              </label>
+        <>
+          <div
+            className="subsystem-modal-backdrop"
+            role="presentation"
+            onClick={() => setSelectedSubsystem(null)}
+          />
+          <div
+            className="panel subsystem-modal lcars-panel subsystem-modal-touch"
+            style={{ borderColor: '#ffb86b' }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="subsystem-modal-title"
+          >
+            <div className="modal-touch-layout">
+              <header className="modal-touch-header">
+                <div className="modal-touch-title-block">
+                  <h3 id="subsystem-modal-title">Regolazione {selectedSubsystem.nome}</h3>
+                  <div className="modal-touch-chip">{selectedSubsystem.tipo || 'standard'}</div>
+                </div>
+                <div className="modal-touch-preview" aria-hidden="true">
+                  <PowerDial
+                    level={editingLevel}
+                    colorOverride={selectedSubsystem.colore_livello_attuale || undefined}
+                  />
+                  <div className="modal-touch-level-readout">{editingLevel}</div>
+                </div>
+              </header>
+
+              <section className="modal-touch-section">
+                <div className="modal-touch-section-label">Livello potenza</div>
+                <div className="power-level-grid" role="group" aria-label="Selezione livello da 0 a 9">
+                  {POWER_LEVELS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`power-level-btn ${powerButtonTierClass(n)} ${editingLevel === n ? 'active' : ''}`}
+                      aria-pressed={editingLevel === n}
+                      onClick={() => setEditingLevel(n)}
+                    >
+                      {n === 0 ? 'OFF' : n}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
               {selectedSubsystem.supporta_direzioni ? (
-                <label className="modal-field">
-                  Direzione propulsori
-                  <select value={editingDirection} onChange={(e) => setEditingDirection(e.target.value)}>
-                    <option value="avanti">Avanti</option>
-                    <option value="indietro">Indietro</option>
-                    <option value="su">Su</option>
-                    <option value="giu">Giu</option>
-                    <option value="destra">Destra</option>
-                    <option value="sinistra">Sinistra</option>
-                  </select>
-                </label>
+                <section className="modal-touch-section">
+                  <div className="modal-touch-section-label">Direzione propulsori</div>
+                  <div className="direction-strip" role="group" aria-label="Direzione propulsori: sei direzioni">
+                    {PROPULSOR_DIRECTIONS.map(({ value, label, arrow }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`direction-touch-btn direction-strip-btn ${editingDirection === value ? 'active' : ''}`}
+                        aria-pressed={editingDirection === value}
+                        aria-label={`${label}, direzione ${value}`}
+                        title={label}
+                        onClick={() => setEditingDirection(value)}
+                      >
+                        <span className="direction-strip-arrow" aria-hidden>{arrow}</span>
+                        <span className="direction-strip-label">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               ) : null}
-              <div className="modal-toggles">
-                {selectedSubsystem.supporta_inversione ? (
-                  <label><input type="checkbox" checked={editingInvert} onChange={(e) => setEditingInvert(e.target.checked)} /> Inverti effetto</label>
-                ) : null}
-                {selectedSubsystem.supporta_espulsione ? (
-                  <label><input type="checkbox" checked={editingExpel} onChange={(e) => setEditingExpel(e.target.checked)} /> Espulsione</label>
-                ) : null}
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn primary" onClick={saveSubsystem}>Invia comando</button>
+
+              <div className="modal-touch-footer">
+                <div className="modal-touch-footer-main">
+                  <div className="modal-touch-toggles-line">
+                    {selectedSubsystem.supporta_inversione ? (
+                      <TouchLatchToggle
+                        pressed={editingInvert}
+                        onToggle={setEditingInvert}
+                        hint="Inverti effetto"
+                        labelIdle="Normale"
+                        labelActive="Invertito"
+                      />
+                    ) : null}
+                    {selectedSubsystem.supporta_espulsione ? (
+                      <TouchLatchToggle
+                        pressed={editingExpel}
+                        onToggle={setEditingExpel}
+                        hint="Espulsione"
+                        labelIdle="Espulsione disattiva"
+                        labelActive="Espulsione attiva"
+                      />
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn modal-touch-close-btn"
+                      onClick={() => setSelectedSubsystem(null)}
+                    >
+                      Chiudi
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn primary modal-touch-send-tall"
+                    onClick={saveSubsystem}
+                  >
+                    Invia comando
+                  </button>
+                </div>
                 {(selectedSubsystem.tipo === 'motore' && Number(editingLevel || 0) === 0) ? (
                   <button
                     type="button"
-                    className="btn danger"
+                    className="btn danger modal-touch-emergency-bar"
                     onClick={async () => {
                       if (!onEmergencyLanding) return;
                       if (!window.confirm("Confermi l'atterraggio di emergenza?")) return;
@@ -594,11 +710,10 @@ export default function Cockpit({
                     Atterraggio di emergenza
                   </button>
                 ) : null}
-                <button type="button" className="btn" onClick={() => setSelectedSubsystem(null)}>Chiudi</button>
               </div>
             </div>
           </div>
-        </div>
+        </>
       ) : null}
     </div>
   );

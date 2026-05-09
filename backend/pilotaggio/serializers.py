@@ -42,6 +42,7 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
             "durata_ripristino_secondi",
             "attivo",
             "gruppo",
+            "ordine_gruppo",
             "ordine",
             "tipo",
             "coeff_produzione",
@@ -221,6 +222,10 @@ class StatoSottosistemaRuntimeSerializer(serializers.ModelSerializer):
     durata_ripristino_secondi = serializers.IntegerField(
         source="sottosistema.durata_ripristino_secondi", read_only=True
     )
+    ordine = serializers.IntegerField(source="sottosistema.ordine", read_only=True)
+    ordine_gruppo = serializers.IntegerField(
+        source="sottosistema.ordine_gruppo", read_only=True
+    )
 
     class Meta:
         model = StatoSottosistemaSessione
@@ -230,6 +235,8 @@ class StatoSottosistemaRuntimeSerializer(serializers.ModelSerializer):
             "codice",
             "nome",
             "tipo",
+            "ordine",
+            "ordine_gruppo",
             "supporta_direzioni",
             "supporta_inversione",
             "supporta_espulsione",

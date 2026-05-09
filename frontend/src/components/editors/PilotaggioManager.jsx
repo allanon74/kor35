@@ -207,7 +207,7 @@ export default function PilotaggioManager({ onLogout }) {
   const [eventi, setEventi] = useState([]);
   const [comandiCritici, setComandiCritici] = useState([]);
   const [nuovoSotto, setNuovoSotto] = useState({
-    codice: '', nome: '', gruppo: '', tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
+    codice: '', nome: '', gruppo: '', ordine_gruppo: 0, ordine: 0, tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
     capacita_storage: 0, coeff_ricarica_storage: 0.5, capacita_carburante: 0,
     effetti_guasto_json: JSON.stringify(defaultEffettiGuasto(), null, 2),
     effetti_inversione_json: JSON.stringify(defaultEffettiComandoCritico(), null, 2),
@@ -222,7 +222,7 @@ export default function PilotaggioManager({ onLogout }) {
   const [nuovoCritico, setNuovoCritico] = useState({ pattern: '', nome: '', attivo: true });
   const [editSottoId, setEditSottoId] = useState(null);
   const [editSotto, setEditSotto] = useState({
-    codice: '', nome: '', gruppo: '', tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
+    codice: '', nome: '', gruppo: '', ordine_gruppo: 0, ordine: 0, tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
     capacita_storage: 0, coeff_ricarica_storage: 0.5, capacita_carburante: 0,
     effetti_guasto_json: JSON.stringify(defaultEffettiGuasto(), null, 2),
     effetti_inversione_json: JSON.stringify(defaultEffettiComandoCritico(), null, 2),
@@ -371,6 +371,8 @@ export default function PilotaggioManager({ onLogout }) {
         coeff_consumo_energia: Number(nuovoSotto.coeff_consumo_energia || 0),
         coeff_consumo_carburante: Number(nuovoSotto.coeff_consumo_carburante || 0),
         coeff_effetto_speciale: Number(nuovoSotto.coeff_effetto_speciale || 1),
+        ordine_gruppo: Number(nuovoSotto.ordine_gruppo ?? 0),
+        ordine: Number(nuovoSotto.ordine ?? 0),
         rampa_livelli_per_tick: Number(nuovoSotto.rampa_livelli_per_tick || 1),
         capacita_storage: Number(nuovoSotto.capacita_storage || 0),
         coeff_ricarica_storage: Number(nuovoSotto.coeff_ricarica_storage || 0),
@@ -397,7 +399,7 @@ export default function PilotaggioManager({ onLogout }) {
       onLogout
     );
     setNuovoSotto({
-      codice: '', nome: '', gruppo: '', tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
+      codice: '', nome: '', gruppo: '', ordine_gruppo: 0, ordine: 0, tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
       capacita_storage: 0, coeff_ricarica_storage: 0.5, capacita_carburante: 0,
       effetti_guasto_json: JSON.stringify(defaultEffettiGuasto(), null, 2),
       effetti_inversione_json: JSON.stringify(defaultEffettiComandoCritico(), null, 2),
@@ -476,6 +478,8 @@ export default function PilotaggioManager({ onLogout }) {
         coeff_consumo_energia: Number(editSotto.coeff_consumo_energia || 0),
         coeff_consumo_carburante: Number(editSotto.coeff_consumo_carburante || 0),
         coeff_effetto_speciale: Number(editSotto.coeff_effetto_speciale || 1),
+        ordine_gruppo: Number(editSotto.ordine_gruppo ?? 0),
+        ordine: Number(editSotto.ordine ?? 0),
         rampa_livelli_per_tick: Number(editSotto.rampa_livelli_per_tick || 1),
         capacita_storage: Number(editSotto.capacita_storage || 0),
         coeff_ricarica_storage: Number(editSotto.coeff_ricarica_storage || 0),
@@ -664,6 +668,9 @@ export default function PilotaggioManager({ onLogout }) {
           Inserisci codice e nome, poi aggiungi la riga. Usa <strong className="text-gray-300">Scansiona QR</strong> sul
           sottosistema: il sistema collega il QR al sottosistema (se il cartellino è nuovo crea anche il manifesto pilota
           dietro le quinte). Non serve cercare id di vista a mano.
+          {' '}
+          <strong className="text-gray-300">Ordine colonna sistema</strong> e <strong className="text-gray-300">ordine nel gruppo</strong>{' '}
+          regolano la disposizione sulla console pilota (stesso ordine colonna per tutti i sottosistemi dello stesso gruppo).
         </p>
         {qrStatus.message ? (
           <div
@@ -686,6 +693,14 @@ export default function PilotaggioManager({ onLogout }) {
           <label className="block">
             <span className="text-xs text-gray-400">Gruppo sistema</span>
             <input className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.gruppo} onChange={(e) => setNuovoSotto((p) => ({ ...p, gruppo: e.target.value }))} placeholder="Alimentazione / Difesa / ..." />
+          </label>
+          <label className="block">
+            <span className="text-xs text-gray-400">Ordine colonna (gruppo)</span>
+            <input type="number" min={0} step={1} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.ordine_gruppo ?? 0} onChange={(e) => setNuovoSotto((p) => ({ ...p, ordine_gruppo: e.target.value }))} />
+          </label>
+          <label className="block">
+            <span className="text-xs text-gray-400">Ordine nel gruppo</span>
+            <input type="number" min={0} step={1} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.ordine ?? 0} onChange={(e) => setNuovoSotto((p) => ({ ...p, ordine: e.target.value }))} />
           </label>
           <label className="block">
             <span className="text-xs text-gray-400">Tipo sottosistema</span>
@@ -789,6 +804,14 @@ export default function PilotaggioManager({ onLogout }) {
                     <input className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.gruppo || ''} onChange={(e) => setEditSotto((p) => ({ ...p, gruppo: e.target.value }))} />
                   </label>
                   <label className="block">
+                    <span className="text-xs text-gray-400">Ordine colonna (gruppo)</span>
+                    <input type="number" min={0} step={1} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.ordine_gruppo ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, ordine_gruppo: e.target.value }))} />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Ordine nel gruppo</span>
+                    <input type="number" min={0} step={1} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.ordine ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, ordine: e.target.value }))} />
+                  </label>
+                  <label className="block">
                     <span className="text-xs text-gray-400">Tipo</span>
                     <select className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.tipo || 'standard'} onChange={(e) => setEditSotto((p) => ({ ...p, tipo: e.target.value }))}>
                       <option value="standard">standard</option><option value="generatore">generatore</option><option value="batteria">batteria</option><option value="serbatoio">serbatoio</option><option value="motore">motore</option><option value="portale">portale</option><option value="manovra">manovra</option>
@@ -874,7 +897,7 @@ export default function PilotaggioManager({ onLogout }) {
               ) : (
                 <>
                   <span className="wrap-break-word">
-                    <strong>{s.codice}</strong> — {s.nome} ({s.gruppo || 'Senza gruppo'} / {s.tipo || 'standard'})
+                    <strong>{s.codice}</strong> — {s.nome} ({s.gruppo || 'Senza gruppo'} / {s.tipo || 'standard'} · col.{s.ordine_gruppo ?? 0} · #{s.ordine ?? 0})
                     {s.stato_qr === 'pronto'
                       ? ' · QR collegato'
                       : s.stato_qr === 'incompleto'
@@ -898,6 +921,8 @@ export default function PilotaggioManager({ onLogout }) {
                           codice: s.codice || '',
                           nome: s.nome || '',
                           gruppo: s.gruppo || '',
+                          ordine_gruppo: s.ordine_gruppo ?? 0,
+                          ordine: s.ordine ?? 0,
                           tipo: s.tipo || 'standard',
                           coeff_produzione: s.coeff_produzione ?? 0,
                           coeff_consumo_energia: s.coeff_consumo_energia ?? 1,

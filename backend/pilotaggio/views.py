@@ -540,7 +540,13 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
     sub_serializer = StatoSottosistemaRuntimeSerializer(
         StatoSottosistemaSessione.objects.filter(sessione=sessione)
         .select_related("sottosistema")
-        .order_by("sottosistema__ordine", "sottosistema__nome", "sottosistema__codice")
+        .order_by(
+            "sottosistema__ordine_gruppo",
+            "sottosistema__gruppo",
+            "sottosistema__ordine",
+            "sottosistema__nome",
+            "sottosistema__codice",
+        )
         if sessione
         else [],
         many=True,
@@ -550,7 +556,8 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
     stati_qs = StatoAllertaPilot.objects.all().order_by("livello")
     stati_allerta = StatoAllertaPilotPublicSerializer(stati_qs, many=True).data
 
-    sistemi = {}
+    sistemi_buckets = {}
+    gruppo_ordine_min = {}
     stati_runtime = {
         str(st.pk): st
         for st in (
@@ -562,7 +569,22 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
     for row in sub_serializer.data:
         match = stati_runtime.get(str(row["id"]))
         gruppo = (match.sottosistema.gruppo if match else "Sistema").strip() or "Sistema"
-        sistemi.setdefault(gruppo, []).append(row)
+        og = (
+            int(getattr(match.sottosistema, "ordine_gruppo", 0) or 0)
+            if match
+            else 0
+        )
+        gruppo_ordine_min[gruppo] = (
+            min(gruppo_ordine_min.get(gruppo, og), og)
+            if gruppo in gruppo_ordine_min
+            else og
+        )
+        sistemi_buckets.setdefault(gruppo, []).append(row)
+    gruppi_ordinati = sorted(
+        sistemi_buckets.keys(),
+        key=lambda g: (gruppo_ordine_min.get(g, 0), g.lower()),
+    )
+    sistemi = {g: sistemi_buckets[g] for g in gruppi_ordinati}
     evento_data = EventoAttivoSerializer(pending).data if pending else None
     if evento_data and evento_data.get("direzione_evento"):
         evento_data["descrizione"] = str(evento_data.get("descrizione") or "").replace(
@@ -1075,7 +1097,9 @@ class PilotCatalogView(APIView):
     permission_classes = [IsPilotConsole]
 
     def get(self, request):
-        sotto = SottosistemaNave.objects.filter(attivo=True).order_by("codice")
+        sotto = SottosistemaNave.objects.filter(attivo=True).order_by(
+            "ordine_gruppo", "gruppo", "ordine", "nome", "codice"
+        )
         cmd = ComandoNave.objects.filter(attivo=True).order_by("codice")
         intensita = IntensitaComando.objects.filter(attivo=True).order_by("valore")
         combinations = []
@@ -1154,7 +1178,9 @@ class PilotPrefettureView(generics.ListAPIView):
 
 
 class StaffSottosistemaViewSet(viewsets.ModelViewSet):
-    queryset = SottosistemaNave.objects.all().order_by("codice")
+    queryset = SottosistemaNave.objects.all().order_by(
+        "ordine_gruppo", "gruppo", "ordine", "nome", "codice"
+    )
     serializer_class = SottosistemaNaveSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
 
