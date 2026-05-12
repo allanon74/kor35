@@ -14,6 +14,7 @@ import {
     useDisequipTessituraRuntimeObject,
 } from '../hooks/useGameData';
 import { gameComaControl } from '../api';
+import { getOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
 
 import ActiveItemWidget from './ActiveItemWidget'; 
 
@@ -396,7 +397,58 @@ const formatCountdown = (seconds) => {
 
 // --- MAIN GAMETAB ---
 const GameTab = ({ onNavigate }) => {
-    const { selectedCharacterData: char, unreadCount, refreshCharacterData, onLogout } = useCharacter();
+    const {
+        selectedCharacterData: liveChar,
+        selectedCharacterId,
+        isLoadingDetail,
+        unreadCount,
+        refreshCharacterData,
+        onLogout,
+    } = useCharacter();
+    const [idbChar, setIdbChar] = useState(null);
+    const [idbStoredAt, setIdbStoredAt] = useState(null);
+    const [idbLoading, setIdbLoading] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        if (liveChar) {
+            setIdbChar(null);
+            setIdbStoredAt(null);
+            setIdbLoading(false);
+            return undefined;
+        }
+        if (!selectedCharacterId) {
+            setIdbChar(null);
+            setIdbStoredAt(null);
+            setIdbLoading(false);
+            return undefined;
+        }
+        setIdbLoading(true);
+        getOfflineGameStateSnapshot(selectedCharacterId)
+            .then((row) => {
+                if (cancelled) return;
+                setIdbChar(row?.snapshot || null);
+                setIdbStoredAt(row?.stored_at || null);
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setIdbChar(null);
+                    setIdbStoredAt(null);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setIdbLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [liveChar, selectedCharacterId]);
+
+    const char = liveChar ?? idbChar;
+    const isOfflineSnapshot = !liveChar && !!idbChar;
+    const readOnlyGame =
+        typeof navigator !== 'undefined' && (!navigator.onLine || isOfflineSnapshot);
+
     const [favorites, setFavorites] = useState([]);
     const [comaBusy, setComaBusy] = useState(false);
     
@@ -560,6 +612,7 @@ const GameTab = ({ onNavigate }) => {
     const weapons = allAttacks.filter(a => a.isHost).map(a => a.source);
 
     const handleStatChange = (key, mode, maxOverride) => {
+        if (readOnlyGame) return;
         statMutation.mutate({ charId: char.id, stat_sigla: key, mode, max_override: maxOverride || 0 });
     };
 
@@ -583,7 +636,17 @@ const GameTab = ({ onNavigate }) => {
         return map;
     }, [runtimeAttivi]);
 
-    if (!char) return <div className="p-8 text-center text-white">Caricamento...</div>;
+    if (!char) {
+        if (isLoadingDetail || idbLoading) {
+            return <div className="p-8 text-center text-white">Caricamento...</div>;
+        }
+        return (
+            <div className="p-8 text-center text-amber-200/90 text-sm max-w-md mx-auto">
+                Nessun dato di gioco in cache per questo personaggio. Connettiti al Mirror almeno una volta
+                con il tab Gioco aperto per salvare uno snapshot offline (tessiture, statistiche, equipaggiamento).
+            </div>
+        );
+    }
 
     // Statistiche Tattiche
     const primary = char.statistiche_primarie || [];
@@ -617,7 +680,7 @@ const GameTab = ({ onNavigate }) => {
     const hasComaCountdown = tacticalStats['PV_CUR'] <= 0 && !!comaState && !isDead;
 
     const handleComaControl = async (actionName) => {
-        if (!char?.id) return;
+        if (!char?.id || readOnlyGame) return;
         setComaBusy(true);
         try {
             await gameComaControl(char.id, actionName, onLogout);
@@ -650,7 +713,26 @@ const GameTab = ({ onNavigate }) => {
 
     return (
         <div className="pb-24 px-2 space-y-6 animate-fadeIn text-gray-100 pt-2">
-            
+            {readOnlyGame && (
+                <div
+                    className="rounded-lg border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100/95 text-center"
+                    role="status"
+                >
+                    {isOfflineSnapshot ? (
+                        <>
+                            Modalità consultazione offline: ultimo salvataggio locale
+                            {idbStoredAt ? ` (${new Date(idbStoredAt).toLocaleString()})` : ''}. Le azioni di gioco sono
+                            disattivate finché non torna la connessione al server.
+                        </>
+                    ) : (
+                        <>
+                            Sei offline: le modifiche non possono essere salvate. Mostriamo i dati in cache del browser
+                            se disponibili.
+                        </>
+                    )}
+                </div>
+            )}
+
             <CapacityDashboard 
                 capacityUsed={capacityUsed} capacityMax={capacityMax} capacityConsumers={capacityConsumersAll}
                 heavyUsed={heavyUsed} heavyMax={heavyMax} heavyConsumers={heavyConsumers}
@@ -682,7 +764,7 @@ const GameTab = ({ onNavigate }) => {
                             </div>
                             <button
                                 type="button"
-                                disabled={comaBusy}
+                                disabled={comaBusy || readOnlyGame}
                                 onClick={() => handleComaControl(comaState?.is_paused ? 'stabilize_stop' : 'stabilize_start')}
                                 className="mt-2 w-full py-2 rounded-lg bg-red-800 hover:bg-red-700 disabled:opacity-50 text-xs font-bold uppercase tracking-wide"
                             >
@@ -690,7 +772,7 @@ const GameTab = ({ onNavigate }) => {
                             </button>
                             <button
                                 type="button"
-                                disabled={comaBusy}
+                                disabled={comaBusy || readOnlyGame}
                                 onClick={() => handleComaControl('fatal_hit')}
                                 className={`mt-2 w-full py-2 rounded-lg disabled:opacity-50 text-xs font-bold uppercase tracking-wide ${
                                     String(comaState?.death_mode || 'none') === 'fatale'
@@ -702,7 +784,7 @@ const GameTab = ({ onNavigate }) => {
                             </button>
                             <button
                                 type="button"
-                                disabled={comaBusy}
+                                disabled={comaBusy || readOnlyGame}
                                 onClick={() => {
                                     if (window.confirm('Confermi colpo mortale? Il personaggio morira istantaneamente.')) {
                                         handleComaControl('mortal_hit');
@@ -728,7 +810,7 @@ const GameTab = ({ onNavigate }) => {
                     <RigenerazioneTimerWidget
                         key={char.id}
                         rows={char.rigenerazioni_auto_ui || []}
-                        onAfterTick={refreshCharacterData}
+                        onAfterTick={readOnlyGame ? () => {} : refreshCharacterData}
                     />
                     {(char.risorse_pool_ui || [])
                         .filter((p) => p.valore_max > 0 && !['PV', 'PA', 'PS', 'CHA'].includes(p.sigla))
@@ -737,9 +819,10 @@ const GameTab = ({ onNavigate }) => {
                             key={pool.sigla}
                             pool={pool}
                             isPending={risorsaMutation.isPending}
-                            onConsume={(sigla) =>
-                                risorsaMutation.mutate({ charId: char.id, statSigla: sigla })
-                            }
+                            onConsume={(sigla) => {
+                                if (readOnlyGame) return;
+                                risorsaMutation.mutate({ charId: char.id, statSigla: sigla });
+                            }}
                         />
                     ))}
                     {Array.isArray(char.effetti_risorsa_attivi) && char.effetti_risorsa_attivi.length > 0 && (
@@ -776,7 +859,7 @@ const GameTab = ({ onNavigate }) => {
                                                         runtimeObjectId: rt.oggetto_runtime.id,
                                                     })
                                                 }
-                                                disabled={disequipRuntimeObjMutation.isPending}
+                                                disabled={disequipRuntimeObjMutation.isPending || readOnlyGame}
                                                 className="px-2 py-1 rounded bg-rose-900/50 hover:bg-rose-800/60 disabled:opacity-40 text-[9px] uppercase tracking-wide font-bold text-rose-100"
                                             >
                                                 Disequip runtime
@@ -891,7 +974,7 @@ const GameTab = ({ onNavigate }) => {
                                                             tessituraId: tessitura.id,
                                                         })
                                                     }
-                                                    disabled={attivaRuntimeMutation.isPending}
+                                                    disabled={attivaRuntimeMutation.isPending || readOnlyGame}
                                                     className="px-2 py-1 rounded bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
                                                 >
                                                     {runtimeAttivo ? 'Riattiva' : 'Attiva'}
@@ -905,7 +988,7 @@ const GameTab = ({ onNavigate }) => {
                                                                 runtimeId: runtimeAttivo.id,
                                                             })
                                                         }
-                                                        disabled={stopRuntimeMutation.isPending}
+                                                        disabled={stopRuntimeMutation.isPending || readOnlyGame}
                                                         className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
                                                     >
                                                         Stop
@@ -950,14 +1033,14 @@ const GameTab = ({ onNavigate }) => {
                                     <ActiveItemWidget
                                         key={group.host.id}
                                         item={group.host}
-                                        onUpdate={refreshCharacterData}
+                                        onUpdate={readOnlyGame ? () => {} : refreshCharacterData}
                                     />
                                 )}
                                 {group.modules.map((item) => (
                                     <ActiveItemWidget
                                         key={item.id}
                                         item={item}
-                                        onUpdate={refreshCharacterData}
+                                        onUpdate={readOnlyGame ? () => {} : refreshCharacterData}
                                     />
                                 ))}
                             </div>

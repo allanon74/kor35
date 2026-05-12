@@ -97,7 +97,9 @@ from .campaigns import ensure_user_in_base_campaign
 from .serializers import (
     ChangePasswordSerializer, OggettoSerializer, AttivataSerializer, InfusioneSerializer, TessituraSerializer,
     ManifestoSerializer, NodoSerializer, A_vistaSerializer, InventarioSerializer, CerimonialeSerializer,
-    PersonaggioDetailSerializer, CreditoMovimentoCreateSerializer, PersonaggioListSerializer,
+    PersonaggioDetailSerializer,
+    serialize_personaggio_offline_game_state,
+    CreditoMovimentoCreateSerializer, PersonaggioListSerializer,
     TransazioneSospesaSerializer, PropostaTransazioneSerializer, 
     PuntiCaratteristicaMovimentoCreateSerializer, TransazioneCreateSerializer, 
     TransazioneSospesaSerializer, TransazioneConfermaSerializer, PropostaTransazioneSerializer,
@@ -2213,23 +2215,70 @@ class PersonaggioDetailView(APIView):
         personaggio.advance_recuperi_risorse()
         serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
+
     def patch(self, request, pk, format=None):
         personaggio = get_object_or_404(Personaggio, pk=pk)
-        
+
         # Controllo permessi (solo il proprietario o admin)
         if personaggio.proprietario != request.user and not (
             request.user.is_superuser
             or _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=True)
         ):
             return Response({"error": "Non hai il permesso di modificare questo personaggio."}, status=status.HTTP_403_FORBIDDEN)
-        
+
         # Usiamo il serializer esistente con partial=True per l'update parziale
         serializer = PersonaggioDetailSerializer(personaggio, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PersonaggioGameStateView(APIView):
+    """
+    GET: snapshot leggero per persistenza offline (tessiture, abilità, cerimoniali,
+    equipaggiamento, pool PV/PA/PS/Chakra, runtime tessiture con timer, ecc.).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, format=None):
+        active_campaign = _get_active_campaign(request)
+        default_campaign = _get_default_campaign()
+        personaggio = get_object_or_404(
+            Personaggio.objects.select_related("social_profile").prefetch_related(
+                Prefetch(
+                    "abilita_possedute",
+                    queryset=Abilita.objects.defer("caratteristica_2", "caratteristica_3").select_related(
+                        "caratteristica"
+                    ),
+                ),
+            ),
+            pk=pk,
+        )
+        if active_campaign and personaggio.campagna_id != getattr(active_campaign, "id", None):
+            is_png_kor35 = bool(
+                default_campaign
+                and personaggio.campagna_id == default_campaign.id
+                and personaggio.tipologia_id
+                and not personaggio.tipologia.giocante
+            )
+            if not is_png_kor35:
+                return Response(
+                    {"error": "Personaggio non visibile nella campagna selezionata."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        user = request.user
+        if personaggio.proprietario != user and not (
+            user.is_superuser or _can_operate_in_campaign(user, personaggio.campagna, needs_master=True)
+        ):
+            return Response(
+                {"error": "Non hai il permesso di visualizzare questo personaggio."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        _sync_coma_state(personaggio)
+        personaggio.advance_recuperi_risorse()
+        return Response(serialize_personaggio_offline_game_state(personaggio, request), status=status.HTTP_200_OK)
 
 
 class PersonaggioModificatoriDettagliatiView(APIView):
