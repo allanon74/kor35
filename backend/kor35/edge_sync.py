@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from kor35.syncing import (
     expand_paginaregolamento_queryset_with_ancestors,
     serialize_for_sync,
+    try_apply_mti_child_fields_when_skipped,
     try_apply_pagina_regolamento_structure_when_skipped,
 )
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
@@ -326,8 +327,14 @@ class EdgeSyncView(APIView):
                 wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(local, row)
                 if wiki_menu == "defer":
                     return "defer"
+            mt_child = try_apply_mti_child_fields_when_skipped(
+                local, row, self._resolve_fk_value
+            )
+            if mt_child == "defer":
+                return "defer"
+            extra_applied = wiki_menu == "applied" or mt_child == "applied"
             if not m2m_raw:
-                if wiki_menu == "applied":
+                if extra_applied:
                     if remote_updated_at:
                         model.objects.filter(pk=local.pk).update(updated_at=remote_updated_at)
                     return "applied"

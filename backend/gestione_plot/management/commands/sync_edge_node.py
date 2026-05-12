@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_datetime
 from kor35.syncing import (
     expand_paginaregolamento_queryset_with_ancestors,
     serialize_for_sync,
+    try_apply_mti_child_fields_when_skipped,
     try_apply_pagina_regolamento_structure_when_skipped,
 )
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
@@ -343,21 +344,27 @@ class Command(BaseCommand):
                 wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(local_obj, row)
                 if wiki_menu == "defer":
                     return "defer"
-            if not m2m_updates:
-                if wiki_menu == "applied":
-                    if remote_updated_at:
-                        model.objects.filter(pk=local_obj.pk).update(updated_at=remote_updated_at)
-                    return "applied"
-                return "skipped"
-            obj = local_obj
-            for field_name, raw_values in m2m_updates.items():
-                resolved_list, unresolved = self._resolve_m2m_values(model, field_name, raw_values)
-                if unresolved:
-                    return "defer"
-                getattr(obj, field_name).set(resolved_list)
-            if remote_updated_at:
-                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
-            return "applied"
+            mt_child = try_apply_mti_child_fields_when_skipped(
+                local_obj, row, lambda f, v: self._resolve_fk_value(model, f.name, v)
+            )
+            if mt_child == "defer":
+                return "defer"
+            extra_applied = wiki_menu == "applied" or mt_child == "applied"
+            if m2m_updates:
+                obj = local_obj
+                for field_name, raw_values in m2m_updates.items():
+                    resolved_list, unresolved = self._resolve_m2m_values(model, field_name, raw_values)
+                    if unresolved:
+                        return "defer"
+                    getattr(obj, field_name).set(resolved_list)
+                if remote_updated_at:
+                    model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+                return "applied"
+            if extra_applied:
+                if remote_updated_at:
+                    model.objects.filter(pk=local_obj.pk).update(updated_at=remote_updated_at)
+                return "applied"
+            return "skipped"
 
         update_data = {}
 

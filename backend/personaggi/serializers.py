@@ -2380,6 +2380,50 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         return sorted(out, key=lambda x: x['sigla'])
 
 
+# Chiavi estratte da PersonaggioDetailSerializer per cache offline (IndexedDB / mesh instabile).
+# Mantenerle allineate a GameTab e alle esigenze di consultazione in campo.
+OFFLINE_GAME_STATE_KEYS = (
+    "id",
+    "nome",
+    "data_morte",
+    "statistiche_primarie",
+    "statistiche_temporanee",
+    "risorse_consumabili",
+    "risorse_pool_ui",
+    "effetti_risorsa_attivi",
+    "tessiture_attive_runtime",
+    "tessiture_runtime_slots_occupati",
+    "rigenerazioni_auto_ui",
+    "abilita_possedute",
+    "tessiture_possedute",
+    "cerimoniali_posseduti",
+    "attivate_possedute",
+    "infusioni_possedute",
+    "oggetti",
+    "consumabili",
+    "creazioni_consumabili_in_corso",
+    "creazioni_consumabili_pronte",
+    "lavori_pendenti_count",
+    "impostazioni_ui",
+)
+
+
+def serialize_personaggio_offline_game_state(personaggio, request):
+    """
+    Snapshot compatto per consultazione offline sul client (PWA).
+    Riutilizza PersonaggioDetailSerializer per evitare drift di regole di gioco.
+    """
+    serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
+    detail = serializer.data
+    payload = {key: detail[key] for key in OFFLINE_GAME_STATE_KEYS if key in detail}
+    updated_at = getattr(personaggio, "updated_at", None)
+    return {
+        **payload,
+        "snapshot_server_at": timezone.now().isoformat(),
+        "personaggio_updated_at": updated_at.isoformat() if updated_at else None,
+    }
+
+
 class PersonaggioPublicSerializer(serializers.ModelSerializer):
     oggetti = OggettoSerializer(source='get_oggetti', many=True, read_only=True)
 

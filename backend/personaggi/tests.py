@@ -464,3 +464,53 @@ class TessituraRuntimeTests(APITestCase):
         )
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("COG", str(r.data))
+
+
+class PersonaggioGameStateApiTests(APITestCase):
+    """GET /api/personaggi/<pk>/game_state/ — snapshot per cache offline client."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="gs-player", password="x")
+        self.client.force_authenticate(user=self.user)
+        self.kor35 = Campagna.objects.create(
+            slug="kor35-gamestate-test",
+            nome="Kor35 GameState Test",
+            is_default=False,
+            is_base=False,
+            attiva=True,
+        )
+        CampagnaUtente.objects.create(campagna=self.kor35, user=self.user, ruolo="PLAYER", attivo=True)
+        self.tipologia = TipologiaPersonaggio.objects.create(
+            nome="Tipo GS",
+            caratteristiche_iniziali=8,
+            crediti_iniziali=0,
+            giocante=True,
+        )
+        self.pg = Personaggio.objects.create(
+            nome="PG GS",
+            proprietario=self.user,
+            tipologia=self.tipologia,
+            campagna=self.kor35,
+        )
+
+    def test_game_state_owner_get_200_and_has_core_keys(self):
+        url = f"/api/personaggi/api/personaggi/{self.pg.id}/game_state/"
+        r = self.client.get(url, HTTP_X_CAMPAGNA=self.kor35.slug)
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertIn("snapshot_server_at", r.data)
+        self.assertIn("statistiche_primarie", r.data)
+        self.assertIn("oggetti", r.data)
+        self.assertEqual(r.data.get("id"), self.pg.id)
+        self.assertEqual(r.data.get("nome"), "PG GS")
+
+    def test_game_state_forbidden_for_other_user(self):
+        other = User.objects.create_user(username="other-gs", password="x")
+        pg2 = Personaggio.objects.create(
+            nome="PG Altro",
+            proprietario=other,
+            tipologia=self.tipologia,
+            campagna=self.kor35,
+        )
+        url = f"/api/personaggi/api/personaggi/{pg2.id}/game_state/"
+        r = self.client.get(url, HTTP_X_CAMPAGNA=self.kor35.slug)
+        self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)

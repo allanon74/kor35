@@ -588,6 +588,17 @@ export const getPersonaggioDetail = (id, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/personaggi/${cleanId}/`, { method: 'GET' }, onLogout);
 };
 
+/**
+ * Snapshot compatto per modalità offline (stesso permesso del dettaglio personaggio).
+ */
+export const getPersonaggioGameState = (id, onLogout) => {
+  const cleanId = String(id ?? '').trim();
+  if (!cleanId) {
+    return Promise.reject(new Error('ID personaggio mancante.'));
+  }
+  return fetchAuthenticated(`/api/personaggi/api/personaggi/${cleanId}/game_state/`, { method: 'GET' }, onLogout);
+};
+
 export const getQrCodeData = (qrId, onLogout, personaggioId = null) => {
   const q =
     personaggioId != null && personaggioId !== ''

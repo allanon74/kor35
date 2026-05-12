@@ -103,6 +103,29 @@ def touch_classeoggetto_updated_at_on_materia_m2m(
         ClasseOggetto.objects.filter(pk=instance.pk).update(updated_at=now)
 
 
+def bump_mti_personaggi_parents_updated_at(sender, instance, **kwargs):
+    """
+    Dopo save su un modello MTI di `personaggi`, aggiorna `updated_at` su ogni
+    antenato concreto nello stesso app (Tabella, A_vista, Inventario, …) così il
+    delta sync (`updated_at__gt`) non perde modifiche solo-tabella-figlia.
+    Ignora genitori fuori da personaggi.models (es. CMSPlugin).
+    """
+    if kwargs.get("raw"):
+        return
+    now = timezone.now()
+    cls = instance.__class__
+    while cls is not None and cls._meta.parents:
+        parent_cls = next(iter(cls._meta.parents.keys()))
+        cls = parent_cls
+        if getattr(cls._meta, "abstract", False):
+            continue
+        if cls.__module__ != "personaggi.models":
+            continue
+        if not hasattr(cls, "updated_at"):
+            continue
+        cls.objects.filter(pk=instance.pk).update(updated_at=now)
+
+
 @receiver(post_save, sender=Infusione)
 def copia_dati_da_proposta(sender, instance, created, **kwargs):
     """

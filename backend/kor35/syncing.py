@@ -157,6 +157,67 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
     return data
 
 
+# Modelli MTI per cui NON va forzato il merge dei campi figlio quando il branch LWW
+# salta gli scalari: stato di gioco / conflitti intenzionali edge vs master.
+_MTICHILD_PATCH_DENYLIST = frozenset(
+    {
+        "personaggi.personaggio",
+    }
+)
+
+
+def try_apply_mti_child_fields_when_skipped(
+    local_obj: models.Model,
+    row: dict[str, Any],
+    resolve_fk,
+) -> Literal["defer", "applied", "noop"]:
+    """
+    Ereditarietà multi-tabella (es. Tecnica -> A_vista, Tabella -> Punteggio): i campi
+    sulla tabella figlia possono cambiare senza far avanzare `updated_at` sul genitore,
+    oppure restare con lo stesso timestamp del master mentre il payload contiene valori
+    diversi. In quel caso il branch LWW (remote_updated_at <= locale) salterebbe tutti
+    gli scalari e il mirror resterebbe indietro.
+
+    Allinea i campi *solo sulla tabella del modello concreto* (local_concrete_fields),
+    per tutti i modelli MTI tranne quelli in denylist (es. Personaggio).
+    """
+    label = local_obj._meta.label_lower
+    if label in _MTICHILD_PATCH_DENYLIST:
+        return "noop"
+    if not local_obj._meta.parents:
+        return "noop"
+
+    patch: dict[str, Any] = {}
+    for field in local_obj._meta.local_concrete_fields:
+        if field.name == "id":
+            continue
+        if isinstance(field, models.ForeignKey) and getattr(field.remote_field, "parent_link", False):
+            continue
+        if field.name not in row:
+            continue
+        value = row[field.name]
+        if isinstance(field, models.ForeignKey):
+            resolved = resolve_fk(field, value)
+            if resolved is None and not field.null and value not in (None, ""):
+                return "defer"
+            current = getattr(local_obj, field.name)
+            cur_pk = getattr(current, "pk", None)
+            new_pk = getattr(resolved, "pk", None) if resolved is not None else None
+            if cur_pk != new_pk:
+                patch[field.name] = resolved
+            continue
+
+        current = getattr(local_obj, field.name)
+        if json_safe_for_sync(current) != json_safe_for_sync(value):
+            patch[field.name] = value
+
+    if not patch:
+        return "noop"
+
+    type(local_obj).objects.filter(pk=local_obj.pk).update(**patch)
+    return "applied"
+
+
 def try_apply_pagina_regolamento_structure_when_skipped(
     local_obj: models.Model, row: dict[str, Any]
 ) -> Literal["defer", "applied", "noop"]:

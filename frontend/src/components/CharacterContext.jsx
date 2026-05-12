@@ -10,6 +10,7 @@ import {
   getPreferredPersonaggio,
   setPreferredPersonaggio,
   getPersonaggioDetail,
+  getPersonaggioGameState,
   getAcquirableSkills,
   getAcquirableInfusioni,
   getAcquirableTessiture,
@@ -22,6 +23,7 @@ import {
   postEventoPremiApplica,
 } from '../api'; 
 import NotificationPopup from './NotificationPopup';
+import { putOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
 
 import { 
   usePunteggi, 
@@ -196,6 +198,30 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isLoading: isLoadingDetail,
     refetch: refetchCharacterDetail
   } = usePersonaggioDetail(selectedCharacterId, onLogout);
+
+  /** Aggiorna IndexedDB (snapshot di gioco) dopo ogni sync online del personaggio. */
+  useEffect(() => {
+    if (!selectedCharacterId || typeof navigator === 'undefined' || !navigator.onLine) {
+      return undefined;
+    }
+    if (!selectedCharacterData) {
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getPersonaggioGameState(selectedCharacterId, onLogout);
+        if (!cancelled && snap) {
+          await putOfflineGameStateSnapshot(selectedCharacterId, snap);
+        }
+      } catch {
+        /* rete / auth: non bloccare la UI */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCharacterId, selectedCharacterData, onLogout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -592,7 +618,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     selectedCharacterId,
     preferredCharacterId,
     
-    characterData: selectedCharacterData, 
+    characterData: selectedCharacterData,
     selectedCharacterData,
     
     acquirableSkills,
