@@ -50,6 +50,14 @@ const defaultEvento = {
   attivo: true,
 };
 
+/** Stato form modale modifica evento (include campi testo per array JSON). */
+const emptyEditEventoModal = () => ({
+  ...defaultEvento,
+  codice_soluzione_esatta: '___',
+  codici_soluzione_parziale_json: '[]',
+  codici_precipizio_json: '[]',
+});
+
 const defaultCurveZero = () => {
   const out = {};
   for (let i = 0; i <= 9; i += 1) out[String(i)] = 0;
@@ -236,7 +244,7 @@ export default function PilotaggioManager({ onLogout }) {
   const [editIntensitaId, setEditIntensitaId] = useState(null);
   const [editIntensita, setEditIntensita] = useState({ valore: 0, nome: '' });
   const [editEventoId, setEditEventoId] = useState(null);
-  const [editEvento, setEditEvento] = useState(defaultEvento);
+  const [editEvento, setEditEvento] = useState(() => emptyEditEventoModal());
   const [editCriticoId, setEditCriticoId] = useState(null);
   const [editCritico, setEditCritico] = useState({ pattern: '', nome: '', attivo: true });
   const [nuovoEffettoGuastoBuilder, setNuovoEffettoGuastoBuilder] = useState(defaultEffettoGuastoBuilder());
@@ -518,29 +526,95 @@ export default function PilotaggioManager({ onLogout }) {
     setEditIntensitaId(null);
     loadData();
   };
+  const closeEditEventoModal = useCallback(() => {
+    setEditEventoId(null);
+    setEditEvento(emptyEditEventoModal());
+    setError('');
+  }, []);
+
+  const openEditEventoModal = useCallback((e) => {
+    setError('');
+    setEditEventoId(e.id);
+    setEditEvento({
+      nome: e.nome || '',
+      descrizione: e.descrizione ?? '',
+      codice_soluzione_esatta: e.codice_soluzione_esatta || '___',
+      codici_soluzione_parziale_json: JSON.stringify(e.codici_soluzione_parziale || [], null, 2),
+      codici_precipizio_json: JSON.stringify(e.codici_precipizio || [], null, 2),
+      regole_json: JSON.stringify(e.regole_json ?? { version: 3 }, null, 2),
+      durata_base_secondi: e.durata_base_secondi ?? 20,
+      durata_tick: e.durata_tick || '4',
+      peso_random: e.peso_random ?? 10,
+      sottosistema: e.sottosistema || '',
+      attivo: e.attivo !== false,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!editEventoId) return undefined;
+    const onKey = (ev) => {
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        closeEditEventoModal();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editEventoId, closeEditEventoModal]);
+
   const salvaEvento = async () => {
+    setError('');
     const durataSpec = String(editEvento.durata_tick || '').trim();
     if (!isValidDurataTickSpec(durataSpec)) {
       setError('Durata evento non valida. Usa: N, A-B, -N oppure -');
       return;
     }
-    await staffUpdatePilotEvento(
-      editEventoId,
-      {
-        ...editEvento,
-        codice_soluzione_esatta: editEvento.codice_soluzione_esatta || '___',
-        codici_soluzione_parziale: [],
-        codici_precipizio: [],
-        regole_json: (() => {
-          try { return JSON.parse(editEvento.regole_json || '{}'); } catch (_) { return {}; }
-        })(),
-        sottosistema: editEvento.sottosistema || null,
-        durata_tick: durataSpec,
-      },
-      onLogout
-    );
-    setEditEventoId(null);
-    loadData();
+    let regole_json;
+    try {
+      regole_json = JSON.parse(editEvento.regole_json || '{}');
+    } catch {
+      setError('JSON «Regole avanzate» non valido.');
+      return;
+    }
+    let codici_soluzione_parziale;
+    let codici_precipizio;
+    try {
+      const rawP = JSON.parse(editEvento.codici_soluzione_parziale_json || '[]');
+      const rawC = JSON.parse(editEvento.codici_precipizio_json || '[]');
+      codici_soluzione_parziale = Array.isArray(rawP) ? rawP : [];
+      codici_precipizio = Array.isArray(rawC) ? rawC : [];
+    } catch {
+      setError('JSON codici parziale o precipizio non valido (devono essere array JSON).');
+      return;
+    }
+    const codice = String(editEvento.codice_soluzione_esatta || '___')
+      .trim()
+      .toUpperCase()
+      .slice(0, 3) || '___';
+    const payload = {
+      nome: String(editEvento.nome || '').trim(),
+      descrizione: String(editEvento.descrizione ?? ''),
+      codice_soluzione_esatta: codice,
+      codici_soluzione_parziale,
+      codici_precipizio,
+      regole_json,
+      durata_base_secondi: Math.max(1, Number(editEvento.durata_base_secondi) || 20),
+      durata_tick: durataSpec,
+      peso_random: Math.max(0, Number(editEvento.peso_random) || 0),
+      sottosistema: editEvento.sottosistema || null,
+      attivo: Boolean(editEvento.attivo),
+    };
+    if (!payload.nome) {
+      setError('Il nome evento è obbligatorio.');
+      return;
+    }
+    try {
+      await staffUpdatePilotEvento(editEventoId, payload, onLogout);
+      closeEditEventoModal();
+      loadData();
+    } catch (err) {
+      setError(err?.message || 'Errore salvataggio evento.');
+    }
   };
 
   const salvaStatoAllerta = async () => {
@@ -1138,59 +1212,41 @@ export default function PilotaggioManager({ onLogout }) {
           <textarea className="bg-gray-800 rounded px-2 py-1 md:col-span-2 min-h-32 font-mono text-xs" placeholder="JSON regole avanzate (modificabile)" value={nuovoEvento.regole_json} onChange={(e) => setNuovoEvento((p) => ({ ...p, regole_json: e.target.value }))} />
           <button className="px-3 py-1 rounded bg-indigo-600 md:col-span-2" onClick={addEvento}>Aggiungi evento</button>
         </div>
-        {eventi.map((e) => (
-          <div key={e.id} className="flex items-center justify-between bg-gray-800/60 rounded px-2 py-1 text-sm mb-1">
-            {editEventoId === e.id ? (
-              <div className="grid md:grid-cols-2 gap-2 w-full">
-                <input className="bg-gray-700 rounded px-2 py-1" value={editEvento.nome} onChange={(ev) => setEditEvento((p) => ({ ...p, nome: ev.target.value }))} />
-                <input
-                  className={`bg-gray-700 rounded px-2 py-1 font-mono ${isValidDurataTickSpec(editEvento.durata_tick) ? '' : 'border border-red-600'}`}
-                  value={editEvento.durata_tick ?? '4'}
-                  onChange={(ev) => {
-                    const next = ev.target.value.replace(/[^0-9-]/g, '');
-                    setEditEvento((p) => ({ ...p, durata_tick: next }));
-                  }}
-                  placeholder='Durata tick: N | A-B | -N | -'
-                />
-                <input className="bg-gray-700 rounded px-2 py-1 md:col-span-2" value={editEvento.descrizione} onChange={(ev) => setEditEvento((p) => ({ ...p, descrizione: ev.target.value }))} />
-                <p className="text-xs text-gray-400 md:col-span-2">
-                  Formati validi: <code>N</code>, <code>A-B</code>, <code>-N</code>, <code>-</code>.
-                </p>
-                <textarea className="bg-gray-700 rounded px-2 py-1 md:col-span-2 min-h-32 font-mono text-xs" value={editEvento.regole_json} onChange={(ev) => setEditEvento((p) => ({ ...p, regole_json: ev.target.value }))} />
-                <div className="flex gap-3 md:col-span-2">
-                  <button className="text-emerald-400" onClick={salvaEvento}>Salva</button>
-                  <button className="text-gray-300" onClick={() => setEditEventoId(null)}>Annulla</button>
+        <div className="space-y-2 mt-2">
+          {eventi.map((e) => (
+            <div
+              key={e.id}
+              className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-gray-800/60 rounded-lg px-3 py-2 text-sm border border-gray-700/80"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-white truncate" title={e.nome}>
+                  {e.nome}
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                  <span>
+                    tick <span className="font-mono text-gray-300">{e.durata_tick || '4'}</span>
+                  </span>
+                  <span>peso {e.peso_random ?? 10}</span>
+                  <span>{e.attivo !== false ? 'attivo' : 'disattivato'}</span>
+                  {e.sottosistema_codice ? (
+                    <span className="font-mono text-indigo-300/90">{e.sottosistema_codice}</span>
+                  ) : null}
+                  <span className="font-mono text-amber-200/90" title="Codice risoluzione ST">
+                    {e.codice_soluzione_esatta || '—'}
+                  </span>
                 </div>
               </div>
-            ) : (
-              <>
-                <span>{e.nome} <span className="text-xs text-gray-400">[{e.durata_tick || '4'}]</span></span>
-                <div className="flex gap-3">
-                  <button
-                    className="text-indigo-300"
-                    onClick={() => {
-                      setEditEventoId(e.id);
-                      setEditEvento({
-                        nome: e.nome || '',
-                        descrizione: e.descrizione || '',
-                        codice_soluzione_esatta: e.codice_soluzione_esatta || '',
-                        regole_json: JSON.stringify(e.regole_json || { alternative: [] }, null, 2),
-                        durata_base_secondi: e.durata_base_secondi ?? 20,
-                        durata_tick: e.durata_tick || '4',
-                        peso_random: e.peso_random ?? 10,
-                        sottosistema: e.sottosistema || '',
-                        attivo: e.attivo ?? true,
-                      });
-                    }}
-                  >
-                    Modifica
-                  </button>
-                  <button className="text-red-400" onClick={() => staffDeletePilotEvento(e.id, onLogout).then(loadData)}>Elimina</button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
+              <div className="flex gap-3 shrink-0">
+                <button type="button" className="text-indigo-300 hover:text-indigo-200" onClick={() => openEditEventoModal(e)}>
+                  Modifica
+                </button>
+                <button type="button" className="text-red-400 hover:text-red-300" onClick={() => staffDeletePilotEvento(e.id, onLogout).then(loadData)}>
+                  Elimina
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
       ) : null}
 
@@ -1412,6 +1468,176 @@ export default function PilotaggioManager({ onLogout }) {
           <div className="text-gray-400 text-sm">Runtime config non disponibile.</div>
         )}
       </section>
+      ) : null}
+
+      {editEventoId ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          role="presentation"
+          onClick={closeEditEventoModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pilot-edit-evento-title"
+            className="bg-gray-800 rounded-2xl w-full max-w-3xl max-h-[min(92vh,900px)] flex flex-col border border-indigo-500/40 shadow-2xl shadow-indigo-950/50"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="shrink-0 flex justify-between items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-700/90 bg-gray-800/95">
+              <div>
+                <h3 id="pilot-edit-evento-title" className="text-lg font-bold text-indigo-300">
+                  Modifica evento viaggio
+                </h3>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                  Testo per il pilota, regole ST/SP/CA, codici e collegamento a sottosistema. Salva per applicare al catalogo.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 px-3 py-1.5 rounded-lg text-sm text-gray-300 hover:bg-gray-700 border border-gray-600"
+                onClick={closeEditEventoModal}
+              >
+                Chiudi
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4 space-y-4 text-sm">
+              {error ? (
+                <div className="rounded-lg border border-red-700/50 bg-red-950/50 px-3 py-2 text-sm text-red-100">
+                  {error}
+                </div>
+              ) : null}
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Nome</span>
+                <input
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
+                  value={editEvento.nome}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, nome: ev.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Descrizione (pilota)</span>
+                <textarea
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none min-h-[88px] resize-y"
+                  value={editEvento.descrizione}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, descrizione: ev.target.value }))}
+                />
+              </label>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Durata tick</span>
+                  <input
+                    className={`mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border font-mono text-sm ${
+                      isValidDurataTickSpec(editEvento.durata_tick) ? 'border-gray-600' : 'border-red-500'
+                    } focus:border-indigo-500 outline-none`}
+                    value={editEvento.durata_tick ?? '4'}
+                    onChange={(ev) => {
+                      const next = ev.target.value.replace(/[^0-9-]/g, '');
+                      setEditEvento((p) => ({ ...p, durata_tick: next }));
+                    }}
+                    placeholder="N | A-B | -N | -"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    <code>N</code>, <code>A-B</code>, <code>-N</code>, <code>-</code>
+                  </p>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Countdown base (secondi)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
+                    value={editEvento.durata_base_secondi}
+                    onChange={(ev) => setEditEvento((p) => ({ ...p, durata_base_secondi: ev.target.value }))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Peso random</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
+                    value={editEvento.peso_random}
+                    onChange={(ev) => setEditEvento((p) => ({ ...p, peso_random: ev.target.value }))}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Codice ST (3 car.)</span>
+                  <input
+                    maxLength={3}
+                    className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none font-mono uppercase"
+                    value={editEvento.codice_soluzione_esatta ?? ''}
+                    onChange={(ev) =>
+                      setEditEvento((p) => ({
+                        ...p,
+                        codice_soluzione_esatta: ev.target.value.toUpperCase().replace(/[^A-Z0-9_()-]/g, '').slice(0, 3),
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sottosistema collegato</span>
+                <select
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
+                  value={editEvento.sottosistema || ''}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, sottosistema: ev.target.value }))}
+                >
+                  <option value="">Nessuno</option>
+                  {sottosistemi.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.nome} ({s.codice})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-600"
+                  checked={Boolean(editEvento.attivo)}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, attivo: ev.target.checked }))}
+                />
+                <span className="text-gray-300">Evento attivo nel pool random</span>
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regole avanzate (JSON)</span>
+                <textarea
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none min-h-[140px] font-mono text-xs leading-relaxed resize-y"
+                  value={editEvento.regole_json}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, regole_json: ev.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Codici soluzione parziale (array JSON)</span>
+                <textarea
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none min-h-[72px] font-mono text-xs resize-y"
+                  value={editEvento.codici_soluzione_parziale_json}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, codici_soluzione_parziale_json: ev.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Codici precipizio (array JSON)</span>
+                <textarea
+                  className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none min-h-[72px] font-mono text-xs resize-y"
+                  value={editEvento.codici_precipizio_json}
+                  onChange={(ev) => setEditEvento((p) => ({ ...p, codici_precipizio_json: ev.target.value }))}
+                />
+              </label>
+            </div>
+            <div className="shrink-0 flex flex-wrap justify-end gap-2 px-5 py-3 border-t border-gray-700 bg-gray-900/80">
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-700"
+                onClick={closeEditEventoModal}
+              >
+                Annulla
+              </button>
+              <button type="button" className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium" onClick={salvaEvento}>
+                Salva modifiche
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );
