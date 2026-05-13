@@ -617,6 +617,7 @@ EVENTO_ESITO_PARZIALE = "parziale"
 EVENTO_ESITO_FALLITO = "fallito"
 EVENTO_ESITO_TIMEOUT = "timeout"
 EVENTO_ESITO_PRECIPITAZIO = "precipizio"
+EVENTO_ESITO_GUASTO_CA = "guasto_ca"
 EVENTO_ESITO_CHOICES = [
     (EVENTO_ESITO_PENDING, "In attesa"),
     (EVENTO_ESITO_RISOLTO, "Risolto"),
@@ -624,6 +625,7 @@ EVENTO_ESITO_CHOICES = [
     (EVENTO_ESITO_FALLITO, "Fallito"),
     (EVENTO_ESITO_TIMEOUT, "Timeout"),
     (EVENTO_ESITO_PRECIPITAZIO, "Precipizio"),
+    (EVENTO_ESITO_GUASTO_CA, "CA: guasto sottosistema"),
 ]
 
 

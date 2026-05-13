@@ -25,6 +25,7 @@ from django.utils import timezone
 from .models import (
     DEFCON_MAX,
     EVENTO_ESITO_FALLITO,
+    EVENTO_ESITO_GUASTO_CA,
     EVENTO_ESITO_PARZIALE,
     EVENTO_ESITO_PRECIPITAZIO,
     EVENTO_ESITO_PENDING,
@@ -659,6 +660,58 @@ def _eval_expression(expr: dict, stati_by_key: dict, direzione_evento: str) -> b
     return _eval_leaf(expr, stati_by_key, direzione_evento)
 
 
+def _applica_esito_ca_da_regole(
+    sessione: SessioneVolo, istanza: EventoAttivoSessione, regole: dict
+) -> Tuple[str, int]:
+    """
+    Quando le regole valutano CA: default precipizio nave; opzionale guasto forzato
+    su un sottosistema (regole_json['ca_effetto']).
+    """
+    cfg = (regole or {}).get("ca_effetto") if isinstance(regole, dict) else None
+    tipo = str((cfg or {}).get("tipo") or "precipizio").strip().lower()
+
+    if tipo == "guasto_sottosistema":
+        sid = (cfg or {}).get("sottosistema_id")
+        scode = str((cfg or {}).get("sottosistema_codice") or "").strip().upper()[:1]
+        stato = None
+        if sid:
+            stato = (
+                StatoSottosistemaSessione.objects.select_related("sottosistema")
+                .filter(sessione=sessione, sottosistema_id=sid)
+                .first()
+            )
+        elif scode:
+            sdef = SottosistemaNave.objects.filter(codice=scode).first()
+            if sdef:
+                stato = (
+                    StatoSottosistemaSessione.objects.select_related("sottosistema")
+                    .filter(sessione=sessione, sottosistema_id=sdef.pk)
+                    .first()
+                )
+        if stato is None:
+            istanza.esito = EVENTO_ESITO_PRECIPITAZIO
+            istanza.risolto_at = timezone.now()
+            istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
+            return "ca", forza_precipizio(sessione, reason="ca_guasto_target_missing")
+
+        now = timezone.now()
+        stato.online = False
+        stato.guasto_at = now
+        stato.save(
+            update_fields=["online", "guasto_at", "recovery_at", "livello_target", "livello_attuale", "updated_at"]
+        )
+        applica_effetto_guasto(sessione, stato)
+        istanza.esito = EVENTO_ESITO_GUASTO_CA
+        istanza.risolto_at = now
+        istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
+        return "ca_guasto", sessione.defcon
+
+    istanza.esito = EVENTO_ESITO_PRECIPITAZIO
+    istanza.risolto_at = timezone.now()
+    istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
+    return "ca", forza_precipizio(sessione)
+
+
 def _valuta_evento_per_regole(sessione: SessioneVolo, istanza: EventoAttivoSessione) -> Tuple[str, int]:
     """
     Valuta ST/SP/CA a fine tick.
@@ -684,10 +737,7 @@ def _valuta_evento_per_regole(sessione: SessioneVolo, istanza: EventoAttivoSessi
         return any(_eval_group(g, stati_by_key, istanza.direzione_evento) for g in groups if isinstance(g, dict))
 
     if eval_outcome("ca"):
-        istanza.esito = EVENTO_ESITO_PRECIPITAZIO
-        istanza.risolto_at = timezone.now()
-        istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-        return "ca", forza_precipizio(sessione)
+        return _applica_esito_ca_da_regole(sessione, istanza, regole)
     if eval_outcome("st"):
         istanza.esito = EVENTO_ESITO_RISOLTO
         istanza.risolto_at = timezone.now()
@@ -765,10 +815,7 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
         )
 
     if eval_outcome("ca"):
-        istanza.esito = EVENTO_ESITO_PRECIPITAZIO
-        istanza.risolto_at = timezone.now()
-        istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-        return "ca", forza_precipizio(sessione)
+        return _applica_esito_ca_da_regole(sessione, istanza, regole)
 
     if eval_outcome("st"):
         istanza.esito = EVENTO_ESITO_RISOLTO

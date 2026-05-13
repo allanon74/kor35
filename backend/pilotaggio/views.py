@@ -67,16 +67,21 @@ from .models import (
 )
 from .permissions import IsPilotConsole, IsStaffUser
 from .serializers import (
+    ComandoCriticoGlobaleListSerializer,
     ComandoCriticoGlobaleSerializer,
     ComandoNaveSerializer,
     EventoAttivoSerializer,
+    EventoNaveListSerializer,
     EventoNaveSerializer,
+    IntensitaComandoListSerializer,
     IntensitaComandoSerializer,
     PilotConsoleTokenSerializer,
     PilotRuntimeConfigSerializer,
     SequenzaVoloSerializer,
     SessioneVoloSerializer,
+    SottosistemaNaveListSerializer,
     SottosistemaNaveSerializer,
+    StatoAllertaPilotListSerializer,
     StatoAllertaPilotPublicSerializer,
     StatoAllertaPilotSerializer,
     StatoSottosistemaRuntimeSerializer,
@@ -1181,8 +1186,12 @@ class StaffSottosistemaViewSet(viewsets.ModelViewSet):
     queryset = SottosistemaNave.objects.all().order_by(
         "ordine_gruppo", "gruppo", "ordine", "nome", "codice"
     )
-    serializer_class = SottosistemaNaveSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return SottosistemaNaveListSerializer
+        return SottosistemaNaveSerializer
 
     @action(detail=True, methods=["post"], url_path="associa-a-vista")
     def associa_a_vista(self, request, pk=None):
@@ -1261,20 +1270,32 @@ class StaffComandoCriticoGlobaleViewSet(viewsets.ModelViewSet):
     """Pattern globali: un codice valido che li matcha precipita la nave subito."""
 
     queryset = ComandoCriticoGlobale.objects.all().order_by("nome", "pattern")
-    serializer_class = ComandoCriticoGlobaleSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return ComandoCriticoGlobaleListSerializer
+        return ComandoCriticoGlobaleSerializer
 
 
 class StaffIntensitaViewSet(viewsets.ModelViewSet):
     queryset = IntensitaComando.objects.all().order_by("valore")
-    serializer_class = IntensitaComandoSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return IntensitaComandoListSerializer
+        return IntensitaComandoSerializer
 
 
 class StaffEventoViewSet(viewsets.ModelViewSet):
     queryset = EventoNave.objects.all().order_by("nome")
-    serializer_class = EventoNaveSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return EventoNaveListSerializer
+        return EventoNaveSerializer
 
 
 class StaffSequenzaViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1291,8 +1312,12 @@ class StaffStatoAllertaViewSet(viewsets.ModelViewSet):
     """CRUD livelli DEFCON 0..6 (colori, tempi, nave abbattuta)."""
 
     queryset = StatoAllertaPilot.objects.all().order_by("livello")
-    serializer_class = StatoAllertaPilotSerializer
     permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return StatoAllertaPilotListSerializer
+        return StatoAllertaPilotSerializer
 
 
 class StaffSessioneListView(generics.ListAPIView):

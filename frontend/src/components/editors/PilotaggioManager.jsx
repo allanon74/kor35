@@ -2,24 +2,25 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StaffQrTab from '../StaffQrTab';
 import {
   staffAssociaPilotSottosistemaQr,
-  staffCreatePilotComando,
   staffCreatePilotComandoCritico,
   staffCreatePilotEvento,
   staffCreatePilotIntensita,
   staffCreatePilotSottosistema,
-  staffDeletePilotComando,
   staffDeletePilotComandoCritico,
   staffDeletePilotEvento,
   staffDeletePilotIntensita,
   staffDeletePilotSottosistema,
-  staffGetPilotComandi,
   staffGetPilotComandiCritici,
   staffGetPilotEventi,
+  staffGetPilotComandoCritico,
+  staffGetPilotEvento,
   staffGetPilotIntensita,
+  staffGetPilotIntensitaById,
+  staffGetPilotSottosistema,
   staffGetPilotSottosistemi,
   staffGetPilotStatiAllerta,
+  staffGetPilotStatoAllerta,
   staffGetPilotRuntimeConfig,
-  staffUpdatePilotComando,
   staffUpdatePilotComandoCritico,
   staffUpdatePilotEvento,
   staffUpdatePilotIntensita,
@@ -30,13 +31,11 @@ import {
 
 const PILOT_TABS = [
   { id: 'sottosistemi', label: 'Sottosistemi' },
-  { id: 'comandi', label: 'Comandi' },
   { id: 'intensita', label: 'Intensità' },
   { id: 'eventi', label: 'Eventi' },
   { id: 'comandi_critici', label: 'Comandi critici (globali)' },
   { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
   { id: 'runtime', label: 'Runtime Console' },
-  { id: 'combinazioni', label: 'Combinazioni' },
 ];
 
 const defaultEvento = {
@@ -206,11 +205,64 @@ function isValidDurataTickSpec(value) {
   return /^(\d+|\d+-\d+|-\d+|-)$/.test(String(value || '').trim());
 }
 
+/** Ricostruisce il builder UI da `regole_json` (persistenza round-trip via _conditions / _expr). */
+function ruleBuilderFromRegoleJson(rj) {
+  const r = rj && typeof rj === 'object' ? rj : {};
+  const branch = (k) => ({
+    conditions: Array.isArray(r[k]?._conditions) ? r[k]._conditions : [],
+    expression:
+      typeof r[k]?._expr === 'string' && String(r[k]._expr).trim()
+        ? String(r[k]._expr).trim()
+        : DEFAULT_RULE_EXPR,
+  });
+  return { st: branch('st'), sp: branch('sp'), ca: branch('ca') };
+}
+
+/** Unisce ST/SP/CA (AST + metadati UI) e `ca_effetto` nel documento regole. */
+function mergeCaAndRulesIntoRegole(baseJson, rb, caTipo, caSottoId) {
+  const out =
+    baseJson && typeof baseJson === 'object' && !Array.isArray(baseJson) ? { ...baseJson } : {};
+  if (!out.version) out.version = 3;
+  const usesDirectional = ['st', 'sp', 'ca'].some((k) =>
+    (rb[k]?.conditions || []).some((c) => c.op === 'direction')
+  );
+  out.usa_direzione_evento = usesDirectional;
+  for (const k of ['st', 'sp', 'ca']) {
+    const ast = buildExpressionAst(rb[k].expression, rb[k].conditions);
+    if (!ast) {
+      return {
+        ok: false,
+        error: `Espressione ${k.toUpperCase()} non valida: controlla condizioni e formula (es. (1 AND 2) OR 3).`,
+        regole: null,
+      };
+    }
+    out[k] = {
+      ...(out[k] && typeof out[k] === 'object' && !Array.isArray(out[k]) ? out[k] : {}),
+      expression: ast,
+      _conditions: rb[k].conditions,
+      _expr: rb[k].expression,
+    };
+  }
+  if (caTipo === 'guasto_sottosistema') {
+    const sid = String(caSottoId || '').trim();
+    if (!sid) {
+      return {
+        ok: false,
+        error: 'Per effetto CA «guasto sottosistema» seleziona un sottosistema.',
+        regole: null,
+      };
+    }
+    out.ca_effetto = { tipo: 'guasto_sottosistema', sottosistema_id: sid };
+  } else {
+    out.ca_effetto = { tipo: 'precipizio' };
+  }
+  return { ok: true, error: '', regole: out };
+}
+
 export default function PilotaggioManager({ onLogout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sottosistemi, setSottosistemi] = useState([]);
-  const [comandi, setComandi] = useState([]);
   const [intensita, setIntensita] = useState([]);
   const [eventi, setEventi] = useState([]);
   const [comandiCritici, setComandiCritici] = useState([]);
@@ -224,8 +276,6 @@ export default function PilotaggioManager({ onLogout }) {
     ripristino_percent_per_livello_json: JSON.stringify(defaultCurveZero(), null, 2),
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
   });
-  const [nuovoComando, setNuovoComando] = useState({ codice: '', nome: '' });
-  const [nuovaIntensita, setNuovaIntensita] = useState({ valore: 0, nome: '' });
   const [nuovoEvento, setNuovoEvento] = useState(defaultEvento);
   const [nuovoCritico, setNuovoCritico] = useState({ pattern: '', nome: '', attivo: true });
   const [editSottoId, setEditSottoId] = useState(null);
@@ -239,10 +289,9 @@ export default function PilotaggioManager({ onLogout }) {
     ripristino_percent_per_livello_json: JSON.stringify(defaultCurveZero(), null, 2),
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
   });
-  const [editComandoId, setEditComandoId] = useState(null);
-  const [editComando, setEditComando] = useState({ codice: '', nome: '' });
-  const [editIntensitaId, setEditIntensitaId] = useState(null);
   const [editIntensita, setEditIntensita] = useState({ valore: 0, nome: '' });
+  const [editIntensitaId, setEditIntensitaId] = useState(null);
+  const [nuovaIntensita, setNuovaIntensita] = useState({ valore: 0, nome: '' });
   const [editEventoId, setEditEventoId] = useState(null);
   const [editEvento, setEditEvento] = useState(() => emptyEditEventoModal());
   const [editCriticoId, setEditCriticoId] = useState(null);
@@ -265,6 +314,15 @@ export default function PilotaggioManager({ onLogout }) {
   const [editStatoId, setEditStatoId] = useState(null);
   const [editStato, setEditStato] = useState({});
   const [runtimeConfig, setRuntimeConfig] = useState(null);
+  const [editCaEffettoTipo, setEditCaEffettoTipo] = useState('precipizio');
+  const [editCaEffettoSottosistemaId, setEditCaEffettoSottosistemaId] = useState('');
+  const [createCaEffettoTipo, setCreateCaEffettoTipo] = useState('precipizio');
+  const [createCaEffettoSottosistemaId, setCreateCaEffettoSottosistemaId] = useState('');
+  const [editRuleBuilder, setEditRuleBuilder] = useState({
+    st: { conditions: [], expression: DEFAULT_RULE_EXPR },
+    sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
+    ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
+  });
   const [ruleBuilder, setRuleBuilder] = useState({
     st: { conditions: [], expression: DEFAULT_RULE_EXPR },
     sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
@@ -278,6 +336,14 @@ export default function PilotaggioManager({ onLogout }) {
       ca: validateRuleExpression(ruleBuilder.ca.expression, ruleBuilder.ca.conditions),
     }),
     [ruleBuilder]
+  );
+  const editRuleValidation = useMemo(
+    () => ({
+      st: validateRuleExpression(editRuleBuilder.st.expression, editRuleBuilder.st.conditions),
+      sp: validateRuleExpression(editRuleBuilder.sp.expression, editRuleBuilder.sp.conditions),
+      ca: validateRuleExpression(editRuleBuilder.ca.expression, editRuleBuilder.ca.conditions),
+    }),
+    [editRuleBuilder]
   );
   const selectedConditionSubsystem = useMemo(
     () => sottosistemi.find((s) => s.codice === draftCondition.subsystem) || null,
@@ -311,9 +377,8 @@ export default function PilotaggioManager({ onLogout }) {
     setLoading(true);
     setError('');
     try {
-      const [s, c, i, e, crit, stati, runtime] = await Promise.all([
+      const [s, i, e, crit, stati, runtime] = await Promise.all([
         staffGetPilotSottosistemi(onLogout),
-        staffGetPilotComandi(onLogout),
         staffGetPilotIntensita(onLogout),
         staffGetPilotEventi(onLogout),
         staffGetPilotComandiCritici(onLogout).catch(() => []),
@@ -321,7 +386,6 @@ export default function PilotaggioManager({ onLogout }) {
         staffGetPilotRuntimeConfig(onLogout).catch(() => null),
       ]);
       setSottosistemi(Array.isArray(s) ? s : []);
-      setComandi(Array.isArray(c) ? c : []);
       setIntensita(Array.isArray(i) ? i : []);
       setEventi(Array.isArray(e) ? e : []);
       setComandiCritici(Array.isArray(crit) ? crit : []);
@@ -337,38 +401,6 @@ export default function PilotaggioManager({ onLogout }) {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  const listaCombinata = useMemo(() => {
-    const righe = [];
-    for (const s of sottosistemi) {
-      for (const i of intensita) {
-        for (const c of comandi) {
-          righe.push({
-            codice: `${s.codice}${c.codice}${i.valore}`,
-            sottosistema_codice: s.codice,
-            sottosistema_nome: s.nome,
-            comando_codice: c.codice,
-            comando_nome: c.nome,
-            intensita: i.valore,
-          });
-        }
-      }
-    }
-    return righe;
-  }, [sottosistemi, comandi, intensita]);
-
-  const listaSottosistemaNumeroComando = useMemo(() => {
-    const righe = [];
-    for (const s of sottosistemi) {
-      for (const i of intensita) {
-        righe.push({
-          chiave: `${s.codice}${i.valore}`,
-          comandi_disponibili: comandi.map((c) => `${c.codice}:${c.nome}`),
-        });
-      }
-    }
-    return righe;
-  }, [sottosistemi, comandi, intensita]);
 
   const addSottosistema = async () => {
     await staffCreatePilotSottosistema(
@@ -386,22 +418,22 @@ export default function PilotaggioManager({ onLogout }) {
         coeff_ricarica_storage: Number(nuovoSotto.coeff_ricarica_storage || 0),
         capacita_carburante: Number(nuovoSotto.capacita_carburante || 0),
         effetti_guasto_json: (() => {
-          try { return JSON.parse(nuovoSotto.effetti_guasto_json || '{}'); } catch (_) { return defaultEffettiGuasto(); }
+          try { return JSON.parse(nuovoSotto.effetti_guasto_json || '{}'); } catch { return defaultEffettiGuasto(); }
         })(),
         effetti_inversione_json: (() => {
-          try { return JSON.parse(nuovoSotto.effetti_inversione_json || '{}'); } catch (_) { return defaultEffettiComandoCritico(); }
+          try { return JSON.parse(nuovoSotto.effetti_inversione_json || '{}'); } catch { return defaultEffettiComandoCritico(); }
         })(),
         effetti_espulsione_json: (() => {
-          try { return JSON.parse(nuovoSotto.effetti_espulsione_json || '{}'); } catch (_) { return defaultEffettiComandoCritico(); }
+          try { return JSON.parse(nuovoSotto.effetti_espulsione_json || '{}'); } catch { return defaultEffettiComandoCritico(); }
         })(),
         guasto_percent_per_livello: (() => {
-          try { return JSON.parse(nuovoSotto.guasto_percent_per_livello_json || '{}'); } catch (_) { return defaultGuastoCurve(); }
+          try { return JSON.parse(nuovoSotto.guasto_percent_per_livello_json || '{}'); } catch { return defaultGuastoCurve(); }
         })(),
         ripristino_percent_per_livello: (() => {
-          try { return JSON.parse(nuovoSotto.ripristino_percent_per_livello_json || '{}'); } catch (_) { return defaultCurveZero(); }
+          try { return JSON.parse(nuovoSotto.ripristino_percent_per_livello_json || '{}'); } catch { return defaultCurveZero(); }
         })(),
         colori_per_livello: (() => {
-          try { return JSON.parse(nuovoSotto.colori_per_livello_json || '{}'); } catch (_) { return defaultColorCurve(); }
+          try { return JSON.parse(nuovoSotto.colori_per_livello_json || '{}'); } catch { return defaultColorCurve(); }
         })(),
       },
       onLogout
@@ -418,11 +450,7 @@ export default function PilotaggioManager({ onLogout }) {
     });
     loadData();
   };
-  const addComando = async () => {
-    await staffCreatePilotComando({ ...nuovoComando, codice: nuovoComando.codice.toUpperCase() }, onLogout);
-    setNuovoComando({ codice: '', nome: '' });
-    loadData();
-  };
+
   const addIntensita = async () => {
     await staffCreatePilotIntensita({ ...nuovaIntensita, valore: Number(nuovaIntensita.valore) }, onLogout);
     setNuovaIntensita({ valore: 0, nome: '' });
@@ -434,21 +462,34 @@ export default function PilotaggioManager({ onLogout }) {
       setError('Durata evento non valida. Usa: N, A-B, -N oppure -');
       return;
     }
+    let regoleObj;
+    try {
+      regoleObj = JSON.parse(nuovoEvento.regole_json || '{}');
+    } catch {
+      setError('JSON regole non valido.');
+      return;
+    }
+    const merged = mergeCaAndRulesIntoRegole(regoleObj, ruleBuilder, createCaEffettoTipo, createCaEffettoSottosistemaId);
+    if (!merged.ok) {
+      setError(merged.error);
+      return;
+    }
+    setError('');
     await staffCreatePilotEvento(
       {
         ...nuovoEvento,
         codice_soluzione_esatta: '___',
         codici_soluzione_parziale: [],
         codici_precipizio: [],
-        regole_json: (() => {
-          try { return JSON.parse(nuovoEvento.regole_json || '{}'); } catch (_) { return {}; }
-        })(),
+        regole_json: merged.regole,
         sottosistema: nuovoEvento.sottosistema || null,
         durata_tick: durataSpec,
       },
       onLogout
     );
     setNuovoEvento(defaultEvento);
+    setCreateCaEffettoTipo('precipizio');
+    setCreateCaEffettoSottosistemaId('');
     loadData();
   };
   const addComandoCritico = async () => {
@@ -493,22 +534,22 @@ export default function PilotaggioManager({ onLogout }) {
         coeff_ricarica_storage: Number(editSotto.coeff_ricarica_storage || 0),
         capacita_carburante: Number(editSotto.capacita_carburante || 0),
         effetti_guasto_json: (() => {
-          try { return JSON.parse(editSotto.effetti_guasto_json || '{}'); } catch (_) { return defaultEffettiGuasto(); }
+          try { return JSON.parse(editSotto.effetti_guasto_json || '{}'); } catch { return defaultEffettiGuasto(); }
         })(),
         effetti_inversione_json: (() => {
-          try { return JSON.parse(editSotto.effetti_inversione_json || '{}'); } catch (_) { return defaultEffettiComandoCritico(); }
+          try { return JSON.parse(editSotto.effetti_inversione_json || '{}'); } catch { return defaultEffettiComandoCritico(); }
         })(),
         effetti_espulsione_json: (() => {
-          try { return JSON.parse(editSotto.effetti_espulsione_json || '{}'); } catch (_) { return defaultEffettiComandoCritico(); }
+          try { return JSON.parse(editSotto.effetti_espulsione_json || '{}'); } catch { return defaultEffettiComandoCritico(); }
         })(),
         guasto_percent_per_livello: (() => {
-          try { return JSON.parse(editSotto.guasto_percent_per_livello_json || '{}'); } catch (_) { return defaultGuastoCurve(); }
+          try { return JSON.parse(editSotto.guasto_percent_per_livello_json || '{}'); } catch { return defaultGuastoCurve(); }
         })(),
         ripristino_percent_per_livello: (() => {
-          try { return JSON.parse(editSotto.ripristino_percent_per_livello_json || '{}'); } catch (_) { return defaultCurveZero(); }
+          try { return JSON.parse(editSotto.ripristino_percent_per_livello_json || '{}'); } catch { return defaultCurveZero(); }
         })(),
         colori_per_livello: (() => {
-          try { return JSON.parse(editSotto.colori_per_livello_json || '{}'); } catch (_) { return defaultColorCurve(); }
+          try { return JSON.parse(editSotto.colori_per_livello_json || '{}'); } catch { return defaultColorCurve(); }
         })(),
       },
       onLogout
@@ -516,11 +557,7 @@ export default function PilotaggioManager({ onLogout }) {
     setEditSottoId(null);
     loadData();
   };
-  const salvaComando = async () => {
-    await staffUpdatePilotComando(editComandoId, { codice: editComando.codice.toUpperCase(), nome: editComando.nome }, onLogout);
-    setEditComandoId(null);
-    loadData();
-  };
+
   const salvaIntensita = async () => {
     await staffUpdatePilotIntensita(editIntensitaId, { valore: Number(editIntensita.valore), nome: editIntensita.nome }, onLogout);
     setEditIntensitaId(null);
@@ -529,26 +566,59 @@ export default function PilotaggioManager({ onLogout }) {
   const closeEditEventoModal = useCallback(() => {
     setEditEventoId(null);
     setEditEvento(emptyEditEventoModal());
+    setEditRuleBuilder({
+      st: { conditions: [], expression: DEFAULT_RULE_EXPR },
+      sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
+      ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
+    });
+    setEditCaEffettoTipo('precipizio');
+    setEditCaEffettoSottosistemaId('');
     setError('');
   }, []);
 
-  const openEditEventoModal = useCallback((e) => {
-    setError('');
-    setEditEventoId(e.id);
-    setEditEvento({
-      nome: e.nome || '',
-      descrizione: e.descrizione ?? '',
-      codice_soluzione_esatta: e.codice_soluzione_esatta || '___',
-      codici_soluzione_parziale_json: JSON.stringify(e.codici_soluzione_parziale || [], null, 2),
-      codici_precipizio_json: JSON.stringify(e.codici_precipizio || [], null, 2),
-      regole_json: JSON.stringify(e.regole_json ?? { version: 3 }, null, 2),
-      durata_base_secondi: e.durata_base_secondi ?? 20,
-      durata_tick: e.durata_tick || '4',
-      peso_random: e.peso_random ?? 10,
-      sottosistema: e.sottosistema || '',
-      attivo: e.attivo !== false,
-    });
-  }, []);
+  const openEditEventoModal = useCallback(
+    async (row) => {
+      setError('');
+      try {
+        const e = await staffGetPilotEvento(row.id, onLogout);
+        let rj = e.regole_json;
+        if (typeof rj === 'string') {
+          try {
+            rj = JSON.parse(rj || '{}');
+          } catch {
+            rj = {};
+          }
+        }
+        if (!rj || typeof rj !== 'object') rj = {};
+        setEditRuleBuilder(ruleBuilderFromRegoleJson(rj));
+        const cae = rj.ca_effetto && typeof rj.ca_effetto === 'object' ? rj.ca_effetto : {};
+        if (cae.tipo === 'guasto_sottosistema') {
+          setEditCaEffettoTipo('guasto_sottosistema');
+          setEditCaEffettoSottosistemaId(String(cae.sottosistema_id || '').trim());
+        } else {
+          setEditCaEffettoTipo('precipizio');
+          setEditCaEffettoSottosistemaId('');
+        }
+        setEditEvento({
+          nome: e.nome || '',
+          descrizione: e.descrizione ?? '',
+          codice_soluzione_esatta: e.codice_soluzione_esatta || '___',
+          codici_soluzione_parziale_json: JSON.stringify(e.codici_soluzione_parziale || [], null, 2),
+          codici_precipizio_json: JSON.stringify(e.codici_precipizio || [], null, 2),
+          regole_json: JSON.stringify(rj && Object.keys(rj).length ? rj : { version: 3 }, null, 2),
+          durata_base_secondi: e.durata_base_secondi ?? 20,
+          durata_tick: e.durata_tick || '4',
+          peso_random: e.peso_random ?? 10,
+          sottosistema: e.sottosistema || '',
+          attivo: e.attivo !== false,
+        });
+        setEditEventoId(e.id);
+      } catch (err) {
+        setError(err?.message || 'Impossibile caricare il dettaglio evento.');
+      }
+    },
+    [onLogout]
+  );
 
   useEffect(() => {
     if (!editEventoId) return undefined;
@@ -576,6 +646,17 @@ export default function PilotaggioManager({ onLogout }) {
       setError('JSON «Regole avanzate» non valido.');
       return;
     }
+    const mergedRules = mergeCaAndRulesIntoRegole(
+      regole_json,
+      editRuleBuilder,
+      editCaEffettoTipo,
+      editCaEffettoSottosistemaId
+    );
+    if (!mergedRules.ok) {
+      setError(mergedRules.error);
+      return;
+    }
+    regole_json = mergedRules.regole;
     let codici_soluzione_parziale;
     let codici_precipizio;
     try {
@@ -641,8 +722,8 @@ export default function PilotaggioManager({ onLogout }) {
     target_codice: String(builder.target_codice || '').trim().toUpperCase(),
   }, null, 2);
 
-  const addRuleCondition = () => {
-    if (!draftCondition.subsystem) return;
+  const buildCondFromDraft = () => {
+    if (!draftCondition.subsystem) return null;
     const out = draftCondition.outcome;
     const cond = {
       sottosistema: draftCondition.subsystem,
@@ -653,12 +734,36 @@ export default function PilotaggioManager({ onLogout }) {
       cond.max = Number(draftCondition.max);
     } else if (draftCondition.op === 'direction') {
       cond.direction_rule = draftCondition.direction_rule;
-    } else if (['piene', 'vuote', 'non_piene', 'non_vuote', 'distrutte', 'invertito', 'non_invertito', 'espulso', 'non_espulso'].includes(draftCondition.op)) {
+    } else if (
+      ['piene', 'vuote', 'non_piene', 'non_vuote', 'distrutte', 'invertito', 'non_invertito', 'espulso', 'non_espulso'].includes(
+        draftCondition.op
+      )
+    ) {
       // Nessun parametro aggiuntivo per condizioni booleane su batteria/serbatoio.
     } else {
       cond.value = Number(draftCondition.value);
     }
+    return { out, cond };
+  };
+
+  const addRuleCondition = () => {
+    const pair = buildCondFromDraft();
+    if (!pair) return;
+    const { out, cond } = pair;
     setRuleBuilder((prev) => ({
+      ...prev,
+      [out]: {
+        ...prev[out],
+        conditions: [...prev[out].conditions, cond],
+      },
+    }));
+  };
+
+  const addEditRuleCondition = () => {
+    const pair = buildCondFromDraft();
+    if (!pair) return;
+    const { out, cond } = pair;
+    setEditRuleBuilder((prev) => ({
       ...prev,
       [out]: {
         ...prev[out],
@@ -677,23 +782,48 @@ export default function PilotaggioManager({ onLogout }) {
     }));
   };
 
+  const removeEditRuleCondition = (outcome, idx) => {
+    setEditRuleBuilder((prev) => ({
+      ...prev,
+      [outcome]: {
+        ...prev[outcome],
+        conditions: prev[outcome].conditions.filter((_, i) => i !== idx),
+      },
+    }));
+  };
+
   const generaJsonGuidaEvento = () => {
-    const usesDirectional = ['st', 'sp', 'ca'].some((k) => (ruleBuilder[k]?.conditions || []).some((c) => c.op === 'direction'));
-    const stExpr = buildExpressionAst(ruleBuilder.st.expression, ruleBuilder.st.conditions);
-    const spExpr = buildExpressionAst(ruleBuilder.sp.expression, ruleBuilder.sp.conditions);
-    const caExpr = buildExpressionAst(ruleBuilder.ca.expression, ruleBuilder.ca.conditions);
-    if (!stExpr || !spExpr || !caExpr) {
-      setError('Espressione non valida: usa indici condizione con AND/OR e parentesi, es. (1 AND 2) OR 3');
+    let base = {};
+    try {
+      base = JSON.parse(nuovoEvento.regole_json || '{}');
+    } catch {
+      setError('JSON regole esistente non valido: riparto da oggetto vuoto.');
+      base = { version: 3 };
+    }
+    const merged = mergeCaAndRulesIntoRegole(base, ruleBuilder, createCaEffettoTipo, createCaEffettoSottosistemaId);
+    if (!merged.ok) {
+      setError(merged.error);
       return;
     }
-    const rule = {
-      version: 3,
-      usa_direzione_evento: usesDirectional,
-      st: { expression: stExpr },
-      sp: { expression: spExpr },
-      ca: { expression: caExpr },
-    };
-    setNuovoEvento((p) => ({ ...p, regole_json: JSON.stringify(rule, null, 2) }));
+    setError('');
+    setNuovoEvento((p) => ({ ...p, regole_json: JSON.stringify(merged.regole, null, 2) }));
+  };
+
+  const generaJsonGuidaEventoEdit = () => {
+    let base = {};
+    try {
+      base = JSON.parse(editEvento.regole_json || '{}');
+    } catch {
+      setError('JSON regole non valido in modifica.');
+      return;
+    }
+    const merged = mergeCaAndRulesIntoRegole(base, editRuleBuilder, editCaEffettoTipo, editCaEffettoSottosistemaId);
+    if (!merged.ok) {
+      setError(merged.error);
+      return;
+    }
+    setError('');
+    setEditEvento((p) => ({ ...p, regole_json: JSON.stringify(merged.regole, null, 2) }));
   };
 
   const salvaRuntimeConfig = async () => {
@@ -989,35 +1119,41 @@ export default function PilotaggioManager({ onLogout }) {
                     <button
                       type="button"
                       className="text-indigo-300 text-sm"
-                      onClick={() => {
-                        setEditSottoId(s.id);
-                        setEditSotto({
-                          codice: s.codice || '',
-                          nome: s.nome || '',
-                          gruppo: s.gruppo || '',
-                          ordine_gruppo: s.ordine_gruppo ?? 0,
-                          ordine: s.ordine ?? 0,
-                          tipo: s.tipo || 'standard',
-                          coeff_produzione: s.coeff_produzione ?? 0,
-                          coeff_consumo_energia: s.coeff_consumo_energia ?? 1,
-                          coeff_consumo_carburante: s.coeff_consumo_carburante ?? 0,
-                          coeff_effetto_speciale: s.coeff_effetto_speciale ?? 1,
-                          rampa_livelli_per_tick: s.rampa_livelli_per_tick ?? 1,
-                          capacita_storage: s.capacita_storage ?? 0,
-                          coeff_ricarica_storage: s.coeff_ricarica_storage ?? 0.5,
-                          capacita_carburante: s.capacita_carburante ?? 0,
-                          effetti_guasto_json: JSON.stringify(s.effetti_guasto_json || defaultEffettiGuasto(), null, 2),
-                          effetti_inversione_json: JSON.stringify(s.effetti_inversione_json || defaultEffettiComandoCritico(), null, 2),
-                          effetti_espulsione_json: JSON.stringify(s.effetti_espulsione_json || defaultEffettiComandoCritico(), null, 2),
-                          guasto_percent_per_livello_json: JSON.stringify(s.guasto_percent_per_livello || defaultGuastoCurve(), null, 2),
-                          ripristino_percent_per_livello_json: JSON.stringify(s.ripristino_percent_per_livello || defaultCurveZero(), null, 2),
-                          colori_per_livello_json: JSON.stringify(s.colori_per_livello || defaultColorCurve(), null, 2),
-                        });
-                      setEditEffettoGuastoBuilder({
-                        tipo: String((s.effetti_guasto_json || {}).tipo || 'none'),
-                        valore: Number((s.effetti_guasto_json || {}).valore || 0),
-                        target_codice: String((s.effetti_guasto_json || {}).target_codice || ''),
-                      });
+                      onClick={async () => {
+                        setError('');
+                        try {
+                          const full = await staffGetPilotSottosistema(s.id, onLogout);
+                          setEditSottoId(full.id);
+                          setEditSotto({
+                            codice: full.codice || '',
+                            nome: full.nome || '',
+                            gruppo: full.gruppo || '',
+                            ordine_gruppo: full.ordine_gruppo ?? 0,
+                            ordine: full.ordine ?? 0,
+                            tipo: full.tipo || 'standard',
+                            coeff_produzione: full.coeff_produzione ?? 0,
+                            coeff_consumo_energia: full.coeff_consumo_energia ?? 1,
+                            coeff_consumo_carburante: full.coeff_consumo_carburante ?? 0,
+                            coeff_effetto_speciale: full.coeff_effetto_speciale ?? 1,
+                            rampa_livelli_per_tick: full.rampa_livelli_per_tick ?? 1,
+                            capacita_storage: full.capacita_storage ?? 0,
+                            coeff_ricarica_storage: full.coeff_ricarica_storage ?? 0.5,
+                            capacita_carburante: full.capacita_carburante ?? 0,
+                            effetti_guasto_json: JSON.stringify(full.effetti_guasto_json || defaultEffettiGuasto(), null, 2),
+                            effetti_inversione_json: JSON.stringify(full.effetti_inversione_json || defaultEffettiComandoCritico(), null, 2),
+                            effetti_espulsione_json: JSON.stringify(full.effetti_espulsione_json || defaultEffettiComandoCritico(), null, 2),
+                            guasto_percent_per_livello_json: JSON.stringify(full.guasto_percent_per_livello || defaultGuastoCurve(), null, 2),
+                            ripristino_percent_per_livello_json: JSON.stringify(full.ripristino_percent_per_livello || defaultCurveZero(), null, 2),
+                            colori_per_livello_json: JSON.stringify(full.colori_per_livello || defaultColorCurve(), null, 2),
+                          });
+                          setEditEffettoGuastoBuilder({
+                            tipo: String((full.effetti_guasto_json || {}).tipo || 'none'),
+                            valore: Number((full.effetti_guasto_json || {}).valore || 0),
+                            target_codice: String((full.effetti_guasto_json || {}).target_codice || ''),
+                          });
+                        } catch (err) {
+                          setError(err?.message || 'Impossibile caricare il sottosistema.');
+                        }
                       }}
                     >
                       Modifica parametri
@@ -1069,37 +1205,6 @@ export default function PilotaggioManager({ onLogout }) {
         </div>
       ) : null}
 
-      {activeTab === 'comandi' ? (
-      <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
-        <h3 className="font-semibold mb-3">Comandi (2° carattere)</h3>
-        <div className="flex gap-2 mb-3">
-          <input className="bg-gray-800 rounded px-2 py-1 w-16" maxLength={1} value={nuovoComando.codice} onChange={(e) => setNuovoComando((p) => ({ ...p, codice: e.target.value }))} placeholder="B" />
-          <input className="bg-gray-800 rounded px-2 py-1 flex-1" value={nuovoComando.nome} onChange={(e) => setNuovoComando((p) => ({ ...p, nome: e.target.value }))} placeholder="Nome comando" />
-          <button className="px-3 py-1 rounded bg-indigo-600" onClick={addComando}>Aggiungi</button>
-        </div>
-        {comandi.map((c) => (
-          <div key={c.id} className="flex items-center justify-between bg-gray-800/60 rounded px-2 py-1 text-sm mb-1">
-            {editComandoId === c.id ? (
-              <div className="flex gap-2 w-full">
-                <input className="bg-gray-700 rounded px-2 py-1 w-16" maxLength={1} value={editComando.codice} onChange={(e) => setEditComando((p) => ({ ...p, codice: e.target.value }))} />
-                <input className="bg-gray-700 rounded px-2 py-1 flex-1" value={editComando.nome} onChange={(e) => setEditComando((p) => ({ ...p, nome: e.target.value }))} />
-                <button className="text-emerald-400" onClick={salvaComando}>Salva</button>
-                <button className="text-gray-300" onClick={() => setEditComandoId(null)}>Annulla</button>
-              </div>
-            ) : (
-              <>
-                <span>{c.codice} - {c.nome}</span>
-                <div className="flex gap-3">
-                  <button className="text-indigo-300" onClick={() => { setEditComandoId(c.id); setEditComando({ codice: c.codice || '', nome: c.nome || '' }); }}>Modifica</button>
-                  <button className="text-red-400" onClick={() => staffDeletePilotComando(c.id, onLogout).then(loadData)}>Elimina</button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-      </section>
-      ) : null}
-
       {activeTab === 'intensita' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-3">Intensità (3° carattere numerico)</h3>
@@ -1121,7 +1226,22 @@ export default function PilotaggioManager({ onLogout }) {
               <>
                 <span>{i.valore} - {i.nome || `Intensità ${i.valore}`}</span>
                 <div className="flex gap-3">
-                  <button className="text-indigo-300" onClick={() => { setEditIntensitaId(i.id); setEditIntensita({ valore: i.valore ?? 0, nome: i.nome || '' }); }}>Modifica</button>
+                  <button
+                    className="text-indigo-300"
+                    type="button"
+                    onClick={async () => {
+                      setError('');
+                      try {
+                        const row = await staffGetPilotIntensitaById(i.id, onLogout);
+                        setEditIntensitaId(row.id);
+                        setEditIntensita({ valore: row.valore ?? 0, nome: row.nome || '' });
+                      } catch (err) {
+                        setError(err?.message || 'Impossibile caricare intensità.');
+                      }
+                    }}
+                  >
+                    Modifica
+                  </button>
                   <button className="text-red-400" onClick={() => staffDeletePilotIntensita(i.id, onLogout).then(loadData)}>Elimina</button>
                 </div>
               </>
@@ -1186,7 +1306,26 @@ export default function PilotaggioManager({ onLogout }) {
               <div className="space-y-1 text-xs">
                 {(ruleBuilder[k].conditions || []).map((c, idx) => (
                   <div key={`${k}-${idx}`} className="bg-gray-800 rounded px-2 py-1 flex justify-between gap-2">
-                    <span>{idx + 1}) {c.sottosistema} {c.op} {c.value ?? `${c.min}-${c.max}` ?? c.direction_rule}</span>
+                    <span>
+                      {idx + 1}) {c.sottosistema} {c.op}{' '}
+                      {c.op === 'between' ? `${c.min}-${c.max}` : ''}
+                      {c.op === 'direction' ? c.direction_rule : ''}
+                      {![
+                        'between',
+                        'direction',
+                        'piene',
+                        'vuote',
+                        'non_piene',
+                        'non_vuote',
+                        'distrutte',
+                        'invertito',
+                        'non_invertito',
+                        'espulso',
+                        'non_espulso',
+                      ].includes(c.op)
+                        ? c.value
+                        : ''}
+                    </span>
                     <button className="text-red-400" onClick={() => removeRuleCondition(k, idx)}>x</button>
                   </div>
                 ))}
@@ -1209,6 +1348,42 @@ export default function PilotaggioManager({ onLogout }) {
           <p className="text-xs text-gray-400 md:col-span-2">
             Durata evento: <code>N</code>=esatto, <code>A-B</code>=random tra estremi, <code>-N</code>=persiste ma se non arriva ST entro N tick la nave precipita, <code>-</code>=persiste finche non arriva ST.
           </p>
+          <div className="md:col-span-2 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 space-y-2">
+            <div className="text-xs font-semibold text-amber-200/90">Effetto esito CA (quando scatta la ramo CA)</div>
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              Di default il CA precipita la nave. Puoi invece applicare un guasto mirato a un sottosistema (il motore di gioco usa <code className="text-gray-300">ca_effetto</code> nel JSON regole).
+            </p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <label className="block min-w-[10rem]">
+                <span className="text-xs text-gray-400">Tipo effetto CA</span>
+                <select
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 w-full"
+                  value={createCaEffettoTipo}
+                  onChange={(e) => setCreateCaEffettoTipo(e.target.value)}
+                >
+                  <option value="precipizio">Precipizio nave</option>
+                  <option value="guasto_sottosistema">Guasto sottosistema</option>
+                </select>
+              </label>
+              {createCaEffettoTipo === 'guasto_sottosistema' ? (
+                <label className="block flex-1 min-w-[12rem]">
+                  <span className="text-xs text-gray-400">Sottosistema in guasto</span>
+                  <select
+                    className="bg-gray-800 rounded px-2 py-1 mt-1 w-full"
+                    value={createCaEffettoSottosistemaId}
+                    onChange={(e) => setCreateCaEffettoSottosistemaId(e.target.value)}
+                  >
+                    <option value="">Seleziona…</option>
+                    {sottosistemi.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome} ({s.codice})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          </div>
           <textarea className="bg-gray-800 rounded px-2 py-1 md:col-span-2 min-h-32 font-mono text-xs" placeholder="JSON regole avanzate (modificabile)" value={nuovoEvento.regole_json} onChange={(e) => setNuovoEvento((p) => ({ ...p, regole_json: e.target.value }))} />
           <button className="px-3 py-1 rounded bg-indigo-600 md:col-span-2" onClick={addEvento}>Aggiungi evento</button>
         </div>
@@ -1292,13 +1467,19 @@ export default function PilotaggioManager({ onLogout }) {
                     <button
                       type="button"
                       className="text-indigo-300"
-                      onClick={() => {
-                        setEditCriticoId(row.id);
-                        setEditCritico({
-                          pattern: row.pattern || '',
-                          nome: row.nome || '',
-                          attivo: row.attivo ?? true,
-                        });
+                      onClick={async () => {
+                        setError('');
+                        try {
+                          const full = await staffGetPilotComandoCritico(row.id, onLogout);
+                          setEditCriticoId(full.id);
+                          setEditCritico({
+                            pattern: full.pattern || '',
+                            nome: full.nome || '',
+                            attivo: full.attivo ?? true,
+                          });
+                        } catch (err) {
+                          setError(err?.message || 'Impossibile caricare il comando critico.');
+                        }
                       }}
                     >
                       Modifica
@@ -1379,17 +1560,23 @@ export default function PilotaggioManager({ onLogout }) {
                   <button
                     type="button"
                     className="text-indigo-300 shrink-0 self-start md:self-center"
-                    onClick={() => {
-                      setEditStatoId(st.id);
-                      setEditStato({
-                        nome: st.nome || '',
-                        colore: st.colore || '#888888',
-                        frequenza_evento_min_sec: st.frequenza_evento_min_sec ?? 60,
-                        frequenza_evento_max_sec: st.frequenza_evento_max_sec ?? 90,
-                        tempo_risoluzione_secondi: st.tempo_risoluzione_secondi ?? 20,
-                        probabilita_evento_per_tick: st.probabilita_evento_per_tick ?? 0,
-                        equivale_nave_abbattuta: Boolean(st.equivale_nave_abbattuta),
-                      });
+                    onClick={async () => {
+                      setError('');
+                      try {
+                        const full = await staffGetPilotStatoAllerta(st.id, onLogout);
+                        setEditStatoId(full.id);
+                        setEditStato({
+                          nome: full.nome || '',
+                          colore: full.colore || '#888888',
+                          frequenza_evento_min_sec: full.frequenza_evento_min_sec ?? 60,
+                          frequenza_evento_max_sec: full.frequenza_evento_max_sec ?? 90,
+                          tempo_risoluzione_secondi: full.tempo_risoluzione_secondi ?? 20,
+                          probabilita_evento_per_tick: full.probabilita_evento_per_tick ?? 0,
+                          equivale_nave_abbattuta: Boolean(full.equivale_nave_abbattuta),
+                        });
+                      } catch (err) {
+                        setError(err?.message || 'Impossibile caricare lo stato allerta.');
+                      }
                     }}
                   >
                     Modifica
@@ -1401,28 +1588,6 @@ export default function PilotaggioManager({ onLogout }) {
           {!statiAllerta.length ? (
             <p className="text-gray-400 text-sm">Nessuno stato caricato. Esegui le migrazioni (<code className="text-xs">0005_statoallertapilot</code>).</p>
           ) : null}
-        </div>
-      </section>
-      ) : null}
-
-      {activeTab === 'combinazioni' ? (
-      <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
-        <h3 className="font-semibold mb-3">Lista richiesta: sottosistema = carattere + numero = comando</h3>
-        <div className="max-h-48 overflow-y-auto space-y-1 text-xs mb-4">
-          {listaSottosistemaNumeroComando.map((r) => (
-            <div key={r.chiave} className="bg-gray-800/60 rounded px-2 py-1">
-              {r.chiave} = {r.comandi_disponibili.join(' | ')}
-            </div>
-          ))}
-        </div>
-        <h4 className="font-semibold mb-2 text-sm text-gray-300">Dettaglio combinazioni complete (3 caratteri)</h4>
-        <div className="max-h-96 overflow-y-auto space-y-1 text-xs">
-          {listaCombinata.map((r, idx) => (
-            <div key={`${r.codice}-${idx}`} className="bg-gray-800/60 rounded px-2 py-1">
-              {r.codice}: {r.sottosistema_codice}={r.sottosistema_nome} + {r.comando_codice}={r.comando_nome} + {r.intensita}
-            </div>
-          ))}
-          {!listaCombinata.length ? <div className="text-gray-400">Nessuna combinazione disponibile.</div> : null}
         </div>
       </section>
       ) : null}
@@ -1480,7 +1645,7 @@ export default function PilotaggioManager({ onLogout }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="pilot-edit-evento-title"
-            className="bg-gray-800 rounded-2xl w-full max-w-3xl max-h-[min(92vh,900px)] flex flex-col border border-indigo-500/40 shadow-2xl shadow-indigo-950/50"
+            className="bg-gray-800 rounded-2xl w-full max-w-5xl max-h-[min(92vh,900px)] flex flex-col border border-indigo-500/40 shadow-2xl shadow-indigo-950/50"
             onClick={(ev) => ev.stopPropagation()}
           >
             <div className="shrink-0 flex justify-between items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-700/90 bg-gray-800/95">
@@ -1599,6 +1764,144 @@ export default function PilotaggioManager({ onLogout }) {
                 />
                 <span className="text-gray-300">Evento attivo nel pool random</span>
               </label>
+
+              <div className="rounded-xl border border-indigo-900/40 p-4 space-y-3 bg-gray-900/50">
+                <div className="text-xs font-semibold text-indigo-200/90 uppercase tracking-wide">Composer condizioni ST / SP / CA</div>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Le condizioni e le formule qui sotto aggiornano il campo JSON «Regole avanzate» (anche <code className="text-gray-400">ca_effetto</code>) al salvataggio; usa «Aggiorna JSON da builder» per vedere l&apos;anteprima nel textarea.
+                </p>
+                <div className="grid md:grid-cols-7 gap-2 border border-gray-700 rounded-lg p-2">
+                  <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.outcome} onChange={(ev) => setDraftCondition((p) => ({ ...p, outcome: ev.target.value }))}>
+                    <option value="st">ST (migliora)</option>
+                    <option value="sp">SP (stabile)</option>
+                    <option value="ca">CA</option>
+                  </select>
+                  <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.subsystem} onChange={(ev) => setDraftCondition((p) => ({ ...p, subsystem: ev.target.value }))}>
+                    <option value="">Sottosistema…</option>
+                    {sottosistemi.map((ss) => (
+                      <option key={ss.id} value={ss.codice}>
+                        {ss.nome} ({ss.codice})
+                      </option>
+                    ))}
+                  </select>
+                  <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.op} onChange={(ev) => setDraftCondition((p) => ({ ...p, op: ev.target.value }))}>
+                    {conditionOps.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  {draftCondition.op === 'between' ? (
+                    <>
+                      <input type="number" min={0} max={9} className="bg-gray-900 rounded px-2 py-1" value={draftCondition.min} onChange={(ev) => setDraftCondition((p) => ({ ...p, min: ev.target.value }))} placeholder="min" />
+                      <input type="number" min={0} max={9} className="bg-gray-900 rounded px-2 py-1" value={draftCondition.max} onChange={(ev) => setDraftCondition((p) => ({ ...p, max: ev.target.value }))} placeholder="max" />
+                    </>
+                  ) : draftCondition.op === 'direction' ? (
+                    <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.direction_rule} onChange={(ev) => setDraftCondition((p) => ({ ...p, direction_rule: ev.target.value }))}>
+                      <option value="stessa_direzione">stessa_direzione</option>
+                      <option value="direzione_opposta">direzione_opposta</option>
+                      <option value="non_stessa_direzione">non_stessa_direzione</option>
+                      <option value="non_direzione_opposta">non_direzione_opposta</option>
+                    </select>
+                  ) : ['piene', 'vuote', 'non_piene', 'non_vuote', 'distrutte', 'invertito', 'non_invertito', 'espulso', 'non_espulso'].includes(draftCondition.op) ? (
+                    <div className="bg-gray-900 rounded px-2 py-1 text-xs text-gray-300">Condizione booleana</div>
+                  ) : (
+                    <input type="number" min={0} max={9} className="bg-gray-900 rounded px-2 py-1" value={draftCondition.value} onChange={(ev) => setDraftCondition((p) => ({ ...p, value: ev.target.value }))} placeholder="val" />
+                  )}
+                  <button type="button" className="px-3 py-1 rounded bg-indigo-700 text-sm" onClick={addEditRuleCondition}>
+                    Aggiungi
+                  </button>
+                  <button type="button" className="px-3 py-1 rounded bg-sky-700 text-sm" onClick={generaJsonGuidaEventoEdit}>
+                    Aggiorna JSON
+                  </button>
+                </div>
+                <div className="grid md:grid-cols-3 gap-2">
+                  {['st', 'sp', 'ca'].map((k) => (
+                    <div key={`edit-${k}`} className="border border-gray-700 rounded-lg p-2 bg-gray-950/40">
+                      <div className="flex justify-between items-center mb-2">
+                        <strong>{k.toUpperCase()}</strong>
+                        <span className="text-[11px] text-gray-500">Formula con parentesi</span>
+                      </div>
+                      <input
+                        className="bg-gray-900 rounded px-2 py-1 text-xs w-full mb-2 font-mono border border-gray-700"
+                        placeholder="(1 AND 2) OR 3"
+                        value={editRuleBuilder[k].expression || ''}
+                        onChange={(ev) => setEditRuleBuilder((p) => ({ ...p, [k]: { ...p[k], expression: ev.target.value } }))}
+                      />
+                      <div className={`text-[11px] mb-2 ${editRuleValidation[k].valid ? 'text-emerald-300' : 'text-amber-300'}`}>
+                        {editRuleValidation[k].valid ? 'OK' : 'Errore'}: {editRuleValidation[k].message}
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        {(editRuleBuilder[k].conditions || []).map((c, idx) => (
+                          <div key={`${k}-edit-${idx}`} className="bg-gray-900 rounded px-2 py-1 flex justify-between gap-2">
+                            <span>
+                              {idx + 1}) {c.sottosistema} {c.op}{' '}
+                              {c.op === 'between' ? `${c.min}-${c.max}` : ''}
+                              {c.op === 'direction' ? c.direction_rule : ''}
+                              {![
+                                'between',
+                                'direction',
+                                'piene',
+                                'vuote',
+                                'non_piene',
+                                'non_vuote',
+                                'distrutte',
+                                'invertito',
+                                'non_invertito',
+                                'espulso',
+                                'non_espulso',
+                              ].includes(c.op)
+                                ? c.value
+                                : ''}
+                            </span>
+                            <button type="button" className="text-red-400 shrink-0" onClick={() => removeEditRuleCondition(k, idx)}>
+                              x
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 space-y-2">
+                <div className="text-xs font-semibold text-amber-200/90">Effetto esito CA</div>
+                <p className="text-[11px] text-gray-400 leading-relaxed">
+                  Di default il CA precipita la nave. In alternativa puoi forzare il guasto di un sottosistema specifico (campo <code className="text-gray-300">ca_effetto</code> nel JSON).
+                </p>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <label className="block min-w-[10rem]">
+                    <span className="text-xs text-gray-400">Tipo effetto CA</span>
+                    <select
+                      className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
+                      value={editCaEffettoTipo}
+                      onChange={(ev) => setEditCaEffettoTipo(ev.target.value)}
+                    >
+                      <option value="precipizio">Precipizio nave</option>
+                      <option value="guasto_sottosistema">Guasto sottosistema</option>
+                    </select>
+                  </label>
+                  {editCaEffettoTipo === 'guasto_sottosistema' ? (
+                    <label className="block flex-1 min-w-[12rem]">
+                      <span className="text-xs text-gray-400">Sottosistema in guasto</span>
+                      <select
+                        className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
+                        value={editCaEffettoSottosistemaId}
+                        onChange={(ev) => setEditCaEffettoSottosistemaId(ev.target.value)}
+                      >
+                        <option value="">Seleziona…</option>
+                        {sottosistemi.map((ss) => (
+                          <option key={ss.id} value={ss.id}>
+                            {ss.nome} ({ss.codice})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+
               <label className="block">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regole avanzate (JSON)</span>
                 <textarea

@@ -80,6 +80,24 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
         return "pronto" if qr else "incompleto"
 
 
+class SottosistemaNaveListSerializer(serializers.ModelSerializer):
+    """Elenco leggero staff (liste tab)."""
+
+    class Meta:
+        model = SottosistemaNave
+        fields = [
+            "id",
+            "codice",
+            "nome",
+            "gruppo",
+            "ordine_gruppo",
+            "ordine",
+            "tipo",
+            "attivo",
+        ]
+        read_only_fields = fields
+
+
 class ComandoCriticoGlobaleSerializer(serializers.ModelSerializer):
     class Meta:
         model = ComandoCriticoGlobale
@@ -99,6 +117,57 @@ class IntensitaComandoSerializer(serializers.ModelSerializer):
         model = IntensitaComando
         fields = ["id", "valore", "nome", "descrizione", "attivo"]
         read_only_fields = ["id"]
+
+
+class IntensitaComandoListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IntensitaComando
+        fields = ["id", "valore", "nome", "attivo"]
+        read_only_fields = fields
+
+
+class EventoNaveListSerializer(serializers.ModelSerializer):
+    sottosistema_codice = serializers.CharField(
+        source="sottosistema.codice", read_only=True, default=None
+    )
+
+    class Meta:
+        model = EventoNave
+        fields = [
+            "id",
+            "nome",
+            "attivo",
+            "codice_soluzione_esatta",
+            "durata_tick",
+            "peso_random",
+            "sottosistema",
+            "sottosistema_codice",
+        ]
+        read_only_fields = fields
+
+
+class ComandoCriticoGlobaleListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComandoCriticoGlobale
+        fields = ["id", "pattern", "nome", "attivo"]
+        read_only_fields = fields
+
+
+class StatoAllertaPilotListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StatoAllertaPilot
+        fields = [
+            "id",
+            "livello",
+            "nome",
+            "colore",
+            "frequenza_evento_min_sec",
+            "frequenza_evento_max_sec",
+            "tempo_risoluzione_secondi",
+            "probabilita_evento_per_tick",
+            "equivale_nave_abbattuta",
+        ]
+        read_only_fields = fields
 
 
 class EventoNaveSerializer(serializers.ModelSerializer):
