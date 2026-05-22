@@ -376,6 +376,95 @@ make down ENV=dev-home
 make cleanup-legacy
 ```
 
+### Allineamento FK statistiche aure da AMA (`copia_stat_aura_da_ama`)
+
+Management command: `personaggi/management/commands/copia_stat_aura_da_ama.py`
+
+**Scopo:** copia da un'aura template verso tutte le altre aure (`tipo=AU`) i valori delle FK verso `Statistica` usate per costi, tempi, durate e numeri di consumabili.
+
+**Sorgente (vincolante):** sigla **`AMA`** (case-insensitive). Deve esistere una sola aura con quella sigla; altrimenti il comando termina con errore.
+
+**Campi copiati** (tutti i `ForeignKey` su `Punteggio`/`Aura` con questi prefissi):
+
+| Prefisso | Esempi |
+|----------|--------|
+| `stat_costo_*` | creazione/acquisto infusione e tessitura, forgiatura, cerimoniali, consumabili, … |
+| `stat_tempo_*` | `stat_tempo_forgiatura`, `stat_tempo_creazione_consumabili`, … |
+| `stat_durata_*` | `stat_durata_consumabili` |
+| `stat_numero_*` | `stat_numero_consumabili` |
+
+**Opzioni:**
+
+- senza flag → **dry-run** (anteprima, transazione con rollback);
+- `--apply` → salva sul DB;
+- `--sorgente-sigla` (default `AMA`) → altra aura template;
+- `--sorgente-pk` (opzionale) → verifica aggiuntiva del PK della sorgente.
+
+**Prerequisiti:** stack avviato (`make status ENV=…`); codice del comando presente nel container (dopo deploy: `make restart-be` o `make deploy-be`).
+
+#### dev-home
+
+Root repo locale (es. `/home/django/progetti/kor35`):
+
+```bash
+cd /home/django/progetti/kor35
+
+# Anteprima
+cd config/docker && \
+  KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.dev-home" \
+  docker compose -f compose.base.yml -f compose.dev-home.yml exec -T backend \
+  python manage.py copia_stat_aura_da_ama
+
+# Applica
+cd config/docker && \
+  KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.dev-home" \
+  docker compose -f compose.base.yml -f compose.dev-home.yml exec -T backend \
+  python manage.py copia_stat_aura_da_ama --apply
+```
+
+Equivalente con variabile `ENV` (stesso schema del `Makefile`):
+
+```bash
+ENV=dev-home
+cd config/docker && \
+  KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.${ENV}" \
+  docker compose -f compose.base.yml -f compose.${ENV}.yml exec -T backend \
+  python manage.py copia_stat_aura_da_ama --apply
+```
+
+#### prod
+
+Root deploy (es. `/srv/kor35`). Su prod è obbligatorio `COMPOSE_PROJECT_NAME=kor35-prod` (come negli altri target `make` con `ENV=prod`).
+
+```bash
+cd /srv/kor35
+
+# Backup consigliato prima di modificare dati
+make backup-db ENV=prod
+
+# Anteprima
+cd config/docker && \
+  COMPOSE_PROJECT_NAME=kor35-prod \
+  KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.prod" \
+  docker compose -f compose.base.yml -f compose.prod.yml exec -T backend \
+  python manage.py copia_stat_aura_da_ama
+
+# Applica
+cd config/docker && \
+  COMPOSE_PROJECT_NAME=kor35-prod \
+  KOR35_BACKEND_ENV_FILE="$(pwd)/../../backend/.env.prod" \
+  docker compose -f compose.base.yml -f compose.prod.yml exec -T backend \
+  python manage.py copia_stat_aura_da_ama --apply
+```
+
+Verifica opzionale PK sorgente (es. se AMA ha ancora `pk=4`):
+
+```bash
+python manage.py copia_stat_aura_da_ama --apply --sorgente-pk 4
+```
+
+(aggiungere il prefisso `docker compose exec …` come negli esempi sopra.)
+
 ### Troubleshooting frontend `:8080` (connection reset / ERR_EMPTY_RESPONSE)
 
 Sintomo: browser su `http://127.0.0.1:8080/` → connection reset; `curl` idem; `docker ps` mostra `kor35_devhome_frontend` `Up`.
