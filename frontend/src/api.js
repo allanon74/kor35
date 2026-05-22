@@ -2847,6 +2847,15 @@ export const getConfigurazioneSito = () => {
   return fetchPublic('/api/plot/api/public/configurazione-sito/1/');
 };
 
+export const getStaffDashboardLayout = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/dashboard-layout/', { method: 'GET' }, onLogout);
+
+export const updateStaffDashboardLayout = (layout, onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/dashboard-layout/', {
+    method: 'PATCH',
+    body: JSON.stringify({ staff_dashboard_layout: layout }),
+  }, onLogout);
+
 export const getAdminMaintenanceConfig = (onLogout) => {
   return fetchAuthenticated('/api/plot/api/admin/maintenance-config/', { method: 'GET' }, onLogout);
 };

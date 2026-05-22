@@ -557,6 +557,8 @@ class ConfigurazioneSitoSerializer(serializers.ModelSerializer):
     """
     Serializer per la configurazione del sito
     """
+    staff_dashboard_layout = serializers.SerializerMethodField()
+
     class Meta:
         model = ConfigurazioneSito
         fields = [
@@ -565,9 +567,29 @@ class ConfigurazioneSitoSerializer(serializers.ModelSerializer):
             'email', 'pec', 'telefono',
             'maintenance_mode', 'maintenance_public_message', 'maintenance_admin_note',
             'creazione_guidata_aperta_giocatori',
+            'staff_dashboard_layout',
             'ultima_modifica'
         ]
-        read_only_fields = ['id', 'ultima_modifica']
+        read_only_fields = ['id', 'ultima_modifica', 'staff_dashboard_layout']
+
+    def get_staff_dashboard_layout(self, obj):
+        from .staff_dashboard_layout import effective_staff_dashboard_layout
+        return effective_staff_dashboard_layout(obj.staff_dashboard_layout)
+
+
+class StaffDashboardLayoutSerializer(serializers.Serializer):
+    """Solo aggiornamento layout menu staff (Head Master / superuser)."""
+
+    staff_dashboard_layout = serializers.JSONField()
+
+    def validate_staff_dashboard_layout(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from .staff_dashboard_layout import validate_staff_dashboard_layout
+
+        try:
+            return validate_staff_dashboard_layout(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
 
 
 class LinkSocialSerializer(serializers.ModelSerializer):

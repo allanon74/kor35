@@ -915,6 +915,12 @@ class ConfigurazioneSito(SyncableModel, models.Model):
         verbose_name='Creazione guidata visibile ai giocatori',
         help_text='Se disattivo, il pulsante creazione guidata non compare per i giocatori (staff/master possono ancora usare la sandbox test).',
     )
+    staff_dashboard_layout = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Layout Dashboard Staff",
+        help_text="Ordine e raggruppamento voci menu Dashboard Staff (globale, sincronizzato).",
+    )
 
     # Metadata
     ultima_modifica = models.DateTimeField(auto_now=True)

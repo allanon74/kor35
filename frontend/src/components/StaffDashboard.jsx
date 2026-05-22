@@ -1,26 +1,28 @@
-import React, { useState, useMemo, useCallback, memo, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useCallback, memo, lazy, Suspense, useEffect } from 'react';
 import GenericHeader from './GenericHeader';
 import Sidebar from './Sidebar';
-import { socialGetNotifications, generateWikiManualPdfSnapshot, getWikiManualLatestPdfUrl } from '../api';
+import { socialGetNotifications, generateWikiManualPdfSnapshot, getWikiManualLatestPdfUrl, getStaffDashboardLayout } from '../api';
+import StaffDashboardLayoutEditor from './StaffDashboardLayoutEditor';
 import { useCharacter } from './CharacterContext';
-import { 
-    Map, Scroll, FlaskConical, Gavel, 
-    Feather, Shield, MessageSquare, Users, 
-    LayoutGrid, LogOut, ClipboardCheck,
-    Skull, BookOpen, Menu, ChevronRight, Globe, // Aggiunto Globe
-    Layers, Globe2, Image, Package, QrCode, Sparkles, Gem,
-    BookText, Navigation,
+import {
+    LayoutGrid, LogOut, Menu, ChevronRight, ChevronDown, Globe, Users, BookOpen, Sparkles, LayoutList,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BuildVersions from './BuildVersions';
 import MaintenanceModePanel from './MaintenanceModePanel';
+import {
+    buildVisibleStaffTools,
+    DEFAULT_STAFF_DASHBOARD_LAYOUT,
+} from '../staff/staffToolsRegistry';
+import {
+    applyStaffDashboardLayout,
+    buildStaffSidebarItems,
+} from '../staff/staffDashboardLayout';
 
-// Import diretto di PlotTab per debug
 import PlotTab from './PlotTab';
-import QrDebugTab from './QrDebugTab'; // Import diretto anche per QrDebugTab
-import TabellaManager from './editors/TabellaManager'; // Import diretto per evitare chunk mancante
+import QrDebugTab from './QrDebugTab';
+import TabellaManager from './editors/TabellaManager';
 
-// Lazy loading dei componenti per migliorare le performance iniziali
 const AdminMessageTab = lazy(() => import('./AdminMessageTab'));
 const CerimonialeManager = lazy(() => import('./editors/CerimonialeManager'));
 const InfusioneManager = lazy(() => import('./editors/InfusioneManager'));
@@ -45,7 +47,38 @@ const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
 const PilotaggioManager = lazy(() => import('./editors/PilotaggioManager'));
 const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuidataStaffManager'));
 
-// Loading component
+const STAFF_COMPONENT_MAP = {
+    plot: PlotTab,
+    'qr-debug': QrDebugTab,
+    tabelle: TabellaManager,
+    mostri: MostroManager,
+    abilita: AbilitaManager,
+    cerimoniali: CerimonialeManager,
+    tessiture: TessituraManager,
+    infusioni: InfusioneManager,
+    proposte: StaffProposalTab,
+    oggetti: OggettoManager,
+    'oggetti-base': OggettoBaseManager,
+    immagini: ImmagineManager,
+    inventari: InventarioManager,
+    manifesti: ManifestoManager,
+    nodi: NodoManager,
+    'innesco-timer': InnescoTimerManager,
+    pilotaggio: PilotaggioManager,
+    'effetti-casuali': EffettiCasualiManager,
+    'social-report': SocialEventReportTab,
+    'risorse-pool': StaffRisorsaPoolTab,
+    'ere-prefetture': EraManager,
+    'creazione-guidata': CreazioneGuidataStaffManager,
+    'dichiarazioni-glossario': DichiarazioniGlossarioManager,
+    'arcana-profiles': ArcanaProfilesTab,
+    campagne: CampaignManager,
+    maintenance: MaintenanceModePanel,
+    messaggi: AdminMessageTab,
+};
+
+const DIRECT_LOAD_TOOLS = new Set(['plot', 'qr-debug']);
+
 const LoadingSpinner = () => (
     <div className="h-full flex items-center justify-center bg-gray-900">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
@@ -53,18 +86,52 @@ const LoadingSpinner = () => (
 );
 
 const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onToolChange }) => {
-    const [activeTool, setActiveTool] = useState(initialTool); 
+    const [activeTool, setActiveTool] = useState(initialTool);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [socialUnreadCount, setSocialUnreadCount] = useState(0);
     const [pdfGenerating, setPdfGenerating] = useState(false);
     const [pdfGenMessage, setPdfGenMessage] = useState('');
-    const { selectedCharacterId, isGlobalSuperuser, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster } = useCharacter();
+    const [dashboardLayout, setDashboardLayout] = useState(DEFAULT_STAFF_DASHBOARD_LAYOUT);
+    const [expandedGroups, setExpandedGroups] = useState({});
+    const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
+    const {
+        selectedCharacterId,
+        isGlobalSuperuser,
+        isCampaignStaffer,
+        isCampaignMaster,
+        isCampaignHeadMaster,
+    } = useCharacter();
 
-    React.useEffect(() => {
+    const roleFlags = useMemo(() => ({
+        isGlobalSuperuser,
+        isCampaignStaffer,
+        isCampaignMaster,
+        isCampaignHeadMaster,
+    }), [isGlobalSuperuser, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster]);
+
+    const canEditDashboardLayout = isCampaignHeadMaster || isGlobalSuperuser;
+
+    useEffect(() => {
         setActiveTool(initialTool);
     }, [initialTool]);
 
-    React.useEffect(() => {
+    useEffect(() => {
+        let cancelled = false;
+        const loadLayout = async () => {
+            try {
+                const data = await getStaffDashboardLayout(onLogout);
+                if (!cancelled && data?.staff_dashboard_layout) {
+                    setDashboardLayout(data.staff_dashboard_layout);
+                }
+            } catch (e) {
+                console.warn('Layout dashboard staff non disponibile, uso default.', e);
+            }
+        };
+        loadLayout();
+        return () => { cancelled = true; };
+    }, [onLogout]);
+
+    useEffect(() => {
         let interval;
         if (!selectedCharacterId) {
             setSocialUnreadCount(0);
@@ -89,61 +156,25 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         return () => clearInterval(interval);
     }, [selectedCharacterId, onLogout]);
 
-    // Configurazione dei Tools disponibili (Memoized)
-    const toolsConfig = useMemo(() => [
-        { id: 'plot', label: 'Gestione Plot', icon: <Map size={24} />, color: 'bg-indigo-600', component: PlotTab },
-        { id: 'qr-debug', label: 'QR Debug', icon: <QrCode size={24} />, color: 'bg-yellow-600', component: QrDebugTab },
-        { id: 'mostri', label: 'Database Mostri', icon: <Skull size={24} />, color: 'bg-red-700', component: MostroManager }, 
-        { id: 'abilita', label: 'Database Abilità', icon: <BookOpen size={24} />, color: 'bg-blue-700', component: AbilitaManager },
-        { id: 'cerimoniali', label: 'Cerimoniali', icon: <Scroll size={24} />, color: 'bg-amber-700', component: CerimonialeManager },
-        { id: 'tessiture', label: 'Tessiture', icon: <Feather size={24} />, color: 'bg-cyan-700', component: TessituraManager },
-        { id: 'infusioni', label: 'Infusioni', icon: <FlaskConical size={24} />, color: 'bg-purple-700', component: InfusioneManager },
-        { id: 'proposte', label: 'Valutazione Proposte', icon: <ClipboardCheck size={24} />, color: 'bg-orange-600', component: StaffProposalTab },
-        { id: 'oggetti', label: 'Database Oggetti', icon: <Gavel size={24} />, color: 'bg-stone-600', component: OggettoManager },
-        { id: 'oggetti-base', label: 'Oggetti Base', icon: <Shield size={24} />, color: 'bg-stone-800', component: OggettoBaseManager },
-        { id: 'tabelle', label: 'Gestione Tabelle', icon: <Layers size={24} />, color: 'bg-pink-700', component: TabellaManager },
-        { id: 'immagini', label: 'Immagini Wiki', icon: <Image size={24} />, color: 'bg-teal-700', component: ImmagineManager },
-        { id: 'inventari', label: 'Inventari', icon: <Package size={24} />, color: 'bg-slate-700', component: InventarioManager },
-        { id: 'manifesti', label: 'Manifesti (QR)', icon: <BookText size={24} />, color: 'bg-amber-900', component: ManifestoManager },
-        { id: 'nodi', label: 'Nodi (QR)', icon: <Sparkles size={24} />, color: 'bg-cyan-900', component: NodoManager },
-        { id: 'innesco-timer', label: 'Innesco timer (QR)', icon: <Sparkles size={24} />, color: 'bg-orange-900', component: InnescoTimerManager },
-        { id: 'pilotaggio', label: 'Console Pilotaggio', icon: <Navigation size={24} />, color: 'bg-sky-700', component: PilotaggioManager },
-        { id: 'effetti-casuali', label: 'Effetti Casuali', icon: <Sparkles size={24} />, color: 'bg-amber-700', component: EffettiCasualiManager },
-        { id: 'social-report', label: 'Report Social Eventi', icon: <Sparkles size={24} />, color: 'bg-fuchsia-700', component: SocialEventReportTab },
-        { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: <Gem size={24} />, color: 'bg-amber-800', component: StaffRisorsaPoolTab },
-        { id: 'ere-prefetture', label: 'Ere e Prefetture', icon: <Globe2 size={24} />, color: 'bg-violet-700', component: EraManager },
-        { id: 'creazione-guidata', label: 'Creazione guidata PG', icon: <Sparkles size={24} />, color: 'bg-violet-900', component: CreazioneGuidataStaffManager },
-        { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e Glossario', icon: <BookText size={24} />, color: 'bg-emerald-700', component: DichiarazioniGlossarioManager },
-        { id: 'arcana-profiles', label: 'Profili Arcana SSO', icon: <Shield size={24} />, color: 'bg-indigo-800', component: ArcanaProfilesTab },
-        { id: 'campagne', label: 'Campagne', icon: <Globe2 size={24} />, color: 'bg-emerald-800', component: CampaignManager },
-        { id: 'maintenance', label: 'Maintenance Mode', icon: <Shield size={24} />, color: 'bg-amber-700', component: MaintenanceModePanel },
-        { id: 'messaggi', label: 'Messaggi Staff', icon: <MessageSquare size={24} />, color: 'bg-emerald-600', component: AdminMessageTab },        
-    ], []);
+    const visibleTools = useMemo(
+        () => buildVisibleStaffTools(roleFlags, STAFF_COMPONENT_MAP),
+        [roleFlags],
+    );
 
-    const visibleTools = useMemo(() => {
-        // Admin globale senza ruolo campagna: solo strumenti globali.
-        if (isGlobalSuperuser && !isCampaignStaffer) {
-            return toolsConfig.filter((t) => ['arcana-profiles', 'campagne', 'maintenance'].includes(t.id));
+    const menuStructure = useMemo(
+        () => applyStaffDashboardLayout(visibleTools, dashboardLayout),
+        [visibleTools, dashboardLayout],
+    );
+
+    useEffect(() => {
+        const initial = {};
+        for (const section of menuStructure.sections) {
+            if (section.tools.length > 1) {
+                initial[section.id] = !section.collapsed_default;
+            }
         }
-
-        // Staffer: solo Messaggi Staff + Plot.
-        if (isCampaignStaffer && !isCampaignMaster && !isCampaignHeadMaster) {
-            return toolsConfig.filter((t) => ['messaggi', 'plot'].includes(t.id));
-        }
-
-        // Master: tutte le schede eccetto Campagne e Arcana SSO.
-        if (isCampaignMaster && !isCampaignHeadMaster && !isGlobalSuperuser) {
-            return toolsConfig.filter((t) => !['campagne', 'arcana-profiles', 'maintenance'].includes(t.id));
-        }
-
-        // Head Master: tutte tranne Arcana SSO.
-        if (isCampaignHeadMaster && !isGlobalSuperuser) {
-            return toolsConfig.filter((t) => !['arcana-profiles', 'maintenance'].includes(t.id));
-        }
-
-        // Superuser con ruolo campagna o fallback: tutto.
-        return toolsConfig;
-    }, [toolsConfig, isGlobalSuperuser, isCampaignStaffer, isCampaignMaster, isCampaignHeadMaster]);
+        setExpandedGroups(initial);
+    }, [menuStructure.sections]);
 
     const handleToolSelect = useCallback((id) => {
         setActiveTool(id);
@@ -151,42 +182,39 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         setIsMenuOpen(false);
     }, [onToolChange]);
 
-    // Configurazione unificata degli elementi della sidebar (Memoized)
-    const sidebarItems = useMemo(() => [
-        { label: 'Master Hub', icon: <LayoutGrid size={18}/>, active: activeTool === 'home', action: () => handleToolSelect('home') },
-        ...visibleTools.map(t => ({
-            label: t.label,
-            icon: React.cloneElement(t.icon, { size: 18 }),
-            active: activeTool === t.id,
-            action: () => handleToolSelect(t.id)
-        })),
-        { label: '----------------', icon: null, action: () => {} },
-        // Aggiunto Wiki come elemento della lista, ma con proprietà 'link'
-        { label: 'Wiki Pubblica', icon: <Globe size={18}/>, link: '/', active: false },
-        {
-            label: 'Vai al Social',
-            icon: <Sparkles size={18}/>,
-            link: '/app/social',
-            active: false,
-            badgeCount: socialUnreadCount,
+    const sidebarItems = useMemo(() => buildStaffSidebarItems({
+        activeTool,
+        menuStructure,
+        handleToolSelect,
+        onSwitchToPlayer,
+        socialUnreadCount,
+        hubIcon: <LayoutGrid size={18} />,
+        shortcutIcons: {
+            globe: <Globe size={18} />,
+            sparkles: <Sparkles size={18} />,
+            users: <Users size={18} />,
         },
-        { label: 'Vai a Personaggi', icon: <Users size={18}/>, action: onSwitchToPlayer, active: false }
-    ], [activeTool, visibleTools, handleToolSelect, onSwitchToPlayer, socialUnreadCount]);
+    }), [activeTool, menuStructure, handleToolSelect, onSwitchToPlayer, socialUnreadCount]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (activeTool === 'home') return;
         const stillVisible = visibleTools.some((t) => t.id === activeTool);
         if (!stillVisible) setActiveTool('home');
     }, [activeTool, visibleTools]);
 
-    // Funzione helper per renderizzare un singolo item della sidebar (Memoized)
     const renderSidebarItem = useCallback((item, idx) => {
-        if (item.label.includes('---')) return <div key={idx} className="h-px bg-gray-900 my-2 mx-4"></div>;
-        
+        if (item.label.includes('---')) {
+            return <div key={idx} className="h-px bg-gray-900 my-2 mx-4" />;
+        }
+
+        const hasSubItems = item.subItems && item.subItems.length > 0;
+        const groupKey = item.groupId || item.label;
+        const isExpanded = expandedGroups[groupKey] ?? !item.collapsed_default;
+
         const baseClasses = `w-full flex items-center justify-between p-3 rounded-xl font-bold transition-all group ${
-            item.active 
-            ? 'bg-indigo-600 text-white shadow-lg' 
-            : 'text-gray-400 hover:bg-gray-900 hover:text-white'
+            item.active
+                ? 'bg-indigo-600 text-white shadow-lg'
+                : 'text-gray-400 hover:bg-gray-900 hover:text-white'
         }`;
 
         const content = (
@@ -203,7 +231,11 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                             {item.badgeCount}
                         </span>
                     )}
-                    {item.active && <ChevronRight size={14} className="opacity-50"/>}
+                    {hasSubItems ? (
+                        isExpanded ? <ChevronDown size={14} className="opacity-50" /> : <ChevronRight size={14} className="opacity-50" />
+                    ) : (
+                        item.active && <ChevronRight size={14} className="opacity-50" />
+                    )}
                 </div>
             </>
         );
@@ -216,12 +248,42 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
             );
         }
 
+        if (hasSubItems) {
+            return (
+                <div key={idx} className="flex flex-col">
+                    <button
+                        type="button"
+                        onClick={() => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !isExpanded }))}
+                        className={baseClasses}
+                    >
+                        {content}
+                    </button>
+                    {isExpanded && (
+                        <div className="ml-4 pl-3 border-l-2 border-gray-800 mt-1 space-y-1 mb-2">
+                            {item.subItems.map((sub, sIdx) => (
+                                <button
+                                    key={sIdx}
+                                    type="button"
+                                    onClick={sub.action}
+                                    className={`w-full text-left p-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${
+                                        sub.active ? 'text-indigo-300 bg-indigo-500/10' : 'text-gray-500 hover:text-gray-300'
+                                    }`}
+                                >
+                                    {sub.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
         return (
-            <button key={idx} onClick={item.action} className={baseClasses}>
-            {content}
-        </button>
-    );
-}, []);
+            <button key={idx} type="button" onClick={item.action} className={baseClasses}>
+                {content}
+            </button>
+        );
+    }, [expandedGroups]);
 
     const handleGenerateWikiPdf = useCallback(async () => {
         setPdfGenerating(true);
@@ -237,24 +299,25 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         }
     }, [onLogout]);
 
+    const activeToolMeta = visibleTools.find((t) => t.id === activeTool);
+
     return (
         <div className="flex h-screen bg-gray-950 text-white overflow-hidden font-sans">
-            
-            {/* === SIDEBAR DESKTOP (Fissa a sinistra, solo desktop) === */}
+
             <aside className="hidden md:flex flex-col w-72 bg-gray-950 border-r border-gray-800 shadow-2xl z-20">
                 <div className="p-6 border-b border-gray-900 flex items-center gap-3">
-                     <div className="bg-indigo-600 p-1.5 rounded-lg shadow-lg shadow-indigo-900/50">
-                        <LayoutGrid size={20} className="text-white"/>
-                     </div>
-                     <span className="font-black text-indigo-400 italic tracking-widest uppercase text-sm">MENU MASTER</span>
+                    <div className="bg-indigo-600 p-1.5 rounded-lg shadow-lg shadow-indigo-900/50">
+                        <LayoutGrid size={20} className="text-white" />
+                    </div>
+                    <span className="font-black text-indigo-400 italic tracking-widest uppercase text-sm">MENU MASTER</span>
                 </div>
-                
+
                 <nav className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
                     {sidebarItems.map((item, idx) => renderSidebarItem(item, idx))}
                 </nav>
 
                 <div className="p-4 border-t border-gray-900 bg-gray-950">
-                    <button onClick={onLogout} className="w-full flex items-center gap-3 p-3 rounded-xl font-bold text-red-500 hover:bg-red-500/10 transition-all mb-2">
+                    <button type="button" onClick={onLogout} className="w-full flex items-center gap-3 p-3 rounded-xl font-bold text-red-500 hover:bg-red-500/10 transition-all mb-2">
                         <LogOut size={18} /><span className="text-xs uppercase tracking-wide">Logout</span>
                     </button>
                     <div className="text-center">
@@ -263,32 +326,28 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                 </div>
             </aside>
 
-            {/* === SIDEBAR MOBILE (Overlay a DESTRA) === */}
-            <Sidebar 
-                isOpen={isMenuOpen} 
-                onClose={() => setIsMenuOpen(false)} 
+            <Sidebar
+                isOpen={isMenuOpen}
+                onClose={() => setIsMenuOpen(false)}
                 title="Menu Master"
-                items={sidebarItems} 
-                onLogout={onLogout} 
+                items={sidebarItems}
+                onLogout={onLogout}
             />
 
-            {/* === CONTENUTO PRINCIPALE === */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-gray-900">
-                <GenericHeader 
+                <GenericHeader
                     title="KOR 35"
-                    subtitle={activeTool === 'home' ? "Dashboard" : visibleTools.find(t => t.id === activeTool)?.label}
+                    subtitle={activeTool === 'home' ? 'Dashboard' : activeToolMeta?.label}
                     rightSlot={
                         <div className="flex items-center gap-2">
-                            {/* Tasto Home Rapido */}
                             {activeTool !== 'home' && (
-                                <button onClick={() => handleToolSelect('home')} className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-400 transition-colors" title="Dashboard">
-                                    <LayoutGrid size={20}/>
+                                <button type="button" onClick={() => handleToolSelect('home')} className="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-gray-400 transition-colors" title="Dashboard">
+                                    <LayoutGrid size={20} />
                                 </button>
                             )}
-                            
-                            {/* Hamburger Menu (Visibile SOLO su Mobile, apre sidebar a destra) */}
-                            <button 
-                                onClick={() => setIsMenuOpen(true)} 
+                            <button
+                                type="button"
+                                onClick={() => setIsMenuOpen(true)}
                                 className="md:hidden p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-indigo-400 transition-colors"
                             >
                                 <Menu size={24} />
@@ -300,11 +359,26 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                 <main className="flex-1 overflow-y-auto overflow-x-hidden relative p-0 custom-scrollbar">
                     {activeTool === 'home' && (
                         <div className="min-h-full p-6 animate-fadeIn">
-                            <h2 className="text-2xl font-black text-gray-700 uppercase italic mb-6 tracking-widest text-center md:text-left">Strumenti Staff</h2>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                                <h2 className="text-2xl font-black text-gray-700 uppercase italic tracking-widest text-center sm:text-left">
+                                    Strumenti Staff
+                                </h2>
+                                {canEditDashboardLayout && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setLayoutEditorOpen(true)}
+                                        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-700 hover:bg-violet-600 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-violet-900/30 transition-colors"
+                                    >
+                                        <LayoutList size={18} />
+                                        Organizza menu staff
+                                    </button>
+                                )}
+                            </div>
                             <div className="mb-6 p-4 rounded-xl border border-indigo-500/30 bg-gray-900/70">
                                 <h3 className="text-sm font-black uppercase tracking-wider text-indigo-300 mb-3">Manuale Wiki PDF</h3>
                                 <div className="flex flex-col md:flex-row md:items-center gap-3">
                                     <button
+                                        type="button"
                                         onClick={handleGenerateWikiPdf}
                                         disabled={pdfGenerating}
                                         className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${pdfGenerating ? 'bg-gray-700 text-gray-300 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
@@ -324,54 +398,90 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                                     <p className="mt-2 text-xs text-gray-300">{pdfGenMessage}</p>
                                 )}
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                                {visibleTools.map(tool => (
-                                    <button 
-                                        key={tool.id}
-                                        onClick={() => setActiveTool(tool.id)}
-                                        className={`${tool.color} p-6 rounded-2xl shadow-xl hover:scale-[1.02] hover:shadow-2xl transition-all duration-200 flex flex-col items-center justify-center gap-4 aspect-square border-t border-white/10 group relative overflow-hidden active:scale-95`}
+
+                            {menuStructure.pinned.length > 0 && (
+                                <section className="mb-8">
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3">Accesso rapido</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                        {menuStructure.pinned.map((tool) => (
+                                            <button
+                                                key={tool.id}
+                                                type="button"
+                                                onClick={() => handleToolSelect(tool.id)}
+                                                className={`${tool.color} p-6 rounded-2xl shadow-xl hover:scale-[1.02] hover:shadow-2xl transition-all duration-200 flex flex-col items-center justify-center gap-4 aspect-square border-t border-white/10 group relative overflow-hidden active:scale-95`}
+                                            >
+                                                <div className="absolute inset-0 bg-linear-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                                <div className="text-white drop-shadow-md transform group-hover:-translate-y-1 transition-transform duration-300 z-10">
+                                                    {React.createElement(tool.icon, { size: 40 })}
+                                                </div>
+                                                <span className="font-black text-white uppercase tracking-wider text-xs text-center z-10">{tool.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
+
+                            {menuStructure.sections.map((section) => (
+                                <section key={section.id} className="mb-8">
+                                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3 flex items-center gap-2">
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${section.tools[0]?.color || 'bg-slate-600'}`} />
+                                        <section.icon size={14} className="text-gray-600" />
+                                        {section.label}
+                                    </h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                        {section.tools.map((tool) => (
+                                            <button
+                                                key={tool.id}
+                                                type="button"
+                                                onClick={() => handleToolSelect(tool.id)}
+                                                className={`${tool.color} p-6 rounded-2xl shadow-xl hover:scale-[1.02] hover:shadow-2xl transition-all duration-200 flex flex-col items-center justify-center gap-4 aspect-square border-t border-white/10 group relative overflow-hidden active:scale-95`}
+                                            >
+                                                <div className="absolute inset-0 bg-linear-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                                <div className="text-white drop-shadow-md transform group-hover:-translate-y-1 transition-transform duration-300 z-10">
+                                                    {React.createElement(tool.icon, { size: 40 })}
+                                                </div>
+                                                <span className="font-black text-white uppercase tracking-wider text-xs text-center z-10">{tool.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </section>
+                            ))}
+
+                            <section className="mb-4">
+                                <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-3">Collegamenti</h3>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={onSwitchToPlayer}
+                                        className="bg-gray-800 border-2 border-dashed border-gray-700 p-6 rounded-2xl hover:bg-gray-750 hover:border-gray-500 transition-all flex flex-col items-center justify-center gap-4 aspect-square group"
                                     >
-                                        <div className="absolute inset-0 bg-linear-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"/>
-                                        <div className="text-white drop-shadow-md transform group-hover:-translate-y-1 transition-transform duration-300 z-10">
-                                            {React.cloneElement(tool.icon, { size: 40 })}
-                                        </div>
-                                        <span className="font-black text-white uppercase tracking-wider text-xs text-center z-10">{tool.label}</span>
+                                        <Users size={40} className="text-gray-600 group-hover:text-gray-300 transition-colors" />
+                                        <span className="font-bold text-gray-500 group-hover:text-white uppercase tracking-wider text-xs text-center">Vai a Personaggi</span>
                                     </button>
-                                ))}
-                                
-                                <button 
-                                    onClick={onSwitchToPlayer}
-                                    className="bg-gray-800 border-2 border-dashed border-gray-700 p-6 rounded-2xl hover:bg-gray-750 hover:border-gray-500 transition-all flex flex-col items-center justify-center gap-4 aspect-square group"
-                                >
-                                    <Users size={40} className="text-gray-600 group-hover:text-gray-300 transition-colors" />
-                                    <span className="font-bold text-gray-500 group-hover:text-white uppercase tracking-wider text-xs text-center">Vai a Personaggi</span>
-                                </button>
-
-                                <Link 
-                                    to="/" 
-                                    className="bg-gray-800 border-2 border-dashed border-gray-700 p-6 rounded-2xl hover:bg-gray-750 hover:border-gray-500 transition-all flex flex-col items-center justify-center gap-4 aspect-square group"
-                                >
-                                    <BookOpen size={40} className="text-gray-600 group-hover:text-gray-300 transition-colors" />
-                                    <span className="font-bold text-gray-500 group-hover:text-white uppercase tracking-wider text-xs text-center">Vai alla Wiki</span>
-                                </Link>
-
-                                <Link 
-                                    to="/app/social" 
-                                    className="bg-gray-800 border-2 border-dashed border-gray-700 p-6 rounded-2xl hover:bg-gray-750 hover:border-gray-500 transition-all flex flex-col items-center justify-center gap-4 aspect-square group"
-                                >
-                                    <Sparkles size={40} className="text-gray-600 group-hover:text-pink-300 transition-colors" />
-                                    <span className="font-bold text-gray-500 group-hover:text-white uppercase tracking-wider text-xs text-center">Apri InstaFame</span>
-                                </Link>
-                            </div>
+                                    <Link
+                                        to="/"
+                                        className="bg-gray-800 border-2 border-dashed border-gray-700 p-6 rounded-2xl hover:bg-gray-750 hover:border-gray-500 transition-all flex flex-col items-center justify-center gap-4 aspect-square group"
+                                    >
+                                        <BookOpen size={40} className="text-gray-600 group-hover:text-gray-300 transition-colors" />
+                                        <span className="font-bold text-gray-500 group-hover:text-white uppercase tracking-wider text-xs text-center">Vai alla Wiki</span>
+                                    </Link>
+                                    <Link
+                                        to="/app/social"
+                                        className="bg-gray-800 border-2 border-dashed border-gray-700 p-6 rounded-2xl hover:bg-gray-750 hover:border-gray-500 transition-all flex flex-col items-center justify-center gap-4 aspect-square group"
+                                    >
+                                        <Sparkles size={40} className="text-gray-600 group-hover:text-pink-300 transition-colors" />
+                                        <span className="font-bold text-gray-500 group-hover:text-white uppercase tracking-wider text-xs text-center">Apri InstaFame</span>
+                                    </Link>
+                                </div>
+                            </section>
                         </div>
                     )}
 
                     {activeTool !== 'home' && (() => {
-                        const tool = visibleTools.find(t => t.id === activeTool);
+                        const tool = visibleTools.find((t) => t.id === activeTool);
                         if (!tool) return null;
                         const Component = tool.component;
-                        // PlotTab e QrDebugTab sono importati direttamente, non hanno bisogno di Suspense
-                        if (activeTool === 'plot' || activeTool === 'qr-debug') {
+                        if (DIRECT_LOAD_TOOLS.has(activeTool)) {
                             return (
                                 <div className="h-full w-full flex flex-col animate-in slide-in-from-right-4 duration-300">
                                     <Component onLogout={onLogout} onBack={() => setActiveTool('home')} />
@@ -388,6 +498,18 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                     })()}
                 </main>
             </div>
+
+            {layoutEditorOpen && (
+                <StaffDashboardLayoutEditor
+                    initialLayout={dashboardLayout}
+                    onClose={() => setLayoutEditorOpen(false)}
+                    onSaved={(layout) => {
+                        setDashboardLayout(layout);
+                        setLayoutEditorOpen(false);
+                    }}
+                    onLogout={onLogout}
+                />
+            )}
         </div>
     );
 };

@@ -554,6 +554,55 @@ class PublicConfigurazioneSitoViewSet(viewsets.ReadOnlyModelViewSet):
         return ConfigurazioneSito.objects.all()
 
 
+def _is_campaign_head_master_plus(request, user_override=None):
+    user = user_override if user_override is not None else request.user
+    if _is_global_admin(user):
+        return True
+    role = _campaign_role_for_request(request, user_override=user)
+    return role == CAMPAGNA_ROLE_HEAD_MASTER
+
+
+class StaffDashboardLayoutView(APIView):
+    """
+    Layout globale menu Dashboard Staff.
+    GET: qualsiasi staff campagna; PATCH: Head Master o superuser.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _deny_not_staff(self, request):
+        if not _is_campaign_staff_plus(request):
+            return Response({"detail": "Accesso riservato allo staff."}, status=403)
+        return None
+
+    def get(self, request):
+        denied = self._deny_not_staff(request)
+        if denied is not None:
+            return denied
+        from .staff_dashboard_layout import effective_staff_dashboard_layout
+        config = ConfigurazioneSito.get_config()
+        return Response({
+            "staff_dashboard_layout": effective_staff_dashboard_layout(config.staff_dashboard_layout),
+        })
+
+    def patch(self, request):
+        denied = self._deny_not_staff(request)
+        if denied is not None:
+            return denied
+        if not _is_campaign_head_master_plus(request):
+            return Response(
+                {"detail": "Solo Head Master o admin globale possono modificare il layout."},
+                status=403,
+            )
+        from .serializers import StaffDashboardLayoutSerializer
+        serializer = StaffDashboardLayoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        config = ConfigurazioneSito.get_config()
+        config.staff_dashboard_layout = serializer.validated_data["staff_dashboard_layout"]
+        config.save(update_fields=["staff_dashboard_layout", "ultima_modifica"])
+        return Response(serializer.validated_data)
+
+
 class AdminMaintenanceConfigView(APIView):
     """
     Console maintenance mode riservata ai soli superuser Django.
