@@ -5745,6 +5745,13 @@ class PropostaTecnica(SyncableModel, models.Model):
     effetto = models.TextField("Effetto (Cerimoniale)", blank=True, null=True)
     livello_proposto = models.IntegerField(default=1, verbose_name="Livello Scelto")
     # -----------------------------------
+
+    spiegazione_teorie = models.TextField(
+        "Spiegazione teorie coinvolte (in game)",
+        blank=True,
+        null=True,
+        help_text="Contesto narrativo delle teorie di gioco alla base della proposta.",
+    )
     
     class Meta: 
         ordering = ['-data_creazione']

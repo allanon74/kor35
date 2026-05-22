@@ -304,6 +304,17 @@ const StaffProposalTab = ({ onLogout }) => {
                                 <div className="prose prose-invert text-sm max-w-none text-gray-300 leading-relaxed whitespace-pre-wrap"
                                      dangerouslySetInnerHTML={{ __html: selectedProposal.descrizione }} 
                                 />
+
+                                {selectedProposal.spiegazione_teorie && (
+                                    <div className="mt-6 pt-4 border-t border-gray-700/50">
+                                        <strong className="text-indigo-400 block text-xs uppercase mb-2 tracking-widest">
+                                            Teorie coinvolte (in game)
+                                        </strong>
+                                        <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">
+                                            {selectedProposal.spiegazione_teorie}
+                                        </p>
+                                    </div>
+                                )}
                                 
                                 {selectedProposal.tipo === 'CER' && (
                                     <div className="mt-6 space-y-4 pt-4 border-t border-gray-700/50">

@@ -38,6 +38,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     // --- STATI DATI PROPOSTA ---
     const [name, setName] = useState(proposal?.nome || '');
     const [description, setDescription] = useState(proposal?.descrizione || '');
+    const [spiegazioneTeorie, setSpiegazioneTeorie] = useState(proposal?.spiegazione_teorie || '');
     
     // Campi specifici Cerimoniale
     const [prerequisiti, setPrerequisiti] = useState(proposal?.prerequisiti || '');
@@ -272,6 +273,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
             svolgimento: isCerimoniale ? svolgimento : null,
             effetto: isCerimoniale ? effetto : null,
             livello_proposto: isCerimoniale ? livelloCerimoniale : 1,
+            spiegazione_teorie: spiegazioneTeorie.trim() || null,
         };
     };
 
@@ -404,6 +406,20 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                                 ))}
                             </select>
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block mb-1.5">
+                            Spiegazione teorie coinvolte (in game)
+                        </label>
+                        <textarea
+                            value={spiegazioneTeorie}
+                            onChange={e => setSpiegazioneTeorie(e.target.value)}
+                            disabled={!isDraft}
+                            className="w-full bg-gray-800 border border-gray-600 rounded-xl p-4 text-white focus:border-indigo-500 outline-none transition-all min-h-[100px] shadow-inner"
+                            rows={4}
+                            placeholder="Descrivi le teorie, correnti o principi di gioco che giustificano la proposta..."
+                        />
                     </div>
 
                     {/* LOGICA CERIMONIALE */}

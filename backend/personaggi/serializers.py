@@ -1578,7 +1578,8 @@ class PropostaTecnicaSerializer(serializers.ModelSerializer):
             'componenti', 'componenti_data',
             'livello', 'livello_proposto', 'costo_invio_pagato', 'note_staff', 'data_creazione',
             'slot_corpo_permessi', 'tipo_risultato_atteso', 
-            'prerequisiti', 'svolgimento', 'effetto', 'personaggio_nome', 'autore_nome',
+            'prerequisiti', 'svolgimento', 'effetto', 'spiegazione_teorie',
+            'personaggio_nome', 'autore_nome',
         )
         read_only_fields = ('stato', 'costo_invio_pagato', 'note_staff', 'data_creazione')
         extra_kwargs = {
