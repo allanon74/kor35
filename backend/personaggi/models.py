@@ -5535,6 +5535,33 @@ class AuthGroupSyncState(models.Model):
         verbose_name_plural = "Sync State Gruppi"
 
 
+class SyncTombstone(models.Model):
+    """
+    Cancellazione logica a livello di sync: propaga delete tra Master e mirror/edge.
+    Non sostituisce il soft-delete sui singoli modelli; traccia solo sync_id eliminati.
+    """
+
+    model_label = models.CharField(max_length=120, db_index=True)
+    sync_id = models.UUIDField(db_index=True)
+    deleted_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        verbose_name = "Tombstone sync"
+        verbose_name_plural = "Tombstone sync"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["model_label", "sync_id"],
+                name="personaggi_synctombstone_model_sync_id_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["deleted_at"], name="personaggi_synctomb_del_at_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.model_label} {self.sync_id} @ {self.deleted_at}"
+
+
 @receiver(post_save, sender=User)
 def touch_user_sync_state(sender, instance, **kwargs):
     AuthUserSyncState.objects.update_or_create(user=instance, defaults={})

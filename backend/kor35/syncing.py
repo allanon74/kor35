@@ -5,6 +5,7 @@ from typing import Any, Literal
 from django.contrib.auth import get_user_model
 from django.core.files.base import File
 from django.db import models
+from django.utils import timezone
 from rest_framework import serializers
 
 
@@ -115,6 +116,62 @@ def expand_paginaregolamento_queryset_with_ancestors(model: type[models.Model], 
     return model.objects.filter(pk__in=pks)
 
 
+PAGINA_REGOLAMENTO_LABEL = "gestione_plot.paginaregolamento"
+SYNC_MENU_ONLY_KEY = "_sync_menu_only"
+PAGINA_REGOLAMENTO_MENU_FIELD_NAMES = frozenset(
+    {
+        "titolo",
+        "slug",
+        "parent",
+        "ordine",
+        "public",
+        "visibile_solo_staff",
+    }
+)
+
+
+def touch_sync_updated_at(model: type[models.Model], pk) -> None:
+    """
+    Dopo patch parziali in sync (menu wiki, campi MTI figlio, M2M) non usare
+    remote_updated_at: abbasserebbe il timestamp locale e aprirebbe a revert LWW.
+    """
+    model.objects.filter(pk=pk).update(updated_at=timezone.now())
+
+
+def serialize_pagina_regolamento_menu_only(instance: models.Model) -> dict[str, Any]:
+    """Antenati wiki nel delta: solo metadati menu, mai contenuto/immagine."""
+    data = serialize_for_sync(instance)
+    for heavy in ("contenuto", "immagine", "banner_y"):
+        data.pop(heavy, None)
+    data[SYNC_MENU_ONLY_KEY] = True
+    return data
+
+
+def build_model_sync_records(
+    model: type[models.Model],
+    model_key: str,
+    since,
+) -> list[dict[str, Any]]:
+    qs = model.objects.all()
+    if since:
+        qs = qs.filter(updated_at__gt=since)
+    if model_key == PAGINA_REGOLAMENTO_LABEL:
+        delta_pks = set(qs.values_list("pk", flat=True))
+        qs = expand_paginaregolamento_queryset_with_ancestors(model, qs)
+        rows: list[dict[str, Any]] = []
+        for obj in qs.iterator():
+            if obj.pk in delta_pks:
+                rows.append(serialize_for_sync(obj))
+            else:
+                rows.append(serialize_pagina_regolamento_menu_only(obj))
+        return rows
+    return [serialize_for_sync(obj) for obj in qs.iterator()]
+
+
+def pagina_regolamento_row_is_menu_only(row: dict[str, Any]) -> bool:
+    return bool(row.get(SYNC_MENU_ONLY_KEY))
+
+
 def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
     """
     Export minimalista di un record con FK espresse tramite sync key.
@@ -215,40 +272,65 @@ def try_apply_mti_child_fields_when_skipped(
         return "noop"
 
     type(local_obj).objects.filter(pk=local_obj.pk).update(**patch)
+    touch_sync_updated_at(type(local_obj), local_obj.pk)
     return "applied"
 
 
 def try_apply_pagina_regolamento_structure_when_skipped(
-    local_obj: models.Model, row: dict[str, Any]
+    local_obj: models.Model, row: dict[str, Any], resolve_fk=None
 ) -> Literal["defer", "applied", "noop"]:
     """
     Con Last-Write-Wins il record intero può essere saltato pur essendo il payload remoto
-    l'unica fonte corretta per l'albero del menu wiki (parent / ordine).
+    l'unica fonte corretta per l'albero del menu wiki (parent / ordine e metadati menu).
 
-    Allinea comunque parent e ordine dal payload quando la riga locale esiste già e il
-    sync avrebbe ignorato gli scalari per timestamp.
+    Allinea i campi menu dal payload quando la riga locale esiste già e il sync avrebbe
+    ignorato gli scalari per timestamp. Non tocca contenuto / immagine.
     """
     Model = local_obj.__class__
-    raw_parent = row.get("parent")
-    resolved = None
-    if raw_parent not in (None, ""):
-        parent_row = Model.objects.filter(sync_id=raw_parent).first()
-        if parent_row is None:
-            return "defer"
-        resolved = parent_row
+    patch: dict[str, Any] = {}
 
-    ordine_raw = row.get("ordine")
-    if ordine_raw is None:
-        ordine = local_obj.ordine
-    else:
+    if "titolo" in row and row.get("titolo") != local_obj.titolo:
+        patch["titolo"] = row.get("titolo")
+    if "slug" in row and row.get("slug") != local_obj.slug:
+        patch["slug"] = row.get("slug")
+    if "public" in row and bool(row.get("public")) != bool(local_obj.public):
+        patch["public"] = bool(row.get("public"))
+    if "visibile_solo_staff" in row and bool(row.get("visibile_solo_staff")) != bool(
+        local_obj.visibile_solo_staff
+    ):
+        patch["visibile_solo_staff"] = bool(row.get("visibile_solo_staff"))
+
+    raw_parent = row.get("parent")
+    resolved_parent = None
+    if raw_parent not in (None, ""):
+        if resolve_fk is not None:
+            parent_field = Model._meta.get_field("parent")
+            resolved_parent = resolve_fk(parent_field, raw_parent)
+        else:
+            resolved_parent = Model.objects.filter(sync_id=raw_parent).first()
+        if resolved_parent is None:
+            return "defer"
+    target_parent_id = resolved_parent.pk if resolved_parent is not None else None
+    if local_obj.parent_id != target_parent_id:
+        patch["parent"] = resolved_parent
+
+    if "ordine" in row:
         try:
-            ordine = int(ordine_raw)
+            ordine = int(row.get("ordine"))
         except (TypeError, ValueError):
             ordine = local_obj.ordine
+        if local_obj.ordine != ordine:
+            patch["ordine"] = ordine
 
-    target_parent_id = resolved.pk if resolved is not None else None
-    if local_obj.parent_id == target_parent_id and local_obj.ordine == ordine:
+    if not patch:
         return "noop"
 
-    Model.objects.filter(pk=local_obj.pk).update(parent=resolved, ordine=ordine)
+    Model.objects.filter(pk=local_obj.pk).update(**patch)
+    touch_sync_updated_at(Model, local_obj.pk)
     return "applied"
+
+
+def pagina_regolamento_sync_field_allowed(field_name: str, row: dict[str, Any]) -> bool:
+    if not pagina_regolamento_row_is_menu_only(row):
+        return True
+    return field_name in PAGINA_REGOLAMENTO_MENU_FIELD_NAMES

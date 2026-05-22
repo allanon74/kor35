@@ -14,10 +14,19 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from kor35.syncing import (
-    expand_paginaregolamento_queryset_with_ancestors,
-    serialize_for_sync,
+    build_model_sync_records,
+    pagina_regolamento_sync_field_allowed,
+    touch_sync_updated_at,
     try_apply_mti_child_fields_when_skipped,
     try_apply_pagina_regolamento_structure_when_skipped,
+)
+from kor35.sync_tombstone import (
+    TOMBSTONE_PAYLOAD_KEY,
+    apply_tombstone_rows,
+    build_tombstones_outgoing,
+    clear_stale_tombstone_before_record_apply,
+    get_sync_model_registry,
+    tombstone_blocks_record_apply,
 )
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
 
@@ -112,17 +121,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Sync completata."))
 
     def _model_registry(self):
-        registry = {}
-        for app_label in ("personaggi", "gestione_plot", "social"):
-            app_config = apps.get_app_config(app_label)
-            for model in app_config.get_models():
-                if model._meta.abstract:
-                    continue
-                if hasattr(model, "sync_id") and hasattr(model, "updated_at"):
-                    if model._meta.label_lower == "personaggi.segnozodiacale":
-                        continue
-                    registry[model._meta.label_lower] = model
-        return registry
+        return get_sync_model_registry(
+            ("personaggi", "gestione_plot", "social", "pilotaggio")
+        )
 
     def _load_since(self, state_path: Path, since_override: str | None):
         if since_override:
@@ -143,16 +144,12 @@ class Command(BaseCommand):
     def _build_outgoing_payload(self, model_registry, since):
         payload = {}
         for key, model in model_registry.items():
-            qs = model.objects.all()
-            if since and hasattr(model, "updated_at"):
-                qs = qs.filter(updated_at__gt=since)
-                if key == "gestione_plot.paginaregolamento":
-                    qs = expand_paginaregolamento_queryset_with_ancestors(model, qs)
-            payload[key] = [serialize_for_sync(obj) for obj in qs.iterator()]
+            payload[key] = build_model_sync_records(model, key, since if hasattr(model, "updated_at") else None)
 
         payload["auth.user"] = self._build_users_payload(since)
         payload["auth.group"] = self._build_groups_payload(since)
         payload["catalog.segnozodiacale"] = self._build_zodiac_catalog_payload()
+        payload[TOMBSTONE_PAYLOAD_KEY] = build_tombstones_outgoing(since)
         return payload
 
     def _build_zodiac_catalog_payload(self):
@@ -179,8 +176,9 @@ class Command(BaseCommand):
         # Applicazione robusta con retry: processa record solo quando tutte le FK
         # obbligatorie (e parent link) sono risolvibili.
         pending = []
+        reserved_keys = {"auth.user", "auth.group", "catalog.segnozodiacale", TOMBSTONE_PAYLOAD_KEY}
         for model_key, records in incoming_payload.items():
-            if model_key in {"auth.user", "auth.group", "catalog.segnozodiacale"}:
+            if model_key in reserved_keys:
                 continue
             model = model_registry.get(model_key)
             if not model:
@@ -192,7 +190,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             for _ in range(max_rounds):
                 if not pending:
-                    return
+                    break
                 next_pending = []
                 progressed = 0
 
@@ -209,6 +207,8 @@ class Command(BaseCommand):
                 pending = next_pending
                 if progressed == 0:
                     break
+
+            apply_tombstone_rows(model_registry, incoming_payload.get(TOMBSTONE_PAYLOAD_KEY, []) or [])
 
         if pending:
             first_model, first_row = pending[0]
@@ -320,6 +320,11 @@ class Command(BaseCommand):
             return "skipped"
 
         remote_updated_at = parse_datetime(row.get("updated_at")) if row.get("updated_at") else None
+        model_label = model._meta.label_lower
+        if tombstone_blocks_record_apply(model_label, sync_id, remote_updated_at):
+            return "skipped"
+        clear_stale_tombstone_before_record_apply(model_label, sync_id, remote_updated_at)
+
         local_obj = model.objects.filter(sync_id=sync_id).first()
 
         # M2M (es. mattoni_materia_permessi) non aggiornano updated_at sul modello padre: se
@@ -340,8 +345,12 @@ class Command(BaseCommand):
         )
         if skip_scalars:
             wiki_menu = "noop"
-            if model._meta.label_lower == "gestione_plot.paginaregolamento":
-                wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(local_obj, row)
+            if model_label == "gestione_plot.paginaregolamento":
+                wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(
+                    local_obj,
+                    row,
+                    lambda field, value: self._resolve_fk_value(model, field.name, value),
+                )
                 if wiki_menu == "defer":
                     return "defer"
             mt_child = try_apply_mti_child_fields_when_skipped(
@@ -357,12 +366,10 @@ class Command(BaseCommand):
                     if unresolved:
                         return "defer"
                     getattr(obj, field_name).set(resolved_list)
-                if remote_updated_at:
-                    model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+                touch_sync_updated_at(model, obj.pk)
                 return "applied"
             if extra_applied:
-                if remote_updated_at:
-                    model.objects.filter(pk=local_obj.pk).update(updated_at=remote_updated_at)
+                touch_sync_updated_at(model, local_obj.pk)
                 return "applied"
             return "skipped"
 
@@ -387,6 +394,8 @@ class Command(BaseCommand):
                 update_data[field.name] = parent_obj
                 continue
             if field.name not in row:
+                continue
+            if not pagina_regolamento_sync_field_allowed(field.name, row):
                 continue
             value = row[field.name]
             if isinstance(field, ForeignKey):

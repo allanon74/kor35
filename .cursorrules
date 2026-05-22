@@ -17,6 +17,9 @@ Poiché i database Master ed Edge operano separatamente e si sincronizzano a pos
 ## 2. Regole per le API e la Sincronizzazione
 - Usa Django REST Framework (DRF).
 - La logica di sincronizzazione deve sempre essere avvolta in `transaction.atomic()` per evitare corruzioni parziali del database in caso di caduta della rete.
+- Le **cancellazioni** su modelli con `sync_id` NON si propagano con la delete fisica da sola: viene creato un record `personaggi.SyncTombstone` (signal `pre_delete`) ed esportato nel payload `sync.tombstone`. All'apply, LWW tra `deleted_at` (tombstone) e `updated_at` (record). Helper in `kor35/sync_tombstone.py`; non bypassare con delete dirette in script di sync senza `suppress_tombstone_on_delete()`.
+- Dopo un `save()` su un modello sincronizzabile, il tombstone per quel `sync_id` viene rimosso (resurrezione).
+- **Wiki (`PaginaRegolamento`)**: antenati nel delta sync esportano solo metadati menu (`_sync_menu_only`, senza `contenuto`/`immagine`). Patch parziali menu/MTI/M2M usano `touch_sync_updated_at()` — mai `remote_updated_at` sul locale. Export/apply via `build_model_sync_records` e `pagina_regolamento_sync_field_allowed` in `kor35/syncing.py`.
 - I file multimediali (immagini, video) non vengono inviati tramite JSON. Nel DB salva solo il percorso relativo. I file fisici vengono sincronizzati a livello di sistema operativo tramite `rsync`.
 
 ## 3. Regole per il Frontend (React / Vite)

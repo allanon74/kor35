@@ -8,6 +8,7 @@ class PersonaggiConfig(AppConfig):
     
     def ready(self):
         import personaggi.signals
+        import personaggi.sync_tombstone_signals  # noqa: F401
         from personaggi import signals as personaggi_signals
 
         for model in self.get_models():

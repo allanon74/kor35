@@ -17,10 +17,19 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from kor35.syncing import (
-    expand_paginaregolamento_queryset_with_ancestors,
-    serialize_for_sync,
+    build_model_sync_records,
+    pagina_regolamento_sync_field_allowed,
+    touch_sync_updated_at,
     try_apply_mti_child_fields_when_skipped,
     try_apply_pagina_regolamento_structure_when_skipped,
+)
+from kor35.sync_tombstone import (
+    TOMBSTONE_PAYLOAD_KEY,
+    apply_tombstone_rows,
+    build_tombstones_outgoing,
+    clear_stale_tombstone_before_record_apply,
+    get_sync_model_registry,
+    tombstone_blocks_record_apply,
 )
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
 
@@ -89,33 +98,21 @@ class EdgeSyncView(APIView):
         )
 
     def _sync_model_registry(self):
-        registry = {}
-        for app_label in ("personaggi", "gestione_plot", "social", "pilotaggio"):
-            app_config = apps.get_app_config(app_label)
-            for model in app_config.get_models():
-                if model._meta.abstract:
-                    continue
-                if hasattr(model, "sync_id") and hasattr(model, "updated_at"):
-                    if model._meta.label_lower == "personaggi.segnozodiacale":
-                        continue
-                    registry[model._meta.label_lower] = model
-        return registry
+        return get_sync_model_registry(
+            ("personaggi", "gestione_plot", "social", "pilotaggio")
+        )
 
     def _build_outgoing(self, last_sync_timestamp):
         registry = self._sync_model_registry()
         payload = {}
 
         for key, model in registry.items():
-            qs = model.objects.all()
-            if last_sync_timestamp:
-                qs = qs.filter(updated_at__gt=last_sync_timestamp)
-                if key == "gestione_plot.paginaregolamento":
-                    qs = expand_paginaregolamento_queryset_with_ancestors(model, qs)
-            payload[key] = [serialize_for_sync(obj) for obj in qs.iterator()]
+            payload[key] = build_model_sync_records(model, key, last_sync_timestamp)
 
         payload["auth.user"] = self._serialize_users(last_sync_timestamp)
         payload["auth.group"] = self._serialize_groups(last_sync_timestamp)
         payload["catalog.segnozodiacale"] = self._serialize_zodiac_catalog()
+        payload[TOMBSTONE_PAYLOAD_KEY] = build_tombstones_outgoing(last_sync_timestamp)
         return payload
 
     def _serialize_zodiac_catalog(self):
@@ -239,8 +236,9 @@ class EdgeSyncView(APIView):
         self._apply_zodiac_catalog(incoming_records.get("catalog.segnozodiacale", []))
         registry = self._sync_model_registry()
         pending = []
+        reserved_keys = {"auth.user", "auth.group", "catalog.segnozodiacale", TOMBSTONE_PAYLOAD_KEY}
         for model_key, rows in incoming_records.items():
-            if model_key in {"auth.user", "auth.group", "catalog.segnozodiacale"}:
+            if model_key in reserved_keys:
                 continue
             model = registry.get(model_key)
             if not model:
@@ -251,7 +249,7 @@ class EdgeSyncView(APIView):
         max_rounds = max(len(pending), 1)
         for _ in range(max_rounds):
             if not pending:
-                return
+                break
             still_pending = []
             progressed = 0
             for item in pending:
@@ -269,6 +267,8 @@ class EdgeSyncView(APIView):
             raise ValidationError(
                 f"Sync FK unresolved: model={first.model_key} sync_id={first.payload.get('sync_id')}"
             )
+
+        apply_tombstone_rows(registry, incoming_records.get(TOMBSTONE_PAYLOAD_KEY, []) or [])
 
     def _apply_zodiac_catalog(self, rows):
         if not rows:
@@ -305,6 +305,11 @@ class EdgeSyncView(APIView):
             return "skipped"
 
         remote_updated_at = parse_datetime(row.get("updated_at")) if row.get("updated_at") else None
+        model_label = model._meta.label_lower
+        if tombstone_blocks_record_apply(model_label, sync_id, remote_updated_at):
+            return "skipped"
+        clear_stale_tombstone_before_record_apply(model_label, sync_id, remote_updated_at)
+
         local = model.objects.filter(sync_id=sync_id).first()
 
         m2m_raw = {}
@@ -323,8 +328,10 @@ class EdgeSyncView(APIView):
         )
         if skip_scalars:
             wiki_menu = "noop"
-            if model._meta.label_lower == "gestione_plot.paginaregolamento":
-                wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(local, row)
+            if model_label == "gestione_plot.paginaregolamento":
+                wiki_menu = try_apply_pagina_regolamento_structure_when_skipped(
+                    local, row, self._resolve_fk_value
+                )
                 if wiki_menu == "defer":
                     return "defer"
             mt_child = try_apply_mti_child_fields_when_skipped(
@@ -335,8 +342,7 @@ class EdgeSyncView(APIView):
             extra_applied = wiki_menu == "applied" or mt_child == "applied"
             if not m2m_raw:
                 if extra_applied:
-                    if remote_updated_at:
-                        model.objects.filter(pk=local.pk).update(updated_at=remote_updated_at)
+                    touch_sync_updated_at(model, local.pk)
                     return "applied"
                 return "skipped"
             obj = local
@@ -344,8 +350,7 @@ class EdgeSyncView(APIView):
                 field = model._meta.get_field(field_name)
                 resolved_list = self._resolve_m2m_values(field, raw_list)
                 getattr(obj, field_name).set(resolved_list)
-            if remote_updated_at:
-                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+            touch_sync_updated_at(model, obj.pk)
             return "applied"
 
         update_data = {}
@@ -368,6 +373,8 @@ class EdgeSyncView(APIView):
                 update_data[field.name] = parent_obj
                 continue
             if field.name not in row:
+                continue
+            if not pagina_regolamento_sync_field_allowed(field.name, row):
                 continue
 
             value = row.get(field.name)
