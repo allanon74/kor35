@@ -7,17 +7,18 @@ import StartPage from '../components/StartPage';
 import EventSubscriptionResultPage from '../pages/EventSubscriptionResultPage';
 
 const AppLayout = ({ token, onLogout }) => {
-  const { isCampaignStaffer, isCampaignMaster } = useCharacter();
+  const { isCampaignStaffer, isGlobalSuperuser } = useCharacter();
   const navigate = useNavigate();
   const location = useLocation();
   const isStartPagePath = location.pathname === '/app' || location.pathname === '/app/start';
   const isEventSubscriptionResultPath = location.pathname === '/app/iscrizione-esito';
-  
-  // Stato per gestire quale interfaccia mostrare (solo per lo staff)
-  // 'staff' = Dashboard Master | 'player' = Interfaccia Giocatore
-  const [viewMode, setViewMode] = useState('player'); 
 
-  // Memorizza quale tool aprire nella dashboard (default 'home')
+  /** Allineato ai pulsanti «Dashboard staff» (ruolo campagna o superuser). */
+  const canAccessStaffDashboard = isCampaignStaffer || isGlobalSuperuser;
+
+  // 'staff' = Dashboard Master | 'player' = Interfaccia Giocatore
+  const [viewMode, setViewMode] = useState('player');
+
   const [dashboardInitialTool, setDashboardInitialTool] = useState('home');
 
   useEffect(() => {
@@ -25,7 +26,7 @@ const AppLayout = ({ token, onLogout }) => {
     const mode = params.get('mode');
     const tool = params.get('tool');
 
-    if (!isCampaignStaffer) {
+    if (!canAccessStaffDashboard) {
       setViewMode('player');
       return;
     }
@@ -41,22 +42,20 @@ const AppLayout = ({ token, onLogout }) => {
       return;
     }
 
-    // Default staff senza mode esplicito: resta/entra in vista player.
     setViewMode('player');
-  }, [isCampaignStaffer, isCampaignMaster, location.search]);
+  }, [canAccessStaffDashboard, location.search]);
 
-  // Effetto: Se l'utente non è staff, forziamo sempre la vista player
   useEffect(() => {
-    if (!isCampaignStaffer) {
+    if (!canAccessStaffDashboard) {
       setViewMode('player');
     }
-  }, [isCampaignStaffer, isCampaignMaster]);
+  }, [canAccessStaffDashboard]);
 
   const updateUrlParams = (nextMode, nextTool = null) => {
     const params = new URLSearchParams(location.search);
     params.set('mode', nextMode);
-    if (nextMode === 'master' && nextTool) {
-      params.set('tool', nextTool);
+    if (nextMode === 'master' || nextMode === 'staff') {
+      params.set('tool', nextTool || 'home');
     } else {
       params.delete('tool');
     }
@@ -66,8 +65,19 @@ const AppLayout = ({ token, onLogout }) => {
     navigate({ pathname: location.pathname, search: `?${nextSearch}` }, { replace: true });
   };
 
-  // Render: Vista Master (Solo se è staff E siamo in modalità staff)
-  if (isCampaignStaffer && viewMode === 'staff') {
+  /** Ingresso unificato alla dashboard staff (pathname + query sempre coerenti). */
+  const goToStaffDashboard = (tool = 'home') => {
+    if (!canAccessStaffDashboard) return;
+    const resolvedTool = tool || 'home';
+    setDashboardInitialTool(resolvedTool);
+    setViewMode('staff');
+    const params = new URLSearchParams();
+    params.set('mode', 'master');
+    params.set('tool', resolvedTool);
+    navigate({ pathname: '/app/play', search: `?${params.toString()}` }, { replace: true });
+  };
+
+  if (canAccessStaffDashboard && viewMode === 'staff') {
     return (
       <StaffDashboard 
         token={token}
@@ -94,12 +104,7 @@ const AppLayout = ({ token, onLogout }) => {
     return (
       <StartPage
         onLogout={onLogout}
-        onSwitchToMaster={(tool = 'home') => {
-          setDashboardInitialTool(tool);
-          setViewMode('staff');
-          updateUrlParams('master', tool);
-          navigate('/app/play', { replace: true });
-        }}
+        onSwitchToMaster={goToStaffDashboard}
       />
     );
   }
@@ -109,11 +114,7 @@ const AppLayout = ({ token, onLogout }) => {
     <MainPage 
       token={token}
       onLogout={onLogout}
-      onSwitchToMaster={(tool = 'home') => {
-          setDashboardInitialTool(tool);
-          setViewMode('staff');
-          updateUrlParams('master', tool);
-      }}
+      onSwitchToMaster={goToStaffDashboard}
     />
   );
 };

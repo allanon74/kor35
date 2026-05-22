@@ -86,24 +86,61 @@ export function removeToolFromDraft(draft, toolId) {
   }
 }
 
-export function insertToolInGroup(draft, toolId, groupId, index = -1) {
+export const PINNED_ZONE_ID = '__pinned__';
+export const UNASSIGNED_ZONE_ID = '__unassigned__';
+
+function getZoneToolIds(draft, zoneId) {
+  if (zoneId === PINNED_ZONE_ID) return draft.pinned_tool_ids;
+  return draft.groups.find((g) => g.id === zoneId)?.tool_ids;
+}
+
+function setZoneToolIds(draft, zoneId, toolIds) {
+  if (zoneId === PINNED_ZONE_ID) {
+    draft.pinned_tool_ids = toolIds;
+    return;
+  }
+  const group = draft.groups.find((g) => g.id === zoneId);
+  if (group) group.tool_ids = toolIds;
+}
+
+/**
+ * Sposta o riordina una voce (anche nello stesso gruppo/pin).
+ * @param {number} toIndex indice di inserimento (0 = prima; list.length = in fondo)
+ */
+export function moveToolInZone(draft, toolId, zoneId, toIndex, fromZone) {
+  if (zoneId === UNASSIGNED_ZONE_ID) {
+    removeToolFromDraft(draft, toolId);
+    return;
+  }
+
+  const insertIndex = Math.max(0, toIndex);
+
+  if (fromZone === zoneId) {
+    const list = [...(getZoneToolIds(draft, zoneId) || [])];
+    const fromIndex = list.indexOf(toolId);
+    if (fromIndex < 0) return;
+
+    let target = Math.min(insertIndex, list.length);
+    if (fromIndex < target) target -= 1;
+    if (fromIndex === target) return;
+
+    const next = [...list];
+    next.splice(fromIndex, 1);
+    next.splice(target, 0, toolId);
+    setZoneToolIds(draft, zoneId, next);
+    return;
+  }
+
   removeToolFromDraft(draft, toolId);
-  if (groupId === '__unassigned__') {
-    return;
-  }
-  if (groupId === '__pinned__') {
-    if (!draft.pinned_tool_ids.includes(toolId)) {
-      draft.pinned_tool_ids.push(toolId);
-    }
-    return;
-  }
-  const group = draft.groups.find((g) => g.id === groupId);
-  if (!group) return;
-  if (index < 0 || index >= group.tool_ids.length) {
-    group.tool_ids.push(toolId);
-  } else {
-    group.tool_ids.splice(index, 0, toolId);
-  }
+  const list = [...(getZoneToolIds(draft, zoneId) || [])];
+  const at = Math.min(insertIndex, list.length);
+  list.splice(at, 0, toolId);
+  setZoneToolIds(draft, zoneId, list);
+}
+
+export function insertToolInGroup(draft, toolId, groupId, index = -1) {
+  const at = index < 0 ? 9999 : index;
+  moveToolInZone(draft, toolId, groupId, at, UNASSIGNED_ZONE_ID);
 }
 
 export function reorderInList(list, fromIndex, toIndex) {

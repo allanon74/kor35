@@ -18,14 +18,13 @@ import {
   createEmptyGroup,
   editorDraftToLayoutPayload,
   getUnassignedToolIds,
-  insertToolInGroup,
   layoutToEditorDraft,
+  moveToolInZone,
+  PINNED_ZONE_ID,
   removeToolFromDraft,
   reorderInList,
+  UNASSIGNED_ZONE_ID,
 } from '../staff/staffLayoutEditorState';
-
-const PINNED_ZONE = '__pinned__';
-const UNASSIGNED_ZONE = '__unassigned__';
 
 function ToolChip({
   toolId,
@@ -70,15 +69,18 @@ function ToolChip({
 
   return (
     <div
-      draggable={draggable}
-      onDragStart={(e) => {
-        e.stopPropagation();
-        onDragStart(e, toolId);
-      }}
-      onDragEnd={onDragEnd}
       className={`flex items-center gap-2 p-2 rounded-xl border border-white/10 ${colorClass} shadow-md`}
     >
-      <span className="cursor-grab text-white/60 shrink-0" title="Trascina">
+      <span
+        draggable={draggable}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          onDragStart(e, toolId);
+        }}
+        onDragEnd={onDragEnd}
+        className="cursor-grab text-white/60 shrink-0 touch-none p-0.5 -m-0.5 rounded hover:bg-black/20"
+        title="Trascina per riordinare o spostare"
+      >
         <GripVertical size={16} />
       </span>
       <Icon size={18} className="text-white shrink-0" />
@@ -103,29 +105,95 @@ function ToolChip({
   );
 }
 
-function DropZone({ children, zoneId, onDrop, className = '', label, acceptsToolDrop = true }) {
-  const [over, setOver] = useState(false);
+function DropSlot({ slotIndex, zoneId, onToolDrop, acceptsToolDrop, isActive }) {
   return (
     <div
       onDragOver={(e) => {
         if (!acceptsToolDrop) return;
         e.preventDefault();
         e.stopPropagation();
-        setOver(true);
       }}
-      onDragLeave={() => setOver(false)}
       onDrop={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        setOver(false);
-        onDrop(e, zoneId);
+        onToolDrop(e, zoneId, slotIndex);
       }}
-      className={`rounded-xl border-2 border-dashed p-3 min-h-[3rem] transition-colors ${
-        over ? 'border-violet-400 bg-violet-500/10' : 'border-gray-600 bg-gray-800/40'
-      } ${className}`}
+      className={`h-2 -my-0.5 rounded transition-all ${
+        isActive ? 'bg-violet-400/90 shadow-[0_0_8px_rgba(167,139,250,0.6)]' : 'bg-transparent hover:bg-violet-500/20'
+      }`}
+      title="Rilascia qui per inserire in questa posizione"
+    />
+  );
+}
+
+function ToolSortableList({
+  zoneId,
+  toolIds,
+  draft,
+  setDraft,
+  paletteId,
+  onDragStart,
+  onDragEnd,
+  onToolDrop,
+  acceptsToolDrop,
+  label,
+  emptyHint,
+}) {
+  const [activeSlot, setActiveSlot] = useState(null);
+
+  return (
+    <div
+      className="rounded-xl border-2 border-dashed p-3 min-h-[3rem] border-gray-600 bg-gray-800/40"
+      onDragLeave={() => setActiveSlot(null)}
     >
-      {label && <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">{label}</p>}
-      <div className="space-y-2">{children}</div>
+      {label && (
+        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">{label}</p>
+      )}
+      {toolIds.length === 0 && (
+        <p className="text-xs text-gray-500 italic mb-2">{emptyHint}</p>
+      )}
+      <div className="space-y-0">
+        {toolIds.map((toolId, idx) => (
+          <React.Fragment key={toolId}>
+            <div onDragEnter={() => setActiveSlot(idx)}>
+              <DropSlot
+                slotIndex={idx}
+                zoneId={zoneId}
+                onToolDrop={(e, z, i) => {
+                  setActiveSlot(null);
+                  onToolDrop(e, z, i);
+                }}
+                acceptsToolDrop={acceptsToolDrop}
+                isActive={activeSlot === idx}
+              />
+            </div>
+            <ToolChip
+              toolId={toolId}
+              draft={draft}
+              setDraft={setDraft}
+              paletteId={paletteId}
+              colorIndex={idx}
+              onDragStart={(e, id) => onDragStart(e, id, zoneId)}
+              onDragEnd={() => {
+                setActiveSlot(null);
+                onDragEnd();
+              }}
+            />
+          </React.Fragment>
+        ))}
+        <div onDragEnter={() => setActiveSlot(toolIds.length)}>
+          <DropSlot
+            slotIndex={toolIds.length}
+            zoneId={zoneId}
+            onToolDrop={(e, z, i) => {
+              setActiveSlot(null);
+              onToolDrop(e, z, i);
+            }}
+            acceptsToolDrop={acceptsToolDrop}
+            isActive={activeSlot === toolIds.length}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -171,13 +239,19 @@ export default function StaffDashboardLayoutEditor({ initialLayout, onClose, onS
     return payload;
   }, [dragPayload]);
 
-  const handleToolDrop = useCallback((e, targetZone, targetIndex = -1) => {
+  const handleToolDrop = useCallback((e, targetZone, targetIndex = 0) => {
     const payload = readDragPayload(e);
     if (!payload || payload.type !== 'tool') return;
 
     setDraft((prev) => {
       const next = layoutToEditorDraft(editorDraftToLayoutPayload(prev));
-      insertToolInGroup(next, payload.toolId, targetZone, targetIndex);
+      moveToolInZone(
+        next,
+        payload.toolId,
+        targetZone,
+        targetIndex,
+        payload.fromZone || UNASSIGNED_ZONE_ID,
+      );
       return next;
     });
     setDragPayload(null);
@@ -261,7 +335,7 @@ export default function StaffDashboardLayoutEditor({ initialLayout, onClose, onS
             Organizza menu staff
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            Trascina le voci nelle aree tratteggiate; sposta un gruppo solo dalla maniglia ⋮⋮ nell&apos;intestazione.
+            Trascina le voci dalla maniglia ⋮⋮ (riordina nello stesso gruppo o spostale); i gruppi solo dalla maniglia in intestazione.
           </p>
         </div>
         <button
@@ -283,28 +357,19 @@ export default function StaffDashboardLayoutEditor({ initialLayout, onClose, onS
           <h3 className="text-xs font-black uppercase tracking-widest text-amber-300 mb-2 flex items-center gap-2">
             <Pin size={14} /> Accesso rapido (pin)
           </h3>
-          <DropZone
-            zoneId={PINNED_ZONE}
-            onDrop={handleToolDrop}
+          <ToolSortableList
+            zoneId={PINNED_ZONE_ID}
+            toolIds={draft.pinned_tool_ids}
+            draft={draft}
+            setDraft={setDraft}
+            paletteId="violet"
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onToolDrop={handleToolDrop}
             acceptsToolDrop={dragPayload?.type !== 'group'}
-            label="Trascina qui per il pin in cima al menu"
-          >
-            {draft.pinned_tool_ids.length === 0 && (
-              <p className="text-xs text-gray-500 italic">Nessun pin — trascina una voce o usa l&apos;icona pin.</p>
-            )}
-            {draft.pinned_tool_ids.map((toolId, idx) => (
-              <ToolChip
-                key={toolId}
-                toolId={toolId}
-                draft={draft}
-                setDraft={setDraft}
-                paletteId="violet"
-                colorIndex={idx}
-                onDragStart={(e, id) => onDragStart(e, id, PINNED_ZONE)}
-                onDragEnd={onDragEnd}
-              />
-            ))}
-          </DropZone>
+            label="Accesso rapido — rilascia sulla barra viola tra le voci per riordinare"
+            emptyHint="Nessun pin — trascina una voce o usa l&apos;icona pin."
+          />
         </section>
 
         <section className="space-y-4">
@@ -415,28 +480,19 @@ export default function StaffDashboardLayoutEditor({ initialLayout, onClose, onS
                       <span className={`w-full h-1.5 rounded-full ${getPaletteColor(paletteId, 0)}`} />
                     )}
                   </div>
-                  <DropZone
+                  <ToolSortableList
                     zoneId={group.id}
-                    onDrop={handleToolDrop}
+                    toolIds={group.tool_ids}
+                    draft={draft}
+                    setDraft={setDraft}
+                    paletteId={paletteId}
+                    onDragStart={onDragStart}
+                    onDragEnd={onDragEnd}
+                    onToolDrop={handleToolDrop}
                     acceptsToolDrop={dragPayload?.type !== 'group'}
                     label={`Voci in "${group.label}"`}
-                  >
-                    {group.tool_ids.length === 0 && (
-                      <p className="text-xs text-gray-500 italic">Trascina qui le voci del gruppo.</p>
-                    )}
-                    {group.tool_ids.map((toolId, idx) => (
-                      <ToolChip
-                        key={toolId}
-                        toolId={toolId}
-                        draft={draft}
-                        setDraft={setDraft}
-                        paletteId={paletteId}
-                        colorIndex={idx}
-                        onDragStart={(e, id) => onDragStart(e, id, group.id)}
-                        onDragEnd={onDragEnd}
-                      />
-                    ))}
-                  </DropZone>
+                    emptyHint="Trascina qui le voci del gruppo."
+                  />
                 </div>
               </div>
             );
@@ -446,24 +502,35 @@ export default function StaffDashboardLayoutEditor({ initialLayout, onClose, onS
         {unassignedIds.length > 0 && (
           <section>
             <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Non assegnati</h3>
-            <DropZone
-              zoneId={UNASSIGNED_ZONE}
-              onDrop={handleToolDrop}
-              acceptsToolDrop={dragPayload?.type !== 'group'}
+            <div
+              className="rounded-xl border-2 border-dashed p-3 border-gray-600 bg-gray-800/40"
+              onDragOver={(e) => {
+                if (dragPayload?.type === 'group') return;
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleToolDrop(e, UNASSIGNED_ZONE_ID, 0);
+              }}
             >
-              {unassignedIds.map((toolId, idx) => (
-                <ToolChip
-                  key={toolId}
-                  toolId={toolId}
-                  draft={draft}
-                  setDraft={setDraft}
-                  paletteId="stone"
-                  colorIndex={idx}
-                  onDragStart={(e, id) => onDragStart(e, id, UNASSIGNED_ZONE)}
-                  onDragEnd={onDragEnd}
-                />
-              ))}
-            </DropZone>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2">Non assegnati</p>
+              <div className="space-y-2">
+                {unassignedIds.map((toolId, idx) => (
+                  <ToolChip
+                    key={toolId}
+                    toolId={toolId}
+                    draft={draft}
+                    setDraft={setDraft}
+                    paletteId="stone"
+                    colorIndex={idx}
+                    onDragStart={(e, id) => onDragStart(e, id, UNASSIGNED_ZONE_ID)}
+                    onDragEnd={onDragEnd}
+                  />
+                ))}
+              </div>
+            </div>
           </section>
         )}
       </div>
