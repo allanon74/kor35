@@ -551,10 +551,11 @@ class RifiutaPropostaView(APIView):
             proposta.note_staff = note_staff
             proposta.save()
             
-            # Invia messaggio al creatore
+            # Invia messaggio solo al personaggio che ha proposto la tecnica
             Messaggio.objects.create(
                 mittente=request.user,
                 destinatario_personaggio=proposta.personaggio,
+                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 titolo=f"Proposta Rifiutata: {proposta.nome}",
                 testo=f"La tua proposta per '{proposta.nome}' è stata rifiutata e riportata in bozza.\n\nNote Staff:\n{note_staff}"
             )
@@ -665,10 +666,11 @@ class ApprovaPropostaView(APIView):
                 proposta.note_staff = data.get('note_staff', proposta.note_staff)
                 proposta.save()
 
-                # F. Invia Messaggio
+                # F. Invia messaggio solo al personaggio che ha proposto la tecnica
                 Messaggio.objects.create(
                     mittente=request.user,
                     destinatario_personaggio=personaggio,
+                    tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                     titolo=f"Approvazione: {nuova_tecnica.nome}",
                     testo=(
                         f"La tua tecnica '{nuova_tecnica.nome}' è stata approvata e creata.\n"
