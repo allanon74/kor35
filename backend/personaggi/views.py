@@ -4106,6 +4106,8 @@ class StaffRisorsaPoolListView(APIView):
         for pg in qs:
             pools = []
             for st in stats:
+                if pg.get_valore_statistica(st.sigla) <= 0:
+                    continue
                 max_v = pg.get_valore_massimo_risorsa_runtime(st.sigla)
                 if max_v <= 0:
                     continue

@@ -339,7 +339,19 @@ export const useOptimisticStatChange = () => {
 
                 const newPools = poolUi.some((p) => p.sigla === poolBase)
                     ? poolUi.map((p) => (p.sigla === poolBase ? { ...p, valore_corrente: val } : p))
-                    : [...poolUi, { sigla: poolBase, valore_corrente: val, valore_max: maxVal, nome: poolBase, descrizione: '', recupero_auto: {} }];
+                    : Number(maxVal) > 0
+                      ? [
+                            ...poolUi,
+                            {
+                                sigla: poolBase,
+                                valore_corrente: val,
+                                valore_max: maxVal,
+                                nome: poolBase,
+                                descrizione: '',
+                                recupero_auto: {},
+                            },
+                        ]
+                      : poolUi;
                 const rc = { ...(oldData.risorse_consumabili || {}) };
                 rc[poolBase] = val;
                 const updatedPrimaries = oldData.statistiche_primarie?.map((stat) =>

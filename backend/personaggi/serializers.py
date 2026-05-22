@@ -2308,6 +2308,9 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         out = []
         rec_map = obj.get_recuperi_risorsa_stato()
         for stat in Statistica.objects.filter(is_risorsa_pool=True).order_by('-formula', 'ordine', 'nome'):
+            # Visibilità: massimo di scheda della statistica (non il solo runtime da massimo_pool_sigla).
+            if obj.get_valore_statistica(stat.sigla) <= 0:
+                continue
             max_v = obj.get_valore_massimo_risorsa_runtime(stat.sigla)
             if max_v <= 0:
                 continue
@@ -2362,8 +2365,12 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         rec_map = obj.get_recuperi_risorsa_stato()
         out = []
         for sigla, rec in rec_map.items():
+            if obj.get_valore_statistica(sigla) <= 0:
+                continue
             stat_obj = Statistica.objects.filter(sigla=sigla).first()
             max_v = obj.get_valore_massimo_risorsa_runtime(sigla)
+            if max_v <= 0:
+                continue
             cur = obj.get_risorsa_corrente_runtime(sigla)
             out.append({
                 'sigla': sigla,

@@ -19,6 +19,7 @@ from .models import (
     TipologiaPersonaggio,
     CARATTERISTICA,
 )
+from .serializers import PersonaggioDetailSerializer
 from .sso import _upsert_local_user
 
 
@@ -514,3 +515,47 @@ class PersonaggioGameStateApiTests(APITestCase):
         url = f"/api/personaggi/api/personaggi/{pg2.id}/game_state/"
         r = self.client.get(url, HTTP_X_CAMPAGNA=self.kor35.slug)
         self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class RisorsePoolUiVisibilityTests(APITestCase):
+    """risorse_pool_ui: solo statistiche pool con massimo di scheda > 0."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="pool-vis", password="x")
+        self.pg = Personaggio.objects.create(nome="PG Pool", proprietario=self.user)
+        self.stat_frt = Statistica.objects.create(
+            nome="Fortuna Test",
+            sigla="FRT",
+            parametro="FRT",
+            is_risorsa_pool=True,
+        )
+        self.stat_teo = Statistica.objects.create(
+            nome="Teoforia Test",
+            sigla="TEO",
+            parametro="TEO",
+            is_risorsa_pool=True,
+            pool_corrente_default_pieno_se_assente=False,
+        )
+        self.stat_cap = Statistica.objects.create(
+            nome="Cap Pool Test",
+            sigla="CAP",
+            parametro="CAP",
+            is_risorsa_pool=True,
+            massimo_pool_sigla="FRT",
+        )
+        pb = dict(self.pg.punteggi_base or {})
+        pb[self.stat_frt.nome] = 2
+        pb[self.stat_teo.nome] = 0
+        pb[self.stat_cap.nome] = 0
+        self.pg.punteggi_base = pb
+        self.pg.save(update_fields=["punteggi_base", "updated_at"])
+
+    def test_risorse_pool_ui_solo_massimo_scheda_positivo(self):
+        ser = PersonaggioDetailSerializer()
+        rows = ser.get_risorse_pool_ui(self.pg)
+        sigle = {r["sigla"] for r in rows}
+        self.assertIn("FRT", sigle)
+        self.assertNotIn("TEO", sigle)
+        self.assertNotIn("CAP", sigle)
+        frt = next(r for r in rows if r["sigla"] == "FRT")
+        self.assertEqual(frt["valore_max"], 2)

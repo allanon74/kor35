@@ -227,12 +227,17 @@ const CharacterSheet = memo(({ data, onLogout }) => {
     [punteggi_base, statistiche_base_dict, modificatori_calcolati]
   );
 
-  const StatisticaContainerTile = ({ container }) => {
+  const StatisticaContainerTile = ({ container, inRisorsePoolLevel = false }) => {
     const fakePunteggio = {
       nome: container.nome,
       colore: container.colore,
       icona_url: container.icona_url,
     };
+
+    const isRisorsePoolLevel =
+      inRisorsePoolLevel ||
+      (typeof container.nome === 'string' &&
+        container.nome.toLowerCase().includes('risorse pool'));
 
     const children = containersByParentId.get(container.id) || [];
     const shouldHideByRules = (value, cfg) => {
@@ -249,13 +254,20 @@ const CharacterSheet = memo(({ data, onLogout }) => {
         const stat = statsById.get(it.statistica_id);
         if (!stat) return null;
         const value = computeStatValue(stat);
+        if (isRisorsePoolLevel && value <= 0) return null;
         if (shouldHideByRules(value, it)) return null;
         return { stat, itemConfig: it, value };
       })
       .filter(Boolean);
 
     const renderedChildren = children
-      .map((child) => <StatisticaContainerTile key={child.id} container={child} />)
+      .map((child) => (
+        <StatisticaContainerTile
+          key={child.id}
+          container={child}
+          inRisorsePoolLevel={isRisorsePoolLevel}
+        />
+      ))
       .filter(Boolean);
 
     const hasVisibleNonDipendente = items.some(({ itemConfig }) => !itemConfig?.is_dipendente);

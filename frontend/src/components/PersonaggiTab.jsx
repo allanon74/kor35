@@ -927,7 +927,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                             </p>
                                         )}
                                     {!poolDetailLoading &&
-                                        poolDetail?.risorse_pool_ui?.map((pool) => {
+                                        poolDetail?.risorse_pool_ui
+                                            ?.filter((pool) => Number(pool?.valore_max) > 0)
+                                            ?.map((pool) => {
                                             const row = poolInputs[pool.sigla] || { delta: '', motivo: '' };
                                             return (
                                                 <div

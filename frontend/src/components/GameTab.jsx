@@ -15,6 +15,7 @@ import {
 } from '../hooks/useGameData';
 import { gameComaControl } from '../api';
 import { getOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
+import { risorsePoolVisibiliInGame } from '../lib/gamePoolUtils';
 
 import ActiveItemWidget from './ActiveItemWidget'; 
 
@@ -636,6 +637,11 @@ const GameTab = ({ onNavigate }) => {
         return map;
     }, [runtimeAttivi]);
 
+    const poolUi = useMemo(
+        () => risorsePoolVisibiliInGame(char?.risorse_pool_ui),
+        [char?.risorse_pool_ui]
+    );
+
     if (!char) {
         if (isLoadingDetail || idbLoading) {
             return <div className="p-8 text-center text-white">Caricamento...</div>;
@@ -663,7 +669,6 @@ const GameTab = ({ onNavigate }) => {
     const rankShell = pickPrimaryRank('RPG');
 
     const tempStats = char.statistiche_temporanee || {};
-    const poolUi = char.risorse_pool_ui || [];
     const poolCur = (sigla) => {
         const row = poolUi.find((p) => p.sigla === sigla);
         return row != null ? row.valore_corrente : undefined;
@@ -812,9 +817,7 @@ const GameTab = ({ onNavigate }) => {
                         rows={char.rigenerazioni_auto_ui || []}
                         onAfterTick={readOnlyGame ? () => {} : refreshCharacterData}
                     />
-                    {(char.risorse_pool_ui || [])
-                        .filter((p) => p.valore_max > 0 && !['PV', 'PA', 'PS', 'CHA'].includes(p.sigla))
-                        .map((pool) => (
+                    {poolUi.map((pool) => (
                         <RisorsaPoolWidget
                             key={pool.sigla}
                             pool={pool}
