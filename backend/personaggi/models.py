@@ -1420,7 +1420,7 @@ class Punteggio(Tabella):
     stat_costo_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_stat_costo_consumabili', verbose_name="Stat. Costo Creazione Consumabili")
     stat_numero_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_numero': True}, related_name='aure_stat_numero_consumabili', verbose_name="Stat. Numero Consumabili")
     stat_tempo_creazione_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_tempo': True}, related_name='aure_stat_tempo_creazione_consumabili', verbose_name="Stat. Tempo Creazione Consumabili (sec)")
-    stat_durata_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_durata_consumabili', verbose_name="Stat. Durata Consumabili (giorni)")
+    stat_durata_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_tempo': True}, related_name='aure_stat_durata_consumabili', verbose_name="Stat. Durata Consumabili (giorni)")
     # -------------------------------
     
     class Meta: 
