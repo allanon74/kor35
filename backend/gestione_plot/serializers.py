@@ -564,6 +564,7 @@ class ConfigurazioneSitoSerializer(serializers.ModelSerializer):
             'indirizzo', 'citta', 'cap', 'provincia', 'nazione',
             'email', 'pec', 'telefono',
             'maintenance_mode', 'maintenance_public_message', 'maintenance_admin_note',
+            'creazione_guidata_aperta_giocatori',
             'ultima_modifica'
         ]
         read_only_fields = ['id', 'ultima_modifica']

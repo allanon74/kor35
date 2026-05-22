@@ -10,6 +10,15 @@ from .iscrizioni_evento_views import (
     iscrizioni_evento_crea_ordine,
     iscrizioni_evento_eligibility,
 )
+from .creazione_guidata_views import (
+    CreazioneGuidataFlussoViewSet,
+    CreazioneGuidataPassoViewSet,
+    CreazioneGuidataSceltaViewSet,
+    creazione_guidata_avvio,
+    creazione_guidata_impostazioni,
+    creazione_guidata_stato,
+    creazione_guidata_passo,
+)
 from .views import(
     EventoViewSet, PublicAuraViewSet, PublicTabellaViewSet, PublicTierViewSet, PublicEventiViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
@@ -67,6 +76,21 @@ router.register(r'staff/wiki-tier-collections',
 router.register(r'staff/wiki-mattoni',
                 StaffWikiMattoniWidgetViewSet,
                 basename='staff-wiki-mattoni')
+router.register(
+    r'staff/creazione-guidata/flussi',
+    CreazioneGuidataFlussoViewSet,
+    basename='staff-creazione-guidata-flussi',
+)
+router.register(
+    r'staff/creazione-guidata/passi',
+    CreazioneGuidataPassoViewSet,
+    basename='staff-creazione-guidata-passi',
+)
+router.register(
+    r'staff/creazione-guidata/scelte',
+    CreazioneGuidataSceltaViewSet,
+    basename='staff-creazione-guidata-scelte',
+)
 router.register(r'public/wiki-menu', PublicPaginaRegolamentoMenu, basename='public-wiki-menu')
 router.register(r'public/wiki-page', PublicPaginaRegolamentoDetail, basename='public-wiki-page')
 router.register(r'public/wiki-tabelle', PublicTabellaViewSet, basename='public-wiki-tabelle')
@@ -88,6 +112,10 @@ urlpatterns = [
     path('iscrizioni-evento/crea-ordine/', iscrizioni_evento_crea_ordine),
     path('iscrizioni-evento/cattura/', iscrizioni_evento_cattura),
     path('iscrizioni-evento/annulla/', iscrizioni_evento_annulla),
+    path('api/creazione-guidata/impostazioni/', creazione_guidata_impostazioni, name='creazione_guidata_impostazioni'),
+    path('api/creazione-guidata/stato/', creazione_guidata_stato, name='creazione_guidata_stato'),
+    path('api/creazione-guidata/avvio/', creazione_guidata_avvio, name='creazione_guidata_avvio'),
+    path('api/creazione-guidata/passi/<slug:slug>/', creazione_guidata_passo, name='creazione_guidata_passo'),
     path('api/wiki/menu/', get_wiki_menu, name='wiki_menu'),
     path('api/wiki/pagina/<slug:slug>/', get_wiki_page, name='wiki_page'),
     path('api/wiki/manuale.pdf', download_wiki_manual_pdf, name='wiki_manual_pdf'),

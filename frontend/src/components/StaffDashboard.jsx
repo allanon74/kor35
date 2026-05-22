@@ -43,6 +43,7 @@ const ManifestoManager = lazy(() => import('./editors/ManifestoManager'));
 const NodoManager = lazy(() => import('./editors/NodoManager'));
 const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
 const PilotaggioManager = lazy(() => import('./editors/PilotaggioManager'));
+const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuidataStaffManager'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -111,6 +112,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         { id: 'social-report', label: 'Report Social Eventi', icon: <Sparkles size={24} />, color: 'bg-fuchsia-700', component: SocialEventReportTab },
         { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: <Gem size={24} />, color: 'bg-amber-800', component: StaffRisorsaPoolTab },
         { id: 'ere-prefetture', label: 'Ere e Prefetture', icon: <Globe2 size={24} />, color: 'bg-violet-700', component: EraManager },
+        { id: 'creazione-guidata', label: 'Creazione guidata PG', icon: <Sparkles size={24} />, color: 'bg-violet-900', component: CreazioneGuidataStaffManager },
         { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e Glossario', icon: <BookText size={24} />, color: 'bg-emerald-700', component: DichiarazioniGlossarioManager },
         { id: 'arcana-profiles', label: 'Profili Arcana SSO', icon: <Shield size={24} />, color: 'bg-indigo-800', component: ArcanaProfilesTab },
         { id: 'campagne', label: 'Campagne', icon: <Globe2 size={24} />, color: 'bg-emerald-800', component: CampaignManager },

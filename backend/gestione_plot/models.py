@@ -358,6 +358,133 @@ class PaginaRegolamento(SyncableModel, models.Model):
         return f"{self.titolo} ({self.parent.titolo if self.parent else 'Root'})"
 
 
+class CreazioneGuidataFlusso(SyncableModel, models.Model):
+    """Configurazione di un percorso guidato per la creazione personaggio."""
+
+    slug = models.SlugField(max_length=80, unique=True)
+    titolo = models.CharField(max_length=200)
+    attivo = models.BooleanField(default=False)
+    modalita_test = models.BooleanField(
+        default=False,
+        verbose_name='Modalità test (solo staff)',
+        help_text='Se attivo, il flusso è visibile solo a staff Django, superuser e ruoli campagna Staffer/Master/Head Master.',
+    )
+    flusso_produzione = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='sandbox_test',
+        help_text='Per flussi in modalità test: flusso di produzione su cui pubblicare le modifiche.',
+    )
+    campagna = models.ForeignKey(
+        'personaggi.Campagna',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='flussi_creazione_guidata',
+        help_text="Se vuoto, il flusso vale per tutte le campagne (priorità inferiore rispetto a flussi specifici).",
+    )
+    passo_iniziale = models.ForeignKey(
+        'CreazioneGuidataPasso',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='flussi_come_iniziale',
+    )
+
+    class Meta:
+        ordering = ['titolo']
+        verbose_name = 'Flusso creazione guidata'
+        verbose_name_plural = 'Flussi creazione guidata'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['flusso_produzione'],
+                condition=models.Q(modalita_test=True, flusso_produzione__isnull=False),
+                name='uniq_sandbox_test_per_produzione',
+            ),
+        ]
+
+    def __str__(self):
+        return self.titolo
+
+
+class CreazioneGuidataPasso(SyncableModel, models.Model):
+    """Pagina del wizard (contenuto tipo wiki)."""
+
+    flusso = models.ForeignKey(
+        CreazioneGuidataFlusso,
+        on_delete=models.CASCADE,
+        related_name='passi',
+    )
+    slug = models.SlugField(max_length=80)
+    titolo = models.CharField(max_length=200)
+    contenuto = models.TextField(blank=True, default='')
+    immagine = models.ImageField(upload_to='creazione_guidata/', null=True, blank=True)
+    ordine = models.PositiveIntegerField(default=0)
+    opzioni_ui = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            'presentazione: pulsanti|si_no|radio; '
+            'gruppo_id; modalita_rewind: ramo|toggle; '
+            'widget_fondo: {tipo: modello_aura, ...}'
+        ),
+    )
+
+    class Meta:
+        ordering = ['ordine', 'titolo']
+        unique_together = [['flusso', 'slug']]
+        verbose_name = 'Passo creazione guidata'
+        verbose_name_plural = 'Passi creazione guidata'
+
+    def __str__(self):
+        return f"{self.titolo} ({self.flusso.slug}/{self.slug})"
+
+
+class CreazioneGuidataScelta(SyncableModel, models.Model):
+    """Scelta ramificata su un passo del wizard."""
+
+    TIPO_NAVIGA = 'naviga'
+    TIPO_IMPOSTA_CAMPO = 'imposta_campo'
+    TIPO_AGGIUNGI_ABILITA = 'aggiungi_abilita'
+    TIPO_COMBO = 'combo'
+    TIPO_FINE = 'fine'
+    TIPO_AZIONE_CHOICES = [
+        (TIPO_NAVIGA, 'Naviga verso altro passo'),
+        (TIPO_IMPOSTA_CAMPO, 'Imposta campo personaggio'),
+        (TIPO_AGGIUNGI_ABILITA, 'Aggiungi abilità suggerite'),
+        (TIPO_COMBO, 'Combinata (campo + abilità + navigazione da payload)'),
+        (TIPO_FINE, 'Fine percorso'),
+    ]
+
+    passo = models.ForeignKey(
+        CreazioneGuidataPasso,
+        on_delete=models.CASCADE,
+        related_name='scelte',
+    )
+    etichetta = models.CharField(max_length=200)
+    descrizione = models.CharField(max_length=500, blank=True, default='')
+    ordine = models.PositiveIntegerField(default=0)
+    tipo_azione = models.CharField(max_length=32, choices=TIPO_AZIONE_CHOICES, default=TIPO_NAVIGA)
+    passo_destinazione = models.ForeignKey(
+        CreazioneGuidataPasso,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='scelte_in_entrata',
+    )
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['ordine', 'etichetta']
+        verbose_name = 'Scelta creazione guidata'
+        verbose_name_plural = 'Scelte creazione guidata'
+
+    def __str__(self):
+        return f"{self.etichetta} ({self.tipo_azione})"
+
+
 class WikiImmagine(SyncableModel, models.Model):
     """
     Modello per gestire immagini caricate nella wiki.
@@ -783,7 +910,12 @@ class ConfigurazioneSito(SyncableModel, models.Model):
         verbose_name="Nota visibile in Admin durante manutenzione",
         help_text="Avviso evidenziato in tutte le pagine Admin quando la manutenzione e attiva.",
     )
-    
+    creazione_guidata_aperta_giocatori = models.BooleanField(
+        default=False,
+        verbose_name='Creazione guidata visibile ai giocatori',
+        help_text='Se disattivo, il pulsante creazione guidata non compare per i giocatori (staff/master possono ancora usare la sandbox test).',
+    )
+
     # Metadata
     ultima_modifica = models.DateTimeField(auto_now=True)
     

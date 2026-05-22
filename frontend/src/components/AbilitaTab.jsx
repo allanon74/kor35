@@ -6,7 +6,8 @@ import AbilitaDetailModal from './AbilitaDetailModal.jsx';
 import GenericGroupedList from './GenericGroupedList';
 import PunteggioDisplay from './PunteggioDisplay';     
 import IconaPunteggio from './IconaPunteggio';
-import { useOptimisticAcquireAbilita, useRevokeAbilita } from '../hooks/useGameData';         
+import { useOptimisticAcquireAbilita, useRevokeAbilita } from '../hooks/useGameData';
+import { updatePersonaggio } from '../api';         
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -33,6 +34,20 @@ const AbilitaTab = ({ onLogout }) => {
     return () => window.clearInterval(timer);
   }, []);
 
+  const wizardInCorso = !!char?.impostazioni_ui?.creazione_guidata_in_corso;
+
+  const wizardScelteIds = useMemo(() => {
+    const raw = char?.impostazioni_ui?.wizard_abilita_scelte;
+    if (!Array.isArray(raw)) return new Set();
+    return new Set(raw.map((id) => String(id)));
+  }, [char?.impostazioni_ui]);
+
+  const wizardPendingIds = useMemo(() => {
+    const raw = char?.impostazioni_ui?.wizard_abilita_pendenti;
+    if (!Array.isArray(raw)) return new Set();
+    return new Set(raw.map((id) => String(id)));
+  }, [char?.impostazioni_ui]);
+
   const handleAcquire = useCallback(async (skill, e) => {
     e.stopPropagation(); 
     if (acquireMutation.isPending || !selectedCharacterId) return;
@@ -52,13 +67,24 @@ const AbilitaTab = ({ onLogout }) => {
         abilitaId: skill.id, 
         charId: selectedCharacterId 
       });
-      // Refetch in background per allineare i dati reali lato server.
+      const sid = String(skill.id);
+      if (wizardPendingIds.has(sid) || wizardScelteIds.has(sid)) {
+        const ui = { ...(char?.impostazioni_ui || {}) };
+        const next = (ui.wizard_abilita_pendenti || []).filter((id) => String(id) !== sid);
+        ui.wizard_abilita_pendenti = next;
+        ui.wizard_abilita_scelte = (ui.wizard_abilita_scelte || []).filter((id) => String(id) !== sid);
+        try {
+          await updatePersonaggio(selectedCharacterId, { impostazioni_ui: ui }, onLogout);
+        } catch (_e) {
+          /* ignore */
+        }
+      }
       refreshCharacterData();
     } catch (error) {
       console.error("Errore acquisto:", error);
       alert(`Errore durante l'acquisto: ${error.message}`);
     }
-  }, [acquireMutation, selectedCharacterId, refreshCharacterData]);
+  }, [acquireMutation, selectedCharacterId, refreshCharacterData, wizardPendingIds, wizardScelteIds, char?.impostazioni_ui, onLogout]);
 
   const handleRevoke = useCallback(
     async (skill, e) => {
@@ -129,14 +155,28 @@ const AbilitaTab = ({ onLogout }) => {
 
   // --- FILTRO MODIFICA: Rimuovo i tratti speciali e le abilità nascoste dalla lista acquistabili ---
   // Questi verranno gestiti tramite il modale in PunteggioDisplay
-  const filteredAcquirableSkills = useMemo(() => 
-    acquirableSkills 
+  const filteredAcquirableSkills = useMemo(() => {
+    const list = acquirableSkills
       ? acquirableSkills.filter(
-          (skill) => !skill.is_tratto_aura && !skill.nascondi_in_scheda_abilita
+          (skill) => !skill.is_tratto_aura && !skill.nascondi_in_scheda_abilita,
         )
-      : [],
-    [acquirableSkills]
-  );
+      : [];
+    return [...list].sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [acquirableSkills]);
+
+  const daAcquistareSkills = useMemo(() => {
+    return filteredAcquirableSkills.filter((skill) => {
+      const id = String(skill.id);
+      return wizardScelteIds.has(id) || wizardPendingIds.has(id);
+    });
+  }, [filteredAcquirableSkills, wizardScelteIds, wizardPendingIds]);
+
+  const acquirableRestSkills = useMemo(() => {
+    return filteredAcquirableSkills.filter((skill) => {
+      const id = String(skill.id);
+      return !wizardScelteIds.has(id) && !wizardPendingIds.has(id);
+    });
+  }, [filteredAcquirableSkills, wizardScelteIds, wizardPendingIds]);
   // --------------------------------------------------------------------------
 
   if (isLoadingAcquirable || isLoadingDetail || !char) {
@@ -211,6 +251,9 @@ const AbilitaTab = ({ onLogout }) => {
   };
 
   const renderAcquirableItem = (skill) => {
+    const sid = String(skill.id);
+    const isWizardScelta = wizardInCorso && wizardScelteIds.has(sid);
+    const isWizardPending = wizardPendingIds.has(sid);
     const canAffordPC = char.punti_caratteristica >= skill.costo_pc_calc;
     const canAffordCrediti = char.crediti >= skill.costo_crediti_calc;
     const canAfford = canAffordPC && canAffordCrediti;
@@ -236,7 +279,19 @@ const AbilitaTab = ({ onLogout }) => {
                 />
             </div>
             <div className="flex flex-col">
-                <span className="font-bold text-gray-200 text-base">{skill.nome}</span>
+                <span className="font-bold text-gray-200 text-base flex items-center gap-2 flex-wrap">
+                  {skill.nome}
+                  {isWizardScelta ? (
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-violet-900/60 text-violet-200 border border-violet-600">
+                      Scelta nel percorso
+                    </span>
+                  ) : null}
+                  {isWizardPending ? (
+                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-900/60 text-amber-200 border border-amber-600">
+                      Da completare
+                    </span>
+                  ) : null}
+                </span>
                 <div className="text-xs text-gray-400 flex gap-2 mt-0.5 sm:hidden">
                     {skill.costo_pc_calc > 0 && (
                         <span className={canAffordPC ? "text-blue-300" : "text-red-400"}>
@@ -326,10 +381,38 @@ const AbilitaTab = ({ onLogout }) => {
     />
   );
 
+  const DaAcquistareSection = daAcquistareSkills.length > 0 && (
+    <div className="mb-6 rounded-xl border-2 border-violet-500/60 bg-violet-950/30 p-3 shadow-[0_0_20px_rgba(139,92,246,0.12)]">
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-violet-500/40">
+        <ShoppingCart className="w-5 h-5 text-violet-300 shrink-0" />
+        <div>
+          <h2 className="text-base font-bold text-violet-100">Da acquistare</h2>
+          <p className="text-[11px] text-violet-300/80">
+            Proposte dal percorso guidato o da completare con i fondi attuali
+          </p>
+        </div>
+        <span className="ml-auto text-xs font-mono text-violet-200 bg-violet-900/50 px-2 py-0.5 rounded">
+          {daAcquistareSkills.length}
+        </span>
+      </div>
+      <GenericGroupedList
+        items={daAcquistareSkills}
+        groupByKey="caratteristica"
+        orderKey="ordine"
+        titleKey="nome"
+        colorKey="colore"
+        iconKey="icona_url"
+        renderItem={renderAcquirableItem}
+        renderHeader={renderGroupHeader}
+        compact={false}
+        itemSortFn={(a, b) => a.nome.localeCompare(b.nome)}
+      />
+    </div>
+  );
+
   const AcquirableListComponent = (
-    <GenericGroupedList 
-      // USO LA LISTA FILTRATA QUI
-      items={filteredAcquirableSkills} 
+    <GenericGroupedList
+      items={acquirableRestSkills}
       groupByKey="caratteristica"
       orderKey="ordine"
       titleKey="nome"
@@ -358,6 +441,8 @@ const AbilitaTab = ({ onLogout }) => {
                 </div>
             </div>
         </div>
+
+        {DaAcquistareSection}
 
         {temporaryAbilities.length > 0 && (
           <div className="mb-6 rounded-lg border border-sky-500/50 bg-sky-950/20 p-3 shadow-[0_0_16px_rgba(56,189,248,0.14)]">
@@ -414,7 +499,7 @@ const AbilitaTab = ({ onLogout }) => {
                             ? 'bg-indigo-600 text-white shadow-lg scale-[1.02]' 
                             : 'text-gray-400 hover:bg-gray-700/50 hover:text-white'
                     )}>
-                    Nuove <span className="ml-1 opacity-70 text-xs">({filteredAcquirableSkills.length})</span>
+                    Nuove <span className="ml-1 opacity-70 text-xs">({acquirableRestSkills.length})</span>
                     </button>
                 )}
                 </Tab>
@@ -425,6 +510,7 @@ const AbilitaTab = ({ onLogout }) => {
                     {PossessedListComponent}
                 </Tab.Panel>
                 <Tab.Panel className="focus:outline-none animate-fadeIn">
+                    {DaAcquistareSection}
                     {AcquirableListComponent}
                 </Tab.Panel>
             </Tab.Panels>
@@ -450,9 +536,10 @@ const AbilitaTab = ({ onLogout }) => {
                     <PlusCircle className="w-6 h-6 text-indigo-500" />
                     <h2 className="text-xl font-bold text-white">
                         Nuove Abilità
-                        <span className="ml-2 text-sm font-normal text-gray-400">({filteredAcquirableSkills.length})</span>
+                        <span className="ml-2 text-sm font-normal text-gray-400">({acquirableRestSkills.length})</span>
                     </h2>
                 </div>
+                {DaAcquistareSection}
                 {AcquirableListComponent}
             </div>
 

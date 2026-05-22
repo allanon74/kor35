@@ -5,6 +5,7 @@ from .models import (
     StaffOffGame, QuestFase, QuestTask,
     PaginaRegolamento, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial, PayPalImpostazioniGlobali, IscrizioneEventoPagamento, EventoPremioPersonaggio,
+    CreazioneGuidataFlusso, CreazioneGuidataPasso, CreazioneGuidataScelta,
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 
@@ -439,3 +440,41 @@ class LinkSocialAdmin(admin.ModelAdmin):
             'fields': ('ordine', 'attivo')
         }),
     )
+
+
+class CreazioneGuidataSceltaInline(admin.TabularInline):
+    model = CreazioneGuidataScelta
+    fk_name = 'passo'
+    extra = 1
+    fields = ('ordine', 'etichetta', 'tipo_azione', 'passo_destinazione', 'payload')
+
+
+class CreazioneGuidataPassoInline(admin.StackedInline):
+    model = CreazioneGuidataPasso
+    extra = 0
+    show_change_link = True
+    fields = ('ordine', 'slug', 'titolo', 'contenuto')
+
+
+@admin.register(CreazioneGuidataFlusso)
+class CreazioneGuidataFlussoAdmin(admin.ModelAdmin):
+    list_display = ('titolo', 'slug', 'attivo', 'modalita_test', 'flusso_produzione', 'campagna', 'passo_iniziale')
+    list_filter = ('attivo', 'modalita_test', 'campagna')
+    raw_id_fields = ('flusso_produzione', 'passo_iniziale')
+    search_fields = ('titolo', 'slug')
+    inlines = [CreazioneGuidataPassoInline]
+
+
+@admin.register(CreazioneGuidataPasso)
+class CreazioneGuidataPassoAdmin(SModelAdmin):
+    list_display = ('titolo', 'slug', 'flusso', 'ordine')
+    list_filter = ('flusso',)
+    search_fields = ('titolo', 'slug')
+    inlines = [CreazioneGuidataSceltaInline]
+
+
+@admin.register(CreazioneGuidataScelta)
+class CreazioneGuidataSceltaAdmin(admin.ModelAdmin):
+    list_display = ('etichetta', 'passo', 'tipo_azione', 'ordine')
+    list_filter = ('tipo_azione', 'passo__flusso')
+    search_fields = ('etichetta',)

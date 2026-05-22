@@ -2158,6 +2158,149 @@ export const updatePersonaggio = (id, data, onLogout) => {
     }, onLogout);
 };
 
+export const deletePersonaggio = (id, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/gestione-personaggi/${id}/`, {
+        method: 'DELETE',
+    }, onLogout);
+};
+
+// --- CREAZIONE GUIDATA PERSONAGGIO ---
+const _creazioneGuidataQuery = (personaggioId, effetti, modalitaTest) => {
+    const params = new URLSearchParams();
+    if (personaggioId) params.set('personaggio_id', String(personaggioId));
+    if (effetti?.length) params.set('effetti', JSON.stringify(effetti));
+    if (modalitaTest) params.set('modalita_test', '1');
+    return params.toString();
+};
+
+export const getCreazioneGuidataStato = (onLogout) =>
+    fetchAuthenticated('/api/plot/api/creazione-guidata/stato/', { method: 'GET' }, onLogout);
+
+export const getCreazioneGuidataImpostazioni = (onLogout) =>
+    fetchAuthenticated('/api/plot/api/creazione-guidata/impostazioni/', { method: 'GET' }, onLogout);
+
+export const patchCreazioneGuidataImpostazioni = (apertaGiocatori, onLogout) =>
+    fetchAuthenticated(
+        '/api/plot/api/creazione-guidata/impostazioni/',
+        { method: 'PATCH', body: JSON.stringify({ aperta_giocatori: apertaGiocatori }) },
+        onLogout,
+    );
+
+export const getCreazioneGuidataAvvio = (personaggioId, effetti, onLogout, modalitaTest = false) => {
+    const qs = _creazioneGuidataQuery(personaggioId, effetti, modalitaTest);
+    return fetchAuthenticated(
+        `/api/plot/api/creazione-guidata/avvio${qs ? `?${qs}` : ''}`,
+        { method: 'GET' },
+        onLogout,
+    );
+};
+
+export const getCreazioneGuidataPasso = (slug, personaggioId, effetti, onLogout, modalitaTest = false) => {
+    const qs = _creazioneGuidataQuery(personaggioId, effetti, modalitaTest);
+    return fetchAuthenticated(
+        `/api/plot/api/creazione-guidata/passi/${encodeURIComponent(slug)}${qs ? `?${qs}` : ''}`,
+        { method: 'GET' },
+        onLogout,
+    );
+};
+
+export const applyCreazioneGuidata = (personaggioId, effetti, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/gestione-personaggi/${personaggioId}/creazione-guidata/applica/`,
+        { method: 'POST', body: JSON.stringify({ effetti }) },
+        onLogout,
+    );
+
+export const getCreazioneGuidataProposte = (personaggioId, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/gestione-personaggi/${personaggioId}/creazione-guidata/proposte/`,
+        { method: 'GET' },
+        onLogout,
+    );
+
+export const salvaCreazioneGuidataProposte = (personaggioId, effetti, trail, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/gestione-personaggi/${personaggioId}/creazione-guidata/salva-proposte/`,
+        { method: 'POST', body: JSON.stringify({ effetti, trail }) },
+        onLogout,
+    );
+
+export const getCreazioneGuidataRiepilogo = (personaggioId, effetti, onLogout) => {
+    const params = new URLSearchParams();
+    if (effetti?.length) params.set('effetti', JSON.stringify(effetti));
+    const qs = params.toString();
+    return fetchAuthenticated(
+        `/api/personaggi/api/gestione-personaggi/${personaggioId}/creazione-guidata/riepilogo${qs ? `?${qs}` : ''}`,
+        { method: 'GET' },
+        onLogout,
+    );
+};
+
+export const listCreazioneGuidataFlussi = (onLogout) =>
+    fetchAuthenticated('/api/plot/api/staff/creazione-guidata/flussi/', { method: 'GET' }, onLogout);
+
+export const getCreazioneGuidataFlusso = (id, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/staff/creazione-guidata/flussi/${id}/`, { method: 'GET' }, onLogout);
+
+export const createCreazioneGuidataFlusso = (data, onLogout) =>
+    fetchAuthenticated('/api/plot/api/staff/creazione-guidata/flussi/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const creaSandboxCreazioneGuidataFlusso = (flussoProduzioneId, onLogout) =>
+    fetchAuthenticated(
+        `/api/plot/api/staff/creazione-guidata/flussi/${flussoProduzioneId}/crea-sandbox/`,
+        { method: 'POST' },
+        onLogout,
+    );
+
+export const pubblicaCreazioneGuidataSandbox = (flussoTestId, onLogout) =>
+    fetchAuthenticated(
+        `/api/plot/api/staff/creazione-guidata/flussi/${flussoTestId}/pubblica-su-produzione/`,
+        { method: 'POST' },
+        onLogout,
+    );
+
+export const updateCreazioneGuidataFlusso = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/staff/creazione-guidata/flussi/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const deleteCreazioneGuidataFlusso = (id, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/staff/creazione-guidata/flussi/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const createCreazioneGuidataPasso = (data, onLogout) =>
+    fetchAuthenticated('/api/plot/api/staff/creazione-guidata/passi/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const updateCreazioneGuidataPasso = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/staff/creazione-guidata/passi/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const deleteCreazioneGuidataPasso = (id, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/staff/creazione-guidata/passi/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const createCreazioneGuidataScelta = (data, onLogout) =>
+    fetchAuthenticated('/api/plot/api/staff/creazione-guidata/scelte/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const updateCreazioneGuidataScelta = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/staff/creazione-guidata/scelte/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const deleteCreazioneGuidataScelta = (id, onLogout) =>
+    fetchAuthenticated(`/api/plot/api/staff/creazione-guidata/scelte/${id}/`, { method: 'DELETE' }, onLogout);
+
 export const resetPersonaggio = (id, reason, onLogout) => {
     return fetchAuthenticated(`/api/personaggi/api/gestione-personaggi/${id}/reset_personaggio/`, {
         method: 'POST',

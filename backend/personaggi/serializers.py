@@ -2503,6 +2503,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     can_edit_razza = serializers.SerializerMethodField()
     can_edit_era = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
+    impostazioni_ui = serializers.JSONField(required=False)
 
     class Meta:
         model = Personaggio
@@ -2517,6 +2518,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'era', 'prefettura', 'prefettura_esterna', 'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
             'can_edit_razza', 'can_edit_era',
             'avatar_url',
+            'impostazioni_ui',
         )
         read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
 
@@ -3329,6 +3331,7 @@ class AbilitaStaffListSerializer(serializers.ModelSerializer):
         model = Abilita
         fields = [
             'id',
+            'sync_id',
             'nome',
             'costo_pc',
             'costo_crediti',

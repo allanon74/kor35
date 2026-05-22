@@ -4,10 +4,12 @@ import { Edit3, LogOut, Plus, Sparkles, BookOpen, Shield, ShieldAlert, ArrowRigh
 import {
   createPersonaggio,
   getArcanaPasswordStatus,
+  getCreazioneGuidataStato,
   getEre,
   getTipologiePersonaggio,
   getPersonaggiEditList,
   updatePersonaggio,
+  deletePersonaggio,
   fetchAuthenticated,
   resolveMediaUrl,
   socialUpdateMyProfile,
@@ -17,6 +19,7 @@ import { useCharacter } from './CharacterContext';
 import PasswordChangeModal from './PasswordChangeModal';
 import RichTextEditor from './RichTextEditor';
 import EventSubscriptionStartPanel from './EventSubscriptionStartPanel';
+import CreazioneGuidataModal from './CreazioneGuidataModal';
 
 export default function StartPage({ onLogout, onSwitchToMaster }) {
   const navigate = useNavigate();
@@ -26,6 +29,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     isCampaignMaster,
     isCampaignStaffer,
     isAdmin,
+    canUseWizardTest,
     campaigns,
     activeCampaign,
     changeActiveCampaign,
@@ -67,6 +71,52 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreviewBlob, setAvatarPreviewBlob] = useState(null);
   const [avatarRemoteUrl, setAvatarRemoteUrl] = useState(null);
+  const [showGuidedWizard, setShowGuidedWizard] = useState(false);
+  const [guidedWizardLoading, setGuidedWizardLoading] = useState(false);
+  const [wizardStato, setWizardStato] = useState({
+    disponibile: false,
+    disponibile_produzione: false,
+    disponibile_test: false,
+  });
+
+  useEffect(() => {
+    if (!showEditor) return undefined;
+    let cancelled = false;
+    getCreazioneGuidataStato(onLogout)
+      .then((st) => {
+        if (!cancelled && st) setWizardStato(st);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWizardStato({
+            disponibile: false,
+            disponibile_produzione: false,
+            disponibile_test: false,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showEditor, onLogout]);
+
+  const showGuidedCreationButton = useMemo(() => {
+    if (impostazioniUi?.creazione_guidata_in_corso) {
+      return canUseWizardTest || wizardStato.aperta_giocatori !== false;
+    }
+    if (!isCreateMode) return false;
+    if (canUseWizardTest && wizardStato.disponibile_test) return true;
+    if (wizardStato.disponibile_giocatori) return true;
+    return false;
+  }, [
+    impostazioniUi?.creazione_guidata_in_corso,
+    isCreateMode,
+    wizardStato.disponibile_giocatori,
+    wizardStato.disponibile_test,
+    wizardStato.aperta_giocatori,
+    canUseWizardTest,
+  ]);
+  const [impostazioniUi, setImpostazioniUi] = useState({});
 
   useEffect(() => {
     if (!avatarFile) {
@@ -165,6 +215,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         campaigns.find((c) => normCampaignSlug(c.slug) === normCampaignSlug(activeCampaign))?.id ||
         '',
     });
+    setImpostazioniUi({});
     setShowEditor(true);
     setEditPermissions({ can_edit_era: true, can_edit_razza: true });
   };
@@ -185,6 +236,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       watch_enabled: !!char.watch_enabled,
       campagna: char.campagna || '',
     });
+    setImpostazioniUi(char.impostazioni_ui && typeof char.impostazioni_ui === 'object' ? char.impostazioni_ui : {});
     setShowEditor(true);
     setEditPermissions({
       can_edit_era: !!char.can_edit_era,
@@ -192,8 +244,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     });
   };
 
-  const saveCharacter = async () => {
-    const previousCampaignId = formData.campagna ? String(formData.campagna) : null;
+  const buildSavePayload = () => {
     const payload = { ...formData };
     if (!payload.era) payload.era = null;
     if (!payload.prefettura) payload.prefettura = null;
@@ -222,6 +273,95 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     } else {
       payload.watch_enabled = !!payload.watch_enabled;
     }
+    if (Object.keys(impostazioniUi).length > 0) {
+      payload.impostazioni_ui = impostazioniUi;
+    }
+    return payload;
+  };
+
+  const closeEditor = async () => {
+    if (impostazioniUi?.creazione_guidata_in_corso && formData.id) {
+      const discard = window.confirm(
+        'Hai una bozza di personaggio avviata con la creazione guidata. Vuoi eliminare la bozza? (Annulla = la bozza resta in lista)',
+      );
+      if (discard) {
+        try {
+          await deletePersonaggio(formData.id, onLogout);
+          const updated = await getPersonaggiEditList(onLogout, { mineOnly: true });
+          const ordered = Array.isArray(updated)
+            ? [...updated].sort((a, b) => String(a?.nome || '').localeCompare(String(b?.nome || '')))
+            : [];
+          setCharacters(ordered);
+          await fetchPersonaggi();
+        } catch (err) {
+          alert(err?.message || 'Errore eliminazione bozza');
+          return;
+        }
+      }
+    }
+    setShowEditor(false);
+    setShowGuidedWizard(false);
+    setAvatarFile(null);
+    setAvatarRemoteUrl(null);
+  };
+
+  const openGuidedCreation = async () => {
+    const nome = String(formData.nome || '').trim();
+    if (!nome) {
+      alert('Inserisci almeno il nome del personaggio prima di avviare la creazione guidata.');
+      return;
+    }
+    setGuidedWizardLoading(true);
+    try {
+      const payload = buildSavePayload();
+      let charId = formData.id;
+      if (!charId) {
+        delete payload.id;
+        const created = await createPersonaggio(payload, onLogout);
+        charId = created?.id;
+        setFormData((prev) => ({
+          ...prev,
+          id: charId,
+          era: created?.era ?? prev.era,
+          prefettura: created?.prefettura ?? prev.prefettura,
+          prefettura_esterna: created?.prefettura_esterna ?? prev.prefettura_esterna,
+        }));
+        setIsCreateMode(false);
+      } else {
+        await updatePersonaggio(charId, payload, onLogout);
+      }
+      const ui = { ...impostazioniUi, creazione_guidata_in_corso: true };
+      setImpostazioniUi(ui);
+      await updatePersonaggio(charId, { impostazioni_ui: ui }, onLogout);
+      setShowGuidedWizard(true);
+    } catch (err) {
+      alert(err?.message || 'Impossibile salvare la bozza per il percorso guidato.');
+    } finally {
+      setGuidedWizardLoading(false);
+    }
+  };
+
+  const handleGuidedApplied = (result) => {
+    const pg = result?.personaggio;
+    if (pg) {
+      setFormData((prev) => ({
+        ...prev,
+        era: pg.era ?? prev.era,
+        prefettura: pg.prefettura ?? prev.prefettura,
+        prefettura_esterna: !!pg.prefettura_esterna,
+        tipologia: pg.tipologia ?? prev.tipologia,
+      }));
+      setImpostazioniUi(pg.impostazioni_ui && typeof pg.impostazioni_ui === 'object' ? pg.impostazioni_ui : {});
+    }
+  };
+
+  const saveCharacter = async () => {
+    const previousCampaignId = formData.campagna ? String(formData.campagna) : null;
+    const payload = buildSavePayload();
+    const ui = { ...impostazioniUi };
+    delete ui.creazione_guidata_in_corso;
+    if (Object.keys(ui).length > 0) payload.impostazioni_ui = ui;
+    else if (formData.id) payload.impostazioni_ui = { creazione_guidata_in_corso: false };
     try {
       let charId = formData.id;
       let savedCampaignId = previousCampaignId;
@@ -278,12 +418,6 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     await selectCharacter(char.id);
     setLastCharacterId(String(char.id));
     navigate('/app/play?tab=home');
-  };
-
-  const closeEditor = () => {
-    setShowEditor(false);
-    setAvatarFile(null);
-    setAvatarRemoteUrl(null);
   };
 
   const modalAvatarSrc = avatarPreviewBlob || (avatarRemoteUrl ? resolveMediaUrl(avatarRemoteUrl) : null);
@@ -471,6 +605,11 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                     <div className="min-w-0">
                       <div className="font-bold text-white flex items-center gap-1.5 min-w-0">
                         <span className="truncate">{char.nome}</span>
+                        {char.impostazioni_ui?.creazione_guidata_in_corso ? (
+                          <span className="shrink-0 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-900/80 text-amber-200 border border-amber-700">
+                            Bozza
+                          </span>
+                        ) : null}
                         {char.watch_enabled ? (
                           <span
                             className="inline-flex shrink-0 text-sky-400"
@@ -734,7 +873,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                 Segni zodiacali disponibili: {segni.length > 0 ? segni.map((s) => s.nome).join(', ') : 'n/d'}
               </div>
             </div>
-            <div className="px-5 py-4 border-t border-gray-700 flex justify-end gap-2">
+            <div className="px-5 py-4 border-t border-gray-700 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={closeEditor}
@@ -742,6 +881,25 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
               >
                 Annulla
               </button>
+              {showGuidedCreationButton && (
+                <button
+                  type="button"
+                  onClick={openGuidedCreation}
+                  disabled={guidedWizardLoading}
+                  className="px-4 py-2 rounded bg-violet-800 hover:bg-violet-700 text-sm font-bold disabled:opacity-50"
+                  title={
+                    canUseWizardTest && wizardStato.disponibile_test && !wizardStato.disponibile_produzione
+                      ? 'Percorso di test (solo staff)'
+                      : undefined
+                  }
+                >
+                  {guidedWizardLoading
+                    ? 'Salvataggio...'
+                    : impostazioniUi?.creazione_guidata_in_corso
+                      ? 'Riprendi creazione guidata'
+                      : 'Creazione guidata per nuovi giocatori'}
+                </button>
+              )}
               <button
                 onClick={saveCharacter}
                 className="px-4 py-2 rounded bg-indigo-700 hover:bg-indigo-600 text-sm font-bold"
@@ -752,6 +910,15 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
           </div>
         </div>
       )}
+
+      <CreazioneGuidataModal
+        isOpen={showGuidedWizard}
+        onClose={() => setShowGuidedWizard(false)}
+        personaggioId={formData.id}
+        onLogout={onLogout}
+        onApplied={handleGuidedApplied}
+        canUseWizardTest={canUseWizardTest}
+      />
 
       <PasswordChangeModal
         isOpen={showPasswordModal}

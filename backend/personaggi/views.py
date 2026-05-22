@@ -4907,6 +4907,84 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             
         return Response({"status": "success", "new_val": val, "msg": "Risorse aggiornate"})
 
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='creazione-guidata/proposte',
+    )
+    def creazione_guidata_proposte(self, request, pk=None):
+        from personaggi.creazione_guidata_proposte import load_wizard_proposte
+
+        personaggio = self.get_object()
+        if personaggio.proprietario_id != request.user.id:
+            return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
+
+        effetti, trail = load_wizard_proposte(personaggio)
+        return Response({'effetti': effetti, 'trail': trail})
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='creazione-guidata/salva-proposte',
+    )
+    def creazione_guidata_salva_proposte(self, request, pk=None):
+        from personaggi.creazione_guidata_proposte import salva_wizard_proposte
+
+        personaggio = self.get_object()
+        if personaggio.proprietario_id != request.user.id:
+            return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
+
+        effetti = request.data.get('effetti') or []
+        trail = request.data.get('trail')
+        blob = salva_wizard_proposte(personaggio, effetti=effetti, trail=trail)
+        return Response({'wizard_proposte': blob})
+
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='creazione-guidata/riepilogo',
+    )
+    def creazione_guidata_riepilogo(self, request, pk=None):
+        from gestione_plot.creazione_guidata_helpers import _parse_effetti_param
+        from personaggi.creazione_guidata_riepilogo import build_wizard_riepilogo
+
+        personaggio = self.get_object()
+        if personaggio.proprietario_id != request.user.id:
+            return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
+
+        effetti = _parse_effetti_param(request.query_params.get('effetti'))
+        return Response(build_wizard_riepilogo(personaggio, effetti))
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='creazione-guidata/applica',
+    )
+    @transaction.atomic
+    def creazione_guidata_applica(self, request, pk=None):
+        from personaggi.creazione_guidata_apply import apply_creazione_guidata_effetti
+
+        personaggio = self.get_object()
+        if personaggio.proprietario_id != request.user.id:
+            return Response({"error": "Non autorizzato."}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
+            return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
+
+        effetti = request.data.get('effetti') or []
+        result = apply_creazione_guidata_effetti(personaggio, effetti, request=request)
+        personaggio.refresh_from_db()
+        serializer = PersonaggioManageSerializer(personaggio, context={'request': request})
+        return Response({
+            **result,
+            'personaggio': serializer.data,
+        })
+
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     @transaction.atomic
     def reset_personaggio(self, request, pk=None):

@@ -76,6 +76,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     if (stored !== null) return stored === 'true';
     return localStorage.getItem('kor35_is_master') === 'true';
   });
+  const [isDjangoStaff, setIsDjangoStaff] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +91,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
         const serverSuper = !!me.is_superuser;
         setIsGlobalSuperuser(serverSuper);
         localStorage.setItem('kor35_is_admin', String(serverSuper));
+        setIsDjangoStaff(!!me.is_staff || serverSuper);
       } catch {
         /* mantieni fallback iniziale da localStorage */
       }
@@ -112,6 +114,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     activeCampaignRole === 'MASTER' ||
     activeCampaignRole === 'HEAD_MASTER';
   const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
+  const canUseWizardTest = isGlobalSuperuser || isDjangoStaff || isCampaignStaffer;
 
   const [viewAll, setViewAll] = useState(false);
   
@@ -658,6 +661,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     /** Superuser Django (bypass globale). Alias legacy per il codice esistente. */
     isGlobalSuperuser,
     isAdmin: isGlobalSuperuser,
+    isDjangoStaff,
+    canUseWizardTest,
     viewAll,
     toggleViewAll,
     adminPendingCount,
