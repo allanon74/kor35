@@ -73,7 +73,7 @@ from .serializers import (
 class AbilitaStaffPagination(PageNumberPagination):
     page_size = 50
     page_size_query_param = 'page_size'
-    max_page_size = 200
+    max_page_size = 500
 
 
 def _get_default_campaign():

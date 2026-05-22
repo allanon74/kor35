@@ -2350,6 +2350,21 @@ export const staffGetAbilitaList = (onLogout, params = {}) => {
     return fetchAuthenticated(url, { method: 'GET' }, onLogout);
 };
 
+/** Elenco completo staff (tutte le pagine) — per combobox che devono includere anche abilità "nascoste in scheda". */
+export const staffGetAbilitaListAll = async (onLogout, params = {}) => {
+    const pageSize = params.pageSize || 200;
+    const all = [];
+    let page = 1;
+    for (;;) {
+        const data = await staffGetAbilitaList(onLogout, { ...params, page, pageSize });
+        const rows = Array.isArray(data) ? data : (data?.results || []);
+        all.push(...rows);
+        if (Array.isArray(data) || !data?.next) break;
+        page += 1;
+    }
+    return all;
+};
+
 /** Dettaglio completo (inlines incluse) per l'editor staff — necessario prima di PATCH per non azzerare relazioni. */
 export const staffGetAbilita = (id, onLogout) => {
     return fetchAuthenticated(`/api/personaggi/api/staff/abilita/${id}/`, { method: 'GET' }, onLogout);

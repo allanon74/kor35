@@ -1,11 +1,36 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useCharacter } from '../CharacterContext';
-import { getStatisticheList, staffUpdateTessitura, staffCreateTessitura, staffGetAbilitaList } from '../../api';
+import { getStatisticheList, staffUpdateTessitura, staffCreateTessitura, staffGetAbilitaListAll } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
 import FormulaBuilderModal from './FormulaBuilderModal';
+
+/** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
+const mergeAbilitaTemporaneaOption = (rows, selected) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!selected) return list;
+  const id = selected?.id ?? selected;
+  if (id == null || id === '') return list;
+  const sid = String(id);
+  if (list.some((r) => String(r.id) === sid)) return list;
+  const nome =
+    typeof selected === 'object' && selected.nome
+      ? selected.nome
+      : `Abilità #${id}`;
+  return [
+    ...list,
+    { id, nome, nascondi_in_scheda_abilita: !!selected?.nascondi_in_scheda_abilita },
+  ];
+};
+
+const formatAbilitaOptionLabel = (abilita) => {
+  if (!abilita?.nome) return '';
+  return abilita.nascondi_in_scheda_abilita
+    ? `${abilita.nome} (nascosta in scheda)`
+    : abilita.nome;
+};
 
 const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -44,11 +69,28 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
   useEffect(() => {
     getStatisticheList(onLogout).then(setStatsOptions);
-    staffGetAbilitaList(onLogout, { pageSize: 500 }).then((data) => {
-      const rows = Array.isArray(data) ? data : (data?.results || []);
-      setAbilitaOptions(rows || []);
-    });
-  }, [onLogout]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await staffGetAbilitaListAll(onLogout);
+        if (cancelled) return;
+        setAbilitaOptions(
+          mergeAbilitaTemporaneaOption(rows, initialData?.abilita_temporanea)
+        );
+      } catch (e) {
+        console.error('Errore caricamento abilità per tessitura:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onLogout, initialData?.abilita_temporanea?.id]);
+
+  useEffect(() => {
+    setAbilitaOptions((prev) =>
+      mergeAbilitaTemporaneaOption(prev, formData.abilita_temporanea)
+    );
+  }, [formData.abilita_temporanea]);
 
   useEffect(() => {
     setFormData(hydrateForm(initialData));
@@ -187,6 +229,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
                   label="Abilita temporanea"
                   value={formData.abilita_temporanea?.id || formData.abilita_temporanea}
                   options={abilitaOptions}
+                  formatOptionLabel={formatAbilitaOptionLabel}
                   onChange={(v) => setFormData({ ...formData, abilita_temporanea: v ? parseInt(v, 10) : null })}
                 />
                 <Input
@@ -653,18 +696,26 @@ const Select = ({ label, value, options, onChange }) => (
     </div>
 );
 
-const SearchableSelect = ({ label, value, options = [], onChange, placeholder = 'Cerca...' }) => {
+const SearchableSelect = ({
+  label,
+  value,
+  options = [],
+  onChange,
+  placeholder = 'Cerca...',
+  formatOptionLabel,
+}) => {
     const wrapRef = useRef(null);
+    const labelFor = (opt) => (formatOptionLabel ? formatOptionLabel(opt) : opt?.nome || '');
     const selectedOption = useMemo(
       () => (options || []).find((o) => String(o.id) === String(value ?? '')) || null,
       [options, value]
     );
-    const [query, setQuery] = useState(selectedOption?.nome || '');
+    const [query, setQuery] = useState(() => (selectedOption ? labelFor(selectedOption) : ''));
     const [open, setOpen] = useState(false);
 
     useEffect(() => {
-      setQuery(selectedOption?.nome || '');
-    }, [selectedOption?.id, selectedOption?.nome]);
+      setQuery(selectedOption ? labelFor(selectedOption) : '');
+    }, [selectedOption?.id, selectedOption?.nome, formatOptionLabel]);
 
     useEffect(() => {
       const onDocClick = (ev) => {
@@ -678,11 +729,11 @@ const SearchableSelect = ({ label, value, options = [], onChange, placeholder = 
     const filtered = useMemo(() => {
       const q = String(query || '').trim().toLowerCase();
       if (!q) return options;
-      return (options || []).filter((o) => String(o.nome || '').toLowerCase().includes(q));
-    }, [options, query]);
+      return (options || []).filter((o) => labelFor(o).toLowerCase().includes(q));
+    }, [options, query, formatOptionLabel]);
 
     const pick = (opt) => {
-      setQuery(opt?.nome || '');
+      setQuery(opt ? labelFor(opt) : '');
       onChange?.(opt ? String(opt.id) : '');
       setOpen(false);
     };
@@ -717,7 +768,7 @@ const SearchableSelect = ({ label, value, options = [], onChange, placeholder = 
                     }`}
                     onClick={() => pick(opt)}
                   >
-                    {opt.nome}
+                    {labelFor(opt)}
                   </button>
                 ))
               )}
