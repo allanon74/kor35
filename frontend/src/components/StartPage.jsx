@@ -78,6 +78,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     disponibile_produzione: false,
     disponibile_test: false,
   });
+  const [impostazioniUi, setImpostazioniUi] = useState({});
 
   useEffect(() => {
     if (!showEditor) return undefined;
@@ -116,7 +117,6 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     wizardStato.aperta_giocatori,
     canUseWizardTest,
   ]);
-  const [impostazioniUi, setImpostazioniUi] = useState({});
 
   useEffect(() => {
     if (!avatarFile) {
