@@ -1388,24 +1388,24 @@ class Punteggio(Tabella):
     potenziamenti_multi_slot = models.BooleanField(default=False, verbose_name="Multi-Slot? (Più copie sullo stesso oggetto)")
     
     # COSTI CREAZIONE / ACQUISTO (Tecnica approvata)
-    stat_costo_creazione_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_inf')
-    stat_costo_creazione_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_tes')
-    stat_costo_acquisto_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_inf')
-    stat_costo_acquisto_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_tes')
+    stat_costo_creazione_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_creazione_inf')
+    stat_costo_creazione_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_creazione_tes')
+    stat_costo_acquisto_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_acquisto_inf')
+    stat_costo_acquisto_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_acquisto_tes')
     
     # NUOVI CAMPI: COSTO INVIO PROPOSTA (Burocrazia)
-    stat_costo_invio_proposta_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_invio_prop_inf', verbose_name="Stat. Costo Invio Proposta (Inf)")
-    stat_costo_invio_proposta_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_invio_prop_tes', verbose_name="Stat. Costo Invio Proposta (Tes)")
+    stat_costo_invio_proposta_infusione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_invio_prop_inf', verbose_name="Stat. Costo Invio Proposta (Inf)")
+    stat_costo_invio_proposta_tessitura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_invio_prop_tes', verbose_name="Stat. Costo Invio Proposta (Tes)")
 
     # COSTI CRAFTING (Forgiatura)
-    stat_costo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_forgia')
-    stat_tempo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_tempo_forgia')
+    stat_costo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_forgia')
+    stat_tempo_forgiatura = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_tempo': True}, related_name='aure_tempo_forgia')
     
     # COSTI CREAZIONE OGGETTI (Creazione diretta senza forgiatura)
-    stat_costo_creazione_oggetto = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_ogg', verbose_name="Stat. Costo Creazione Oggetto (Materia)")
-    stat_costo_creazione_mod = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_mod', verbose_name="Stat. Costo Creazione Mod")
-    stat_costo_creazione_innesto = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_inn', verbose_name="Stat. Costo Creazione Innesto")
-    stat_costo_creazione_mutazione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_mut', verbose_name="Stat. Costo Creazione Mutazione")
+    stat_costo_creazione_oggetto = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_creazione_ogg', verbose_name="Stat. Costo Creazione Oggetto (Materia)")
+    stat_costo_creazione_mod = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_creazione_mod', verbose_name="Stat. Costo Creazione Mod")
+    stat_costo_creazione_innesto = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_creazione_inn', verbose_name="Stat. Costo Creazione Innesto")
+    stat_costo_creazione_mutazione = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_creazione_mut', verbose_name="Stat. Costo Creazione Mutazione")
     
     caratteristica_relativa = models.ForeignKey("Punteggio", on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, null=True, blank=True, related_name="punteggi_caratteristica")
     modifica_statistiche = models.ManyToManyField('Statistica', through='CaratteristicaModificatore', related_name='modificata_da_caratteristiche', blank=True)
@@ -1413,13 +1413,13 @@ class Punteggio(Tabella):
     
     # --- NUOVI CAMPI CERIMONIALI ---
     permette_cerimoniali = models.BooleanField(default=False, verbose_name="Permette Cerimoniali")
-    stat_costo_acquisto_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_acquisto_cer', verbose_name="Stat. Costo Acquisto Cerimoniale")
-    stat_costo_creazione_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_creazione_cer', verbose_name="Stat. Costo Creazione Cerimoniale")
-    stat_costo_invio_proposta_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_costo_invio_prop_cer', verbose_name="Stat. Costo Invio Proposta (Cer)")
+    stat_costo_acquisto_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_acquisto_cer', verbose_name="Stat. Costo Acquisto Cerimoniale")
+    stat_costo_creazione_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_creazione_cer', verbose_name="Stat. Costo Creazione Cerimoniale")
+    stat_costo_invio_proposta_cerimoniale = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_costo_invio_prop_cer', verbose_name="Stat. Costo Invio Proposta (Cer)")
     # --- CONSUMABILI (creazione da tessitura) ---
-    stat_costo_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_costo_consumabili', verbose_name="Stat. Costo Creazione Consumabili")
-    stat_numero_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_numero_consumabili', verbose_name="Stat. Numero Consumabili")
-    stat_tempo_creazione_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_tempo_creazione_consumabili', verbose_name="Stat. Tempo Creazione Consumabili (sec)")
+    stat_costo_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_costo': True}, related_name='aure_stat_costo_consumabili', verbose_name="Stat. Costo Creazione Consumabili")
+    stat_numero_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_numero': True}, related_name='aure_stat_numero_consumabili', verbose_name="Stat. Numero Consumabili")
+    stat_tempo_creazione_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'is_tempo': True}, related_name='aure_stat_tempo_creazione_consumabili', verbose_name="Stat. Tempo Creazione Consumabili (sec)")
     stat_durata_consumabili = models.ForeignKey('Statistica', on_delete=models.SET_NULL, null=True, blank=True, related_name='aure_stat_durata_consumabili', verbose_name="Stat. Durata Consumabili (giorni)")
     # -------------------------------
     
@@ -1472,6 +1472,21 @@ class Statistica(Punteggio):
     )
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     is_primaria = models.BooleanField(default=False)
+    is_costo = models.BooleanField(
+        default=False,
+        verbose_name="Statistica costo",
+        help_text="Se attivo, la statistica può essere scelta nei campi stat_costo_* (costi crafting/acquisto).",
+    )
+    is_tempo = models.BooleanField(
+        default=False,
+        verbose_name="Statistica tempo",
+        help_text="Se attivo, la statistica può essere scelta nei campi stat_tempo_* (durate crafting).",
+    )
+    is_numero = models.BooleanField(
+        default=False,
+        verbose_name="Statistica numero",
+        help_text="Se attivo, la statistica può essere scelta nei campi stat_numero_* (quantità, conteggi).",
+    )
     is_risorsa_pool = models.BooleanField(
         default=False,
         verbose_name="Risorsa a pool",

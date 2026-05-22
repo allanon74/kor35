@@ -712,8 +712,8 @@ class TierAdmin(A_Admin):
 @admin.register(Statistica)
 class StatisticaAdmin(A_Admin):
     form = PunteggioAdminForm
-    list_display = ('nome', 'parametro', 'formula', 'is_primaria', 'valore_predefinito', 'valore_base_predefinito', 'sigla')
-    list_editable = ('formula', 'is_primaria',)
+    list_display = ('nome', 'parametro', 'formula', 'is_primaria', 'is_costo', 'is_tempo', 'is_numero', 'valore_predefinito', 'valore_base_predefinito', 'sigla')
+    list_editable = ('formula', 'is_primaria', 'is_costo', 'is_tempo', 'is_numero')
     exclude = ('tipo',)
     summernote_fields = ('descrizione',)
     search_fields = ['nome', 'parametro']
