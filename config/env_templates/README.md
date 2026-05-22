@@ -52,4 +52,12 @@ Poi compila password e segreti. Avvio stack:
 ./scripts/up_wsl_pi_like.sh --env prod
 ```
 
+Dopo reboot WSL/Docker (profili con nginx su `:8080` / `:8081`):
+
+```bash
+make up ENV=dev-home RECREATE_FRONTEND=1
+```
+
+Vedi `docs/WSL_DEV_SETUP.md` se `http://127.0.0.1:8080/` risponde con connection reset.
+
 Lo script `use_env_backend.sh` crea `backend/.env.<profilo>` se manca e copia il contenuto in `backend/.env` per compatibilità locale.

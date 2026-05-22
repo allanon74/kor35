@@ -164,6 +164,15 @@ Opzioni utili:
 - `--setup`: esegue setup prima dell'up
 - `--no-build`: evita rebuild immagini
 - `--skip-collectstatic`: salta collectstatic
+- `--recreate-frontend`: ricrea il container nginx ( **obbligatorio dopo reboot WSL/Docker Desktop** su `dev-home` / `dev-office`; vedi sotto)
+
+### Riavvio stack dopo spegnimento macchina (WSL)
+
+```bash
+make up ENV=dev-home RECREATE_FRONTEND=1
+```
+
+Senza recreate del `frontend`, Docker puo' riusare un container nginx gia' esistente con bind mount vuoti: la porta `8080` accetta TCP ma chiude subito la connessione (`ERR_EMPTY_RESPONSE` nel browser). Dettagli: `docs/WSL_DEV_SETUP.md` (sezione Pi-like, riavvio quotidiano).
 
 ### Stato / log / stop
 
@@ -308,8 +317,11 @@ make env ENV=dev-home
 # 2) setup runtime + build frontend
 make setup
 
-# 3) avvia stack
+# 3) avvia stack (prima installazione)
 make up ENV=dev-home
+
+# 3a) avvio dopo reboot WSL/Docker (ricrea nginx — uso quotidiano)
+make up ENV=dev-home RECREATE_FRONTEND=1
 
 # opzionale: pulizia automatica vecchi container kor35_wsl_* prima dell'up
 make up ENV=dev-home CLEANUP_LEGACY=1
@@ -362,6 +374,27 @@ make down ENV=dev-home
 
 # 7) cleanup manuale container legacy
 make cleanup-legacy
+```
+
+### Troubleshooting frontend `:8080` (connection reset / ERR_EMPTY_RESPONSE)
+
+Sintomo: browser su `http://127.0.0.1:8080/` → connection reset; `curl` idem; `docker ps` mostra `kor35_devhome_frontend` `Up`.
+
+Causa tipica: container `frontend` non ricreato dopo reboot; mount `nginx_conf_wsl` e `react_build` vuoti **dentro** il container.
+
+Fix:
+
+```bash
+make up ENV=dev-home RECREATE_FRONTEND=1
+# oppure
+./scripts/up_wsl_pi_like.sh --env dev-home --recreate-frontend
+```
+
+Verifica:
+
+```bash
+curl -sI http://127.0.0.1:8080/ | head -3
+docker exec kor35_devhome_frontend ls /etc/nginx/conf.d/
 ```
 
 ### Troubleshooting sync DB (rapido)

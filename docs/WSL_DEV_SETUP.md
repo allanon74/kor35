@@ -132,11 +132,13 @@ cd /home/django/progetti/kor35
 ./scripts/setup_wsl_pi_like.sh
 ```
 
-Poi avvia lo stack (consigliato):
+Poi avvia lo stack (prima installazione o dopo `make setup`):
 
 ```bash
 cd /home/django/progetti/kor35
-./scripts/up_wsl_pi_like.sh
+make up ENV=dev-home
+# oppure
+./scripts/up_wsl_pi_like.sh --env dev-home
 ```
 
 In un solo comando (setup + build frontend + avvio):
@@ -145,6 +147,36 @@ In un solo comando (setup + build frontend + avvio):
 ./scripts/up_wsl_pi_like.sh --setup
 ./scripts/up_wsl_pi_like.sh --env dev-home --setup
 ```
+
+### Riavvio quotidiano (WSL + Docker Desktop dopo spegnimento)
+
+Ordine consigliato:
+
+1. Avvia **WSL** (Ubuntu).
+2. Avvia **Docker Desktop** e attendi che sia completamente pronto.
+3. Avvia lo stack **ricreando il container nginx** (`frontend`):
+
+```bash
+cd /home/django/progetti/kor35
+make up ENV=dev-home RECREATE_FRONTEND=1
+# equivalente
+./scripts/up_wsl_pi_like.sh --env dev-home --recreate-frontend
+```
+
+**Perche' serve `RECREATE_FRONTEND=1`:** dopo un reboot di WSL/Docker Desktop il container `kor35_devhome_frontend` puo' restare in esecuzione con bind mount "vuoti" (`/etc/nginx/conf.d` e `/usr/share/nginx/html` senza file). Nginx non apre la porta 80 → dal browser `http://127.0.0.1:8080/` risponde con **connection reset** / `ERR_EMPTY_RESPONSE` (Chrome -324), anche se `docker ps` mostra il container `Up`.
+
+Verifica rapida:
+
+```bash
+curl -sI http://127.0.0.1:8080/ | head -3
+# atteso: HTTP/1.1 200 OK
+
+docker exec kor35_devhome_frontend ls /etc/nginx/conf.d/
+docker exec kor35_devhome_frontend ls /usr/share/nginx/html/ | head
+# atteso: default.conf, common_locations.snippets, index.html, assets/, ...
+```
+
+Se le directory nel container sono vuote, ripeti con `RECREATE_FRONTEND=1`. Un semplice `make up` senza quel flag **non** ricrea il frontend se il container esiste gia' (nel log compare `frontend Running 0.0s`).
 
 Altri comodi:
 
@@ -157,7 +189,7 @@ Altri comodi:
 ./scripts/down_wsl_pi_like.sh --volumes   # stop e cancella dati DB del compose
 ```
 
-Opzioni `up`: `--no-build` (riavvio senza rebuild immagini), `--setup` (come `setup_wsl_pi_like.sh`), `--skip-collectstatic`.
+Opzioni `up`: `--no-build` (riavvio senza rebuild immagini), `--setup` (come `setup_wsl_pi_like.sh`), `--skip-collectstatic`, `--recreate-frontend` (obbligatorio dopo reboot WSL; vedi sopra).
 
 `collectstatic` viene eseguito automaticamente da `up_wsl_pi_like.sh` (a meno di `--skip-collectstatic`).
 

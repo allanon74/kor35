@@ -668,6 +668,14 @@ make up ENV=dev-home
 make up ENV=dev-home CLEANUP_LEGACY=1
 ```
 
+**Dopo ogni spegnimento del PC** (WSL + Docker Desktop riavviati), usa sempre il recreate del nginx:
+
+```bash
+make up ENV=dev-home RECREATE_FRONTEND=1
+```
+
+Senza `RECREATE_FRONTEND=1`, `http://127.0.0.1:8080/` puo' dare connection reset / `ERR_EMPTY_RESPONSE` anche con tutti i container `Up`. Vedi `docs/WSL_DEV_SETUP.md`.
+
 ### 4) Aggiornare il codice con lo stack già avviato
 
 Con `dev-home` (e profili analoghi) il backend è montato da disco nel container: **non serve** `make down` / `make up` solo per ricaricare i `.py`.
@@ -828,7 +836,7 @@ sudo journalctl -u kor35-mirror-db-backup.service -n 120 --no-pager
 
 ## Appendice: Comandi rapidi quotidiani
 
-Bootstrap ambiente dev-home:
+Bootstrap ambiente dev-home (prima volta):
 
 ```bash
 cd /home/django/progetti/kor35
@@ -836,6 +844,12 @@ cd /home/django/progetti/kor35
 cd backend && ln -sf .env.dev-home .env && cd ..
 make setup
 make up ENV=dev-home
+```
+
+Avvio mattina dopo reboot WSL/Docker:
+
+```bash
+make up ENV=dev-home RECREATE_FRONTEND=1
 ```
 
 Dopo modifiche a React o Python (stack già su), vedi il punto **4) Aggiornare il codice con lo stack già avviato** nella sezione [Setup Ambienti](#setup-ambienti-di-sviluppo-prima-di-make) (`make restart-fe`, `make restart-be`, `make restart` + flag opzionali `RUN_PIP_INSTALL=1`, `RUN_MIGRATIONS=1`, `RUN_COLLECTSTATIC=1`).

@@ -99,6 +99,8 @@ ssh -i ~/.ssh/<nome-chiave> <user>@<host> -p <porta>
 
 ## 5) Setup runtime progetto e avvio stack
 
+**Prima installazione** (build frontend + avvio):
+
 ```bash
 cd /home/django/progetti/kor35
 make setup
@@ -111,17 +113,37 @@ Se hai conflitti con vecchi container legacy:
 make up ENV=dev-home CLEANUP_LEGACY=1
 ```
 
+**Ogni giorno dopo aver spento il PC** (WSL → Docker Desktop pronto → stack):
+
+```bash
+cd /home/django/progetti/kor35
+make up ENV=dev-home RECREATE_FRONTEND=1
+```
+
+Senza `RECREATE_FRONTEND=1` il container nginx puo' restare `Up` con mount vuoti: `http://127.0.0.1:8080/` da **connection reset** / `ERR_EMPTY_RESPONSE` nel browser.
+
 ## 6) Verifiche finali
 
 ```bash
 make status ENV=dev-home
 make logs ENV=dev-home
+curl -sI http://127.0.0.1:8080/ | head -3
 ```
+
+Atteso su `curl`: `HTTP/1.1 200 OK`.
 
 URL frontend locale:
 - `http://127.0.0.1:8080`
 
 ## 7) Comandi rapidi quotidiani
+
+Avvio mattina (dopo reboot WSL/Docker):
+
+```bash
+make up ENV=dev-home RECREATE_FRONTEND=1
+```
+
+Durante la giornata (stack gia' su):
 
 ```bash
 make restart-fe ENV=dev-home
@@ -136,4 +158,4 @@ Per replicare il setup su un altro laptop:
 1. ripeti i punti 1 e 2;
 2. copia `backend/.env.dev-home` (e `.env.sync-media` se necessario);
 3. esegui `make setup`;
-4. esegui `make up ENV=dev-home`.
+4. esegui `make up ENV=dev-home` (poi, a ogni riavvio macchina, `make up ENV=dev-home RECREATE_FRONTEND=1`).

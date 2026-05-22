@@ -25,7 +25,7 @@ help:
 	@echo "    RUN_PIP_INSTALL=1  # esegue pip install -r requirements.txt nel container backend"
 	@echo "    RUN_COLLECTSTATIC=1 # esegue collectstatic nel container backend"
 	@echo "  opzionale up/up-no-build/up-no-static:"
-	@echo "    RECREATE_FRONTEND=1 # forza recreate del servizio frontend (utile dopo reboot)"
+	@echo "    RECREATE_FRONTEND=1 # ricrea nginx frontend (obbligatorio dopo reboot WSL/Docker su dev-home)"
 	@echo "    ALLOW_DB_REINIT=1   # override guardrail: consenti ri-init DB se volume manca"
 	@echo ""
 	@echo "Target principali:"
