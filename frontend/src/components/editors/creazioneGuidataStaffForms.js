@@ -1,13 +1,5 @@
 /** Valori iniziali e mapping form modali creazione guidata (staff). */
 
-export const TIPO_AZIONE_OPTIONS = [
-  { value: 'naviga', label: 'Naviga (passo successivo)' },
-  { value: 'imposta_campo', label: 'Imposta campo personaggio' },
-  { value: 'aggiungi_abilita', label: 'Aggiungi abilità suggerite' },
-  { value: 'combo', label: 'Combinata (campo + abilità + navigazione)' },
-  { value: 'fine', label: 'Fine percorso' },
-];
-
 export const PRESENTAZIONE_OPTIONS = [
   { value: 'pulsanti', label: 'Pulsanti' },
   { value: 'si_no', label: 'Sì / No' },
@@ -87,7 +79,9 @@ export function emptySceltaForm() {
     etichetta: '',
     descrizione: '',
     ordine: 0,
-    tipo_azione: 'naviga',
+    navigazioneFine: false,
+    flagImpostaCampo: false,
+    flagAggiungiAbilita: false,
     passo_destinazione: null,
     payloadJson: '{}',
     payloadField: 'era',
@@ -98,21 +92,53 @@ export function emptySceltaForm() {
   };
 }
 
+function flagsFromSceltaTipoPayload(tipo, payload = {}) {
+  const hasField = Boolean(payload.field);
+  const hasAbilita = Array.isArray(payload.abilita_sync_ids) && payload.abilita_sync_ids.length > 0;
+  return {
+    navigazioneFine: tipo === 'fine',
+    flagImpostaCampo: tipo === 'imposta_campo' || tipo === 'combo' || hasField,
+    flagAggiungiAbilita: tipo === 'aggiungi_abilita' || tipo === 'combo' || hasAbilita,
+  };
+}
+
 export function sceltaFormFrom(s) {
+  const payload = s.payload || {};
+  const flags = flagsFromSceltaTipoPayload(s.tipo_azione, payload);
   return {
     id: s.id,
     etichetta: s.etichetta,
     descrizione: s.descrizione || '',
     ordine: s.ordine || 0,
-    tipo_azione: s.tipo_azione,
+    ...flags,
     passo_destinazione: s.passo_destinazione,
     payloadJson: JSON.stringify(s.payload || {}, null, 2),
-    payloadField: s.payload?.field || 'era',
-    payloadSyncId: s.payload?.sync_id || '',
-    payloadAbilitaSyncIds: (s.payload?.abilita_sync_ids || []).map(String),
-    gruppoId: s.payload?.gruppo_id || '',
-    modalitaRewind: s.payload?.modalita_rewind || '',
+    payloadField: payload.field || 'era',
+    payloadSyncId: payload.sync_id || '',
+    payloadAbilitaSyncIds: (payload.abilita_sync_ids || []).map(String),
+    gruppoId: payload.gruppo_id || '',
+    modalitaRewind: payload.modalita_rewind || '',
   };
+}
+
+/** Deriva tipo_azione backend da radio/checkbox del form. */
+export function buildTipoAzioneFromSceltaForm(sceltaForm) {
+  if (sceltaForm.navigazioneFine) return 'fine';
+  if (sceltaForm.flagImpostaCampo && sceltaForm.flagAggiungiAbilita) return 'combo';
+  if (sceltaForm.flagImpostaCampo) return 'imposta_campo';
+  if (sceltaForm.flagAggiungiAbilita) return 'aggiungi_abilita';
+  return 'naviga';
+}
+
+/** Etichetta sintetica per la lista scelte. */
+export function formatSceltaAzioneSummary(scelta) {
+  const parts = [];
+  if (scelta?.tipo_azione === 'fine') parts.push('Fine percorso');
+  else parts.push('Naviga');
+  const p = scelta?.payload || {};
+  if (p.field) parts.push('campo PG');
+  if (p.abilita_sync_ids?.length) parts.push('abilità');
+  return parts.join(' · ');
 }
 
 export function parsePayloadJson(raw) {
@@ -121,7 +147,6 @@ export function parsePayloadJson(raw) {
 }
 
 export function buildPayloadFromSceltaForm(sceltaForm) {
-  const tipo = sceltaForm.tipo_azione;
   const base = {};
   if (sceltaForm.gruppoId) base.gruppo_id = sceltaForm.gruppoId;
   if (sceltaForm.modalitaRewind) base.modalita_rewind = sceltaForm.modalitaRewind;
@@ -130,35 +155,29 @@ export function buildPayloadFromSceltaForm(sceltaForm) {
     .map((s) => String(s).trim())
     .filter(Boolean);
 
-  if (tipo === 'imposta_campo') {
+  const payload = { ...base };
+
+  if (sceltaForm.flagImpostaCampo) {
     if (sceltaForm.payloadField === 'prefettura_esterna') {
-      return { ...base, field: 'prefettura_esterna', value: true };
+      payload.field = 'prefettura_esterna';
+      payload.value = true;
+    } else {
+      payload.field = sceltaForm.payloadField;
+      payload.sync_id = sceltaForm.payloadSyncId || null;
     }
-    return { ...base, field: sceltaForm.payloadField, sync_id: sceltaForm.payloadSyncId || null };
   }
-  if (tipo === 'aggiungi_abilita') {
-    return { ...base, abilita_sync_ids: abilitaIds };
+
+  if (sceltaForm.flagAggiungiAbilita) {
+    payload.abilita_sync_ids = abilitaIds;
   }
-  if (tipo === 'combo') {
-    const combo = { ...base };
-    if (abilitaIds.length) combo.abilita_sync_ids = abilitaIds;
-    if (sceltaForm.payloadField && sceltaForm.payloadField !== 'prefettura_esterna') {
-      combo.field = sceltaForm.payloadField;
-      combo.sync_id = sceltaForm.payloadSyncId || null;
-    } else if (sceltaForm.payloadField === 'prefettura_esterna') {
-      combo.field = 'prefettura_esterna';
-      combo.value = true;
-    }
+
+  if (!sceltaForm.navigazioneFine) {
     try {
-      Object.assign(combo, parsePayloadJson(sceltaForm.payloadJson));
+      Object.assign(payload, parsePayloadJson(sceltaForm.payloadJson));
     } catch {
       /* ignore */
     }
-    return combo;
   }
-  try {
-    return { ...base, ...parsePayloadJson(sceltaForm.payloadJson) };
-  } catch {
-    return base;
-  }
+
+  return payload;
 }

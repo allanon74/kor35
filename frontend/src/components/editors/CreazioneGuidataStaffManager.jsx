@@ -4,7 +4,6 @@ import RichTextEditor from '../RichTextEditor';
 import StaffEditorModal from './StaffEditorModal';
 import AbilitaMultiPicker from './AbilitaMultiPicker';
 import {
-  TIPO_AZIONE_OPTIONS,
   PRESENTAZIONE_OPTIONS,
   REWIND_OPTIONS,
   CAMPO_OPTIONS,
@@ -15,6 +14,8 @@ import {
   emptySceltaForm,
   sceltaFormFrom,
   buildPayloadFromSceltaForm,
+  buildTipoAzioneFromSceltaForm,
+  formatSceltaAzioneSummary,
 } from './creazioneGuidataStaffForms';
 import {
   listCreazioneGuidataFlussi,
@@ -39,6 +40,9 @@ import {
 const inputCls =
   'w-full bg-gray-800 border border-gray-600 rounded-lg p-2 text-sm text-gray-100';
 const selectCls = inputCls;
+const checkLabelCls = 'flex items-center gap-2 text-sm text-gray-200 cursor-pointer';
+const fieldsetCls = 'rounded-lg border border-gray-700 bg-gray-800/50 p-3 space-y-2';
+const legendCls = 'text-[10px] uppercase font-bold text-gray-500 tracking-wide px-1';
 
 function ListRow({ active, onSelect, onEdit, title, subtitle, badges }) {
   return (
@@ -268,8 +272,10 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
         etichetta: sceltaForm.etichetta,
         descrizione: sceltaForm.descrizione,
         ordine: sceltaForm.ordine,
-        tipo_azione: sceltaForm.tipo_azione,
-        passo_destinazione: sceltaForm.passo_destinazione || null,
+        tipo_azione: buildTipoAzioneFromSceltaForm(sceltaForm),
+        passo_destinazione: sceltaForm.navigazioneFine
+          ? null
+          : (sceltaForm.passo_destinazione || null),
         payload: buildPayloadFromSceltaForm(sceltaForm),
       };
       if (modal?.mode === 'edit' && modal.sceltaId) {
@@ -327,33 +333,67 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
         value={sceltaForm.descrizione}
         onChange={(e) => setSceltaForm({ ...sceltaForm, descrizione: e.target.value })}
       />
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-[10px] uppercase text-gray-500">Tipo azione</label>
-          <select
-            className={selectCls}
-            value={sceltaForm.tipo_azione}
-            onChange={(e) => setSceltaForm({ ...sceltaForm, tipo_azione: e.target.value })}
-          >
-            {TIPO_AZIONE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-[10px] uppercase text-gray-500">Ordine</label>
-          <input
-            type="number"
-            className={inputCls}
-            value={sceltaForm.ordine}
-            onChange={(e) =>
-              setSceltaForm({ ...sceltaForm, ordine: parseInt(e.target.value || '0', 10) })
-            }
-          />
-        </div>
+      <div>
+        <label className="text-[10px] uppercase text-gray-500">Ordine</label>
+        <input
+          type="number"
+          className={inputCls}
+          value={sceltaForm.ordine}
+          onChange={(e) =>
+            setSceltaForm({ ...sceltaForm, ordine: parseInt(e.target.value || '0', 10) })
+          }
+        />
       </div>
+
+      <fieldset className={fieldsetCls}>
+        <legend className={legendCls}>Navigazione</legend>
+        <label className={checkLabelCls}>
+          <input
+            type="radio"
+            name="scelta-navigazione"
+            checked={!sceltaForm.navigazioneFine}
+            onChange={() => setSceltaForm({ ...sceltaForm, navigazioneFine: false })}
+            className="rounded-full"
+          />
+          Naviga al prossimo step
+        </label>
+        <label className={checkLabelCls}>
+          <input
+            type="radio"
+            name="scelta-navigazione"
+            checked={!!sceltaForm.navigazioneFine}
+            onChange={() => setSceltaForm({ ...sceltaForm, navigazioneFine: true })}
+            className="rounded-full"
+          />
+          Fine percorso
+        </label>
+      </fieldset>
+
+      <fieldset className={fieldsetCls}>
+        <legend className={legendCls}>Effetti opzionali</legend>
+        <label className={checkLabelCls}>
+          <input
+            type="checkbox"
+            checked={!!sceltaForm.flagImpostaCampo}
+            onChange={(e) =>
+              setSceltaForm({ ...sceltaForm, flagImpostaCampo: e.target.checked })
+            }
+            className="rounded"
+          />
+          Imposta campo personaggio
+        </label>
+        <label className={checkLabelCls}>
+          <input
+            type="checkbox"
+            checked={!!sceltaForm.flagAggiungiAbilita}
+            onChange={(e) =>
+              setSceltaForm({ ...sceltaForm, flagAggiungiAbilita: e.target.checked })
+            }
+            className="rounded"
+          />
+          Aggiungi abilità suggerite
+        </label>
+      </fieldset>
       <input
         className={inputCls}
         placeholder="gruppo_id (override passo)"
@@ -372,25 +412,28 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
           </option>
         ))}
       </select>
-      <select
-        className={selectCls}
-        value={sceltaForm.passo_destinazione || ''}
-        onChange={(e) =>
-          setSceltaForm({
-            ...sceltaForm,
-            passo_destinazione: e.target.value ? Number(e.target.value) : null,
-          })
-        }
-      >
-        <option value="">Passo destinazione (opz.)</option>
-        {passi.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.titolo}
-          </option>
-        ))}
-      </select>
-      {(sceltaForm.tipo_azione === 'imposta_campo' || sceltaForm.tipo_azione === 'combo') && (
-        <>
+      {!sceltaForm.navigazioneFine ? (
+        <select
+          className={selectCls}
+          value={sceltaForm.passo_destinazione || ''}
+          onChange={(e) =>
+            setSceltaForm({
+              ...sceltaForm,
+              passo_destinazione: e.target.value ? Number(e.target.value) : null,
+            })
+          }
+        >
+          <option value="">Passo destinazione (opz.)</option>
+          {passi.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.titolo}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {sceltaForm.flagImpostaCampo ? (
+        <div className={`${fieldsetCls} space-y-2`}>
+          <p className={legendCls}>Campo personaggio</p>
           <select
             className={selectCls}
             value={sceltaForm.payloadField}
@@ -402,7 +445,7 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
               </option>
             ))}
           </select>
-          {sceltaForm.payloadField === 'era' && (
+          {sceltaForm.payloadField === 'era' ? (
             <select
               className={selectCls}
               value={sceltaForm.payloadSyncId}
@@ -415,8 +458,8 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
                 </option>
               ))}
             </select>
-          )}
-          {sceltaForm.payloadField === 'prefettura' && (
+          ) : null}
+          {sceltaForm.payloadField === 'prefettura' ? (
             <select
               className={selectCls}
               value={sceltaForm.payloadSyncId}
@@ -429,19 +472,19 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
                 </option>
               ))}
             </select>
-          )}
-        </>
-      )}
-      {(sceltaForm.tipo_azione === 'aggiungi_abilita' || sceltaForm.tipo_azione === 'combo') && (
-        <AbilitaMultiPicker
-          options={abilitaOptions}
-          selectedSyncIds={sceltaForm.payloadAbilitaSyncIds || []}
-          onChange={(ids) => setSceltaForm({ ...sceltaForm, payloadAbilitaSyncIds: ids })}
-        />
-      )}
-      {(sceltaForm.tipo_azione === 'naviga'
-        || sceltaForm.tipo_azione === 'fine'
-        || sceltaForm.tipo_azione === 'combo') && (
+          ) : null}
+        </div>
+      ) : null}
+      {sceltaForm.flagAggiungiAbilita ? (
+        <div className={fieldsetCls}>
+          <AbilitaMultiPicker
+            options={abilitaOptions}
+            selectedSyncIds={sceltaForm.payloadAbilitaSyncIds || []}
+            onChange={(ids) => setSceltaForm({ ...sceltaForm, payloadAbilitaSyncIds: ids })}
+          />
+        </div>
+      ) : null}
+      {!sceltaForm.navigazioneFine ? (
         <div>
           <label className="text-[10px] uppercase text-gray-500">Payload JSON (avanzato)</label>
           <textarea
@@ -450,7 +493,7 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
             onChange={(e) => setSceltaForm({ ...sceltaForm, payloadJson: e.target.value })}
           />
         </div>
-      )}
+      ) : null}
     </>
   );
 
@@ -658,7 +701,7 @@ export default function CreazioneGuidataStaffManager({ onLogout }) {
                 >
                   <span className="min-w-0">
                     <span className="font-semibold block truncate">{s.etichetta}</span>
-                    <span className="text-xs text-gray-500">{s.tipo_azione}</span>
+                    <span className="text-xs text-gray-500">{formatSceltaAzioneSummary(s)}</span>
                   </span>
                   <ChevronRight size={14} className="text-gray-500 shrink-0" />
                 </button>

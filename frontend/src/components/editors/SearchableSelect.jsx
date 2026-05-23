@@ -59,6 +59,8 @@ const SearchableDropdown = memo(({
     labelKey = 'nome',
     valueKey = 'id',
     disabled = false,
+    /** Sopra StaffEditorModal (z-[100]) e altri overlay staff. */
+    dropdownZIndex = 110,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -174,11 +176,12 @@ const SearchableDropdown = memo(({
                 createPortal(
                     <div
                         id={`dropdown-${uniqueId}`}
-                        className="fixed z-50 bg-gray-900 border border-gray-700 rounded shadow-xl max-h-60 overflow-y-auto custom-scrollbar"
+                        className="fixed bg-gray-900 border border-gray-700 rounded shadow-xl max-h-60 overflow-y-auto custom-scrollbar"
                         style={{
                             top: `${dropdownPosition.top}px`,
                             left: `${dropdownPosition.left}px`,
                             width: `${dropdownPosition.width}px`,
+                            zIndex: dropdownZIndex,
                         }}
                     >
                         {filteredOptions.length > 0 ? (
@@ -220,6 +223,7 @@ const SearchableSelect = memo(
         valueKey = 'id',
         disabled = false,
         minOptionsForSearch = DEFAULT_MIN_OPTIONS_FOR_SEARCH,
+        dropdownZIndex = 110,
         className = '',
     }) => {
         const useNative = options.length <= minOptionsForSearch;
@@ -248,6 +252,7 @@ const SearchableSelect = memo(
                 labelKey={labelKey}
                 valueKey={valueKey}
                 disabled={disabled}
+                dropdownZIndex={dropdownZIndex}
             />
         );
     }
