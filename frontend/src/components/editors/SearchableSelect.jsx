@@ -6,6 +6,9 @@ import { useDebounce } from '../../hooks/useDebounce';
 /** Sotto questa soglia si usa un `<select>` nativo (liste corte, UX più immediata). */
 export const DEFAULT_MIN_OPTIONS_FOR_SEARCH = 12;
 
+/** Sopra modali staff (z-[100]) e toast (z-[100]). */
+export const SEARCHABLE_DROPDOWN_Z_CLASS = 'z-[110]';
+
 const NativeSelect = memo(({
     options = [],
     value,
@@ -174,7 +177,7 @@ const SearchableDropdown = memo(({
                 createPortal(
                     <div
                         id={`dropdown-${uniqueId}`}
-                        className="fixed z-50 bg-gray-900 border border-gray-700 rounded shadow-xl max-h-60 overflow-y-auto custom-scrollbar"
+                        className={`fixed ${SEARCHABLE_DROPDOWN_Z_CLASS} bg-gray-900 border border-gray-700 rounded shadow-xl max-h-60 overflow-y-auto custom-scrollbar`}
                         style={{
                             top: `${dropdownPosition.top}px`,
                             left: `${dropdownPosition.left}px`,

@@ -706,6 +706,7 @@ class AbilitaStaffViewSet(viewsets.ModelViewSet):
                 .select_related('aura_riferimento')
                 .only(
                     'id',
+                    'sync_id',
                     'nome',
                     'costo_pc',
                     'costo_crediti',
