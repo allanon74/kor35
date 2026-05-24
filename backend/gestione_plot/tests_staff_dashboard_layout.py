@@ -38,3 +38,12 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         layout["groups"][0]["palette"] = "rainbow"
         with self.assertRaises(ValidationError):
             validate_staff_dashboard_layout(layout)
+
+    def test_scommesse_tool_nel_default(self):
+        from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
+
+        self.assertIn("scommesse", KNOWN_STAFF_TOOL_IDS)
+        layout = default_staff_dashboard_layout()
+        evento_tools = layout["groups"][0]["tool_ids"]
+        self.assertIn("scommesse", evento_tools)
+        validate_staff_dashboard_layout(layout)

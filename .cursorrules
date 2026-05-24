@@ -38,3 +38,13 @@ Poiché i database Master ed Edge operano separatamente e si sincronizzano a pos
 ## 5. Stile e Sicurezza
 - Le credenziali e gli URL di sync non devono mai essere hardcodati nel `settings.py`. Usa sempre la libreria `django-environ`.
 - Scrivi codice pulito, modulare e documentato in italiano.
+
+## 6. Nuovi strumenti Dashboard Staff
+Quando aggiungi un nuovo tool/tab nella sezione staff, registralo **sempre in tutti e quattro** i punti sotto. Se manca anche solo uno, il salvataggio del layout personalizzato fallisce con `400 Tool sconosciuto: <id>`.
+
+1. **Backend whitelist**: aggiungi l'`id` (kebab-case) a `KNOWN_STAFF_TOOL_IDS` in `backend/gestione_plot/staff_dashboard_layout.py`; se è nel menu di default, includilo anche in `DEFAULT_STAFF_DASHBOARD_LAYOUT["groups"][...]["tool_ids"]`.
+2. **Frontend registry**: voce in `frontend/src/staff/staffToolsRegistry.js` (`STAFF_TOOLS_REGISTRY` + eventuale `DEFAULT_STAFF_DASHBOARD_LAYOUT`).
+3. **Componente lazy**: mappa `componentKey` → componente in `frontend/src/components/StaffDashboard.jsx`.
+4. **Test**: verifica che `validate_staff_dashboard_layout(default_staff_dashboard_layout())` passi (file `backend/gestione_plot/tests_staff_dashboard_layout.py`).
+
+Gli `id` devono coincidere tra frontend e backend (es. `scommesse`, `qr-debug`).

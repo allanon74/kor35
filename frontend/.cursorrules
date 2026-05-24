@@ -32,3 +32,6 @@ Poiché i database Master ed Edge operano separatamente e si sincronizzano a pos
 ## 5. Stile e Sicurezza
 - Le credenziali e gli URL di sync non devono mai essere hardcodati nel `settings.py`. Usa sempre la libreria `django-environ`.
 - Scrivi codice pulito, modulare e documentato in italiano.
+
+## 6. Nuovi strumenti Dashboard Staff
+Vedi anche la sezione 6 in `.cursorrules` (root). Checklist minima frontend: `staffToolsRegistry.js`, `StaffDashboard.jsx` (lazy map), allineamento `id` con `KNOWN_STAFF_TOOL_IDS` nel backend (`gestione_plot/staff_dashboard_layout.py`).
