@@ -999,6 +999,7 @@ class LinkSocial(SyncableModel, models.Model):
     """
     TIPO_CHOICES = [
         ('whatsapp', 'WhatsApp'),
+        ('whatsapp_cambusa', 'WhatsApp — La Cambusa'),
         ('instagram', 'Instagram'),
         ('facebook', 'Facebook'),
         ('youtube', 'YouTube'),

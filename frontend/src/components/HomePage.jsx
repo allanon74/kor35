@@ -200,24 +200,14 @@ export default function HomePage({ pageData, siteConfig }) {
           <div className="absolute top-0 right-0 w-44 h-44 bg-rose-200 opacity-15 rounded-full -mr-20 -mt-20 group-hover:scale-125 transition-transform"></div>
         </a>
 
-        {/* SEZIONE WIDGET: CHI SIAMO, EVENTI, SOCIAL */}
-        <div className="grid md:grid-cols-3 gap-6">
-          
-          {/* Widget Chi Siamo */}
-          <div className="md:col-span-1">
-            <WidgetChiSiamo />
-          </div>
-
-          {/* Widget Eventi */}
-          <div className="md:col-span-1">
-            <WidgetEventi />
-          </div>
-
-          {/* Widget Social */}
-          <div className="md:col-span-1">
-            <WidgetSocial />
-          </div>
+        {/* SEZIONE WIDGET: CHI SIAMO ED EVENTI */}
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <WidgetChiSiamo />
+          <WidgetEventi />
         </div>
+
+        {/* SEGUICI — larghezza piena sotto Chi Siamo ed Eventi */}
+        <WidgetSocial />
 
         {/* Footer informativo */}
         <div className="mt-10 pt-6 border-t border-gray-200">

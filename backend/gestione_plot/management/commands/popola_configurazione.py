@@ -38,32 +38,39 @@ class Command(BaseCommand):
                 'ordine': 1,
             },
             {
+                'tipo': 'whatsapp_cambusa',
+                'nome_visualizzato': 'La Cambusa',
+                'url': 'https://chat.whatsapp.com/ESEMPIO_INVITO_CAMBUSA',
+                'descrizione': 'Gruppo WhatsApp La Cambusa',
+                'ordine': 2,
+            },
+            {
                 'tipo': 'instagram',
                 'nome_visualizzato': '@kor35official',
                 'url': 'https://instagram.com/kor35official',
                 'descrizione': 'Seguici su Instagram',
-                'ordine': 2,
+                'ordine': 3,
             },
             {
                 'tipo': 'facebook',
                 'nome_visualizzato': 'KOR35 Official',
                 'url': 'https://facebook.com/kor35',
                 'descrizione': 'Pagina Facebook ufficiale',
-                'ordine': 3,
+                'ordine': 4,
             },
             {
                 'tipo': 'youtube',
                 'nome_visualizzato': 'KOR35 Channel',
                 'url': 'https://youtube.com/@kor35',
                 'descrizione': 'Video e highlights',
-                'ordine': 4,
+                'ordine': 5,
             },
             {
                 'tipo': 'email',
                 'nome_visualizzato': 'Scrivici',
                 'url': 'mailto:info@kor35.it',
                 'descrizione': 'Email di contatto',
-                'ordine': 5,
+                'ordine': 6,
             },
         ]
         

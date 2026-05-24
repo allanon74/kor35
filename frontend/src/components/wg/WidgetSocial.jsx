@@ -27,6 +27,7 @@ export default function WidgetSocial() {
   // Mappa dei tipi social alle icone e colori
   const socialConfig = {
     whatsapp: { icon: MessageCircle, color: 'bg-green-500 hover:bg-green-600' },
+    whatsapp_cambusa: { icon: MessageCircle, color: 'bg-green-600 hover:bg-green-700' },
     instagram: { icon: Instagram, color: 'bg-pink-500 hover:bg-pink-600' },
     facebook: { icon: Facebook, color: 'bg-blue-600 hover:bg-blue-700' },
     youtube: { icon: Youtube, color: 'bg-red-600 hover:bg-red-700' },
@@ -82,11 +83,13 @@ export default function WidgetSocial() {
             Resta aggiornato sulle nostre attività e unisciti alla community!
           </p>
           
-          <div className="grid gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             {socialLinks.map((social) => {
               const config = socialConfig[social.tipo] || socialConfig['altro'];
               const IconComponent = config.icon;
               const isEmail = social.tipo === 'email';
+              const title = social.nome_visualizzato || social.tipo_display;
+              const subtitle = social.descrizione || social.tipo_display;
               
               return (
                 <a
@@ -94,16 +97,14 @@ export default function WidgetSocial() {
                   href={social.url}
                   target={!isEmail ? '_blank' : undefined}
                   rel={!isEmail ? 'noopener noreferrer' : undefined}
-                  className={`flex items-center gap-4 p-4 rounded-lg text-white transition-all transform hover:scale-105 shadow-sm hover:shadow-md ${config.color}`}
+                  className={`flex items-center gap-4 p-4 rounded-lg text-white transition-all transform hover:scale-[1.02] shadow-sm hover:shadow-md min-w-0 ${config.color}`}
                 >
                   <div className="flex-shrink-0 bg-white/20 p-2 rounded-lg">
                     <IconComponent size={24} />
                   </div>
-                  <div className="flex-1">
-                    <div className="font-semibold">{social.tipo_display}</div>
-                    <div className="text-xs opacity-90">
-                      {social.descrizione || social.nome_visualizzato}
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate">{title}</div>
+                    <div className="text-xs opacity-90 line-clamp-2">{subtitle}</div>
                   </div>
                   <svg 
                     className="w-5 h-5 opacity-70" 

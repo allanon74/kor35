@@ -8,6 +8,17 @@ import {
   postIscrizioneEventoCattura,
   postIscrizioneEventoCreaOrdine,
 } from '../api';
+import { RichTextViewer } from './RichTextDisplay';
+
+function EventSinossi({ content }) {
+  const trimmed = String(content || '').trim();
+  if (!trimmed) return null;
+  return (
+    <div className="max-w-full min-w-0 overflow-hidden rounded-lg border border-indigo-800/40 bg-indigo-950/25 px-3 py-2.5 text-sm">
+      <RichTextViewer content={trimmed} />
+    </div>
+  );
+}
 
 function loadPayPalScript(clientId, currency, sandbox, uiFlags = {}) {
   const host = sandbox ? 'https://www.sandbox.paypal.com' : 'https://www.paypal.com';
@@ -345,11 +356,11 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
           if (ev.cta_kind === 'registered') {
             const nomePg = ev.already_registered?.personaggio_nome || 'Personaggio';
             return (
-              <div
-                key={ev.id}
-                className="rounded-lg border border-emerald-800/70 bg-emerald-950/30 px-4 py-3 text-emerald-100 text-center text-base font-semibold"
-              >
-                {nomePg} già iscritto all&apos;evento «{ev.titolo}»
+              <div key={ev.id} className="space-y-2">
+                <EventSinossi content={ev.sinossi} />
+                <div className="rounded-lg border border-emerald-800/70 bg-emerald-950/30 px-4 py-3 text-emerald-100 text-center text-base font-semibold">
+                  {nomePg} già iscritto all&apos;evento «{ev.titolo}»
+                </div>
               </div>
             );
           }
@@ -360,6 +371,7 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
             (ev.blocking_reasons || []).forEach((r) => reasons.push(r));
             return (
               <div key={ev.id} className="space-y-2">
+                <EventSinossi content={ev.sinossi} />
                 <div className="rounded-lg border border-emerald-800/70 bg-emerald-950/30 px-4 py-2 text-emerald-100 text-center text-sm">
                   {ev.already_registered?.personaggio_nome} iscritto a «{ev.titolo}»
                 </div>
@@ -396,6 +408,7 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
           const minCost = ev.costo_minimo_euro || ev.costo_euro;
           return (
             <div key={ev.id} className="space-y-2">
+              <EventSinossi content={ev.sinossi} />
               <button
                 type="button"
                 disabled={blocked}
@@ -445,6 +458,7 @@ export default function EventSubscriptionStartPanel({ onLogout }) {
             <h3 className="text-lg font-bold pr-8">
               {modalTipo === 'integra' ? 'Integra iscrizione' : modalEvent.titolo}
             </h3>
+            <EventSinossi content={modalEvent.sinossi} />
             <div className="rounded-lg border border-emerald-700 bg-emerald-950/40 px-3 py-2 text-center">
               <p className="text-xs uppercase tracking-wide text-emerald-300 font-black">Importo da pagare</p>
               <p className="text-3xl font-black text-emerald-100 leading-tight">{importoTotale.toFixed(2)} €</p>

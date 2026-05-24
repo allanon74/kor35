@@ -188,6 +188,7 @@ def _build_event_payload(ev: Evento, user, *, checks_ok: bool, blocking: list, p
     row = {
         "id": ev.id,
         "titolo": ev.titolo,
+        "sinossi": ev.sinossi or "",
         "costo_base_euro": str(ev.iscrizione_costo_euro or 0),
         "costo_euro": str(costo_min),
         "costo_minimo_euro": str(costo_min),

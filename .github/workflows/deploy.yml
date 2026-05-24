@@ -433,6 +433,10 @@ jobs:
           MIRROR_COMPOSE_PROJECT_NAME: ${{ secrets.MIRROR_COMPOSE_PROJECT_NAME }}
         run: |
           set -euo pipefail
+          if [ ! -f dist-upload/index.html ]; then
+            echo "Artifact frontend-dist mancante o vuoto (manca dist-upload/index.html)." >&2
+            exit 1
+          fi
           # Stessa logica dello step SSH: root monorepo = MIRROR_ROOT_PATH se valorizzato, altrimenti MIRROR_BACKEND_PATH, altrimenti default.
           REMOTE_BASE="${ROOT_PATH:-${BACKEND_PATH:-/home/pi/kor35-replica}}"
           REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build"
@@ -443,6 +447,11 @@ jobs:
           P="${PORT:-22}"
           SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh $SSH_OPTS "${USER}@${HOST}" "test -f '${REMOTE_BASE}/config/docker/compose.base.yml'" || {
+            echo "Path mirror errato: ${REMOTE_BASE} (manca config/docker/compose.base.yml)." >&2
+            echo "Allinea i secret MIRROR_ROOT_PATH e MIRROR_BACKEND_PATH alla root del monorepo (es. /home/pi/kor35-replica)." >&2
+            exit 1
+          }
           ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
           set -euo pipefail
           REMOTE_BASE="${1:?}"
@@ -453,8 +462,15 @@ jobs:
           export COMPOSE_PROJECT_NAME="${CPN}"
           docker compose -f compose.base.yml -f compose.mirror.yml stop frontend 2>/dev/null || true
           if ! docker run --rm -v "${RB}:/mnt:rw" alpine:3.20 chown -R "$(id -u):$(id -g)" /mnt; then
-            echo "WARN: chown react_build via docker fallito; continuo con rsync (può fallire se i file sono root)." >&2
+            echo "ERRORE: chown react_build via docker fallito." >&2
+            echo "Sul Pi esegui: cd ${REMOTE_BASE} && ./scripts/fix_react_build_permissions.sh ${REMOTE_BASE} mirror" >&2
+            exit 1
           fi
+          if ! touch "${RB}/.ci_write_test" 2>/dev/null; then
+            echo "ERRORE: ${RB} non scrivibile dall'utente SSH dopo chown." >&2
+            exit 1
+          fi
+          rm -f "${RB}/.ci_write_test"
           REMOTE_PREP
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"

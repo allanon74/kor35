@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
 import { getEventiPubblici } from '../../api';
+import { sanitizeHtml } from '../../utils/htmlSanitizer';
+import { RICH_TEXT_SHARED_STYLES } from '../../styles/richTextSharedStyles';
 
 /**
  * Widget Eventi - Mostra gli eventi pubblici futuri e recenti
@@ -65,7 +67,8 @@ export default function WidgetEventi() {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200">
+    <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 max-w-full min-w-0 overflow-hidden">
+      <style>{RICH_TEXT_SHARED_STYLES}</style>
       <div className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
         <Calendar className="text-red-700" size={28} />
         <h3 className="text-xl font-bold text-gray-800">Eventi</h3>
@@ -82,15 +85,15 @@ export default function WidgetEventi() {
           {eventi.map((evento) => (
             <div 
               key={evento.id} 
-              className={`p-4 rounded-lg border-l-4 transition-all hover:shadow-md ${
+              className={`p-4 rounded-lg border-l-4 transition-all hover:shadow-md max-w-full min-w-0 overflow-hidden ${
                 isFuturo(evento.data_inizio) 
                   ? 'bg-green-50 border-green-500' 
                   : 'bg-gray-50 border-gray-400'
               }`}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <h4 className="font-bold text-gray-800 mb-2 flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-bold text-gray-800 mb-2 flex flex-wrap items-center gap-2">
                     {evento.titolo}
                     {isFuturo(evento.data_inizio) && (
                       <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full font-normal">
@@ -100,9 +103,10 @@ export default function WidgetEventi() {
                   </h4>
                   
                   {evento.sinossi && (
-                    <p className="text-sm text-gray-600 mb-3 leading-relaxed">
-                      {evento.sinossi}
-                    </p>
+                    <div
+                      className="wiki-content prose prose-sm max-w-none text-sm text-gray-600 mb-3 leading-relaxed break-words [&_img]:max-w-full [&_img]:h-auto [&_table]:max-w-full [&_table]:overflow-x-auto"
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(evento.sinossi) }}
+                    />
                   )}
                   
                   <div className="flex flex-wrap gap-3 text-xs text-gray-500">
