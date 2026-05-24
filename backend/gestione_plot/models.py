@@ -112,6 +112,55 @@ class Evento(SyncableModel, models.Model):
         return self.titolo
 
 
+class EventoIscrizioneOpzione(SyncableModel, models.Model):
+    """
+    Costo accessorio per l'iscrizione a un evento (pasto, pernottamento, ecc.).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    evento = models.ForeignKey(
+        Evento,
+        on_delete=models.CASCADE,
+        related_name="iscrizione_opzioni",
+    )
+    nome = models.CharField(max_length=120)
+    descrizione = models.TextField(blank=True)
+    costo_euro = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+        verbose_name="Costo (EUR)",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    scelta_giocatore = models.BooleanField(
+        default=True,
+        verbose_name="Scelta del giocatore",
+        help_text="Se disattivo, l'opzione è inclusa automaticamente in ogni iscrizione.",
+    )
+    obbligatoria = models.BooleanField(
+        default=False,
+        verbose_name="Obbligatoria (se a scelta)",
+        help_text="Con «scelta del giocatore» attivo: il giocatore deve selezionarla per iscriversi.",
+    )
+    posti_limite = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Posti disponibili",
+        help_text="Vuoto = posti illimitati. I posti occupati includono ordini in attesa di pagamento.",
+    )
+    attiva = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Opzione iscrizione evento"
+        verbose_name_plural = "Opzioni iscrizione evento"
+        ordering = ["ordine", "nome"]
+
+    def __str__(self):
+        return f"{self.evento_id} — {self.nome}"
+
+
 class EventoPremioPersonaggio(SyncableModel, models.Model):
     """
     Segna che PC e crediti d'evento sono stati accreditati una volta al PG iscritto
@@ -1031,9 +1080,18 @@ class IscrizioneEventoPagamento(SyncableModel, models.Model):
         FAILED = "FAILED", "Fallito"
         CANCELLED = "CANCELLED", "Annullato"
 
+    class TipoOrdine(models.TextChoices):
+        ISCRIZIONE = "ISCRIZIONE", "Iscrizione iniziale"
+        INTEGRA = "INTEGRA", "Integrazione opzioni"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    tipo_ordine = models.CharField(
+        max_length=12,
+        choices=TipoOrdine.choices,
+        default=TipoOrdine.ISCRIZIONE,
+    )
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="iscrizioni_paypal")
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="iscrizioni_evento_paypal")
     utente = models.ForeignKey(
@@ -1055,3 +1113,34 @@ class IscrizioneEventoPagamento(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.evento_id} / {self.personaggio_id} ({self.stato})"
+
+
+class IscrizioneEventoPagamentoOpzione(SyncableModel, models.Model):
+    """Opzioni acquistate con un pagamento PayPal."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    pagamento = models.ForeignKey(
+        IscrizioneEventoPagamento,
+        on_delete=models.CASCADE,
+        related_name="righe_opzioni",
+    )
+    opzione = models.ForeignKey(
+        EventoIscrizioneOpzione,
+        on_delete=models.PROTECT,
+        related_name="acquisti",
+    )
+    costo_euro = models.DecimalField(max_digits=8, decimal_places=2)
+
+    class Meta:
+        verbose_name = "Opzione pagamento iscrizione"
+        verbose_name_plural = "Opzioni pagamento iscrizione"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pagamento", "opzione"],
+                name="uniq_iscrizione_pagamento_opzione",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.pagamento_id} — {self.opzione_id}"

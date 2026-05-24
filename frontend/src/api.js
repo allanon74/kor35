@@ -1668,7 +1668,7 @@ export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/
 export const getIscrizioniEventoEligibility = (onLogout) =>
   fetchAuthenticated('/api/plot/iscrizioni-evento/eligibility/', { method: 'GET' }, onLogout);
 
-/** Body: { evento_id, personaggio_id } → { paypal_order_id, sandbox } */
+/** Body: { evento_id, personaggio_id, tipo?, opzione_sync_ids? } → { paypal_order_id, sandbox } */
 export const postIscrizioneEventoCreaOrdine = (body, onLogout) =>
   fetchAuthenticated('/api/plot/iscrizioni-evento/crea-ordine/', {
     method: 'POST',

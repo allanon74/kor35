@@ -85,7 +85,21 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                                     {fmtIscrizioneDt(evento.iscrizione_apertura) || '—'} →{' '}
                                     {fmtIscrizioneDt(evento.iscrizione_chiusura) || '—'}
                                 </span>
-                                <span>Costo: {Number(evento.iscrizione_costo_euro || 0).toFixed(2)} €</span>
+                                <span>
+                                    Costo base: {Number(evento.iscrizione_costo_euro || 0).toFixed(2)} €
+                                </span>
+                                {Array.isArray(evento.iscrizione_opzioni) && evento.iscrizione_opzioni.length > 0 && (
+                                    <ul className="mt-1 space-y-0.5 list-disc pl-4">
+                                        {evento.iscrizione_opzioni.map((op) => (
+                                            <li key={op.sync_id}>
+                                                {op.nome}: {Number(op.costo_euro || 0).toFixed(2)} €
+                                                {!op.scelta_giocatore ? ' (automatica)' : null}
+                                                {op.obbligatoria && op.scelta_giocatore ? ' (obbligatoria)' : null}
+                                                {op.posti_limite != null ? ` · max ${op.posti_limite} posti` : null}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                                 {evento.iscrizione_test_attiva ? (
                                     <span className="text-amber-300 font-semibold">Modalità test attiva (solo staff campagna principale)</span>
                                 ) : null}

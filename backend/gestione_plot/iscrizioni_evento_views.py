@@ -8,6 +8,7 @@ import logging
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
@@ -23,7 +24,21 @@ from personaggi.models import (
 )
 from personaggi.sso import ArcanaSSOPasswordStatusView
 
-from .models import Evento, IscrizioneEventoPagamento, PayPalImpostazioniGlobali
+from .iscrizioni_evento_logic import (
+    _user_opzione_sync_ids,
+    evento_ha_iscrizione_online,
+    importo_minimo_iscrizione,
+    opzioni_attive,
+    opzioni_integrabili,
+    risolvi_scelte_iscrizione,
+    serialize_opzione_for_api,
+)
+from .models import (
+    Evento,
+    IscrizioneEventoPagamento,
+    IscrizioneEventoPagamentoOpzione,
+    PayPalImpostazioniGlobali,
+)
 from .paypal_api import format_euro_amount, paypal_capture_order, paypal_create_order, paypal_get_access_token
 
 logger = logging.getLogger(__name__)
@@ -109,7 +124,12 @@ def _events_in_registration_window(now):
             iscrizione_apertura__lte=now,
             iscrizione_chiusura__gte=now,
         )
-        .filter(iscrizione_costo_euro__gt=0)
+        .filter(
+            Q(iscrizione_costo_euro__gt=0)
+            | Q(iscrizione_opzioni__attiva=True)
+        )
+        .distinct()
+        .prefetch_related("iscrizione_opzioni")
         .order_by("data_inizio", "id")
     )
 
@@ -128,6 +148,7 @@ def _already_registered_row(user, evento: Evento):
             evento=evento,
             utente=user,
             stato=IscrizioneEventoPagamento.Stato.CAPTURED,
+            tipo_ordine=IscrizioneEventoPagamento.TipoOrdine.ISCRIZIONE,
         )
         .select_related("personaggio")
         .order_by("-created_at")
@@ -145,7 +166,57 @@ def _has_any_character_registered(user, evento: Evento) -> bool:
         evento=evento,
         utente=user,
         stato=IscrizioneEventoPagamento.Stato.CAPTURED,
+        tipo_ordine=IscrizioneEventoPagamento.TipoOrdine.ISCRIZIONE,
     ).exists()
+
+
+def _build_event_payload(ev: Evento, user, *, checks_ok: bool, blocking: list, paypal_row, is_staff_main: bool):
+    registered = _already_registered_row(user, ev)
+    sandbox = _paypal_sandbox_for_user_event(user, ev, paypal_row)
+    cid, sec = _paypal_client_id_secret(sandbox, paypal_row)
+    paypal_ready = bool(cid and sec)
+
+    gia_acquistate = _user_opzione_sync_ids(ev, user) if registered else set()
+
+    opzioni_payload = [
+        serialize_opzione_for_api(op, gia_acquistata=str(op.sync_id) in gia_acquistate)
+        for op in opzioni_attive(ev)
+    ]
+    integrabili = opzioni_integrabili(ev, user) if registered else []
+    costo_min = importo_minimo_iscrizione(ev)
+
+    row = {
+        "id": ev.id,
+        "titolo": ev.titolo,
+        "costo_base_euro": str(ev.iscrizione_costo_euro or 0),
+        "costo_euro": str(costo_min),
+        "costo_minimo_euro": str(costo_min),
+        "is_test": bool(ev.iscrizione_test_attiva),
+        "already_registered": registered,
+        "opzioni": opzioni_payload,
+        "opzioni_integrabili_count": len(integrabili),
+        "paypal_uses_sandbox": sandbox,
+        "paypal_client_id": cid if paypal_ready else "",
+        "paypal_ready": paypal_ready,
+        "paypal_show_card": bool(paypal_row.mostra_pulsante_carta),
+        "paypal_show_mybank": bool(paypal_row.mostra_pulsante_mybank),
+    }
+
+    if registered:
+        if integrabili:
+            row["cta_kind"] = "integra"
+            row["blocking_reasons"] = [] if checks_ok else blocking
+        else:
+            row["cta_kind"] = "registered"
+            row["blocking_reasons"] = []
+    elif not checks_ok:
+        row["cta_kind"] = "blocked"
+        row["blocking_reasons"] = blocking
+    else:
+        row["cta_kind"] = "subscribe"
+        row["blocking_reasons"] = []
+
+    return row
 
 
 @api_view(["GET"])
@@ -165,35 +236,19 @@ def iscrizioni_evento_eligibility(request):
     for ev in _events_in_registration_window(now):
         if ev.iscrizione_test_attiva and not is_staff_main:
             continue
+        if not evento_ha_iscrizione_online(ev):
+            continue
 
-        registered = _already_registered_row(request.user, ev)
-        sandbox = _paypal_sandbox_for_user_event(request.user, ev, paypal_row)
-        cid, sec = _paypal_client_id_secret(sandbox, paypal_row)
-        paypal_ready = bool(cid and sec)
-
-        row = {
-            "id": ev.id,
-            "titolo": ev.titolo,
-            "costo_euro": str(ev.iscrizione_costo_euro),
-            "is_test": bool(ev.iscrizione_test_attiva),
-            "already_registered": registered,
-            "paypal_uses_sandbox": sandbox,
-            "paypal_client_id": cid if paypal_ready else "",
-            "paypal_ready": paypal_ready,
-            "paypal_show_card": bool(paypal_row.mostra_pulsante_carta),
-            "paypal_show_mybank": bool(paypal_row.mostra_pulsante_mybank),
-        }
-        if registered:
-            row["cta_kind"] = "registered"
-            row["blocking_reasons"] = []
-        elif not all_ok:
-            row["cta_kind"] = "blocked"
-            row["blocking_reasons"] = blocking
-        else:
-            row["cta_kind"] = "subscribe"
-            row["blocking_reasons"] = []
-
-        events_payload.append(row)
+        events_payload.append(
+            _build_event_payload(
+                ev,
+                request.user,
+                checks_ok=all_ok,
+                blocking=blocking,
+                paypal_row=paypal_row,
+                is_staff_main=is_staff_main,
+            )
+        )
 
     return Response(
         {
@@ -208,12 +263,25 @@ def iscrizioni_evento_eligibility(request):
     )
 
 
+def _crea_righe_opzioni_pending(pagamento: IscrizioneEventoPagamento, opzioni):
+    for op in opzioni:
+        IscrizioneEventoPagamentoOpzione.objects.create(
+            pagamento=pagamento,
+            opzione=op,
+            costo_euro=op.costo_euro,
+        )
+
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def iscrizioni_evento_crea_ordine(request):
     """
-    Crea ordine PayPal e record PENDING (personaggio scelto dal giocatore).
-    Body: { "evento_id": <int>, "personaggio_id": <int> }
+    Crea ordine PayPal e record PENDING.
+    Body: {
+      "evento_id", "personaggio_id",
+      "tipo": "iscrizione" | "integra" (default iscrizione),
+      "opzione_sync_ids": ["uuid", ...]
+    }
     """
     paypal_row = PayPalImpostazioniGlobali.get_solo()
     try:
@@ -222,7 +290,15 @@ def iscrizioni_evento_crea_ordine(request):
     except (TypeError, ValueError):
         return Response({"error": "evento_id e personaggio_id richiesti"}, status=status.HTTP_400_BAD_REQUEST)
 
-    evento = Evento.objects.filter(id=evento_id).first()
+    tipo = str(request.data.get("tipo") or "iscrizione").strip().lower()
+    if tipo not in ("iscrizione", "integra"):
+        return Response({"error": "tipo non valido"}, status=status.HTTP_400_BAD_REQUEST)
+
+    opzione_sync_ids = request.data.get("opzione_sync_ids") or []
+    if isinstance(opzione_sync_ids, str):
+        opzione_sync_ids = [opzione_sync_ids]
+
+    evento = Evento.objects.filter(id=evento_id).prefetch_related("iscrizione_opzioni").first()
     if not evento:
         return Response({"error": "Evento non trovato"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -233,9 +309,6 @@ def iscrizioni_evento_crea_ordine(request):
         and evento.iscrizione_apertura <= now <= evento.iscrizione_chiusura
     ):
         return Response({"error": "Iscrizioni non aperte per questo evento"}, status=status.HTTP_400_BAD_REQUEST)
-
-    if evento.iscrizione_costo_euro is None or evento.iscrizione_costo_euro <= 0:
-        return Response({"error": "Costo iscrizione non configurato"}, status=status.HTTP_400_BAD_REQUEST)
 
     if evento.iscrizione_test_attiva and not _is_master_or_head_main_campaign(request.user):
         return Response({"error": "Iscrizione test riservata allo staff campagna principale"}, status=status.HTTP_403_FORBIDDEN)
@@ -262,19 +335,40 @@ def iscrizioni_evento_crea_ordine(request):
     if not pg:
         return Response({"error": "Personaggio non valido o non ammesso"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if _has_any_character_registered(request.user, evento):
-        return Response({"error": "Hai già un personaggio iscritto a questo evento"}, status=status.HTTP_409_CONFLICT)
+    if tipo == "integra":
+        if not _has_any_character_registered(request.user, evento):
+            return Response({"error": "Devi essere già iscritto per integrare le opzioni"}, status=status.HTTP_400_BAD_REQUEST)
+        if not opzioni_integrabili(evento, request.user):
+            return Response({"error": "Nessuna opzione aggiuntiva disponibile"}, status=status.HTTP_400_BAD_REQUEST)
+        tipo_ordine = IscrizioneEventoPagamento.TipoOrdine.INTEGRA
+    else:
+        if _has_any_character_registered(request.user, evento):
+            return Response({"error": "Hai già un personaggio iscritto a questo evento"}, status=status.HTTP_409_CONFLICT)
+        if evento.partecipanti.filter(id=pg.id).exists():
+            return Response({"error": "Personaggio già iscritto a questo evento"}, status=status.HTTP_409_CONFLICT)
+        tipo_ordine = IscrizioneEventoPagamento.TipoOrdine.ISCRIZIONE
 
-    if evento.partecipanti.filter(id=pg.id).exists():
-        return Response({"error": "Personaggio già iscritto a questo evento"}, status=status.HTTP_409_CONFLICT)
+    opzioni, importo, errori = risolvi_scelte_iscrizione(
+        evento,
+        modalita=tipo,
+        utente=request.user,
+        opzione_sync_ids_raw=opzione_sync_ids,
+    )
+    if errori:
+        return Response({"error": errori[0], "errori": errori}, status=status.HTTP_400_BAD_REQUEST)
+
+    if importo <= 0:
+        return Response({"error": "Importo totale deve essere maggiore di zero"}, status=status.HTTP_400_BAD_REQUEST)
 
     sandbox = _paypal_sandbox_for_user_event(request.user, evento, paypal_row)
     client_id, client_secret = _paypal_client_id_secret(sandbox, paypal_row)
     if not client_id or not client_secret:
         return Response({"error": "PayPal non configurato (client id / secret mancanti)"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-    value_str = format_euro_amount(Decimal(evento.iscrizione_costo_euro))
+    value_str = format_euro_amount(importo)
     desc = f"Iscrizione {evento.titolo}"[:120]
+    if tipo == "integra":
+        desc = f"Integrazione {evento.titolo}"[:120]
     custom_id = f"evt{evento.id}-pg{pg.id}-u{request.user.id}"[:120]
 
     try:
@@ -295,20 +389,24 @@ def iscrizioni_evento_crea_ordine(request):
     if not order_id:
         return Response({"error": "PayPal non ha restituito id ordine"}, status=status.HTTP_502_BAD_GATEWAY)
 
-    IscrizioneEventoPagamento.objects.create(
-        evento=evento,
-        personaggio=pg,
-        utente=request.user,
-        paypal_order_id=str(order_id),
-        stato=IscrizioneEventoPagamento.Stato.PENDING,
-        importo_euro=evento.iscrizione_costo_euro,
-        sandbox_usato=sandbox,
-    )
+    with transaction.atomic():
+        pagamento = IscrizioneEventoPagamento.objects.create(
+            evento=evento,
+            personaggio=pg,
+            utente=request.user,
+            paypal_order_id=str(order_id),
+            stato=IscrizioneEventoPagamento.Stato.PENDING,
+            importo_euro=importo,
+            sandbox_usato=sandbox,
+            tipo_ordine=tipo_ordine,
+        )
+        _crea_righe_opzioni_pending(pagamento, opzioni)
 
     return Response(
         {
             "paypal_order_id": str(order_id),
             "sandbox": sandbox,
+            "importo_euro": str(importo),
         },
         status=status.HTTP_201_CREATED,
     )
@@ -358,7 +456,7 @@ def iscrizioni_evento_annulla(request):
 @permission_classes([permissions.IsAuthenticated])
 def iscrizioni_evento_cattura(request):
     """
-    Cattura pagamento PayPal e aggiunge il PG ai partecipanti dell'evento.
+    Cattura pagamento PayPal e aggiunge il PG ai partecipanti dell'evento (solo iscrizione iniziale).
     Body: { "paypal_order_id": "..." }
     """
     order_id = str(request.data.get("paypal_order_id") or "").strip()
@@ -414,15 +512,20 @@ def iscrizioni_evento_cattura(request):
                 return Response({"status": "already_captured"}, status=status.HTTP_200_OK)
 
             ev = Evento.objects.select_for_update().get(pk=row_locked.evento_id)
-            other_registered = ev.partecipanti.filter(proprietario=row_locked.utente, tipologia__giocante=True).exclude(id=row_locked.personaggio_id).exists()
-            if other_registered:
-                row_locked.stato = IscrizioneEventoPagamento.Stato.FAILED
-                row_locked.ultimo_errore = "Esiste già un altro tuo personaggio iscritto a questo evento."
-                row_locked.save(update_fields=["stato", "ultimo_errore", "updated_at"])
-                return Response({"error": row_locked.ultimo_errore}, status=status.HTTP_409_CONFLICT)
 
-            if not ev.partecipanti.filter(id=row_locked.personaggio_id).exists():
-                ev.partecipanti.add(row_locked.personaggio_id)
+            if row_locked.tipo_ordine == IscrizioneEventoPagamento.TipoOrdine.ISCRIZIONE:
+                other_registered = ev.partecipanti.filter(
+                    proprietario=row_locked.utente, tipologia__giocante=True
+                ).exclude(id=row_locked.personaggio_id).exists()
+                if other_registered:
+                    row_locked.stato = IscrizioneEventoPagamento.Stato.FAILED
+                    row_locked.ultimo_errore = "Esiste già un altro tuo personaggio iscritto a questo evento."
+                    row_locked.save(update_fields=["stato", "ultimo_errore", "updated_at"])
+                    return Response({"error": row_locked.ultimo_errore}, status=status.HTTP_409_CONFLICT)
+
+                if not ev.partecipanti.filter(id=row_locked.personaggio_id).exists():
+                    ev.partecipanti.add(row_locked.personaggio_id)
+
             row_locked.paypal_capture_id = capture_id
             row_locked.stato = IscrizioneEventoPagamento.Stato.CAPTURED
             row_locked.ultimo_errore = ""
@@ -436,6 +539,7 @@ def iscrizioni_evento_cattura(request):
             "status": "ok",
             "evento_id": row.evento_id,
             "personaggio_id": row.personaggio_id,
+            "tipo_ordine": row.tipo_ordine,
         },
         status=status.HTTP_200_OK,
     )

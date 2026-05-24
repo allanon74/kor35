@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    Evento, GiornoEvento, PaginaRegolamento, Quest, 
-    MostroTemplate, AttaccoTemplate, 
+    Evento, EventoIscrizioneOpzione, GiornoEvento, PaginaRegolamento, Quest,
+    MostroTemplate, AttaccoTemplate,
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton,
     WikiMattoniWidget,
@@ -212,9 +212,60 @@ class GiornoEventoSerializer(serializers.ModelSerializer):
         model = GiornoEvento
         fields = '__all__'
 
+class EventoIscrizioneOpzioneSerializer(serializers.ModelSerializer):
+    sync_id = serializers.UUIDField(required=False)
+
+    class Meta:
+        model = EventoIscrizioneOpzione
+        fields = [
+            'sync_id', 'nome', 'descrizione', 'costo_euro', 'ordine',
+            'scelta_giocatore', 'obbligatoria', 'posti_limite', 'attiva',
+        ]
+
+
+def _upsert_iscrizione_opzioni(evento: Evento, opzioni_data: list | None):
+    if opzioni_data is None:
+        return
+    keep_sync_ids = []
+    for row in opzioni_data:
+        if not isinstance(row, dict):
+            continue
+        nome = (row.get('nome') or '').strip()
+        if not nome:
+            continue
+        sync_raw = row.get('sync_id')
+        instance = None
+        if sync_raw:
+            instance = EventoIscrizioneOpzione.objects.filter(evento=evento, sync_id=sync_raw).first()
+        if instance is None:
+            instance = EventoIscrizioneOpzione(evento=evento)
+        instance.nome = nome
+        instance.descrizione = row.get('descrizione') or ''
+        try:
+            instance.costo_euro = float(row.get('costo_euro') or 0)
+        except (TypeError, ValueError):
+            instance.costo_euro = 0
+        instance.ordine = int(row.get('ordine') or 0)
+        instance.scelta_giocatore = bool(row.get('scelta_giocatore', True))
+        instance.obbligatoria = bool(row.get('obbligatoria', False))
+        pl = row.get('posti_limite')
+        if pl in (None, '', 0, '0'):
+            instance.posti_limite = None
+        else:
+            try:
+                instance.posti_limite = max(1, int(pl))
+            except (TypeError, ValueError):
+                instance.posti_limite = None
+        instance.attiva = bool(row.get('attiva', True))
+        instance.save()
+        keep_sync_ids.append(instance.sync_id)
+    EventoIscrizioneOpzione.objects.filter(evento=evento).exclude(sync_id__in=keep_sync_ids).delete()
+
+
 class EventoSerializer(serializers.ModelSerializer):
     giorni = serializers.SerializerMethodField()
-    
+    iscrizione_opzioni = EventoIscrizioneOpzioneSerializer(many=True, required=False)
+
     # Questi campi permettono al frontend di vedere i nomi (UserCheck e Users icone)
     staff_details = UserShortSerializer(source='staff_assegnato', many=True, read_only=True)
     partecipanti_details = PersonaggioSerializer(source='partecipanti', many=True, read_only=True)
@@ -226,7 +277,7 @@ class EventoSerializer(serializers.ModelSerializer):
             'luogo', 'pc_guadagnati', 'crediti_guadagnati', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
-            'iscrizione_test_attiva',
+            'iscrizione_test_attiva', 'iscrizione_opzioni',
         ]
 
     def get_giorni(self, obj):
@@ -234,6 +285,18 @@ class EventoSerializer(serializers.ModelSerializer):
         if self.context.get("plot_staffer_limited"):
             return [giorno for giorno in giorni_data if (giorno.get("quests") or [])]
         return giorni_data
+
+    def create(self, validated_data):
+        opzioni_data = validated_data.pop('iscrizione_opzioni', None)
+        evento = super().create(validated_data)
+        _upsert_iscrizione_opzioni(evento, opzioni_data)
+        return evento
+
+    def update(self, instance, validated_data):
+        opzioni_data = validated_data.pop('iscrizione_opzioni', None)
+        evento = super().update(instance, validated_data)
+        _upsert_iscrizione_opzioni(evento, opzioni_data)
+        return evento
 
 class EventoPubblicoSerializer(serializers.ModelSerializer):
     """

@@ -214,6 +214,22 @@ const PlotTab = ({ onLogout }) => {
                 const pcEv = parseInt(String(raw.pc_guadagnati ?? '1'), 10);
                 raw.pc_guadagnati = Number.isFinite(pcEv) && pcEv >= 0 ? pcEv : 1;
                 raw.iscrizione_test_attiva = !!raw.iscrizione_test_attiva;
+                raw.iscrizione_opzioni = Array.isArray(raw.iscrizione_opzioni)
+                    ? raw.iscrizione_opzioni.map((op, idx) => ({
+                          sync_id: op.sync_id || undefined,
+                          nome: (op.nome || '').trim(),
+                          descrizione: op.descrizione || '',
+                          costo_euro: parseFloat(String(op.costo_euro ?? '0').replace(',', '.')) || 0,
+                          ordine: Number.isFinite(parseInt(op.ordine, 10)) ? parseInt(op.ordine, 10) : idx,
+                          scelta_giocatore: op.scelta_giocatore !== false,
+                          obbligatoria: !!op.obbligatoria,
+                          posti_limite:
+                              op.posti_limite === '' || op.posti_limite === null || op.posti_limite === undefined
+                                  ? null
+                                  : parseInt(op.posti_limite, 10) || null,
+                          attiva: op.attiva !== false,
+                      }))
+                    : [];
                 if (raw.id) await updateEvento(raw.id, raw, onLogout);
                 else await createEvento(raw, onLogout);
             } else if (editMode === 'giorno') {
@@ -564,6 +580,7 @@ const PlotTab = ({ onLogout }) => {
                                 crediti_guadagnati: 1000,
                                 iscrizione_costo_euro: 0,
                                 iscrizione_test_attiva: false,
+                                iscrizione_opzioni: [],
                             })
                         }
                         className="p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-colors shadow-lg"
@@ -697,6 +714,130 @@ const PlotTab = ({ onLogout }) => {
                                                 sandbox)
                                             </span>
                                         </label>
+                                        <div className="pt-2 border-t border-indigo-800/50 space-y-2">
+                                            <p className="text-[10px] font-black uppercase text-indigo-300 tracking-widest">
+                                                Opzioni accessorie
+                                            </p>
+                                            <p className="text-[11px] text-gray-400">
+                                                Costi aggiuntivi (pasto, pernottamento…). Senza «scelta giocatore» = inclusi
+                                                automaticamente. «Obbligatoria» = il giocatore deve selezionarla. Posti vuoto =
+                                                illimitati.
+                                            </p>
+                                            {(formData.iscrizione_opzioni || []).map((op, idx) => (
+                                                <div
+                                                    key={op.sync_id || `new-${idx}`}
+                                                    className="rounded-lg border border-gray-700 bg-gray-900/80 p-3 space-y-2"
+                                                >
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            className="flex-1 bg-gray-800 p-2 rounded border border-gray-600 text-sm"
+                                                            placeholder="Nome opzione"
+                                                            value={op.nome || ''}
+                                                            onChange={(e) => {
+                                                                const list = [...(formData.iscrizione_opzioni || [])];
+                                                                list[idx] = { ...list[idx], nome: e.target.value };
+                                                                setFormData({ ...formData, iscrizione_opzioni: list });
+                                                            }}
+                                                        />
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            step="0.01"
+                                                            className="w-24 bg-gray-800 p-2 rounded border border-gray-600 text-sm"
+                                                            placeholder="€"
+                                                            value={op.costo_euro ?? ''}
+                                                            onChange={(e) => {
+                                                                const list = [...(formData.iscrizione_opzioni || [])];
+                                                                list[idx] = { ...list[idx], costo_euro: e.target.value };
+                                                                setFormData({ ...formData, iscrizione_opzioni: list });
+                                                            }}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className="px-2 text-red-400 hover:text-red-200"
+                                                            onClick={() => {
+                                                                const list = (formData.iscrizione_opzioni || []).filter(
+                                                                    (_, i) => i !== idx
+                                                                );
+                                                                setFormData({ ...formData, iscrizione_opzioni: list });
+                                                            }}
+                                                            aria-label="Rimuovi opzione"
+                                                        >
+                                                            <X size={18} />
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-3 text-xs text-gray-300">
+                                                        <label className="flex items-center gap-1">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={op.scelta_giocatore !== false}
+                                                                onChange={(e) => {
+                                                                    const list = [...(formData.iscrizione_opzioni || [])];
+                                                                    list[idx] = {
+                                                                        ...list[idx],
+                                                                        scelta_giocatore: e.target.checked,
+                                                                    };
+                                                                    setFormData({ ...formData, iscrizione_opzioni: list });
+                                                                }}
+                                                            />
+                                                            Scelta giocatore
+                                                        </label>
+                                                        <label className="flex items-center gap-1">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={!!op.obbligatoria}
+                                                                disabled={op.scelta_giocatore === false}
+                                                                onChange={(e) => {
+                                                                    const list = [...(formData.iscrizione_opzioni || [])];
+                                                                    list[idx] = { ...list[idx], obbligatoria: e.target.checked };
+                                                                    setFormData({ ...formData, iscrizione_opzioni: list });
+                                                                }}
+                                                            />
+                                                            Obbligatoria
+                                                        </label>
+                                                        <label className="flex items-center gap-1">
+                                                            Posti
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                className="w-16 bg-gray-800 p-1 rounded border border-gray-600"
+                                                                value={op.posti_limite ?? ''}
+                                                                onChange={(e) => {
+                                                                    const list = [...(formData.iscrizione_opzioni || [])];
+                                                                    list[idx] = {
+                                                                        ...list[idx],
+                                                                        posti_limite: e.target.value,
+                                                                    };
+                                                                    setFormData({ ...formData, iscrizione_opzioni: list });
+                                                                }}
+                                                            />
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            <button
+                                                type="button"
+                                                className="text-xs font-bold text-indigo-300 hover:text-indigo-100"
+                                                onClick={() =>
+                                                    setFormData({
+                                                        ...formData,
+                                                        iscrizione_opzioni: [
+                                                            ...(formData.iscrizione_opzioni || []),
+                                                            {
+                                                                sync_id: crypto.randomUUID(),
+                                                                nome: '',
+                                                                costo_euro: 0,
+                                                                scelta_giocatore: true,
+                                                                obbligatoria: false,
+                                                                attiva: true,
+                                                            },
+                                                        ],
+                                                    })
+                                                }
+                                            >
+                                                + Aggiungi opzione
+                                            </button>
+                                        </div>
                                     </div>
                                 </>
                             )}

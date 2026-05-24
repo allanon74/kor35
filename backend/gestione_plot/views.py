@@ -135,6 +135,7 @@ class EventoViewSet(viewsets.ModelViewSet):
         user = self.request.user
         
         base_queryset = Evento.objects.all().prefetch_related(
+            'iscrizione_opzioni',
             'giorni__quests__mostri_presenti',
             'giorni__quests__png_richiesti',
             'giorni__quests__viste_previste__manifesto',

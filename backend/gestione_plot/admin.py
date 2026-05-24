@@ -4,7 +4,8 @@ from .models import (
     MostroTemplate, AttaccoTemplate, PngAssegnato,
     StaffOffGame, QuestFase, QuestTask,
     PaginaRegolamento, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
-    ConfigurazioneSito, LinkSocial, PayPalImpostazioniGlobali, IscrizioneEventoPagamento, EventoPremioPersonaggio,
+    ConfigurazioneSito, LinkSocial, PayPalImpostazioniGlobali, IscrizioneEventoPagamento,
+    IscrizioneEventoPagamentoOpzione, EventoIscrizioneOpzione, EventoPremioPersonaggio,
     CreazioneGuidataFlusso, CreazioneGuidataPasso, CreazioneGuidataScelta,
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
@@ -73,6 +74,15 @@ class AttaccoTemplateAdmin(admin.ModelAdmin):
     list_editable = ('ordine',)
     ordering = ('template', 'ordine')
 
+class EventoIscrizioneOpzioneInline(admin.TabularInline):
+    model = EventoIscrizioneOpzione
+    extra = 0
+    fields = (
+        'nome', 'costo_euro', 'ordine', 'scelta_giocatore', 'obbligatoria',
+        'posti_limite', 'attiva',
+    )
+
+
 @admin.register(Evento)
 class EventoAdmin(SModelAdmin):
     list_display = (
@@ -89,7 +99,7 @@ class EventoAdmin(SModelAdmin):
     )
     list_filter = ('data_inizio', 'iscrizione_test_attiva')
     search_fields = ('titolo',)
-    inlines = [GiornoEventoInline]
+    inlines = [EventoIscrizioneOpzioneInline, GiornoEventoInline]
     filter_horizontal = ('staff_assegnato', 'partecipanti')
 
 
@@ -134,12 +144,22 @@ class EventoPremioPersonaggioAdmin(admin.ModelAdmin):
     readonly_fields = ('sync_id', 'updated_at', 'created_at')
 
 
+class IscrizioneEventoPagamentoOpzioneInline(admin.TabularInline):
+    model = IscrizioneEventoPagamentoOpzione
+    extra = 0
+    readonly_fields = ('opzione', 'costo_euro', 'sync_id', 'created_at', 'updated_at')
+
+
 @admin.register(IscrizioneEventoPagamento)
 class IscrizioneEventoPagamentoAdmin(admin.ModelAdmin):
-    list_display = ('created_at', 'evento', 'personaggio', 'utente', 'stato', 'importo_euro', 'sandbox_usato', 'paypal_order_id')
-    list_filter = ('stato', 'sandbox_usato')
+    list_display = (
+        'created_at', 'evento', 'personaggio', 'utente', 'tipo_ordine', 'stato',
+        'importo_euro', 'sandbox_usato', 'paypal_order_id',
+    )
+    list_filter = ('stato', 'tipo_ordine', 'sandbox_usato')
     search_fields = ('paypal_order_id', 'paypal_capture_id', 'personaggio__nome', 'utente__username')
     readonly_fields = ('sync_id', 'updated_at', 'created_at', 'paypal_order_id', 'paypal_capture_id')
+    inlines = [IscrizioneEventoPagamentoOpzioneInline]
 
 @admin.register(GiornoEvento)
 class GiornoEventoAdmin(SModelAdmin):
