@@ -3155,3 +3155,93 @@ export const rispondiMessaggio = async (messaggioId, personaggioId, testo, titol
         onLogout
     );
 };
+
+// --- Scommesse in-game ---
+
+export const scommesseGetCalendari = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/scommesse/calendari/', { method: 'GET' }, onLogout);
+
+export const scommesseGetConfig = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/scommesse/config/', { method: 'GET' }, onLogout);
+
+export const scommesseGetSquadraStorico = (squadraId, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/scommesse/squadre/${squadraId}/storico/`, { method: 'GET' }, onLogout);
+
+export const scommesseGetCalendario = (calendarioId, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/scommesse/calendari/${calendarioId}/`, { method: 'GET' }, onLogout);
+
+export const scommessePiazzaPuntata = (personaggioId, payload, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/scommesse/puntate/', {
+        method: 'POST',
+        body: JSON.stringify({ ...payload, personaggio_id: personaggioId }),
+    }, onLogout);
+
+export const scommesseGetMiePuntate = (personaggioId, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/scommesse/mie-puntate/?personaggio_id=${encodeURIComponent(personaggioId)}`,
+        { method: 'GET' },
+        onLogout,
+    );
+
+export const scommesseGeneraCodice = (personaggioId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/scommesse/codici/genera/', {
+        method: 'POST',
+        body: JSON.stringify({ personaggio_id: personaggioId }),
+    }, onLogout);
+
+export const scommesseGetMieiCodici = (personaggioId, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/scommesse/miei-codici/?personaggio_id=${encodeURIComponent(personaggioId)}`,
+        { method: 'GET' },
+        onLogout,
+    );
+
+const STAFF_SCOMMESSE = '/api/personaggi/api/staff/scommesse';
+
+export const staffScommesseGetSport = (onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/sport/`, { method: 'GET' }, onLogout);
+
+export const staffScommesseSaveSport = (data, onLogout, id = null) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/sport/${id ? `${id}/` : ''}`, {
+        method: id ? 'PATCH' : 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffScommesseDeleteSport = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/sport/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffScommesseGetSquadre = (sportId, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/squadre/${sportId ? `?sport=${sportId}` : ''}`, { method: 'GET' }, onLogout);
+
+export const staffScommesseSaveSquadra = (data, onLogout, id = null) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/squadre/${id ? `${id}/` : ''}`, {
+        method: id ? 'PATCH' : 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffScommesseDeleteSquadra = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/squadre/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffScommesseGetCalendari = (onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/calendari/`, { method: 'GET' }, onLogout);
+
+export const staffScommesseSaveCalendario = (data, onLogout, id = null) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/calendari/${id ? `${id}/` : ''}`, {
+        method: id ? 'PATCH' : 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffScommesseDeleteCalendario = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/calendari/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffScommesseRigeneraIncontri = (calendarioId, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/calendari/${calendarioId}/rigenera-incontri/`, { method: 'POST' }, onLogout);
+
+export const staffScommesseGetConfig = (onLogout, campagnaId = null) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/config/${campagnaId ? `?campagna=${campagnaId}` : ''}`, { method: 'GET' }, onLogout);
+
+export const staffScommesseSaveConfig = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/config/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);

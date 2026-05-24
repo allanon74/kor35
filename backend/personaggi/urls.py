@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, watch_views
+from . import views, views_staff, views_scommesse, watch_views
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -101,6 +101,9 @@ router.register(r'staff/personaggi-carriera-membership', PersonaggioCarrieraMemb
 router.register(r'staff/campagne', views.CampagnaAdminViewSet, basename='staff-campagne')
 router.register(r'staff/campagne-utenti', views.CampagnaUtenteAdminViewSet, basename='staff-campagne-utenti')
 router.register(r'staff/campagne-feature-policy', views.CampagnaFeaturePolicyAdminViewSet, basename='staff-campagne-feature-policy')
+router.register(r'staff/scommesse/sport', views_scommesse.SportScommesseStaffViewSet, basename='staff-scommesse-sport')
+router.register(r'staff/scommesse/squadre', views_scommesse.SquadraScommesseStaffViewSet, basename='staff-scommesse-squadre')
+router.register(r'staff/scommesse/calendari', views_scommesse.CalendarioScommesseStaffViewSet, basename='staff-scommesse-calendari')
 
 urlpatterns = [
     path('api/device/watch/pair/start/', watch_views.WatchPairStartView.as_view(), name='watch-pair-start'),
@@ -239,6 +242,16 @@ urlpatterns = [
     path('api/staff/formula-semantic-options/', FormulaSemanticOptionsView.as_view(), name='staff-formula-semantic-options'),
     path('api/staff/risorse-pool/', views.StaffRisorsaPoolListView.as_view(), name='staff-risorse-pool-list'),
     path('api/staff/risorse-pool/incrementa/', views.StaffRisorsaIncrementView.as_view(), name='staff-risorse-pool-incrementa'),
+
+    path('api/scommesse/calendari/', views_scommesse.ScommesseCalendariPlayerView.as_view(), name='scommesse-calendari'),
+    path('api/scommesse/calendari/<uuid:calendario_id>/', views_scommesse.ScommesseCalendarioDetailPlayerView.as_view(), name='scommesse-calendario-detail'),
+    path('api/scommesse/puntate/', views_scommesse.ScommessePuntataCreateView.as_view(), name='scommesse-puntate-create'),
+    path('api/scommesse/mie-puntate/', views_scommesse.ScommesseMiePuntateView.as_view(), name='scommesse-mie-puntate'),
+    path('api/scommesse/codici/genera/', views_scommesse.ScommesseGeneraCodiceView.as_view(), name='scommesse-codici-genera'),
+    path('api/scommesse/miei-codici/', views_scommesse.ScommesseMieiCodiciView.as_view(), name='scommesse-miei-codici'),
+    path('api/scommesse/config/', views_scommesse.ScommesseConfigPlayerView.as_view(), name='scommesse-config'),
+    path('api/scommesse/squadre/<uuid:squadra_id>/storico/', views_scommesse.ScommesseSquadraStoricoView.as_view(), name='scommesse-squadra-storico'),
+    path('api/staff/scommesse/config/', views_scommesse.ScommesseConfigStaffView.as_view(), name='staff-scommesse-config'),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     

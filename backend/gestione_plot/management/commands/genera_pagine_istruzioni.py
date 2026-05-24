@@ -139,6 +139,7 @@ class Command(BaseCommand):
     <li><a href="/regolamento/istruzioni/scanner-qr">Scanner QR</a> - Come usare lo scanner</li>
     <li><a href="/regolamento/istruzioni/diario">Diario</a> - Log delle azioni</li>
     <li><a href="/regolamento/istruzioni/transazioni">Transazioni</a> - Scambi e trasferimenti</li>
+    <li><a href="/regolamento/istruzioni/scommesse">Scommesse</a> - Pronostici sportivi in-game</li>
 </ul>
                 ''',
                 ordine=1,
@@ -1109,6 +1110,68 @@ class Command(BaseCommand):
                 ''',
                 parent=pagina_istruzioni,
                 ordine=18,
+                public=True,
+                visibile_solo_staff=False,
+                force=force
+            )
+
+            # Pagina: Scommesse (tab scommesse)
+            self.get_or_create_page(
+                slug='scommesse',
+                titolo='Scommesse in-game',
+                contenuto='''
+<h2>Scommesse sportive in-game</h2>
+<p>La sezione <strong>Scommesse</strong> ti permette di pronosticare gli esiti di tornei e competizioni organizzati dallo staff durante l'evento live. Le puntate usano i <strong>Crediti (CR)</strong> del personaggio.</p>
+
+<h3>📅 Calendari e eventi</h3>
+<p>Per ogni sport attivo lo staff pubblica un <strong>calendario</strong> con una serie di incontri (squadra casa vs squadra trasferta). Su ogni incontro puoi scommettere su:</p>
+<ul>
+    <li><strong>1</strong> — vittoria della squadra di casa</li>
+    <li><strong>X</strong> — pareggio</li>
+    <li><strong>2</strong> — vittoria della squadra ospite</li>
+</ul>
+<p>Accanto a ogni esito vedi la <strong>quota</strong> (moltiplicatore): se indovini, la vincita è <em>importo puntato × quota</em>.</p>
+
+<h3>🎯 Scommessa singola e combinata</h3>
+<ul>
+    <li><strong>Singola</strong>: un solo incontro</li>
+    <li><strong>Combinata</strong>: più incontri nello stesso calendario; le quote si moltiplicano, ma devi indovinare <em>tutti</em> gli esiti per vincere</li>
+</ul>
+<p>Il numero massimo di eventi in combinata è configurabile dallo staff (di default fino a 8).</p>
+
+<h3>⏱️ Tempistiche</h3>
+<ul>
+    <li>Le scommesse sono aperte dalla <strong>data di apertura</strong> fino alla <strong>data di risoluzione</strong> del calendario</li>
+    <li>I risultati sono calcolati al momento della creazione del calendario, ma restano <strong>nascosti</strong> fino alla data di risoluzione</li>
+    <li>Dopo la pubblicazione, il calendario resta consultabile per circa <strong>24 ore</strong> (poi scompare dall'elenco)</li>
+</ul>
+
+<h3>💰 Limiti di puntata</h3>
+<p>Senza codice speciale, l'importo massimo per singola scommessa è limitato (di default <strong>15 CR</strong>, salvo diversa impostazione sul calendario).</p>
+<p>Con un <strong>codice allibratore</strong> valido non ci sono limiti di importo e ricevi quote più favorevoli.</p>
+
+<h3>🔑 Allibratore e codici (statistica ALL)</h3>
+<p>Se il tuo personaggio possiede la statistica <strong>Allibratore (sigla ALL &gt; 0)</strong> puoi:</p>
+<ul>
+    <li>Generare codici alfanumerici da <strong>5 caratteri</strong> (monouso, una scommessa ciascuno)</li>
+    <li>Condividere un codice con un altro giocatore che lo inserisce al momento della puntata</li>
+    <li>Ricevere una <strong>commissione</strong> sull'importo puntato (di default 8%)</li>
+</ul>
+<p>Quote più favorevoli: più alto è il valore ALL, minore è il margine del bookmaker applicato alla scommessa con codice.</p>
+
+<h3>📋 Le mie scommesse</h3>
+<p>Nella stessa tab trovi l'elenco delle puntate effettuate e l'esito (in attesa, vinta, persa) dopo la risoluzione del calendario.</p>
+
+<h3>⚠️ Note importanti</h3>
+<ul>
+    <li>I crediti puntati vengono scalati subito; le vincite vengono accreditate alla risoluzione</li>
+    <li>Un codice usato non può essere riutilizzato</li>
+    <li>Le quote tengono conto della potenza delle squadre con una piccola variabilità casuale (±10%)</li>
+    <li>Dopo ogni incontro risolto, la potenza delle squadre si aggiorna in modo <strong>proporzionale</strong>: se vince il favorito la variazione è piccola; se vince lo sfavorito (sorpresa) la variazione è più marcata. In pareggio nessun cambiamento.</li>
+</ul>
+                ''',
+                parent=pagina_istruzioni,
+                ordine=19,
                 public=True,
                 visibile_solo_staff=False,
                 force=force

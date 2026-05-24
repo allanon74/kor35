@@ -15,7 +15,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch
+    Key, HelpCircle, Watch, Trophy
 } from 'lucide-react';
 
 import AbilitaTab from './AbilitaTab.jsx';
@@ -32,6 +32,7 @@ import GameTab from './GameTab.jsx';
 import WatchTab from './WatchTab.jsx';
 import JobRequestsWidget from './JobRequestsWidget.jsx'; 
 import PersonaggiTab from './PersonaggiTab.jsx';
+import ScommesseTab from './ScommesseTab.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
 
 // --- [MODIFICA] Import Modale Password ---
@@ -60,6 +61,7 @@ const AVAILABLE_TABS = [
     { id: 'logs', label: 'Diario', icon: ScrollText, component: LogViewer },
     { id: 'transazioni', label: 'Transazioni', icon: ArrowRightLeft, component: TransazioniViewer },
     { id: 'personaggi', label: 'Personaggi', icon: Users, component: PersonaggiTab },
+    { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: ScommesseTab },
 ];
 
 const DEFAULT_SHORTCUTS = ['inventario', 'abilita', 'messaggi', 'qr'];
@@ -102,6 +104,7 @@ const TAB_TO_WIKI_SLUG = {
     'personaggi': 'gestione-personaggio',
     'social': 'social',
     'consumabili': 'consumabili',
+    'scommesse': 'scommesse',
     'home': 'gestione-personaggio',
     'game': 'navigazione-app',
     'watch': 'smartwatch-wear-os',

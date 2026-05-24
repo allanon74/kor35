@@ -46,6 +46,7 @@ const NodoManager = lazy(() => import('./editors/NodoManager'));
 const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
 const PilotaggioManager = lazy(() => import('./editors/PilotaggioManager'));
 const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuidataStaffManager'));
+const ScommesseManager = lazy(() => import('./editors/ScommesseManager'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -75,6 +76,7 @@ const STAFF_COMPONENT_MAP = {
     campagne: CampaignManager,
     maintenance: MaintenanceModePanel,
     messaggi: AdminMessageTab,
+    scommesse: ScommesseManager,
 };
 
 const DIRECT_LOAD_TOOLS = new Set(['plot', 'qr-debug']);

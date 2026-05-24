@@ -20,6 +20,7 @@ import {
   Navigation,
   Settings,
   Users,
+  Trophy,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -58,6 +59,7 @@ export const STAFF_TOOL_ICON_MAP = {
   Navigation,
   Settings,
   Users,
+  Trophy,
 };
 
 /**
@@ -92,6 +94,7 @@ export const STAFF_TOOLS_REGISTRY = {
   campagne: { id: 'campagne', label: 'Campagne', icon: Globe2, color: 'bg-emerald-800', componentKey: 'campagne' },
   maintenance: { id: 'maintenance', label: 'Maintenance mode', icon: Shield, color: 'bg-amber-700', componentKey: 'maintenance' },
   messaggi: { id: 'messaggi', label: 'Messaggi staff', icon: MessageSquare, color: 'bg-emerald-600', componentKey: 'messaggi' },
+  scommesse: { id: 'scommesse', label: 'Scommesse', icon: Trophy, color: 'bg-amber-600', componentKey: 'scommesse' },
 };
 
 export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
@@ -105,7 +108,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug'],
+      tool_ids: ['plot', 'pilotaggio', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse'],
     },
     {
       id: 'database',

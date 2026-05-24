@@ -6052,6 +6052,20 @@ class CreazioneConsumabileInCorso(SyncableModel, models.Model):
 
 
 # ============================================================================
+# SCOMMESSE IN-GAME
+# ============================================================================
+from personaggi.scommesse_models import (  # noqa: E402, F401
+    SportScommesse,
+    SquadraScommesse,
+    CalendarioScommesse,
+    IncontroScommesse,
+    CodiceScommessa,
+    PuntataScommessa,
+    SelezionePuntata,
+    ConfigurazioneScommesse,
+)
+
+# ============================================================================
 # SIGNALS - Inizializzazione automatica
 # ============================================================================
 
