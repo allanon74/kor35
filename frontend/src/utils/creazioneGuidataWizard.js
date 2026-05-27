@@ -103,6 +103,22 @@ export function applySceltaToTrail(trail, passo, scelta) {
 
   let nextTrail = [...(trail || [])];
 
+  // Multi-selezione senza gruppo: stesso pulsante = toggle on/off (no duplicati).
+  if (!gruppoId) {
+    const sameIdx = nextTrail.findIndex(
+      (t) => t.passoSlug === passoSlug && t.sceltaId === scelta?.id,
+    );
+    if (sameIdx >= 0) {
+      nextTrail.splice(sameIdx, 1);
+      return {
+        trail: nextTrail,
+        effetti: flattenEffettiFromTrail(nextTrail),
+        navigareSlug: null,
+        fine: false,
+      };
+    }
+  }
+
   if (gruppoId && rewindMode === 'toggle') {
     nextTrail = nextTrail.filter(
       (t) => !(t.gruppoId === gruppoId && t.passoSlug === passoSlug),
