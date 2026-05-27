@@ -38,6 +38,11 @@ const NativeSelect = memo(({
                     onChange(null);
                     return;
                 }
+                // UUID (modelli sync) e stringhe: non parseInt
+                if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(v)) {
+                    onChange(v);
+                    return;
+                }
                 const parsed = parseInt(v, 10);
                 onChange(Number.isNaN(parsed) ? v : parsed);
             }}

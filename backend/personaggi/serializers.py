@@ -247,10 +247,7 @@ class TipoCarrieraStaffSerializer(serializers.ModelSerializer):
 
 
 class CarrieraStaffSerializer(serializers.ModelSerializer):
-    tipo_carriera_id = serializers.PrimaryKeyRelatedField(
-        queryset=TipoCarriera.objects.all(),
-        source="tipo_carriera",
-    )
+    tipo_carriera = serializers.PrimaryKeyRelatedField(queryset=TipoCarriera.objects.all())
     tipo_carriera_nome = serializers.CharField(source="tipo_carriera.nome", read_only=True)
     tipo_carriera_codice = serializers.CharField(source="tipo_carriera.codice", read_only=True)
     tiers_sblocco_ids = serializers.ListField(
@@ -268,7 +265,7 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             "descrizione",
             "tipo",
             "foto",
-            "tipo_carriera_id",
+            "tipo_carriera",
             "tipo_carriera_nome",
             "tipo_carriera_codice",
             "tiers_sblocco_ids",
@@ -276,6 +273,9 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             "sync_id",
             "updated_at",
         )
+        extra_kwargs = {
+            "tipo_carriera": {"required": True},
+        }
 
     def get_tiers_sblocco_dettaglio(self, obj):
         return list(
@@ -300,7 +300,7 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
         from personaggi.models import TIER_3
 
         tier_ids = validated_data.pop("tiers_sblocco_ids", None)
-        tipo_carriera = validated_data.pop("tipo_carriera")
+        tipo_carriera = validated_data.pop("tipo_carriera", None)
         validated_data.setdefault("tipo", TIER_3)
         carriera = Carriera.objects.create(tipo_carriera=tipo_carriera, **validated_data)
         self._sync_tiers_sblocco(carriera, tier_ids)
@@ -314,31 +314,75 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
 
 
 class CaricaStaffSerializer(serializers.ModelSerializer):
-    carriera_id = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all(), source="carriera")
+    carriera = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all())
     carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
 
     class Meta:
         model = Carica
-        fields = "__all__"
+        fields = (
+            "id",
+            "sync_id",
+            "updated_at",
+            "carriera",
+            "carriera_nome",
+            "nome",
+            "bonus_stipendio_evento",
+            "ordine",
+            "attiva",
+        )
+        read_only_fields = ("id", "sync_id", "updated_at", "carriera_nome")
 
 
 class PersonaggioCarrieraMembershipStaffSerializer(serializers.ModelSerializer):
-    carriera_id = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all(), source="carriera")
-    tipo_carriera_id = serializers.PrimaryKeyRelatedField(queryset=TipoCarriera.objects.all(), source="tipo_carriera")
-    carica_id = serializers.PrimaryKeyRelatedField(
+    personaggio = serializers.PrimaryKeyRelatedField(queryset=Personaggio.objects.all())
+    carriera = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all())
+    tipo_carriera = serializers.PrimaryKeyRelatedField(queryset=TipoCarriera.objects.all())
+    carica = serializers.PrimaryKeyRelatedField(
         queryset=Carica.objects.filter(attiva=True),
-        source="carica",
         allow_null=True,
         required=False,
     )
     carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
     carica_nome = serializers.CharField(source="carica.nome", read_only=True)
     tipo_carriera_codice = serializers.CharField(source="tipo_carriera.codice", read_only=True)
-    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+    personaggio_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = PersonaggioCarrieraMembership
-        fields = "__all__"
+        fields = (
+            "id",
+            "sync_id",
+            "updated_at",
+            "personaggio",
+            "personaggio_nome",
+            "carriera",
+            "tipo_carriera",
+            "carica",
+            "data_da",
+            "data_a",
+            "carriera_nome",
+            "carica_nome",
+            "tipo_carriera_codice",
+        )
+        read_only_fields = (
+            "id",
+            "sync_id",
+            "updated_at",
+            "personaggio_nome",
+            "carriera_nome",
+            "carica_nome",
+            "tipo_carriera_codice",
+        )
+
+    def get_personaggio_nome(self, obj):
+        pg = obj.personaggio
+        if not pg:
+            return ""
+        owner = getattr(pg, "proprietario", None)
+        if owner:
+            login = owner.username or owner.email or str(owner.pk)
+            return f"{pg.nome} ({login})"
+        return pg.nome
 
     def validate(self, attrs):
         carriera = attrs.get("carriera") or getattr(self.instance, "carriera", None)

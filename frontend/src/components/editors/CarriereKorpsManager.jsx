@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Users, Briefcase, Shield } from 'lucide-react';
 import MasterGenericList from './MasterGenericList';
 import EditorSaveActions from './EditorSaveActions';
+import SearchableSelect from './SearchableSelect';
 import {
   staffGetTipiCarriera,
   staffGetCarriere,
@@ -64,18 +65,17 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
             value={form.descrizione || ''}
             onChange={(e) => setForm({ ...form, descrizione: e.target.value })}
           />
-          <select
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={form.tipo_carriera_id || ''}
-            onChange={(e) => setForm({ ...form, tipo_carriera_id: e.target.value })}
-          >
-            <option value="">Tipo carriera</option>
-            {tipi.map((t) => (
-              <option key={t.id} value={t.id}>{t.nome}</option>
-            ))}
-          </select>
+          <label className="block text-xs text-gray-400 mb-1">Tipo carriera</label>
+          <SearchableSelect
+            options={tipi}
+            value={form.tipo_carriera || form.tipo_carriera_id || null}
+            onChange={(v) => setForm({ ...form, tipo_carriera: v, tipo_carriera_id: v })}
+            placeholder="Tipo (KORP, Professione, …)"
+          />
           <p className="text-xs text-gray-500">
-            Le professioni restano tier T3 (wiki invariata). Tipo «KORP» per le corps.
+            Le professioni restano tier T3 in wiki. Qui associ i <strong>tier di abilità</strong> sbloccabili
+            per i membri; per inserire le singole abilità in un tier usa{' '}
+            <strong>Database regole → Tabelle</strong>.
           </p>
           <div>
             <div className="text-xs text-gray-400 mb-2">Tier abilità sbloccabili per i membri</div>
@@ -112,7 +112,7 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
   );
 }
 
-function CaricaModal({ isOpen, onClose, onSave, value, carriere, statusMessage, statusType }) {
+function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMessage, statusType }) {
   const [form, setForm] = useState(value || {});
   useEffect(() => setForm(value || {}), [value]);
   if (!isOpen) return null;
@@ -124,18 +124,13 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriere, statusMessage, 
           <button type="button" onClick={onClose}><X className="text-gray-400" size={18} /></button>
         </div>
         <div className="p-4 space-y-3">
-          <select
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={form.carriera_id || ''}
-            onChange={(e) => setForm({ ...form, carriera_id: e.target.value })}
-          >
-            <option value="">Carriera / KORP</option>
-            {carriere.map((c) => (
-              <option key={c.id} value={c.id}>
-                [{c.tipo_carriera_codice}] {c.nome}
-              </option>
-            ))}
-          </select>
+          <label className="block text-xs text-gray-400 mb-1">Carriera / KORP</label>
+          <SearchableSelect
+            options={carriereOptions}
+            value={form.carriera || form.carriera_id || null}
+            onChange={(v) => setForm({ ...form, carriera: v, carriera_id: v })}
+            placeholder="Cerca carriera o KORP…"
+          />
           <input
             className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
             placeholder="Nome carica"
@@ -169,7 +164,16 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriere, statusMessage, 
 }
 
 function MembershipModal({
-  isOpen, onClose, onSave, value, carriere, tipi, personaggi, statusMessage, statusType,
+  isOpen,
+  onClose,
+  onSave,
+  value,
+  carriereOptions,
+  tipi,
+  personaggiOptions,
+  cariche,
+  statusMessage,
+  statusType,
 }) {
   const [form, setForm] = useState(value || {});
   const [chiudiKorpPrecedenti, setChiudiKorpPrecedenti] = useState(true);
@@ -178,21 +182,24 @@ function MembershipModal({
     setChiudiKorpPrecedenti(true);
   }, [value]);
 
+  const tipoId = form.tipo_carriera || form.tipo_carriera_id;
+  const carrieraId = form.carriera || form.carriera_id;
+
   const selectedTipo = useMemo(
-    () => tipi.find((t) => String(t.id) === String(form.tipo_carriera_id)),
-    [tipi, form.tipo_carriera_id],
+    () => tipi.find((t) => String(t.id) === String(tipoId)),
+    [tipi, tipoId],
   );
   const isKorp = selectedTipo?.codice === 'korp';
 
   const carriereFiltrate = useMemo(() => {
-    if (!form.tipo_carriera_id) return carriere;
-    return carriere.filter((c) => String(c.tipo_carriera_id) === String(form.tipo_carriera_id));
-  }, [carriere, form.tipo_carriera_id]);
+    if (!tipoId) return carriereOptions;
+    return carriereOptions.filter((c) => String(c.tipo_carriera) === String(tipoId));
+  }, [carriereOptions, tipoId]);
 
   const caricheOptions = useMemo(() => {
-    if (!form.carriera_id) return [];
-    return (form._cariche || []).filter((c) => String(c.carriera_id) === String(form.carriera_id));
-  }, [form.carriera_id, form._cariche]);
+    if (!carrieraId) return [];
+    return cariche.filter((c) => String(c.carriera) === String(carrieraId));
+  }, [carrieraId, cariche]);
 
   if (!isOpen) return null;
 
@@ -204,46 +211,44 @@ function MembershipModal({
           <button type="button" onClick={onClose}><X className="text-gray-400" size={18} /></button>
         </div>
         <div className="p-4 space-y-3">
-          <select
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={form.personaggio || ''}
-            onChange={(e) => setForm({ ...form, personaggio: e.target.value })}
-          >
-            <option value="">Personaggio</option>
-            {personaggi.map((p) => (
-              <option key={p.id} value={p.id}>{p.nome}</option>
-            ))}
-          </select>
-          <select
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={form.tipo_carriera_id || ''}
-            onChange={(e) => setForm({ ...form, tipo_carriera_id: e.target.value, carriera_id: '', carica_id: '' })}
-          >
-            <option value="">Tipo</option>
-            {tipi.map((t) => (
-              <option key={t.id} value={t.id}>{t.nome}</option>
-            ))}
-          </select>
-          <select
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={form.carriera_id || ''}
-            onChange={(e) => setForm({ ...form, carriera_id: e.target.value, carica_id: '' })}
-          >
-            <option value="">Carriera / KORP</option>
-            {carriereFiltrate.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
-          <select
-            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            value={form.carica_id || ''}
-            onChange={(e) => setForm({ ...form, carica_id: e.target.value || null })}
-          >
-            <option value="">Carica (opzionale)</option>
-            {caricheOptions.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
+          <label className="block text-xs text-gray-400 mb-1">Personaggio</label>
+          <SearchableSelect
+            options={personaggiOptions}
+            value={form.personaggio || null}
+            onChange={(v) => setForm({ ...form, personaggio: v })}
+            placeholder="Cerca personaggio (nome o giocatore)…"
+          />
+          <label className="block text-xs text-gray-400 mb-1">Tipo</label>
+          <SearchableSelect
+            options={tipi}
+            value={tipoId || null}
+            onChange={(v) => setForm({ ...form, tipo_carriera: v, carriera: null, carica: null })}
+            placeholder="KORP o Professione…"
+          />
+          <label className="block text-xs text-gray-400 mb-1">Carriera / KORP</label>
+          <SearchableSelect
+            options={carriereFiltrate}
+            value={carrieraId || null}
+            onChange={(v) => {
+              const row = carriereOptions.find((c) => String(c.id) === String(v));
+              setForm({
+                ...form,
+                carriera: v,
+                tipo_carriera: row?.tipo_carriera || form.tipo_carriera,
+                carica: null,
+              });
+            }}
+            placeholder="Cerca professione o KORP…"
+            disabled={!tipoId && carriereFiltrate.length === 0}
+          />
+          <label className="block text-xs text-gray-400 mb-1">Carica (opzionale)</label>
+          <SearchableSelect
+            options={caricheOptions}
+            value={form.carica || form.carica_id || null}
+            onChange={(v) => setForm({ ...form, carica: v })}
+            placeholder="Carica nella carriera…"
+            disabled={!carrieraId}
+          />
           {isKorp && !form.id && (
             <label className="flex items-start gap-2 p-3 rounded-lg border border-amber-600/50 bg-amber-950/30 text-sm text-amber-100">
               <input
@@ -342,6 +347,25 @@ export default function CarriereKorpsManager({ onLogout }) {
     return carriere.filter((c) => c.tipo_carriera_codice === filtroTipo);
   }, [carriere, filtroTipo]);
 
+  const carriereSelectOptions = useMemo(
+    () =>
+      carriere.map((c) => ({
+        id: c.id,
+        nome: `[${c.tipo_carriera_codice || c.tipo_carriera_nome || '?'}] ${c.nome}`,
+        tipo_carriera: c.tipo_carriera || tipi.find((t) => t.codice === c.tipo_carriera_codice)?.id,
+      })),
+    [carriere, tipi],
+  );
+
+  const personaggiSelectOptions = useMemo(
+    () =>
+      personaggi.map((p) => ({
+        id: p.id,
+        nome: p.proprietario ? `${p.nome} (${p.proprietario})` : p.nome,
+      })),
+    [personaggi],
+  );
+
   const carrieraColumns = useMemo(
     () => [
       { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
@@ -394,7 +418,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         nome: form.nome,
         descrizione: form.descrizione || '',
         tipo: form.tipo || 'T3',
-        tipo_carriera_id: form.tipo_carriera_id,
+        tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
         tiers_sblocco_ids: form.tiers_sblocco_ids || [],
       };
       if (form.id) await staffUpdateCarriera(form.id, payload, onLogout);
@@ -414,7 +438,7 @@ export default function CarriereKorpsManager({ onLogout }) {
   const saveCarica = async (form, mode) => {
     try {
       const payload = {
-        carriera_id: form.carriera_id,
+        carriera: form.carriera || form.carriera_id,
         nome: form.nome,
         bonus_stipendio_evento: form.bonus_stipendio_evento ?? 0,
         ordine: form.ordine ?? 0,
@@ -434,11 +458,16 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const saveMembership = async (form, mode) => {
     try {
+      if (!form.personaggio || !(form.carriera || form.carriera_id) || !(form.tipo_carriera || form.tipo_carriera_id)) {
+        setStatusMessage('Compila personaggio, tipo e carriera/KORP.');
+        setStatusType('error');
+        return;
+      }
       const payload = {
         personaggio: form.personaggio,
-        carriera_id: form.carriera_id,
-        tipo_carriera_id: form.tipo_carriera_id,
-        carica_id: form.carica_id || null,
+        carriera: form.carriera || form.carriera_id,
+        tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
+        carica: form.carica || form.carica_id || null,
         data_da: form.data_da || undefined,
         data_a: form.data_a || null,
       };
@@ -515,15 +544,15 @@ export default function CarriereKorpsManager({ onLogout }) {
             onAdd={() =>
               setModalCarriera({
                 tipo: 'T3',
-                tipo_carriera_id: tipi.find((t) => t.codice === 'professione')?.id,
+                tipo_carriera: tipi.find((t) => t.codice === 'professione')?.id,
                 tiers_sblocco_ids: [],
               })
             }
             onEdit={(item) =>
               setModalCarriera({
                 ...item,
-                tipo_carriera_id:
-                  item.tipo_carriera_id || tipi.find((t) => t.codice === item.tipo_carriera_codice)?.id,
+                tipo_carriera:
+                  item.tipo_carriera || tipi.find((t) => t.codice === item.tipo_carriera_codice)?.id,
               })
             }
             onDelete={async (id) => {
@@ -544,7 +573,7 @@ export default function CarriereKorpsManager({ onLogout }) {
             addLabel="Nuova carica"
             emptyMessage="Nessuna carica definita."
             onAdd={() => setModalCarica({ attiva: true, ordine: 0 })}
-            onEdit={(item) => setModalCarica({ ...item, carriera_id: item.carriera })}
+            onEdit={(item) => setModalCarica({ ...item, carriera: item.carriera })}
             onDelete={async (id) => {
               await staffDeleteCarica(id, onLogout);
               await loadAll();
@@ -562,15 +591,14 @@ export default function CarriereKorpsManager({ onLogout }) {
             persistKey="staff-carriere-korps-membership"
             addLabel="Nuova appartenenza"
             emptyMessage="Nessuna appartenenza registrata."
-            onAdd={() => setModalMembership({ _cariche: cariche })}
+            onAdd={() => setModalMembership({})}
             onEdit={(item) =>
               setModalMembership({
                 ...item,
                 personaggio: item.personaggio,
-                carriera_id: item.carriera,
-                tipo_carriera_id: item.tipo_carriera,
-                carica_id: item.carica,
-                _cariche: cariche,
+                carriera: item.carriera,
+                tipo_carriera: item.tipo_carriera,
+                carica: item.carica,
               })
             }
             onDelete={async (id) => {
@@ -597,7 +625,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         onClose={() => setModalCarica(null)}
         onSave={saveCarica}
         value={modalCarica}
-        carriere={carriere}
+        carriereOptions={carriereSelectOptions}
         statusMessage={statusMessage}
         statusType={statusType}
       />
@@ -606,9 +634,10 @@ export default function CarriereKorpsManager({ onLogout }) {
         onClose={() => setModalMembership(null)}
         onSave={saveMembership}
         value={modalMembership}
-        carriere={carriere}
+        carriereOptions={carriereSelectOptions}
         tipi={tipi}
-        personaggi={personaggi}
+        personaggiOptions={personaggiSelectOptions}
+        cariche={cariche}
         statusMessage={statusMessage}
         statusType={statusType}
       />
