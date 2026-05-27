@@ -2002,6 +2002,9 @@ export const staffUpdateCarriera = (id, data, onLogout) =>
 export const staffDeleteCarriera = (id, onLogout) =>
     fetchAuthenticated(`/api/personaggi/api/staff/carriere/${id}/`, { method: 'DELETE' }, onLogout);
 
+export const staffGetCarrieraTiersSelezionabili = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/carriere/tiers_selezionabili/', { method: 'GET' }, onLogout);
+
 export const staffGetCariche = (onLogout) =>
     fetchAuthenticated('/api/personaggi/api/staff/cariche/', { method: 'GET' }, onLogout);
 

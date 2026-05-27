@@ -1270,6 +1270,13 @@ class Carriera(Tier):
         on_delete=models.PROTECT,
         related_name="carriere",
     )
+    tiers_sblocco = models.ManyToManyField(
+        Tier,
+        through="CarrieraTierSblocco",
+        related_name="carriere_che_sbloccano",
+        blank=True,
+        help_text="Tier di abilità acquistabili dai membri di questa carriera/KORP.",
+    )
 
     class Meta:
         verbose_name = "Carriera"
@@ -1300,6 +1307,23 @@ class Korp(Carriera):
         if not self.tipo_carriera_id:
             self.tipo_carriera = TipoCarriera.objects.get(codice="korp")
         super().save(*args, **kwargs)
+
+
+class CarrieraTierSblocco(A_modello):
+    carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="tier_sblocco_links")
+    tier = models.ForeignKey(Tier, on_delete=models.CASCADE, related_name="carriera_sblocco_links")
+
+    class Meta:
+        verbose_name = "Carriera – tier sblocco"
+        verbose_name_plural = "Carriere – tier sblocco"
+        unique_together = ("carriera", "tier")
+
+    def clean(self):
+        if self.carriera_id and self.tier_id and self.carriera_id == self.tier_id:
+            raise ValidationError("Una carriera non può sbloccare se stessa come tier.")
+
+    def __str__(self):
+        return f"{self.carriera.nome} → {self.tier.nome}"
 
 
 class SegnoZodiacale(Tier):
@@ -4476,6 +4500,14 @@ class Personaggio(Inventario):
             ar = abilita.aura_riferimento
             if getattr(ar, 'sigla', None) == 'AIN':
                 return self.valida_tratto_aura_innata(abilita)
+
+        from personaggi.carriere_tier_sblocco import (
+            messaggio_blocco_tier_carriera,
+            personaggio_puo_acquistare_abilita_tier,
+        )
+
+        if not personaggio_puo_acquistare_abilita_tier(self, abilita):
+            return False, messaggio_blocco_tier_carriera(self)
 
         # Controllo Esclusività Tratto Aura (altre aure)
         if abilita.is_tratto_aura and abilita.aura_riferimento:

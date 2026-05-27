@@ -729,12 +729,17 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
                 'abilita_prerequisiti__prerequisito',
                 'abilita_punteggio_set__punteggio',
                 'abilitastatistica_set__statistica',
+                'abilita_tier_set',
             )
             .order_by('nome')
         )
 
+        from personaggi.carriere_tier_sblocco import personaggio_puo_acquistare_abilita_tier
+
         acquirable_skills = []
         for skill in master_skills_list:
+            if not personaggio_puo_acquistare_abilita_tier(personaggio, skill):
+                continue
             era_ids_skill = set(EraAbilita.objects.filter(abilita_id=skill.id).values_list("era_id", flat=True))
             if era_ids_skill and personaggio.era_id not in era_ids_skill:
                 continue

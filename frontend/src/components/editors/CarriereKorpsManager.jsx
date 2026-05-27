@@ -16,6 +16,7 @@ import {
   staffCreateCarriereMembership,
   staffUpdateCarriereMembership,
   staffDeleteCarriereMembership,
+  staffGetCarrieraTiersSelezionabili,
   getPersonaggiEditList,
 } from '../../api';
 
@@ -25,10 +26,24 @@ const TABS = [
   { id: 'membership', label: 'Appartenenze', icon: Users },
 ];
 
-function CarrieraModal({ isOpen, onClose, onSave, value, tipi, statusMessage, statusType }) {
+function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabili, statusMessage, statusType }) {
   const [form, setForm] = useState(value || {});
-  useEffect(() => setForm(value || {}), [value]);
+  useEffect(() => {
+    const base = value || {};
+    const ids = base.tiers_sblocco_dettaglio
+      ? base.tiers_sblocco_dettaglio.map((t) => t.id)
+      : base.tiers_sblocco_ids || [];
+    setForm({ ...base, tiers_sblocco_ids: ids });
+  }, [value]);
   if (!isOpen) return null;
+
+  const toggleTier = (tierId) => {
+    const sid = String(tierId);
+    const current = new Set((form.tiers_sblocco_ids || []).map(String));
+    if (current.has(sid)) current.delete(sid);
+    else current.add(sid);
+    setForm({ ...form, tiers_sblocco_ids: [...current].map((x) => Number(x)) });
+  };
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
       <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl">
@@ -62,6 +77,26 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, statusMessage, st
           <p className="text-xs text-gray-500">
             Le professioni restano tier T3 (wiki invariata). Tipo «KORP» per le corps.
           </p>
+          <div>
+            <div className="text-xs text-gray-400 mb-2">Tier abilità sbloccabili per i membri</div>
+            <div className="max-h-40 overflow-y-auto border border-gray-700 rounded p-2 space-y-1">
+              {tiersSelezionabili.length === 0 ? (
+                <p className="text-xs text-gray-500">Nessun tier disponibile</p>
+              ) : (
+                tiersSelezionabili.map((t) => (
+                  <label key={t.id} className="flex items-center gap-2 text-sm text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={(form.tiers_sblocco_ids || []).map(String).includes(String(t.id))}
+                      onChange={() => toggleTier(t.id)}
+                    />
+                    <span className="text-gray-500 text-xs">{t.tipo}</span>
+                    {t.nome}
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
         </div>
         <div className="p-4 border-t border-gray-700">
           <EditorSaveActions
@@ -271,22 +306,25 @@ export default function CarriereKorpsManager({ onLogout }) {
   const [modalCarica, setModalCarica] = useState(null);
   const [modalMembership, setModalMembership] = useState(null);
   const [filtroTipo, setFiltroTipo] = useState('');
+  const [tiersSelezionabili, setTiersSelezionabili] = useState([]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [t, c, ch, m, p] = await Promise.all([
+      const [t, c, ch, m, p, tiers] = await Promise.all([
         staffGetTipiCarriera(onLogout),
         staffGetCarriere(onLogout),
         staffGetCariche(onLogout),
         staffGetCarriereMemberships(onLogout),
         getPersonaggiEditList(onLogout),
+        staffGetCarrieraTiersSelezionabili(onLogout),
       ]);
       setTipi(Array.isArray(t) ? t : []);
       setCarriere(Array.isArray(c) ? c : []);
       setCariche(Array.isArray(ch) ? ch : []);
       setMemberships(Array.isArray(m) ? m : []);
       setPersonaggi(Array.isArray(p) ? p : []);
+      setTiersSelezionabili(Array.isArray(tiers) ? tiers : []);
     } catch (e) {
       setStatusMessage(e.message || 'Errore caricamento');
       setStatusType('error');
@@ -304,6 +342,52 @@ export default function CarriereKorpsManager({ onLogout }) {
     return carriere.filter((c) => c.tipo_carriera_codice === filtroTipo);
   }, [carriere, filtroTipo]);
 
+  const carrieraColumns = useMemo(
+    () => [
+      { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
+      { header: 'Tipo', render: (x) => x.tipo_carriera_nome || x.tipo_carriera_codice || '—' },
+      { header: 'Tier wiki', render: (x) => x.tipo || '—', align: 'center', width: 90 },
+      {
+        header: 'Tier sblocco',
+        render: (x) => (x.tiers_sblocco_dettaglio?.length ?? 0),
+        align: 'center',
+        width: 100,
+      },
+    ],
+    [],
+  );
+
+  const caricaColumns = useMemo(
+    () => [
+      { header: 'Carriera', render: (x) => x.carriera_nome || '—' },
+      { header: 'Carica', render: (x) => <span className="font-bold">{x.nome}</span> },
+      { header: 'Ordine', render: (x) => x.ordine ?? 0, align: 'center', width: 80 },
+      {
+        header: 'Attiva',
+        render: (x) => (x.attiva === false ? 'No' : 'Sì'),
+        align: 'center',
+        width: 80,
+      },
+    ],
+    [],
+  );
+
+  const membershipColumns = useMemo(
+    () => [
+      { header: 'PG', render: (x) => x.personaggio_nome || `#${x.personaggio}` },
+      { header: 'Carriera', render: (x) => x.carriera_nome || '—' },
+      { header: 'Tipo', render: (x) => x.tipo_carriera_codice || '—', width: 110 },
+      { header: 'Carica', render: (x) => x.carica_nome || '—' },
+      {
+        header: 'Stato',
+        render: (x) => (x.data_a ? 'Chiusa' : 'Attiva'),
+        align: 'center',
+        width: 90,
+      },
+    ],
+    [],
+  );
+
   const saveCarriera = async (form, mode) => {
     try {
       const payload = {
@@ -311,6 +395,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         descrizione: form.descrizione || '',
         tipo: form.tipo || 'T3',
         tipo_carriera_id: form.tipo_carriera_id,
+        tiers_sblocco_ids: form.tiers_sblocco_ids || [],
       };
       if (form.id) await staffUpdateCarriera(form.id, payload, onLogout);
       else await staffCreateCarriera(payload, onLogout);
@@ -416,65 +501,84 @@ export default function CarriereKorpsManager({ onLogout }) {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 min-h-0 p-4 h-full">
         {tab === 'org' && (
+          <div className="h-full">
           <MasterGenericList
+            title="Carriere e KORP"
             items={carriereFiltered}
-            columns={[
-              { key: 'nome', label: 'Nome' },
-              { key: 'tipo_carriera_nome', label: 'Tipo' },
-              { key: 'tipo', label: 'Tier wiki' },
-            ]}
-            onAdd={() => setModalCarriera({ tipo: 'T3', tipo_carriera_id: tipi.find((t) => t.codice === 'professione')?.id })}
-            onEdit={(item) => setModalCarriera({ ...item, tipo_carriera_id: item.tipo_carriera_id || tipi.find((t) => t.codice === item.tipo_carriera_codice)?.id })}
-            onDelete={async (item) => {
-              if (!window.confirm(`Eliminare "${item.nome}"?`)) return;
-              await staffDeleteCarriera(item.id, onLogout);
+            columns={carrieraColumns}
+            loading={loading}
+            persistKey="staff-carriere-korps-org"
+            addLabel="Nuova carriera"
+            emptyMessage="Nessuna carriera trovata."
+            onAdd={() =>
+              setModalCarriera({
+                tipo: 'T3',
+                tipo_carriera_id: tipi.find((t) => t.codice === 'professione')?.id,
+                tiers_sblocco_ids: [],
+              })
+            }
+            onEdit={(item) =>
+              setModalCarriera({
+                ...item,
+                tipo_carriera_id:
+                  item.tipo_carriera_id || tipi.find((t) => t.codice === item.tipo_carriera_codice)?.id,
+              })
+            }
+            onDelete={async (id) => {
+              await staffDeleteCarriera(id, onLogout);
               await loadAll();
             }}
           />
+          </div>
         )}
         {tab === 'cariche' && (
+          <div className="h-full">
           <MasterGenericList
+            title="Cariche"
             items={cariche}
-            columns={[
-              { key: 'carriera_nome', label: 'Carriera' },
-              { key: 'nome', label: 'Carica' },
-              { key: 'ordine', label: 'Ordine' },
-            ]}
+            columns={caricaColumns}
+            loading={loading}
+            persistKey="staff-carriere-korps-cariche"
+            addLabel="Nuova carica"
+            emptyMessage="Nessuna carica definita."
             onAdd={() => setModalCarica({ attiva: true, ordine: 0 })}
             onEdit={(item) => setModalCarica({ ...item, carriera_id: item.carriera })}
-            onDelete={async (item) => {
-              if (!window.confirm(`Eliminare carica "${item.nome}"?`)) return;
-              await staffDeleteCarica(item.id, onLogout);
+            onDelete={async (id) => {
+              await staffDeleteCarica(id, onLogout);
               await loadAll();
             }}
           />
+          </div>
         )}
         {tab === 'membership' && (
+          <div className="h-full">
           <MasterGenericList
+            title="Appartenenze PG"
             items={memberships}
-            columns={[
-              { key: 'personaggio_nome', label: 'PG' },
-              { key: 'carriera_nome', label: 'Carriera' },
-              { key: 'tipo_carriera_codice', label: 'Tipo' },
-              { key: 'carica_nome', label: 'Carica' },
-            ]}
+            columns={membershipColumns}
+            loading={loading}
+            persistKey="staff-carriere-korps-membership"
+            addLabel="Nuova appartenenza"
+            emptyMessage="Nessuna appartenenza registrata."
             onAdd={() => setModalMembership({ _cariche: cariche })}
-            onEdit={(item) => setModalMembership({
-              ...item,
-              personaggio: item.personaggio,
-              carriera_id: item.carriera,
-              tipo_carriera_id: item.tipo_carriera,
-              carica_id: item.carica,
-              _cariche: cariche,
-            })}
-            onDelete={async (item) => {
-              if (!window.confirm('Eliminare questa appartenenza?')) return;
-              await staffDeleteCarriereMembership(item.id, onLogout);
+            onEdit={(item) =>
+              setModalMembership({
+                ...item,
+                personaggio: item.personaggio,
+                carriera_id: item.carriera,
+                tipo_carriera_id: item.tipo_carriera,
+                carica_id: item.carica,
+                _cariche: cariche,
+              })
+            }
+            onDelete={async (id) => {
+              await staffDeleteCarriereMembership(id, onLogout);
               await loadAll();
             }}
           />
+          </div>
         )}
       </div>
 
@@ -484,6 +588,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         onSave={saveCarriera}
         value={modalCarriera}
         tipi={tipi}
+        tiersSelezionabili={tiersSelezionabili}
         statusMessage={statusMessage}
         statusType={statusType}
       />

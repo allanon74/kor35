@@ -51,7 +51,7 @@ from .models import (
     RichiestaAssemblaggio, OggettoCaratteristica, 
     Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
     TipologiaEffetto, EffettoCasuale, Dichiarazione,
-    Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
+    Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica, CarrieraTierSblocco,
     PersonaggioCarrieraMembership,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, Regione,
@@ -253,6 +253,12 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
     )
     tipo_carriera_nome = serializers.CharField(source="tipo_carriera.nome", read_only=True)
     tipo_carriera_codice = serializers.CharField(source="tipo_carriera.codice", read_only=True)
+    tiers_sblocco_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+    )
+    tiers_sblocco_dettaglio = serializers.SerializerMethodField()
 
     class Meta:
         model = Carriera
@@ -265,16 +271,46 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             "tipo_carriera_id",
             "tipo_carriera_nome",
             "tipo_carriera_codice",
+            "tiers_sblocco_ids",
+            "tiers_sblocco_dettaglio",
             "sync_id",
             "updated_at",
         )
 
+    def get_tiers_sblocco_dettaglio(self, obj):
+        return list(
+            obj.tiers_sblocco.order_by("tipo", "nome").values("id", "nome", "tipo")
+        )
+
+    def _sync_tiers_sblocco(self, carriera, tier_ids):
+        from personaggi.carriere_tier_sblocco import tiers_selezionabili_per_sblocco_carriera
+
+        if tier_ids is None:
+            return
+        allowed = set(tiers_selezionabili_per_sblocco_carriera().filter(pk__in=tier_ids).values_list("pk", flat=True))
+        CarrieraTierSblocco.objects.filter(carriera=carriera).exclude(tier_id__in=allowed).delete()
+        existing = set(
+            CarrieraTierSblocco.objects.filter(carriera=carriera).values_list("tier_id", flat=True)
+        )
+        for tid in allowed:
+            if tid not in existing:
+                CarrieraTierSblocco.objects.create(carriera=carriera, tier_id=tid)
+
     def create(self, validated_data):
         from personaggi.models import TIER_3
 
+        tier_ids = validated_data.pop("tiers_sblocco_ids", None)
         tipo_carriera = validated_data.pop("tipo_carriera")
         validated_data.setdefault("tipo", TIER_3)
-        return Carriera.objects.create(tipo_carriera=tipo_carriera, **validated_data)
+        carriera = Carriera.objects.create(tipo_carriera=tipo_carriera, **validated_data)
+        self._sync_tiers_sblocco(carriera, tier_ids)
+        return carriera
+
+    def update(self, instance, validated_data):
+        tier_ids = validated_data.pop("tiers_sblocco_ids", None)
+        instance = super().update(instance, validated_data)
+        self._sync_tiers_sblocco(instance, tier_ids)
+        return instance
 
 
 class CaricaStaffSerializer(serializers.ModelSerializer):

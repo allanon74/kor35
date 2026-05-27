@@ -12,8 +12,8 @@
 ## Ambiente test (sviluppo)
 
 ```bash
-# Dalla root del progetto, con stack dev attivo:
-docker compose -f config/docker/compose.base.yml -f config/docker/compose.dev-standalone.yml exec backend \
+# Dalla root del progetto, con stack dev attivo (-T = niente prompt interattivo):
+docker compose -f config/docker/compose.base.yml -f config/docker/compose.dev-home.yml exec -T backend \
   python manage.py migrate personaggi 0181_carriere_unificate
 
 # Verifica rapida:
@@ -59,3 +59,30 @@ Non c’è reverse automatico dei dati. In caso di errore: ripristino backup DB 
 
 - Nuova appartenenza **KORP**: checkbox predefinita “chiudi KORP precedente” (molto consigliata), senza vincolo DB.
 - Endpoint staff: `/api/personaggi/api/staff/carriere/`, `…/cariche/`, `…/personaggi-carriere-membership/`
+
+## Migrazione successiva `0182_carriera_tier_sblocco`
+
+Dopo `0181`, applicare anche:
+
+```bash
+docker compose … exec backend python manage.py migrate personaggi 0182_carriera_tier_sblocco
+```
+
+Aggiunge `CarrieraTierSblocco` (M2M carriera → tier abilità) e filtra le abilità acquistabili in base alle membership attive.
+
+### Test (evitare il blocco su «database already exists»)
+
+Django chiede `yes/no` se il DB `test_kor35_dev` esiste già. Usa **`--keepdb`** e **`exec -T`**:
+
+```bash
+docker compose -f config/docker/compose.base.yml -f config/docker/compose.dev-home.yml exec -T backend \
+  python manage.py test personaggi.tests_carriere_tier_sblocco gestione_plot.tests_staff_dashboard_layout -v1 --keepdb
+```
+
+Per ricreare da zero il DB di test (una tantum):
+
+```bash
+docker compose -f config/docker/compose.base.yml -f config/docker/compose.dev-home.yml exec -T db \
+  psql -U postgres -c "DROP DATABASE IF EXISTS test_kor35_dev;"
+# poi test senza --keepdb, oppure: yes | docker compose ... exec backend python manage.py test ...
+```

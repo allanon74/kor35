@@ -22,7 +22,7 @@ from .models import (
     abilita_tier,
     TipologiaEffetto, EffettoCasuale,
     Era, Prefettura, Regione, Korp, Carriera, TipoCarriera, Carica,
-    PersonaggioCarrieraMembership,
+    PersonaggioCarrieraMembership, CarrieraTierSblocco,
     Dichiarazione,
     Campagna, CampagnaFeaturePolicy,
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI,
@@ -927,11 +927,33 @@ class TipoCarrieraStaffViewSet(viewsets.ModelViewSet):
 
 
 class CarrieraStaffViewSet(viewsets.ModelViewSet):
-    queryset = Carriera.objects.select_related("tipo_carriera").order_by("tipo_carriera__ordine", "nome")
+    queryset = Carriera.objects.select_related("tipo_carriera").prefetch_related("tiers_sblocco").order_by(
+        "tipo_carriera__ordine", "nome"
+    )
     serializer_class = CarrieraStaffSerializer
     permission_classes = [IsStaffOrMaster]
     filterset_fields = ["tipo_carriera__codice", "tipo"]
     search_fields = ["nome", "descrizione"]
+
+    @action(detail=False, methods=["get"])
+    def tiers_selezionabili(self, request):
+        from personaggi.carriere_tier_sblocco import tiers_selezionabili_per_sblocco_carriera
+
+        qs = tiers_selezionabili_per_sblocco_carriera()
+        data = [{"id": t.id, "nome": t.nome, "tipo": t.tipo} for t in qs]
+        return Response(data)
+
+    def _invalidate_carriera_members_cache(self, carriera):
+        from personaggi.carriere_tier_sblocco import invalidate_acquirable_skills_cache
+
+        for pid in PersonaggioCarrieraMembership.objects.filter(
+            carriera=carriera, data_a__isnull=True
+        ).values_list("personaggio_id", flat=True):
+            invalidate_acquirable_skills_cache(pid)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        self._invalidate_carriera_members_cache(serializer.instance)
 
 
 class CaricaStaffViewSet(viewsets.ModelViewSet):
@@ -968,8 +990,24 @@ class PersonaggioCarrieraMembershipStaffViewSet(viewsets.ModelViewSet):
                 data_a__isnull=True,
             ).update(data_a=now)
         self.perform_create(serializer)
+        from personaggi.carriere_tier_sblocco import invalidate_acquirable_skills_cache
+
+        invalidate_acquirable_skills_cache(serializer.instance.personaggio_id)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_update(self, serializer):
+        super().perform_update(serializer)
+        from personaggi.carriere_tier_sblocco import invalidate_acquirable_skills_cache
+
+        invalidate_acquirable_skills_cache(serializer.instance.personaggio_id)
+
+    def perform_destroy(self, instance):
+        personaggio_id = instance.personaggio_id
+        super().perform_destroy(instance)
+        from personaggi.carriere_tier_sblocco import invalidate_acquirable_skills_cache
+
+        invalidate_acquirable_skills_cache(personaggio_id)
 
 
 class MattoniMagiciListView(APIView):
