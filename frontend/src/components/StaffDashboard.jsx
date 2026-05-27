@@ -38,6 +38,7 @@ const EffettiCasualiManager = lazy(() => import('./editors/EffettiCasualiManager
 const SocialEventReportTab = lazy(() => import('./editors/SocialEventReportTab'));
 const StaffRisorsaPoolTab = lazy(() => import('./StaffRisorsaPoolTab'));
 const EraManager = lazy(() => import('./editors/EraManager'));
+const CarriereKorpsManager = lazy(() => import('./editors/CarriereKorpsManager'));
 const DichiarazioniGlossarioManager = lazy(() => import('./editors/DichiarazioniGlossarioManager'));
 const ArcanaProfilesTab = lazy(() => import('./editors/ArcanaProfilesTab'));
 const CampaignManager = lazy(() => import('./editors/CampaignManager'));
@@ -70,6 +71,7 @@ const STAFF_COMPONENT_MAP = {
     'social-report': SocialEventReportTab,
     'risorse-pool': StaffRisorsaPoolTab,
     'ere-prefetture': EraManager,
+    'carriere-korps': CarriereKorpsManager,
     'creazione-guidata': CreazioneGuidataStaffManager,
     'dichiarazioni-glossario': DichiarazioniGlossarioManager,
     'arcana-profiles': ArcanaProfilesTab,

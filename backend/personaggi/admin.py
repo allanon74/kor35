@@ -51,8 +51,8 @@ from .models import (
     InnescoTimer, QrInventarioScanSession, StatoInnescoTimerPersonaggio,
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
-    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
-    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
+    PersonaggioCarrieraMembership,
     UserSocialPreference,
     Campagna,
     CampagnaUtente,
@@ -76,13 +76,12 @@ PERSONAGGI_ADMIN_MODEL_GROUPS = {
     "Era": ("Mondo", 20),
     "Prefettura": ("Mondo", 21),
     "Regione": ("Mondo", 22),
-    "Korp": ("Mondo", 23),
-    "Carriera": ("Mondo", 24),
-    "SegnoZodiacale": ("Mondo", 25),
-    "CaricaKorp": ("Mondo", 26),
-    "CaricaCarriera": ("Mondo", 27),
-    "PersonaggioKorpMembership": ("Mondo", 28),
-    "PersonaggioCarrieraMembership": ("Mondo", 29),
+    "TipoCarriera": ("Mondo", 23),
+    "Korp": ("Mondo", 24),
+    "Carriera": ("Mondo", 25),
+    "SegnoZodiacale": ("Mondo", 26),
+    "Carica": ("Mondo", 27),
+    "PersonaggioCarrieraMembership": ("Mondo", 28),
     # Personaggi / gameplay
     "Personaggio": ("Personaggi", 30),
     "Inventario": ("Personaggi", 31),
@@ -1033,18 +1032,11 @@ class PersonaggioStatisticaBaseInline(admin.TabularInline):
     autocomplete_fields = ['statistica']
 
 
-class PersonaggioKorpMembershipInline(admin.TabularInline):
-    model = PersonaggioKorpMembership
-    extra = 0
-    fields = ("korp", "carica", "data_da", "data_a")
-    autocomplete_fields = ["korp", "carica"]
-
-
 class PersonaggioCarrieraMembershipInline(admin.TabularInline):
     model = PersonaggioCarrieraMembership
     extra = 0
-    fields = ("carriera", "carica", "data_da", "data_a")
-    autocomplete_fields = ["carriera", "carica"]
+    fields = ("carriera", "tipo_carriera", "carica", "data_da", "data_a")
+    autocomplete_fields = ["carriera", "tipo_carriera", "carica"]
 
 
 class EraAbilitaInline(admin.TabularInline):
@@ -1071,7 +1063,7 @@ class PersonaggioAdmin(A_Admin):
     autocomplete_fields = ('proprietario', 'campagna', 'era', 'prefettura', 'segno_zodiacale')
     inlines = [
         PersonaggioStatisticaBaseInline,
-        PersonaggioKorpMembershipInline, PersonaggioCarrieraMembershipInline,
+        PersonaggioCarrieraMembershipInline,
         PersonaggioModelloAuraInline, PersonaggioInfusioneInline, PersonaggioTessituraInline, PersonaggioAttivataInline, 
         CreditoMovimentoInline, PuntiCaratteristicaMovimentoInline, PersonaggioLogInline
     ]
@@ -1141,18 +1133,28 @@ class RegioneAdmin(admin.ModelAdmin):
         )
 
 
+@admin.register(TipoCarriera)
+class TipoCarrieraAdmin(admin.ModelAdmin):
+    list_display = ("nome", "codice", "ordine", "attivo")
+    list_editable = ("ordine", "attivo")
+    search_fields = ("nome", "codice")
+
+
 @admin.register(Korp)
 class KorpAdmin(TierAdmin):
-    list_display = ("nome", "tipo")
+    list_display = ("nome", "tipo", "tipo_carriera")
     search_fields = ("nome", "descrizione")
     list_filter = ("tipo",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(tipo_carriera__codice="korp")
 
 
 @admin.register(Carriera)
 class CarrieraAdmin(TierAdmin):
-    list_display = ("nome", "tipo")
+    list_display = ("nome", "tipo", "tipo_carriera")
     search_fields = ("nome", "descrizione")
-    list_filter = ("tipo",)
+    list_filter = ("tipo", "tipo_carriera")
 
 
 @admin.register(SegnoZodiacale)
@@ -1163,52 +1165,20 @@ class SegnoZodiacaleAdmin(TierAdmin):
     summernote_fields = ("descrizione", "testo_privato")
 
 
-@admin.register(CaricaKorp)
-class CaricaKorpAdmin(admin.ModelAdmin):
-    list_display = ("nome", "korp", "bonus_stipendio_evento", "ordine", "attiva")
-    list_filter = ("korp", "attiva")
-    search_fields = ("nome", "korp__nome")
-    autocomplete_fields = ("korp",)
-
-
-@admin.register(CaricaCarriera)
-class CaricaCarrieraAdmin(admin.ModelAdmin):
+@admin.register(Carica)
+class CaricaAdmin(admin.ModelAdmin):
     list_display = ("nome", "carriera", "bonus_stipendio_evento", "ordine", "attiva")
-    list_filter = ("carriera", "attiva")
+    list_filter = ("carriera__tipo_carriera", "carriera", "attiva")
     search_fields = ("nome", "carriera__nome")
     autocomplete_fields = ("carriera",)
 
 
-@admin.register(PersonaggioKorpMembership)
-class PersonaggioKorpMembershipAdmin(admin.ModelAdmin):
-    list_display = ("personaggio", "korp", "carica", "data_da", "data_a")
-    list_filter = ("korp", "carica")
-    search_fields = ("personaggio__nome", "korp__nome", "carica__nome")
-    autocomplete_fields = ("personaggio", "korp", "carica")
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        if obj.data_a is None:
-            PersonaggioKorpMembership.objects.filter(
-                personaggio=obj.personaggio,
-                data_a__isnull=True
-            ).exclude(pk=obj.pk).update(data_a=obj.data_da)
-
-
 @admin.register(PersonaggioCarrieraMembership)
 class PersonaggioCarrieraMembershipAdmin(admin.ModelAdmin):
-    list_display = ("personaggio", "carriera", "carica", "data_da", "data_a")
-    list_filter = ("carriera", "carica")
+    list_display = ("personaggio", "carriera", "tipo_carriera", "carica", "data_da", "data_a")
+    list_filter = ("tipo_carriera", "carriera", "carica")
     search_fields = ("personaggio__nome", "carriera__nome", "carica__nome")
-    autocomplete_fields = ("personaggio", "carriera", "carica")
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        if obj.data_a is None:
-            PersonaggioCarrieraMembership.objects.filter(
-                personaggio=obj.personaggio,
-                data_a__isnull=True
-            ).exclude(pk=obj.pk).update(data_a=obj.data_da)
+    autocomplete_fields = ("personaggio", "carriera", "tipo_carriera", "carica")
 
 @admin.register(Gruppo)
 class GruppoAdmin(admin.ModelAdmin):

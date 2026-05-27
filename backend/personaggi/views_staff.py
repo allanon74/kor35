@@ -21,7 +21,8 @@ from .models import (
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
     TipologiaEffetto, EffettoCasuale,
-    Era, Prefettura, Regione, Korp,
+    Era, Prefettura, Regione, Korp, Carriera, TipoCarriera, Carica,
+    PersonaggioCarrieraMembership,
     Dichiarazione,
     Campagna, CampagnaFeaturePolicy,
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI,
@@ -59,6 +60,8 @@ from .serializers import (
     InventarioStaffSerializer,
     TipologiaEffettoStaffSerializer, EffettoCasualeStaffSerializer,
     EraStaffSerializer, PrefetturaStaffSerializer, RegioneStaffSerializer,
+    TipoCarrieraStaffSerializer, CarrieraStaffSerializer, CaricaStaffSerializer,
+    PersonaggioCarrieraMembershipStaffSerializer,
     DichiarazioneStaffSerializer,
     ManifestoStaffSerializer,
     NodoStaffSerializer,
@@ -915,6 +918,58 @@ class RegioneStaffViewSet(viewsets.ModelViewSet):
     queryset = Regione.objects.all().order_by("ordine", "nome")
     serializer_class = RegioneStaffSerializer
     permission_classes = [IsStaffOrMaster]
+
+
+class TipoCarrieraStaffViewSet(viewsets.ModelViewSet):
+    queryset = TipoCarriera.objects.all().order_by("ordine", "nome")
+    serializer_class = TipoCarrieraStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+
+
+class CarrieraStaffViewSet(viewsets.ModelViewSet):
+    queryset = Carriera.objects.select_related("tipo_carriera").order_by("tipo_carriera__ordine", "nome")
+    serializer_class = CarrieraStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    filterset_fields = ["tipo_carriera__codice", "tipo"]
+    search_fields = ["nome", "descrizione"]
+
+
+class CaricaStaffViewSet(viewsets.ModelViewSet):
+    queryset = Carica.objects.select_related("carriera", "carriera__tipo_carriera").order_by(
+        "carriera__nome", "ordine", "nome"
+    )
+    serializer_class = CaricaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    filterset_fields = ["carriera", "carriera__tipo_carriera__codice", "attiva"]
+    search_fields = ["nome", "carriera__nome"]
+
+
+class PersonaggioCarrieraMembershipStaffViewSet(viewsets.ModelViewSet):
+    queryset = PersonaggioCarrieraMembership.objects.select_related(
+        "personaggio", "carriera", "carica", "tipo_carriera"
+    ).order_by("-data_da", "-id")
+    serializer_class = PersonaggioCarrieraMembershipStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    filterset_fields = ["personaggio", "carriera", "tipo_carriera__codice", "data_a"]
+    search_fields = ["personaggio__nome", "carriera__nome", "carica__nome"]
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        chiudi_korp = request.data.get("chiudi_korp_precedenti") in (True, "true", "1", 1)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        tipo = serializer.validated_data.get("tipo_carriera")
+        personaggio = serializer.validated_data.get("personaggio")
+        if chiudi_korp and tipo and tipo.codice == "korp" and personaggio:
+            now = timezone.now()
+            PersonaggioCarrieraMembership.objects.filter(
+                personaggio=personaggio,
+                tipo_carriera__codice="korp",
+                data_a__isnull=True,
+            ).update(data_a=now)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class MattoniMagiciListView(APIView):

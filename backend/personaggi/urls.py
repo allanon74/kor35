@@ -30,8 +30,6 @@ from .views import (AbilViewSet,
     PropostaTecnicaViewSet,
     EraViewSet, PrefetturaViewSet, RegioneViewSet,
     KorpViewSet, CarrieraViewSet, SegnoZodiacaleViewSet,
-    CaricaKorpViewSet, CaricaCarrieraViewSet,
-    PersonaggioKorpMembershipViewSet, PersonaggioCarrieraMembershipViewSet,
 )
 
 app_name = 'personaggi'
@@ -85,6 +83,14 @@ router.register(r'staff/dichiarazioni', views_staff.DichiarazioneStaffViewSet, b
 router.register(r'staff/ere', views_staff.EraStaffViewSet, basename='staff-ere')
 router.register(r'staff/regioni', views_staff.RegioneStaffViewSet, basename='staff-regioni')
 router.register(r'staff/prefetture', views_staff.PrefetturaStaffViewSet, basename='staff-prefetture')
+router.register(r'staff/tipi-carriera', views_staff.TipoCarrieraStaffViewSet, basename='staff-tipi-carriera')
+router.register(r'staff/carriere', views_staff.CarrieraStaffViewSet, basename='staff-carriere')
+router.register(r'staff/cariche', views_staff.CaricaStaffViewSet, basename='staff-cariche')
+router.register(
+    r'staff/personaggi-carriere-membership',
+    views_staff.PersonaggioCarrieraMembershipStaffViewSet,
+    basename='staff-personaggi-carriere-membership',
+)
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')
@@ -94,10 +100,6 @@ router.register(r'regioni', RegioneViewSet, basename='regioni')
 router.register(r'korp', KorpViewSet, basename='korp')
 router.register(r'carriere', CarrieraViewSet, basename='carriere')
 router.register(r'segni-zodiacali', SegnoZodiacaleViewSet, basename='segni-zodiacali')
-router.register(r'staff/cariche-korp', CaricaKorpViewSet, basename='staff-cariche-korp')
-router.register(r'staff/cariche-carriera', CaricaCarrieraViewSet, basename='staff-cariche-carriera')
-router.register(r'staff/personaggi-korp-membership', PersonaggioKorpMembershipViewSet, basename='staff-personaggi-korp-membership')
-router.register(r'staff/personaggi-carriera-membership', PersonaggioCarrieraMembershipViewSet, basename='staff-personaggi-carriera-membership')
 router.register(r'staff/campagne', views.CampagnaAdminViewSet, basename='staff-campagne')
 router.register(r'staff/campagne-utenti', views.CampagnaUtenteAdminViewSet, basename='staff-campagne-utenti')
 router.register(r'staff/campagne-feature-policy', views.CampagnaFeaturePolicyAdminViewSet, basename='staff-campagne-feature-policy')

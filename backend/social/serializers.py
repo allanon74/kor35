@@ -3,7 +3,8 @@ from rest_framework import serializers
 
 from personaggi.models import (
     Personaggio,
-    PersonaggioKorpMembership,
+    get_active_korp,
+    get_active_korp_membership,
     Campagna,
     CampagnaFeaturePolicy,
     FEATURE_SOCIAL,
@@ -56,8 +57,8 @@ class SocialProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ("personaggio", "personaggio_nome", "korp_nome", "segno_zodiacale")
 
     def get_korp_nome(self, obj):
-        membership = obj.personaggio.korp_membership.filter(data_a__isnull=True).select_related("korp").first()
-        return membership.korp.nome if membership else None
+        membership = get_active_korp_membership(obj.personaggio)
+        return membership.carriera.nome if membership else None
 
 
 class SocialProfilePublicSerializer(serializers.ModelSerializer):
@@ -83,12 +84,8 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_korp_nome(self, obj):
-        membership = obj.personaggio.korp_membership.filter(data_a__isnull=True).select_related("korp").first()
-        return membership.korp.nome if membership else None
-
-    def get_korp_nome(self, obj):
-        membership = obj.personaggio.korp_membership.filter(data_a__isnull=True).select_related("korp").first()
-        return membership.korp.nome if membership else None
+        membership = get_active_korp_membership(obj.personaggio)
+        return membership.carriera.nome if membership else None
 
 
 class SocialCommentSerializer(serializers.ModelSerializer):
@@ -391,17 +388,6 @@ def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None)
         if pg:
             return pg
     return owned.first()
-
-
-def get_active_korp(personaggio):
-    if not personaggio:
-        return None
-    membership = (
-        PersonaggioKorpMembership.objects.filter(personaggio=personaggio, data_a__isnull=True)
-        .select_related("korp")
-        .first()
-    )
-    return membership.korp if membership else None
 
 
 def visible_posts_queryset_for_personaggio(personaggio, request=None):

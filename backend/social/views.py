@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from gestione_plot.models import Evento
-from personaggi.models import Messaggio, Personaggio, PersonaggioKorpMembership
+from personaggi.models import Messaggio, Personaggio, get_active_korp, PersonaggioCarrieraMembership
 
 from .models import (
     SOCIAL_GROUP_ROLE_ADMIN,
@@ -125,14 +125,7 @@ def visible_stories_queryset_for_personaggio(personaggio):
             base = base.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
     if not personaggio:
         return base.filter(visibilita="PUB")
-    active_korp = None
-    membership = (
-        PersonaggioKorpMembership.objects.filter(personaggio=personaggio, data_a__isnull=True)
-        .select_related("korp")
-        .first()
-    )
-    if membership:
-        active_korp = membership.korp
+    active_korp = get_active_korp(personaggio)
     if not active_korp:
         return base.filter(visibilita="PUB")
     return base.filter(Q(visibilita="PUB") | Q(visibilita="KORP", korp_visibilita=active_korp)).distinct()
@@ -200,8 +193,8 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         if visibilita == SOCIAL_VISIBILITY_KORP:
             if not korp_visibilita:
                 raise permissions.PermissionDenied("Serve una KORP per story riservata.")
-            is_member = PersonaggioKorpMembership.objects.filter(
-                personaggio=personaggio, korp=korp_visibilita, data_a__isnull=True
+            is_member = PersonaggioCarrieraMembership.objects.filter(
+                personaggio=personaggio, carriera=korp_visibilita, data_a__isnull=True
             ).exists()
             if not is_member:
                 raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")
@@ -562,8 +555,8 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         if visibilita == SOCIAL_VISIBILITY_KORP:
             if not korp_visibilita:
                 raise permissions.PermissionDenied("Serve una KORP per post riservato.")
-            is_member = PersonaggioKorpMembership.objects.filter(
-                personaggio=personaggio, korp=korp_visibilita, data_a__isnull=True
+            is_member = PersonaggioCarrieraMembership.objects.filter(
+                personaggio=personaggio, carriera=korp_visibilita, data_a__isnull=True
             ).exists()
             if not is_member:
                 raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")

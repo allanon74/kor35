@@ -118,7 +118,7 @@ def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
 
 
 def personaggio_match_innesco_timer(personaggio, innesco) -> bool:
-    from .models import InnescoTimer, PersonaggioKorpMembership
+    from .models import InnescoTimer, PersonaggioCarrieraMembership
 
     if innesco.modalita_target == InnescoTimer.INNESCO_TARGET_GLOBAL:
         return True
@@ -130,10 +130,10 @@ def personaggio_match_innesco_timer(personaggio, innesco) -> bool:
         reg_id = getattr(getattr(personaggio, "prefettura", None), "regione_id", None)
         checks.append(bool(reg_id and innesco.target_regioni.filter(pk=reg_id).exists()))
     if innesco.target_korps.exists():
-        ok_k = PersonaggioKorpMembership.objects.filter(
+        ok_k = PersonaggioCarrieraMembership.objects.filter(
             personaggio=personaggio,
             data_a__isnull=True,
-            korp__in=innesco.target_korps.all(),
+            carriera__in=innesco.target_korps.all(),
         ).exists()
         checks.append(ok_k)
     if not checks:

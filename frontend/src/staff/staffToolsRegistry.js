@@ -88,6 +88,7 @@ export const STAFF_TOOLS_REGISTRY = {
   'social-report': { id: 'social-report', label: 'Report social eventi', icon: Sparkles, color: 'bg-fuchsia-700', componentKey: 'social-report' },
   'risorse-pool': { id: 'risorse-pool', label: 'Risorse pool (Fortuna)', icon: Gem, color: 'bg-amber-800', componentKey: 'risorse-pool' },
   'ere-prefetture': { id: 'ere-prefetture', label: 'Ere e prefetture', icon: Globe2, color: 'bg-violet-700', componentKey: 'ere-prefetture' },
+  'carriere-korps': { id: 'carriere-korps', label: 'Carriere e KORP', icon: Users, color: 'bg-violet-800', componentKey: 'carriere-korps' },
   'creazione-guidata': { id: 'creazione-guidata', label: 'Creazione guidata PG', icon: Sparkles, color: 'bg-violet-900', componentKey: 'creazione-guidata' },
   'dichiarazioni-glossario': { id: 'dichiarazioni-glossario', label: 'Dichiarazioni e glossario', icon: BookText, color: 'bg-emerald-700', componentKey: 'dichiarazioni-glossario' },
   'arcana-profiles': { id: 'arcana-profiles', label: 'Profili Arcana SSO', icon: Shield, color: 'bg-indigo-800', componentKey: 'arcana-profiles' },

@@ -51,8 +51,8 @@ from .models import (
     RichiestaAssemblaggio, OggettoCaratteristica, 
     Cerimoniale, StatoTimerAttivo, MattoneStatistica, abilita_tier as AbilitaTier,
     TipologiaEffetto, EffettoCasuale, Dichiarazione,
-    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
-    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
+    PersonaggioCarrieraMembership,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, Regione,
     Campagna,
@@ -177,16 +177,41 @@ class TierSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class TipoCarrieraSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoCarriera
+        fields = ("id", "sync_id", "codice", "nome", "ordine", "attivo", "updated_at")
+
+
 class KorpSerializer(serializers.ModelSerializer):
+    tipo_carriera = TipoCarrieraSerializer(read_only=True)
+
     class Meta:
         model = Korp
-        fields = "__all__"
+        fields = ("id", "nome", "descrizione", "tipo", "foto", "tipo_carriera", "sync_id", "updated_at")
 
 
 class CarrieraSerializer(serializers.ModelSerializer):
+    tipo_carriera = TipoCarrieraSerializer(read_only=True)
+    tipo_carriera_id = serializers.PrimaryKeyRelatedField(
+        queryset=TipoCarriera.objects.filter(attivo=True),
+        source="tipo_carriera",
+        write_only=True,
+    )
+
     class Meta:
         model = Carriera
-        fields = "__all__"
+        fields = (
+            "id",
+            "nome",
+            "descrizione",
+            "tipo",
+            "foto",
+            "tipo_carriera",
+            "tipo_carriera_id",
+            "sync_id",
+            "updated_at",
+        )
 
 
 class SegnoZodiacaleSerializer(serializers.ModelSerializer):
@@ -195,28 +220,99 @@ class SegnoZodiacaleSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class CaricaKorpSerializer(serializers.ModelSerializer):
+class CaricaSerializer(serializers.ModelSerializer):
+    carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
+    tipo_carriera_codice = serializers.CharField(source="carriera.tipo_carriera.codice", read_only=True)
+
     class Meta:
-        model = CaricaKorp
-        fields = "__all__"
-
-
-class CaricaCarrieraSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CaricaCarriera
-        fields = "__all__"
-
-
-class PersonaggioKorpMembershipSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PersonaggioKorpMembership
+        model = Carica
         fields = "__all__"
 
 
 class PersonaggioCarrieraMembershipSerializer(serializers.ModelSerializer):
+    carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
+    carica_nome = serializers.CharField(source="carica.nome", read_only=True)
+    tipo_carriera_codice = serializers.CharField(source="tipo_carriera.codice", read_only=True)
+    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+
     class Meta:
         model = PersonaggioCarrieraMembership
         fields = "__all__"
+
+
+class TipoCarrieraStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TipoCarriera
+        fields = "__all__"
+
+
+class CarrieraStaffSerializer(serializers.ModelSerializer):
+    tipo_carriera_id = serializers.PrimaryKeyRelatedField(
+        queryset=TipoCarriera.objects.all(),
+        source="tipo_carriera",
+    )
+    tipo_carriera_nome = serializers.CharField(source="tipo_carriera.nome", read_only=True)
+    tipo_carriera_codice = serializers.CharField(source="tipo_carriera.codice", read_only=True)
+
+    class Meta:
+        model = Carriera
+        fields = (
+            "id",
+            "nome",
+            "descrizione",
+            "tipo",
+            "foto",
+            "tipo_carriera_id",
+            "tipo_carriera_nome",
+            "tipo_carriera_codice",
+            "sync_id",
+            "updated_at",
+        )
+
+    def create(self, validated_data):
+        from personaggi.models import TIER_3
+
+        tipo_carriera = validated_data.pop("tipo_carriera")
+        validated_data.setdefault("tipo", TIER_3)
+        return Carriera.objects.create(tipo_carriera=tipo_carriera, **validated_data)
+
+
+class CaricaStaffSerializer(serializers.ModelSerializer):
+    carriera_id = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all(), source="carriera")
+    carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
+
+    class Meta:
+        model = Carica
+        fields = "__all__"
+
+
+class PersonaggioCarrieraMembershipStaffSerializer(serializers.ModelSerializer):
+    carriera_id = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all(), source="carriera")
+    tipo_carriera_id = serializers.PrimaryKeyRelatedField(queryset=TipoCarriera.objects.all(), source="tipo_carriera")
+    carica_id = serializers.PrimaryKeyRelatedField(
+        queryset=Carica.objects.filter(attiva=True),
+        source="carica",
+        allow_null=True,
+        required=False,
+    )
+    carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
+    carica_nome = serializers.CharField(source="carica.nome", read_only=True)
+    tipo_carriera_codice = serializers.CharField(source="tipo_carriera.codice", read_only=True)
+    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+
+    class Meta:
+        model = PersonaggioCarrieraMembership
+        fields = "__all__"
+
+    def validate(self, attrs):
+        carriera = attrs.get("carriera") or getattr(self.instance, "carriera", None)
+        carica = attrs.get("carica")
+        if carica and carriera and carica.carriera_id != carriera.pk:
+            raise serializers.ValidationError("La carica non appartiene alla carriera selezionata.")
+        tipo = attrs.get("tipo_carriera")
+        if carriera and tipo and carriera.tipo_carriera_id != tipo.pk:
+            raise serializers.ValidationError("Il tipo non coincide con la carriera.")
+        return attrs
 
 
 class PrefetturaSerializer(serializers.ModelSerializer):

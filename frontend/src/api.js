@@ -1980,6 +1980,66 @@ export const staffGetRegioni = (onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/staff/regioni/', { method: 'GET' }, onLogout);
 };
 
+// --- CARRIERE / KORP (STAFF) ---
+export const staffGetTipiCarriera = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/tipi-carriera/', { method: 'GET' }, onLogout);
+
+export const staffGetCarriere = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/carriere/', { method: 'GET' }, onLogout);
+
+export const staffCreateCarriera = (data, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/carriere/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCarriera = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/carriere/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCarriera = (id, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/carriere/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCariche = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/cariche/', { method: 'GET' }, onLogout);
+
+export const staffCreateCarica = (data, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/cariche/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCarica = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/cariche/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCarica = (id, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/cariche/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCarriereMemberships = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/personaggi-carriere-membership/', { method: 'GET' }, onLogout);
+
+export const staffCreateCarriereMembership = (data, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/personaggi-carriere-membership/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCarriereMembership = (id, data, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/personaggi-carriere-membership/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCarriereMembership = (id, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/personaggi-carriere-membership/${id}/`, {
+        method: 'DELETE',
+    }, onLogout);
+
 // --- PILOTAGGIO (STAFF) ---
 export const staffGetPilotSottosistemi = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/sottosistemi/', { method: 'GET' }, onLogout);

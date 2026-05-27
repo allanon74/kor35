@@ -43,8 +43,8 @@ from .models import (
     StatoTimerAttivo,
     TipologiaPersonaggio,
     Era, Prefettura, EraAbilita, Regione, RegioneAbilita,
-    Korp, Carriera, SegnoZodiacale, CaricaKorp, CaricaCarriera,
-    PersonaggioKorpMembership, PersonaggioCarrieraMembership,
+    Korp, Carriera, SegnoZodiacale, Carica,
+    PersonaggioCarrieraMembership,
     UserSocialPreference,
     StatisticaContainer,
     PersonaggioInfusione, PersonaggioCerimoniale,
@@ -119,8 +119,7 @@ from .serializers import (
     ConsumabilePersonaggioSerializer,
     EraSerializer, PrefetturaSerializer, RegioneSerializer,
     KorpSerializer, CarrieraSerializer, SegnoZodiacaleSerializer,
-    CaricaKorpSerializer, CaricaCarrieraSerializer,
-    PersonaggioKorpMembershipSerializer, PersonaggioCarrieraMembershipSerializer,
+    CaricaSerializer, PersonaggioCarrieraMembershipSerializer,
     TessituraEffettoRuntimeSerializer,
     StatisticaContainerSerializer,
     CampagnaSerializer, CampagnaUtenteSerializer, CampagnaFeaturePolicySerializer,
@@ -4749,7 +4748,7 @@ class KorpViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CarrieraViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Carriera.objects.all().order_by("nome")
+    queryset = Carriera.objects.select_related("tipo_carriera").order_by("tipo_carriera__ordine", "nome")
     serializer_class = CarrieraSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -4778,26 +4777,18 @@ class RegioneViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
 
-class CaricaKorpViewSet(viewsets.ModelViewSet):
-    queryset = CaricaKorp.objects.select_related("korp").all().order_by("korp__nome", "ordine", "nome")
-    serializer_class = CaricaKorpSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-
-class CaricaCarrieraViewSet(viewsets.ModelViewSet):
-    queryset = CaricaCarriera.objects.select_related("carriera").all().order_by("carriera__nome", "ordine", "nome")
-    serializer_class = CaricaCarrieraSerializer
-    permission_classes = [permissions.IsAdminUser]
-
-
-class PersonaggioKorpMembershipViewSet(viewsets.ModelViewSet):
-    queryset = PersonaggioKorpMembership.objects.select_related("personaggio", "korp", "carica").all().order_by("-data_da", "-id")
-    serializer_class = PersonaggioKorpMembershipSerializer
+class CaricaViewSet(viewsets.ModelViewSet):
+    queryset = Carica.objects.select_related("carriera", "carriera__tipo_carriera").order_by(
+        "carriera__nome", "ordine", "nome"
+    )
+    serializer_class = CaricaSerializer
     permission_classes = [permissions.IsAdminUser]
 
 
 class PersonaggioCarrieraMembershipViewSet(viewsets.ModelViewSet):
-    queryset = PersonaggioCarrieraMembership.objects.select_related("personaggio", "carriera", "carica").all().order_by("-data_da", "-id")
+    queryset = PersonaggioCarrieraMembership.objects.select_related(
+        "personaggio", "carriera", "carica", "tipo_carriera"
+    ).order_by("-data_da", "-id")
     serializer_class = PersonaggioCarrieraMembershipSerializer
     permission_classes = [permissions.IsAdminUser]
     

@@ -1247,16 +1247,59 @@ class Tier(Tabella):
             raise ValidationError("I Tier 4 possono avere al massimo 4 caratteristiche associate.")
 
 
-class Korp(Tier):
+class TipoCarriera(SyncableModel, models.Model):
+    """Tipologia dinamica di carriera (KORP, Professione, …)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    codice = models.SlugField(max_length=40, unique=True)
+    nome = models.CharField(max_length=120)
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(default=True)
+
     class Meta:
-        verbose_name = "KORP"
-        verbose_name_plural = "KORPS"
+        verbose_name = "Tipo Carriera"
+        verbose_name_plural = "Tipi Carriera"
+        ordering = ["ordine", "nome"]
+
+    def __str__(self):
+        return self.nome
 
 
 class Carriera(Tier):
+    tipo_carriera = models.ForeignKey(
+        TipoCarriera,
+        on_delete=models.PROTECT,
+        related_name="carriere",
+    )
+
     class Meta:
         verbose_name = "Carriera"
         verbose_name_plural = "Carriere"
+
+    def save(self, *args, **kwargs):
+        if not self.tipo_carriera_id:
+            raise ValidationError("tipo_carriera è obbligatorio per Carriera.")
+        super().save(*args, **kwargs)
+
+
+class KorpManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(tipo_carriera__codice="korp")
+
+
+class Korp(Carriera):
+    """Proxy: le KORP sono Carriere con tipo_carriera.codice = korp (stessi PK tier)."""
+
+    objects = KorpManager()
+
+    class Meta:
+        proxy = True
+        verbose_name = "KORP"
+        verbose_name_plural = "KORPS"
+
+    def save(self, *args, **kwargs):
+        if not self.tipo_carriera_id:
+            self.tipo_carriera = TipoCarriera.objects.get(codice="korp")
+        super().save(*args, **kwargs)
 
 
 class SegnoZodiacale(Tier):
@@ -1270,24 +1313,7 @@ class SegnoZodiacale(Tier):
         ordering = ["numero", "nome"]
 
 
-class CaricaKorp(A_modello):
-    korp = models.ForeignKey(Korp, on_delete=models.CASCADE, related_name="cariche")
-    nome = models.CharField(max_length=120)
-    bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    ordine = models.PositiveIntegerField(default=0)
-    attiva = models.BooleanField(default=True)
-
-    class Meta:
-        verbose_name = "Carica KORP"
-        verbose_name_plural = "Cariche KORP"
-        ordering = ["korp__nome", "ordine", "nome"]
-        unique_together = ("korp", "nome")
-
-    def __str__(self):
-        return f"{self.korp.nome} - {self.nome}"
-
-
-class CaricaCarriera(A_modello):
+class Carica(A_modello):
     carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="cariche")
     nome = models.CharField(max_length=120)
     bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -1295,8 +1321,8 @@ class CaricaCarriera(A_modello):
     attiva = models.BooleanField(default=True)
 
     class Meta:
-        verbose_name = "Carica Carriera"
-        verbose_name_plural = "Cariche Carriera"
+        verbose_name = "Carica"
+        verbose_name_plural = "Cariche"
         ordering = ["carriera__nome", "ordine", "nome"]
         unique_together = ("carriera", "nome")
 
@@ -1304,58 +1330,61 @@ class CaricaCarriera(A_modello):
         return f"{self.carriera.nome} - {self.nome}"
 
 
-class PersonaggioKorpMembership(A_modello):
-    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="korp_membership")
-    korp = models.ForeignKey(Korp, on_delete=models.PROTECT, related_name="membership")
-    carica = models.ForeignKey(CaricaKorp, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
-    data_da = models.DateTimeField(default=timezone.now)
-    data_a = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        verbose_name = "Membership KORP"
-        verbose_name_plural = "Membership KORP"
-        ordering = ["-data_da", "-id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["personaggio"],
-                condition=Q(data_a__isnull=True),
-                name="uniq_personaggio_korp_attiva",
-            )
-        ]
-
-    def clean(self):
-        if self.carica and self.carica.korp_id != self.korp_id:
-            raise ValidationError("La carica selezionata non appartiene alla KORP indicata.")
-
-    def __str__(self):
-        return f"{self.personaggio.nome} -> {self.korp.nome}"
-
-
 class PersonaggioCarrieraMembership(A_modello):
-    personaggio = models.ForeignKey("Personaggio", on_delete=models.CASCADE, related_name="carriera_membership")
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="carriere_membership",
+    )
     carriera = models.ForeignKey(Carriera, on_delete=models.PROTECT, related_name="membership")
-    carica = models.ForeignKey(CaricaCarriera, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
+    tipo_carriera = models.ForeignKey(
+        TipoCarriera,
+        on_delete=models.PROTECT,
+        related_name="membership",
+    )
+    carica = models.ForeignKey(Carica, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
     data_da = models.DateTimeField(default=timezone.now)
     data_a = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Membership Carriera"
-        verbose_name_plural = "Membership Carriera"
+        verbose_name_plural = "Membership Carriere"
         ordering = ["-data_da", "-id"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["personaggio"],
-                condition=Q(data_a__isnull=True),
-                name="uniq_personaggio_carriera_attiva",
-            )
-        ]
 
     def clean(self):
         if self.carica and self.carica.carriera_id != self.carriera_id:
-            raise ValidationError("La carica selezionata non appartiene alla Carriera indicata.")
+            raise ValidationError("La carica selezionata non appartiene alla carriera indicata.")
+        if self.carriera_id and self.tipo_carriera_id:
+            if self.carriera.tipo_carriera_id != self.tipo_carriera_id:
+                raise ValidationError("Il tipo carriera non coincide con quello della carriera selezionata.")
+
+    def save(self, *args, **kwargs):
+        if self.carriera_id and not self.tipo_carriera_id:
+            self.tipo_carriera_id = self.carriera.tipo_carriera_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.personaggio.nome} -> {self.carriera.nome}"
+
+
+def get_active_korp_membership(personaggio):
+    """Membership KORP attiva (data_a nulla), se presente."""
+    return (
+        PersonaggioCarrieraMembership.objects.filter(
+            personaggio=personaggio,
+            data_a__isnull=True,
+            tipo_carriera__codice="korp",
+        )
+        .select_related("carriera", "carica", "tipo_carriera")
+        .order_by("-data_da", "-id")
+        .first()
+    )
+
+
+def get_active_korp(personaggio):
+    """KORP attiva del personaggio (proxy), o None."""
+    m = get_active_korp_membership(personaggio)
+    return m.carriera if m else None
 
 class Punteggio(Tabella):
     sigla = models.CharField(max_length=3, unique=True)
