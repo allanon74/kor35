@@ -870,21 +870,48 @@ class StatoTimerAttivoAdmin(admin.ModelAdmin):
     secondi_rimanenti_display.short_description = "Tempo Rimasto"
 
 
+@admin.action(description="Segna STL creato sui QR selezionati")
+def qrcode_segna_stl_creato(modeladmin, request, queryset):
+    count = queryset.update(stl_creato=True, updated_at=timezone.now())
+    modeladmin.message_user(
+        request,
+        f"{count} QR-code aggiornati: STL creato impostato a True.",
+    )
+
+
+@admin.action(description="Crea 50 QR-code nuovi")
+def qrcode_crea_50_nuovi(modeladmin, request, queryset):
+    del queryset  # azione globale, non usa la selezione
+    creati = []
+    with transaction.atomic():
+        for _ in range(50):
+            qr = QrCode()
+            qr.save()
+            creati.append(qr.id)
+    modeladmin.message_user(
+        request,
+        f"Creati 50 QR-code nuovi (ultimo id: {creati[-1]}).",
+    )
+
+
 @admin.register(QrCode)
 class QrCodeAdmin(admin.ModelAdmin):
     form = QrCodeAdminForm
     list_display = (
         'id',
         'data_creazione',
+        'stl_creato',
         'inventario_presente',
         'inventario_colore_codice_preview',
         'inventario_colore_sfondo_preview',
         'get_vista_associata_si_no',
         'get_timer_info',
     )
+    list_editable = ('stl_creato',)
     readonly_fields = ('id', 'data_creazione')
     search_fields = ('id',)
     list_filter = (
+        'stl_creato',
         'inventario_presente',
         'inventario_colore_codice',
         'inventario_colore_sfondo',
@@ -893,6 +920,7 @@ class QrCodeAdmin(admin.ModelAdmin):
     summernote_fields = ['testo']
     inlines = [TimerQrCodeInline] # <--- Aggiunge la configurazione timer al QR
     list_select_related = ('vista',)
+    actions = [qrcode_segna_stl_creato, qrcode_crea_50_nuovi]
 
     def get_timer_info(self, obj):
         cfg = getattr(obj, "configurazione_timer", None)

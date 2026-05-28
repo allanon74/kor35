@@ -2890,7 +2890,19 @@ class QrCode(SyncableModel, models.Model):
         default="",
         help_text="Colore sfondo QR rilevato durante inventario (HEX, es. #000000).",
     )
+    stl_creato = models.BooleanField(
+        default=False,
+        verbose_name="STL creato",
+        help_text="Indica se il file STL associato al QR è stato generato.",
+    )
     _QR_ID_SAVE_MAX_ATTEMPTS = 32
+
+    @staticmethod
+    def _integrity_error_is_retriable_id_conflict(exc):
+        """Riprova solo su collisione PK/unique (23505), non su NOT NULL o altri vincoli."""
+        cause = getattr(exc, "__cause__", None)
+        pgcode = getattr(cause, "pgcode", None) or getattr(cause, "sqlstate", None)
+        return pgcode == "23505"
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
@@ -2903,10 +2915,10 @@ class QrCode(SyncableModel, models.Model):
                 super().save(*args, **kwargs)
                 return
             except IntegrityError as exc:
+                if not self._integrity_error_is_retriable_id_conflict(exc):
+                    raise
                 last_error = exc
                 self.id = generate_short_id()
-                # Dopo diversi fallimenti su PK/unique, rigenera anche sync_id (il loop
-                # infinito precedente rigenerava solo id e poteva bloccarsi per sempre).
                 if attempt >= 7:
                     self.sync_id = uuid.uuid4()
         raise last_error
