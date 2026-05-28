@@ -908,17 +908,19 @@ class QrCodeAdmin(admin.ModelAdmin):
         'id',
         'data_creazione',
         'stl_creato',
+        'qr_stampato',
         'inventario_presente',
         'inventario_colore_codice_preview',
         'inventario_colore_sfondo_preview',
         'get_vista_associata_si_no',
         'get_timer_info',
     )
-    list_editable = ('stl_creato',)
+    list_editable = ('stl_creato', 'qr_stampato')
     readonly_fields = ('id', 'data_creazione')
     search_fields = ('id',)
     list_filter = (
         'stl_creato',
+        'qr_stampato',
         'inventario_presente',
         'inventario_colore_codice',
         'inventario_colore_sfondo',

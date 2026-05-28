@@ -2895,6 +2895,11 @@ class QrCode(SyncableModel, models.Model):
         verbose_name="STL creato",
         help_text="Indica se il file STL associato al QR è stato generato.",
     )
+    qr_stampato = models.BooleanField(
+        default=False,
+        verbose_name="QR stampato",
+        help_text="Indica se il codice QR fisico è stato stampato.",
+    )
     _QR_ID_SAVE_MAX_ATTEMPTS = 32
 
     @staticmethod
