@@ -559,7 +559,6 @@ class RifiutaPropostaView(APIView):
                 mittente=request.user,
                 tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 destinatario_personaggio=proposta.personaggio,
-                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 titolo=f"Proposta Rifiutata: {proposta.nome}",
                 testo=f"La tua proposta per '{proposta.nome}' è stata rifiutata e riportata in bozza.\n\nNote Staff:\n{note_staff}"
             )
@@ -675,7 +674,6 @@ class ApprovaPropostaView(APIView):
                     mittente=request.user,
                     tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                     destinatario_personaggio=personaggio,
-                    tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                     titolo=f"Approvazione: {nuova_tecnica.nome}",
                     testo=(
                         f"La tua tecnica '{nuova_tecnica.nome}' è stata approvata e creata.\n"
