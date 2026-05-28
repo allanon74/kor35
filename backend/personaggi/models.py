@@ -2890,12 +2890,26 @@ class QrCode(SyncableModel, models.Model):
         default="",
         help_text="Colore sfondo QR rilevato durante inventario (HEX, es. #000000).",
     )
+    _QR_ID_SAVE_MAX_ATTEMPTS = 32
+
     def save(self, *args, **kwargs):
-        if self._state.adding:
-            while True:
-                try: super().save(*args, **kwargs); break
-                except IntegrityError: self.id = generate_short_id()
-        else: super().save(*args, **kwargs)
+        if not self._state.adding:
+            super().save(*args, **kwargs)
+            return
+
+        last_error = None
+        for attempt in range(self._QR_ID_SAVE_MAX_ATTEMPTS):
+            try:
+                super().save(*args, **kwargs)
+                return
+            except IntegrityError as exc:
+                last_error = exc
+                self.id = generate_short_id()
+                # Dopo diversi fallimenti su PK/unique, rigenera anche sync_id (il loop
+                # infinito precedente rigenerava solo id e poteva bloccarsi per sempre).
+                if attempt >= 7:
+                    self.sync_id = uuid.uuid4()
+        raise last_error
         
 # --- NUOVI MODELLI PER GESTIONE TIMER (PUNTO A) ---
 

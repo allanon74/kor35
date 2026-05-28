@@ -577,7 +577,10 @@ class EdgeSyncView(APIView):
             patch = dict(update_data)
             # Campagna e' radice di moltissime FK: quando coincide la natural key (slug),
             # riallineiamo esplicitamente il sync_id al peer per sbloccare la cascata.
-            if model._meta.label_lower == "personaggi.campagna":
+            if model._meta.label_lower in (
+                "personaggi.campagna",
+                "personaggi.tipocarriera",
+            ):
                 patch["sync_id"] = sync_id
             # Never patch parent-link fields on existing rows.
             for f in model._meta.concrete_fields:
