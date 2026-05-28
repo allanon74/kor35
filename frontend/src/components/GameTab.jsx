@@ -15,7 +15,7 @@ import {
 } from '../hooks/useGameData';
 import { gameComaControl } from '../api';
 import { getOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
-import { risorsePoolVisibiliInGame } from '../lib/gamePoolUtils';
+import { getTacticalPoolCurrent, risorsePoolVisibiliInGame } from '../lib/gamePoolUtils';
 
 import ActiveItemWidget from './ActiveItemWidget'; 
 
@@ -668,17 +668,11 @@ const GameTab = ({ onNavigate }) => {
     const rankArmor = pickPrimaryRank('RPA');
     const rankShell = pickPrimaryRank('RPG');
 
-    const tempStats = char.statistiche_temporanee || {};
-    const poolCur = (sigla) => {
-        const row = poolUi.find((p) => p.sigla === sigla);
-        return row != null ? row.valore_corrente : undefined;
-    };
     const tacticalStats = {
-        'PV_CUR': poolCur('PV') ?? tempStats['PV_CUR'] ?? maxHP,
-        'PA_CUR': poolCur('PA') ?? tempStats['PA_CUR'] ?? maxArmor,
-        'PS_CUR': poolCur('PS') ?? tempStats['PS_CUR'] ?? maxShell,
-        // Chakra: pool CHA in risorse_consumabili; legacy CHK_CUR / CHA_CUR in temp
-        'CHA_CUR': poolCur('CHA') ?? tempStats['CHA_CUR'] ?? tempStats['CHK_CUR'] ?? maxChakra,
+        'PV_CUR': getTacticalPoolCurrent(char, 'PV', 'PV_CUR', maxHP),
+        'PA_CUR': getTacticalPoolCurrent(char, 'PA', 'PA_CUR', maxArmor),
+        'PS_CUR': getTacticalPoolCurrent(char, 'PS', 'PS_CUR', maxShell),
+        'CHA_CUR': getTacticalPoolCurrent(char, 'CHA', 'CHA_CUR', maxChakra),
     };
     const comaState = char?.impostazioni_ui?.coma_state || null;
     const isDead = !!char?.data_morte || comaState?.status === 'dead';
