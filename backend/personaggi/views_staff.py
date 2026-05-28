@@ -557,6 +557,7 @@ class RifiutaPropostaView(APIView):
             # Invia messaggio solo al personaggio che ha proposto la tecnica
             Messaggio.objects.create(
                 mittente=request.user,
+                tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 destinatario_personaggio=proposta.personaggio,
                 tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                 titolo=f"Proposta Rifiutata: {proposta.nome}",
@@ -672,6 +673,7 @@ class ApprovaPropostaView(APIView):
                 # F. Invia messaggio solo al personaggio che ha proposto la tecnica
                 Messaggio.objects.create(
                     mittente=request.user,
+                    tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                     destinatario_personaggio=personaggio,
                     tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
                     titolo=f"Approvazione: {nuova_tecnica.nome}",
