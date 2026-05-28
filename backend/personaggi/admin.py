@@ -898,6 +898,12 @@ def qrcode_crea_50_nuovi(modeladmin, request, queryset):
 @admin.register(QrCode)
 class QrCodeAdmin(admin.ModelAdmin):
     form = QrCodeAdminForm
+    # Timer opzionale: inline solo in modifica (evita formset obbligatorio in creazione).
+    def get_inlines(self, request, obj):
+        if obj is None:
+            return []
+        return [TimerQrCodeInline]
+
     list_display = (
         'id',
         'data_creazione',

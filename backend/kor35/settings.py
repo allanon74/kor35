@@ -490,3 +490,26 @@ CORS_ALLOWED_ORIGINS += _split_origins_env(env("EXTRA_CORS_ALLOWED_ORIGINS", def
 if CURRENT_ENV == "raspberry_docker":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True
+
+# Errori HTTP (es. 500 admin) su stdout del container: visibili con `docker compose logs backend`.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "gunicorn.error": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}

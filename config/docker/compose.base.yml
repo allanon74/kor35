@@ -50,7 +50,7 @@ services:
       - "8000"
     command: >
       sh -c "python manage.py migrate --noinput &&
-      gunicorn kor35.wsgi:application --bind 0.0.0.0:8000 --timeout 900 --graceful-timeout 120"
+      gunicorn kor35.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 900 --graceful-timeout 120 --access-logfile - --error-logfile - --capture-output"
     healthcheck:
       test:
         [

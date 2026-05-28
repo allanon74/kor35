@@ -38,20 +38,75 @@ make migrate ENV=prod
 - **Edge sync** (Pi/mirror → master): `Edge sync failed`, `edge_sync.py`, `SottosistemaNave`, `duplicate key ... codice_key` — non è il salvataggio QR in admin.
 - **Admin Django**: cercare traceback con `/admin/personaggi/qrcode/` subito dopo aver riprodotto il 500.
 
-Dopo aver riprodotto l'errore admin, leggere subito:
-
-```bash
-docker logs kor35_prod_backend --tail=300 2>&1
-docker logs kor35_prod_backend --tail=400 2>&1 | grep -A 30 -E 'qrcode|Traceback|admin/personaggi'
-```
-
-oppure con compose (stesso effetto, filtri `--since`):
+Dopo aver riprodotto l'errore admin, leggere subito (sempre con prefisso compose completo):
 
 ```bash
 cd /srv/kor35/config/docker
 COMPOSE_PROJECT_NAME=kor35-prod \
 KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
-docker compose -f compose.base.yml -f compose.prod.yml logs backend --tail=300 --no-log-prefix
+docker compose -f compose.base.yml -f compose.prod.yml logs backend --since=3m --no-log-prefix 2>&1 \
+  | grep -A 40 -E 'qrcode|/admin/personaggi|Traceback|Internal Server Error|ERROR'
+```
+
+Se il grep è vuoto, allargare finestra o togliere il filtro:
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml logs backend --since=15m --tail=500 --no-log-prefix
+```
+
+Edge sync (non confondere con admin QR):
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml logs backend --since=10m --no-log-prefix 2>&1 \
+  | grep -E 'Edge sync failed|SottosistemaNave|IntegrityError|edge_sync' | tail -50
+```
+
+Alternativa Makefile: `cd /srv/kor35 && ./scripts/logs_wsl_pi_like.sh --env prod backend`
+
+**Importante:** con Gunicorn a **1 worker**, un `POST /api/sync/edge/` lungo blocca **tutto** (admin, API). I log nginx mostrano `499` (client timeout), `502`, `connection reset` quando il worker crasha/riavvia. Usare `logs frontend` + `logs backend`; dopo deploy con `--workers 2` e `--access-logfile -` anche le richieste compaiono su backend.
+
+Log nginx (status HTTP su `/admin/...`):
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml logs frontend --since=15m --tail=300 --no-log-prefix
+```
+
+Follow mentre riproduci l'errore (due terminali: uno follow frontend, uno salvi in admin):
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml logs -f frontend backend
+```
+
+Test creazione QR nel container (mostra traceback Python se fallisce):
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml exec -T backend \
+  python manage.py shell -c "from personaggi.models import QrCode; q=QrCode(); q.save(); print('OK', q.id)"
+```
+
+Verifica fix deployato (import transaction in admin):
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml exec -T backend \
+  grep -n 'from django.db import transaction' /app/personaggi/admin.py
 ```
 
 ## Dev locale (WSL)
