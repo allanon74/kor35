@@ -60,6 +60,26 @@ class Evento(SyncableModel, models.Model):
         verbose_name="Crediti guadagnati",
         help_text="Crediti assegnati una sola volta a ogni PG iscritto al primo accesso durante i giorni d'evento.",
     )
+    crediti_base_inizio_evento = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        verbose_name="Crediti base inizio evento",
+        help_text="Quota fissa crediti assegnata a ogni PG partecipante all'avvio ufficiale evento.",
+    )
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Evento iniziato il",
+        help_text="Timestamp di avvio ufficiale evento (pulsante staff «Inizia evento»).",
+    )
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Evento terminato il",
+        help_text="Timestamp di chiusura ufficiale evento (pulsante staff «Termina evento»).",
+    )
     data_inizio = models.DateTimeField()
     data_fine = models.DateTimeField()
     sinossi = models.TextField(blank=True)

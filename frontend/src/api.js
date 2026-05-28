@@ -1663,6 +1663,12 @@ export const getEventi = (onLogout) => fetchAuthenticated('/api/plot/api/eventi/
 export const createEvento = (data, onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateEvento = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'DELETE' }, onLogout);
+export const iniziaEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/inizia/`, { method: 'POST', body: '{}' }, onLogout);
+export const terminaEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/termina/`, { method: 'POST', body: '{}' }, onLogout);
+export const reportRicompenseEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/report_ricompense/`, { method: 'GET' }, onLogout);
 
 /** Elenco eventi con iscrizione aperta, requisiti utente e meta PayPal (client id per SDK). */
 export const getIscrizioniEventoEligibility = (onLogout) =>

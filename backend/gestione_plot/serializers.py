@@ -274,7 +274,8 @@ class EventoSerializer(serializers.ModelSerializer):
         model = Evento
         fields = [
             'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine',
-            'luogo', 'pc_guadagnati', 'crediti_guadagnati', 'staff_assegnato', 'partecipanti',
+            'luogo', 'pc_guadagnati', 'crediti_guadagnati', 'crediti_base_inizio_evento',
+            'started_at', 'ended_at', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
             'iscrizione_test_attiva', 'iscrizione_opzioni',

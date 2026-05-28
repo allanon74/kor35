@@ -5,8 +5,12 @@ import {
 } from 'lucide-react';
 import { RichTextViewer } from './RichTextDisplay';
 
-const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno }) => {
+const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
+    const [showRicompense, setShowRicompense] = useState(false);
+    const [reportLoading, setReportLoading] = useState(false);
+    const [reportError, setReportError] = useState('');
+    const [reportData, setReportData] = useState(null);
 
     if (!evento) return null;
 
@@ -44,6 +48,21 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
         onUpdateEvento(evento.id, { [fieldName]: newIds });
     }, [evento.id, evento, onUpdateEvento]);
 
+    const handleLoadReport = useCallback(async () => {
+        if (!onReportRicompense) return;
+        setReportError('');
+        setReportLoading(true);
+        try {
+            const data = await onReportRicompense();
+            setReportData(data || null);
+            setShowRicompense(true);
+        } catch (e) {
+            setReportError(e?.message || 'Errore caricamento report ricompense');
+        } finally {
+            setReportLoading(false);
+        }
+    }, [onReportRicompense]);
+
     return (
         <div className="bg-indigo-900/10 border-b border-gray-800 p-6 space-y-6 shadow-inner">
             {/* Header Evento */}
@@ -63,11 +82,14 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                         <span className="flex items-center gap-1"><Calendar size={12} className="text-indigo-400"/> {new Date(evento.data_inizio).toLocaleDateString()}</span>
                         <span className="text-indigo-400 flex items-center gap-1">
                             <Star size={12} /> Premio iscritti: {evento.pc_guadagnati ?? 1} PC ·{' '}
-                            {Number(evento.crediti_guadagnati ?? 1000).toLocaleString('it-IT', {
+                            {Number(evento.crediti_base_inizio_evento ?? 0).toLocaleString('it-IT', {
                                 minimumFractionDigits: 0,
                                 maximumFractionDigits: 2,
                             })}{' '}
-                            CR
+                            CR base
+                        </span>
+                        <span className={evento.started_at && !evento.ended_at ? "text-amber-300" : "text-gray-500"}>
+                            Stato: {evento.started_at && !evento.ended_at ? "IN CORSO" : "NON INIZIATO"}
                         </span>
                     </div>
                     {(evento.iscrizione_apertura ||
@@ -110,6 +132,27 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
 
                 {isMaster && (
                     <div className="flex gap-2">
+                        {!evento.started_at || evento.ended_at ? (
+                            <button
+                                onClick={onIniziaEvento}
+                                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-amber-500 transition-all"
+                            >
+                                Inizia evento
+                            </button>
+                        ) : (
+                            <button
+                                onClick={onTerminaEvento}
+                                className="px-4 py-2 bg-rose-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-rose-600 transition-all"
+                            >
+                                Termina evento
+                            </button>
+                        )}
+                        <button
+                            onClick={handleLoadReport}
+                            className="px-4 py-2 bg-indigo-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-indigo-600 transition-all"
+                        >
+                            Report ricompense
+                        </button>
                         <button onClick={onAddGiorno} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-emerald-500 transition-all">
                             + Giorno
                         </button>
@@ -119,6 +162,48 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                     </div>
                 )}
             </div>
+
+            {isMaster && (
+                <div className="rounded-lg border border-indigo-900/50 bg-gray-950/40 p-3 space-y-2">
+                    <button
+                        onClick={() => setShowRicompense((v) => !v)}
+                        className="w-full text-left text-[11px] font-black uppercase text-indigo-300 tracking-wide"
+                    >
+                        {showRicompense ? 'Nascondi report ricompense' : 'Mostra report ricompense'}
+                    </button>
+                    {reportLoading ? <p className="text-xs text-gray-400">Caricamento report…</p> : null}
+                    {reportError ? <p className="text-xs text-red-300">{reportError}</p> : null}
+                    {showRicompense && reportData?.ricompense?.length ? (
+                        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                            {reportData.ricompense.map((r) => (
+                                <div key={r.personaggio_id} className="rounded border border-gray-800 bg-gray-900/80 p-2">
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="font-bold text-white">{r.personaggio_nome}</span>
+                                        <span className={r.premio_gia_assegnato ? 'text-emerald-300' : 'text-amber-300'}>
+                                            {r.premio_gia_assegnato ? 'Assegnato' : 'Non assegnato'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-1 text-[11px] text-gray-300">
+                                        PC: {r.pc_evento} · Base evento: {Number(r.base_evento || 0).toLocaleString('it-IT')} CR ·
+                                        Bonus: {Number(r.bonus_totale || 0).toLocaleString('it-IT')} CR ·
+                                        Totale: {Number(r.totale_crediti || 0).toLocaleString('it-IT')} CR
+                                    </div>
+                                    {Array.isArray(r.righe_membership) && r.righe_membership.length > 0 ? (
+                                        <div className="mt-1 text-[10px] text-gray-400 space-y-0.5">
+                                            {r.righe_membership.map((m) => (
+                                                <div key={m.membership_id}>
+                                                    {m.carriera_nome}
+                                                    {m.carica_nome ? ` / ${m.carica_nome}` : ''}: +{Number(m.totale_riga || 0).toLocaleString('it-IT')} CR
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            )}
 
             {evento.sinossi ? (
                 <div className="text-gray-300 text-sm italic border-l-2 border-indigo-500 pl-4 bg-indigo-500/5 py-2 ql-editor-view">

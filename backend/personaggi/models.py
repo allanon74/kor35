@@ -1277,6 +1277,13 @@ class Carriera(Tier):
         blank=True,
         help_text="Tier di abilità acquistabili dai membri di questa carriera/KORP.",
     )
+    bonus_crediti_evento = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Bonus crediti evento",
+        help_text="Bonus crediti assegnato a ogni evento iniziato ai membri attivi di questa carriera/KORP.",
+    )
 
     class Meta:
         verbose_name = "Carriera"
@@ -1341,6 +1348,12 @@ class Carica(A_modello):
     carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="cariche")
     nome = models.CharField(max_length=120)
     bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    bonus_crediti_evento = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Bonus crediti evento assegnato ai membri con questa carica.",
+    )
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)
 
@@ -3397,7 +3410,9 @@ class Personaggio(Inventario):
 
     def ha_eventi_iniziati(self):
         now = timezone.now()
-        return self.eventi_partecipati.filter(data_inizio__lte=now).exists()
+        return self.eventi_partecipati.filter(
+            models.Q(started_at__isnull=False) | models.Q(data_inizio__lte=now)
+        ).exists()
 
     def can_edit_era_prefettura(self):
         return not self.ha_eventi_iniziati()

@@ -13,7 +13,9 @@ def get_event_context(now=None):
     - latest_event_start: l'ultima data di inizio Evento (max(data_inizio)) fino a now, oppure None
     """
     now = now or timezone.now()
-    event_in_corso = Evento.objects.filter(data_inizio__lte=now, data_fine__gte=now).exists()
+    event_in_corso = Evento.objects.filter(started_at__isnull=False, ended_at__isnull=True).exists()
+    if not event_in_corso:
+        event_in_corso = Evento.objects.filter(data_inizio__lte=now, data_fine__gte=now).exists()
     latest_event_start = (
         Evento.objects.filter(data_inizio__lte=now)
         .order_by("-data_inizio")

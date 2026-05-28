@@ -60,11 +60,14 @@ logger = logging.getLogger(__name__)
 
 def get_evento_in_corso(reference_dt=None):
     now = reference_dt or timezone.now()
-    return (
-        Evento.objects.filter(data_inizio__lte=now, data_fine__gte=now)
-        .order_by("data_inizio")
+    manuale = (
+        Evento.objects.filter(started_at__isnull=False, ended_at__isnull=True)
+        .order_by("started_at")
         .first()
     )
+    if manuale:
+        return manuale
+    return Evento.objects.filter(data_inizio__lte=now, data_fine__gte=now).order_by("data_inizio").first()
 
 
 class SocialPostPagination(PageNumberPagination):

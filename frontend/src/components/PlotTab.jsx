@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { 
     getEventi, associaQrAVista, getRisorseEditor, getAVistaDisponibili,
-    createEvento, updateEvento, deleteEvento,
+    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento,
     createGiorno, updateGiorno, deleteGiorno,
     createQuest, updateQuest, deleteQuest,
     addPngToQuest, addMostroToQuest, addVistaToQuest,
@@ -209,8 +209,8 @@ const PlotTab = ({ onLogout }) => {
                 });
                 const cost = parseFloat(String(raw.iscrizione_costo_euro ?? '0').replace(',', '.'));
                 raw.iscrizione_costo_euro = Number.isFinite(cost) ? cost : 0;
-                const credEv = parseFloat(String(raw.crediti_guadagnati ?? '0').replace(',', '.'));
-                raw.crediti_guadagnati = Number.isFinite(credEv) ? credEv : 0;
+                const credEvBase = parseFloat(String(raw.crediti_base_inizio_evento ?? '0').replace(',', '.'));
+                raw.crediti_base_inizio_evento = Number.isFinite(credEvBase) ? credEvBase : 0;
                 const pcEv = parseInt(String(raw.pc_guadagnati ?? '1'), 10);
                 raw.pc_guadagnati = Number.isFinite(pcEv) && pcEv >= 0 ? pcEv : 1;
                 raw.iscrizione_test_attiva = !!raw.iscrizione_test_attiva;
@@ -342,6 +342,20 @@ const PlotTab = ({ onLogout }) => {
     }, [onLogout, refreshData]);
 
     const handleAddGiorno = useCallback(() => startEdit('giorno'), [startEdit]);
+    const handleIniziaEvento = useCallback(async () => {
+        if (!selectedEvento?.id) return;
+        await iniziaEvento(selectedEvento.id, onLogout);
+        await refreshData();
+    }, [selectedEvento, onLogout, refreshData]);
+    const handleTerminaEvento = useCallback(async () => {
+        if (!selectedEvento?.id) return;
+        await terminaEvento(selectedEvento.id, onLogout);
+        await refreshData();
+    }, [selectedEvento, onLogout, refreshData]);
+    const handleReportRicompenseEvento = useCallback(async () => {
+        if (!selectedEvento?.id) return null;
+        return reportRicompenseEvento(selectedEvento.id, onLogout);
+    }, [selectedEvento, onLogout]);
     
     // Callback per GiornoSection (spostato fuori dal JSX)
     const handleAddQuest = useCallback((gid) => startEdit('quest', { giorno: gid }), [startEdit]);
@@ -577,7 +591,7 @@ const PlotTab = ({ onLogout }) => {
                         onClick={() =>
                             startEdit('evento', {
                                 pc_guadagnati: 1,
-                                crediti_guadagnati: 1000,
+                                crediti_base_inizio_evento: 0,
                                 iscrizione_costo_euro: 0,
                                 iscrizione_test_attiva: false,
                                 iscrizione_opzioni: [],
@@ -628,20 +642,20 @@ const PlotTab = ({ onLogout }) => {
                                         <p className="text-[10px] text-gray-500 mt-1">Accreditati una sola volta per PG iscritto al primo login durante i giorni d&apos;evento (default 1).</p>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Crediti premio presenza</label>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Crediti base inizio evento</label>
                                         <input
                                             type="number"
                                             min={0}
                                             step="0.01"
                                             className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
                                             value={
-                                                formData.crediti_guadagnati === undefined || formData.crediti_guadagnati === null
+                                                formData.crediti_base_inizio_evento === undefined || formData.crediti_base_inizio_evento === null
                                                     ? ''
-                                                    : formData.crediti_guadagnati
+                                                    : formData.crediti_base_inizio_evento
                                             }
-                                            onChange={(e) => setFormData({ ...formData, crediti_guadagnati: e.target.value })}
+                                            onChange={(e) => setFormData({ ...formData, crediti_base_inizio_evento: e.target.value })}
                                         />
-                                        <p className="text-[10px] text-gray-500 mt-1">Default 1000; stessa regola dei PC.</p>
+                                        <p className="text-[10px] text-gray-500 mt-1">Quota fissa assegnata all&apos;avvio; ai singoli PG si sommano bonus carriera/carica.</p>
                                     </div>
                                     <div className="md:col-span-2">
                                         <RichTextEditor label="Sinossi" value={formData.sinossi} onChange={val => setFormData({...formData, sinossi: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
@@ -1081,6 +1095,9 @@ const PlotTab = ({ onLogout }) => {
                                 onDelete={handleDeleteEvento}
                                 onUpdateEvento={handleUpdateEvento}
                                 onAddGiorno={handleAddGiorno}
+                                onIniziaEvento={handleIniziaEvento}
+                                onTerminaEvento={handleTerminaEvento}
+                                onReportRicompense={handleReportRicompenseEvento}
                             />
                         )}
                         <div className="p-4 space-y-16">

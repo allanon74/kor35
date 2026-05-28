@@ -77,6 +77,14 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
             per i membri; per inserire le singole abilità in un tier usa{' '}
             <strong>Database regole → Tabelle</strong>.
           </p>
+          <input
+            type="number"
+            step="0.01"
+            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+            placeholder="Bonus crediti evento (carriera/KORP)"
+            value={form.bonus_crediti_evento ?? 0}
+            onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
+          />
           <div>
             <div className="text-xs text-gray-400 mb-2">Tier abilità sbloccabili per i membri</div>
             <div className="max-h-40 overflow-y-auto border border-gray-700 rounded p-2 space-y-1">
@@ -143,6 +151,14 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
             placeholder="Bonus stipendio evento"
             value={form.bonus_stipendio_evento ?? 0}
             onChange={(e) => setForm({ ...form, bonus_stipendio_evento: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.01"
+            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+            placeholder="Bonus crediti evento (carica)"
+            value={form.bonus_crediti_evento ?? 0}
+            onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
           />
           <input
             type="number"
@@ -371,6 +387,7 @@ export default function CarriereKorpsManager({ onLogout }) {
       { header: 'Nome', render: (x) => <span className="font-bold">{x.nome}</span> },
       { header: 'Tipo', render: (x) => x.tipo_carriera_nome || x.tipo_carriera_codice || '—' },
       { header: 'Tier wiki', render: (x) => x.tipo || '—', align: 'center', width: 90 },
+      { header: 'Bonus CR', render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2), align: 'center', width: 100 },
       {
         header: 'Tier sblocco',
         render: (x) => (x.tiers_sblocco_dettaglio?.length ?? 0),
@@ -385,6 +402,7 @@ export default function CarriereKorpsManager({ onLogout }) {
     () => [
       { header: 'Carriera', render: (x) => x.carriera_nome || '—' },
       { header: 'Carica', render: (x) => <span className="font-bold">{x.nome}</span> },
+      { header: 'Bonus CR', render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2), align: 'center', width: 100 },
       { header: 'Ordine', render: (x) => x.ordine ?? 0, align: 'center', width: 80 },
       {
         header: 'Attiva',
@@ -419,6 +437,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         descrizione: form.descrizione || '',
         tipo: form.tipo || 'T3',
         tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
+        bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
         tiers_sblocco_ids: form.tiers_sblocco_ids || [],
       };
       if (form.id) await staffUpdateCarriera(form.id, payload, onLogout);
@@ -441,6 +460,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         carriera: form.carriera || form.carriera_id,
         nome: form.nome,
         bonus_stipendio_evento: form.bonus_stipendio_evento ?? 0,
+        bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
         ordine: form.ordine ?? 0,
         attiva: form.attiva !== false,
       };

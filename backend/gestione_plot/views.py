@@ -19,6 +19,7 @@ import re
 from pathlib import Path
 
 from django.db.models import Prefetch
+from django.db import transaction
 import logging
 from personaggi.models import (
     Abilita,
@@ -160,6 +161,57 @@ class EventoViewSet(viewsets.ModelViewSet):
         context["plot_staffer_limited"] = bool(is_staffer_only)
         context["plot_staff_user_id"] = self.request.user.id if is_staffer_only else None
         return context
+
+    @action(detail=True, methods=["post"])
+    def inizia(self, request, pk=None):
+        evento = self.get_object()
+        if evento.started_at and not evento.ended_at:
+            return Response({"detail": "Evento già in corso."}, status=status.HTTP_400_BAD_REQUEST)
+        now = timezone.now()
+        with transaction.atomic():
+            evento.started_at = now
+            evento.ended_at = None
+            evento.save(update_fields=["started_at", "ended_at", "updated_at"])
+            from .evento_premi import applica_premio_presenza_personaggio
+
+            premi_applicati = 0
+            for pg in evento.partecipanti.all():
+                if applica_premio_presenza_personaggio(evento, pg, when=now):
+                    premi_applicati += 1
+        return Response(
+            {
+                "ok": True,
+                "evento_id": evento.id,
+                "started_at": now,
+                "premi_applicati": premi_applicati,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"])
+    def termina(self, request, pk=None):
+        evento = self.get_object()
+        if not evento.started_at or evento.ended_at:
+            return Response({"detail": "Evento non in corso."}, status=status.HTTP_400_BAD_REQUEST)
+        now = timezone.now()
+        evento.ended_at = now
+        evento.save(update_fields=["ended_at", "updated_at"])
+        return Response(
+            {
+                "ok": True,
+                "evento_id": evento.id,
+                "ended_at": now,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"])
+    def report_ricompense(self, request, pk=None):
+        evento = self.get_object()
+        from .evento_premi import report_ricompense_evento
+
+        data = report_ricompense_evento(evento)
+        return Response(data, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['get'])
     def a_vista_disponibili(self, request):
