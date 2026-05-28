@@ -1,0 +1,61 @@
+---
+description: Comandi Docker completi per produzione KOR35 (server DO) — usare sempre questi, non abbreviazioni
+alwaysApply: true
+---
+
+# Operazioni Docker — produzione (DigitalOcean)
+
+## Path e nomi fissi
+
+- Monorepo sul server: **`/srv/kor35`**
+- Compose: **`/srv/kor35/config/docker`**
+- File: **`compose.base.yml`** + **`compose.prod.yml`**
+- Project name Compose: **`kor35-prod`** (`COMPOSE_PROJECT_NAME=kor35-prod`)
+- Env backend container: **`KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod`**
+- Container backend: **`kor35_prod_backend`**
+- Il deploy CI esegue già **`migrate --noinput`**; non assumere migrazioni mancanti senza verificarlo nei log.
+
+## Prefisso obbligatorio per `docker compose` su prod
+
+```bash
+cd /srv/kor35/config/docker
+export COMPOSE_PROJECT_NAME=kor35-prod
+export KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod
+docker compose -f compose.base.yml -f compose.prod.yml <subcomando>
+```
+
+## Equivalente via Makefile (dalla root repo)
+
+```bash
+cd /srv/kor35
+make logs ENV=prod
+make status ENV=prod
+make migrate ENV=prod
+```
+
+## Log: distinguere admin vs edge sync
+
+- **Edge sync** (Pi/mirror → master): `Edge sync failed`, `edge_sync.py`, `SottosistemaNave`, `duplicate key ... codice_key` — non è il salvataggio QR in admin.
+- **Admin Django**: cercare traceback con `/admin/personaggi/qrcode/` subito dopo aver riprodotto il 500.
+
+Dopo aver riprodotto l'errore admin, leggere subito:
+
+```bash
+docker logs kor35_prod_backend --tail=300 2>&1
+docker logs kor35_prod_backend --tail=400 2>&1 | grep -A 30 -E 'qrcode|Traceback|admin/personaggi'
+```
+
+oppure con compose (stesso effetto, filtri `--since`):
+
+```bash
+cd /srv/kor35/config/docker
+COMPOSE_PROJECT_NAME=kor35-prod \
+KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+docker compose -f compose.base.yml -f compose.prod.yml logs backend --tail=300 --no-log-prefix
+```
+
+## Dev locale (WSL)
+
+- Path: `/home/django/progetti/kor35`
+- Profilo: `dev-home` → `backend/.env.dev-home`, project Docker spesso `docker` (non `kor35-prod`)
+- Comandi: `cd /home/django/progetti/kor35 && make logs ENV=dev-home` oppure compose con `compose.dev-home.yml`

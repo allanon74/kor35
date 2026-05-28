@@ -517,7 +517,7 @@ class Command(BaseCommand):
         return None
 
     def _iter_unique_field_groups(self, model):
-        """Tuple di nomi campo per vincoli UNIQUE (legacy + UniqueConstraint)."""
+        """Tuple di nomi campo per vincoli UNIQUE (legacy + UniqueConstraint + unique scalari)."""
         seen = set()
         for ut in model._meta.unique_together or ():
             group = tuple(ut) if not isinstance(ut, str) else (ut,)
@@ -530,6 +530,17 @@ class Command(BaseCommand):
                 if group not in seen:
                     seen.add(group)
                     yield group
+        for field in model._meta.concrete_fields:
+            if field.name in ("id", "sync_id"):
+                continue
+            if not getattr(field, "unique", False):
+                continue
+            if isinstance(field, ForeignKey):
+                continue
+            group = (field.name,)
+            if group not in seen:
+                seen.add(group)
+                yield group
 
     def _merge_after_integrity_error(self, model, sync_id, row, update_data, remote_updated_at):
         """

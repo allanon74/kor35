@@ -411,6 +411,8 @@ class EdgeSyncView(APIView):
             )
             if merged:
                 obj = model.objects.filter(sync_id=sync_id).first()
+                if obj is None:
+                    obj = self._find_existing_after_merge(model, row, update_data)
                 if not obj:
                     raise
             else:
@@ -420,6 +422,8 @@ class EdgeSyncView(APIView):
                 model, sync_id, update_data, remote_updated_at
             ):
                 obj = model.objects.filter(sync_id=sync_id).first()
+                if obj is None:
+                    obj = self._find_existing_after_merge(model, row, update_data)
                 if not obj:
                     raise
             else:
@@ -445,6 +449,49 @@ class EdgeSyncView(APIView):
                 if group not in seen:
                     seen.add(group)
                     yield group
+        for field in model._meta.concrete_fields:
+            if field.name in ("id", "sync_id"):
+                continue
+            if not getattr(field, "unique", False):
+                continue
+            if isinstance(field, ForeignKey):
+                continue
+            group = (field.name,)
+            if group not in seen:
+                seen.add(group)
+                yield group
+
+    def _find_existing_after_merge(self, model, row, update_data):
+        """
+        Dopo merge per chiave naturale, il sync_id remoto può non essere stato
+        allineato: recupera la riga locale equivalente (es. pilotaggio codice 'A').
+        """
+        for group in self._iter_unique_field_groups(model):
+            kwargs = {}
+            for fname in group:
+                if fname in update_data:
+                    kwargs[fname] = update_data[fname]
+                else:
+                    break
+            else:
+                obj = model.objects.filter(**kwargs).first()
+                if obj is not None:
+                    return obj
+
+        for field in model._meta.concrete_fields:
+            if field.name in ("id", "sync_id"):
+                continue
+            if not getattr(field, "unique", False):
+                continue
+            if isinstance(field, ForeignKey):
+                continue
+            val = row.get(field.name)
+            if val in (None, ""):
+                continue
+            obj = model.objects.filter(**{field.name: val}).first()
+            if obj is not None:
+                return obj
+        return None
 
     def _merge_by_unique_together_key(self, model, sync_id, update_data, remote_updated_at):
         if model._meta.label_lower == "social.socialprofile":
