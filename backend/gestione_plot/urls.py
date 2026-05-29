@@ -24,7 +24,8 @@ from .views import(
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
     MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
-    PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail, 
+    PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail,
+    ManualePdfViewSet, PublicManualePdfViewSet,
     get_wiki_menu, get_wiki_page, get_wiki_tier_display, get_wiki_tier_collection_display, get_wiki_mattoni_display, get_wiki_image_display, get_wiki_buttons_display, get_wiki_era_display, public_wiki_punteggi, serve_wiki_image, PublicWikiImmagineViewSet, StaffWikiImmagineViewSet,
     PublicWikiTierWidgetViewSet, StaffWikiTierWidgetViewSet,
     PublicWikiTierCollectionWidgetViewSet, StaffWikiTierCollectionWidgetViewSet,
@@ -34,6 +35,7 @@ from .views import(
     AdminMaintenanceConfigView,
     StaffDashboardLayoutView,
     download_wiki_manual_pdf, generate_wiki_manual_snapshot, download_latest_wiki_manual_pdf,
+    download_latest_manuale_pdf, list_public_wiki_manuali,
                    )
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
@@ -62,6 +64,12 @@ router.register(r'staff/pagine-regolamento',
 router.register(r'staff/pagine-regolamento-small', 
                 PaginaRegolamentoSmallViewSet, 
                 basename='pagine-regolamento-small')
+router.register(r'staff/manuali-pdf',
+                ManualePdfViewSet,
+                basename='staff-manuali-pdf')
+router.register(r'public/wiki-manuali',
+                PublicManualePdfViewSet,
+                basename='public-wiki-manuali')
 router.register(r'staff/wiki-immagini', 
                 StaffWikiImmagineViewSet, 
                 basename='staff-wiki-immagini')
@@ -123,6 +131,8 @@ urlpatterns = [
     path('api/wiki/manuale.pdf', download_wiki_manual_pdf, name='wiki_manual_pdf'),
     path('api/wiki/manuale/genera/', generate_wiki_manual_snapshot, name='wiki_manual_generate'),
     path('api/wiki/manuale/latest.pdf', download_latest_wiki_manual_pdf, name='wiki_manual_latest_pdf'),
+    path('api/wiki/manuali/', list_public_wiki_manuali, name='wiki_manuali_list'),
+    path('api/wiki/manuali/<slug:slug>/latest.pdf', download_latest_manuale_pdf, name='wiki_manuale_latest_pdf'),
     path('api/wiki/image/<slug:slug>/', serve_wiki_image, name='wiki_image'),
     path('api/wiki/tier-display/<str:key>/', get_wiki_tier_display, name='wiki_tier_display'),
     path('api/wiki/tier-collection-display/<str:key>/', get_wiki_tier_collection_display, name='wiki_tier_collection_display'),

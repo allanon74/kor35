@@ -21,6 +21,7 @@ import {
   Settings,
   Users,
   Trophy,
+  FileText,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -60,6 +61,7 @@ export const STAFF_TOOL_ICON_MAP = {
   Settings,
   Users,
   Trophy,
+  FileText,
 };
 
 /**
@@ -96,6 +98,7 @@ export const STAFF_TOOLS_REGISTRY = {
   maintenance: { id: 'maintenance', label: 'Maintenance mode', icon: Shield, color: 'bg-amber-700', componentKey: 'maintenance' },
   messaggi: { id: 'messaggi', label: 'Messaggi staff', icon: MessageSquare, color: 'bg-emerald-600', componentKey: 'messaggi' },
   scommesse: { id: 'scommesse', label: 'Scommesse', icon: Trophy, color: 'bg-amber-600', componentKey: 'scommesse' },
+  'manuali-pdf': { id: 'manuali-pdf', label: 'Manuali PDF', icon: FileText, color: 'bg-rose-800', componentKey: 'manuali-pdf' },
 };
 
 export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
@@ -131,7 +134,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'teal',
       order: 2,
       collapsed_default: true,
-      tool_ids: ['creazione-guidata', 'inventari', 'proposte', 'immagini', 'risorse-pool'],
+      tool_ids: ['creazione-guidata', 'inventari', 'proposte', 'immagini', 'manuali-pdf', 'risorse-pool'],
     },
     {
       id: 'comunicazione',

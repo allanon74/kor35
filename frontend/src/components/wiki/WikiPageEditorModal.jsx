@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getWikiTierList, getWikiImageList, getWidgetButtonsList, getWikiTierWidgetList, getWikiTierCollectionWidgetList, getWikiMattoniWidgetList, createWikiImage, updateWikiImage, createWidgetButtons, updateWidgetButtons, createWikiTierWidget, updateWikiTierWidget, createWikiTierCollectionWidget, updateWikiTierCollectionWidget, createWikiMattoniWidget, updateWikiMattoniWidget, createWikiPage, updateWikiPage, getWikiImageUrl, getEre } from '../../api';
+import { getWikiTierList, getWikiImageList, getWidgetButtonsList, getWikiTierWidgetList, getWikiTierCollectionWidgetList, getWikiMattoniWidgetList, createWikiImage, updateWikiImage, createWidgetButtons, updateWidgetButtons, createWikiTierWidget, updateWikiTierWidget, createWikiTierCollectionWidget, updateWikiTierCollectionWidget, createWikiMattoniWidget, updateWikiMattoniWidget, createWikiPage, updateWikiPage, getWikiImageUrl, getEre, getStaffManualePdfList } from '../../api';
 import RichTextEditor from '../RichTextEditor';
-import { Lock, Eye, X, Edit } from 'lucide-react';
+import { Lock, Eye, X, Edit, FileText } from 'lucide-react';
 import ButtonWidgetEditorModal from './ButtonWidgetEditorModal';
 import TierWidgetEditorModal from './TierWidgetEditorModal'; 
 import TierCollectionWidgetEditorModal from './TierCollectionWidgetEditorModal';
@@ -19,9 +19,20 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
     contenuto: '',
     public: false,
     visibile_solo_staff: false,
+    includi_in_pdf: false,
+    pdf_solo_indice: false,
+    pdf_forza_nuova_pagina: false,
+    pdf_titolo_capitolo: '',
     ordine: 0,
     banner_y: 50, // Default centro verticale (0-100)
     ...initialData
+  });
+
+  const [availableManualiPdf, setAvailableManualiPdf] = useState([]);
+  const [selectedManualiIds, setSelectedManualiIds] = useState(() => {
+    const raw = initialData?.manuali_pdf;
+    if (!Array.isArray(raw)) return [];
+    return raw.map((m) => (typeof m === 'object' && m != null ? m.id : m)).filter(Boolean);
   });
   
   // Gestione file immagine
@@ -86,6 +97,12 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
 
 
   const usedWidgetIds = getUsedWidgetIds(formData.contenuto);
+
+  useEffect(() => {
+    getStaffManualePdfList()
+      .then((data) => setAvailableManualiPdf(Array.isArray(data) ? data : []))
+      .catch((err) => console.error('Err loading manuali PDF', err));
+  }, []);
 
   useEffect(() => {
     if (showWidgetHelper) {
@@ -192,8 +209,19 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
         data.append('contenuto', formData.contenuto || ''); 
         data.append('public', formData.public);
         data.append('visibile_solo_staff', formData.visibile_solo_staff);
+        data.append('includi_in_pdf', formData.includi_in_pdf ? 'true' : 'false');
+        data.append('pdf_solo_indice', formData.pdf_solo_indice ? 'true' : 'false');
+        data.append('pdf_forza_nuova_pagina', formData.pdf_forza_nuova_pagina ? 'true' : 'false');
+        if (formData.pdf_titolo_capitolo) {
+            data.append('pdf_titolo_capitolo', formData.pdf_titolo_capitolo);
+        }
         data.append('ordine', formData.ordine);
         data.append('banner_y', formData.banner_y);
+        if (formData.includi_in_pdf) {
+            selectedManualiIds.forEach((id) => data.append('manuali_pdf', String(id)));
+        } else {
+            data.append('manuali_pdf', '');
+        }
 
         if (formData.slug) data.append('slug', formData.slug);
         if (formData.parent) data.append('parent', formData.parent);
@@ -311,6 +339,75 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
                             <Lock size={16} /> Visibile solo allo Staff
                         </label>
                     </div>
+                </div>
+
+                <div className="space-y-3 border rounded-lg p-3 bg-rose-50/80 border-rose-200">
+                    <label className="block text-xs font-bold text-rose-900 flex items-center gap-2">
+                        <FileText size={14} /> Pubblicazione PDF
+                    </label>
+                    <div className="flex items-center gap-3 p-2 rounded border bg-white border-rose-200">
+                        <input
+                            type="checkbox"
+                            id="includi_in_pdf"
+                            className="w-4 h-4 text-rose-700 rounded"
+                            checked={!!formData.includi_in_pdf}
+                            onChange={(e) => setFormData({ ...formData, includi_in_pdf: e.target.checked })}
+                        />
+                        <label htmlFor="includi_in_pdf" className="text-sm font-bold text-gray-800 cursor-pointer">
+                            Includi nei manuali PDF
+                        </label>
+                    </div>
+                    {formData.includi_in_pdf && (
+                        <>
+                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                {availableManualiPdf.length === 0 ? (
+                                    <p className="text-xs text-gray-500">Nessun manuale configurato (scheda staff Manuali PDF).</p>
+                                ) : (
+                                    availableManualiPdf.map((m) => (
+                                        <label key={m.id} className="flex items-center gap-2 text-sm p-1.5 rounded hover:bg-white cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedManualiIds.includes(m.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setSelectedManualiIds((prev) => [...prev, m.id]);
+                                                    } else {
+                                                        setSelectedManualiIds((prev) => prev.filter((x) => x !== m.id));
+                                                    }
+                                                }}
+                                            />
+                                            <span className="font-medium">{m.titolo}</span>
+                                            <span className="text-xs text-gray-400">({m.slug})</span>
+                                        </label>
+                                    ))
+                                )}
+                            </div>
+                            <label className="block text-xs font-bold text-gray-600">Titolo capitolo PDF (opzionale)</label>
+                            <input
+                                type="text"
+                                className="w-full border border-gray-300 p-2 rounded text-sm"
+                                value={formData.pdf_titolo_capitolo || ''}
+                                onChange={(e) => setFormData({ ...formData, pdf_titolo_capitolo: e.target.value })}
+                                placeholder="Uguale al titolo pagina se vuoto"
+                            />
+                            <label className="flex items-center gap-2 text-xs">
+                                <input
+                                    type="checkbox"
+                                    checked={!!formData.pdf_solo_indice}
+                                    onChange={(e) => setFormData({ ...formData, pdf_solo_indice: e.target.checked })}
+                                />
+                                Solo voce in indice (senza corpo)
+                            </label>
+                            <label className="flex items-center gap-2 text-xs">
+                                <input
+                                    type="checkbox"
+                                    checked={!!formData.pdf_forza_nuova_pagina}
+                                    onChange={(e) => setFormData({ ...formData, pdf_forza_nuova_pagina: e.target.checked })}
+                                />
+                                Forza nuova pagina all&apos;inizio del capitolo
+                            </label>
+                        </>
+                    )}
                 </div>
 
                 <WikiWidgetHelperPanel

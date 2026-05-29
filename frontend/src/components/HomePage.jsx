@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, LogIn, Scroll, BookOpen, Download } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
-import { getMediaUrl, getWikiManualLatestPdfUrl } from '../api';
+import { getMediaUrl, getPublicWikiManualeList, getWikiManualeLatestPdfUrl } from '../api';
 import WidgetChiSiamo from './wg/WidgetChiSiamo';
 import WidgetEventi from './wg/WidgetEventi';
 import WidgetSocial from './wg/WidgetSocial';
@@ -14,7 +14,20 @@ import WidgetSocial from './wg/WidgetSocial';
 export default function HomePage({ pageData, siteConfig }) {
   const navigate = useNavigate();
   const { character, isAdmin } = useCharacter();
+  const [wikiManuale, setWikiManuale] = useState([]);
   const isLogged = !!character;
+
+  useEffect(() => {
+    let cancelled = false;
+    getPublicWikiManualeList()
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) {
+          setWikiManuale(data.filter((m) => m.ultimo_generato_at && m.download_url));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   const isMaintenanceMode = !!siteConfig?.maintenance_mode;
   const maintenanceMessage = String(siteConfig?.maintenance_public_message || '').trim();
 
@@ -176,29 +189,36 @@ export default function HomePage({ pageData, siteConfig }) {
           </Link>
         </div>
 
-        <a
-          href={getWikiManualLatestPdfUrl()}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group relative block w-full overflow-hidden bg-gradient-to-r from-red-800 to-rose-900 text-white rounded-xl p-6 md:p-7 shadow-lg hover:shadow-2xl transition-all mb-8"
-          title="Scarica l'ultimo manuale PDF generato dallo Staff"
-        >
-          <div className="relative z-10 flex items-center gap-4 md:gap-5">
-            <div className="bg-white/25 p-3 md:p-4 rounded-lg shrink-0">
-              <Download size={30} />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-2xl md:text-3xl font-black leading-tight">Scarica Manuale PDF Completo</h3>
-              <p className="text-sm md:text-base text-white/80 mt-1">
-                Ultima versione generata dallo staff, pronta per consultazione e stampa.
-              </p>
-            </div>
-            <div className="ml-auto text-sm md:text-base font-bold text-white/80 group-hover:text-white transition-colors">
-              Download →
+        {wikiManuale.length > 0 && (
+          <div className="mb-8 space-y-3">
+            <h3 className="text-sm font-black uppercase tracking-widest text-gray-500">Manuali PDF</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              {wikiManuale.map((m) => (
+                <a
+                  key={m.slug}
+                  href={getWikiManualeLatestPdfUrl(m.slug)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group relative overflow-hidden bg-gradient-to-r from-red-800 to-rose-900 text-white rounded-xl p-5 shadow-lg hover:shadow-2xl transition-all"
+                  title={`Scarica ${m.titolo}`}
+                >
+                  <div className="relative z-10 flex items-center gap-4">
+                    <div className="bg-white/25 p-2.5 rounded-lg shrink-0">
+                      <Download size={24} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-lg font-black leading-tight">{m.titolo}</h4>
+                      {m.sottotitolo && (
+                        <p className="text-sm text-white/80 mt-0.5 line-clamp-2">{m.sottotitolo}</p>
+                      )}
+                    </div>
+                    <span className="ml-auto text-xs font-bold text-white/70 group-hover:text-white">PDF →</span>
+                  </div>
+                </a>
+              ))}
             </div>
           </div>
-          <div className="absolute top-0 right-0 w-44 h-44 bg-rose-200 opacity-15 rounded-full -mr-20 -mt-20 group-hover:scale-125 transition-transform"></div>
-        </a>
+        )}
 
         {/* SEZIONE WIDGET: CHI SIAMO ED EVENTI */}
         <div className="grid md:grid-cols-2 gap-6 mb-6">

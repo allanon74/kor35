@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, memo, lazy, Suspense, useEffect } from 'react';
 import GenericHeader from './GenericHeader';
 import Sidebar from './Sidebar';
-import { socialGetNotifications, generateWikiManualPdfSnapshot, getWikiManualLatestPdfUrl, getStaffDashboardLayout } from '../api';
+import { socialGetNotifications, getStaffDashboardLayout } from '../api';
 import StaffDashboardLayoutEditor from './StaffDashboardLayoutEditor';
 import { useCharacter } from './CharacterContext';
 import {
@@ -48,6 +48,7 @@ const InnescoTimerManager = lazy(() => import('./editors/InnescoTimerManager'));
 const PilotaggioManager = lazy(() => import('./editors/PilotaggioManager'));
 const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuidataStaffManager'));
 const ScommesseManager = lazy(() => import('./editors/ScommesseManager'));
+const ManualePdfManager = lazy(() => import('./editors/ManualePdfManager'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -79,6 +80,7 @@ const STAFF_COMPONENT_MAP = {
     maintenance: MaintenanceModePanel,
     messaggi: AdminMessageTab,
     scommesse: ScommesseManager,
+    'manuali-pdf': ManualePdfManager,
 };
 
 const DIRECT_LOAD_TOOLS = new Set(['plot', 'qr-debug']);
@@ -93,8 +95,6 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     const [activeTool, setActiveTool] = useState(initialTool);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [socialUnreadCount, setSocialUnreadCount] = useState(0);
-    const [pdfGenerating, setPdfGenerating] = useState(false);
-    const [pdfGenMessage, setPdfGenMessage] = useState('');
     const [dashboardLayout, setDashboardLayout] = useState(DEFAULT_STAFF_DASHBOARD_LAYOUT);
     const [expandedGroups, setExpandedGroups] = useState({});
     const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
@@ -289,20 +289,6 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         );
     }, [expandedGroups]);
 
-    const handleGenerateWikiPdf = useCallback(async () => {
-        setPdfGenerating(true);
-        setPdfGenMessage('');
-        try {
-            await generateWikiManualPdfSnapshot(onLogout);
-            setPdfGenMessage('Manuale PDF generato con successo.');
-        } catch (e) {
-            console.error('Errore generazione manuale PDF:', e);
-            setPdfGenMessage('Errore durante la generazione del manuale PDF.');
-        } finally {
-            setPdfGenerating(false);
-        }
-    }, [onLogout]);
-
     const activeToolMeta = visibleTools.find((t) => t.id === activeTool);
 
     return (
@@ -378,31 +364,6 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
                                     </button>
                                 )}
                             </div>
-                            <div className="mb-6 p-4 rounded-xl border border-indigo-500/30 bg-gray-900/70">
-                                <h3 className="text-sm font-black uppercase tracking-wider text-indigo-300 mb-3">Manuale Wiki PDF</h3>
-                                <div className="flex flex-col md:flex-row md:items-center gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={handleGenerateWikiPdf}
-                                        disabled={pdfGenerating}
-                                        className={`px-4 py-2 rounded-lg font-bold text-sm transition-colors ${pdfGenerating ? 'bg-gray-700 text-gray-300 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
-                                    >
-                                        {pdfGenerating ? 'Generazione in corso...' : 'Genera Ultimo Manuale PDF'}
-                                    </button>
-                                    <a
-                                        href={getWikiManualLatestPdfUrl()}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="px-4 py-2 rounded-lg font-bold text-sm border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10 transition-colors text-center"
-                                    >
-                                        Scarica Ultimo PDF
-                                    </a>
-                                </div>
-                                {pdfGenMessage && (
-                                    <p className="mt-2 text-xs text-gray-300">{pdfGenMessage}</p>
-                                )}
-                            </div>
-
                             {menuStructure.pinned.length > 0 && (
                                 <section className="mb-8">
                                     <h3 className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-3">Accesso rapido</h3>

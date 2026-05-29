@@ -420,11 +420,78 @@ class PaginaRegolamento(SyncableModel, models.Model):
         help_text="Se attivo, la pagina sarà visibile solo a Staff e Superuser, anche se Pubblica è True."
     )
 
+    includi_in_pdf = models.BooleanField(
+        default=False,
+        verbose_name="Includi nei manuali PDF",
+        help_text="Se attivo, la pagina può comparire nei manuali PDF selezionati (solo contenuto pubblico).",
+    )
+    manuali_pdf = models.ManyToManyField(
+        'ManualePdf',
+        blank=True,
+        related_name='pagine',
+        verbose_name="Manuali PDF",
+    )
+    pdf_solo_indice = models.BooleanField(
+        default=False,
+        verbose_name="PDF: solo voce indice",
+        help_text="Compare nell'indice ma senza corpo capitolo (utile per hub di navigazione).",
+    )
+    pdf_forza_nuova_pagina = models.BooleanField(
+        default=False,
+        verbose_name="PDF: forza nuova pagina",
+        help_text="Inizia sempre su una pagina nuova nel PDF.",
+    )
+    pdf_titolo_capitolo = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="PDF: titolo capitolo",
+        help_text="Titolo alternativo nel manuale; vuoto = titolo pagina.",
+    )
+
     class Meta:
         ordering = ['ordine', 'titolo']
 
     def __str__(self):
         return f"{self.titolo} ({self.parent.titolo if self.parent else 'Root'})"
+
+
+class ManualePdf(SyncableModel, models.Model):
+    """Manuale PDF generato dalla wiki (uno o più volumi di regolamento)."""
+
+    slug = models.SlugField(max_length=80, unique=True)
+    titolo = models.CharField(max_length=200)
+    sottotitolo = models.CharField(max_length=300, blank=True)
+    ordine = models.PositiveIntegerField(default=0)
+    attivo = models.BooleanField(
+        default=True,
+        help_text="Se disattivo, non compare nella homepage pubblica.",
+    )
+    copertina = models.ImageField(
+        upload_to='wiki_manual_covers/',
+        null=True,
+        blank=True,
+    )
+    ultimo_generato_at = models.DateTimeField(null=True, blank=True)
+    stile_preset = models.CharField(
+        max_length=40,
+        default="giocatore",
+        verbose_name="Preset stile PDF",
+        help_text="Preset di impaginazione; con «personalizzato» contano gli override in stile.",
+    )
+    stile = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Override stile PDF",
+        help_text="Override JSON sul preset (font, margini, immagini, widget, indice, ecc.).",
+    )
+
+    class Meta:
+        ordering = ['ordine', 'titolo']
+        verbose_name = "Manuale PDF wiki"
+        verbose_name_plural = "Manuali PDF wiki"
+
+    def __str__(self):
+        return self.titolo
 
 
 class CreazioneGuidataFlusso(SyncableModel, models.Model):

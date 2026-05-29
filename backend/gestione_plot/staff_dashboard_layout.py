@@ -41,6 +41,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "maintenance",
     "messaggi",
     "scommesse",
+    "manuali-pdf",
 })
 
 DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
@@ -97,6 +98,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
                 "inventari",
                 "proposte",
                 "immagini",
+                "manuali-pdf",
                 "risorse-pool",
             ],
         },

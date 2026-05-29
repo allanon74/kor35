@@ -2,20 +2,20 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8" />
-    <title>KOR35 - Manuale Wiki</title>
+    <title>KOR35 - {{ manuale.titolo|default:"Manuale Wiki" }}</title>
     <style>
         @page {
-            size: A4;
-            margin: 18mm 16mm 18mm 16mm;
+            size: {{ pdf_style.formato|default:"A4" }};
+            margin: {{ pdf_style.margin_top_mm }}mm {{ pdf_style.margin_right_mm }}mm {{ pdf_style.margin_bottom_mm }}mm {{ pdf_style.margin_left_mm }}mm;
             @top-left {
-                content: "KOR35 - Manuale Wiki";
+                content: "KOR35 - {{ manuale.titolo|default:'Manuale' }}";
                 font-size: 8.5pt;
-                color: #6b6b6b;
+                color: {{ pdf_style.accent_muted }};
             }
             @top-right {
                 content: "Edizione PDF";
                 font-size: 8.5pt;
-                color: #6b6b6b;
+                color: {{ pdf_style.accent_muted }};
             }
             @bottom-center {
                 content: "Pagina " counter(page) " / " counter(pages);
@@ -25,10 +25,10 @@
         }
 
         body {
-            font-family: "DejaVu Serif", Georgia, serif;
+            font-family: {{ pdf_style.font_stack }};
             color: #1d1d1d;
-            font-size: 10.8pt;
-            line-height: 1.5;
+            font-size: {{ pdf_style.font_size_pt }}pt;
+            line-height: {{ pdf_style.line_height }};
             hyphens: none;
             text-align: left;
         }
@@ -44,7 +44,7 @@
             padding: 0;
             border: 1px solid #ececec;
             position: relative;
-            min-height: 240mm;
+            min-height: 175mm;
             overflow: hidden;
         }
 
@@ -78,7 +78,7 @@
             font-size: 40pt;
             letter-spacing: 1.5px;
             margin: 0 0 6pt;
-            color: #5a1010;
+            color: {{ pdf_style.accent_color }};
         }
 
         .cover h2 {
@@ -109,7 +109,7 @@
 
         .quickstart h2 {
             font-size: 19pt;
-            color: #5a1010;
+            color: {{ pdf_style.accent_color }};
             margin: 0 0 10pt;
             border-bottom: 1px solid #ded7d3;
             padding-bottom: 6pt;
@@ -143,7 +143,7 @@
         .toc h2 {
             font-size: 22pt;
             margin: 0 0 16pt;
-            color: #5a1010;
+            color: {{ pdf_style.accent_color }};
             border-bottom: 1px solid #d5d5d5;
             padding-bottom: 8pt;
         }
@@ -160,6 +160,11 @@
             padding: 5pt 0;
             page-break-inside: avoid;
         }
+
+        .toc-item.toc-depth-1 { padding-left: 14pt; }
+        .toc-item.toc-depth-2 { padding-left: 28pt; }
+        .toc-item.toc-depth-3 { padding-left: 42pt; }
+        .toc-item.toc-depth-4 { padding-left: 56pt; }
 
         .toc-link {
             display: block;
@@ -180,7 +185,7 @@
         }
 
         .wiki-page { page-break-before: auto; }
-        .wiki-page + .wiki-page { page-break-before: always; }
+        .wiki-page.wiki-page--new { page-break-before: always; }
 
         .chapter-head {
             border-bottom: 1px solid #d5d5d5;
@@ -199,7 +204,7 @@
 
         .chapter-title {
             font-size: 24pt;
-            color: #5a1010;
+            color: {{ pdf_style.accent_color }};
             margin: 0;
             line-height: 1.2;
         }
@@ -216,8 +221,8 @@
         }
 
         .wiki-content img {
-            max-width: 78%;
-            max-height: 145mm;
+            max-width: {% if pdf_style.images_small %}55%{% else %}78%{% endif %};
+            max-height: {% if pdf_style.images_small %}90mm{% else %}145mm{% endif %};
             height: auto;
             display: block;
             margin: 8pt auto 10pt;
@@ -308,10 +313,20 @@
         .pdf-widget ul, .pdf-widget ol { padding-left: 16pt; margin: 5pt 0; }
         .pdf-tier-collection-grid > .pdf-widget-tier { margin: 8pt 0; }
 
+        .pdf-widget-list {
+            margin: 6pt 0;
+            padding-left: 16pt;
+            font-size: 9.5pt;
+        }
+
+        .pdf-widget-table-compact {
+            font-size: 9.5pt;
+        }
+
         .pdf-widget-title {
             margin: 0 0 6pt;
             font-size: 12.5pt;
-            color: #5a1010;
+            color: {{ pdf_style.accent_color }};
             page-break-after: avoid;
             break-after: avoid;
         }
@@ -403,14 +418,14 @@
 
         .colophon {
             page-break-before: always;
-            border-top: 2px solid #5a1010;
+            border-top: 2px solid {{ pdf_style.accent_color }};
             padding-top: 14pt;
         }
 
         .colophon h2 {
             margin: 0 0 10pt;
             font-size: 18pt;
-            color: #5a1010;
+            color: {{ pdf_style.accent_color }};
         }
 
         .colophon p {
@@ -438,9 +453,13 @@
             border: 1px solid #e6e6e6;
             padding: 8pt 10pt;
         }
+        body.pdf-no-images .wiki-content img,
+        body.pdf-no-images .pdf-widget-image {
+            display: none !important;
+        }
     </style>
 </head>
-<body>
+<body class="pdf-manuale-body{% if pdf_style.hide_images %} pdf-no-images{% endif %}">
     <section class="cover">
         <div class="cover-bg"></div>
         {% if cover_image_url %}
@@ -449,64 +468,61 @@
         <div class="cover-overlay"></div>
         <div class="cover-content">
             <h1>KOR35</h1>
-            <h2>Manuale Wiki Ufficiale</h2>
-            <p class="subtitle">Versione impaginata per consultazione e stampa</p>
+            <h2>{{ manuale.titolo|default:"Manuale Wiki" }}</h2>
+            {% if manuale.sottotitolo %}
+            <p class="subtitle">{{ manuale.sottotitolo }}</p>
+            {% else %}
+            <p class="subtitle">Edizione impaginata per consultazione e stampa</p>
+            {% endif %}
             <p class="meta">
-                Generato da {{ generated_from_host }} il {{ generated_at|date:"d/m/Y H:i" }}
+                Generato il {{ generated_at|date:"d/m/Y H:i" }} — {{ total_pages_count }} capitoli
             </p>
         </div>
     </section>
 
-    <section class="quickstart">
-        <h2>Uso Rapido del Manuale</h2>
-        <p>Questo PDF raccoglie l'intera wiki pubblicata/visibile al ruolo corrente in un formato unico da consultare anche offline.</p>
-        <ul>
-            <li><strong>Struttura:</strong> ogni pagina wiki diventa un capitolo numerato.</li>
-            <li><strong>Indice:</strong> usa l'indice per raggiungere velocemente il capitolo desiderato.</li>
-            <li><strong>Stampa:</strong> il layout e' ottimizzato per formato A4 fronte/retro.</li>
-            <li><strong>Aggiornamenti:</strong> rigenera il PDF dopo modifiche della wiki per avere il manuale aggiornato.</li>
-        </ul>
-        <div class="tip-box">
-            <strong>Nota:</strong> questa edizione contiene {{ total_pages_count }} capitoli ed e' pensata per uso operativo durante eventi e preparazione staff.
-        </div>
-    </section>
-
+    {% if pdf_style.indice %}
     <section class="toc">
         <h2>Indice</h2>
         <ul class="toc-list">
-            {% for page in pages %}
-                <li class="toc-item">
-                    <a class="toc-link" href="#{{ page.slug }}">
-                        <span class="toc-title">{{ forloop.counter }}. {{ page.titolo }}</span>
+            {% for entry in toc_entries %}
+                <li class="toc-item toc-depth-{{ entry.depth }}">
+                    <a class="toc-link" href="#{{ entry.slug }}">
+                        <span class="toc-title">
+                            {% if entry.chapter_num %}{{ entry.chapter_num }}. {% endif %}{{ entry.titolo }}{% if entry.solo_indice %} (indice){% endif %}
+                        </span>
                     </a>
                 </li>
             {% endfor %}
         </ul>
     </section>
+    {% endif %}
 
     {% for page in rendered_pages %}
-        <section id="{{ page.slug }}" class="wiki-page">
+        {% if not page.solo_indice %}
+        <section id="{{ page.slug }}" class="wiki-page{% if page.forza_nuova_pagina %} wiki-page--new{% endif %}">
             <header class="chapter-head">
-                <p class="chapter-kicker">Capitolo {{ forloop.counter }}</p>
+                <p class="chapter-kicker">Capitolo {{ page.chapter_num }}</p>
                 <h1 class="chapter-title">{{ page.titolo }}</h1>
             </header>
-            <div class="wiki-meta">Slug: {{ page.slug }}</div>
             <div class="wiki-content">{{ page.rendered_content|safe }}</div>
         </section>
+        {% endif %}
     {% endfor %}
 
+    {% if pdf_style.show_colophon %}
     <section class="colophon">
-        <h2>Colophon e Changelog</h2>
-        <p>Questa edizione PDF e' stata generata automaticamente dalla wiki di gioco KOR35.</p>
+        <h2>Colophon</h2>
+        <p>Edizione «{{ manuale.titolo|default:"Manuale" }}» — preset {{ manuale.stile_preset|default:"giocatore" }}.</p>
         <ul class="meta-list">
-            <li><strong>Data/Ora generazione:</strong> {{ generated_at|date:"d/m/Y H:i:s" }}</li>
-            <li><strong>Host sorgente:</strong> {{ generated_from_host }}</li>
-            <li><strong>Capitoli inclusi:</strong> {{ total_pages_count }}</li>
-            <li><strong>Formato:</strong> A4 ottimizzato per stampa e consultazione offline</li>
+            <li><strong>Generato:</strong> {{ generated_at|date:"d/m/Y H:i:s" }}</li>
+            <li><strong>Capitoli:</strong> {{ total_pages_count }}</li>
+            <li><strong>Formato:</strong> {{ pdf_style.formato }}</li>
+            {% if pdf_style.colophon_detailed %}
+            <li><strong>Widget:</strong> {{ pdf_style.widget_modalita }}</li>
+            <li><strong>Immagini:</strong> {{ pdf_style.immagini }}</li>
+            {% endif %}
         </ul>
-        <p class="note">
-            Per mantenere il manuale allineato alle regole correnti, rigenera il PDF dopo ogni aggiornamento significativo della wiki.
-        </p>
     </section>
+    {% endif %}
 </body>
 </html>

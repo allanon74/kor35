@@ -2702,16 +2702,44 @@ export const getWikiPage = async (slug) => {
   }
 };
 
-export const getWikiManualPdfUrl = () => {
-  const path = '/api/plot/api/wiki/manuale.pdf';
-  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+const wikiPdfPath = (path) => (API_BASE_URL ? `${API_BASE_URL}${path}` : path);
+
+export const getWikiManualPdfUrl = (manualeSlug = 'completo') => {
+  const q = manualeSlug && manualeSlug !== 'completo' ? `?manuale=${encodeURIComponent(manualeSlug)}` : '';
+  return wikiPdfPath(`/api/plot/api/wiki/manuale.pdf${q}`);
 };
 
-export const getWikiManualLatestPdfUrl = () => {
-  const path = '/api/plot/api/wiki/manuale/latest.pdf';
-  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
-};
+export const getWikiManualLatestPdfUrl = () => getWikiManualeLatestPdfUrl('completo');
 
+export const getWikiManualeLatestPdfUrl = (slug) =>
+  wikiPdfPath(`/api/plot/api/wiki/manuali/${encodeURIComponent(slug)}/latest.pdf`);
+
+export const getPublicWikiManualeList = () =>
+  fetchPublic('/api/plot/api/wiki/manuali/');
+
+export const getStaffManualePdfList = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/manuali-pdf/', { method: 'GET' }, onLogout);
+
+export const createStaffManualePdf = (formData, onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/manuali-pdf/', { method: 'POST', body: formData }, onLogout);
+
+export const updateStaffManualePdf = (slug, formData, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/staff/manuali-pdf/${encodeURIComponent(slug)}/`, {
+    method: 'PATCH',
+    body: formData,
+  }, onLogout);
+
+export const generateStaffManualePdf = (slug, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/staff/manuali-pdf/${encodeURIComponent(slug)}/genera/`,
+    { method: 'POST', body: '{}' },
+    onLogout,
+  );
+
+export const getStaffManualePdfAnteprimaUrl = (slug) =>
+  wikiPdfPath(`/api/plot/api/staff/manuali-pdf/${encodeURIComponent(slug)}/anteprima/`);
+
+/** @deprecated Preferire generateStaffManualePdf per ogni manuale */
 export const generateWikiManualPdfSnapshot = (onLogout) => {
   return fetchAuthenticated('/api/plot/api/wiki/manuale/genera/', { method: 'POST', body: '{}' }, onLogout);
 };

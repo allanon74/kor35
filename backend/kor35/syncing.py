@@ -126,6 +126,11 @@ PAGINA_REGOLAMENTO_MENU_FIELD_NAMES = frozenset(
         "ordine",
         "public",
         "visibile_solo_staff",
+        "includi_in_pdf",
+        "manuali_pdf",
+        "pdf_solo_indice",
+        "pdf_forza_nuova_pagina",
+        "pdf_titolo_capitolo",
     }
 )
 

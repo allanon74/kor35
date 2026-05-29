@@ -7,6 +7,7 @@ from .models import (
     QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton,
     WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial,
+    ManualePdf,
 )
 from personaggi.models import (
     Abilita,
@@ -309,17 +310,111 @@ class EventoPubblicoSerializer(serializers.ModelSerializer):
         fields = ['id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 'luogo']
         
 class PaginaRegolamentoSerializer(serializers.ModelSerializer):
+    manuali_pdf = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=ManualePdf.objects.all(),
+        required=False,
+    )
+
     class Meta:
         model = PaginaRegolamento
         fields = '__all__'
-        
+
+    def _sync_manuali_pdf(self, instance, manuali):
+        if manuali is not None:
+            instance.manuali_pdf.set(manuali)
+
+    def create(self, validated_data):
+        manuali = validated_data.pop('manuali_pdf', None)
+        instance = super().create(validated_data)
+        self._sync_manuali_pdf(instance, manuali)
+        return instance
+
+    def update(self, instance, validated_data):
+        manuali = validated_data.pop('manuali_pdf', None)
+        instance = super().update(instance, validated_data)
+        self._sync_manuali_pdf(instance, manuali)
+        return instance
+
+
 class PaginaRegolamentoSmallSerializer(serializers.ModelSerializer):
+    manuali_pdf = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+
     class Meta:
         model = PaginaRegolamento
         fields = [
-            'id', 'titolo', 'slug', 
+            'id', 'titolo', 'slug',
             'parent', 'ordine', 'public', 'visibile_solo_staff',
-            ]
+            'includi_in_pdf', 'manuali_pdf', 'pdf_solo_indice',
+            'pdf_forza_nuova_pagina', 'pdf_titolo_capitolo',
+        ]
+
+
+class ManualePdfSerializer(serializers.ModelSerializer):
+    pagine_assegnate_count = serializers.SerializerMethodField()
+    download_url = serializers.SerializerMethodField()
+    anteprima_url = serializers.SerializerMethodField()
+    copertina_url = serializers.SerializerMethodField()
+    stile_risolto = serializers.SerializerMethodField()
+
+    def validate_stile(self, value):
+        if isinstance(value, str):
+            import json
+            value = value.strip()
+            if not value:
+                return {}
+            return json.loads(value)
+        return value if value is not None else {}
+
+    class Meta:
+        model = ManualePdf
+        fields = [
+            'id', 'sync_id', 'slug', 'titolo', 'sottotitolo', 'ordine', 'attivo',
+            'stile_preset', 'stile', 'stile_risolto',
+            'copertina', 'copertina_url', 'ultimo_generato_at', 'updated_at',
+            'pagine_assegnate_count', 'download_url', 'anteprima_url',
+        ]
+        read_only_fields = ['sync_id', 'ultimo_generato_at', 'updated_at', 'stile_risolto']
+
+    def get_stile_risolto(self, obj):
+        from gestione_plot.wiki_pdf_styles import resolve_manuale_stile
+        return resolve_manuale_stile(obj)
+
+    def get_anteprima_url(self, obj):
+        return f"/api/plot/api/staff/manuali-pdf/{obj.slug}/anteprima/"
+
+    def get_pagine_assegnate_count(self, obj):
+        return obj.pagine.filter(includi_in_pdf=True).count()
+
+    def get_download_url(self, obj):
+        if not obj.ultimo_generato_at:
+            return None
+        return f"/api/plot/api/wiki/manuali/{obj.slug}/latest.pdf"
+
+    def get_copertina_url(self, obj):
+        if not obj.copertina:
+            return None
+        request = self.context.get('request')
+        try:
+            url = obj.copertina.url
+        except Exception:
+            return None
+        if request:
+            return request.build_absolute_uri(url)
+        return url
+
+
+class PublicManualePdfSerializer(serializers.ModelSerializer):
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ManualePdf
+        fields = ['slug', 'titolo', 'sottotitolo', 'ordine', 'ultimo_generato_at', 'download_url']
+
+    def get_download_url(self, obj):
+        if not obj.ultimo_generato_at:
+            return None
+        return f"/api/plot/api/wiki/manuali/{obj.slug}/latest.pdf"
 
 class AbilitaWikiSerializer(serializers.ModelSerializer):
     class Meta:
