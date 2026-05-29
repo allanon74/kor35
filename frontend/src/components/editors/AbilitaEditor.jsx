@@ -5,6 +5,7 @@ import StatModInline from './inlines/StatModInline';
 import GenericRelationInline from './inlines/GenericRelationInline';
 import SearchableSelect from './SearchableSelect';
 import EditorSaveActions from './EditorSaveActions';
+import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 
 const DURATA_OPTIONS = ['O1H', 'DAY', 'EVT'];
 const TIPO_MOD_OPTIONS = ['ADD', 'MOL'];
@@ -19,6 +20,8 @@ const EMPTY_ABILITA_FORM = {
     costo_crediti: 0,
     is_tratto_aura: false,
     nascondi_in_scheda_abilita: false,
+    escluso_negozio_ufficiale: false,
+    non_vendibile: false,
     aura_riferimento: null,
     livello_riferimento: 0,
     tiers: [],
@@ -386,7 +389,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                         )}
                     </div>
 
-                    <div className="bg-gray-900/30 p-3 rounded border border-indigo-900/30">
+                    <div className="bg-gray-900/30 p-3 rounded border border-indigo-900/30 space-y-3">
                         <label className="flex items-center gap-2 cursor-pointer">
                             <input
                                 type="checkbox"
@@ -399,9 +402,10 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                 Nascondi nella scheda Abilita
                             </span>
                         </label>
-                        <p className="text-[11px] text-gray-400 mt-2">
+                        <p className="text-[11px] text-gray-400">
                             L&apos;abilita resta applicata al personaggio (statistiche, prerequisiti, sblocchi), ma non viene mostrata nella tab Abilita.
                         </p>
+                        <CatalogoAccademiaFlags formData={formData} setFormData={setFormData} />
                     </div>
                 </div>
 

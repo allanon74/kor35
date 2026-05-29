@@ -4,6 +4,7 @@ import { Edit2, Trash, Plus, Package, List, User as UserIcon, QrCode as QrIcon, 
 import { RichTextViewer } from './RichTextDisplay';
 import QuestFaseSection from './QuestFaseSection';
 import SearchableSelect from './editors/SearchableSelect';
+import NegozioReadinessBadge from './NegozioReadinessBadge';
 
 // Mappatura tipi a_vista con codici e labels
 const TIPO_A_VISTA_OPTIONS = [
@@ -14,7 +15,8 @@ const TIPO_A_VISTA_OPTIONS = [
     { value: 'TES', label: 'Tessitura' },
     { value: 'INF', label: 'Infusione' },
     { value: 'CER', label: 'Cerimoniale' },
-    { value: 'MAN', label: 'Manifesto' }
+    { value: 'MAN', label: 'Manifesto' },
+    { value: 'NEG', label: 'Negozio alternativo (QR)' },
 ];
 
 const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChange, onEdit, onEditTask, onScanQr }) => {
@@ -135,17 +137,29 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
                             else if (v.infusione_details) nomeElemento = v.infusione_details.nome;
                             else if (v.cerimoniale_details) nomeElemento = v.cerimoniale_details.nome;
                             else if (v.personaggio_details) nomeElemento = v.personaggio_details.nome;
+                            else if (v.negozio_mercante_details) {
+                                nomeElemento = v.negozio_mercante_details.nome;
+                            }
+
+                            const negozioDet = v.negozio_mercante_details;
+                            const hasQr = Boolean(v.qr_code || negozioDet?.qr_code);
                             
                             const tipoOpt = TIPO_A_VISTA_OPTIONS.find(t => t.value === v.tipo);
                             if (tipoOpt) tipoLabel = tipoOpt.label;
                             
                             return (
-                                <div key={v.id} className="flex items-center gap-3 bg-gray-950 border border-gray-800 p-2.5 rounded-xl shadow-sm">
-                                    <div className={`p-2 rounded-lg ${v.qr_code ? 'bg-emerald-500/10 text-emerald-500' : 'bg-gray-800 text-gray-600'}`}>
+                                <div key={v.id} className="flex flex-col gap-1 bg-gray-950 border border-gray-800 p-2.5 rounded-xl shadow-sm">
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-lg shrink-0 ${hasQr ? 'bg-emerald-500/10 text-emerald-500' : 'bg-gray-800 text-gray-600'}`}>
                                         <QrIcon size={18} />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-[11px] font-bold text-gray-200 truncate">{nomeElemento}</div>
+                                        <div className="text-[11px] font-bold text-gray-200 truncate flex items-center gap-2 flex-wrap">
+                                            {nomeElemento}
+                                            {v.tipo === 'NEG' && negozioDet?.readiness && (
+                                                <NegozioReadinessBadge readiness={negozioDet.readiness} compact />
+                                            )}
+                                        </div>
                                         <div className="text-[8px] text-gray-500 uppercase font-black">{tipoLabel}</div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -165,6 +179,10 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
                                             </button>
                                         )}
                                     </div>
+                                </div>
+                                {v.tipo === 'NEG' && negozioDet?.readiness && !negozioDet.readiness.pronto && (
+                                    <NegozioReadinessBadge readiness={negozioDet.readiness} />
+                                )}
                                 </div>
                             );
                         })}

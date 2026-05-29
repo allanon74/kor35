@@ -1,6 +1,8 @@
 import React from 'react';
 
 const TIPO_LABELS = {
+  negozio_mercante: 'Negozio mercante (QR)',
+  portale_negozio: 'Negozio mercante (QR)',
   nodo: 'Nodo (QR)',
   manifesto: 'Manifesto',
   inventario: 'Inventario',

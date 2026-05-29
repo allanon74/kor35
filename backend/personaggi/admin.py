@@ -1421,14 +1421,14 @@ class OggettoBaseModificatoreInline(admin.TabularInline):
 
 @admin.register(OggettoBase)
 class OggettoBaseAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'tipo_oggetto', 'classe_oggetto', 'costo', 'in_vendita')
-    list_filter = ('tipo_oggetto', 'is_tecnologico', 'in_vendita')
+    list_display = ('nome', 'tipo_oggetto', 'classe_oggetto', 'costo', 'in_vendita', 'escluso_negozio_ufficiale', 'non_vendibile')
+    list_filter = ('tipo_oggetto', 'is_tecnologico', 'in_vendita', 'escluso_negozio_ufficiale', 'non_vendibile')
     search_fields = ('nome',)
     autocomplete_fields = ['classe_oggetto']
     
     fieldsets = (
         ('Info Generali', {
-            'fields': ('nome', 'descrizione', 'costo', 'in_vendita')
+            'fields': ('nome', 'descrizione', 'costo', 'in_vendita', 'escluso_negozio_ufficiale', 'non_vendibile')
         }),
         ('Scheda Tecnica', {
             'fields': ('tipo_oggetto', 'classe_oggetto', 'slot_fisici_possibili', 'is_tecnologico', 'attacco_base')

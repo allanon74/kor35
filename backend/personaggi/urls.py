@@ -8,6 +8,12 @@ from rest_framework.routers import DefaultRouter
 
 
 from .views import AbilitaViewSet, ActivateUserView, DeleteUserView, ChangePasswordView, PersonaggioTransazioniListView, RegisterView, StaffMessageListView, UserViewSet
+from .views_negozio_mercante import (
+    NegozioMercanteGiocatoreViewSet,
+    NegozioMercanteQrListinoView,
+    NegozioMercanteStaffViewSet,
+    NegozioMercanteVoceStaffViewSet,
+)
 from .views_staff import (
     QrInspectorView, ApprovaPropostaView, RifiutaPropostaView, ProposteValutazioneList,
     TierStaffViewSet, InventarioStaffViewSet, OggettiSenzaPosizioneView,
@@ -50,6 +56,9 @@ router.register(r'proposte', PropostaTecnicaViewSet, basename='proposte')
 
 # --- ROTTE AGGIUNTE PER NEGOZIO E CRAFTING ---
 router.register(r'negozio', views.NegozioViewSet, basename='negozio')
+router.register(r'negozi-mercante', NegozioMercanteGiocatoreViewSet, basename='negozi-mercante')
+router.register(r'staff/negozi-mercante', NegozioMercanteStaffViewSet, basename='staff-negozi-mercante')
+router.register(r'staff/negozi-mercante-voci', NegozioMercanteVoceStaffViewSet, basename='staff-negozi-mercante-voci')
 router.register(r'crafting', views.CraftingViewSet, basename='crafting')
 # ---------------------------------------------
 

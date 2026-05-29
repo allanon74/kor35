@@ -113,16 +113,18 @@ class QuestVistaSerializer(serializers.ModelSerializer):
     tessitura_details = serializers.SerializerMethodField()
     infusione_details = serializers.SerializerMethodField()
     cerimoniale_details = serializers.SerializerMethodField()
+    negozio_mercante_details = serializers.SerializerMethodField()
     
     class Meta:
         model = QuestVista
         fields = [
             'id', 'quest', 'tipo', 
             'manifesto', 'inventario', 'personaggio', 'oggetto', 
-            'tessitura', 'infusione', 'cerimoniale',
+            'tessitura', 'infusione', 'cerimoniale', 'negozio_mercante',
             'qr_code', 
             'manifesto_details', 'inventario_details', 'personaggio_details',
-            'oggetto_details', 'tessitura_details', 'infusione_details', 'cerimoniale_details'
+            'oggetto_details', 'tessitura_details', 'infusione_details', 'cerimoniale_details',
+            'negozio_mercante_details',
         ]
     
     def get_personaggio_details(self, obj):
@@ -151,6 +153,22 @@ class QuestVistaSerializer(serializers.ModelSerializer):
         if obj.cerimoniale:
             return {'id': obj.cerimoniale.id, 'nome': obj.cerimoniale.nome}
         return None
+
+    def get_negozio_mercante_details(self, obj):
+        if not obj.negozio_mercante:
+            return None
+        from personaggi.negozio_mercante_readiness import valuta_prontezza_negozio
+
+        n = obj.negozio_mercante
+        return {
+            'id': str(n.id),
+            'nome': n.nome,
+            'tipo_negozio': n.tipo_negozio,
+            'attivo': n.attivo,
+            'saldo_crediti': int(n.saldo_crediti or 0),
+            'qr_code': n.qr_code_id,
+            'readiness': valuta_prontezza_negozio(n),
+        }
 
 # --- QUEST E EVENTI ---
 

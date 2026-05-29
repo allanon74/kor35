@@ -1086,6 +1086,7 @@ FEATURE_INFUSIONI = "infusioni"
 FEATURE_OGGETTI_BASE = "oggetti_base"
 FEATURE_CERIMONIALI = "cerimoniali"
 FEATURE_SOCIAL = "social"
+FEATURE_NEGOZI_MERCANTE = "negozi_mercante"
 
 FEATURE_KEY_CHOICES = [
     (FEATURE_ABILITA, "Abilita"),
@@ -1094,6 +1095,7 @@ FEATURE_KEY_CHOICES = [
     (FEATURE_OGGETTI_BASE, "Oggetti Base"),
     (FEATURE_CERIMONIALI, "Cerimoniali"),
     (FEATURE_SOCIAL, "Social"),
+    (FEATURE_NEGOZI_MERCANTE, "Negozi mercante"),
 ]
 
 FEATURE_MODE_SHARED = "SHARED"
@@ -1912,6 +1914,16 @@ class Abilita(A_modello):
         verbose_name='Nascondi nella scheda "Abilità"',
         help_text="Se attivo, questa abilità non viene mostrata nella tab Abilità ma i suoi effetti restano applicati.",
     )
+    escluso_negozio_ufficiale = models.BooleanField(
+        default=False,
+        verbose_name="Escluso Accademia",
+        help_text="Se attivo, non compare nell'Accademia; può essere insegnata solo da negozi alternativi/corporativi.",
+    )
+    non_vendibile = models.BooleanField(
+        default=False,
+        verbose_name="Non vendibile",
+        help_text="Se attivo, non è acquistabile/insegnabile in nessun negozio.",
+    )
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="abilita", default=get_default_campagna_id, db_index=True)
 
     class Meta: 
@@ -2136,9 +2148,24 @@ class Infusione(Tecnica):
         verbose_name="Non acquistabile",
         help_text="Se attivo, la tecnica non compare tra quelle acquistabili dalle tab giocatore.",
     )
+    escluso_negozio_ufficiale = models.BooleanField(
+        default=False,
+        verbose_name="Escluso Accademia",
+        help_text="Se attivo, non compare nell'Accademia; solo negozi speciali.",
+    )
+    non_vendibile = models.BooleanField(
+        default=False,
+        verbose_name="Non vendibile",
+        help_text="Se attivo, non è acquistabile in nessun negozio.",
+    )
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="infusioni", default=get_default_campagna_id, db_index=True)
 
     class Meta: verbose_name = "Infusione"; verbose_name_plural = "Infusioni"
+
+    def save(self, *args, **kwargs):
+        if self.escluso_negozio_ufficiale or self.non_vendibile:
+            self.non_acquistabile = True
+        super().save(*args, **kwargs)
     
     @property
     def costo_crediti(self): 
@@ -2193,9 +2220,25 @@ class Tessitura(Tecnica):
         verbose_name="Non acquistabile",
         help_text="Se attivo, la tecnica non compare tra quelle acquistabili dalle tab giocatore.",
     )
+    escluso_negozio_ufficiale = models.BooleanField(
+        default=False,
+        verbose_name="Escluso Accademia",
+        help_text="Se attivo, non compare nell'Accademia; solo negozi speciali.",
+    )
+    non_vendibile = models.BooleanField(
+        default=False,
+        verbose_name="Non vendibile",
+        help_text="Se attivo, non è acquistabile in nessun negozio.",
+    )
     proposta_creazione = models.OneToOneField('PropostaTecnica', on_delete=models.SET_NULL, null=True, blank=True, related_name='tessitura_generata', verbose_name="Proposta Originale")
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="tessiture", default=get_default_campagna_id, db_index=True)
+
     class Meta: verbose_name = "Tessitura"; verbose_name_plural = "Tessiture"
+
+    def save(self, *args, **kwargs):
+        if self.escluso_negozio_ufficiale or self.non_vendibile:
+            self.non_acquistabile = True
+        super().save(*args, **kwargs)
     
     @property
     def costo_crediti(self): 
@@ -2227,11 +2270,26 @@ class Cerimoniale(Tecnica):
         verbose_name="Non acquistabile",
         help_text="Se attivo, la tecnica non compare tra quelle acquistabili dalle tab giocatore.",
     )
+    escluso_negozio_ufficiale = models.BooleanField(
+        default=False,
+        verbose_name="Escluso Accademia",
+        help_text="Se attivo, non compare nell'Accademia; solo negozi speciali.",
+    )
+    non_vendibile = models.BooleanField(
+        default=False,
+        verbose_name="Non vendibile",
+        help_text="Se attivo, non è acquistabile in nessun negozio.",
+    )
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="cerimoniali", default=get_default_campagna_id, db_index=True)
     
     class Meta: 
         verbose_name = "Cerimoniale"
         verbose_name_plural = "Cerimoniali"
+
+    def save(self, *args, **kwargs):
+        if self.escluso_negozio_ufficiale or self.non_vendibile:
+            self.non_acquistabile = True
+        super().save(*args, **kwargs)
     
     @property
     def livello(self):
@@ -3170,7 +3228,17 @@ class OggettoBase(SyncableModel, models.Model):
         null=True,
         help_text="Solo FIS: lista slot equipaggiabili separati da virgola (es. armor,vest).",
     )
-    in_vendita = models.BooleanField(default=True, verbose_name="Visibile in Negozio")
+    in_vendita = models.BooleanField(default=True, verbose_name="Visibile in Accademia")
+    escluso_negozio_ufficiale = models.BooleanField(
+        default=False,
+        verbose_name="Escluso Accademia",
+        help_text="Se attivo, non compare nel negozio Accademia; può essere offerto solo da negozi alternativi/corporativi.",
+    )
+    non_vendibile = models.BooleanField(
+        default=False,
+        verbose_name="Non vendibile",
+        help_text="Se attivo, non è acquistabile in nessun negozio (né Accademia né speciali).",
+    )
     is_pesante = models.BooleanField(
         default=False, 
         verbose_name="È un oggetto Pesante?", 
@@ -3182,6 +3250,11 @@ class OggettoBase(SyncableModel, models.Model):
         verbose_name = "Oggetto Base (Listino)"
         verbose_name_plural = "Oggetti Base (Listino)"
         ordering = ['tipo_oggetto', 'nome']
+    
+    def save(self, *args, **kwargs):
+        if self.escluso_negozio_ufficiale or self.non_vendibile:
+            self.in_vendita = False
+        super().save(*args, **kwargs)
     
     def __str__(self): 
         return f"{self.nome} ({self.costo} CR)"
@@ -6156,6 +6229,47 @@ class CreazioneConsumabileInCorso(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.tessitura.nome} → {self.personaggio.nome} (fine {self.data_fine_creazione})"
+
+
+# ============================================================================
+# NEGOZI MERCANTE (alternativi / corporativi)
+# ============================================================================
+from personaggi.negozio_mercante_models import (  # noqa: E402
+    NegozioMercante,
+    NegozioMercanteVoce,
+    NegozioMercanteStock,
+    NegozioMercanteMovimento,
+    NEGOZIO_TIPO_ALTERNATIVO,
+    NEGOZIO_TIPO_CORPORATIVO,
+    VOCE_OGGETTO_BASE,
+    VOCE_OGGETTO,
+    VOCE_ABILITA,
+    VOCE_INFUSIONE,
+    VOCE_TESSITURA,
+    VOCE_CERIMONIALE,
+    VOCE_CONSUMABILE,
+    STOCK_DISPONIBILE,
+    STOCK_VENDUTO,
+)
+
+
+class NegozioMercantePortale(A_vista):
+    """
+    Elemento A_vista per QR/plot: la scansione risolve il NegozioMercante collegato.
+    """
+
+    negozio = models.OneToOneField(
+        NegozioMercante,
+        on_delete=models.CASCADE,
+        related_name="portale_avista",
+    )
+
+    class Meta:
+        verbose_name = "Portale negozio mercante"
+        verbose_name_plural = "Portali negozi mercante"
+
+    def __str__(self):
+        return f"Negozio: {self.negozio.nome if self.negozio_id else self.nome}"
 
 
 # ============================================================================

@@ -56,7 +56,7 @@ const ShopModal = ({ onClose, searchTerm: externalSearchTerm, onSearchTermChange
             <div className="flex justify-between items-center p-4 border-b border-gray-700 bg-gray-800/50 rounded-t-xl">
                 <Dialog.Title className="text-xl font-bold text-white flex items-center gap-2">
                     <ShoppingBag className="text-yellow-500" />
-                    Negozio Base
+                    Accademia — Oggetti
                 </Dialog.Title>
                 <div className="flex items-center gap-4">
                     <div className="text-sm font-mono text-yellow-400 bg-yellow-900/20 px-3 py-1 rounded-full border border-yellow-700/30">

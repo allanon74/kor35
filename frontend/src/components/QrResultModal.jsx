@@ -656,6 +656,20 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess }) => {
     const qrId = data.dati?.qr_code_id || data.qrcode_id; 
 
     switch (data.tipo_modello) {
+      case 'negozio_mercante': {
+        const NegozioMercanteModal = React.lazy(() => import('./NegozioMercanteModal'));
+        return (
+          <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
+            <NegozioMercanteModal
+              negozioId={data.dati?.negozio_id}
+              listinoIniziale={data.dati}
+              onClose={onClose}
+              onLogout={onLogout}
+            />
+          </React.Suspense>
+        );
+      }
+
       case 'manifesto':
       case 'a_vista':
         return <ManifestoView data={data.dati} />;

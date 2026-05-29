@@ -6,6 +6,7 @@ import StatBaseInline from './inlines/StatBaseInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
 import FormulaBuilderModal from './FormulaBuilderModal';
+import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 
 /** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
 const mergeAbilitaTemporaneaOption = (rows, selected) => {
@@ -45,6 +46,8 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     componenti: [],
     statistiche_base: [],
     non_acquistabile: false,
+    escluso_negozio_ufficiale: false,
+    non_vendibile: false,
     usa_effetto_temporaneo: false,
     abilita_temporanea: null,
     durata_effetto_secondi: 0,
@@ -289,6 +292,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
                />
                Non acquistabile
              </label>
+             <CatalogoAccademiaFlags formData={formData} setFormData={setFormData} syncTecnicaNonAcquistabile />
           </div>
         </div>
       </div>

@@ -9,6 +9,7 @@ import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
+import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -20,6 +21,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     nome: '', testo: '', formula_attacco: '',
     aura_richiesta: null, aura_infusione: null,
     tipo_risultato: 'POT', is_pesante: false, non_acquistabile: false,
+    escluso_negozio_ufficiale: false, non_vendibile: false,
     statistica_cariche: null, metodo_ricarica: '',
     costo_ricarica_crediti: 0, durata_attivazione: 0,
     slot_corpo_permessi: '', 
@@ -219,16 +221,17 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
               <label htmlFor="is_pesante" className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer">Oggetto Pesante</label>
           </div>
         </div>
-        <div className="flex items-center justify-end">
-          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2">
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2 justify-end">
             <input
               type="checkbox"
               className="w-4 h-4 rounded accent-indigo-500 cursor-pointer"
               checked={!!formData.non_acquistabile}
               onChange={(e) => setFormData({ ...formData, non_acquistabile: e.target.checked })}
             />
-            Non acquistabile
+            Non acquistabile (tab Accademia)
           </label>
+          <CatalogoAccademiaFlags formData={formData} setFormData={setFormData} syncTecnicaNonAcquistabile />
         </div>
       </div>
 

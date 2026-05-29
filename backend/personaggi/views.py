@@ -520,6 +520,12 @@ class AcquisisciAbilitaView(APIView):
         if not abilita_qs.exists():
             return Response({"error": "Abilità non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
 
+        from personaggi.accademia_catalogo import verifica_abilita_accademia
+        try:
+            verifica_abilita_accademia(abilita)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         era_ids_abilita = set(EraAbilita.objects.filter(abilita_id=abilita.id).values_list("era_id", flat=True))
         if era_ids_abilita:
             if not personaggio.era_id:
@@ -720,8 +726,14 @@ class AbilitaAcquistabiliView(generics.GenericAPIView):
         sconto_percent = Decimal(sconto_valore) / Decimal(100)
         moltiplicatore_costo = Decimal(1) - sconto_percent
 
+        from personaggi.accademia_catalogo import abilita_accademia_filter
+
         master_skills_list = (
-            _campaign_feature_filter(request, Abilita.objects.exclude(id__in=possessed_skill_ids), FEATURE_ABILITA)
+            abilita_accademia_filter(
+                _campaign_feature_filter(
+                    request, Abilita.objects.exclude(id__in=possessed_skill_ids), FEATURE_ABILITA
+                )
+            )
             .defer('caratteristica_2', 'caratteristica_3')
             .select_related('caratteristica')
             .prefetch_related(
@@ -806,9 +818,11 @@ class InfusioniAcquistabiliView(generics.GenericAPIView):
             'infusionestatisticabase_set__statistica'
         ).order_by('livello_calc', 'nome')
 
+        from personaggi.accademia_catalogo import tecnica_visibile_in_accademia
+
         acquistabili = []
         for infusione in tutte_infusioni:
-            if getattr(infusione, "non_acquistabile", False):
+            if not tecnica_visibile_in_accademia(infusione):
                 continue
             aura_palette = infusione.aura_infusione or infusione.aura_richiesta
             if aura_palette and aura_palette.modelli_definiti.exists():
@@ -839,11 +853,12 @@ class AcquisisciInfusioneView(APIView):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
         if not _campaign_feature_filter(request, Infusione.objects.filter(id=infusione.id), FEATURE_INFUSIONI).exists():
             return Response({"error": "Infusione non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
-        if getattr(infusione, "non_acquistabile", False):
-            return Response(
-                {"error": "Questa infusione non e acquistabile da tab: usa QR-code o assegnazione master."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        from personaggi.accademia_catalogo import verifica_tecnica_accademia
+
+        try:
+            verifica_tecnica_accademia(infusione)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(infusione)
         if not is_valid: return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -901,9 +916,11 @@ class TessitureAcquistabiliView(generics.GenericAPIView):
             'tessiturastatisticabase_set__statistica'
         ).order_by('livello_calc', 'nome')
 
+        from personaggi.accademia_catalogo import tecnica_visibile_in_accademia
+
         acquistabili = []
         for tessitura in tutte_tessiture:
-            if getattr(tessitura, "non_acquistabile", False):
+            if not tecnica_visibile_in_accademia(tessitura):
                 continue
             aura_req = tessitura.aura_richiesta
             if aura_req:
@@ -937,11 +954,12 @@ class AcquisisciTessituraView(APIView):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
         if not _campaign_feature_filter(request, Tessitura.objects.filter(id=tessitura.id), FEATURE_TESSITURE).exists():
             return Response({"error": "Tessitura non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
-        if getattr(tessitura, "non_acquistabile", False):
-            return Response(
-                {"error": "Questa tessitura non e acquistabile da tab: usa QR-code o assegnazione master."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        from personaggi.accademia_catalogo import verifica_tecnica_accademia
+
+        try:
+            verifica_tecnica_accademia(tessitura)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(tessitura)
         if not is_valid: return Response({"error": error_msg}, status=status.HTTP_400_BAD_REQUEST)
@@ -1102,9 +1120,11 @@ class CerimonialiAcquistabiliView(generics.GenericAPIView):
             'componenti__caratteristica'
         ).order_by('liv', 'nome')
 
+        from personaggi.accademia_catalogo import tecnica_visibile_in_accademia
+
         acquistabili = []
         for cer in tutti_cerimoniali:
-            if getattr(cer, "non_acquistabile", False):
+            if not tecnica_visibile_in_accademia(cer):
                 continue
             # Usa il metodo di validazione che abbiamo aggiornato nel modello Personaggio
             is_valid, _ = personaggio.valida_acquisto_tecnica(cer)
@@ -1135,11 +1155,12 @@ class AcquisisciCerimonialeView(APIView):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
         if not _campaign_feature_filter(request, Cerimoniale.objects.filter(id=cerimoniale.id), FEATURE_CERIMONIALI).exists():
             return Response({"error": "Cerimoniale non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
-        if getattr(cerimoniale, "non_acquistabile", False):
-            return Response(
-                {"error": "Questo cerimoniale non e acquistabile da tab: usa QR-code o assegnazione master."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        from personaggi.accademia_catalogo import verifica_tecnica_accademia
+
+        try:
+            verifica_tecnica_accademia(cerimoniale)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         # Verifica requisiti
         is_valid, error_msg = personaggio.valida_acquisto_tecnica(cerimoniale)
@@ -1580,6 +1601,42 @@ class QrCodeDetailView(APIView):
             qr_code = QrCode.objects.select_related("vista").get(id=qrcode_id)
         except QrCode.DoesNotExist:
             return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        from personaggi.negozio_mercante_avista import negozio_da_vista_pk
+        from personaggi.negozio_mercante_models import NegozioMercante
+        from personaggi.negozio_mercante_service import build_listino
+
+        negozio_mercante = NegozioMercante.objects.filter(qr_code=qr_code, attivo=True).first()
+        if not negozio_mercante and qr_code.vista_id:
+            candidato = negozio_da_vista_pk(qr_code.vista_id)
+            if candidato and candidato.attivo:
+                negozio_mercante = candidato
+        if negozio_mercante:
+            if not request.user.is_authenticated:
+                return Response({"error": "Autenticazione richiesta."}, status=status.HTTP_401_UNAUTHORIZED)
+            raw_pid = request.query_params.get("personaggio_id")
+            if raw_pid in (None, ""):
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                pid = int(raw_pid)
+            except (TypeError, ValueError):
+                return Response({"error": "personaggio_id non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+            if not scanner_pg:
+                return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+            listino = build_listino(negozio_mercante, scanner_pg)
+            return Response(
+                {
+                    "tipo_modello": "negozio_mercante",
+                    "messaggio": listino.get("messaggio_accesso") or f"Negozio: {negozio_mercante.nome}",
+                    "dati": listino,
+                    "qrcode_id": qr_code.id,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         configurazione_timer = getattr(qr_code, "configurazione_timer", None)
         if configurazione_timer:
@@ -3457,7 +3514,9 @@ class NegozioViewSet(viewsets.ViewSet):
         Restituisce tutti gli OggettiBase in vendita.
         """
         try:
-            oggetti = OggettoBase.objects.filter(in_vendita=True).order_by('tipo_oggetto', 'costo')
+            from personaggi.accademia_catalogo import oggetto_base_accademia_qs
+
+            oggetti = oggetto_base_accademia_qs().order_by('tipo_oggetto', 'costo')
             serializer = OggettoBaseSerializer(oggetti, many=True)
             return Response(serializer.data)
         except Exception as e:

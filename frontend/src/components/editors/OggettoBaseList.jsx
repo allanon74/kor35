@@ -76,6 +76,12 @@ const OggettoBaseList = ({ onAdd, onEdit, onScanQr, onLogout }) => {
                     {!item.in_vendita && (
                         <span className="bg-gray-700 text-gray-400 text-[8px] px-1 rounded font-black italic uppercase">Off-List</span>
                     )}
+                    {item.escluso_negozio_ufficiale && (
+                        <span className="bg-amber-900/40 text-amber-300 text-[8px] px-1 border border-amber-700/50 rounded font-black">SOLO NEG. SPEC.</span>
+                    )}
+                    {item.non_vendibile && (
+                        <span className="bg-red-900/40 text-red-300 text-[8px] px-1 border border-red-800/50 rounded font-black">NON VEND.</span>
+                    )}
                 </div>
             ) 
         },

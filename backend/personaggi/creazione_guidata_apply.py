@@ -110,6 +110,20 @@ def try_acquire_abilita(personaggio, abilita, request=None):
                 'motivo': 'Abilità non disponibile nella campagna attiva.',
             }
 
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    from personaggi.accademia_catalogo import verifica_abilita_accademia
+
+    try:
+        verifica_abilita_accademia(abilita)
+    except DjangoValidationError as exc:
+        return {
+            'status': 'error',
+            'abilita_id': abilita.id,
+            'abilita_nome': abilita.nome,
+            'motivo': str(exc),
+        }
+
     era_ids_abilita = set(EraAbilita.objects.filter(abilita_id=abilita.id).values_list('era_id', flat=True))
     if era_ids_abilita:
         if not personaggio.era_id:

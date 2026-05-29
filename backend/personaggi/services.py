@@ -1083,64 +1083,71 @@ class GestioneCraftingService:
         return nuovo_oggetto
 
     @staticmethod
+    def crea_istanza_da_oggetto_base(template, personaggio, *, costo_acquisto=None):
+        """Crea oggetto fisico da template e lo mette nell'inventario del personaggio (senza pagamento)."""
+        costo = costo_acquisto if costo_acquisto is not None else template.costo
+        nuovo_oggetto = Oggetto.objects.create(
+            nome=template.nome,
+            testo=template.descrizione,
+            tipo_oggetto=template.tipo_oggetto,
+            classe_oggetto=template.classe_oggetto,
+            slot_fisici_possibili=template.slot_fisici_possibili,
+            is_tecnologico=template.is_tecnologico,
+            costo_acquisto=costo,
+            attacco_base=template.attacco_base,
+            oggetto_base_generatore=template,
+            in_vendita=False,
+            is_equipaggiato=False,
+            cariche_attuali=0,
+            is_pesante=template.is_pesante,
+        )
+        for stat_link in template.oggettobasestatisticabase_set.all():
+            base_obj, created = OggettoStatisticaBase.objects.get_or_create(
+                oggetto=nuovo_oggetto,
+                statistica=stat_link.statistica,
+                defaults={'valore_base': stat_link.valore_base},
+            )
+            if not created:
+                base_obj.valore_base = (base_obj.valore_base or 0) + (stat_link.valore_base or 0)
+                base_obj.save(update_fields=['valore_base'])
+        for mod_link in template.oggettobasemodificatore_set.all():
+            mod_obj, created = OggettoStatistica.objects.get_or_create(
+                oggetto=nuovo_oggetto,
+                statistica=mod_link.statistica,
+                defaults={
+                    'valore': mod_link.valore,
+                    'tipo_modificatore': mod_link.tipo_modificatore,
+                },
+            )
+            if not created:
+                mod_obj.valore = (mod_obj.valore or 0) + (mod_link.valore or 0)
+                if not mod_obj.tipo_modificatore and mod_link.tipo_modificatore:
+                    mod_obj.tipo_modificatore = mod_link.tipo_modificatore
+                mod_obj.save(update_fields=['valore', 'tipo_modificatore'])
+
+        nuovo_oggetto.sposta_in_inventario(personaggio)
+        return nuovo_oggetto
+
+    @staticmethod
     def acquista_da_negozio(personaggio, oggetto_base_id):
+        from .accademia_catalogo import verifica_oggetto_base_accademia
+
         try:
             template = OggettoBase.objects.get(pk=oggetto_base_id)
         except OggettoBase.DoesNotExist:
             raise ValidationError("Oggetto non trovato nel listino.")
-            
-        if not template.in_vendita:
-            raise ValidationError("Questo oggetto non è più in vendita.")
-            
+
+        verifica_oggetto_base_accademia(template)
+
         costo = template.costo
         if personaggio.crediti < costo:
             raise ValidationError(f"Crediti insufficienti. Costo: {costo}")
-            
+
         with transaction.atomic():
             personaggio.modifica_crediti(-costo, f"Acquisto negozio: {template.nome}")
-            
-            nuovo_oggetto = Oggetto.objects.create(
-                nome=template.nome,
-                testo=template.descrizione,
-                tipo_oggetto=template.tipo_oggetto,
-                classe_oggetto=template.classe_oggetto,
-                slot_fisici_possibili=template.slot_fisici_possibili,
-                is_tecnologico=template.is_tecnologico,
-                costo_acquisto=costo,
-                attacco_base=template.attacco_base,
-                oggetto_base_generatore=template,
-                in_vendita=False,
-                is_equipaggiato=False,
-                cariche_attuali=0,
-                is_pesante = template.is_pesante,
+            return GestioneCraftingService.crea_istanza_da_oggetto_base(
+                template, personaggio, costo_acquisto=costo
             )
-            for stat_link in template.oggettobasestatisticabase_set.all():
-                base_obj, created = OggettoStatisticaBase.objects.get_or_create(
-                    oggetto=nuovo_oggetto,
-                    statistica=stat_link.statistica,
-                    defaults={'valore_base': stat_link.valore_base}
-                )
-                if not created:
-                    base_obj.valore_base = (base_obj.valore_base or 0) + (stat_link.valore_base or 0)
-                    base_obj.save(update_fields=['valore_base'])
-            for mod_link in template.oggettobasemodificatore_set.all():
-                mod_obj, created = OggettoStatistica.objects.get_or_create(
-                    oggetto=nuovo_oggetto,
-                    statistica=mod_link.statistica,
-                    defaults={
-                        'valore': mod_link.valore,
-                        'tipo_modificatore': mod_link.tipo_modificatore
-                    }
-                )
-                if not created:
-                    mod_obj.valore = (mod_obj.valore or 0) + (mod_link.valore or 0)
-                    if not mod_obj.tipo_modificatore and mod_link.tipo_modificatore:
-                        mod_obj.tipo_modificatore = mod_link.tipo_modificatore
-                    mod_obj.save(update_fields=['valore', 'tipo_modificatore'])
-            
-            nuovo_oggetto.sposta_in_inventario(personaggio)
-            
-        return nuovo_oggetto
 
     @staticmethod
     def calcola_costi_tempi(personaggio, infusione):

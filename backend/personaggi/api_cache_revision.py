@@ -34,9 +34,9 @@ def revision_punteggi_all():
 
 
 def revision_negozio_listino():
-    from .models import OggettoBase
+    from .accademia_catalogo import oggetto_base_accademia_qs
 
-    return OggettoBase.objects.filter(in_vendita=True).aggregate(m=Max("updated_at"))["m"]
+    return oggetto_base_accademia_qs().aggregate(m=Max("updated_at"))["m"]
 
 
 def revision_personaggi_list(user, view_all: bool):

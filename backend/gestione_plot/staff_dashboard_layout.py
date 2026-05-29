@@ -42,6 +42,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "messaggi",
     "scommesse",
     "manuali-pdf",
+    "negozi-mercante",
 })
 
 DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
@@ -62,6 +63,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
                 "innesco-timer",
                 "qr-debug",
                 "scommesse",
+                "negozi-mercante",
             ],
         },
         {

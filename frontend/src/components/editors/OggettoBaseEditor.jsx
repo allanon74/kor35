@@ -5,6 +5,7 @@ import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor'; // Importazione corretta
 import EditorSaveActions from './EditorSaveActions';
+import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
 
@@ -43,6 +44,8 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
     attacco_base: '',
     slot_fisici_possibili: [],
     in_vendita: true,
+    escluso_negozio_ufficiale: false,
+    non_vendibile: false,
     statistiche_base: [], 
     statistiche_modificatori: []
   });
@@ -123,6 +126,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
             setFormData({
                 nome: '', descrizione: '', tipo_oggetto: 'FIS', classe_oggetto: null, costo: 0,
                 is_tecnologico: false, is_pesante: false, attacco_base: '', in_vendita: true,
+                escluso_negozio_ufficiale: false, non_vendibile: false,
                 slot_fisici_possibili: [],
                 statistiche_base: [], statistiche_modificatori: [],
             });
@@ -251,8 +255,9 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
         <div className="flex flex-wrap gap-6 pt-2 border-t border-gray-800 mt-2">
             <label className="flex items-center gap-2 text-xs font-bold cursor-pointer hover:text-blue-300 transition-colors">
                 <input type="checkbox" className="accent-blue-500 w-4 h-4" checked={formData.in_vendita} onChange={e => setFormData({...formData, in_vendita: e.target.checked})} /> 
-                In Vendita (Shop)
+                In Accademia
             </label>
+            <CatalogoAccademiaFlags formData={formData} setFormData={setFormData} />
             <label className="flex items-center gap-2 text-xs font-bold cursor-pointer hover:text-red-300 transition-colors">
                 <input type="checkbox" className="accent-red-500 w-4 h-4" checked={formData.is_pesante} onChange={e => setFormData({...formData, is_pesante: e.target.checked})} /> 
                 Pesante (OGP)

@@ -257,7 +257,8 @@ class EventoViewSet(viewsets.ModelViewSet):
             'TES': 'Tessitura',
             'INF': 'Infusione',
             'CER': 'Cerimoniale',
-            'MAN': 'Manifesto'
+            'MAN': 'Manifesto',
+            'NEG': 'Negozio alternativo (QR)',
         }
         
         # Carica Personaggi con tipologia
@@ -323,9 +324,33 @@ class EventoViewSet(viewsets.ModelViewSet):
                 'tipo': 'CER',
                 'tipo_display': tipo_mapping['CER']
             })
+
+        from personaggi.negozio_mercante_models import NEGOZIO_TIPO_ALTERNATIVO, NegozioMercante
+
+        for n in NegozioMercante.objects.filter(tipo_negozio=NEGOZIO_TIPO_ALTERNATIVO).order_by('nome'):
+            risultati.append({
+                'id': str(n.id),
+                'nome': n.nome,
+                'tipo': 'NEG',
+                'tipo_display': 'Negozio alternativo (QR)',
+            })
         
         return Response({'a_vista': risultati})
     
+    def _negozi_mercante_risorse_editor(self):
+        from personaggi.negozio_mercante_models import NEGOZIO_TIPO_ALTERNATIVO, NegozioMercante
+        from personaggi.negozio_mercante_readiness import valuta_prontezza_negozio
+
+        out = []
+        for n in NegozioMercante.objects.filter(tipo_negozio=NEGOZIO_TIPO_ALTERNATIVO).order_by('nome'):
+            out.append({
+                'id': str(n.id),
+                'nome': n.nome,
+                'qr_code': n.qr_code_id,
+                'readiness': valuta_prontezza_negozio(n),
+            })
+        return out
+
     @action(detail=False, methods=['get'])
     def risorse_editor(self, request):
         """
@@ -361,6 +386,7 @@ class EventoViewSet(viewsets.ModelViewSet):
                 'cerimoniali': CerimonialeSerializer(Cerimoniale.objects.all(), many=True).data,
                 'oggetti': oggetti_data,
                 'staff': UserShortSerializer(User.objects.filter(is_staff=True).only('id', 'username', 'first_name', 'last_name'), many=True).data,
+                'negozi_mercante': self._negozi_mercante_risorse_editor(),
             })
         except Exception:
             logger.exception("Errore nel caricamento risorse editor plot")
@@ -423,6 +449,7 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
             Personaggio, Inventario, Manifesto, 
             Oggetto, Tessitura, Infusione, Cerimoniale
         )
+        from personaggi.negozio_mercante_models import NegozioMercante
         
         a_vista_id = self.request.data.get('a_vista_id') or self.request.data.get('contentId')
         tipo = self.request.data.get('tipo')
@@ -439,7 +466,8 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
             'TES': (Tessitura, 'tessitura'),
             'INF': (Infusione, 'infusione'),
             'CER': (Cerimoniale, 'cerimoniale'),
-            'MAN': (Manifesto, 'manifesto')
+            'MAN': (Manifesto, 'manifesto'),
+            'NEG': (NegozioMercante, 'negozio_mercante'),
         }
         
         if tipo not in type_mapping:
@@ -460,6 +488,7 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
         """
         FUNZIONE CRUCIALE: Associa un QR fisico scansionato a questa vista prevista.
         Se force=true, disassocia il QR dall'elemento precedente.
+        Per tipo NEG collega il QR al NegozioMercante (scan apre il negozio, non A_vista).
         """
         vista_quest = self.get_object()
         qr_id = request.data.get('qr_id')
@@ -467,7 +496,10 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
         
         try:
             qr = QrCode.objects.get(id=qr_id)
-            
+
+            if vista_quest.tipo == 'NEG' and vista_quest.negozio_mercante_id:
+                return self._associa_qr_negozio_mercante(vista_quest, qr, force)
+
             # CONTROLLO: Se il QR è già associato ad un'altra vista, avvisa l'utente
             if qr.vista and not force:
                 from personaggi.qr_logic import descrivi_avista_per_associazione_qr
@@ -516,6 +548,21 @@ class QuestVistaViewSet(viewsets.ModelViewSet):
             return Response({'status': 'success', 'content': str(target_vista)})
         except QrCode.DoesNotExist:
             return Response({'error': 'QR Code non trovato'}, status=404)
+
+    def _associa_qr_negozio_mercante(self, vista_quest, qr, force):
+        from personaggi.negozio_mercante_avista import associa_qr_a_negozio
+
+        negozio = vista_quest.negozio_mercante
+        if not negozio:
+            return Response({'error': 'Nessun negozio collegato a questa vista'}, status=400)
+
+        ok, conflict = associa_qr_a_negozio(negozio, qr, force=force)
+        if not ok:
+            return Response(conflict, status=409)
+
+        vista_quest.qr_code = qr
+        vista_quest.save(update_fields=['qr_code', 'updated_at'])
+        return Response({'status': 'success', 'content': negozio.nome, 'tipo': 'negozio_mercante'})
         
 class MostroTemplateViewSet(viewsets.ModelViewSet): # Cambiato da ReadOnlyModelViewSet a ModelViewSet
     queryset = MostroTemplate.objects.all().prefetch_related('attacchi')

@@ -16,49 +16,9 @@ from channels.layers import get_channel_layer
 
 def personaggio_soddisfa_requisiti_manifesto(personaggio, manifesto) -> Tuple[bool, str]:
     """Ritorna (ok, messaggio). Lista requisiti vuota = accesso libero."""
-    from .models import Abilita, Statistica
+    from .requisiti_accesso import personaggio_soddisfa_requisiti
 
-    reqs = manifesto.requisiti_lettura or []
-    if not reqs:
-        return True, ""
-
-    for req in reqs:
-        if not isinstance(req, dict):
-            continue
-        tipo = (req.get("tipo") or "").strip().lower()
-        if tipo == "statistica":
-            sigla = (req.get("sigla") or "").strip().upper()
-            min_v = int(req.get("min", 1) or 1)
-            if not sigla:
-                continue
-            cur = personaggio.get_valore_statistica(sigla)
-            if cur < min_v:
-                st = Statistica.objects.filter(sigla=sigla).first()
-                nome = st.nome if st else sigla
-                return False, f"Richiesto {nome} ({sigla}) ≥ {min_v} (hai {cur})."
-        elif tipo == "abilita":
-            aid = req.get("id")
-            if aid is None:
-                continue
-            if not personaggio.abilita_possedute.filter(pk=aid).exists():
-                ab = Abilita.objects.filter(pk=aid).first()
-                nome = ab.nome if ab else str(aid)
-                return False, f"È richiesta l'abilità: {nome}."
-        elif tipo == "punteggio":
-            # Alias: valore aura per nome punteggio (tipo AURA)
-            from .models import Punteggio, AURA
-
-            nome = (req.get("nome") or "").strip()
-            min_v = int(req.get("min", 1) or 1)
-            if not nome:
-                continue
-            p = Punteggio.objects.filter(nome=nome, tipo=AURA).first()
-            if not p:
-                return False, f"Requisito aura sconosciuto: {nome}."
-            cur = personaggio.get_valore_aura_effettivo(p)
-            if cur < min_v:
-                return False, f"Richiesta aura {nome} ≥ {min_v} (hai {cur})."
-    return True, ""
+    return personaggio_soddisfa_requisiti(personaggio, manifesto.requisiti_lettura or [])
 
 
 def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
@@ -489,6 +449,7 @@ def descrivi_avista_per_associazione_qr(vista_obj):
         InnescoTimer,
         Inventario,
         Manifesto,
+        NegozioMercantePortale,
         Nodo,
         Oggetto,
         Personaggio,
@@ -506,6 +467,10 @@ def descrivi_avista_per_associazione_qr(vista_obj):
             "nome": getattr(instance, "nome", str(instance)),
             "elemento_id": str(instance.pk),
         }
+
+    portale = NegozioMercantePortale.objects.filter(pk=pk).select_related("negozio").first()
+    if portale:
+        return _out("negozio_mercante", portale.negozio)
 
     if InnescoTimer.objects.filter(pk=pk).exists():
         return _out("innesco_timer", InnescoTimer.objects.get(pk=pk))

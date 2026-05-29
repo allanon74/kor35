@@ -99,6 +99,7 @@ export const STAFF_TOOLS_REGISTRY = {
   messaggi: { id: 'messaggi', label: 'Messaggi staff', icon: MessageSquare, color: 'bg-emerald-600', componentKey: 'messaggi' },
   scommesse: { id: 'scommesse', label: 'Scommesse', icon: Trophy, color: 'bg-amber-600', componentKey: 'scommesse' },
   'manuali-pdf': { id: 'manuali-pdf', label: 'Manuali PDF', icon: FileText, color: 'bg-rose-800', componentKey: 'manuali-pdf' },
+  'negozi-mercante': { id: 'negozi-mercante', label: 'Negozi mercante', icon: Package, color: 'bg-amber-900', componentKey: 'negozi-mercante' },
 };
 
 export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
@@ -112,7 +113,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse'],
+      tool_ids: ['plot', 'pilotaggio', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse', 'negozi-mercante'],
     },
     {
       id: 'database',

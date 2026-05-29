@@ -1699,6 +1699,117 @@ export const postIscrizioneEventoAnnulla = (body, onLogout) =>
 export const postEventoPremiApplica = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/evento-premi/applica/', { method: 'POST', body: '{}' }, onLogout);
 
+// --- NEGOZI MERCANTE ---
+export const fetchNegoziCorporativi = (charId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/negozi-mercante/corporativi/?char_id=${charId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const fetchNegozioMercanteListino = (negozioId, charId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/negozi-mercante/${negozioId}/listino/?char_id=${charId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const acquistaNegozioMercante = (negozioId, body, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/negozi-mercante/${negozioId}/acquista/`,
+    { method: 'POST', body: JSON.stringify(body) },
+    onLogout,
+  );
+
+export const vendiOggettoNegozioMercante = (negozioId, charId, oggettoId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/negozi-mercante/${negozioId}/vendi/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ char_id: charId, oggetto_id: oggettoId }),
+    },
+    onLogout,
+  );
+
+export const previewVenditaNegozioMercante = (negozioId, charId, oggettoId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/negozi-mercante/${negozioId}/preview-vendita/?char_id=${charId}&oggetto_id=${oggettoId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffAssociaQrNegozioMercante = (negozioId, qrId, onLogout, force = false) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${negozioId}/associa-qr/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ qr_id: qrId, force }),
+    },
+    onLogout,
+  );
+
+export const staffScollegaQrNegozioMercante = (negozioId, onLogout) =>
+  staffAssociaQrNegozioMercante(negozioId, null, onLogout);
+
+export const staffGetNegoziMercante = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/negozi-mercante/', { method: 'GET' }, onLogout);
+
+export const staffCreateNegozioMercante = (data, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/negozi-mercante/',
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffUpdateNegozioMercante = (id, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffGetNegozioMercanteVoci = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-voci/?negozio=${negozioId}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffCreateNegozioMercanteVoce = (data, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/negozi-mercante-voci/',
+    { method: 'POST', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffUpdateNegozioMercanteVoce = (id, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-voci/${id}/`,
+    { method: 'PATCH', body: JSON.stringify(data) },
+    onLogout,
+  );
+
+export const staffDeleteNegozioMercanteVoce = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante-voci/${id}/`,
+    { method: 'DELETE' },
+    onLogout,
+  );
+
+export const staffGetNegozioMercanteReadiness = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${negozioId}/readiness/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffGetNegozioMercanteMovimenti = (negozioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/negozi-mercante/${negozioId}/movimenti/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
 // --- GIORNI ---
 export const createGiorno = (data, onLogout) => fetchAuthenticated('/api/plot/api/giorni/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateGiorno = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/giorni/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
@@ -1746,7 +1857,7 @@ export const addVistaToQuest = (questId, data, onLogout) => {
     const payload = {
         quest: parseInt(questId),
         tipo: data.tipo,
-        a_vista_id: parseInt(data.a_vista_id)
+        a_vista_id: data.tipo === 'NEG' ? data.a_vista_id : parseInt(data.a_vista_id, 10),
     };
     return fetchAuthenticated('/api/plot/api/viste-setup/', { method: 'POST', body: JSON.stringify(payload) }, onLogout);
 };

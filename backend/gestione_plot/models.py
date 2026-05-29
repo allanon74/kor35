@@ -300,7 +300,8 @@ class QuestVista(SyncableModel, models.Model):
         ('TES', 'Tessitura'),
         ('INF', 'Infusione'),
         ('CER', 'Cerimoniale'),
-        ('MAN', 'Manifesto')
+        ('MAN', 'Manifesto'),
+        ('NEG', 'Negozio alternativo'),
     ])
     
     # Riferimenti a tutti i possibili tipi di a_vista (con related_name univoci)
@@ -311,6 +312,13 @@ class QuestVista(SyncableModel, models.Model):
     tessitura = models.ForeignKey('personaggi.Tessitura', on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_tessitura')
     infusione = models.ForeignKey('personaggi.Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_infusione')
     cerimoniale = models.ForeignKey('personaggi.Cerimoniale', on_delete=models.SET_NULL, null=True, blank=True, related_name='questvista_cerimoniale')
+    negozio_mercante = models.ForeignKey(
+        'personaggi.NegozioMercante',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='quest_viste',
+    )
     
     qr_code = models.OneToOneField(QrCode, on_delete=models.SET_NULL, null=True, blank=True)
 

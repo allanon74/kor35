@@ -15,7 +15,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy
+    Key, HelpCircle, Watch, Trophy, Store
 } from 'lucide-react';
 
 import AbilitaTab from './AbilitaTab.jsx';
@@ -33,6 +33,7 @@ import WatchTab from './WatchTab.jsx';
 import JobRequestsWidget from './JobRequestsWidget.jsx'; 
 import PersonaggiTab from './PersonaggiTab.jsx';
 import ScommesseTab from './ScommesseTab.jsx';
+import NegoziMercanteTab from './NegoziMercanteTab.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
 
 // --- [MODIFICA] Import Modale Password ---
@@ -56,6 +57,7 @@ const AVAILABLE_TABS = [
     { id: 'infusioni', label: 'Infusioni', icon: TestTube2, component: InfusioniTab },
     { id: 'cerimoniali', label: 'Cerimoniali', icon: Users, component: CerimonialiTab },
     { id: 'consumabili', label: 'Consumabili', icon: Package, component: ConsumabiliTab },
+    { id: 'negozi', label: 'Negozi', icon: Store, component: NegoziMercanteTab },
     { id: 'qr', label: 'Scanner', icon: QrCode, component: QrTab },
     { id: 'messaggi', label: 'Messaggi', icon: Mail, component: MessaggiTab },
     { id: 'logs', label: 'Diario', icon: ScrollText, component: LogViewer },

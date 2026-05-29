@@ -4,6 +4,7 @@ import { staffUpdateCerimoniale, staffCreateCerimoniale } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 
 // Aggiunto onCancel e onSave ai props
 const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
@@ -18,6 +19,8 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
     effetto: '',
     liv: 1,
     non_acquistabile: false,
+    escluso_negozio_ufficiale: false,
+    non_vendibile: false,
     componenti: []
   };
 
@@ -102,15 +105,16 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
             </div>
             <Input label="Livello (liv)" type="number" value={formData.liv} onChange={v => setFormData({...formData, liv: v})} />
         </div>
-        <div className="flex items-center justify-end">
-          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2">
+        <div className="space-y-2">
+          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest cursor-pointer flex items-center gap-2 justify-end">
             <input
               type="checkbox"
               checked={!!formData.non_acquistabile}
               onChange={(e) => setFormData({ ...formData, non_acquistabile: e.target.checked })}
             />
-            Non acquistabile
+            Non acquistabile (tab Accademia)
           </label>
+          <CatalogoAccademiaFlags formData={formData} setFormData={setFormData} syncTecnicaNonAcquistabile />
         </div>
       </div>
 
