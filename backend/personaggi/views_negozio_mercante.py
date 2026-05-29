@@ -11,7 +11,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from personaggi.models import FEATURE_NEGOZI_MERCANTE
-from personaggi.views_staff import _campaign_feature_filter, _get_active_campaign
+from personaggi.views_staff import (
+    _campaign_feature_filter,
+    _get_active_campaign,
+    _get_default_campaign,
+)
 from personaggi.negozio_mercante_models import NegozioMercante, NegozioMercanteVoce
 from personaggi.negozio_mercante_readiness import valuta_prontezza_negozio
 from personaggi.negozio_mercante_models import NegozioMercanteMovimento
@@ -124,7 +128,14 @@ class NegozioMercanteStaffViewSet(viewsets.ModelViewSet):
         return _campaign_feature_filter(self.request, qs, FEATURE_NEGOZI_MERCANTE)
 
     def perform_create(self, serializer):
-        serializer.save(campagna=_get_active_campaign(self.request))
+        campagna = _get_active_campaign(self.request) or _get_default_campaign()
+        if not campagna:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            raise DRFValidationError(
+                {"campagna": "Campagna attiva non trovata (header X-Campagna o default)."}
+            )
+        serializer.save(campagna=campagna)
 
     @action(detail=True, methods=["post"], url_path="associa-qr")
     def associa_qr(self, request, pk=None):

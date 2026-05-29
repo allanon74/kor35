@@ -21,6 +21,14 @@ class NegozioMercanteVoceSerializer(serializers.ModelSerializer):
 
 class NegozioMercanteSerializer(serializers.ModelSerializer):
     voci = NegozioMercanteVoceSerializer(many=True, read_only=True)
+
     class Meta:
         model = NegozioMercante
         fields = "__all__"
+        read_only_fields = (
+            "campagna",
+            "inventario",
+            "qr_code",
+            "created_at",
+            "updated_at",
+        )
