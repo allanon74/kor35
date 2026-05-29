@@ -2739,6 +2739,32 @@ export const generateStaffManualePdf = (slug, onLogout) =>
 export const getStaffManualePdfAnteprimaUrl = (slug) =>
   wikiPdfPath(`/api/plot/api/staff/manuali-pdf/${encodeURIComponent(slug)}/anteprima/`);
 
+export const getStaffManualePdfExportZipUrl = () =>
+  wikiPdfPath('/api/plot/api/staff/manuali-pdf/export-zip/');
+
+export const getWikiPdfDiagnostica = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/manuali-pdf/diagnostica/', { method: 'GET' }, onLogout);
+
+export const getWikiManualeStorico = (slug, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/staff/manuali-pdf/${encodeURIComponent(slug)}/storico/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const startWikiManualeBatchJob = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/manuali-pdf/genera-tutti/', {
+    method: 'POST',
+    body: '{}',
+  }, onLogout);
+
+export const getWikiManualeBatchJob = (jobId, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/staff/manuali-pdf/jobs/${jobId}/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
 /** @deprecated Preferire generateStaffManualePdf per ogni manuale */
 export const generateWikiManualPdfSnapshot = (onLogout) => {
   return fetchAuthenticated('/api/plot/api/wiki/manuale/genera/', { method: 'POST', body: '{}' }, onLogout);

@@ -494,6 +494,69 @@ class ManualePdf(SyncableModel, models.Model):
         return self.titolo
 
 
+class ManualePdfGenerazione(SyncableModel, models.Model):
+    """Storico di una generazione PDF per un manuale (changelog edizioni)."""
+
+    manuale = models.ForeignKey(
+        ManualePdf,
+        on_delete=models.CASCADE,
+        related_name='generazioni',
+    )
+    generato_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    success = models.BooleanField(default=False)
+    error_message = models.TextField(blank=True)
+    pagine_count = models.PositiveIntegerField(default=0)
+    capitoli_count = models.PositiveIntegerField(default=0)
+    file_size_bytes = models.PositiveBigIntegerField(default=0)
+    file_path = models.CharField(max_length=500, blank=True)
+    stile_preset = models.CharField(max_length=40, blank=True)
+    stile_snapshot = models.JSONField(default=dict, blank=True)
+    triggered_by_email = models.CharField(max_length=254, blank=True)
+    durata_ms = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-generato_at']
+        verbose_name = "Generazione manuale PDF"
+        verbose_name_plural = "Generazioni manuali PDF"
+
+    def __str__(self):
+        stato = "OK" if self.success else "ERR"
+        return f"{self.manuale.slug} [{stato}] {self.generato_at}"
+
+
+class ManualePdfBatchJob(SyncableModel, models.Model):
+    """Job batch per rigenerare più manuali (UI staff o cron)."""
+
+    STATUS_PENDING = "pending"
+    STATUS_RUNNING = "running"
+    STATUS_COMPLETED = "completed"
+    STATUS_PARTIAL = "partial"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "In attesa"),
+        (STATUS_RUNNING, "In esecuzione"),
+        (STATUS_COMPLETED, "Completato"),
+        (STATUS_PARTIAL, "Completato con errori"),
+        (STATUS_FAILED, "Fallito"),
+    ]
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    triggered_by_email = models.CharField(max_length=254, blank=True)
+    results = models.JSONField(default=list, blank=True)
+    error_message = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Job batch manuali PDF"
+        verbose_name_plural = "Job batch manuali PDF"
+
+    def __str__(self):
+        return f"Batch PDF {self.status} ({self.created_at})"
+
+
 class CreazioneGuidataFlusso(SyncableModel, models.Model):
     """Configurazione di un percorso guidato per la creazione personaggio."""
 

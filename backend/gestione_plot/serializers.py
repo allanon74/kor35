@@ -8,6 +8,8 @@ from .models import (
     WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial,
     ManualePdf,
+    ManualePdfGenerazione,
+    ManualePdfBatchJob,
 )
 from personaggi.models import (
     Abilita,
@@ -402,6 +404,46 @@ class ManualePdfSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(url)
         return url
+
+
+class ManualePdfGenerazioneSerializer(serializers.ModelSerializer):
+    manuale_slug = serializers.CharField(source="manuale.slug", read_only=True)
+
+    class Meta:
+        model = ManualePdfGenerazione
+        fields = [
+            "id",
+            "sync_id",
+            "manuale_slug",
+            "generato_at",
+            "success",
+            "error_message",
+            "pagine_count",
+            "capitoli_count",
+            "file_size_bytes",
+            "file_path",
+            "stile_preset",
+            "durata_ms",
+            "triggered_by_email",
+        ]
+        read_only_fields = fields
+
+
+class ManualePdfBatchJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ManualePdfBatchJob
+        fields = [
+            "id",
+            "sync_id",
+            "status",
+            "created_at",
+            "started_at",
+            "finished_at",
+            "triggered_by_email",
+            "results",
+            "error_message",
+        ]
+        read_only_fields = fields
 
 
 class PublicManualePdfSerializer(serializers.ModelSerializer):

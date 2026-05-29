@@ -58,7 +58,7 @@ from .models import (
     Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate,
     PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget,
     WikiTierCollectionWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
-    ConfigurazioneSito, LinkSocial, ManualePdf,
+    ConfigurazioneSito, LinkSocial, ManualePdf, ManualePdfBatchJob, ManualePdfGenerazione,
 )
 from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
@@ -71,6 +71,8 @@ from .serializers import (
     PublicDichiarazioneGlossarioSerializer,
     ManualePdfSerializer,
     PublicManualePdfSerializer,
+    ManualePdfGenerazioneSerializer,
+    ManualePdfBatchJobSerializer,
 )
 from .wiki_pdf import (
     build_manuale_html_for_request,
@@ -78,7 +80,15 @@ from .wiki_pdf import (
     get_current_pdf_stile,
     wiki_manual_latest_path,
     wiki_manual_legacy_latest_path,
-    write_manuale_pdf_bytes,
+)
+from .wiki_pdf_service import (
+    BUNDLE_ZIP_NAME,
+    build_manuali_zip_bundle,
+    compute_wiki_pdf_diagnostica,
+    create_batch_job,
+    enqueue_batch_job,
+    esegui_generazione_manuale,
+    _triggered_by_email_from_request,
 )
 
 
@@ -576,11 +586,11 @@ class ManualePdfViewSet(viewsets.ModelViewSet):
     def genera(self, request, slug=None):
         manuale = self.get_object()
         try:
-            pdf_bytes = generate_manuale_pdf(
+            log = esegui_generazione_manuale(
                 manuale,
                 request,
-                render_content_fn=_render_wiki_widgets_for_pdf,
-                force_public=True,
+                _render_wiki_widgets_for_pdf,
+                triggered_by_email=_triggered_by_email_from_request(request),
             )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
@@ -593,17 +603,55 @@ class ManualePdfViewSet(viewsets.ModelViewSet):
             logger.exception("Errore generazione manuale PDF %s", slug)
             return Response({"detail": "Errore durante la generazione del PDF."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        output_path = write_manuale_pdf_bytes(manuale, pdf_bytes)
+        manuale.refresh_from_db()
         serializer = self.get_serializer(manuale)
         return Response(
             {
                 "ok": True,
                 "generated_at": manuale.ultimo_generato_at.isoformat() if manuale.ultimo_generato_at else None,
                 "download_url": serializer.data.get('download_url'),
-                "path": str(output_path),
+                "path": log.file_path,
+                "generazione": ManualePdfGenerazioneSerializer(log).data,
                 "manuale": serializer.data,
             }
         )
+
+    @action(detail=True, methods=['get'], url_path='storico')
+    def storico(self, request, slug=None):
+        manuale = self.get_object()
+        qs = ManualePdfGenerazione.objects.filter(manuale=manuale).order_by('-generato_at')[:50]
+        return Response(ManualePdfGenerazioneSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=['get'], url_path='diagnostica')
+    def diagnostica(self, request):
+        return Response(compute_wiki_pdf_diagnostica())
+
+    @action(detail=False, methods=['get'], url_path='export-zip')
+    def export_zip(self, request):
+        try:
+            zip_path = build_manuali_zip_bundle()
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        response = FileResponse(open(zip_path, 'rb'), content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{BUNDLE_ZIP_NAME}"'
+        return response
+
+    @action(detail=False, methods=['post'], url_path='genera-tutti')
+    def genera_tutti(self, request):
+        try:
+            job = create_batch_job(triggered_by_email=_triggered_by_email_from_request(request))
+        except RuntimeError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        enqueue_batch_job(job, request.get_host(), _render_wiki_widgets_for_pdf)
+        return Response(
+            ManualePdfBatchJobSerializer(job).data,
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=False, methods=['get'], url_path=r'jobs/(?P<job_id>[0-9]+)')
+    def job_status(self, request, job_id=None):
+        job = get_object_or_404(ManualePdfBatchJob, pk=job_id)
+        return Response(ManualePdfBatchJobSerializer(job).data)
 
     @action(detail=True, methods=['get'], url_path='anteprima')
     def anteprima(self, request, slug=None):
@@ -1443,15 +1491,15 @@ def generate_wiki_manual_snapshot(request):
 
     results = []
     errors = []
+    email = _triggered_by_email_from_request(request)
     for manuale in ManualePdf.objects.filter(attivo=True).order_by('ordine', 'titolo'):
         try:
-            pdf_bytes = generate_manuale_pdf(
+            esegui_generazione_manuale(
                 manuale,
                 request,
-                render_content_fn=_render_wiki_widgets_for_pdf,
-                force_public=True,
+                _render_wiki_widgets_for_pdf,
+                triggered_by_email=email,
             )
-            write_manuale_pdf_bytes(manuale, pdf_bytes)
             results.append({"slug": manuale.slug, "ok": True})
         except ValueError as exc:
             errors.append({"slug": manuale.slug, "detail": str(exc)})
