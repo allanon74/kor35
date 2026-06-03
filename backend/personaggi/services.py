@@ -169,7 +169,7 @@ class GestioneOggettiService:
             raise ValidationError("Non puoi equipaggiare un oggetto danneggiato.")
         
         # 0. Controllo tecnologia: oggetti tecnologici richiedono Aura Tecnologica >= 1.
-        if oggetto.is_tecnologico and personaggio.get_valore_statistica('ATE') < 1:
+        if oggetto.is_tecnologico and personaggio.get_valore_aura_per_sigla('ATE') < 1:
             raise ValidationError(
                 "Oggetto tecnologico non equipaggiabile: serve Aura Tecnologica (ATE) almeno a 1."
             )
@@ -781,7 +781,7 @@ class GestioneOggettiService:
                 return False
 
         # Regola extra innesto: il ricevente deve avere almeno 1 punto ATE.
-        if risultato == 'INNESTO' and personaggio.get_valore_statistica('ATE') < 1:
+        if risultato == 'INNESTO' and personaggio.get_valore_aura_per_sigla('ATE') < 1:
             return False
 
         # 2. Verifica Caratteristiche (Componenti)

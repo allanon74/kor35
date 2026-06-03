@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
@@ -6,20 +7,26 @@ from unittest.mock import patch
 from .models import (
     Abilita,
     AbilitaStatistica,
+    AURA,
     Campagna,
     CampagnaUtente,
     MODIFICATORE_ADDITIVO,
     Oggetto,
+    OggettoBase,
     OggettoInInventario,
     Personaggio,
+    PersonaggioAbilita,
     Punteggio,
     Statistica,
     Tessitura,
     TessituraEffettoRuntime,
     TipologiaPersonaggio,
+    TIPO_OGGETTO_FISICO,
+    abilita_punteggio,
     CARATTERISTICA,
 )
 from .serializers import PersonaggioDetailSerializer
+from .services import GestioneOggettiService
 from .sso import _upsert_local_user
 
 
@@ -559,3 +566,58 @@ class RisorsePoolUiVisibilityTests(APITestCase):
         self.assertNotIn("CAP", sigle)
         frt = next(r for r in rows if r["sigla"] == "FRT")
         self.assertEqual(frt["valore_max"], 2)
+
+
+class EquipOggettoTecnologicoAteTests(TestCase):
+    """ATE è un'aura (tipo AU), non una statistica ST: va letta con get_valore_aura_per_sigla."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="equip-ate-user", password="x")
+        self.pg = Personaggio.objects.create(nome="PG ATE Equip", proprietario=self.user)
+        self.aura_ate = Punteggio.objects.create(
+            nome="Aura Tecnologica Equip Test",
+            sigla="ATE",
+            tipo=AURA,
+        )
+        self.caratt = Punteggio.objects.create(
+            nome="Car Equip Test",
+            sigla="CEQ",
+            tipo=CARATTERISTICA,
+        )
+        self.abilita_ate = Abilita.objects.create(
+            nome="Abilita ATE Equip",
+            caratteristica=self.caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        abilita_punteggio.objects.create(
+            abilita=self.abilita_ate,
+            punteggio=self.aura_ate,
+            valore=1,
+        )
+        PersonaggioAbilita.objects.create(personaggio=self.pg, abilita=self.abilita_ate)
+        self.template = OggettoBase.objects.create(
+            nome="Template gadget",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            is_tecnologico=True,
+        )
+        self.oggetto = Oggetto.objects.create(
+            nome="Gadget tecnologico",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            is_tecnologico=True,
+            slot_fisici_possibili="melee",
+            oggetto_base_generatore=self.template,
+        )
+        self.oggetto.sposta_in_inventario(self.pg)
+
+    def test_ate_in_punteggi_base_non_usa_get_valore_statistica(self):
+        self.assertGreaterEqual(self.pg.get_valore_aura_per_sigla("ATE"), 1)
+        self.assertEqual(self.pg.get_valore_statistica("ATE"), 0)
+
+    def test_equip_tecnologico_con_ate_uno(self):
+        stato = GestioneOggettiService.equipaggia_oggetto(
+            self.pg, self.oggetto, slot_key="melee"
+        )
+        self.assertEqual(stato, "Equipaggiato")
+        self.oggetto.refresh_from_db()
+        self.assertTrue(self.oggetto.is_equipaggiato)

@@ -3888,7 +3888,7 @@ class RichiestaAssemblaggioViewSet(viewsets.ModelViewSet):
             tipo_ris = forgiatura_obj.infusione.tipo_risultato
             aura_oggetto = forgiatura_obj.infusione.aura_infusione or forgiatura_obj.infusione.aura_richiesta
             if tipo_ris == 'AUM' and getattr(aura_oggetto, 'sigla', None) == 'ATE':
-                if db_artigiano.get_valore_statistica('ATE') < 1:
+                if db_artigiano.get_valore_aura_per_sigla('ATE') < 1:
                     return Response({"error": "Il ricevente deve avere almeno 1 punto in Aura Tecnologica (ATE)."}, status=400)
             
             messaggio_testo = f"Il Dr. {pg_self.nome} propone l'installazione di {forgiatura_obj.infusione.nome} su {slot_dest}. Costo: {offerta} CR."

@@ -4510,6 +4510,16 @@ class Personaggio(Inventario):
         pb = self.punteggi_base
         if aura.is_generica: return max([v for k,v in pb.items() if Punteggio.objects.filter(nome=k, tipo=AURA, is_generica=False).exists()] or [0])
         return pb.get(aura.nome, 0)
+
+    def get_valore_aura_per_sigla(self, sigla):
+        """
+        Valore effettivo di un'aura (Punteggio tipo AU) per sigla (es. ATE, AMS).
+        Non usare get_valore_statistica: le aure non sono Statistiche (tipo ST).
+        """
+        aura = Punteggio.objects.filter(sigla=sigla, tipo=AURA).first()
+        if not aura:
+            return 0
+        return self.get_valore_aura_effettivo(aura)
     
     def valida_acquisto_tecnica(self, t):
         if not t.aura_richiesta: return False, "Aura mancante."

@@ -50,8 +50,8 @@ def permessi_oggetto_inventario_qr(personaggio, oggetto) -> Dict[str, Any]:
         oggetto.tipo_oggetto == TIPO_OGGETTO_POTENZIAMENTO and oggetto.is_tecnologico
     )
 
-    ams = personaggio.get_valore_statistica("AMS")
-    ate = personaggio.get_valore_statistica("ATE")
+    ams = personaggio.get_valore_aura_per_sigla("AMS")
+    ate = personaggio.get_valore_aura_per_sigla("ATE")
 
     # Prendi: materia/mod "liberi" (non montati) se visibili; altri tipi se visibili
     puo_prendere = False
