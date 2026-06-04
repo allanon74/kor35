@@ -198,9 +198,9 @@ const FormulaBuilderModal = ({
               Inserisci cura nella formula
             </label>
             <p className="mt-2 text-xs text-gray-500">
-              Il tipo di danno (in mischia / a distanza) si sceglie nella sezione «Danno (tipo attacco)».
-              I valori numerici dannigen, dannimis e dannidis definiscono i componenti: in mischia si usa
-              dannigen + dannimis, a distanza dannigen + dannidis.
+              In «Danno (tipo attacco)» scegli in mischia o a distanza: nella formula viene scritta la somma
+              corretta (dannigen+dannimis o dannigen+dannidis), indipendentemente dai valori sotto. In gioco il
+              totale si mostra così: 1 = niente; 2–9 = lettere con ! (es. tre!); 10+ = numero con ! (es. 12!).
             </p>
           </div>
 

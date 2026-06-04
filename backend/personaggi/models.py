@@ -554,32 +554,30 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
     return built
 
 
-def infer_weapon_damage_mode(base_values, context=None):
+def infer_weapon_damage_mode(base_values=None, context=None):
     """
-    Tipo danno attacco (mischia/distanza) dalle statistiche base dell'oggetto.
-    Usa i valori base prima dei modificatori globali del personaggio, così un bonus
-    a dannimis (es. abilità temporanea) non sposta il danno delle armi a distanza.
+    Tipo danno attacco per un oggetto: deriva dalla formula salvata (scelta staff
+    in mischia/distanza), non dai valori numerici di dannimis/dannidis.
     """
     context = context or {}
     explicit = context.get("damage_mode")
     if explicit in ("mischia", "distanza"):
         return explicit
 
-    base_values = base_values or {}
-    base_mis = int(base_values.get("dannimis") or 0)
-    base_dis = int(base_values.get("dannidis") or 0)
-    if base_dis > 0 and base_mis <= 0:
+    tmpl = str(context.get("attack_formula_template") or "")
+    compact = re.sub(r"\s+", "", tmpl.lower())
+    if "dannidis+dannigen" in compact:
         return "distanza"
-    if base_mis > 0 and base_dis <= 0:
+    if "dannimis+dannigen" in compact:
         return "mischia"
-    if base_mis > 0 and base_dis > 0:
-        return "mischia" if base_mis >= base_dis else "distanza"
 
-    tmpl = str(context.get("attack_formula_template") or "").lower()
-    if "pierce" in tmpl:
-        return "distanza"
-    if "chop" in tmpl:
-        return "mischia"
+    # Legacy: template con {formula_damage} e testo sorgente fisso (Pierce!/Chop!)
+    if "{formula_damage}" in tmpl:
+        lower = tmpl.lower()
+        if "pierce" in lower and "chop" not in lower:
+            return "distanza"
+        if "chop" in lower and "pierce" not in lower:
+            return "mischia"
     return None
 
 
@@ -683,6 +681,20 @@ FORMAT_COLLECTIONS = {
         'DEFAULT' : '{n}-uplo! '
     }
 }
+
+def is_damage_sum_expression(expr):
+    """True se l'espressione è una somma danni attacco (mischia o distanza)."""
+    compact = re.sub(r"\s+", "", str(expr or "").lower())
+    return any(
+        token in compact
+        for token in (
+            "dannimis+dannigen",
+            "dannigen+dannimis",
+            "dannidis+dannigen",
+            "dannigen+dannidis",
+        )
+    )
+
 
 def formatta_danno_formula(valore):
     """
@@ -978,6 +990,10 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 return str(int(round(float(val_math))))
             except (TypeError, ValueError):
                 return str(val_math)
+        if formato in ("D", ":D") or (
+            formato in ("L", ":L", "l") and is_damage_sum_expression(expr)
+        ):
+            return formatta_danno_formula(val_math)
         return formatta_valore_avanzato(val_math, formato)
 
     # Regex aggiornata: cerca {contenuto} con opzionale |formato
@@ -3294,7 +3310,7 @@ class OggettoBase(SyncableModel, models.Model):
         blank=True,
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
-        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannigen+dannimis|:L}!",
+        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannimis + dannigen|D} (danno: vuoto se 1, lettere+! da 2 a 9, cifre+! da 10).",
     )
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoBaseStatisticaBase', blank=True, related_name='template_base')
     statistiche_modificatori = models.ManyToManyField(Statistica, through='OggettoBaseModificatore', blank=True, related_name='template_modificatori')
@@ -3370,7 +3386,7 @@ class Oggetto(A_vista):
         blank=True,
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
-        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannigen+dannimis|:L}!",
+        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannimis + dannigen|D} (danno: vuoto se 1, lettere+! da 2 a 9, cifre+! da 10).",
     )
     in_vendita = models.BooleanField(default=False, verbose_name="In vendita al negozio?")
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")

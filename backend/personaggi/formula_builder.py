@@ -179,13 +179,8 @@ def build_stats_by_selection(current_stats, selections):
 
     if damage_mode == "mischia":
         stats["dmg_mischia"] = 1
-        stats["dannidis"] = 0
     elif damage_mode == "distanza":
         stats["dmg_distanza"] = 1
-        stats["dannimis"] = 0
-    else:
-        stats["dannimis"] = 0
-        stats["dannidis"] = 0
 
     return stats
 
@@ -251,6 +246,15 @@ def build_formula_template(formula_type, selections):
         "formula_cura": "{formula_cura}",
         "formula_damage": "{formula_damage}",
     }
+
+    def _damage_block_placeholder():
+        mode = _damage_mode_from_selections(selected_map)
+        if mode == "mischia":
+            return "{dannimis + dannigen|D}"
+        if mode == "distanza":
+            return "{dannidis + dannigen|D}"
+        return None
+
     source_map = {
         "chop": "Chop! ",
         "blam": "Blam! ",
@@ -272,6 +276,11 @@ def build_formula_template(formula_type, selections):
                 # Persisti la sorgente selezionata nel template finale.
                 out.append(source_map[selected_source])
                 continue
+        if block == "formula_damage":
+            damage_ph = _damage_block_placeholder()
+            if damage_ph:
+                out.append(damage_ph)
+            continue
         if _block_included(block):
             out.append(placeholder)
 

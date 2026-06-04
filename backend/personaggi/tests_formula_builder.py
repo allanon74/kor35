@@ -17,6 +17,7 @@ from .models import (
     AURA,
     CARATTERISTICA,
     MODIFICATORE_ADDITIVO,
+    formatta_danno_formula,
     formatta_testo_generico,
     infer_weapon_damage_mode,
 )
@@ -48,7 +49,7 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertEqual(merged["dmg_distanza"], 0)
         self.assertEqual(merged["dannigen"], 2)
         self.assertEqual(merged["dannimis"], 3)
-        self.assertEqual(merged["dannidis"], 0)
+        self.assertEqual(merged["dannidis"], 5)
 
     def test_mischia_damage_preview_sums_dannigen_and_dannimis(self):
         stats = build_stats_by_selection(
@@ -78,9 +79,70 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertNotIn("uno", rendered.lower())
         self.assertNotIn("due!", rendered.lower())
 
-    def test_infer_weapon_damage_mode_from_base_stats(self):
-        self.assertEqual(infer_weapon_damage_mode({"dannidis": 1}), "distanza")
-        self.assertEqual(infer_weapon_damage_mode({"dannimis": 1}), "mischia")
+    def test_formatta_danno_formula_display_rules(self):
+        self.assertEqual(formatta_danno_formula(1), "")
+        self.assertEqual(formatta_danno_formula(2), "due!")
+        self.assertEqual(formatta_danno_formula(9), "nove!")
+        self.assertEqual(formatta_danno_formula(10), "10!")
+        self.assertEqual(formatta_danno_formula(12), "12!")
+
+    def test_explicit_damage_placeholder_uses_display_rules(self):
+        class FakeStat:
+            def __init__(self, parametro):
+                self.parametro = parametro
+
+        class FakeItem:
+            def __init__(self, parametro, valore_base):
+                self.statistica = FakeStat(parametro)
+                self.valore_base = valore_base
+
+        for total, expected in ((1, ""), (3, "tre"), (12, "12")):
+            stats = [FakeItem("dannidis", total)]
+            formula = "Pierce! {dannidis + dannigen|D}"
+            rendered = render_formula_preview(
+                formula=formula,
+                stats_by_param={"dannidis": total, "dannigen": 0},
+            ).lower()
+            self.assertIn("pierce!", rendered)
+            if expected:
+                self.assertIn(expected, rendered)
+            else:
+                self.assertNotIn("uno", rendered)
+                self.assertNotIn("!", rendered.replace("pierce!", ""))
+
+    def test_build_formula_template_writes_explicit_damage_expression(self):
+        mischia_tpl = build_formula_template(
+            "attack",
+            {"formula_damage": "mischia", "formula_source": "chop"},
+        )
+        self.assertIn("{dannimis + dannigen|D}", mischia_tpl)
+        self.assertNotIn("{formula_damage}", mischia_tpl)
+
+        dist_tpl = build_formula_template(
+            "attack",
+            {"formula_damage": "distanza", "formula_source": "pierce"},
+        )
+        self.assertIn("{dannidis + dannigen|D}", dist_tpl)
+        self.assertNotIn("{formula_damage}", dist_tpl)
+
+    def test_infer_weapon_damage_mode_from_saved_formula_not_stats(self):
+        self.assertEqual(
+            infer_weapon_damage_mode(
+                {"dannimis": 99, "dannidis": 0},
+                {"attack_formula_template": "Pierce! {dannidis + dannigen|D}"},
+            ),
+            "distanza",
+        )
+        self.assertEqual(
+            infer_weapon_damage_mode(
+                {"dannidis": 99, "dannimis": 0},
+                {"attack_formula_template": "Chop! {dannimis + dannigen|D}"},
+            ),
+            "mischia",
+        )
+        self.assertIsNone(
+            infer_weapon_damage_mode({"dannidis": 1, "dannimis": 0}, {})
+        )
 
     def test_ranged_weapon_keeps_damage_with_global_dannimis_bonus(self):
         st_mis = Statistica.objects.filter(parametro="dannimis").first()
@@ -117,12 +179,13 @@ class FormulaBuilderLogicTests(TestCase):
         if hasattr(pg, "_modificatori_calcolati_cache"):
             del pg._modificatori_calcolati_cache
 
+        explicit_formula = "{rango|:RANGO}{molt|:MOLT}Pierce! {dannidis + dannigen|D}"
         rendered = formatta_testo_generico(
             "",
-            formula=formula,
+            formula=explicit_formula,
             statistiche_base=stats,
             personaggio=pg,
-            context={"item_modifiers": [], "attack_formula_template": formula},
+            context={"item_modifiers": [], "attack_formula_template": explicit_formula},
             solo_formula=True,
         ).lower()
         self.assertIn("pierce!", rendered)
