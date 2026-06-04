@@ -392,6 +392,44 @@ class TessituraRuntimeTests(APITestCase):
         self.assertIn("RGR", mods)
         self.assertGreaterEqual(mods["RGR"]["add"], 2.0)
 
+    def test_runtime_esporta_descrizione_abilita_temporanea_senza_possesso(self):
+        """L'abilita temporanea puo non essere in abilita_possedute: la descrizione va nel payload runtime."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        abilita = Abilita.objects.create(
+            nome="Potenziare descrizione runtime",
+            descrizione="<p>Effetto temporaneo da tessitura</p>",
+            caratteristica=self.caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        tessitura = Tessitura.objects.create(
+            nome="Tessitura descr runtime",
+            aura_richiesta=self.aura_runtime,
+            usa_effetto_temporaneo=True,
+            abilita_temporanea=abilita,
+            durata_effetto_secondi=60,
+            formula="1d10",
+        )
+        self.assertFalse(self.pg.abilita_possedute.filter(pk=abilita.pk).exists())
+
+        now = timezone.now()
+        TessituraEffettoRuntime.objects.create(
+            personaggio=self.pg,
+            tessitura=tessitura,
+            abilita_temporanea=abilita,
+            inizio=now,
+            fine=now + timedelta(seconds=60),
+            is_attivo=True,
+        )
+        ser = PersonaggioDetailSerializer(self.pg)
+        runtime_rows = ser.data.get("tessiture_attive_runtime") or []
+        self.assertEqual(len(runtime_rows), 1)
+        html = runtime_rows[0].get("abilita_temporanea_descrizione_html") or ""
+        self.assertIn("Effetto temporaneo da tessitura", html)
+
     def test_attiva_runtime_slot_disequippa_oggetto_reale_stesso_slot(self):
         obj = Oggetto.objects.create(
             nome="Spada Runtime",

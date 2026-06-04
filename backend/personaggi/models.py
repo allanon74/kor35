@@ -5256,7 +5256,12 @@ class Personaggio(Inventario):
                 testo_finale =  descrizione_html
         
         if isinstance(item, Abilita):
-            testo_finale = item.TestoFormattato
+            stats = item.abilitastatistica_set.select_related('statistica').order_by(
+                '-statistica__formula', 'statistica__ordine', 'statistica__nome'
+            ).all()
+            testo_finale = formatta_testo_generico(
+                item.descrizione, statistiche_base=stats, personaggio=self
+            )
             if item.pk == getattr(self.get_tratto_camaleonte_posseduto(), 'pk', None):
                 forma_oggi = self.get_forma_camaleonte_del_giorno()
                 if forma_oggi:

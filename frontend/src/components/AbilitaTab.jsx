@@ -126,16 +126,20 @@ const AbilitaTab = ({ onLogout }) => {
           : fallbackSeconds;
         const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
         const ss = String(seconds % 60).padStart(2, '0');
+        const descrizioneHtml =
+          rt?.abilita_temporanea_descrizione_html ||
+          skill?.testo_formattato_personaggio ||
+          skill?.TestoFormattato ||
+          skill?.descrizione ||
+          skill?.testo ||
+          '';
         return {
           id: String(rt.id),
           nome: skill?.nome || rt?.abilita_temporanea_nome || 'Abilita temporanea',
           tessituraNome: rt?.tessitura_nome || 'Tessitura',
-          descrizioneHtml:
-            skill?.testo_formattato_personaggio ||
-            skill?.TestoFormattato ||
-            skill?.descrizione ||
-            skill?.testo ||
-            '<em>Nessuna descrizione disponibile.</em>',
+          descrizioneHtml: descrizioneHtml.trim()
+            ? descrizioneHtml
+            : '<em>Nessuna descrizione disponibile.</em>',
           countdown: `${mm}:${ss}`,
         };
       });

@@ -1479,6 +1479,7 @@ class TessituraOggettoRuntimeSerializer(serializers.ModelSerializer):
 class TessituraEffettoRuntimeSerializer(serializers.ModelSerializer):
     tessitura_nome = serializers.CharField(source='tessitura.nome', read_only=True)
     abilita_temporanea_nome = serializers.CharField(source='abilita_temporanea.nome', read_only=True)
+    abilita_temporanea_descrizione_html = serializers.SerializerMethodField()
     oggetto_runtime = TessituraOggettoRuntimeSerializer(read_only=True)
     secondi_rimanenti = serializers.SerializerMethodField()
 
@@ -1490,6 +1491,7 @@ class TessituraEffettoRuntimeSerializer(serializers.ModelSerializer):
             'tessitura_nome',
             'abilita_temporanea',
             'abilita_temporanea_nome',
+            'abilita_temporanea_descrizione_html',
             'inizio',
             'fine',
             'is_attivo',
@@ -1498,6 +1500,17 @@ class TessituraEffettoRuntimeSerializer(serializers.ModelSerializer):
             'secondi_rimanenti',
             'oggetto_runtime',
         )
+
+    def get_abilita_temporanea_descrizione_html(self, obj):
+        ab = getattr(obj, 'abilita_temporanea', None)
+        if not ab:
+            return ''
+        personaggio = self.context.get('personaggio')
+        if personaggio:
+            html = personaggio.get_testo_formattato_per_item(ab)
+            if html and str(html).strip():
+                return html
+        return ab.descrizione or ''
 
     def get_secondi_rimanenti(self, obj):
         delta = (obj.fine - timezone.now()).total_seconds()
@@ -2544,7 +2557,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
     def get_tessiture_attive_runtime(self, obj):
         runtime_qs = obj.get_tessiture_runtime_attive()
-        return TessituraEffettoRuntimeSerializer(runtime_qs, many=True).data
+        ctx = {**self.context, 'personaggio': obj}
+        return TessituraEffettoRuntimeSerializer(runtime_qs, many=True, context=ctx).data
 
     def get_tessiture_runtime_slots_occupati(self, obj):
         runtime_qs = obj.get_tessiture_runtime_attive()
