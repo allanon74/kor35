@@ -1,4 +1,4 @@
-# Generated manually: memorizza costi effettivi pagati su pivot acquisto/revoca
+# Memorizza costi effettivi pagati su pivot acquisto/revoca (dopo ramo negozi 0185–0189)
 
 from datetime import timedelta
 from decimal import Decimal
@@ -94,7 +94,7 @@ def _backfill_costi_pagati(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("personaggi", "0184_qrcode_stl_creato"),
+        ("personaggi", "0189_negozio_descrizione_immersiva"),
     ]
 
     operations = [
