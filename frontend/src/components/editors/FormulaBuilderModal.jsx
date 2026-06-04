@@ -32,8 +32,6 @@ const FormulaBuilderModal = ({
     dannidis: 0,
   });
   const [includeCura, setIncludeCura] = useState(false);
-  const [includeDanni, setIncludeDanni] = useState(false);
-  const [damageMode, setDamageMode] = useState('mischia');
 
   const statsByParamFromForm = useMemo(() => {
     const byId = new Map(statsOptions.map((s) => [String(s.id), s]));
@@ -69,7 +67,7 @@ const FormulaBuilderModal = ({
         formula: '',
         formula_type: formulaType,
         stats_by_param: { ...statsByParamFromForm, ...numericValues },
-        selections: { ...selections, include_cura: includeCura, include_danni: includeDanni, damage_mode: damageMode },
+        selections: { ...selections, include_cura: includeCura },
         custom_text: customText,
       },
       onLogout
@@ -80,7 +78,7 @@ const FormulaBuilderModal = ({
         setPreview('Errore preview formula.');
       })
       .finally(() => setLoadingPreview(false));
-  }, [open, schema, formulaType, selections, includeCura, includeDanni, damageMode, customText, formulaValue, statsByParamFromForm, numericValues, onLogout]);
+  }, [open, schema, formulaType, selections, includeCura, customText, formulaValue, statsByParamFromForm, numericValues, onLogout]);
 
   if (!open) {
     return null;
@@ -106,7 +104,7 @@ const FormulaBuilderModal = ({
           formula: '',
           formula_type: formulaType,
           stats_by_param: { ...statsByParamFromForm, ...numericValues },
-          selections: { ...selections, include_cura: includeCura, include_danni: includeDanni, damage_mode: damageMode },
+          selections: { ...selections, include_cura: includeCura },
           custom_text: customText,
         },
         onLogout
@@ -194,27 +192,16 @@ const FormulaBuilderModal = ({
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3">
-            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Sezioni opzionali</div>
-            <div className="flex flex-col gap-3 text-sm text-gray-200">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={includeCura} onChange={(e) => setIncludeCura(e.target.checked)} />
-                Inserisci cura
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={includeDanni} onChange={(e) => setIncludeDanni(e.target.checked)} />
-                Inserisci danni
-              </label>
-              {includeDanni && (
-                <select
-                  value={damageMode}
-                  onChange={(e) => setDamageMode(e.target.value)}
-                  className="max-w-xs bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
-                >
-                  <option value="mischia">In mischia</option>
-                  <option value="distanza">A distanza</option>
-                </select>
-              )}
-            </div>
+            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Sezione opzionale</div>
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input type="checkbox" checked={includeCura} onChange={(e) => setIncludeCura(e.target.checked)} />
+              Inserisci cura nella formula
+            </label>
+            <p className="mt-2 text-xs text-gray-500">
+              Il tipo di danno (in mischia / a distanza) si sceglie nella sezione «Danno (tipo attacco)».
+              I valori numerici dannigen, dannimis e dannidis definiscono i componenti: in mischia si usa
+              dannigen + dannimis, a distanza dannigen + dannidis.
+            </p>
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3">

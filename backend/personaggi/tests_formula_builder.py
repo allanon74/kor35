@@ -2,7 +2,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .formula_builder import build_stats_by_selection
+from .formula_builder import (
+    build_formula_template,
+    build_stats_by_selection,
+    render_formula_preview,
+)
 from .models import Abilita, AbilitaFormulaRule, Mattone, Punteggio, AURA, CARATTERISTICA
 
 
@@ -21,6 +25,46 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertEqual(merged["dardo"], 0)
         self.assertEqual(merged["tocco"], 1)
         self.assertEqual(merged["custom_param"], 5)
+
+    def test_damage_mode_preserves_numeric_components(self):
+        current = {"dannigen": 2, "dannimis": 3, "dannidis": 5}
+        selections = {"formula_damage": "mischia"}
+
+        merged = build_stats_by_selection(current, selections)
+
+        self.assertEqual(merged["dmg_mischia"], 1)
+        self.assertEqual(merged["dmg_distanza"], 0)
+        self.assertEqual(merged["dannigen"], 2)
+        self.assertEqual(merged["dannimis"], 3)
+        self.assertEqual(merged["dannidis"], 0)
+
+    def test_mischia_damage_preview_sums_dannigen_and_dannimis(self):
+        stats = build_stats_by_selection(
+            {"dannigen": 2, "dannimis": 1},
+            {"formula_damage": "mischia"},
+        )
+        formula = build_formula_template("attack", {"formula_damage": "mischia"})
+        rendered = render_formula_preview(formula=formula, stats_by_param=stats)
+        self.assertIn("tre!", rendered.lower())
+
+    def test_distanza_damage_preview_sums_dannigen_and_dannidis(self):
+        stats = build_stats_by_selection(
+            {"dannigen": 2, "dannidis": 1},
+            {"formula_damage": "distanza"},
+        )
+        formula = build_formula_template("attack", {"formula_damage": "distanza"})
+        rendered = render_formula_preview(formula=formula, stats_by_param=stats)
+        self.assertIn("tre!", rendered.lower())
+
+    def test_damage_total_one_is_omitted(self):
+        stats = build_stats_by_selection(
+            {"dannigen": 1, "dannimis": 0},
+            {"formula_damage": "mischia"},
+        )
+        formula = build_formula_template("attack", {"formula_damage": "mischia"})
+        rendered = render_formula_preview(formula=formula, stats_by_param=stats)
+        self.assertNotIn("uno", rendered.lower())
+        self.assertNotIn("due!", rendered.lower())
 
 
 class FormulaBuilderApiTests(TestCase):

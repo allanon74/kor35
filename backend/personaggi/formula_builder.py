@@ -83,12 +83,12 @@ FORMULA_BUILDER_SCHEMA = {
         },
         {
             "id": "formula_damage",
-            "label": "Danno",
+            "label": "Danno (tipo attacco)",
             "kind": "single",
             "options": [
                 {"id": "none", "label": "Nessuno", "stats": {}},
-                {"id": "mischia", "label": "Mischia", "stats": {"dannimis": 1}},
-                {"id": "distanza", "label": "Distanza", "stats": {"dannidis": 1}},
+                {"id": "mischia", "label": "In mischia", "stats": {}},
+                {"id": "distanza", "label": "A distanza", "stats": {}},
             ],
         },
     ],
@@ -144,16 +144,49 @@ def _iter_selected_options(selections):
         for option_id in selected_ids:
             option = valid_options.get(option_id)
             if option:
-                yield option
+                yield section_id, option
+
+
+def _damage_mode_from_selections(selections):
+    if not isinstance(selections, dict):
+        return None
+    explicit = selections.get("formula_damage")
+    if explicit and str(explicit).strip().lower() not in ("", "none"):
+        return str(explicit).strip().lower()
+    return None
 
 
 def build_stats_by_selection(current_stats, selections):
     stats = dict(current_stats or {})
+    original = dict(current_stats or {})
+    selections = selections or {}
+
     for param in FORMULA_CONTROLLED_PARAMS:
         stats[param] = 0
-    for option in _iter_selected_options(selections):
+
+    for section_id, option in _iter_selected_options(selections):
+        if section_id == "formula_damage":
+            continue
         for param, value in (option.get("stats") or {}).items():
             stats[param] = value
+
+    damage_mode = _damage_mode_from_selections(selections)
+    stats["dmg_mischia"] = 0
+    stats["dmg_distanza"] = 0
+    stats["dannimis"] = int(original.get("dannimis") or 0)
+    stats["dannidis"] = int(original.get("dannidis") or 0)
+    stats["dannigen"] = int(original.get("dannigen") or stats.get("dannigen") or 0)
+
+    if damage_mode == "mischia":
+        stats["dmg_mischia"] = 1
+        stats["dannidis"] = 0
+    elif damage_mode == "distanza":
+        stats["dmg_distanza"] = 1
+        stats["dannimis"] = 0
+    else:
+        stats["dannimis"] = 0
+        stats["dannidis"] = 0
+
     return stats
 
 
@@ -200,6 +233,13 @@ def build_formula_template(formula_type, selections):
             return any(str(x).strip().lower() != "none" for x in selected)
         return str(selected).strip().lower() != "none"
 
+    def _block_included(block):
+        if block == "formula_cura":
+            return bool(selected_map.get("include_cura"))
+        if block == "formula_damage":
+            return _section_selected("formula_damage")
+        return _section_selected(block)
+
     placeholder_by_block = {
         "formula_type": "{formula_type}",
         "rango": "{rango|:RANGO}",
@@ -232,7 +272,7 @@ def build_formula_template(formula_type, selections):
                 # Persisti la sorgente selezionata nel template finale.
                 out.append(source_map[selected_source])
                 continue
-        if _section_selected(block):
+        if _block_included(block):
             out.append(placeholder)
 
     return "".join(out) or DEFAULT_FORMULA_TEMPLATE

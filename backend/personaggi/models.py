@@ -344,16 +344,24 @@ EXCLUSIVE_FORMAT_GROUPS = {
                 "params": ["dannimis", "dannigen"],
                 "label": "",
                 "extra": {
-                    "when": "dannimis + dannigen > 0",
-                    "template": "{dannimis + dannigen|:N}!",
+                    "when": (
+                        "(dmg_mischia > 0 and dannimis + dannigen > 1) or "
+                        "(dmg_mischia + dmg_distanza <= 0 and dannimis + dannigen > 1 "
+                        "and dannidis + dannigen <= 1)"
+                    ),
+                    "template": "{dannimis + dannigen|D}",
                 },
             },
             {
                 "params": ["dannidis", "dannigen"],
                 "label": "",
                 "extra": {
-                    "when": "dannidis + dannigen > 0 and dannimis + dannigen <= 0",
-                    "template": "{dannidis + dannigen|:N}!",
+                    "when": (
+                        "(dmg_distanza > 0 and dannidis + dannigen > 1) or "
+                        "(dmg_mischia + dmg_distanza <= 0 and dannidis + dannigen > 1 "
+                        "and dannimis + dannigen <= 1)"
+                    ),
+                    "template": "{dannidis + dannigen|D}",
                 },
             },
         ],
@@ -636,6 +644,24 @@ FORMAT_COLLECTIONS = {
     }
 }
 
+def formatta_danno_formula(valore):
+    """
+    Danno in formula attacco: 1 implicito (vuoto); 2-9 lettera+!; 10+ numero+!.
+    """
+    try:
+        n = int(round(float(valore)))
+    except (TypeError, ValueError):
+        return ""
+    if n <= 1:
+        return ""
+    if n >= 10:
+        return f"{n}!"
+    word = FORMAT_COLLECTIONS.get("N", {}).get(n)
+    if word is None:
+        word = str(n)
+    return f"{word}!"
+
+
 # 3. FUNZIONE DI TRASFORMAZIONE VALORE
 def formatta_valore_avanzato(valore, formato, context=None):
     """
@@ -682,6 +708,10 @@ def formatta_valore_avanzato(valore, formato, context=None):
     except (ValueError, TypeError):
         # Se non è un numero, ritorniamo la stringa originale
         return str(valore)
+
+    # Danno attacco (2-9 lettere+!, 10+ cifre+!, 1 vuoto)
+    if formato in ('D', ':D'):
+        return formatta_danno_formula(n)
 
     # C. Formattazione Algoritmica (Romani)
     if formato == 'R': return to_roman(n)
@@ -800,6 +830,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     for _k in (
         "rango", "molt",
         "dannimis", "dannidis", "dannigen",
+        "dmg_mischia", "dmg_distanza",
         "curapf", "cura",
         "chop", "blam", "pierce", "mental", "elemento_src",
         "flusso", "dardo", "tocco", "cono", "esplos", "tutti",
