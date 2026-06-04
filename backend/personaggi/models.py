@@ -5391,7 +5391,7 @@ class Personaggio(Inventario):
         if hasattr(item, 'costo_crediti'): costo_base = item.costo_crediti
         if costo_base <= 0: return 0
         sconto_perc = 0
-        if isinstance(item, (Infusione, Tessitura, Attivata)): sconto_perc = self.get_valore_statistica('RCT')
+        if isinstance(item, (Infusione, Tessitura, Attivata, Cerimoniale)): sconto_perc = self.get_valore_statistica('RCT')
         elif isinstance(item, Oggetto): sconto_perc = self.get_valore_statistica('RCO')
         elif isinstance(item, Abilita): sconto_perc = self.get_valore_statistica('RCA')
         if sconto_perc > 0:
@@ -5404,6 +5404,18 @@ class PersonaggioAbilita(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     abilita = models.ForeignKey(Abilita, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
+    costo_pc_pagato = models.IntegerField(
+        default=0,
+        verbose_name="PC pagati all'acquisto",
+        help_text="Usato per il rimborso in revoca (valore effettivo pagato).",
+    )
+    costo_crediti_pagato = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Crediti pagati all'acquisto",
+        help_text="Usato per il rimborso in revoca (valore effettivo pagato).",
+    )
     origine = models.CharField(
         max_length=20,
         choices=[
@@ -5474,6 +5486,13 @@ class PersonaggioInfusione(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
+    costo_crediti_pagato = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Crediti pagati all'acquisto",
+        help_text="Usato per il rimborso in revoca (valore effettivo pagato).",
+    )
 
     class Meta:
         unique_together = [["personaggio", "infusione"]]
@@ -5485,6 +5504,13 @@ class PersonaggioTessitura(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
+    costo_crediti_pagato = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Crediti pagati all'acquisto",
+        help_text="Usato per il rimborso in revoca (valore effettivo pagato).",
+    )
     is_favorite = models.BooleanField(default=False, verbose_name="Preferita")
     
     class Meta:
@@ -5496,6 +5522,13 @@ class PersonaggioCerimoniale(SyncableModel, models.Model):
     personaggio = models.ForeignKey(Personaggio, on_delete=models.CASCADE)
     cerimoniale = models.ForeignKey(Cerimoniale, on_delete=models.CASCADE)
     data_acquisizione = models.DateTimeField(default=timezone.now)
+    costo_crediti_pagato = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Crediti pagati all'acquisto",
+        help_text="Usato per il rimborso in revoca (valore effettivo pagato).",
+    )
 
     class Meta:
         unique_together = [["personaggio", "cerimoniale"]]

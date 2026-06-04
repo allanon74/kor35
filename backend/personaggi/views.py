@@ -16,6 +16,12 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 # --- IMPORT MODELLI AGGIORNATI ---
+from .acquisto_costi import (
+    calcola_costi_abilita_acquisto,
+    calcola_costo_tecnica_acquisto,
+    rimborso_crediti_da_pivot,
+    rimborso_pc_da_pivot,
+)
 from .models import (
     OggettoInInventario, Abilita, Tier, QrCode, Oggetto, Attivata, Manifesto, Nodo,
     A_vista, Inventario, Infusione, Tessitura, Personaggio, TransazioneSospesa, 
@@ -662,14 +668,10 @@ class AcquisisciAbilitaView(APIView):
             if crediti_delta:
                 personaggio.modifica_crediti(crediti_delta, f"Cambio tratto AIN: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}")
         else:
+            costo_pc_finale, costo_crediti_finale = calcola_costi_abilita_acquisto(personaggio, abilita)
             mods = personaggio.modificatori_calcolati
             sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0})
             sconto_valore = max(0, sconto_stat.get('add', 0))
-            sconto_percent = Decimal(sconto_valore) / Decimal(100)
-            moltiplicatore_costo = Decimal(1) - sconto_percent
-            costo_pc_finale = abilita.costo_pc
-            costo_crediti_base = Decimal(abilita.costo_crediti)
-            costo_crediti_finale = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal('0.01'))
 
             if personaggio.punti_caratteristica < costo_pc_finale:
                 return Response({"error": f"Punti Caratteristica insufficenti. Richiesti: {costo_pc_finale}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -682,10 +684,19 @@ class AcquisisciAbilitaView(APIView):
             personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
             personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
 
+        if is_tratto_ain:
+            costo_pc_pagato = int(abilita.costo_pc or 0)
+            costo_crediti_pagato = Decimal(abilita.costo_crediti or 0)
+        else:
+            costo_pc_pagato = int(costo_pc_finale)
+            costo_crediti_pagato = costo_crediti_finale
+
         PersonaggioAbilita.objects.create(
             personaggio=personaggio,
             abilita=abilita,
             origine=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
+            costo_pc_pagato=costo_pc_pagato,
+            costo_crediti_pagato=costo_crediti_pagato,
         )
         
         cache.delete(f"acquirable_skills_{personaggio.id}")
@@ -865,11 +876,17 @@ class AcquisisciInfusioneView(APIView):
 
         if personaggio.infusioni_possedute.filter(id=infusione.id).exists(): return Response({"error": "Infusione già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
 
-        costo = infusione.costo_crediti 
-        if personaggio.crediti < costo: return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
+        costo = calcola_costo_tecnica_acquisto(personaggio, infusione)
+        costo_dec = Decimal(costo)
+        if personaggio.crediti < costo_dec:
+            return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        personaggio.modifica_crediti(-costo, f"Acquisito infusione: {infusione.nome}")
-        personaggio.infusioni_possedute.add(infusione)
+        personaggio.modifica_crediti(-costo_dec, f"Acquisito infusione: {infusione.nome}")
+        PersonaggioInfusione.objects.create(
+            personaggio=personaggio,
+            infusione=infusione,
+            costo_crediti_pagato=costo_dec,
+        )
         personaggio.aggiungi_log(f"Ha appreso l'infusione '{infusione.nome}' (Liv. {infusione.livello}).")
         
         if hasattr(infusione, 'proposta_creazione') and infusione.proposta_creazione:
@@ -966,11 +983,17 @@ class AcquisisciTessituraView(APIView):
 
         if personaggio.tessiture_possedute.filter(id=tessitura.id).exists(): return Response({"error": "Tessitura già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
 
-        costo = tessitura.costo_crediti
-        if personaggio.crediti < costo: return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
+        costo = calcola_costo_tecnica_acquisto(personaggio, tessitura)
+        costo_dec = Decimal(costo)
+        if personaggio.crediti < costo_dec:
+            return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        personaggio.modifica_crediti(-costo, f"Acquisito tessitura: {tessitura.nome}")
-        personaggio.tessiture_possedute.add(tessitura)
+        personaggio.modifica_crediti(-costo_dec, f"Acquisito tessitura: {tessitura.nome}")
+        PersonaggioTessitura.objects.create(
+            personaggio=personaggio,
+            tessitura=tessitura,
+            costo_crediti_pagato=costo_dec,
+        )
         personaggio.aggiungi_log(f"Ha appreso la tessitura '{tessitura.nome}' (Liv. {tessitura.livello}).")
         
         if hasattr(tessitura, 'proposta_creazione') and tessitura.proposta_creazione:
@@ -1170,13 +1193,17 @@ class AcquisisciCerimonialeView(APIView):
         if personaggio.cerimoniali_posseduti.filter(id=cerimoniale.id).exists(): 
             return Response({"error": "Cerimoniale già conosciuto."}, status=status.HTTP_400_BAD_REQUEST)
 
-        costo = cerimoniale.costo_crediti
-        if personaggio.crediti < costo: 
+        costo = calcola_costo_tecnica_acquisto(personaggio, cerimoniale)
+        costo_dec = Decimal(costo)
+        if personaggio.crediti < costo_dec:
             return Response({"error": f"Crediti insufficienti. Richiesti: {costo}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Esegui transazione
-        personaggio.modifica_crediti(-costo, f"Appreso cerimoniale: {cerimoniale.nome}")
-        personaggio.cerimoniali_posseduti.add(cerimoniale)
+        personaggio.modifica_crediti(-costo_dec, f"Appreso cerimoniale: {cerimoniale.nome}")
+        PersonaggioCerimoniale.objects.create(
+            personaggio=personaggio,
+            cerimoniale=cerimoniale,
+            costo_crediti_pagato=costo_dec,
+        )
         personaggio.aggiungi_log(f"Ha appreso il cerimoniale '{cerimoniale.nome}' (Liv. {cerimoniale.livello}).")
         
         # Gestione Royalty (Opzionale, come per le altre tecniche)
@@ -1244,58 +1271,10 @@ class RevocaAbilitaView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        window = timedelta(minutes=10)
-        start_dt = acquired_at - window
-        end_dt = acquired_at + window
-
-        desc_prefix = f"Acquisito abilità: {abilita.nome}"
-
-        pc_mov = (
-            PuntiCaratteristicaMovimento.objects.filter(
-                personaggio=personaggio,
-                descrizione__startswith=desc_prefix,
-                data__gte=start_dt,
-                data__lte=end_dt,
-            )
-            .order_by("-data")
-            .first()
+        pc_refund = rimborso_pc_da_pivot(pivot, acquired_at=acquired_at)
+        credits_refund = rimborso_crediti_da_pivot(
+            pivot, item=abilita, acquired_at=acquired_at
         )
-        credit_mov = (
-            CreditoMovimento.objects.filter(
-                personaggio=personaggio,
-                descrizione__startswith=desc_prefix,
-                data__gte=start_dt,
-                data__lte=end_dt,
-            )
-            .order_by("-data")
-            .first()
-        )
-
-        pc_refund = 0
-        if pc_mov and pc_mov.importo < 0:
-            pc_refund = -pc_mov.importo
-
-        credits_refund = 0
-        if credit_mov and credit_mov.importo < 0:
-            credits_refund = -credit_mov.importo
-
-        # Fallback: se non troviamo i movimenti, ricalcoliamo costi attuali come in fase di acquisto.
-        is_tratto_ain = (
-            abilita.is_tratto_aura
-            and abilita.aura_riferimento_id
-            and getattr(abilita.aura_riferimento, "sigla", None) == "AIN"
-        )
-        if pc_refund == 0 and credits_refund == 0 and not is_tratto_ain:
-            mods = personaggio.modificatori_calcolati
-            sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {"add": 0, "mol": 1.0})
-            sconto_valore = max(0, sconto_stat.get("add", 0))
-            sconto_percent = Decimal(sconto_valore) / Decimal(100)
-            moltiplicatore_costo = Decimal(1) - sconto_percent
-            costo_pc_finale = abilita.costo_pc
-            costo_crediti_base = Decimal(abilita.costo_crediti)
-            costo_crediti_finale = (costo_crediti_base * moltiplicatore_costo).quantize(Decimal("0.01"))
-            pc_refund = costo_pc_finale
-            credits_refund = costo_crediti_finale
 
         if pc_refund:
             personaggio.modifica_pc(pc_refund, f"Revocato acquisto abilità: {abilita.nome}")
@@ -1348,27 +1327,9 @@ class RevocaInfusioneView(APIView):
         ):
             return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
 
-        window = timedelta(minutes=10)
-        start_dt = acquired_at - window
-        end_dt = acquired_at + window
-        desc = f"Acquisito infusione: {infusione.nome}"
-
-        credit_mov = (
-            CreditoMovimento.objects.filter(
-                personaggio=personaggio,
-                descrizione=desc,
-                data__gte=start_dt,
-                data__lte=end_dt,
-            )
-            .order_by("-data")
-            .first()
+        credits_refund = rimborso_crediti_da_pivot(
+            pivot, item=infusione, acquired_at=acquired_at
         )
-
-        credits_refund = 0
-        if credit_mov and credit_mov.importo < 0:
-            credits_refund = -credit_mov.importo
-        else:
-            credits_refund = infusione.costo_crediti
 
         if credits_refund:
             personaggio.modifica_crediti(credits_refund, f"Revocato acquisto infusione: {infusione.nome}")
@@ -1426,27 +1387,9 @@ class RevocaTessituraView(APIView):
         ):
             return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
 
-        window = timedelta(minutes=10)
-        start_dt = acquired_at - window
-        end_dt = acquired_at + window
-        desc = f"Acquisito tessitura: {tessitura.nome}"
-
-        credit_mov = (
-            CreditoMovimento.objects.filter(
-                personaggio=personaggio,
-                descrizione=desc,
-                data__gte=start_dt,
-                data__lte=end_dt,
-            )
-            .order_by("-data")
-            .first()
+        credits_refund = rimborso_crediti_da_pivot(
+            pivot, item=tessitura, acquired_at=acquired_at
         )
-
-        credits_refund = 0
-        if credit_mov and credit_mov.importo < 0:
-            credits_refund = -credit_mov.importo
-        else:
-            credits_refund = tessitura.costo_crediti
 
         if credits_refund:
             personaggio.modifica_crediti(credits_refund, f"Revocato acquisto tessitura: {tessitura.nome}")
@@ -1503,27 +1446,9 @@ class RevocaCerimonialeView(APIView):
         ):
             return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
 
-        window = timedelta(minutes=10)
-        start_dt = acquired_at - window
-        end_dt = acquired_at + window
-        desc = f"Appreso cerimoniale: {cerimoniale.nome}"
-
-        credit_mov = (
-            CreditoMovimento.objects.filter(
-                personaggio=personaggio,
-                descrizione=desc,
-                data__gte=start_dt,
-                data__lte=end_dt,
-            )
-            .order_by("-data")
-            .first()
+        credits_refund = rimborso_crediti_da_pivot(
+            pivot, item=cerimoniale, acquired_at=acquired_at
         )
-
-        credits_refund = 0
-        if credit_mov and credit_mov.importo < 0:
-            credits_refund = -credit_mov.importo
-        else:
-            credits_refund = cerimoniale.costo_crediti
 
         if credits_refund:
             personaggio.modifica_crediti(credits_refund, f"Revocato acquisto cerimoniale: {cerimoniale.nome}")
@@ -5060,17 +4985,21 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         rimborso_crediti = Decimal("0")
 
         for link in abilita_links:
-            rimborso_pc += int(link.abilita.costo_pc or 0)
-            rimborso_crediti += Decimal(link.abilita.costo_crediti or 0)
+            rimborso_pc += int(link.costo_pc_pagato or 0) or int(link.abilita.costo_pc or 0)
+            pagato_cr = link.costo_crediti_pagato
+            rimborso_crediti += pagato_cr if pagato_cr else Decimal(link.abilita.costo_crediti or 0)
 
         for link in infusioni_links:
-            rimborso_crediti += Decimal(link.infusione.costo_crediti or 0)
+            pagato_cr = link.costo_crediti_pagato
+            rimborso_crediti += pagato_cr if pagato_cr else Decimal(link.infusione.costo_crediti or 0)
 
         for link in tessiture_links:
-            rimborso_crediti += Decimal(link.tessitura.costo_crediti or 0)
+            pagato_cr = link.costo_crediti_pagato
+            rimborso_crediti += pagato_cr if pagato_cr else Decimal(link.tessitura.costo_crediti or 0)
 
         for link in cerimoniali_links:
-            rimborso_crediti += Decimal(link.cerimoniale.costo_crediti or 0)
+            pagato_cr = link.costo_crediti_pagato
+            rimborso_crediti += pagato_cr if pagato_cr else Decimal(link.cerimoniale.costo_crediti or 0)
 
         PersonaggioAbilita.objects.filter(personaggio=personaggio).delete()
         PersonaggioInfusione.objects.filter(personaggio=personaggio).delete()

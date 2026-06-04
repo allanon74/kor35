@@ -2284,9 +2284,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         # data_acquisizione per singola abilità posseduta
         pivots = (
             PersonaggioAbilita.objects.filter(personaggio=personaggio, abilita_id__in=abilita_ids)
-            .values("abilita_id", "data_acquisizione")
+            .values("abilita_id", "data_acquisizione", "costo_crediti_pagato", "costo_pc_pagato")
         )
         acq_map = {p["abilita_id"]: p["data_acquisizione"] for p in pivots}
+        paid_cr_map = {p["abilita_id"]: p["costo_crediti_pagato"] for p in pivots}
+        paid_pc_map = {p["abilita_id"]: p["costo_pc_pagato"] for p in pivots}
 
         # Vincolo: se l'abilità è prerequisito di almeno un'altra abilità posseduta, non è mai modificabile
         prereq_locked_ids = get_abilita_bloccate_da_prerequisito(abilita_ids)
@@ -2300,6 +2302,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             acquired_at = acq_map.get(ab_id)
             mod_base = self._is_modificabile_per_eventi(acquired_at)
             item["is_modifiable"] = bool(mod_base and ab_id not in prereq_locked_ids)
+            if paid_cr_map.get(ab_id):
+                item["costo_crediti_pagato"] = paid_cr_map[ab_id]
+            if paid_pc_map.get(ab_id):
+                item["costo_pc_pagato"] = paid_pc_map[ab_id]
 
             # Se è la forma camaleonte posseduta, mostra la formattazione con "forma del giorno"
             # direttamente sotto la descrizione nella scheda personaggio.
@@ -2346,9 +2352,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
         pivots = (
             PersonaggioInfusione.objects.filter(personaggio=personaggio, infusione_id__in=infusioni_ids)
-            .values("infusione_id", "data_acquisizione")
+            .values("infusione_id", "data_acquisizione", "costo_crediti_pagato")
         )
         acq_map = {p["infusione_id"]: p["data_acquisizione"] for p in pivots}
+        paid_map = {p["infusione_id"]: p["costo_crediti_pagato"] for p in pivots}
 
         risultati = []
         context_con_pg = {**self.context, "personaggio": personaggio}
@@ -2356,6 +2363,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             dati = InfusioneSerializer(inf, context=context_con_pg).data
             dati["testo_formattato_personaggio"] = personaggio.get_testo_formattato_per_item(inf)
             dati["is_modifiable"] = bool(self._is_modificabile_per_eventi(acq_map.get(inf.id)))
+            if paid_map.get(inf.id):
+                dati["costo_crediti_pagato"] = paid_map[inf.id]
             risultati.append(dati)
         return risultati
 
@@ -2368,10 +2377,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
         pivots = (
             PersonaggioTessitura.objects.filter(personaggio=personaggio, tessitura_id__in=tessiture_ids)
-            .values("tessitura_id", "data_acquisizione", "is_favorite")
+            .values("tessitura_id", "data_acquisizione", "is_favorite", "costo_crediti_pagato")
         )
         acq_map = {p["tessitura_id"]: p["data_acquisizione"] for p in pivots}
         fav_map = {p["tessitura_id"]: p["is_favorite"] for p in pivots}
+        paid_map = {p["tessitura_id"]: p["costo_crediti_pagato"] for p in pivots}
 
         risultati = []
         context_con_pg = {**self.context, "personaggio": personaggio}
@@ -2380,6 +2390,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             dati["testo_formattato_personaggio"] = personaggio.get_testo_formattato_per_item(tes)
             dati["is_favorite"] = bool(fav_map.get(tes.id, False))
             dati["is_modifiable"] = bool(self._is_modificabile_per_eventi(acq_map.get(tes.id)))
+            if paid_map.get(tes.id):
+                dati["costo_crediti_pagato"] = paid_map[tes.id]
             risultati.append(dati)
         return risultati
 
@@ -2393,15 +2405,19 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
 
         pivots = (
             PersonaggioCerimoniale.objects.filter(personaggio=personaggio, cerimoniale_id__in=cer_ids)
-            .values("cerimoniale_id", "data_acquisizione")
+            .values("cerimoniale_id", "data_acquisizione", "costo_crediti_pagato")
         )
         acq_map = {p["cerimoniale_id"]: p["data_acquisizione"] for p in pivots}
+        paid_map = {p["cerimoniale_id"]: p["costo_crediti_pagato"] for p in pivots}
 
         context_con_pg = {**self.context, "personaggio": personaggio}
         serialized = CerimonialeSerializer(cerimoniali, many=True, context=context_con_pg).data
 
         for item in serialized:
-            item["is_modifiable"] = bool(self._is_modificabile_per_eventi(acq_map.get(item.get("id"))))
+            cid = item.get("id")
+            item["is_modifiable"] = bool(self._is_modificabile_per_eventi(acq_map.get(cid)))
+            if paid_map.get(cid):
+                item["costo_crediti_pagato"] = paid_map[cid]
 
         return serialized
 

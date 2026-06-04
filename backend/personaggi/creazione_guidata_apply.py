@@ -242,6 +242,8 @@ def try_acquire_abilita(personaggio, abilita, request=None):
         personaggio=personaggio,
         abilita=abilita,
         origine=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
+        costo_pc_pagato=int(costo_pc_finale),
+        costo_crediti_pagato=costo_crediti_finale,
     )
     cache.delete(f"acquirable_skills_{personaggio.id}")
     _sync_coma_state(personaggio)
