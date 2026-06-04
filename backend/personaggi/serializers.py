@@ -1286,8 +1286,16 @@ class OggettoSerializer(serializers.ModelSerializer):
         # Passa le statistiche_base dell'oggetto per includere i valori base
         statistiche_base = obj.oggettostatisticabase_set.select_related('statistica').all()
         item_mods = obj.oggettostatistica_set.select_related('statistica').all()
-        context = {'livello': obj.livello, 'aura': obj.aura, 'item_modifiers': item_mods}
-        
+        from .models import FORMULA_SCOPE_ATTACK
+
+        context = {
+            'livello': obj.livello,
+            'aura': obj.aura,
+            'item_modifiers': item_mods,
+            'formula_kind': FORMULA_SCOPE_ATTACK,
+            'attack_formula_template': obj.attacco_base,
+        }
+
         if personaggio:
             # Usiamo la funzione di utility del model per risolvere le graffe {}
             # Passiamo l'attacco come "formula" con statistiche_base e modificatori del personaggio

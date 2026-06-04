@@ -7,7 +7,19 @@ from .formula_builder import (
     build_stats_by_selection,
     render_formula_preview,
 )
-from .models import Abilita, AbilitaFormulaRule, Mattone, Punteggio, AURA, CARATTERISTICA
+from .models import (
+    Abilita,
+    AbilitaFormulaRule,
+    AbilitaStatistica,
+    Mattone,
+    Punteggio,
+    Statistica,
+    AURA,
+    CARATTERISTICA,
+    MODIFICATORE_ADDITIVO,
+    formatta_testo_generico,
+    infer_weapon_damage_mode,
+)
 
 
 class FormulaBuilderLogicTests(TestCase):
@@ -65,6 +77,56 @@ class FormulaBuilderLogicTests(TestCase):
         rendered = render_formula_preview(formula=formula, stats_by_param=stats)
         self.assertNotIn("uno", rendered.lower())
         self.assertNotIn("due!", rendered.lower())
+
+    def test_infer_weapon_damage_mode_from_base_stats(self):
+        self.assertEqual(infer_weapon_damage_mode({"dannidis": 1}), "distanza")
+        self.assertEqual(infer_weapon_damage_mode({"dannimis": 1}), "mischia")
+
+    def test_ranged_weapon_keeps_damage_with_global_dannimis_bonus(self):
+        st_mis = Statistica.objects.filter(parametro="dannimis").first()
+        if not st_mis:
+            self.skipTest("Statistica dannimis non presente nel DB di test")
+        abilita, _ = Abilita.objects.get_or_create(
+            nome="Test bonus mischia globale",
+            defaults={"costo_pc": 0, "costo_crediti": 0},
+        )
+        AbilitaStatistica.objects.update_or_create(
+            abilita=abilita,
+            statistica=st_mis,
+            defaults={"valore": 1, "tipo_modificatore": MODIFICATORE_ADDITIVO},
+        )
+
+        class FakeStat:
+            def __init__(self, parametro):
+                self.parametro = parametro
+
+        class FakeItem:
+            def __init__(self, parametro, valore_base):
+                self.statistica = FakeStat(parametro)
+                self.valore_base = valore_base
+
+        stats = [FakeItem("dannidis", 2)]
+        formula = "{rango|:RANGO}{molt|:MOLT}Pierce! {formula_damage}"
+
+        user_model = __import__("django.contrib.auth", fromlist=["get_user_model"]).get_user_model()
+        user = user_model.objects.create_user(username="formula_weapon_dmg", password="x")
+        from .models import Personaggio, PersonaggioAbilita
+
+        pg = Personaggio.objects.create(nome="PG formula weapon", proprietario=user)
+        PersonaggioAbilita.objects.create(personaggio=pg, abilita=abilita)
+        if hasattr(pg, "_modificatori_calcolati_cache"):
+            del pg._modificatori_calcolati_cache
+
+        rendered = formatta_testo_generico(
+            "",
+            formula=formula,
+            statistiche_base=stats,
+            personaggio=pg,
+            context={"item_modifiers": [], "attack_formula_template": formula},
+            solo_formula=True,
+        ).lower()
+        self.assertIn("pierce!", rendered)
+        self.assertIn("due!", rendered)
 
 
 class FormulaBuilderApiTests(TestCase):

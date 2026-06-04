@@ -553,6 +553,46 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
         built = f"{built} "
     return built
 
+
+def infer_weapon_damage_mode(base_values, context=None):
+    """
+    Tipo danno attacco (mischia/distanza) dalle statistiche base dell'oggetto.
+    Usa i valori base prima dei modificatori globali del personaggio, così un bonus
+    a dannimis (es. abilità temporanea) non sposta il danno delle armi a distanza.
+    """
+    context = context or {}
+    explicit = context.get("damage_mode")
+    if explicit in ("mischia", "distanza"):
+        return explicit
+
+    base_values = base_values or {}
+    base_mis = int(base_values.get("dannimis") or 0)
+    base_dis = int(base_values.get("dannidis") or 0)
+    if base_dis > 0 and base_mis <= 0:
+        return "distanza"
+    if base_mis > 0 and base_dis <= 0:
+        return "mischia"
+    if base_mis > 0 and base_dis > 0:
+        return "mischia" if base_mis >= base_dis else "distanza"
+
+    tmpl = str(context.get("attack_formula_template") or "").lower()
+    if "pierce" in tmpl:
+        return "distanza"
+    if "chop" in tmpl:
+        return "mischia"
+    return None
+
+
+def apply_weapon_damage_mode_flags(base_values, eval_context, context=None):
+    mode = infer_weapon_damage_mode(base_values, context)
+    if mode == "mischia":
+        eval_context["dmg_mischia"] = 1
+        eval_context["dmg_distanza"] = 0
+    elif mode == "distanza":
+        eval_context["dmg_distanza"] = 1
+        eval_context["dmg_mischia"] = 0
+
+
 def _get_icon_color_from_bg(hex_color):
     try:
         hex_color = hex_color.lstrip('#')
@@ -838,6 +878,11 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     ):
         if _k not in eval_context:
             eval_context[_k] = 0
+
+    if "{formula_damage}" in formula_out:
+        damage_ctx = dict(context or {})
+        damage_ctx.setdefault("attack_formula_template", formula_out)
+        apply_weapon_damage_mode_flags(base_values, eval_context, damage_ctx)
 
     # Override semantici formula da abilita possedute (sorgente, aura, elemento).
     if personaggio and hasattr(personaggio, "get_formula_semantic_overrides"):
