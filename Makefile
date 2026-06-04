@@ -55,7 +55,7 @@ help:
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
 	@echo "  make restart ENV=dev-home RUN_MIGRATIONS=1 RUN_PIP_INSTALL=1 RUN_COLLECTSTATIC=1"
 	@echo ""
-	@echo "Sync:"
+	@echo "Sync (vedi config/docker/SYNC.md — master=prod, replica=dev-office|mirror):"
 	@echo "  make sync-db [SYNC_SINCE=ISO_DATETIME] # pull-only DB (backend container)"
 	@echo "  make sync-db-full            # pull-only completo da 1970-01-01T00:00:00Z"
 	@echo "  make sync-db-diagnose        # pull-only con diagnostica conflitti SegnoZodiacale"

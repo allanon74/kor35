@@ -1,3 +1,5 @@
+# dev-home: stack locale WSL; sync verso master opzionale (EDGE_SYNC_URL vuoto = DB isolato).
+
 services:
   db:
     container_name: kor35_devhome_db
@@ -9,6 +11,9 @@ services:
 
   backend:
     container_name: kor35_devhome_backend
+    environment:
+      KOR35_SYNC_NODE_ROLE: local
+      EDGE_SYNC_STATE_FILE: /app/runtime-state/edge_sync_dev-home.json
     volumes:
       - ../../backend:/app
       - ./nginx-docker/static_data:/app/static

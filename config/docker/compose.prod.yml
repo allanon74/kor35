@@ -1,3 +1,5 @@
+# prod: nodo master sync (nessun EDGE_SYNC_URL); le replica pushano qui via /api/sync/edge/.
+
 services:
   db:
     container_name: kor35_prod_db
@@ -11,6 +13,9 @@ services:
 
   backend:
     container_name: kor35_prod_backend
+    environment:
+      KOR35_SYNC_NODE_ROLE: master
+      EDGE_SYNC_STATE_FILE: /app/runtime-state/edge_sync_prod.json
     volumes:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media

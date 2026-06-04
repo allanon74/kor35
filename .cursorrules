@@ -17,10 +17,15 @@ Poiché i database Master ed Edge operano separatamente e si sincronizzano a pos
 ## 2. Regole per le API e la Sincronizzazione
 - Usa Django REST Framework (DRF).
 - La logica di sincronizzazione deve sempre essere avvolta in `transaction.atomic()` per evitare corruzioni parziali del database in caso di caduta della rete.
+- **Identità tra nodi**: per record sincronizzabili usa sempre `sync_id` (UUID) e `updated_at` per LWW — non l'`id` numerico/auto del DB locale (es. Tessitura id=142 prod vs id=25 dev-office sulla stessa `sync_id`).
 - Le **cancellazioni** su modelli con `sync_id` NON si propagano con la delete fisica da sola: viene creato un record `personaggi.SyncTombstone` (signal `pre_delete`) ed esportato nel payload `sync.tombstone`. All'apply, LWW tra `deleted_at` (tombstone) e `updated_at` (record). Helper in `kor35/sync_tombstone.py`; non bypassare con delete dirette in script di sync senza `suppress_tombstone_on_delete()`.
 - Dopo un `save()` su un modello sincronizzabile, il tombstone per quel `sync_id` viene rimosso (resurrezione).
+- **Apply edge** (`kor35/edge_sync.py`, `gestione_plot/management/commands/sync_edge_node.py`): LWW su `updated_at`; se il locale è più recente del payload (`remote_updated_at < local.updated_at`), **non** sovrascrivere campi MTI figlio da payload stale (`try_apply_mti_child_fields_when_skipped` in `kor35/syncing.py`). La patch MTI figlio vale solo a parità di timestamp o per recupero mirror — mai per revert da replica in ritardo.
+- **MTI** (es. `Tessitura` → `A_vista`, `Infusione`, tabelle `Tabella`/`Punteggio`): campi sulla tabella figlia (`usa_effetto_temporaneo`, `formula`, …) sono nel payload del modello concreto (`personaggi.tessitura`). Un `save()` completo sul figlio deve aggiornare `updated_at` del genitore; evita `.update()` solo sulla tabella figlia senza `touch_sync_updated_at()` se il record partecipa al sync.
 - **Wiki (`PaginaRegolamento`)**: antenati nel delta sync esportano solo metadati menu (`_sync_menu_only`, senza `contenuto`/`immagine`). Patch parziali menu/MTI/M2M usano `touch_sync_updated_at()` — mai `remote_updated_at` sul locale. Export/apply via `build_model_sync_records` e `pagina_regolamento_sync_field_allowed` in `kor35/syncing.py`.
+- Nuovi modelli nel registry: `get_sync_model_registry()` in `kor35/sync_tombstone.py` (serve `sync_id` + `updated_at`). Export: `serialize_for_sync` / `build_model_sync_records`. Test apply: estendere `kor35/tests_edge_sync_integrity.py` se tocchi LWW/MTI.
 - I file multimediali (immagini, video) non vengono inviati tramite JSON. Nel DB salva solo il percorso relativo. I file fisici vengono sincronizzati a livello di sistema operativo tramite `rsync`.
+- Runbook operativo: `config/docker/SYNC.md`. Regole IA dettagliate: `.cursor/rules/edge-sync.mdc`.
 
 ## 3. Regole per il Frontend (React / Vite)
 - L'app React viene compilata (`npm run build`) ed eseguita fisicamente nei browser degli smartphone dei giocatori.
@@ -34,6 +39,7 @@ Poiché i database Master ed Edge operano separatamente e si sincronizzano a pos
 - Questo progetto è Docker-first in OGNI ambiente: sviluppo, test, mirror e produzione.
 - Qualsiasi comando operativo (Django manage.py, test, migrazioni, shell, npm build/dev, collectstatic, ecc.) va eseguito tramite container (`docker compose exec/run ...`) e non direttamente sull'host, salvo esplicita richiesta contraria dell'utente.
 - Quando proponi procedure o runbook, fornisci sempre prima la versione Docker.
+- **Profili sync** (`config/docker/compose.*.yml`): `KOR35_SYNC_NODE_ROLE` = `master` (prod), `replica` (dev-office, mirror), `local` (dev-home). Master: `EDGE_SYNC_URL` vuoto in `backend/.env.prod`. Replica: `EDGE_SYNC_URL=https://<master>/api/sync/edge/` (path esatto, non `/api/edge/sync/`). Stato pull: volume `../../.runtime-state` → `/app/runtime-state/edge_sync_<profilo>.json`. Comandi: `make sync-db`, `make sync-db-full`, `make sync-media` — vedi `config/docker/SYNC.md` e template `config/env_templates/`.
 
 ## 5. Stile e Sicurezza
 - Le credenziali e gli URL di sync non devono mai essere hardcodati nel `settings.py`. Usa sempre la libreria `django-environ`.

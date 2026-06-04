@@ -68,6 +68,7 @@ done
 wsl_pi_set_env_profile "$ENV_PROFILE"
 wsl_pi_require_docker
 wsl_pi_require_stack_dir
+mkdir -p "$KOR35_ROOT/.runtime-state"
 
 DB_VOLUME_NAME=""
 STATE_DIR="$KOR35_ROOT/.runtime-state"

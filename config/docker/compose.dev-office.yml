@@ -1,3 +1,5 @@
+# dev-office: replica verso master prod; dopo edit su catalogo (Tessiture, …) preferire master o pull-only.
+
 services:
   db:
     container_name: kor35_devoffice_db
@@ -9,6 +11,9 @@ services:
 
   backend:
     container_name: kor35_devoffice_backend
+    environment:
+      KOR35_SYNC_NODE_ROLE: replica
+      EDGE_SYNC_STATE_FILE: /app/runtime-state/edge_sync_dev-office.json
     volumes:
       - ../../backend:/app
       - ./nginx-docker/static_data:/app/static

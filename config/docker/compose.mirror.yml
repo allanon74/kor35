@@ -1,3 +1,5 @@
+# mirror (Pi): replica bidirezionale con master; timer systemd kor35-mirror-db-sync.
+
 services:
   db:
     container_name: kor35_mirror_db
@@ -9,6 +11,9 @@ services:
 
   backend:
     container_name: kor35_mirror_backend
+    environment:
+      KOR35_SYNC_NODE_ROLE: replica
+      EDGE_SYNC_STATE_FILE: /app/runtime-state/edge_sync_mirror.json
     volumes:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media

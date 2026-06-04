@@ -1,3 +1,14 @@
+# Stack KOR35 — base condiviso (dev-home, dev-office, mirror, prod).
+#
+# Sincronizzazione Edge (LWW su sync_id + updated_at):
+#   - Master: prod — espone POST /api/sync/edge/; lasciare EDGE_SYNC_URL vuoto in .env.prod
+#   - Replica: dev-office, mirror — EDGE_SYNC_URL + EDGE_SYNC_TOKEN verso il master
+#   - Locale isolato: dev-home — sync opzionale (URL vuoto = nessun pull)
+# Dopo migrazioni o campi nuovi su modelli SyncableModel: migrate su tutti i nodi, poi
+#   make sync-db-full ENV=<replica>  oppure timer mirror; modifiche staff preferibilmente sul master.
+# Stato incrementale pull: backend monta ../../.runtime-state (gitignored).
+# Vedi config/docker/SYNC.md
+
 services:
   db:
     image: postgres:15-alpine
@@ -29,12 +40,15 @@ services:
     restart: unless-stopped
     env_file:
       - ${KOR35_BACKEND_ENV_FILE:-../../backend/.env}
+    volumes:
+      - ../../.runtime-state:/app/runtime-state
     environment:
       DB_HOST: db
       DB_PORT: "5432"
       REDIS_HOST: redis
       ENVIRONMENT: raspberry_docker
-      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
+      KOR35_SYNC_NODE_ROLE: ${KOR35_SYNC_NODE_ROLE:-unset}
+      EDGE_SYNC_STATE_FILE: ${EDGE_SYNC_STATE_FILE:-/app/runtime-state/edge_sync_state.json}
       HTTP_PROXY: ${HTTP_PROXY-}
       HTTPS_PROXY: ${HTTPS_PROXY-}
       NO_PROXY: ${NO_PROXY-}
@@ -73,7 +87,6 @@ services:
       DB_PORT: "5432"
       REDIS_HOST: redis
       ENVIRONMENT: raspberry_docker
-      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
       HTTP_PROXY: ${HTTP_PROXY-}
       HTTPS_PROXY: ${HTTPS_PROXY-}
       NO_PROXY: ${NO_PROXY-}
@@ -112,7 +125,6 @@ services:
       DB_PORT: "5432"
       REDIS_HOST: redis
       ENVIRONMENT: raspberry_docker
-      EDGE_SYNC_STATE_FILE: /app/.edge_sync_state.json
       HTTP_PROXY: ${HTTP_PROXY-}
       HTTPS_PROXY: ${HTTPS_PROXY-}
       NO_PROXY: ${NO_PROXY-}

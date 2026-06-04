@@ -33,6 +33,15 @@ make status ENV=prod
 make migrate ENV=prod
 ```
 
+## Sync DB (master / replica)
+
+- **Master** (`compose.prod.yml`): `KOR35_SYNC_NODE_ROLE=master`, `EDGE_SYNC_URL` vuoto in `backend/.env.prod`.
+- **Replica** (Pi/mirror, dev-office): `EDGE_SYNC_URL` → `https://www.kor35.it/api/sync/edge/` + token condiviso (non `/api/edge/sync/`).
+- Runbook: `config/docker/SYNC.md`. Pull da container replica: `make sync-db ENV=dev-office` (stato in `.runtime-state/edge_sync_<profilo>.json`).
+- Dopo migrazioni su modelli `sync_id`: migrate su tutti i nodi; edit catalogo (Tessiture, …) preferibilmente sul master.
+- Modifiche a `syncing.py` / apply LWW: vedi `.cursor/rules/edge-sync.mdc` e test `kor35.tests_edge_sync_integrity`.
+- Sintomo «campi che si azzerano dopo il sync» su MTI (es. runtime tessiture): payload replica più vecchio del master — non patchare campi figlio se `remote_updated_at < local.updated_at`.
+
 ## Log: distinguere admin vs edge sync
 
 - **Edge sync** (Pi/mirror → master): `Edge sync failed`, `edge_sync.py`, `SottosistemaNave`, `duplicate key ... codice_key` — non è il salvataggio QR in admin.

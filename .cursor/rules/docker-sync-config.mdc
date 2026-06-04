@@ -1,0 +1,20 @@
+---
+description: Compose/env Docker e variabili EDGE_SYNC — allineamento profili master/replica
+globs: config/docker/**,config/env_templates/**,Makefile,scripts/*sync*,scripts/lib_wsl_pi_like.sh,scripts/up_wsl_pi_like.sh,.env.wsl.example
+alwaysApply: false
+---
+
+# Config Docker e sync
+
+Quando modifichi compose o template env:
+
+1. **Ruoli** in overlay (`compose.dev-office.yml`, `compose.mirror.yml`, `compose.prod.yml`):
+   - `KOR35_SYNC_NODE_ROLE`: `master` | `replica` | `local`
+   - `EDGE_SYNC_STATE_FILE`: `/app/runtime-state/edge_sync_<profilo>.json` (un file per profilo)
+2. **Base** (`compose.base.yml`): solo `backend` monta `../../.runtime-state:/app/runtime-state`; non rimuovere senza aggiornare `SYNC.md`.
+3. **Master** (`backend.prod.env.example`): `EDGE_SYNC_URL` e `EDGE_SYNC_TOKEN` **vuoti**.
+4. **Replica** (`dev-office`, `mirror`): documentare URL `https://<master>/api/sync/edge/` nei template (senza committare token reali).
+5. **Makefile** target sync: mantenere coerenza con `make sync-db` → `sync_edge_node --pull-only` nel container backend.
+6. Aggiornare `config/docker/SYNC.md` e, se cambia il workflow, `.cursor/rules/edge-sync.mdc` / `AGENTS.md`.
+
+Non hardcodare segreti nei file versionati; usare `backend/.env.<profilo>` (gitignored).
