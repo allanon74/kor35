@@ -84,9 +84,9 @@ def _backfill_costi_pagati(apps, schema_editor):
                 None,
                 pivot.data_acquisizione,
             )
-            if cr is None and item:
-                cr = Decimal(item.costo_crediti or 0)
-            elif cr is None:
+            # Nessun movimento trovato: 0 (il modello storico non espone costo_crediti @property).
+            # La revoca userà comunque lookup su CreditoMovimento come fallback.
+            if cr is None:
                 cr = Decimal(0)
             Model.objects.filter(pk=pivot.pk).update(costo_crediti_pagato=cr)
 
