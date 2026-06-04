@@ -232,6 +232,9 @@ def try_apply_mti_child_fields_when_skipped(
     local_obj: models.Model,
     row: dict[str, Any],
     resolve_fk,
+    *,
+    remote_updated_at=None,
+    local_updated_at=None,
 ) -> Literal["defer", "applied", "noop"]:
     """
     Ereditarietà multi-tabella (es. Tecnica -> A_vista, Tabella -> Punteggio): i campi
@@ -242,11 +245,21 @@ def try_apply_mti_child_fields_when_skipped(
 
     Allinea i campi *solo sulla tabella del modello concreto* (local_concrete_fields),
     per tutti i modelli MTI tranne quelli in denylist (es. Personaggio).
+
+    Se il record locale è più recente del payload (remote < local), non applicare:
+    altrimenti un mirror/edge in ritardo può azzerare modifiche già salvate sul Master
+    (es. usa_effetto_temporaneo su Tessitura).
     """
     label = local_obj._meta.label_lower
     if label in _MTICHILD_PATCH_DENYLIST:
         return "noop"
     if not local_obj._meta.parents:
+        return "noop"
+    if (
+        remote_updated_at is not None
+        and local_updated_at is not None
+        and remote_updated_at < local_updated_at
+    ):
         return "noop"
 
     patch: dict[str, Any] = {}

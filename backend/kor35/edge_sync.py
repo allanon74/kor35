@@ -335,7 +335,11 @@ class EdgeSyncView(APIView):
                 if wiki_menu == "defer":
                     return "defer"
             mt_child = try_apply_mti_child_fields_when_skipped(
-                local, row, self._resolve_fk_value
+                local,
+                row,
+                self._resolve_fk_value,
+                remote_updated_at=remote_updated_at,
+                local_updated_at=local.updated_at,
             )
             if mt_child == "defer":
                 return "defer"

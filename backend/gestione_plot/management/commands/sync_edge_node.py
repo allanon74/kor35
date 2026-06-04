@@ -354,7 +354,11 @@ class Command(BaseCommand):
                 if wiki_menu == "defer":
                     return "defer"
             mt_child = try_apply_mti_child_fields_when_skipped(
-                local_obj, row, lambda f, v: self._resolve_fk_value(model, f.name, v)
+                local_obj,
+                row,
+                lambda f, v: self._resolve_fk_value(model, f.name, v),
+                remote_updated_at=remote_updated_at,
+                local_updated_at=local_obj.updated_at,
             )
             if mt_child == "defer":
                 return "defer"
