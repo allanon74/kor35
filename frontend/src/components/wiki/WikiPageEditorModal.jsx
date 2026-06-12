@@ -29,6 +29,29 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
   });
 
   const [availableManualiPdf, setAvailableManualiPdf] = useState([]);
+  const buildInitialManualiMeta = (data) => {
+    const meta = {};
+    const config = data?.manuali_pdf_config;
+    if (Array.isArray(config)) {
+      config.forEach((c) => {
+        if (c?.manuale_id) {
+          meta[c.manuale_id] = {
+            ordine: c.ordine ?? 0,
+            inizio_capitolo: c.inizio_capitolo !== false,
+          };
+        }
+      });
+    }
+    const raw = data?.manuali_pdf;
+    if (Array.isArray(raw)) {
+      raw.forEach((m) => {
+        const id = typeof m === 'object' && m != null ? m.id : m;
+        if (id && !meta[id]) meta[id] = { ordine: 0, inizio_capitolo: true };
+      });
+    }
+    return meta;
+  };
+  const [manualiPdfMeta, setManualiPdfMeta] = useState(() => buildInitialManualiMeta(initialData));
   const [selectedManualiIds, setSelectedManualiIds] = useState(() => {
     const raw = initialData?.manuali_pdf;
     if (!Array.isArray(raw)) return [];
@@ -219,8 +242,15 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
         data.append('banner_y', formData.banner_y);
         if (formData.includi_in_pdf) {
             selectedManualiIds.forEach((id) => data.append('manuali_pdf', String(id)));
+            const config = selectedManualiIds.map((manualeId) => ({
+                manuale_id: manualeId,
+                ordine: manualiPdfMeta[manualeId]?.ordine ?? 0,
+                inizio_capitolo: manualiPdfMeta[manualeId]?.inizio_capitolo !== false,
+            }));
+            data.append('manuali_pdf_config', JSON.stringify(config));
         } else {
             data.append('manuali_pdf', '');
+            data.append('manuali_pdf_config', '[]');
         }
 
         if (formData.slug) data.append('slug', formData.slug);
@@ -363,23 +393,63 @@ export default function WikiPageEditorModal({ onClose, onSuccess, initialData = 
                                 {availableManualiPdf.length === 0 ? (
                                     <p className="text-xs text-gray-500">Nessun manuale configurato (scheda staff Manuali PDF).</p>
                                 ) : (
-                                    availableManualiPdf.map((m) => (
-                                        <label key={m.id} className="flex items-center gap-2 text-sm p-1.5 rounded hover:bg-white cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedManualiIds.includes(m.id)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setSelectedManualiIds((prev) => [...prev, m.id]);
-                                                    } else {
-                                                        setSelectedManualiIds((prev) => prev.filter((x) => x !== m.id));
-                                                    }
-                                                }}
-                                            />
-                                            <span className="font-medium">{m.titolo}</span>
-                                            <span className="text-xs text-gray-400">({m.slug})</span>
-                                        </label>
-                                    ))
+                                    availableManualiPdf.map((m) => {
+                                        const selected = selectedManualiIds.includes(m.id);
+                                        const meta = manualiPdfMeta[m.id] || { ordine: 0, inizio_capitolo: true };
+                                        return (
+                                        <div key={m.id} className="p-2 rounded border border-rose-100 bg-white space-y-2">
+                                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedManualiIds((prev) => [...prev, m.id]);
+                                                            setManualiPdfMeta((prev) => ({
+                                                                ...prev,
+                                                                [m.id]: prev[m.id] || { ordine: 0, inizio_capitolo: true },
+                                                            }));
+                                                        } else {
+                                                            setSelectedManualiIds((prev) => prev.filter((x) => x !== m.id));
+                                                        }
+                                                    }}
+                                                />
+                                                <span className="font-medium">{m.titolo}</span>
+                                                <span className="text-xs text-gray-400">({m.slug})</span>
+                                            </label>
+                                            {selected && (
+                                                <div className="flex flex-wrap items-center gap-3 pl-6 text-xs">
+                                                    <label className="flex items-center gap-1">
+                                                        <span className="text-gray-500 font-bold">Ordine PDF</span>
+                                                        <input
+                                                            type="number"
+                                                            className="w-20 border border-gray-300 rounded px-2 py-1"
+                                                            value={meta.ordine ?? 0}
+                                                            onChange={(e) => setManualiPdfMeta((prev) => ({
+                                                                ...prev,
+                                                                [m.id]: {
+                                                                    ...meta,
+                                                                    ordine: parseInt(e.target.value, 10) || 0,
+                                                                },
+                                                            }))}
+                                                        />
+                                                    </label>
+                                                    <label className="flex items-center gap-1 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={meta.inizio_capitolo !== false}
+                                                            onChange={(e) => setManualiPdfMeta((prev) => ({
+                                                                ...prev,
+                                                                [m.id]: { ...meta, inizio_capitolo: e.target.checked },
+                                                            }))}
+                                                        />
+                                                        Inizio capitolo
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
+                                        );
+                                    })
                                 )}
                             </div>
                             <label className="block text-xs font-bold text-gray-600">Titolo capitolo PDF (opzionale)</label>

@@ -435,6 +435,7 @@ class PaginaRegolamento(SyncableModel, models.Model):
     )
     manuali_pdf = models.ManyToManyField(
         'ManualePdf',
+        through='ManualePdfPagina',
         blank=True,
         related_name='pagine',
         verbose_name="Manuali PDF",
@@ -500,6 +501,42 @@ class ManualePdf(SyncableModel, models.Model):
 
     def __str__(self):
         return self.titolo
+
+
+class ManualePdfPagina(SyncableModel, models.Model):
+    """Associazione pagina wiki ↔ manuale PDF con ordine e ruolo nel capitolo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    manuale = models.ForeignKey(
+        ManualePdf,
+        on_delete=models.CASCADE,
+        related_name='pagine_manuale',
+    )
+    pagina = models.ForeignKey(
+        PaginaRegolamento,
+        on_delete=models.CASCADE,
+        related_name='manuali_manuale',
+    )
+    ordine = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Ordine nel manuale",
+    )
+    inizio_capitolo = models.BooleanField(
+        default=True,
+        verbose_name="Inizio capitolo PDF",
+        help_text="Se attivo apre un capitolo numerato; altrimenti sottosezione con intestazione minore.",
+    )
+
+    class Meta:
+        ordering = ['ordine', 'pagina__titolo']
+        verbose_name = "Pagina in manuale PDF"
+        verbose_name_plural = "Pagine in manuali PDF"
+        constraints = [
+            models.UniqueConstraint(fields=['manuale', 'pagina'], name='uniq_manuale_pagina'),
+        ]
+
+    def __str__(self):
+        return f"{self.pagina.titolo} → {self.manuale.titolo}"
 
 
 class ManualePdfGenerazione(SyncableModel, models.Model):

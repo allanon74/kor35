@@ -11,7 +11,7 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from gestione_plot.models import ManualePdf, PaginaRegolamento
+from gestione_plot.models import ManualePdf, ManualePdfPagina, PaginaRegolamento
 from gestione_plot.wiki_pdf_styles import resolve_manuale_stile
 
 pdf_render_stile: ContextVar[dict | None] = ContextVar("pdf_render_stile", default=None)
@@ -38,41 +38,38 @@ def get_current_pdf_stile() -> dict:
     return merge_manuale_stile("giocatore", {})
 
 
-def get_pages_for_manuale(manuale: ManualePdf, *, force_public: bool = True) -> list[PaginaRegolamento]:
+def get_manuale_pdf_pagine_qs(manuale: ManualePdf, *, force_public: bool = True):
+    """Queryset through con pagine ordinate per il manuale."""
     qs = (
-        PaginaRegolamento.objects.filter(
-            includi_in_pdf=True,
-            manuali_pdf=manuale,
+        ManualePdfPagina.objects.filter(
+            manuale=manuale,
+            pagina__includi_in_pdf=True,
         )
-        .select_related("parent")
-        .prefetch_related("manuali_pdf")
-        .order_by("parent__id", "ordine", "titolo")
+        .select_related("pagina", "pagina__parent")
+        .order_by("ordine", "pagina__titolo")
     )
     if force_public:
-        qs = qs.filter(public=True, visibile_solo_staff=False)
-    return list(qs.distinct())
+        qs = qs.filter(pagina__public=True, pagina__visibile_solo_staff=False)
+    return qs
 
 
-def _page_depth_in_manual(page: PaginaRegolamento, pages_by_pk: dict) -> int:
-    depth = 0
-    parent_id = page.parent_id
-    while parent_id and parent_id in pages_by_pk:
-        depth += 1
-        parent_id = pages_by_pk[parent_id].parent_id
-    return depth
+def get_pages_for_manuale(manuale: ManualePdf, *, force_public: bool = True) -> list[PaginaRegolamento]:
+    pages = []
+    for mp in get_manuale_pdf_pagine_qs(manuale, force_public=force_public):
+        page = mp.pagina
+        page._manuale_pdf_meta = mp  # noqa: SLF001 — metadati per rendering PDF
+        pages.append(page)
+    return pages
 
 
 def build_toc_entries(pages: list[PaginaRegolamento], rendered_pages: list[dict], max_depth: int) -> list[dict]:
-    pages_by_pk = {p.pk: p for p in pages}
     entries = []
     for rp in rendered_pages:
-        page = next((p for p in pages if p.slug == rp["slug"]), None)
-        depth = _page_depth_in_manual(page, pages_by_pk) if page else 0
-        if depth >= max_depth and not rp.get("solo_indice"):
-            # Voce foglia oltre profondità: mostra come figlio dell'ultimo livello ammesso
-            display_depth = max_depth - 1
+        if rp.get("inizio_capitolo", True):
+            display_depth = 0
         else:
-            display_depth = min(depth, max_depth - 1)
+            display_depth = 1
+        display_depth = min(display_depth, max(0, max_depth - 1))
         entries.append(
             {
                 "titolo": rp["titolo"],
@@ -89,10 +86,13 @@ def build_rendered_pages(pages, request, render_content_fn) -> list[dict]:
     rendered = []
     chapter_num = 0
     for page in pages:
+        meta = getattr(page, "_manuale_pdf_meta", None)
+        inizio_capitolo = meta.inizio_capitolo if meta is not None else True
         titolo = (page.pdf_titolo_capitolo or page.titolo or "").strip() or page.titolo
         body = ""
         if not page.pdf_solo_indice:
-            chapter_num += 1
+            if inizio_capitolo:
+                chapter_num += 1
             body = render_content_fn(page.contenuto or "", request)
         rendered.append(
             {
@@ -101,7 +101,8 @@ def build_rendered_pages(pages, request, render_content_fn) -> list[dict]:
                 "rendered_content": body,
                 "solo_indice": bool(page.pdf_solo_indice),
                 "forza_nuova_pagina": bool(page.pdf_forza_nuova_pagina),
-                "chapter_num": chapter_num if not page.pdf_solo_indice else None,
+                "inizio_capitolo": inizio_capitolo,
+                "chapter_num": chapter_num if inizio_capitolo and not page.pdf_solo_indice else None,
             }
         )
     return rendered

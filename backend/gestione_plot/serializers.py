@@ -330,44 +330,37 @@ class EventoPubblicoSerializer(serializers.ModelSerializer):
         fields = ['id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 'luogo']
         
 class PaginaRegolamentoSerializer(serializers.ModelSerializer):
-    manuali_pdf = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=ManualePdf.objects.all(),
-        required=False,
-    )
+    manuali_pdf = serializers.SerializerMethodField()
+    manuali_pdf_config = serializers.SerializerMethodField()
 
     class Meta:
         model = PaginaRegolamento
         fields = '__all__'
 
-    def _sync_manuali_pdf(self, instance, manuali):
-        if manuali is not None:
-            instance.manuali_pdf.set(manuali)
+    def get_manuali_pdf(self, obj):
+        return list(obj.manuali_pdf.values_list('pk', flat=True))
 
-    def create(self, validated_data):
-        manuali = validated_data.pop('manuali_pdf', None)
-        instance = super().create(validated_data)
-        self._sync_manuali_pdf(instance, manuali)
-        return instance
-
-    def update(self, instance, validated_data):
-        manuali = validated_data.pop('manuali_pdf', None)
-        instance = super().update(instance, validated_data)
-        self._sync_manuali_pdf(instance, manuali)
-        return instance
+    def get_manuali_pdf_config(self, obj):
+        from gestione_plot.wiki_manuale_pagine import get_pagina_manuali_pdf_config
+        return get_pagina_manuali_pdf_config(obj)
 
 
 class PaginaRegolamentoSmallSerializer(serializers.ModelSerializer):
     manuali_pdf = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    manuali_pdf_config = serializers.SerializerMethodField()
 
     class Meta:
         model = PaginaRegolamento
         fields = [
             'id', 'titolo', 'slug',
             'parent', 'ordine', 'public', 'visibile_solo_staff',
-            'includi_in_pdf', 'manuali_pdf', 'pdf_solo_indice',
-            'pdf_forza_nuova_pagina', 'pdf_titolo_capitolo',
+            'includi_in_pdf', 'manuali_pdf', 'manuali_pdf_config',
+            'pdf_solo_indice', 'pdf_forza_nuova_pagina', 'pdf_titolo_capitolo',
         ]
+
+    def get_manuali_pdf_config(self, obj):
+        from gestione_plot.wiki_manuale_pagine import get_pagina_manuali_pdf_config
+        return get_pagina_manuali_pdf_config(obj)
 
 
 class ManualePdfSerializer(serializers.ModelSerializer):

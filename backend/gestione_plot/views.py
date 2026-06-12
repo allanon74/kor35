@@ -608,17 +608,33 @@ class PaginaRegolamentoViewSet(viewsets.ModelViewSet):
             return []
         return [int(x) for x in raw if str(x).strip().isdigit()]
 
-    def perform_create(self, serializer):
+    def _manuali_pdf_config_from_request(self):
+        from gestione_plot.wiki_manuale_pagine import parse_manuali_pdf_config
+
+        raw = self.request.data.get('manuali_pdf_config')
+        if raw is None and hasattr(self.request.data, 'get'):
+            raw = self.request.data.get('manuali_pdf_config')
+        if raw is None:
+            return None
+        return parse_manuali_pdf_config(raw)
+
+    def _sync_manuali_after_save(self, instance):
+        from gestione_plot.wiki_manuale_pagine import sync_pagina_manuali_pdf
+
+        config = self._manuali_pdf_config_from_request()
         manuali_ids = self._manuali_pdf_ids_from_request()
+        if config is not None:
+            sync_pagina_manuali_pdf(instance, None, config)
+        elif manuali_ids is not None:
+            sync_pagina_manuali_pdf(instance, manuali_ids, None)
+
+    def perform_create(self, serializer):
         instance = serializer.save()
-        if manuali_ids is not None:
-            instance.manuali_pdf.set(manuali_ids)
+        self._sync_manuali_after_save(instance)
 
     def perform_update(self, serializer):
-        manuali_ids = self._manuali_pdf_ids_from_request()
         instance = serializer.save()
-        if manuali_ids is not None:
-            instance.manuali_pdf.set(manuali_ids)
+        self._sync_manuali_after_save(instance)
 
 
 class ManualePdfViewSet(viewsets.ModelViewSet):
@@ -714,6 +730,25 @@ class ManualePdfViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
         return HttpResponse(html, content_type="text/html; charset=utf-8")
+
+    @action(detail=True, methods=['get', 'put'], url_path='pagine')
+    def pagine(self, request, slug=None):
+        """Elenco pagine del manuale (GET) o sostituzione ordine/membership (PUT)."""
+        from gestione_plot.wiki_manuale_pagine import bulk_set_manuale_pagine, list_manuale_pagine_entries
+
+        manuale = self.get_object()
+        if request.method == 'GET':
+            return Response({'pagine': list_manuale_pagine_entries(manuale)})
+        entries = request.data.get('pagine')
+        if not isinstance(entries, list):
+            return Response({'detail': 'Campo «pagine» (lista) obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = bulk_set_manuale_pagine(manuale, entries)
+        except Exception:
+            logger.exception("Errore aggiornamento pagine manuale %s", slug)
+            return Response({'detail': 'Errore aggiornamento pagine.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        manuale.refresh_from_db()
+        return Response({'pagine': result, 'pagine_assegnate_count': len(result)})
 
 
 class PublicManualePdfViewSet(viewsets.ReadOnlyModelViewSet):

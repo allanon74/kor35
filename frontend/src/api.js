@@ -2876,6 +2876,27 @@ export const getWikiManualeBatchJob = (jobId, onLogout) =>
     onLogout,
   );
 
+export const getStaffManualePdfPagine = (slug, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/staff/manuali-pdf/${encodeURIComponent(slug)}/pagine/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const updateStaffManualePdfPagine = (slug, pagine, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/staff/manuali-pdf/${encodeURIComponent(slug)}/pagine/`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pagine }),
+    },
+    onLogout,
+  );
+
+export const getStaffWikiPagesSmall = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/pagine-regolamento-small/', { method: 'GET' }, onLogout);
+
 /** @deprecated Preferire generateStaffManualePdf per ogni manuale */
 export const generateWikiManualPdfSnapshot = (onLogout) => {
   return fetchAuthenticated('/api/plot/api/wiki/manuale/genera/', { method: 'POST', body: '{}' }, onLogout);

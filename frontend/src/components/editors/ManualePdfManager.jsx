@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, memo } from 'react';
-import { ArrowLeft, BookOpen, Download, RefreshCw, Save, Eye, AlertTriangle, History, Package } from 'lucide-react';
+import { ArrowLeft, BookOpen, Download, RefreshCw, Save, Eye, AlertTriangle, History, Package, ListOrdered } from 'lucide-react';
+import ManualePdfPagineModal from './ManualePdfPagineModal';
 import {
   getStaffManualePdfList,
   createStaffManualePdf,
@@ -42,6 +43,7 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
   const [storico, setStorico] = useState([]);
   const [batchJob, setBatchJob] = useState(null);
   const [batchPolling, setBatchPolling] = useState(false);
+  const [pagineModalSlug, setPagineModalSlug] = useState(null);
 
   const loadManuali = useCallback(async () => {
     setLoading(true);
@@ -303,25 +305,38 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
             <ul className="space-y-2">
               {manuali.map((m) => (
                 <li key={m.slug}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSlug(m.slug)}
-                    className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                  <div
+                    className={`rounded-xl border transition-colors ${
                       selectedSlug === m.slug
                         ? 'bg-rose-900/40 border-rose-500/50'
                         : 'bg-gray-900 border-gray-800 hover:border-gray-600'
                     }`}
                   >
-                    <div className="font-bold text-sm">{m.titolo}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {m.pagine_assegnate_count ?? 0} pagine · {m.stile_preset || 'giocatore'}
-                    </div>
-                    {m.ultimo_generato_at && (
-                      <div className="text-xs text-emerald-500/80 mt-1">
-                        PDF: {new Date(m.ultimo_generato_at).toLocaleString('it-IT')}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSlug(m.slug)}
+                      className="w-full text-left p-3"
+                    >
+                      <div className="font-bold text-sm">{m.titolo}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {m.pagine_assegnate_count ?? 0} pagine · {m.stile_preset || 'giocatore'}
                       </div>
-                    )}
-                  </button>
+                      {m.ultimo_generato_at && (
+                        <div className="text-xs text-emerald-500/80 mt-1">
+                          PDF: {new Date(m.ultimo_generato_at).toLocaleString('it-IT')}
+                        </div>
+                      )}
+                    </button>
+                    <div className="px-3 pb-3">
+                      <button
+                        type="button"
+                        onClick={() => setPagineModalSlug(m.slug)}
+                        className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-rose-500/30 text-rose-200 text-xs font-bold hover:bg-rose-500/10"
+                      >
+                        <ListOrdered size={14} /> Gestisci pagine
+                      </button>
+                    </div>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -462,9 +477,18 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
 
           {selected && (
             <>
-              <p className="text-xs text-gray-500 border-t border-gray-800 pt-3">
-                Pagine incluse: <strong>{selected.pagine_assegnate_count ?? 0}</strong>
-              </p>
+              <div className="flex flex-wrap items-center gap-2 border-t border-gray-800 pt-3">
+                <p className="text-xs text-gray-500">
+                  Pagine incluse: <strong>{selected.pagine_assegnate_count ?? 0}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPagineModalSlug(selected.slug)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-rose-500/40 text-rose-200 text-xs font-bold hover:bg-rose-500/10"
+                >
+                  <ListOrdered size={14} /> Ordine e capitoli
+                </button>
+              </div>
               {storico.length > 0 && (
                 <div className="border border-gray-800 rounded-lg p-3 mt-2">
                   <p className="text-xs font-black uppercase text-gray-500 flex items-center gap-1 mb-2">
@@ -551,6 +575,15 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
           </div>
         )}
       </div>
+
+      {pagineModalSlug && (
+        <ManualePdfPagineModal
+          manuale={manuali.find((m) => m.slug === pagineModalSlug)}
+          onClose={() => setPagineModalSlug(null)}
+          onSaved={() => loadManuali()}
+          onLogout={onLogout}
+        />
+      )}
     </div>
   );
 };

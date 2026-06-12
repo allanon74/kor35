@@ -209,6 +209,20 @@
             line-height: 1.2;
         }
 
+        .section-head {
+            margin: 14pt 0 8pt;
+            page-break-after: avoid;
+        }
+
+        .section-title {
+            font-size: 16pt;
+            color: #333;
+            margin: 0;
+            line-height: 1.25;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 4pt;
+        }
+
         .wiki-meta {
             font-size: 9pt;
             color: #727272;
@@ -500,10 +514,16 @@
     {% for page in rendered_pages %}
         {% if not page.solo_indice %}
         <section id="{{ page.slug }}" class="wiki-page{% if page.forza_nuova_pagina %} wiki-page--new{% endif %}">
+            {% if page.inizio_capitolo %}
             <header class="chapter-head">
                 <p class="chapter-kicker">Capitolo {{ page.chapter_num }}</p>
                 <h1 class="chapter-title">{{ page.titolo }}</h1>
             </header>
+            {% else %}
+            <header class="section-head">
+                <h2 class="section-title">{{ page.titolo }}</h2>
+            </header>
+            {% endif %}
             <div class="wiki-content">{{ page.rendered_content|safe }}</div>
         </section>
         {% endif %}
