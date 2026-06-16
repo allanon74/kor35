@@ -46,7 +46,38 @@ const LoadingComponent = () => (
 // --- Componente Scheda ---
 
 const CharacterSheet = memo(({ data, onLogout }) => {
-  const { punteggiList, statisticaContainers, subscribeToPush, refreshCharacterData } = useCharacter();
+  const { punteggiList, statisticaContainers, subscribeToPush, isWebPushSupported, refreshCharacterData } = useCharacter();
+  const [pushActivating, setPushActivating] = useState(false);
+  const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
+  const [pushFeedback, setPushFeedback] = useState(null);
+
+  const handleActivatePush = useCallback(async () => {
+    setPushActivating(true);
+    setPushFeedback(null);
+    try {
+      const result = await subscribeToPush();
+      if (result?.ok) {
+        setPushBannerDismissed(true);
+        setPushFeedback({ type: 'success', message: 'Notifiche push attivate.' });
+        return;
+      }
+      if (result?.reason === 'denied') {
+        setPushBannerDismissed(true);
+      }
+      setPushFeedback({
+        type: 'error',
+        message: result?.message || 'Impossibile attivare le notifiche push.',
+      });
+    } finally {
+      setPushActivating(false);
+    }
+  }, [subscribeToPush]);
+
+  const showPushBanner =
+    isWebPushSupported() &&
+    !pushBannerDismissed &&
+    typeof Notification !== 'undefined' &&
+    Notification.permission !== 'granted';
   
   // State per la modal dei modificatori
   const [modalStatistica, setModalStatistica] = useState(null);
@@ -404,7 +435,7 @@ const CharacterSheet = memo(({ data, onLogout }) => {
       </div>
 
       {/* Banner Notifiche */}
-      {'Notification' in window && Notification.permission !== 'granted' && (
+      {showPushBanner && (
          <div className="mb-6 p-4 bg-indigo-900/50 rounded-lg border border-indigo-500 flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="flex items-center gap-3">
                 <div className="bg-indigo-600 p-2 rounded-full">
@@ -413,12 +444,25 @@ const CharacterSheet = memo(({ data, onLogout }) => {
                 <div>
                     <p className="font-bold text-white text-sm">Notifiche Push</p>
                     <p className="text-xs text-indigo-200">Ricevi messaggi anche ad app chiusa.</p>
+                    {pushFeedback?.type === 'error' && (
+                      <p className="text-xs text-red-300 mt-1">{pushFeedback.message}</p>
+                    )}
                 </div>
             </div>
-            <button onClick={() => subscribeToPush()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded shadow transition-colors w-full sm:w-auto">
-                Attiva
+            <button
+              type="button"
+              onClick={handleActivatePush}
+              disabled={pushActivating}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-wait text-white text-sm font-medium rounded shadow transition-colors w-full sm:w-auto"
+            >
+                {pushActivating ? 'Attivazione…' : 'Attiva'}
             </button>
          </div>
+      )}
+      {pushFeedback?.type === 'success' && !showPushBanner && (
+        <div className="mb-6 p-3 rounded-lg border border-green-600/50 bg-green-900/30 text-green-200 text-sm">
+          {pushFeedback.message}
+        </div>
       )}
 
       {auraInnataRecord && canEditRazza && (

@@ -24,6 +24,7 @@ import {
 } from '../api'; 
 import NotificationPopup from './NotificationPopup';
 import { putOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
+import { activateWebPush, isWebPushSupported } from '../lib/webpush';
 
 import { 
   usePunteggi, 
@@ -39,16 +40,6 @@ import {
 export const CharacterContext = createContext(null);
 
 // --- HELPER UTILS ---
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
 
 const sendSystemNotification = (title, body) => {
     if (!("Notification" in window)) return;
@@ -539,23 +530,27 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, [isGlobalSuperuser, viewAll, onLogout]);
 
   const subscribeToPush = useCallback(async () => {
-    // Feature flag: abilita webpush solo se esplicitamente attivo.
-    // In produzione ci ha causato crash runtime; meglio fail-safe.
-    const enabled = String(import.meta?.env?.VITE_WEBPUSH_ENABLED || '').toLowerCase() === 'true';
-    if (!enabled) return;
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const result = await activateWebPush();
+    if (!result.ok) return result;
     try {
-        const reg = await navigator.serviceWorker.ready;
-        let sub = await reg.pushManager.getSubscription();
-        if (!sub) {
-            const key = urlBase64ToUint8Array("BIOIApSIeJdV1tp5iVxyLtm8KzM43_AQWV2ymS4iMjkIG1R5g399o6WRdZJY-xcUBZPyJ7EFRVgWqlbalOkGSYw");
-            sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
-        }
-        await saveWebPushSubscription(sub, onLogout);
-    } catch (e) { console.error("WebPush Error:", e); }
+      await saveWebPushSubscription(result.subscription, onLogout);
+      return { ok: true };
+    } catch (e) {
+      console.error('WebPush Error:', e);
+      return {
+        ok: false,
+        reason: 'error',
+        message: e?.message || 'Errore nel salvataggio della sottoscrizione.',
+      };
+    }
   }, [onLogout]);
 
-  useEffect(() => { if (selectedCharacterId) subscribeToPush(); }, [selectedCharacterId, subscribeToPush]);
+  // Re-sottoscrive in silenzio solo se l'utente ha già concesso il permesso.
+  useEffect(() => {
+    if (!selectedCharacterId || !isWebPushSupported()) return;
+    if (Notification.permission !== 'granted') return;
+    subscribeToPush();
+  }, [selectedCharacterId, subscribeToPush]);
 
   const [notification, setNotification] = useState(null);
   const ws = useRef(null);
@@ -673,6 +668,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     handleToggleRead,
     handleDeleteMessage,
     subscribeToPush,
+    isWebPushSupported,
   };
 
   return (

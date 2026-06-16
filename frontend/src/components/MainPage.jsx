@@ -9,6 +9,7 @@ import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
 import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
 import packageInfo from '../../package.json';
+import { isWebPushEnabled } from '../lib/webpush';
 
 import { 
     Home, QrCode, Zap, TestTube2, Scroll, LogOut, Mail, Backpack, 
@@ -171,8 +172,9 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     window.location.reload();
   };
 
-  // Safety net: rimuove eventuali Service Worker già presenti per evitare cache incoerente dei chunk.
+  // Safety net: rimuove eventuali Service Worker legacy solo se webpush è disattivato.
   useEffect(() => {
+    if (isWebPushEnabled()) return undefined;
     let mounted = true;
     const cleanupServiceWorkers = async () => {
       try {
