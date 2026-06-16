@@ -1,7 +1,7 @@
 """Test logica minigioco QR."""
 from unittest.mock import MagicMock, patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from personaggi.qr_minigioco import (
     generate_game_state,
@@ -179,4 +179,73 @@ class QrMinigiocoLogicTests(SimpleTestCase):
         self.assertEqual(url, "/media/bib.jpg")
         self.assertIs(bib, row)
         mock_scegli.assert_called_once_with(99)
+
+
+class MinigiocoBibliotecaTests(TestCase):
+    @patch("personaggi.minigioco_biblioteca._download_image")
+    @patch("personaggi.minigioco_biblioteca._fetch_wikimedia_page")
+    @patch("personaggi.minigioco_biblioteca._fetch_openverse_page")
+    def test_raccogli_fallback_wikimedia_se_openverse_vuoto(self, mock_ov, mock_wm, mock_dl):
+        from personaggi.minigioco_biblioteca import _raccogli_immagini
+
+        mock_ov.return_value = ([], "HTTPError: 403 Forbidden")
+        mock_wm.return_value = (
+            [
+                {
+                    "url": "https://upload.wikimedia.org/example.jpg",
+                    "title": "Esempio",
+                    "creator": "Autore",
+                    "license": "CC BY 4.0",
+                    "id": "123",
+                    "foreign_landing_url": "https://commons.wikimedia.org/wiki/File:Esempio.jpg",
+                }
+            ],
+            None,
+        )
+        mock_dl.return_value = b"x" * 3000
+
+        prepared, _errors, ov_err, wm_err, sources = _raccogli_immagini(target=1)
+
+        self.assertEqual(len(prepared), 1)
+        self.assertEqual(prepared[0]["fonte"], "wikimedia")
+        self.assertEqual(sources, ["wikimedia"])
+        self.assertTrue(ov_err)
+        self.assertFalse(wm_err)
+        mock_wm.assert_called()
+
+    def test_license_ok_esclude_nc_nd(self):
+        from personaggi.minigioco_biblioteca import _license_ok_for_minigioco
+
+        self.assertTrue(_license_ok_for_minigioco("CC BY 4.0"))
+        self.assertTrue(_license_ok_for_minigioco("CC0 1.0"))
+        self.assertFalse(_license_ok_for_minigioco("CC BY-NC 4.0"))
+        self.assertFalse(_license_ok_for_minigioco("CC BY-ND 4.0"))
+
+    @patch("personaggi.minigioco_biblioteca.requests.post")
+    def test_registra_openverse_salva_su_db(self, mock_post):
+        from personaggi.minigioco_biblioteca import openverse_config_status, registra_openverse_app
+        from personaggi.models import MinigiocoOpenverseConfig
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 201
+        mock_resp.json.return_value = {
+            "client_id": "cid-test",
+            "client_secret": "secret-test",
+            "msg": "Check your email for a verification link.",
+        }
+        mock_post.return_value = mock_resp
+
+        result = registra_openverse_app(
+            name="KOR35 test",
+            description="desc",
+            email="staff@kor35.it",
+        )
+
+        self.assertTrue(result["ok"])
+        cfg = MinigiocoOpenverseConfig.get_solo()
+        self.assertEqual(cfg.client_id, "cid-test")
+        self.assertEqual(cfg.client_secret, "secret-test")
+        status = openverse_config_status()
+        self.assertTrue(status["configured"])
+        self.assertEqual(status["source"], "database")
 

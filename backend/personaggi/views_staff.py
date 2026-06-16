@@ -1446,7 +1446,11 @@ class StaffMinigiocoBibliotecaView(APIView):
     permission_classes = [IsStaffOrMaster]
 
     def get(self, request):
-        from personaggi.minigioco_biblioteca import BIBLIOTECA_TARGET, biblioteca_immagine_count
+        from personaggi.minigioco_biblioteca import (
+            BIBLIOTECA_TARGET,
+            biblioteca_immagine_count,
+            openverse_config_status,
+        )
 
         rows = MinigiocoBibliotecaImmagine.objects.order_by("-aggiunta_at")[:120]
         items = []
@@ -1474,9 +1478,42 @@ class StaffMinigiocoBibliotecaView(APIView):
                 "count": biblioteca_immagine_count(),
                 "target": BIBLIOTECA_TARGET,
                 "ultimo_aggiornamento": ultima.aggiunta_at.isoformat() if ultima else None,
+                "openverse": openverse_config_status(),
                 "items": items,
             }
         )
+
+
+class StaffMinigiocoOpenverseRegistraView(APIView):
+    """POST registra app OAuth su Openverse e salva credenziali sul nodo."""
+
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request):
+        from personaggi.minigioco_biblioteca import registra_openverse_app
+
+        result = registra_openverse_app(
+            name=(request.data.get("name") or "").strip(),
+            description=(request.data.get("description") or "").strip(),
+            email=(request.data.get("email") or "").strip(),
+        )
+        if not result.get("ok"):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class StaffMinigiocoOpenverseVerificaView(APIView):
+    """POST verifica token OAuth e ricerca immagini Openverse."""
+
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request):
+        from personaggi.minigioco_biblioteca import verifica_openverse_connessione
+
+        result = verifica_openverse_connessione()
+        if not result.get("ok"):
+            return Response(result, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class StaffMinigiocoBibliotecaAggiornaView(APIView):

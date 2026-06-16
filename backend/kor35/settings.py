@@ -324,6 +324,11 @@ ARCANA_SSO_FRONTEND_LOGIN_PATH = env("ARCANA_SSO_FRONTEND_LOGIN_PATH", default="
 # OIDC max_age (secondi). Default "0" = richiedi autenticazione fresca. Valore vuoto = non inviare il parametro.
 ARCANA_SSO_AUTHORIZE_MAX_AGE = env("ARCANA_SSO_AUTHORIZE_MAX_AGE", default="0").strip()
 
+# Openverse (libreria immagini minigioco QR) — OAuth2 client_credentials su VPS/datacenter.
+# Registrazione app: POST https://api.openverse.org/v1/auth_tokens/register/
+OPENVERSE_CLIENT_ID = env("OPENVERSE_CLIENT_ID", default="").strip()
+OPENVERSE_CLIENT_SECRET = env("OPENVERSE_CLIENT_SECRET", default="").strip()
+
 AUTHENTICATION_BACKENDS = [
 	'django.contrib.auth.backends.ModelBackend',
 	'allauth.account.auth_backends.AuthenticationBackend', #allauth

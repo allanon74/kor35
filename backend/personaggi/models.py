@@ -3361,6 +3361,35 @@ class MinigiocoBibliotecaImmagine(SyncableModel, models.Model):
         return self.titolo or str(self.id)
 
 
+class MinigiocoOpenverseConfig(models.Model):
+    """
+    Credenziali OAuth Openverse per il nodo corrente (non sincronizzate tra master/replica).
+    Singleton: una sola riga con singleton_id=1.
+    """
+
+    singleton_id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    client_id = models.CharField(max_length=128, blank=True, default="")
+    client_secret = models.CharField(max_length=512, blank=True, default="")
+    app_name = models.CharField(max_length=120, blank=True, default="")
+    app_description = models.TextField(blank=True, default="")
+    contact_email = models.EmailField(blank=True, default="")
+    api_message = models.CharField(max_length=500, blank=True, default="")
+    registered_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Config Openverse minigioco"
+        verbose_name_plural = "Config Openverse minigioco"
+
+    def __str__(self):
+        return self.app_name or "Openverse KOR35"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(singleton_id=1)
+        return obj
+
+
 class MinigiocoQrBlocco(SyncableModel, models.Model):
     """PG bloccato permanentemente su un QR (es. timer scaduto con esito blocca)."""
 

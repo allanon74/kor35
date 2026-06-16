@@ -664,6 +664,24 @@ export const staffAggiornaMinigiocoBiblioteca = (target = 100, onLogout) =>
     onLogout
   );
 
+export const staffRegistraOpenverseMinigioco = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/minigioco-biblioteca/openverse/registra/',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    onLogout
+  );
+
+export const staffVerificaOpenverseMinigioco = (onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/minigioco-biblioteca/openverse/verifica/',
+    { method: 'POST' },
+    onLogout
+  );
+
 export const staffInspectQrCode = (qrId, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/staff/qr-inspect/${qrId}/`, { method: 'GET' }, onLogout);
 };

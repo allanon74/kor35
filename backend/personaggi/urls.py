@@ -24,6 +24,8 @@ from .views_staff import (
     StaffMinigiocoQrConfigView,
     StaffMinigiocoBibliotecaView,
     StaffMinigiocoBibliotecaAggiornaView,
+    StaffMinigiocoOpenverseRegistraView,
+    StaffMinigiocoOpenverseVerificaView,
     FormulaBuilderSchemaView, FormulaBuilderPreviewView,
     FormulaSemanticOptionsView,
 )
@@ -265,6 +267,16 @@ urlpatterns = [
         'api/staff/minigioco-biblioteca/aggiorna/',
         StaffMinigiocoBibliotecaAggiornaView.as_view(),
         name='staff-minigioco-biblioteca-aggiorna',
+    ),
+    path(
+        'api/staff/minigioco-biblioteca/openverse/registra/',
+        StaffMinigiocoOpenverseRegistraView.as_view(),
+        name='staff-minigioco-openverse-registra',
+    ),
+    path(
+        'api/staff/minigioco-biblioteca/openverse/verifica/',
+        StaffMinigiocoOpenverseVerificaView.as_view(),
+        name='staff-minigioco-openverse-verifica',
     ),
     path('api/staff/qr-inventario-scan/', StaffQrInventoryScanView.as_view(), name='staff-qr-inventario-scan'),
     path('api/staff/approva-proposta/<int:proposta_id>/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
