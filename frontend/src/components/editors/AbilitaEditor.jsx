@@ -856,8 +856,25 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                             + Aggiungi regola
                         </button>
                     </div>
+                    <div className="mb-3 text-xs text-gray-300 bg-gray-950/60 border border-gray-700 rounded p-3 space-y-2">
+                        <p>
+                            Le formule usano il placeholder <code className="text-emerald-300">{'{formula_source}'}</code> per
+                            comporre sorgenti dinamiche (es. <em>Chop/Fuoco</em>). Non scrivere testo fisso nel template:
+                            imposta le statistiche sorgente sull&apos;oggetto/tecnica e usa le regole qui sotto per gli effetti da abilità.
+                        </p>
+                        <p><strong>Come limitare una regola a un contesto specifico</strong></p>
+                        <ul className="list-disc pl-5 space-y-1 text-gray-400">
+                            <li><strong>Solo tessiture / solo attacchi:</strong> campo <em>Scope</em> (<code>WEA</code> / <code>ATT</code>).</li>
+                            <li><strong>Solo aura sacra (o altra):</strong> in <em>Aggiungi sorgente/elemento</em> o sostituzioni aura, imposta <em>Aura origine</em>.</li>
+                            <li><strong>Solo armi in mischia:</strong> condizione <code>dmg_mischia &gt; 0</code> oppure <code>chop &gt; 0</code>.</li>
+                            <li><strong>Solo armi a distanza:</strong> condizione <code>dmg_distanza &gt; 0</code> oppure <code>pierce &gt; 0</code>.</li>
+                            <li><strong>Solo una classe oggetto (es. spade):</strong> condizione sul nome classe, es. <code>&quot;spada&quot; in classe_oggetto</code>.</li>
+                            <li><strong>Solo con certo elemento di partenza (tessiture):</strong> imposta <em>Elemento origine</em> nella regola.</li>
+                            <li><strong>Limiti aggiuntivi su modificatori statistici:</strong> usa la sezione <em>Statistiche abilità</em> con limiti aura/elemento e condizione testuale.</li>
+                        </ul>
+                    </div>
                     {(formData.formula_rules || []).length === 0 ? (
-                        <p className="text-xs text-gray-400">Nessuna regola. Usa questa sezione per override di sorgente, aura o elemento.</p>
+                        <p className="text-xs text-gray-400">Nessuna regola. Usa questa sezione per aggiungere sorgenti/elementi, override aura o sostituzioni elemento.</p>
                     ) : (
                         <div className="space-y-2">
                             {(formData.formula_rules || []).map((rule, idx) => (
@@ -867,6 +884,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                         <div><strong>Scope:</strong> {rule.scope}</div>
                                         <div><strong>Da:</strong> {findPunteggioName(punteggi, rule.from_punteggio) || findMattoneName(semanticMattoniOptions, rule.from_mattone) || '-'}</div>
                                         <div><strong>A:</strong> {findPunteggioName(punteggi, rule.to_punteggio) || findMattoneName(semanticMattoniOptions, rule.to_mattone) || rule.source_label || '-'}</div>
+                                        <div><strong>Condizione:</strong> {rule.when_expr || '-'}</div>
                                         <div><strong>Priorità:</strong> {rule.priority ?? 100}</div>
                                     </div>
                                     <button
@@ -934,6 +952,7 @@ const FORMULA_SCOPE_OPTIONS = [
 
 const FORMULA_RULE_OPTIONS = [
     { id: 'SOURCE_OVERRIDE', nome: 'Sostituisci sorgente' },
+    { id: 'SOURCE_APPEND', nome: 'Aggiungi sorgente/elemento' },
     { id: 'AURA_REPLACE', nome: 'Sostituisci aura' },
     { id: 'AURA_APPEND', nome: 'Aggiungi aura alternativa' },
     { id: 'ELEMENT_REPLACE', nome: 'Sostituisci elemento' },
@@ -949,12 +968,13 @@ const SOURCE_KEYWORD_OPTIONS = [
 function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOptions }) {
     const [draft, setDraft] = useState({
         scope: 'ALL',
-        rule_type: 'SOURCE_OVERRIDE',
+        rule_type: 'SOURCE_APPEND',
         from_punteggio: null,
         to_punteggio: null,
         from_mattone: null,
         to_mattone: null,
         source_label: '',
+        when_expr: '',
         priority: 100,
     });
     const [elementSearch, setElementSearch] = useState('');
@@ -963,12 +983,13 @@ function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOpti
         if (open) {
             setDraft({
                 scope: 'ALL',
-                rule_type: 'SOURCE_OVERRIDE',
+                rule_type: 'SOURCE_APPEND',
                 from_punteggio: null,
                 to_punteggio: null,
                 from_mattone: null,
                 to_mattone: null,
                 source_label: '',
+                when_expr: '',
                 priority: 100,
             });
             setElementSearch('');
@@ -1012,6 +1033,45 @@ function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOpti
                                 onChange={(v) => setDraft({ ...draft, source_label: v || '' })}
                                 minOptionsForSearch={99}
                             />
+                        </div>
+                    )}
+
+                    {draft.rule_type === 'SOURCE_APPEND' && (
+                        <div className="space-y-2">
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold">Etichetta da aggiungere (testo libero)</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-white"
+                                    placeholder="Es. Fuoco"
+                                    value={draft.source_label}
+                                    onChange={(e) => setDraft({ ...draft, source_label: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 uppercase font-bold">Oppure elemento da catalogo (mattone AMA)</label>
+                                <SearchableSelect
+                                    options={filteredElementOptions}
+                                    value={draft.to_mattone}
+                                    onChange={(v) => setDraft({ ...draft, to_mattone: v || null, to_punteggio: null })}
+                                    minOptionsForSearch={1}
+                                />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs text-gray-500 uppercase font-bold">Aura origine (opzionale)</label>
+                                    <SearchableSelect options={auraOptions} value={draft.from_punteggio} onChange={(v) => setDraft({ ...draft, from_punteggio: v || null })} />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500 uppercase font-bold">Elemento origine tessitura (opzionale)</label>
+                                    <SearchableSelect
+                                        options={filteredElementOptions}
+                                        value={draft.from_mattone}
+                                        onChange={(v) => setDraft({ ...draft, from_mattone: v || null, from_punteggio: draft.from_punteggio })}
+                                        minOptionsForSearch={1}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -1063,6 +1123,22 @@ function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOpti
                         </div>
                     )}
 
+                    {(draft.rule_type === 'SOURCE_APPEND' || draft.rule_type === 'ELEMENT_REPLACE') && (
+                        <div>
+                            <label className="text-xs text-gray-500 uppercase font-bold">Condizione (opzionale)</label>
+                            <input
+                                type="text"
+                                className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-white"
+                                placeholder="Es. chop > 0, dmg_mischia > 0, &quot;spada&quot; in classe_oggetto"
+                                value={draft.when_expr}
+                                onChange={(e) => setDraft({ ...draft, when_expr: e.target.value })}
+                            />
+                            <p className="mt-1 text-[11px] text-gray-500">
+                                Lascia vuoto per applicare sempre (nello scope scelto). Usa parametri formula/statistiche del contesto attacco o tessitura.
+                            </p>
+                        </div>
+                    )}
+
                     <div>
                         <label className="text-xs text-gray-500 uppercase font-bold">Priorità</label>
                         <input
@@ -1098,9 +1174,13 @@ function buildFormulaRulePreview(rule, punteggi) {
         rule.scope === 'ATT' ? 'solo attacchi' : rule.scope === 'WEA' ? 'solo tessiture' : 'tutte le formule';
     const fromName = findPunteggioName(punteggi, rule.from_punteggio) || 'qualunque';
     const toName = findPunteggioName(punteggi, rule.to_punteggio) || rule.source_label || 'destinazione';
+    const whenLabel = (rule.when_expr || '').trim() ? ` quando ${rule.when_expr}` : '';
 
     if (rule.rule_type === 'SOURCE_OVERRIDE') {
-        return `Usa "${toName}" al posto della sorgente base su ${scopeLabel}.`;
+        return `Usa "${toName}" al posto della sorgente base su ${scopeLabel}${whenLabel}.`;
+    }
+    if (rule.rule_type === 'SOURCE_APPEND') {
+        return `Aggiunge "${toName}" alla sorgente esistente (es. Chop/${toName}) su ${scopeLabel}${whenLabel}.`;
     }
     if (rule.rule_type === 'AURA_REPLACE') {
         return `Sostituisci aura "${fromName}" con "${toName}" su ${scopeLabel}.`;
@@ -1109,7 +1189,7 @@ function buildFormulaRulePreview(rule, punteggi) {
         return `Aggiungi aura alternativa "${toName}" (es. Aura Base/${toName}) su ${scopeLabel}.`;
     }
     if (rule.rule_type === 'ELEMENT_REPLACE') {
-        return `Sostituisci elemento "${fromName}" con "${toName}" su ${scopeLabel}.`;
+        return `Sostituisci elemento "${fromName}" con "${toName}" su ${scopeLabel}${whenLabel}.`;
     }
     return 'Configura i campi per vedere l’anteprima.';
 }

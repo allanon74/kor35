@@ -11,6 +11,7 @@ from .models import (
     Abilita,
     AbilitaFormulaRule,
     AbilitaStatistica,
+    FORMULA_RULE_SOURCE_APPEND,
     Mattone,
     Punteggio,
     Statistica,
@@ -113,19 +114,21 @@ class FormulaBuilderLogicTests(TestCase):
     def test_build_formula_template_writes_explicit_damage_expression(self):
         mischia_tpl = build_formula_template(
             "attack",
-            {"formula_damage_mode": "mischia", "formula_source": "chop"},
+            {"formula_damage_mode": "mischia", "formula_source": ["chop"]},
         )
+        self.assertIn("{formula_source}", mischia_tpl)
         self.assertIn("{danni_mischia}", mischia_tpl)
         self.assertNotIn("{formula_damage}", mischia_tpl)
-        self.assertNotIn("{danni_distanza}", mischia_tpl)
+        self.assertNotIn("Chop!", mischia_tpl)
 
         dist_tpl = build_formula_template(
             "attack",
-            {"formula_damage_mode": "distanza", "formula_source": "pierce"},
+            {"formula_damage_mode": "distanza", "formula_source": ["pierce"]},
         )
+        self.assertIn("{formula_source}", dist_tpl)
         self.assertIn("{danni_distanza}", dist_tpl)
         self.assertNotIn("{formula_damage}", dist_tpl)
-        self.assertNotIn("{danni_mischia}", dist_tpl)
+        self.assertNotIn("Pierce!", dist_tpl)
 
     def test_build_formula_template_without_damage_and_with_specific_effect(self):
         tpl = build_formula_template(
@@ -151,16 +154,146 @@ class FormulaBuilderLogicTests(TestCase):
             "attack",
             {
                 "formula_damage_mode": "none",
+                "formula_source": ["chop"],
                 "exclude_always_rango": True,
                 "exclude_always_molt": True,
                 "exclude_always_prefix": True,
                 "exclude_always_status": True,
             },
         )
+        self.assertIn("{formula_source}", tpl)
         self.assertNotIn("{rango|:RANGO}", tpl)
         self.assertNotIn("{molt|:MOLT}", tpl)
         self.assertNotIn("{formula_prefix}", tpl)
         self.assertNotIn("{formula_status}", tpl)
+
+    def test_weave_source_chop_and_elemento_preview(self):
+        from .models import Punteggio, ELEMENTO
+
+        elemento = Punteggio.objects.create(
+            nome="Fuoco",
+            sigla="FEL",
+            tipo=ELEMENTO,
+            colore="#ff4400",
+        )
+        stats = build_stats_by_selection(
+            {},
+            {"formula_source": ["chop", "elemento_principale"], "source_element_id": str(elemento.id)},
+        )
+        formula = "{formula_source}"
+        rendered = render_formula_preview(
+            formula=formula,
+            stats_by_param=stats,
+            context={"formula_kind": "WEA", "elemento": elemento},
+        ).lower()
+        self.assertIn("chop", rendered)
+        self.assertIn("fuoco", rendered)
+        self.assertIn("/", rendered)
+
+    def test_source_append_shows_chop_and_fuoco(self):
+        user_model = get_user_model()
+        user = user_model.objects.create_user(username="formula_source_append", password="x")
+        from .models import Personaggio, PersonaggioAbilita
+
+        caratt = Punteggio.objects.create(
+            nome="Forza Append",
+            sigla="FAP",
+            tipo=CARATTERISTICA,
+            colore="#111111",
+        )
+        abilita = Abilita.objects.create(
+            nome="Infusione Fuoco mischia",
+            caratteristica=caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        pg = Personaggio.objects.create(nome="PG source append", proprietario=user)
+        PersonaggioAbilita.objects.create(personaggio=pg, abilita=abilita)
+        AbilitaFormulaRule.objects.create(
+            abilita=abilita,
+            scope="ATT",
+            rule_type=FORMULA_RULE_SOURCE_APPEND,
+            source_label="Fuoco",
+            when_expr="chop > 0",
+            priority=10,
+        )
+
+        class FakeStat:
+            def __init__(self, parametro):
+                self.parametro = parametro
+
+        class FakeItem:
+            def __init__(self, parametro, valore_base):
+                self.statistica = FakeStat(parametro)
+                self.valore_base = valore_base
+
+        stats = [FakeItem("chop", 1), FakeItem("dannimis", 2), FakeItem("dannigen", 1)]
+        formula = (
+            "{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
+            "{formula_source}{danni_mischia}{formula_status}"
+        )
+        rendered = formatta_testo_generico(
+            "",
+            formula=formula,
+            statistiche_base=stats,
+            personaggio=pg,
+            context={"formula_kind": "ATT", "attack_formula_template": formula},
+            solo_formula=True,
+        )
+        lower = rendered.lower()
+        self.assertIn("chop", lower)
+        self.assertIn("fuoco", lower)
+        self.assertIn("/", lower)
+
+    def test_source_append_respects_when_expr(self):
+        user_model = get_user_model()
+        user = user_model.objects.create_user(username="formula_source_append_skip", password="x")
+        from .models import Personaggio, PersonaggioAbilita
+
+        caratt = Punteggio.objects.create(
+            nome="Forza Append Skip",
+            sigla="FAS",
+            tipo=CARATTERISTICA,
+            colore="#222222",
+        )
+        abilita = Abilita.objects.create(
+            nome="Infusione Fuoco distanza",
+            caratteristica=caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        pg = Personaggio.objects.create(nome="PG source append skip", proprietario=user)
+        PersonaggioAbilita.objects.create(personaggio=pg, abilita=abilita)
+        AbilitaFormulaRule.objects.create(
+            abilita=abilita,
+            scope="ATT",
+            rule_type=FORMULA_RULE_SOURCE_APPEND,
+            source_label="Fuoco",
+            when_expr="chop > 0",
+            priority=10,
+        )
+
+        class FakeStat:
+            def __init__(self, parametro):
+                self.parametro = parametro
+
+        class FakeItem:
+            def __init__(self, parametro, valore_base):
+                self.statistica = FakeStat(parametro)
+                self.valore_base = valore_base
+
+        stats = [FakeItem("pierce", 1)]
+        formula = "{formula_source}"
+        rendered = formatta_testo_generico(
+            "",
+            formula=formula,
+            statistiche_base=stats,
+            personaggio=pg,
+            context={"formula_kind": "ATT", "attack_formula_template": formula},
+            solo_formula=True,
+        ).lower()
+        self.assertIn("pierce", rendered)
+        self.assertNotIn("fuoco", rendered)
 
     def test_infer_weapon_damage_mode_from_saved_formula_not_stats(self):
         self.assertEqual(

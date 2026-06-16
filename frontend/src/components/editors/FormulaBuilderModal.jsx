@@ -10,10 +10,13 @@ const FormulaBuilderModal = ({
   statisticheBase = [],
   formulaValue = '',
   defaultFormulaType = 'attack',
+  elementoPrincipaleId = null,
+  elementoOptions = [],
 }) => {
   const [schema, setSchema] = useState(null);
   const [formulaType, setFormulaType] = useState(defaultFormulaType);
   const [selections, setSelections] = useState({});
+  const [sourceElementId, setSourceElementId] = useState('');
   const [preview, setPreview] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [numericValues, setNumericValues] = useState({
@@ -38,6 +41,39 @@ const FormulaBuilderModal = ({
   const [includeSpecificEffect, setIncludeSpecificEffect] = useState(false);
   const [effectDescription, setEffectDescription] = useState('');
 
+  const normalizedElementoOptions = useMemo(
+    () => (elementoOptions || []).map((el) => ({
+      id: String(el.id),
+      label: el.label || el.dichiarazione || el.nome || `Elemento ${el.id}`,
+    })),
+    [elementoOptions]
+  );
+
+  const sourceSelections = useMemo(() => {
+    const raw = selections.formula_source;
+    if (Array.isArray(raw)) return raw;
+    if (raw) return [raw];
+    return [];
+  }, [selections.formula_source]);
+
+  const wantsElementSource = sourceSelections.some(
+    (sid) => String(sid).toLowerCase() === 'elemento_principale'
+  );
+
+  const tessituraElementoId = elementoPrincipaleId ? String(elementoPrincipaleId) : '';
+
+  const tessituraElementoLabel = useMemo(() => {
+    if (!tessituraElementoId) return '';
+    const match = normalizedElementoOptions.find((el) => el.id === tessituraElementoId);
+    return match?.label || `Elemento #${tessituraElementoId}`;
+  }, [normalizedElementoOptions, tessituraElementoId]);
+
+  const effectiveSourceElementId = useMemo(() => {
+    if (!wantsElementSource) return '';
+    if (sourceElementId) return sourceElementId;
+    return tessituraElementoId;
+  }, [wantsElementSource, sourceElementId, tessituraElementoId]);
+
   const statsByParamFromForm = useMemo(() => {
     const byId = new Map(statsOptions.map((s) => [String(s.id), s]));
     const out = {};
@@ -52,12 +88,25 @@ const FormulaBuilderModal = ({
     return out;
   }, [statisticheBase, statsOptions]);
 
+  const buildSelectionsPayload = () => ({
+    ...selections,
+    include_cura: includeCura,
+    exclude_always_rango: excludeAlwaysRango,
+    exclude_always_molt: excludeAlwaysMolt,
+    exclude_always_prefix: excludeAlwaysPrefix,
+    exclude_always_status: excludeAlwaysStatus,
+    include_specific_effect: includeSpecificEffect,
+    effect_description: effectDescription,
+    source_element_id: wantsElementSource && effectiveSourceElementId ? effectiveSourceElementId : null,
+  });
+
   useEffect(() => {
     if (!open) {
       return;
     }
     setFormulaType(defaultFormulaType || 'attack');
     setSelections({});
+    setSourceElementId('');
     setIncludeCura(false);
     setExcludeAlwaysRango(false);
     setExcludeAlwaysMolt(false);
@@ -68,7 +117,7 @@ const FormulaBuilderModal = ({
     staffGetFormulaBuilderSchema(onLogout)
       .then((data) => setSchema(data || null))
       .catch((err) => console.error('Errore schema formula builder:', err));
-  }, [open, onLogout, defaultFormulaType]);
+  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId]);
 
   useEffect(() => {
     if (!open || !schema) {
@@ -80,16 +129,7 @@ const FormulaBuilderModal = ({
         formula: '',
         formula_type: formulaType,
         stats_by_param: { ...statsByParamFromForm, ...numericValues },
-        selections: {
-          ...selections,
-          include_cura: includeCura,
-          exclude_always_rango: excludeAlwaysRango,
-          exclude_always_molt: excludeAlwaysMolt,
-          exclude_always_prefix: excludeAlwaysPrefix,
-          exclude_always_status: excludeAlwaysStatus,
-          include_specific_effect: includeSpecificEffect,
-          effect_description: effectDescription,
-        },
+        selections: buildSelectionsPayload(),
         custom_text: '',
       },
       onLogout
@@ -100,7 +140,25 @@ const FormulaBuilderModal = ({
         setPreview('Errore preview formula.');
       })
       .finally(() => setLoadingPreview(false));
-  }, [open, schema, formulaType, selections, includeCura, excludeAlwaysRango, excludeAlwaysMolt, excludeAlwaysPrefix, excludeAlwaysStatus, includeSpecificEffect, effectDescription, formulaValue, statsByParamFromForm, numericValues, onLogout]);
+  }, [
+    open,
+    schema,
+    formulaType,
+    selections,
+    effectiveSourceElementId,
+    wantsElementSource,
+    includeCura,
+    excludeAlwaysRango,
+    excludeAlwaysMolt,
+    excludeAlwaysPrefix,
+    excludeAlwaysStatus,
+    includeSpecificEffect,
+    effectDescription,
+    formulaValue,
+    statsByParamFromForm,
+    numericValues,
+    onLogout,
+  ]);
 
   if (!open) {
     return null;
@@ -119,6 +177,10 @@ const FormulaBuilderModal = ({
     });
   };
 
+  const clearSourceSelections = () => {
+    setSelections((prev) => ({ ...prev, formula_source: [] }));
+  };
+
   const handleApply = async () => {
     try {
       const res = await staffPreviewFormulaBuilder(
@@ -126,16 +188,7 @@ const FormulaBuilderModal = ({
           formula: '',
           formula_type: formulaType,
           stats_by_param: { ...statsByParamFromForm, ...numericValues },
-          selections: {
-            ...selections,
-            include_cura: includeCura,
-            exclude_always_rango: excludeAlwaysRango,
-            exclude_always_molt: excludeAlwaysMolt,
-            exclude_always_prefix: excludeAlwaysPrefix,
-            exclude_always_status: excludeAlwaysStatus,
-            include_specific_effect: includeSpecificEffect,
-            effect_description: effectDescription,
-          },
+          selections: buildSelectionsPayload(),
           custom_text: '',
         },
         onLogout
@@ -145,6 +198,10 @@ const FormulaBuilderModal = ({
         formulaText: (res?.formula_template || schema?.default_template || '').trim(),
         customText: '',
         controlledParams: [...getControlledParams(schema), ...NUMERIC_CONTROLLED_PARAMS],
+        elementoPrincipaleId:
+          wantsElementSource && effectiveSourceElementId
+            ? parseInt(effectiveSourceElementId, 10)
+            : null,
       });
       onClose?.();
     } catch (err) {
@@ -177,9 +234,21 @@ const FormulaBuilderModal = ({
           {schema?.sections?.map((section) => {
             const isMulti = section.kind === 'multi';
             const selected = selections[section.id];
+            const isSourceSection = section.id === 'formula_source';
             return (
               <div key={section.id} className="border border-gray-700 rounded-lg p-3">
-                <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">{section.label}</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs uppercase tracking-widest text-gray-400">{section.label}</div>
+                  {isSourceSection && (
+                    <button
+                      type="button"
+                      onClick={clearSourceSelections}
+                      className="text-[11px] px-2 py-0.5 rounded border border-gray-600 text-gray-300 hover:bg-gray-800"
+                    >
+                      Nessuna sorgente
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {(section.options || []).map((opt) => {
                     const active = isMulti
@@ -199,6 +268,49 @@ const FormulaBuilderModal = ({
                     );
                   })}
                 </div>
+                {isSourceSection && (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Puoi combinare più voci (es. Chop + Elemento). In gioco le abilità possono aggiungere altre
+                    sorgenti tramite regola «Aggiungi sorgente/elemento».
+                  </p>
+                )}
+                {isSourceSection && wantsElementSource && (
+                  <div className="mt-3 space-y-2">
+                    {tessituraElementoId ? (
+                      <p className="text-sm text-emerald-300">
+                        Elemento dalla tessitura: <strong>{tessituraElementoLabel}</strong>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-amber-300">
+                        Nessun elemento principale impostato nel form tessitura: scegline uno sotto o impostalo nel
+                        campo «Elemento Principale» prima di applicare.
+                      </p>
+                    )}
+                    <label className="text-xs text-gray-400 uppercase tracking-widest block mb-1">
+                      Imposta o sovrascrivi elemento (opzionale)
+                    </label>
+                    <select
+                      value={sourceElementId}
+                      onChange={(e) => setSourceElementId(e.target.value)}
+                      className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
+                    >
+                      <option value="">
+                        {tessituraElementoId
+                          ? `— Usa elemento tessitura (${tessituraElementoLabel}) —`
+                          : '— Seleziona elemento —'}
+                      </option>
+                      {normalizedElementoOptions.map((el) => (
+                        <option key={el.id} value={el.id}>
+                          {el.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-gray-500">
+                      Se scegli un elemento qui, alla pressione di «Applica» aggiorna anche il campo Elemento
+                      Principale nel form tessitura.
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -247,9 +359,10 @@ const FormulaBuilderModal = ({
               </label>
             </div>
             <p className="mt-2 text-xs text-gray-500">
-              In «Sezione danno» scegli nessun danno, danni mischia o danni distanza: nella formula viene scritta la somma
-              corretta (dannigen+dannimis o dannigen+dannidis), indipendentemente dai valori sotto. In gioco il
-              totale si mostra così: 1 = niente; 2–9 = lettere con ! (es. tre!); 10+ = numero con ! (es. 12!).
+              La sorgente in formula usa sempre il placeholder <code className="text-emerald-300">{'{formula_source}'}</code>.
+            </p>
+            <p className="mt-2 text-xs text-gray-500">
+              In «Sezione danno» scegli nessun danno, danni mischia o danni distanza.
             </p>
           </div>
 

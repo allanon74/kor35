@@ -1294,6 +1294,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'item_modifiers': item_mods,
             'formula_kind': FORMULA_SCOPE_ATTACK,
             'attack_formula_template': obj.attacco_base,
+            'classe_oggetto': obj.classe_oggetto.nome if obj.classe_oggetto else '',
         }
 
         if personaggio:

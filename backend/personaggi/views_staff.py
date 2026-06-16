@@ -1153,14 +1153,41 @@ class FormulaBuilderSchemaView(APIView):
 class FormulaBuilderPreviewView(APIView):
     permission_classes = [IsStaffOrMaster]
 
+    @staticmethod
+    def _build_preview_context(payload):
+        from .models import FORMULA_SCOPE_ATTACK, FORMULA_SCOPE_WEAVE, Punteggio
+
+        context = dict(payload.get("context") or {})
+        selections = payload.get("selections") or {}
+        formula_type = payload.get("formula_type") or "attack"
+        if formula_type == "weave":
+            context.setdefault("formula_kind", FORMULA_SCOPE_WEAVE)
+        else:
+            context.setdefault("formula_kind", FORMULA_SCOPE_ATTACK)
+
+        source_ids = selections.get("formula_source")
+        if isinstance(source_ids, str):
+            source_ids = [source_ids]
+        source_ids = source_ids or []
+        wants_element = any(
+            str(sid).strip().lower() in ("elemento", "elemento_principale")
+            for sid in source_ids
+        )
+        element_id = selections.get("source_element_id")
+        if wants_element and element_id and not context.get("elemento"):
+            elemento = Punteggio.objects.filter(pk=element_id).first()
+            if elemento:
+                context["elemento"] = elemento
+        return context
+
     def post(self, request):
         payload = request.data if isinstance(request.data, dict) else {}
         formula = payload.get("formula")
         formula_type = payload.get("formula_type") or "attack"
         current_stats = payload.get("stats_by_param") or {}
         selections = payload.get("selections") or {}
-        context = payload.get("context") or {}
         custom_text = payload.get("custom_text") or ""
+        context = self._build_preview_context(payload)
 
         formula_template = (formula or "").strip() or build_formula_template(formula_type, selections)
         merged_stats = build_stats_by_selection(current_stats=current_stats, selections=selections)
@@ -1179,7 +1206,7 @@ class FormulaBuilderPreviewView(APIView):
 
 
 class FormulaSemanticOptionsView(APIView):
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsStaffOrMaster]
 
     def get(self, request):
         mattoni = (

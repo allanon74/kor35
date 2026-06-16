@@ -52,14 +52,14 @@ FORMULA_BUILDER_SCHEMA = {
         },
         {
             "id": "formula_source",
-            "label": "Sorgente",
-            "kind": "single",
+            "label": "Sorgente (combinabile)",
+            "kind": "multi",
             "options": [
-                {"id": "none", "label": "-", "stats": {}},
                 {"id": "chop", "label": "Chop", "stats": {"chop": 1}},
                 {"id": "blam", "label": "Blam", "stats": {"blam": 1}},
                 {"id": "pierce", "label": "Pierce", "stats": {"pierce": 1}},
                 {"id": "mental", "label": "Mental", "stats": {"mental": 1}},
+                {"id": "elemento_principale", "label": "Elemento principale (tessitura)", "stats": {}},
             ],
         },
         {
@@ -125,6 +125,7 @@ FORMULA_CONTROLLED_PARAMS = {
     "dannimis",
     "dannidis",
     "cura",
+    "elemento_src",
 }
 
 
@@ -145,6 +146,22 @@ def _iter_selected_options(selections):
             option = valid_options.get(option_id)
             if option:
                 yield section_id, option
+
+
+def _source_selection_ids(selections):
+    if not isinstance(selections, dict):
+        return []
+    raw = selections.get("formula_source")
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [
+            str(x).strip().lower()
+            for x in raw
+            if str(x).strip().lower() not in ("", "none")
+        ]
+    value = str(raw).strip().lower()
+    return [] if value in ("", "none") else [value]
 
 
 def _damage_mode_from_selections(selections):
@@ -183,6 +200,10 @@ def build_stats_by_selection(current_stats, selections):
         stats["dmg_mischia"] = 1
     elif damage_mode == "distanza":
         stats["dmg_distanza"] = 1
+
+    source_ids = _source_selection_ids(selections)
+    if any(sid in ("elemento", "elemento_principale") for sid in source_ids):
+        stats["elemento_src"] = 1
 
     return stats
 
@@ -229,6 +250,8 @@ def build_formula_template(formula_type, selections):
     }
 
     def _section_selected(section_id):
+        if section_id == "formula_source":
+            return bool(_source_selection_ids(selected_map))
         selected = selected_map.get(section_id)
         if selected is None:
             return False
@@ -263,13 +286,6 @@ def build_formula_template(formula_type, selections):
             return ["{danni_distanza}"]
         return []
 
-    source_map = {
-        "chop": "Chop! ",
-        "blam": "Blam! ",
-        "pierce": "Pierce! ",
-        "mental": "Mental! ",
-    }
-
     out = []
     for block in blocks:
         placeholder = placeholder_by_block.get(block)
@@ -281,11 +297,9 @@ def build_formula_template(formula_type, selections):
             out.append(placeholder)
             continue
         if block == "formula_source":
-            selected_source = str(selected_map.get("formula_source") or "").strip().lower()
-            if selected_source in source_map:
-                # Persisti la sorgente selezionata nel template finale.
-                out.append(source_map[selected_source])
-                continue
+            if _block_included("formula_source"):
+                out.append("{formula_source}")
+            continue
         if block == "formula_damage_mode":
             out.extend(_damage_mode_placeholders())
             continue

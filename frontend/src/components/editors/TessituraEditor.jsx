@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useCharacter } from '../CharacterContext';
-import { getStatisticheList, staffUpdateTessitura, staffCreateTessitura, staffGetAbilitaListAll } from '../../api';
+import { getStatisticheList, staffUpdateTessitura, staffCreateTessitura, staffGetAbilitaListAll, staffGetFormulaSemanticOptions } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import RichTextEditor from '../RichTextEditor';
@@ -33,10 +33,26 @@ const formatAbilitaOptionLabel = (abilita) => {
     : abilita.nome;
 };
 
+const mergeElementoPrincipaleOption = (rows, selected) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!selected) return list;
+  const id = selected?.id ?? selected;
+  if (id == null || id === '') return list;
+  const sid = String(id);
+  if (list.some((r) => String(r.id) === sid)) return list;
+  const nome =
+    selected?.dichiarazione ||
+    selected?.nome ||
+    selected?.label ||
+    `Elemento #${id}`;
+  return [{ id, nome, dichiarazione: selected?.dichiarazione || '' }, ...list];
+};
+
 const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
   const [statsOptions, setStatsOptions] = useState([]);
   const [abilitaOptions, setAbilitaOptions] = useState([]);
+  const [elementoMattoniOptions, setElementoMattoniOptions] = useState([]);
   
   // FIX: Default Data Merging
   const defaultData = {
@@ -75,13 +91,17 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     let cancelled = false;
     (async () => {
       try {
-        const rows = await staffGetAbilitaListAll(onLogout);
+        const [rows, semantic] = await Promise.all([
+          staffGetAbilitaListAll(onLogout),
+          staffGetFormulaSemanticOptions(onLogout),
+        ]);
         if (cancelled) return;
         setAbilitaOptions(
           mergeAbilitaTemporaneaOption(rows, initialData?.abilita_temporanea)
         );
+        setElementoMattoniOptions(semantic?.elementi_mattoni || []);
       } catch (e) {
-        console.error('Errore caricamento abilità per tessitura:', e);
+        console.error('Errore caricamento risorse tessitura:', e);
       }
     })();
     return () => {
@@ -101,6 +121,16 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
   // Calcolo livello property (numero componenti)
   const calculatedLevel = (formData.componenti || []).reduce((acc, curr) => acc + (parseInt(curr.valore) || 0), 0);
+
+  const elementoSelectOptions = useMemo(() => {
+    const base = (elementoMattoniOptions || []).map((m) => ({
+      id: m.id,
+      nome: m.label || m.dichiarazione || m.nome || `Elemento ${m.id}`,
+      dichiarazione: m.dichiarazione || '',
+      label: m.label || m.dichiarazione || m.nome || '',
+    }));
+    return mergeElementoPrincipaleOption(base, formData.elemento_principale);
+  }, [elementoMattoniOptions, formData.elemento_principale]);
 
   const updateInline = (key, index, field, value) => {
     const newList = [...(formData[key] || [])];
@@ -168,7 +198,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     }
   };
 
-  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, elementoPrincipaleId }) => {
     const controlledSet = new Set(controlledParams || []);
     const byParam = new Map((statsOptions || []).map((s) => [s.parametro, s]));
     const current = formData.statistiche_base || [];
@@ -185,6 +215,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
       ...prev,
       formula: mergedFormula,
       statistiche_base: [...kept, ...fromBuilder],
+      ...(elementoPrincipaleId != null ? { elemento_principale: elementoPrincipaleId } : {}),
     }));
   };
 
@@ -213,7 +244,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
                   options={punteggiList.filter(p => p.tipo === 'AU')} 
                   onChange={v => setFormData({...formData, aura_richiesta: v ? parseInt(v, 10) : null})} />
           <SearchableSelect label="Elemento Principale" value={formData.elemento_principale?.id || formData.elemento_principale} 
-                  options={punteggiList.filter(p => p.tipo === 'EL')} 
+                  options={elementoSelectOptions} 
                   onChange={v => setFormData({...formData, elemento_principale: v ? parseInt(v, 10) : null})} />
         </div>
         <div className="border border-purple-800/40 rounded-lg p-3 bg-purple-950/20 space-y-3">
@@ -322,6 +353,8 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statisticheBase={formData.statistiche_base || []}
         formulaValue={formData.formula}
         defaultFormulaType="weave"
+        elementoPrincipaleId={formData.elemento_principale?.id || formData.elemento_principale}
+        elementoOptions={elementoSelectOptions}
       />
       <RuntimeObjectWizardModal
         open={isRuntimeWizardOpen}

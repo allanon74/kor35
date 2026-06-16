@@ -539,6 +539,16 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
             else:
                 active_parts.append(rendered.strip())
 
+    if group_key == "formula_source":
+        append_labels = value_map.get("__formula_source_append__") or []
+        if isinstance(append_labels, str):
+            append_labels = [append_labels]
+        for lbl in append_labels:
+            lbl = str(lbl or "").strip()
+            if lbl and lbl not in seen:
+                active_parts.append(lbl)
+                seen.add(lbl)
+
     if not active_parts:
         return ""
 
@@ -901,11 +911,14 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
 
     # Override semantici formula da abilita possedute (sorgente, aura, elemento).
     if personaggio and hasattr(personaggio, "get_formula_semantic_overrides"):
-        semantic = personaggio.get_formula_semantic_overrides(context or {})
+        semantic = personaggio.get_formula_semantic_overrides(context or {}, eval_context=eval_context)
         if semantic:
             source_labels = semantic.get("source_labels") or {}
             if source_labels:
                 eval_context["__formula_source_labels__"] = source_labels
+            source_append_labels = semantic.get("source_append_labels") or []
+            if source_append_labels:
+                eval_context["__formula_source_append__"] = source_append_labels
             aura_display = semantic.get("aura_display")
             if aura_display:
                 object_context["aura"] = type("AuraDisplay", (), {"nome": aura_display})()
@@ -914,6 +927,16 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 if context is None:
                     context = {}
                 context["elemento_display_override"] = semantic["elemento_display_override"]
+
+    if context and context.get("elemento") and _is_truthy_numeric(eval_context.get("elemento_src", 0)):
+        labels = dict(eval_context.get("__formula_source_labels__") or {})
+        if "elemento_src" not in labels:
+            el_obj = context["elemento"]
+            raw = getattr(el_obj, "dichiarazione", None) or getattr(el_obj, "nome", "") or ""
+            raw = str(raw).strip()
+            if raw:
+                labels["elemento_src"] = raw.split()[-1]
+                eval_context["__formula_source_labels__"] = labels
 
     # Legacy weaves: se c'è status ma manca source, inietta source prima di status.
     if (
@@ -2039,11 +2062,13 @@ FORMULA_SCOPE_CHOICES = (
 )
 
 FORMULA_RULE_SOURCE_OVERRIDE = "SOURCE_OVERRIDE"
+FORMULA_RULE_SOURCE_APPEND = "SOURCE_APPEND"
 FORMULA_RULE_AURA_REPLACE = "AURA_REPLACE"
 FORMULA_RULE_AURA_APPEND = "AURA_APPEND"
 FORMULA_RULE_ELEMENT_REPLACE = "ELEMENT_REPLACE"
 FORMULA_RULE_CHOICES = (
     (FORMULA_RULE_SOURCE_OVERRIDE, "Sostituisci sorgente"),
+    (FORMULA_RULE_SOURCE_APPEND, "Aggiungi sorgente/elemento"),
     (FORMULA_RULE_AURA_REPLACE, "Sostituisci aura"),
     (FORMULA_RULE_AURA_APPEND, "Aggiungi aura alternativa"),
     (FORMULA_RULE_ELEMENT_REPLACE, "Sostituisci elemento"),
@@ -2083,6 +2108,15 @@ class AbilitaFormulaRule(A_modello):
         related_name="formula_rule_to_mattone",
     )
     source_label = models.CharField(max_length=80, blank=True, null=True)
+    when_expr = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=(
+            "Condizione opzionale (es. chop > 0, dmg_mischia > 0, aura_sacra > 0). "
+            "Se valorizzata, la regola si applica solo quando l'espressione è vera nel contesto formula."
+        ),
+    )
     priority = models.IntegerField(default=100)
 
     class Meta:
@@ -5177,18 +5211,31 @@ class Personaggio(Inventario):
 
         return mods
     
-    def get_formula_semantic_overrides(self, context=None):
+    def get_formula_semantic_overrides(self, context=None, eval_context=None):
         context = context or {}
+        eval_context = eval_context or {}
         formula_kind = str(context.get("formula_kind") or FORMULA_SCOPE_ATTACK).upper()
         aura_obj = context.get("aura")
         elemento_obj = context.get("elemento")
         rules = AbilitaFormulaRule.objects.filter(
             abilita__personaggioabilita__personaggio=self
-        ).select_related("from_punteggio", "to_punteggio")
+        ).select_related("from_punteggio", "to_punteggio", "from_mattone", "to_mattone")
 
         source_override = None
+        source_append_labels = []
         aura_labels = []
         elemento_display_override = None
+
+        def _rule_when_matches(rule):
+            when_expr = (getattr(rule, "when_expr", None) or "").strip()
+            if not when_expr:
+                return True
+            merged_ctx = dict(eval_context)
+            merged_ctx.update(context or {})
+            classe = context.get("classe_oggetto")
+            if classe:
+                merged_ctx["classe_oggetto"] = str(classe).lower()
+            return bool(evaluate_expression(when_expr, merged_ctx))
 
         def _label(entity_obj):
             if not entity_obj:
@@ -5222,11 +5269,26 @@ class Personaggio(Inventario):
                 continue
             if rule.scope == FORMULA_SCOPE_WEAVE and formula_kind != FORMULA_SCOPE_WEAVE:
                 continue
+            if not _rule_when_matches(rule):
+                continue
 
             to_label = _label(rule.to_mattone) or _label(rule.to_punteggio) or (rule.source_label or "").strip()
 
             if rule.rule_type == FORMULA_RULE_SOURCE_OVERRIDE and to_label:
                 source_override = to_label
+                continue
+
+            if rule.rule_type == FORMULA_RULE_SOURCE_APPEND and to_label:
+                if rule.from_punteggio_id and aura_obj:
+                    if getattr(aura_obj, "id", None) != rule.from_punteggio_id:
+                        continue
+                if rule.from_mattone_id and elemento_obj:
+                    current_el = _element_label(elemento_obj).lower()
+                    expected = _label(rule.from_mattone).lower()
+                    if expected and current_el != expected:
+                        continue
+                if to_label not in source_append_labels:
+                    source_append_labels.append(to_label)
                 continue
 
             if rule.rule_type == FORMULA_RULE_ELEMENT_REPLACE and to_label and elemento_obj:
@@ -5266,6 +5328,8 @@ class Personaggio(Inventario):
             out["aura_display"] = "/".join(aura_labels)
         if elemento_display_override:
             out["elemento_display_override"] = elemento_display_override
+        if source_append_labels:
+            out["source_append_labels"] = source_append_labels
         return out
 
 
@@ -5276,8 +5340,21 @@ class Personaggio(Inventario):
         if isinstance(item, Oggetto):
             stats = item.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
             item_mods = item.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            ctx = {'livello': item.livello, 'aura': item.aura, 'item_modifiers': item_mods, 'formula_kind': FORMULA_SCOPE_ATTACK}
-            testo_finale = formatta_testo_generico(item.testo, formula=getattr(item, 'formula', None), statistiche_base=stats, personaggio=self, context=ctx)
+            ctx = {
+                'livello': item.livello,
+                'aura': item.aura,
+                'item_modifiers': item_mods,
+                'formula_kind': FORMULA_SCOPE_ATTACK,
+                'attack_formula_template': item.attacco_base,
+                'classe_oggetto': item.classe_oggetto.nome if item.classe_oggetto else '',
+            }
+            testo_finale = formatta_testo_generico(
+                item.testo,
+                formula=item.attacco_base,
+                statistiche_base=stats,
+                personaggio=self,
+                context=ctx,
+            )
             
         elif isinstance(item, Infusione):
             stats = item.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
