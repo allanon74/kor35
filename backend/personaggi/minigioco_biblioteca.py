@@ -104,8 +104,58 @@ def openverse_config_status() -> dict[str, Any]:
     return payload
 
 
+def _is_cloudflare_block(body: str) -> bool:
+    text = (body or "").lower()
+    return "just a moment" in text or ("cloudflare" in text and "<!doctype html" in text)
+
+
+def salva_openverse_credenziali(
+    *,
+    client_id: str,
+    client_secret: str,
+    name: str = "",
+    description: str = "",
+    email: str = "",
+    api_message: str = "",
+) -> dict[str, Any]:
+    """Salva credenziali Openverse nel DB locale (registrazione da browser o incolla manuale)."""
+    client_id = (client_id or "").strip()
+    client_secret = (client_secret or "").strip()
+    name = (name or "").strip()[:120]
+    description = (description or "").strip()[:500]
+    email = (email or "").strip()
+    api_message = (api_message or "").strip()[:500]
+
+    if not client_id or not client_secret:
+        return {"ok": False, "error": "client_id e client_secret obbligatori."}
+
+    from personaggi.models import MinigiocoOpenverseConfig
+
+    cfg = MinigiocoOpenverseConfig.get_solo()
+    cfg.client_id = client_id
+    cfg.client_secret = client_secret
+    if name:
+        cfg.app_name = name
+    if description:
+        cfg.app_description = description
+    if email:
+        cfg.contact_email = email
+    if api_message:
+        cfg.api_message = api_message
+    if not cfg.registered_at:
+        cfg.registered_at = timezone.now()
+    cfg.save()
+    _invalidate_openverse_token_cache()
+
+    return {
+        "ok": True,
+        "message": api_message or "Credenziali Openverse salvate sul server.",
+        "openverse": openverse_config_status(),
+    }
+
+
 def registra_openverse_app(*, name: str, description: str, email: str) -> dict[str, Any]:
-    """Registra l'app su Openverse e salva le credenziali nel DB locale."""
+    """Registra l'app su Openverse dal server (fallisce spesso su VPS per Cloudflare)."""
     name = (name or "").strip()[:120]
     description = (description or "").strip()[:500]
     email = (email or "").strip()
@@ -127,6 +177,15 @@ def registra_openverse_app(*, name: str, description: str, email: str) -> dict[s
         )
         if resp.status_code not in (200, 201):
             detail = resp.text[:300].strip() or resp.reason
+            if resp.status_code == 403 and _is_cloudflare_block(resp.text):
+                return {
+                    "ok": False,
+                    "blocked_by_cloudflare": True,
+                    "error": (
+                        "Openverse blocca le richieste dal server VPS (Cloudflare). "
+                        "Usa «Registra dal browser»: la chiamata parte dal tuo PC, non dal server."
+                    ),
+                }
             return {"ok": False, "error": f"Openverse HTTP {resp.status_code}: {detail}"}
         data = resp.json()
     except Exception as exc:
@@ -138,26 +197,21 @@ def registra_openverse_app(*, name: str, description: str, email: str) -> dict[s
     if not client_id or not client_secret:
         return {"ok": False, "error": "Risposta Openverse incompleta (mancano client_id o client_secret)."}
 
-    from personaggi.models import MinigiocoOpenverseConfig
-
-    cfg = MinigiocoOpenverseConfig.get_solo()
-    cfg.client_id = client_id
-    cfg.client_secret = client_secret
-    cfg.app_name = name
-    cfg.app_description = description
-    cfg.contact_email = email
-    cfg.api_message = (data.get("msg") or "")[:500]
-    cfg.registered_at = timezone.now()
-    cfg.save()
-    _invalidate_openverse_token_cache()
-
+    saved = salva_openverse_credenziali(
+        client_id=client_id,
+        client_secret=client_secret,
+        name=name,
+        description=description,
+        email=email,
+        api_message=(data.get("msg") or ""),
+    )
+    if not saved.get("ok"):
+        return saved
     return {
-        "ok": True,
+        **saved,
         "client_id": client_id,
         "client_secret": client_secret,
-        "message": cfg.api_message or "Applicazione registrata.",
         "email": email,
-        "openverse": openverse_config_status(),
     }
 
 

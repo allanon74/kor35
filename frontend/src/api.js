@@ -664,6 +664,56 @@ export const staffAggiornaMinigiocoBiblioteca = (target = 100, onLogout) =>
     onLogout
   );
 
+export const OPENVERSE_REGISTER_URL = 'https://api.openverse.org/v1/auth_tokens/register/';
+
+/** Registrazione Openverse dal browser (bypass Cloudflare VPS). */
+export async function openverseRegisterFromBrowser({ name, description, email }) {
+  const resp = await fetch(OPENVERSE_REGISTER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      name: (name || '').trim(),
+      description: (description || '').trim(),
+      email: (email || '').trim(),
+    }),
+  });
+  const text = await resp.text();
+  let data = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = null;
+  }
+  if (!resp.ok) {
+    const cloudflare = /just a moment/i.test(text) || (/cloudflare/i.test(text) && /<!doctype html/i.test(text));
+    const err = new Error(
+      cloudflare
+        ? 'Openverse bloccato da Cloudflare anche dal browser. Incolla le credenziali manualmente o riprova da un\'altra rete.'
+        : `Openverse HTTP ${resp.status}: ${text.slice(0, 200)}`
+    );
+    err.cloudflare = cloudflare;
+    throw err;
+  }
+  if (!data?.client_id || !data?.client_secret) {
+    throw new Error('Risposta Openverse incompleta (mancano client_id o client_secret).');
+  }
+  return data;
+}
+
+export const staffSalvaOpenverseMinigioco = (payload, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/minigioco-biblioteca/openverse/salva/',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    onLogout
+  );
+
 export const staffRegistraOpenverseMinigioco = (payload, onLogout) =>
   fetchAuthenticated(
     '/api/personaggi/api/staff/minigioco-biblioteca/openverse/registra/',

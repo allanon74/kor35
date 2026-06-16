@@ -249,3 +249,31 @@ class MinigiocoBibliotecaTests(TestCase):
         self.assertTrue(status["configured"])
         self.assertEqual(status["source"], "database")
 
+    @patch("personaggi.minigioco_biblioteca.requests.post")
+    def test_registra_openverse_cloudflare_403(self, mock_post):
+        from personaggi.minigioco_biblioteca import registra_openverse_app
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 403
+        mock_resp.text = "<!DOCTYPE html><html>Just a moment... cloudflare"
+        mock_resp.reason = "Forbidden"
+        mock_post.return_value = mock_resp
+
+        result = registra_openverse_app(name="KOR35", description="d", email="a@b.it")
+        self.assertFalse(result["ok"])
+        self.assertTrue(result.get("blocked_by_cloudflare"))
+
+    def test_salva_openverse_credenziali(self):
+        from personaggi.minigioco_biblioteca import openverse_config_status, salva_openverse_credenziali
+
+        result = salva_openverse_credenziali(
+            client_id="manual-id",
+            client_secret="manual-secret",
+            name="Manual app",
+            email="staff@kor35.it",
+        )
+        self.assertTrue(result["ok"])
+        status = openverse_config_status()
+        self.assertTrue(status["configured"])
+        self.assertEqual(status["source"], "database")
+

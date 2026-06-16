@@ -1484,6 +1484,27 @@ class StaffMinigiocoBibliotecaView(APIView):
         )
 
 
+class StaffMinigiocoOpenverseSalvaView(APIView):
+    """POST salva credenziali Openverse (dopo registrazione dal browser o incolla manuale)."""
+
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request):
+        from personaggi.minigioco_biblioteca import salva_openverse_credenziali
+
+        result = salva_openverse_credenziali(
+            client_id=(request.data.get("client_id") or "").strip(),
+            client_secret=(request.data.get("client_secret") or "").strip(),
+            name=(request.data.get("name") or "").strip(),
+            description=(request.data.get("description") or "").strip(),
+            email=(request.data.get("email") or "").strip(),
+            api_message=(request.data.get("api_message") or "").strip(),
+        )
+        if not result.get("ok"):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        return Response(result, status=status.HTTP_200_OK)
+
+
 class StaffMinigiocoOpenverseRegistraView(APIView):
     """POST registra app OAuth su Openverse e salva credenziali sul nodo."""
 

@@ -25,6 +25,7 @@ from .views_staff import (
     StaffMinigiocoBibliotecaView,
     StaffMinigiocoBibliotecaAggiornaView,
     StaffMinigiocoOpenverseRegistraView,
+    StaffMinigiocoOpenverseSalvaView,
     StaffMinigiocoOpenverseVerificaView,
     FormulaBuilderSchemaView, FormulaBuilderPreviewView,
     FormulaSemanticOptionsView,
@@ -267,6 +268,11 @@ urlpatterns = [
         'api/staff/minigioco-biblioteca/aggiorna/',
         StaffMinigiocoBibliotecaAggiornaView.as_view(),
         name='staff-minigioco-biblioteca-aggiorna',
+    ),
+    path(
+        'api/staff/minigioco-biblioteca/openverse/salva/',
+        StaffMinigiocoOpenverseSalvaView.as_view(),
+        name='staff-minigioco-openverse-salva',
     ),
     path(
         'api/staff/minigioco-biblioteca/openverse/registra/',

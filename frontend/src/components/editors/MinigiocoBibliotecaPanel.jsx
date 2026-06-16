@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ImageIcon, KeyRound, Loader, RefreshCw, ShieldCheck } from 'lucide-react';
 import {
+  openverseRegisterFromBrowser,
   staffAggiornaMinigiocoBiblioteca,
   staffGetMinigiocoBiblioteca,
-  staffRegistraOpenverseMinigioco,
+  staffSalvaOpenverseMinigioco,
   staffVerificaOpenverseMinigioco,
 } from '../../api';
 
@@ -22,6 +23,9 @@ const MinigiocoBibliotecaPanel = ({ onLogout }) => {
   const [msg, setMsg] = useState('');
   const [openverseForm, setOpenverseForm] = useState(DEFAULT_OPENVERSE_FORM);
   const [registeredSecret, setRegisteredSecret] = useState(null);
+  const [manualCreds, setManualCreds] = useState({ client_id: '', client_secret: '' });
+  const [showManual, setShowManual] = useState(false);
+  const [savingManual, setSavingManual] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,26 +89,66 @@ const MinigiocoBibliotecaPanel = ({ onLogout }) => {
           'Esiste già una configurazione Openverse su questo server. Registrare di nuovo sostituirà le credenziali salvate. Continuare?'
         )
       : window.confirm(
-          'Registrare una nuova app Openverse per questo server? Riceverai un\'email di verifica da Openverse.'
+          'Registrare una nuova app Openverse dal tuo browser? Riceverai un\'email di verifica da Openverse.'
         );
     if (!conferma) return;
 
     setRegistering(true);
     setRegisteredSecret(null);
-    setMsg('Registrazione Openverse in corso…');
+    setMsg('Registrazione Openverse dal browser…');
     try {
-      const res = await staffRegistraOpenverseMinigioco(openverseForm, onLogout);
+      const ov = await openverseRegisterFromBrowser(openverseForm);
+      const res = await staffSalvaOpenverseMinigioco(
+        {
+          ...openverseForm,
+          client_id: ov.client_id,
+          client_secret: ov.client_secret,
+          api_message: ov.msg || '',
+        },
+        onLogout
+      );
       setRegisteredSecret({
-        client_id: res.client_id,
-        client_secret: res.client_secret,
-        message: res.message,
+        client_id: ov.client_id,
+        client_secret: ov.client_secret,
+        message: ov.msg || res?.message,
       });
-      setMsg(res.message || 'App Openverse registrata. Controlla la email per la verifica.');
+      setMsg(ov.msg || res?.message || 'App Openverse registrata. Controlla la email per la verifica.');
       await load();
     } catch (e) {
-      setMsg(e?.data?.error || e.message || 'Registrazione Openverse fallita.');
+      setMsg(
+        e?.cloudflare
+          ? `${e.message} Oppure incolla le credenziali ottenute altrove nel form sotto.`
+          : e?.data?.error || e.message || 'Registrazione Openverse fallita.'
+      );
+      setShowManual(true);
     } finally {
       setRegistering(false);
+    }
+  };
+
+  const salvaCredenzialiManuali = async () => {
+    if (!manualCreds.client_id?.trim() || !manualCreds.client_secret?.trim()) {
+      setMsg('Inserisci client_id e client_secret.');
+      return;
+    }
+    setSavingManual(true);
+    setMsg('Salvataggio credenziali…');
+    try {
+      const res = await staffSalvaOpenverseMinigioco(
+        {
+          ...openverseForm,
+          client_id: manualCreds.client_id.trim(),
+          client_secret: manualCreds.client_secret.trim(),
+        },
+        onLogout
+      );
+      setMsg(res?.message || 'Credenziali Openverse salvate sul server.');
+      setManualCreds({ client_id: '', client_secret: '' });
+      await load();
+    } catch (e) {
+      setMsg(e?.data?.error || e.message || 'Salvataggio credenziali fallito.');
+    } finally {
+      setSavingManual(false);
     }
   };
 
@@ -159,7 +203,7 @@ const MinigiocoBibliotecaPanel = ({ onLogout }) => {
               onClick={registraOpenverse}
               className="px-2.5 py-1 bg-sky-700 hover:bg-sky-600 rounded text-[11px] font-bold disabled:opacity-50"
             >
-              {registering ? 'Registrazione…' : openverse.configured ? 'Rigenera credenziali' : 'Registra app'}
+              {registering ? 'Registrazione…' : openverse.configured ? 'Rigenera credenziali' : 'Registra dal browser'}
             </button>
             <button
               type="button"
@@ -174,9 +218,9 @@ const MinigiocoBibliotecaPanel = ({ onLogout }) => {
         </div>
 
         <p className="text-[11px] text-gray-400 mb-2">
-          Su DigitalOcean Openverse blocca spesso le richieste anonime. Registra l&apos;app qui: il server salva le
-          credenziali localmente (non sincronizzate). Openverse invierà un&apos;email di verifica — finché non la
-          confermi, il token potrebbe non funzionare.
+          Il server VPS (DigitalOcean) è spesso bloccato da Cloudflare su Openverse. La registrazione parte dal
+          <strong className="text-gray-300"> tuo browser</strong> (non dal server); le credenziali vengono poi salvate
+          sul server. Openverse invierà un&apos;email di verifica — finché non la confermi, il token potrebbe non funzionare.
         </p>
 
         {openverse.configured ? (
@@ -234,6 +278,46 @@ const MinigiocoBibliotecaPanel = ({ onLogout }) => {
             {registeredSecret.message && <p className="mt-1 text-amber-300">{registeredSecret.message}</p>}
           </div>
         )}
+
+        <div className="mt-3 border-t border-gray-700/60 pt-2">
+          <button
+            type="button"
+            onClick={() => setShowManual((v) => !v)}
+            className="text-[11px] text-sky-400 hover:text-sky-300 underline"
+          >
+            {showManual ? 'Nascondi incolla credenziali' : 'Hai già client_id e client_secret? Incollali qui'}
+          </button>
+          {showManual && (
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <label className="text-[11px] text-gray-400 sm:col-span-2">
+                Client ID
+                <input
+                  type="text"
+                  value={manualCreds.client_id}
+                  onChange={(e) => setManualCreds((prev) => ({ ...prev, client_id: e.target.value }))}
+                  className="mt-1 w-full px-2 py-1 rounded bg-gray-900 border border-gray-700 text-xs text-white font-mono"
+                />
+              </label>
+              <label className="text-[11px] text-gray-400 sm:col-span-2">
+                Client secret
+                <input
+                  type="password"
+                  value={manualCreds.client_secret}
+                  onChange={(e) => setManualCreds((prev) => ({ ...prev, client_secret: e.target.value }))}
+                  className="mt-1 w-full px-2 py-1 rounded bg-gray-900 border border-gray-700 text-xs text-white font-mono"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={savingManual}
+                onClick={salvaCredenzialiManuali}
+                className="sm:col-span-2 px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-[11px] font-bold disabled:opacity-50"
+              >
+                {savingManual ? 'Salvataggio…' : 'Salva credenziali sul server'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {loading ? (
