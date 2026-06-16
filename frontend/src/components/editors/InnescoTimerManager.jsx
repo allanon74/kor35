@@ -4,6 +4,8 @@ import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
+import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import {
   associaQrDiretto,
   staffGetInnescoTimers,
@@ -86,6 +88,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
   const [editing, setEditing] = useState(null);
   const [scanningId, setScanningId] = useState(null);
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
+  const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [msg, setMsg] = useState('');
   const [ereOptions, setEreOptions] = useState([]);
   const [regioniOptions, setRegioniOptions] = useState([]);
@@ -209,6 +212,15 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
                     <button type="button" className="text-xs px-2 py-1 bg-gray-700 rounded" onClick={() => setEditing({ ...emptyForm(), ...t })}>
                       Modifica
                     </button>
+                    <button
+                      type="button"
+                      className="text-xs px-2 py-1 bg-indigo-800 rounded"
+                      onClick={() => openMinigioco(t.qrcode_id, t.nome)}
+                      disabled={!t.qrcode_id}
+                      title={t.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                    >
+                      Minigioco
+                    </button>
                     <button type="button" className="text-xs px-2 py-1 bg-violet-800 rounded" onClick={() => setScanningId(t.id)}>
                       Associa QR
                     </button>
@@ -316,6 +328,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               </div>
             </div>
           )}
+          <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
           <div className="flex gap-2">
             <button type="button" className="px-4 py-2 bg-indigo-600 rounded" onClick={save}>
               Salva
@@ -361,6 +374,8 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
           </div>
         </div>
       )}
+
+      {minigiocoModal}
 
       <ConfirmDialog
         open={Boolean(pendingQrConflict)}

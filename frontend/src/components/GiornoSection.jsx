@@ -96,6 +96,7 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
                         onStatChange={questHandlers.onStatChange}
                         onSaveNotes={questHandlers.onSaveNotes}
                         onScanQr={questHandlers.onScanQr}
+                        onMinigioco={questHandlers.onMinigioco}
                     />
                 ))}
             </div>

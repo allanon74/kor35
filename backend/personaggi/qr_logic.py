@@ -436,6 +436,21 @@ def annotate_has_qrcode_avista(qs):
     return qs.annotate(has_qrcode=Exists(QrCode.objects.filter(vista_id=OuterRef("pk"))))
 
 
+def annotate_qrcode_id_avista(qs):
+    """Annotazione Subquery: id del QrCode collegato (se presente)."""
+    from django.db.models import OuterRef, Subquery
+
+    from .models import QrCode
+
+    qr_sub = QrCode.objects.filter(vista_id=OuterRef("pk")).values("id")[:1]
+    return qs.annotate(qrcode_id=Subquery(qr_sub))
+
+
+def annotate_staff_avista_qr(qs):
+    """has_qrcode + qrcode_id per liste/editor staff A_vista."""
+    return annotate_qrcode_id_avista(annotate_has_qrcode_avista(qs))
+
+
 def descrivi_avista_per_associazione_qr(vista_obj):
     """
     Risolve la sottoclasse reale collegata a QrCode.vista (ORM carica spesso solo A_vista).

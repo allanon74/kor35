@@ -6,8 +6,10 @@ import StaffQrTab from '../StaffQrTab';
 import { associaQrDiretto } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
+import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 
 const OggettoManager = ({ onBack, onLogout }) => {
+  const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [view, setView] = useState('list'); // 'list' | 'editor'
   const [selectedItem, setSelectedItem] = useState(null);
   const [scanningForElement, setScanningForElement] = useState(null);
@@ -60,6 +62,7 @@ const OggettoManager = ({ onBack, onLogout }) => {
           onAdd={handleAdd} 
           onEdit={handleEdit} 
           onScanQr={handleScanQr}
+          onMinigioco={(item) => openMinigioco(item.qrcode_id, item.nome)}
           onLogout={onLogout}
           listVersion={listVersion}
         />
@@ -133,6 +136,7 @@ const OggettoManager = ({ onBack, onLogout }) => {
           <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo oggetto" />
         ) : null}
       </ConfirmDialog>
+      {minigiocoModal}
     </div>
   );
 };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { staffCreateInventario, staffUpdateInventario, staffGetInventarioOggetti, staffAggiungiOggettoInventario, staffRimuoviOggettoInventario, staffGetOggettiSenzaPosizione, getOggettoDetail } from '../../api';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import ConfirmDialog from './ConfirmDialog';
 
 const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
@@ -248,6 +249,9 @@ const InventarioEditor = ({ onBack, onLogout, initialData = null }) => {
           </div>
         </div>
       )}
+
+      <StaffMinigiocoQrSection qrcodeId={initialData?.qrcode_id} onLogout={onLogout} />
+
       <ConfirmDialog
         open={pendingRemoveOggettoId !== null}
         title="Rimuovere oggetto dall'inventario?"

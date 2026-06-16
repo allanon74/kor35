@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StaffQrTab from '../StaffQrTab';
+import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import {
   staffAssociaPilotSottosistemaQr,
   staffCreatePilotComandoCritico,
@@ -260,6 +261,7 @@ function mergeCaAndRulesIntoRegole(baseJson, rb, caTipo, caSottoId) {
 }
 
 export default function PilotaggioManager({ onLogout }) {
+  const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sottosistemi, setSottosistemi] = useState([]);
@@ -1118,6 +1120,15 @@ export default function PilotaggioManager({ onLogout }) {
                     </button>
                     <button
                       type="button"
+                      className="px-2 py-1 rounded bg-indigo-800 text-sm text-white disabled:opacity-40"
+                      disabled={!s.qrcode_id}
+                      onClick={() => openMinigioco(s.qrcode_id, `${s.codice} — ${s.nome}`)}
+                      title={s.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                    >
+                      Minigioco
+                    </button>
+                    <button
+                      type="button"
                       className="text-indigo-300 text-sm"
                       onClick={async () => {
                         setError('');
@@ -1942,6 +1953,7 @@ export default function PilotaggioManager({ onLogout }) {
           </div>
         </div>
       ) : null}
+      {minigiocoModal}
     </div>
   );
 }

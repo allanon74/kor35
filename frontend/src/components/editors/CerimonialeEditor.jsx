@@ -4,6 +4,7 @@ import { staffUpdateCerimoniale, staffCreateCerimoniale } from '../../api';
 import CharacteristicInline from './inlines/CharacteristicInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 
 // Aggiunto onCancel e onSave ai props
@@ -129,6 +130,7 @@ const CerimonialeEditor = ({ onBack, onCancel, onSave, onLogout, initialData = n
         onChange={(i, f, v) => updateInline('componenti', i, f, v)}
         onRemove={(i) => setFormData({...formData, componenti: formData.componenti.filter((_, idx) => idx !== i)})}
       />
+      <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
     </div>
   );
 };

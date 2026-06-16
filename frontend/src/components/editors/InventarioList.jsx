@@ -3,7 +3,7 @@ import { staffGetInventari, staffDeleteInventario } from '../../api';
 import MasterGenericList from './MasterGenericList';
 import StaffQrBadge from './StaffQrBadge';
 
-const InventarioList = ({ onAdd, onEdit, onScanQr, onLogout, listVersion = 0 }) => {
+const InventarioList = ({ onAdd, onEdit, onScanQr, onMinigioco, onLogout, listVersion = 0 }) => {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -86,6 +86,7 @@ const InventarioList = ({ onAdd, onEdit, onScanQr, onLogout, listVersion = 0 }) 
             onAdd={onAdd} 
             onEdit={onEdit} 
             onScanQr={onScanQr}
+            onMinigioco={onMinigioco}
             onDelete={handleDelete}
             loading={loading}
             addLabel="Crea Inventario"

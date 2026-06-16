@@ -5,6 +5,7 @@ import CharacteristicInline from './inlines/CharacteristicInline';
 import StatBaseInline from './inlines/StatBaseInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 
@@ -356,6 +357,9 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         elementoPrincipaleId={formData.elemento_principale?.id || formData.elemento_principale}
         elementoOptions={elementoSelectOptions}
       />
+
+      <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
+
       <RuntimeObjectWizardModal
         open={isRuntimeWizardOpen}
         onClose={() => setIsRuntimeWizardOpen(false)}

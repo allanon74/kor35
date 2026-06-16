@@ -5,8 +5,10 @@ import StaffQrTab from '../StaffQrTab';
 import { associaQrDiretto, staffGetInfusioneDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
+import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 
 const InfusioneManager = ({ onBack, onLogout }) => {
+  const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [view, setView] = useState('list'); // 'list' o 'edit'
   const [selectedItem, setSelectedItem] = useState(null);
   const [scanningForElement, setScanningForElement] = useState(null);
@@ -65,6 +67,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
             onSelect={handleEdit} 
             onNew={handleNew} 
             onScanQr={handleScanQr}
+            onMinigioco={(item) => openMinigioco(item.qrcode_id, item.nome)}
             onLogout={onLogout}
             listVersion={listVersion}
           />
@@ -142,6 +145,7 @@ const InfusioneManager = ({ onBack, onLogout }) => {
           <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questa infusione" />
         ) : null}
       </ConfirmDialog>
+      {minigiocoModal}
     </div>
   );
 };

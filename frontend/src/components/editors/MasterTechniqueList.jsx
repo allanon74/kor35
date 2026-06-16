@@ -16,6 +16,7 @@ const MasterTechniqueList = ({
   onEdit, 
   onDelete, 
   onScanQr,
+  onMinigioco,
   addLabel = "Nuovo",
   loading = false 
 }) => {
@@ -135,6 +136,7 @@ const MasterTechniqueList = ({
       onAdd={onAdd} 
       onEdit={onEdit} 
       onScanQr={onScanQr}
+      onMinigioco={onMinigioco}
       onDelete={onDelete}
       loading={loading}
       addLabel={addLabel}

@@ -3,6 +3,7 @@ import { Store, Plus, RefreshCw, QrCode } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import { RegoleAperturaEditor, RegoleVisibilitaEditor } from './RequisitiAccessoEditor';
 import NegozioConfigEconomiaEditor from './NegozioConfigEconomiaEditor';
 import NegozioReadinessBadge from '../NegozioReadinessBadge';
@@ -390,6 +391,10 @@ const NegozioMercanteManager = ({ onLogout }) => {
                 </button>
               )}
             </div>
+          )}
+
+          {form.qr_code && (
+            <StaffMinigiocoQrSection qrcodeId={form.qr_code} onLogout={onLogout} lookup={lookup} />
           )}
 
           <button type="button" onClick={saveNegozio} className="w-full py-2 bg-amber-700 rounded font-bold">

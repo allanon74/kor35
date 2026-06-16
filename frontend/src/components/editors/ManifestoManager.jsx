@@ -4,6 +4,8 @@ import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
+import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import {
   associaQrDiretto,
   staffGetManifesti,
@@ -13,6 +15,7 @@ import {
 } from '../../api';
 
 const ManifestoManager = ({ onBack, onLogout }) => {
+  const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -143,6 +146,15 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                     </button>
                     <button
                       type="button"
+                      className="text-xs px-2 py-1 bg-indigo-800 rounded"
+                      onClick={() => openMinigioco(m.qrcode_id, m.nome)}
+                      disabled={!m.qrcode_id}
+                      title={m.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                    >
+                      Minigioco
+                    </button>
+                    <button
+                      type="button"
                       className="text-xs px-2 py-1 bg-violet-800 rounded"
                       onClick={() => setScanningId(m.id)}
                     >
@@ -184,6 +196,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               onChange={(e) => setEditing({ ...editing, requisiti_lettura_json: e.target.value })}
             />
           </label>
+          <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
           <div className="flex gap-2">
             <button type="button" className="px-4 py-2 bg-indigo-600 rounded" onClick={save}>
               Salva
@@ -255,6 +268,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo manifesto" />
         ) : null}
       </ConfirmDialog>
+      {minigiocoModal}
     </div>
   );
 };

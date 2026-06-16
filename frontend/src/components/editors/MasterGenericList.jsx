@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import { useDebounce } from '../../hooks/useDebounce';
-import { Search, Pencil, Trash2, Plus, FilterX, QrCode } from 'lucide-react';
+import { Search, Pencil, Trash2, Plus, FilterX, QrCode, Puzzle } from 'lucide-react';
 
 const MasterGenericList = ({ 
   items = [], 
@@ -9,6 +9,7 @@ const MasterGenericList = ({
   onEdit, 
   onDelete, 
   onScanQr,
+  onMinigioco,
   addLabel = "Nuovo",
   loading = false,
   filterConfig = [], 
@@ -225,6 +226,16 @@ const MasterGenericList = ({
                             title="Associa QR"
                           >
                             <QrCode size={14} />
+                          </button>
+                        )}
+                        {onMinigioco && (
+                          <button
+                            onClick={() => onMinigioco(item)}
+                            disabled={!item.qrcode_id}
+                            className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={item.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                          >
+                            <Puzzle size={14} />
                           </button>
                         )}
                         <button 

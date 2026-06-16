@@ -29,7 +29,7 @@ from .models import (
     FEATURE_MODE_SHARED,
 )
 
-from .qr_logic import annotate_has_qrcode_avista
+from .qr_logic import annotate_staff_avista_qr
 from .formula_builder import (
     FORMULA_BUILDER_SCHEMA,
     build_formula_template,
@@ -452,10 +452,10 @@ class InfusioneMasterViewSet(viewsets.ModelViewSet):
                 )
             )
             qs = _campaign_feature_filter(self.request, qs, FEATURE_INFUSIONI)
-            return annotate_has_qrcode_avista(qs)
+            return annotate_staff_avista_qr(qs)
 
         qs = _campaign_feature_filter(self.request, Infusione.objects.all(), FEATURE_INFUSIONI)
-        return annotate_has_qrcode_avista(qs)
+        return annotate_staff_avista_qr(qs)
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
@@ -492,10 +492,10 @@ class TessituraMasterViewSet(viewsets.ModelViewSet):
                 )
             )
             qs = _campaign_feature_filter(self.request, qs, FEATURE_TESSITURE)
-            return annotate_has_qrcode_avista(qs)
+            return annotate_staff_avista_qr(qs)
 
         qs = _campaign_feature_filter(self.request, Tessitura.objects.all(), FEATURE_TESSITURE)
-        return annotate_has_qrcode_avista(qs)
+        return annotate_staff_avista_qr(qs)
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
@@ -532,10 +532,10 @@ class CerimonialeMasterViewSet(viewsets.ModelViewSet):
                 )
             )
             qs = _campaign_feature_filter(self.request, qs, FEATURE_CERIMONIALI)
-            return annotate_has_qrcode_avista(qs)
+            return annotate_staff_avista_qr(qs)
 
         qs = _campaign_feature_filter(self.request, Cerimoniale.objects.all(), FEATURE_CERIMONIALI)
-        return annotate_has_qrcode_avista(qs)
+        return annotate_staff_avista_qr(qs)
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
@@ -545,7 +545,7 @@ class OggettoStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        return annotate_has_qrcode_avista(
+        return annotate_staff_avista_qr(
             Oggetto.objects.all().select_related("aura", "classe_oggetto")
         )
 
@@ -556,7 +556,8 @@ class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = OggettoBase.objects.all().select_related('classe_oggetto')
-        return _campaign_feature_filter(self.request, qs, FEATURE_OGGETTI_BASE)
+        qs = _campaign_feature_filter(self.request, qs, FEATURE_OGGETTI_BASE)
+        return annotate_staff_avista_qr(qs)
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
@@ -831,7 +832,7 @@ class InventarioStaffViewSet(viewsets.ModelViewSet):
         qs = Inventario.objects.exclude(
             id__in=Personaggio.objects.values_list('inventario_ptr_id', flat=True)
         ).order_by('-id')
-        return annotate_has_qrcode_avista(qs)
+        return annotate_staff_avista_qr(qs)
     
     @action(detail=True, methods=['get'])
     def oggetti(self, request, pk=None):
@@ -1083,7 +1084,7 @@ class ManifestoStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
 
     def get_queryset(self):
-        return annotate_has_qrcode_avista(Manifesto.objects.all().order_by("-id"))
+        return annotate_staff_avista_qr(Manifesto.objects.all().order_by("-id"))
 
 
 class NodoStaffViewSet(viewsets.ModelViewSet):
@@ -1098,10 +1099,10 @@ class NodoStaffViewSet(viewsets.ModelViewSet):
         active = _get_active_campaign(self.request)
         base = _get_default_campaign()
         if not active:
-            return annotate_has_qrcode_avista(qs)
+            return annotate_staff_avista_qr(qs)
         if active == base:
-            return annotate_has_qrcode_avista(qs.filter(campagna=active))
-        return annotate_has_qrcode_avista(qs.filter(Q(campagna=active) | Q(campagna=base)))
+            return annotate_staff_avista_qr(qs.filter(campagna=active))
+        return annotate_staff_avista_qr(qs.filter(Q(campagna=active) | Q(campagna=base)))
 
     def perform_create(self, serializer):
         camp = _get_active_campaign(self.request) or _get_default_campaign()
@@ -1138,10 +1139,10 @@ class InnescoTimerStaffViewSet(viewsets.ModelViewSet):
         active = _get_active_campaign(self.request)
         base = _get_default_campaign()
         if not active:
-            return annotate_has_qrcode_avista(qs)
+            return annotate_staff_avista_qr(qs)
         if base and active.id != base.id:
-            return annotate_has_qrcode_avista(qs.filter(Q(campagna=active) | Q(campagna=base)))
-        return annotate_has_qrcode_avista(qs.filter(campagna=active))
+            return annotate_staff_avista_qr(qs.filter(Q(campagna=active) | Q(campagna=base)))
+        return annotate_staff_avista_qr(qs.filter(campagna=active))
 
     @staticmethod
     def _apply_target_lists(obj, data):

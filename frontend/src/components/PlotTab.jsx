@@ -20,6 +20,7 @@ import QrTab from './QrTab';
 import RichTextEditor from './RichTextEditor';
 import ConfirmDialog from './editors/ConfirmDialog';
 import QrAssociationConflictBody from './editors/QrAssociationConflictBody';
+import useStaffMinigiocoQr from '../hooks/useStaffMinigiocoQr';
 
 // Cache per le risorse (persiste per la sessione)
 const RISORSE_CACHE_KEY = 'plot_risorse_cache';
@@ -27,6 +28,7 @@ const RISORSE_CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minuti
 
 const PlotTab = ({ onLogout }) => {
     const { isCampaignMaster } = useCharacter();
+    const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
     const canManagePlot = isCampaignMaster;
     const [eventi, setEventi] = useState([]);
     const [selectedEvento, setSelectedEvento] = useState(null);
@@ -332,8 +334,9 @@ const PlotTab = ({ onLogout }) => {
         }, onLogout);
         refreshData();
     },
-    onScanQr: (id) => setScanningForVista(id)
-}), [selectedEvento, onLogout, refreshData]);
+    onScanQr: (id) => setScanningForVista(id),
+    onMinigioco: (qrcodeId, label) => openMinigioco(qrcodeId, label),
+}), [selectedEvento, onLogout, refreshData, openMinigioco]);
 
     // Callbacks per EventoSection (spostati fuori dal JSX)
     const handleUpdateEvento = useCallback((id, data) => { 
@@ -1177,6 +1180,7 @@ const PlotTab = ({ onLogout }) => {
                     />
                 ) : null}
             </ConfirmDialog>
+            {minigiocoModal}
         </div>
     );
 };

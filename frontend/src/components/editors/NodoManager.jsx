@@ -4,6 +4,8 @@ import StaffQrTab from '../StaffQrTab';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
+import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import {
   associaQrDiretto,
   staffGetNodi,
@@ -40,6 +42,7 @@ const NodoManager = ({ onBack, onLogout }) => {
   const [scanningId, setScanningId] = useState(null);
   const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [expandedPhotoUrl, setExpandedPhotoUrl] = useState(null);
+  const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [msg, setMsg] = useState('');
 
   const load = useCallback(async () => {
@@ -185,6 +188,15 @@ const NodoManager = ({ onBack, onLogout }) => {
                     </button>
                     <button
                       type="button"
+                      className="text-xs px-2 py-1 bg-indigo-800 rounded"
+                      onClick={() => openMinigioco(n.qrcode_id, n.nome)}
+                      disabled={!n.qrcode_id}
+                      title={n.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                    >
+                      Minigioco
+                    </button>
+                    <button
+                      type="button"
                       className="text-xs px-2 py-1 bg-violet-800 rounded"
                       onClick={() => setScanningId(n.id)}
                     >
@@ -326,6 +338,7 @@ const NodoManager = ({ onBack, onLogout }) => {
                 </button>
               </div>
             )}
+            <StaffMinigiocoQrSection qrcodeId={editing.qrcode_id} onLogout={onLogout} />
           </div>
 
           <div className="px-4 py-3 shrink-0 border-t border-gray-800/80 bg-gray-950/95 backdrop-blur-sm sticky bottom-0 z-10 flex gap-2">
@@ -406,6 +419,8 @@ const NodoManager = ({ onBack, onLogout }) => {
           <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo nodo" />
         ) : null}
       </ConfirmDialog>
+
+      {minigiocoModal}
 
       {expandedPhotoUrl && (
         <div className="fixed inset-0 z-60 bg-black/95 flex flex-col">

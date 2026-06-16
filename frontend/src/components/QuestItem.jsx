@@ -1,6 +1,6 @@
 // src/components/QuestItem.jsx
 import React, { useState, useMemo, useCallback, memo } from 'react';
-import { Edit2, Trash, Plus, Package, List, User as UserIcon, QrCode as QrIcon, X } from 'lucide-react';
+import { Edit2, Trash, Plus, Package, List, User as UserIcon, QrCode as QrIcon, Puzzle, X } from 'lucide-react';
 import { RichTextViewer } from './RichTextDisplay';
 import QuestFaseSection from './QuestFaseSection';
 import SearchableSelect from './editors/SearchableSelect';
@@ -19,7 +19,7 @@ const TIPO_A_VISTA_OPTIONS = [
     { value: 'NEG', label: 'Negozio alternativo (QR)' },
 ];
 
-const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChange, onEdit, onEditTask, onScanQr }) => {
+const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChange, onEdit, onEditTask, onScanQr, onMinigioco }) => {
     const [viewMode, setViewMode] = useState('FASI'); // 'FASI' o 'STAFF'
     const [newVista, setNewVista] = useState({ tipo: 'MAN', a_vista_id: '' });
 
@@ -142,7 +142,8 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
                             }
 
                             const negozioDet = v.negozio_mercante_details;
-                            const hasQr = Boolean(v.qr_code || negozioDet?.qr_code);
+                            const qrcodeId = v.qr_code || negozioDet?.qr_code || null;
+                            const hasQr = Boolean(qrcodeId);
                             
                             const tipoOpt = TIPO_A_VISTA_OPTIONS.find(t => t.value === v.tipo);
                             if (tipoOpt) tipoLabel = tipoOpt.label;
@@ -170,6 +171,17 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
                                         >
                                             <QrIcon size={14}/>
                                         </button>
+                                        {onMinigioco && (
+                                            <button
+                                                type="button"
+                                                onClick={() => onMinigioco(qrcodeId, nomeElemento)}
+                                                disabled={!qrcodeId}
+                                                className="text-violet-400 p-1.5 hover:bg-gray-800 rounded transition-colors disabled:opacity-30"
+                                                title={qrcodeId ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                                            >
+                                                <Puzzle size={14} />
+                                            </button>
+                                        )}
                                         {isMaster && (
                                             <button 
                                                 onClick={() => onRemoveSub('vista', v.id)} 

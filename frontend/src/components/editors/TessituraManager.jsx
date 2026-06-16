@@ -5,8 +5,10 @@ import StaffQrTab from '../StaffQrTab';
 import { associaQrDiretto, staffGetTessituraDetail } from '../../api';
 import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
+import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 
 const TessituraManager = ({ onBack, onLogout }) => {
+  const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
   const [view, setView] = useState('list'); // 'list' o 'edit'
   const [editingItem, setEditingItem] = useState(null);
   const [scanningForElement, setScanningForElement] = useState(null);
@@ -76,6 +78,7 @@ const TessituraManager = ({ onBack, onLogout }) => {
         onAdd={handleAdd} 
         onEdit={handleEdit} 
         onScanQr={handleScanQr}
+        onMinigioco={(item) => openMinigioco(item.qrcode_id, item.nome)}
         onLogout={onLogout}
         listVersion={listVersion}
       />
@@ -145,6 +148,7 @@ const TessituraManager = ({ onBack, onLogout }) => {
           <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questa tessitura" />
         ) : null}
       </ConfirmDialog>
+      {minigiocoModal}
     </div>
   );
 };

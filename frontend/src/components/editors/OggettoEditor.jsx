@@ -6,6 +6,7 @@ import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
 
@@ -282,6 +283,8 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       </div>
 
       <CharacteristicInline items={formData.componenti} options={punteggiList.filter(p => p.tipo === 'CA')} onAdd={() => setFormData({...formData, componenti: [...formData.componenti, {caratteristica:'', valore:1}]})} onChange={(i,f,v) => {const n=[...formData.componenti]; n[i][f]=v; setFormData({...formData, componenti:n});}} onRemove={i => setFormData({...formData, componenti: formData.componenti.filter((_,idx)=>idx!==i)})} />
+
+      <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
 
       <FormulaBuilderModal
         open={isFormulaBuilderOpen}

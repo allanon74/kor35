@@ -7,6 +7,7 @@ import StatModInline from './inlines/StatModInline';
 import MultiSelectBodySlots from './MultiSelectBodySlots';
 import RichTextEditor from '../RichTextEditor';
 import EditorSaveActions from './EditorSaveActions';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
@@ -289,6 +290,8 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         onChange={(i, f, v) => updateInline('modificatori', i, f, v)}
         onRemove={(i) => setFormData({...formData, modificatori: formData.modificatori.filter((_, idx) => idx !== i)})}
       />
+
+      <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
 
       <FormulaBuilderModal
         open={isFormulaBuilderOpen}

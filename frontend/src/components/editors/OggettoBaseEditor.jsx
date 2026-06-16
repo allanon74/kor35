@@ -5,6 +5,7 @@ import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor'; // Importazione corretta
 import EditorSaveActions from './EditorSaveActions';
+import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
@@ -321,6 +322,8 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
             onRemove={i => setFormData({...formData, statistiche_modificatori: formData.statistiche_modificatori.filter((_,idx)=>idx!==i)})} 
           />
       </div>
+
+      <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
 
       <FormulaBuilderModal
         open={isFormulaBuilderOpen}
