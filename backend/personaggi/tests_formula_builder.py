@@ -41,7 +41,7 @@ class FormulaBuilderLogicTests(TestCase):
 
     def test_damage_mode_preserves_numeric_components(self):
         current = {"dannigen": 2, "dannimis": 3, "dannidis": 5}
-        selections = {"formula_damage": "mischia"}
+        selections = {"formula_damage_mode": "mischia"}
 
         merged = build_stats_by_selection(current, selections)
 
@@ -54,27 +54,27 @@ class FormulaBuilderLogicTests(TestCase):
     def test_mischia_damage_preview_sums_dannigen_and_dannimis(self):
         stats = build_stats_by_selection(
             {"dannigen": 2, "dannimis": 1},
-            {"formula_damage": "mischia"},
+            {"formula_damage_mode": "mischia"},
         )
-        formula = build_formula_template("attack", {"formula_damage": "mischia"})
+        formula = build_formula_template("attack", {"formula_damage_mode": "mischia"})
         rendered = render_formula_preview(formula=formula, stats_by_param=stats)
         self.assertIn("tre!", rendered.lower())
 
     def test_distanza_damage_preview_sums_dannigen_and_dannidis(self):
         stats = build_stats_by_selection(
             {"dannigen": 2, "dannidis": 1},
-            {"formula_damage": "distanza"},
+            {"formula_damage_mode": "distanza"},
         )
-        formula = build_formula_template("attack", {"formula_damage": "distanza"})
+        formula = build_formula_template("attack", {"formula_damage_mode": "distanza"})
         rendered = render_formula_preview(formula=formula, stats_by_param=stats)
         self.assertIn("tre!", rendered.lower())
 
     def test_damage_total_one_is_omitted(self):
         stats = build_stats_by_selection(
             {"dannigen": 1, "dannimis": 0},
-            {"formula_damage": "mischia"},
+            {"formula_damage_mode": "mischia"},
         )
-        formula = build_formula_template("attack", {"formula_damage": "mischia"})
+        formula = build_formula_template("attack", {"formula_damage_mode": "mischia"})
         rendered = render_formula_preview(formula=formula, stats_by_param=stats)
         self.assertNotIn("uno", rendered.lower())
         self.assertNotIn("due!", rendered.lower())
@@ -113,17 +113,54 @@ class FormulaBuilderLogicTests(TestCase):
     def test_build_formula_template_writes_explicit_damage_expression(self):
         mischia_tpl = build_formula_template(
             "attack",
-            {"formula_damage": "mischia", "formula_source": "chop"},
+            {"formula_damage_mode": "mischia", "formula_source": "chop"},
         )
-        self.assertIn("{dannimis + dannigen|D}", mischia_tpl)
+        self.assertIn("{danni_mischia}", mischia_tpl)
         self.assertNotIn("{formula_damage}", mischia_tpl)
+        self.assertNotIn("{danni_distanza}", mischia_tpl)
 
         dist_tpl = build_formula_template(
             "attack",
-            {"formula_damage": "distanza", "formula_source": "pierce"},
+            {"formula_damage_mode": "distanza", "formula_source": "pierce"},
         )
-        self.assertIn("{dannidis + dannigen|D}", dist_tpl)
+        self.assertIn("{danni_distanza}", dist_tpl)
         self.assertNotIn("{formula_damage}", dist_tpl)
+        self.assertNotIn("{danni_mischia}", dist_tpl)
+
+    def test_build_formula_template_without_damage_and_with_specific_effect(self):
+        tpl = build_formula_template(
+            "weave",
+            {
+                "formula_type": "aura",
+                "formula_damage_mode": "none",
+                "include_specific_effect": True,
+                "effect_description": "Spegni la luce",
+            },
+        )
+        self.assertNotIn("{danni_mischia}", tpl)
+        self.assertNotIn("{danni_distanza}", tpl)
+        self.assertIn("Effetto: Spegni la luce!", tpl)
+
+    def test_build_formula_template_keeps_prefix_and_status_by_default(self):
+        tpl = build_formula_template("attack", {"formula_damage_mode": "none"})
+        self.assertIn("{formula_prefix}", tpl)
+        self.assertIn("{formula_status}", tpl)
+
+    def test_build_formula_template_excludes_always_blocks_when_requested(self):
+        tpl = build_formula_template(
+            "attack",
+            {
+                "formula_damage_mode": "none",
+                "exclude_always_rango": True,
+                "exclude_always_molt": True,
+                "exclude_always_prefix": True,
+                "exclude_always_status": True,
+            },
+        )
+        self.assertNotIn("{rango|:RANGO}", tpl)
+        self.assertNotIn("{molt|:MOLT}", tpl)
+        self.assertNotIn("{formula_prefix}", tpl)
+        self.assertNotIn("{formula_status}", tpl)
 
     def test_infer_weapon_damage_mode_from_saved_formula_not_stats(self):
         self.assertEqual(

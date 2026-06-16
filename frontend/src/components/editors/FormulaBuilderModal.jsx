@@ -14,7 +14,6 @@ const FormulaBuilderModal = ({
   const [schema, setSchema] = useState(null);
   const [formulaType, setFormulaType] = useState(defaultFormulaType);
   const [selections, setSelections] = useState({});
-  const [customText, setCustomText] = useState('');
   const [preview, setPreview] = useState('');
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [numericValues, setNumericValues] = useState({
@@ -32,6 +31,12 @@ const FormulaBuilderModal = ({
     dannidis: 0,
   });
   const [includeCura, setIncludeCura] = useState(false);
+  const [excludeAlwaysRango, setExcludeAlwaysRango] = useState(false);
+  const [excludeAlwaysMolt, setExcludeAlwaysMolt] = useState(false);
+  const [excludeAlwaysPrefix, setExcludeAlwaysPrefix] = useState(false);
+  const [excludeAlwaysStatus, setExcludeAlwaysStatus] = useState(false);
+  const [includeSpecificEffect, setIncludeSpecificEffect] = useState(false);
+  const [effectDescription, setEffectDescription] = useState('');
 
   const statsByParamFromForm = useMemo(() => {
     const byId = new Map(statsOptions.map((s) => [String(s.id), s]));
@@ -52,6 +57,14 @@ const FormulaBuilderModal = ({
       return;
     }
     setFormulaType(defaultFormulaType || 'attack');
+    setSelections({});
+    setIncludeCura(false);
+    setExcludeAlwaysRango(false);
+    setExcludeAlwaysMolt(false);
+    setExcludeAlwaysPrefix(false);
+    setExcludeAlwaysStatus(false);
+    setIncludeSpecificEffect(false);
+    setEffectDescription('');
     staffGetFormulaBuilderSchema(onLogout)
       .then((data) => setSchema(data || null))
       .catch((err) => console.error('Errore schema formula builder:', err));
@@ -67,8 +80,17 @@ const FormulaBuilderModal = ({
         formula: '',
         formula_type: formulaType,
         stats_by_param: { ...statsByParamFromForm, ...numericValues },
-        selections: { ...selections, include_cura: includeCura },
-        custom_text: customText,
+        selections: {
+          ...selections,
+          include_cura: includeCura,
+          exclude_always_rango: excludeAlwaysRango,
+          exclude_always_molt: excludeAlwaysMolt,
+          exclude_always_prefix: excludeAlwaysPrefix,
+          exclude_always_status: excludeAlwaysStatus,
+          include_specific_effect: includeSpecificEffect,
+          effect_description: effectDescription,
+        },
+        custom_text: '',
       },
       onLogout
     )
@@ -78,7 +100,7 @@ const FormulaBuilderModal = ({
         setPreview('Errore preview formula.');
       })
       .finally(() => setLoadingPreview(false));
-  }, [open, schema, formulaType, selections, includeCura, customText, formulaValue, statsByParamFromForm, numericValues, onLogout]);
+  }, [open, schema, formulaType, selections, includeCura, excludeAlwaysRango, excludeAlwaysMolt, excludeAlwaysPrefix, excludeAlwaysStatus, includeSpecificEffect, effectDescription, formulaValue, statsByParamFromForm, numericValues, onLogout]);
 
   if (!open) {
     return null;
@@ -104,15 +126,24 @@ const FormulaBuilderModal = ({
           formula: '',
           formula_type: formulaType,
           stats_by_param: { ...statsByParamFromForm, ...numericValues },
-          selections: { ...selections, include_cura: includeCura },
-          custom_text: customText,
+          selections: {
+            ...selections,
+            include_cura: includeCura,
+            exclude_always_rango: excludeAlwaysRango,
+            exclude_always_molt: excludeAlwaysMolt,
+            exclude_always_prefix: excludeAlwaysPrefix,
+            exclude_always_status: excludeAlwaysStatus,
+            include_specific_effect: includeSpecificEffect,
+            effect_description: effectDescription,
+          },
+          custom_text: '',
         },
         onLogout
       );
       onApply?.({
         statsByParam: res?.stats_by_param || {},
         formulaText: (res?.formula_template || schema?.default_template || '').trim(),
-        customText: customText.trim(),
+        customText: '',
         controlledParams: [...getControlledParams(schema), ...NUMERIC_CONTROLLED_PARAMS],
       });
       onClose?.();
@@ -197,22 +228,50 @@ const FormulaBuilderModal = ({
               <input type="checkbox" checked={includeCura} onChange={(e) => setIncludeCura(e.target.checked)} />
               Inserisci cura nella formula
             </label>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input type="checkbox" checked={excludeAlwaysRango} onChange={(e) => setExcludeAlwaysRango(e.target.checked)} />
+                Escludi SEMPRE rango
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input type="checkbox" checked={excludeAlwaysMolt} onChange={(e) => setExcludeAlwaysMolt(e.target.checked)} />
+                Escludi SEMPRE moltiplicatore
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input type="checkbox" checked={excludeAlwaysPrefix} onChange={(e) => setExcludeAlwaysPrefix(e.target.checked)} />
+                Escludi SEMPRE prefisso
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input type="checkbox" checked={excludeAlwaysStatus} onChange={(e) => setExcludeAlwaysStatus(e.target.checked)} />
+                Escludi SEMPRE stato
+              </label>
+            </div>
             <p className="mt-2 text-xs text-gray-500">
-              In «Danno (tipo attacco)» scegli in mischia o a distanza: nella formula viene scritta la somma
+              In «Sezione danno» scegli nessun danno, danni mischia o danni distanza: nella formula viene scritta la somma
               corretta (dannigen+dannimis o dannigen+dannidis), indipendentemente dai valori sotto. In gioco il
               totale si mostra così: 1 = niente; 2–9 = lettere con ! (es. tre!); 10+ = numero con ! (es. 12!).
             </p>
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3">
-            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Testo custom</div>
-            <input
-              type="text"
-              value={customText}
-              onChange={(e) => setCustomText(e.target.value)}
-              className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
-              placeholder="Aggiungi testo libero in coda"
-            />
+            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Effetto specifico</div>
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input
+                type="checkbox"
+                checked={includeSpecificEffect}
+                onChange={(e) => setIncludeSpecificEffect(e.target.checked)}
+              />
+              Attiva effetto specifico
+            </label>
+            {includeSpecificEffect && (
+              <input
+                type="text"
+                value={effectDescription}
+                onChange={(e) => setEffectDescription(e.target.value)}
+                className="mt-2 w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
+                placeholder="Descrizione effetto"
+              />
+            )}
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3">

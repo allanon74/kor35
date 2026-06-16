@@ -338,29 +338,28 @@ EXCLUSIVE_FORMAT_GROUPS = {
         "append_space": True,
         "suffix": "!",
     },
-    "formula_damage": {
+    "danni_mischia": {
         "entries": [
             {
                 "params": ["dannimis", "dannigen"],
                 "label": "",
                 "extra": {
-                    "when": (
-                        "(dmg_mischia > 0 and dannimis + dannigen > 1) or "
-                        "(dmg_mischia + dmg_distanza <= 0 and dannimis + dannigen > 1 "
-                        "and dannidis + dannigen <= 1)"
-                    ),
+                    "when": "dmg_mischia > 0 and dannimis + dannigen > 1",
                     "template": "{dannimis + dannigen|D}",
                 },
             },
+        ],
+        "separator": "/",
+        "append_space": True,
+        "suffix": "",
+    },
+    "danni_distanza": {
+        "entries": [
             {
                 "params": ["dannidis", "dannigen"],
                 "label": "",
                 "extra": {
-                    "when": (
-                        "(dmg_distanza > 0 and dannidis + dannigen > 1) or "
-                        "(dmg_mischia + dmg_distanza <= 0 and dannidis + dannigen > 1 "
-                        "and dannimis + dannigen <= 1)"
-                    ),
+                    "when": "dmg_distanza > 0 and dannidis + dannigen > 1",
                     "template": "{dannidis + dannigen|D}",
                 },
             },
@@ -373,11 +372,11 @@ EXCLUSIVE_FORMAT_GROUPS = {
 DEFAULT_EXCLUSIVE_FORMULA_GROUP = "formula_prefix"
 DEFAULT_ATTACK_FORMULA_TEMPLATE = (
     "{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
-    "{formula_source}{formula_damage}{formula_cura}{formula_status}"
+    "{formula_source}{danni_mischia}{danni_distanza}{formula_cura}{formula_status}"
 )
 DEFAULT_WEAVE_FORMULA_TEMPLATE = (
     "{formula_type}{rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}"
-    "{formula_source}{formula_damage}{formula_cura}{formula_status}"
+    "{formula_source}{danni_mischia}{danni_distanza}{formula_cura}{formula_status}"
 )
 DEFAULT_FORMULA_TEMPLATE = DEFAULT_WEAVE_FORMULA_TEMPLATE
 
@@ -455,7 +454,7 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
         if not isinstance(entry, dict):
             continue
         label = (entry.get("label") or "").strip()
-        if not label and group_key != "formula_damage":
+        if not label and group_key not in ("formula_damage", "danni_mischia", "danni_distanza"):
             continue
         params = []
         if entry.get("param"):
@@ -578,6 +577,10 @@ def infer_weapon_damage_mode(base_values=None, context=None):
             return "distanza"
         if "chop" in lower and "pierce" not in lower:
             return "mischia"
+    if "{danni_mischia}" in tmpl:
+        return "mischia"
+    if "{danni_distanza}" in tmpl:
+        return "distanza"
     return None
 
 
@@ -891,7 +894,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         if _k not in eval_context:
             eval_context[_k] = 0
 
-    if "{formula_damage}" in formula_out:
+    if any(ph in formula_out for ph in ("{formula_damage}", "{danni_mischia}", "{danni_distanza}")):
         damage_ctx = dict(context or {})
         damage_ctx.setdefault("attack_formula_template", formula_out)
         apply_weapon_damage_mode_flags(base_values, eval_context, damage_ctx)
@@ -3310,7 +3313,7 @@ class OggettoBase(SyncableModel, models.Model):
         blank=True,
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
-        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannimis + dannigen|D} (danno: vuoto se 1, lettere+! da 2 a 9, cifre+! da 10).",
+        help_text="Es. {rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}{formula_source}{danni_mischia}{formula_cura}{formula_status} oppure versione distanza con {danni_distanza}.",
     )
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoBaseStatisticaBase', blank=True, related_name='template_base')
     statistiche_modificatori = models.ManyToManyField(Statistica, through='OggettoBaseModificatore', blank=True, related_name='template_modificatori')
@@ -3386,7 +3389,7 @@ class Oggetto(A_vista):
         blank=True,
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
-        help_text="Es. {rango|:RANGO}{molt|:MOLT}Chop! {dannimis + dannigen|D} (danno: vuoto se 1, lettere+! da 2 a 9, cifre+! da 10).",
+        help_text="Es. {rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}{formula_source}{danni_mischia}{formula_cura}{formula_status} oppure versione distanza con {danni_distanza}.",
     )
     in_vendita = models.BooleanField(default=False, verbose_name="In vendita al negozio?")
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")

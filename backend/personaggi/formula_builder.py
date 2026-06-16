@@ -11,8 +11,8 @@ FORMULA_BUILDER_SCHEMA = {
         {"id": "capacity", "label": "Capacita"},
     ],
     "type_templates": {
-        "attack": ["rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage", "formula_cura", "formula_status"],
-        "weave": ["formula_type", "rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage", "formula_cura", "formula_status"],
+        "attack": ["rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage_mode", "formula_cura", "formula_status"],
+        "weave": ["formula_type", "rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage_mode", "formula_cura", "formula_status"],
         "capacity": ["formula_type", "formula_prefix", "formula_source", "formula_status"],
     },
     "sections": [
@@ -82,13 +82,13 @@ FORMULA_BUILDER_SCHEMA = {
             ],
         },
         {
-            "id": "formula_damage",
-            "label": "Danno (tipo attacco)",
+            "id": "formula_damage_mode",
+            "label": "Sezione danno",
             "kind": "single",
             "options": [
-                {"id": "none", "label": "Nessuno", "stats": {}},
-                {"id": "mischia", "label": "In mischia", "stats": {}},
-                {"id": "distanza", "label": "A distanza", "stats": {}},
+                {"id": "none", "label": "Nessun danno", "stats": {}},
+                {"id": "mischia", "label": "Danni mischia (dannimis+dannigen)", "stats": {}},
+                {"id": "distanza", "label": "Danni distanza (dannidis+dannigen)", "stats": {}},
             ],
         },
     ],
@@ -150,7 +150,9 @@ def _iter_selected_options(selections):
 def _damage_mode_from_selections(selections):
     if not isinstance(selections, dict):
         return None
-    explicit = selections.get("formula_damage")
+    explicit = selections.get("formula_damage_mode")
+    if explicit is None:
+        explicit = selections.get("formula_damage")  # legacy payload
     if explicit and str(explicit).strip().lower() not in ("", "none"):
         return str(explicit).strip().lower()
     return None
@@ -165,7 +167,7 @@ def build_stats_by_selection(current_stats, selections):
         stats[param] = 0
 
     for section_id, option in _iter_selected_options(selections):
-        if section_id == "formula_damage":
+        if section_id in ("formula_damage_mode", "formula_damage"):
             continue
         for param, value in (option.get("stats") or {}).items():
             stats[param] = value
@@ -219,6 +221,12 @@ def build_formula_template(formula_type, selections):
         return DEFAULT_FORMULA_TEMPLATE
 
     selected_map = selections if isinstance(selections, dict) else {}
+    excluded_always_blocks = {
+        "rango": bool(selected_map.get("exclude_always_rango")),
+        "molt": bool(selected_map.get("exclude_always_molt")),
+        "formula_prefix": bool(selected_map.get("exclude_always_prefix")),
+        "formula_status": bool(selected_map.get("exclude_always_status")),
+    }
 
     def _section_selected(section_id):
         selected = selected_map.get(section_id)
@@ -231,8 +239,8 @@ def build_formula_template(formula_type, selections):
     def _block_included(block):
         if block == "formula_cura":
             return bool(selected_map.get("include_cura"))
-        if block == "formula_damage":
-            return _section_selected("formula_damage")
+        if block == "formula_damage_mode":
+            return _section_selected("formula_damage_mode") or _section_selected("formula_damage")
         return _section_selected(block)
 
     placeholder_by_block = {
@@ -244,16 +252,16 @@ def build_formula_template(formula_type, selections):
         "formula_source": "{formula_source}",
         "formula_status": "{formula_status}",
         "formula_cura": "{formula_cura}",
-        "formula_damage": "{formula_damage}",
+        "formula_damage_mode": "{danni_mischia}{danni_distanza}",
     }
 
-    def _damage_block_placeholder():
+    def _damage_mode_placeholders():
         mode = _damage_mode_from_selections(selected_map)
         if mode == "mischia":
-            return "{dannimis + dannigen|D}"
+            return ["{danni_mischia}"]
         if mode == "distanza":
-            return "{dannidis + dannigen|D}"
-        return None
+            return ["{danni_distanza}"]
+        return []
 
     source_map = {
         "chop": "Chop! ",
@@ -267,7 +275,9 @@ def build_formula_template(formula_type, selections):
         placeholder = placeholder_by_block.get(block)
         if not placeholder:
             continue
-        if block in ("rango", "molt"):
+        if block in ("rango", "molt", "formula_prefix", "formula_status"):
+            if excluded_always_blocks.get(block):
+                continue
             out.append(placeholder)
             continue
         if block == "formula_source":
@@ -276,12 +286,14 @@ def build_formula_template(formula_type, selections):
                 # Persisti la sorgente selezionata nel template finale.
                 out.append(source_map[selected_source])
                 continue
-        if block == "formula_damage":
-            damage_ph = _damage_block_placeholder()
-            if damage_ph:
-                out.append(damage_ph)
+        if block == "formula_damage_mode":
+            out.extend(_damage_mode_placeholders())
             continue
         if _block_included(block):
             out.append(placeholder)
 
-    return "".join(out) or DEFAULT_FORMULA_TEMPLATE
+    out_formula = "".join(out) or DEFAULT_FORMULA_TEMPLATE
+    effect_text = str(selected_map.get("effect_description") or "").strip()
+    if selected_map.get("include_specific_effect") and effect_text:
+        out_formula = f"{out_formula} Effetto: {effect_text}!"
+    return out_formula
