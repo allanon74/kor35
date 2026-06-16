@@ -1051,7 +1051,7 @@ class SocialProfileDetailView(APIView):
             "personaggio__prefettura__regione",
             "personaggio__segno_zodiacale",
         ).get_or_create(personaggio=personaggio)
-        return Response(SocialProfilePublicSerializer(profile).data)
+        return Response(SocialProfilePublicSerializer(profile, context={"request": request}).data)
 
 
 class SocialPublicPostDetailView(APIView):

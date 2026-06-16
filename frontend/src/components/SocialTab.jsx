@@ -44,6 +44,7 @@ import {
   socialConvertStoryToPost,
   getEre,
   updatePersonaggio,
+  resolveMediaUrl,
 } from '../api';
 import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
@@ -67,7 +68,8 @@ const authorInitials = (name) =>
     .join('') || 'PG';
 
 function SocialAuthorAvatar({ name, avatarUrl, size = 'md', onClick }) {
-  const dim = size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm';
+  const dim =
+    size === 'lg' ? 'w-20 h-20 text-xl' : size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm';
   const inner = avatarUrl ? (
     <img src={avatarUrl} alt={name || 'Profilo'} className="h-full w-full object-cover" />
   ) : (
@@ -1398,7 +1400,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               title="Personaggio attivo e impostazioni InstaFame"
             >
               {profile?.foto_principale ? (
-                <img src={profile.foto_principale} alt="Profilo" className="h-full w-full object-cover" />
+                <img src={resolveMediaUrl(profile.foto_principale)} alt="Profilo" className="h-full w-full object-cover" />
               ) : (
                 <div className="h-full w-full flex items-center justify-center text-amber-200 font-bold">
                   {(profile?.personaggio_nome || '?').charAt(0).toUpperCase()}
@@ -2001,7 +2003,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               {(() => {
                 const loadedComments = commentsByPost[post.id] || [];
                 const commentsToRender =
-                  expandedPostId === post.id ? loadedComments : loadedComments.slice(-2);
+                  expandedPostId === post.id ? loadedComments : [];
                 return (
               <div className="space-y-2">
                 {commentsToRender.map((c) => (
@@ -2493,6 +2495,13 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold">Profilo social: {selectedProfile.personaggio_nome}</h3>
             <button onClick={() => setSelectedProfile(null)} className="text-gray-400 hover:text-white">X</button>
+          </div>
+          <div className="flex justify-center">
+            <SocialAuthorAvatar
+              size="lg"
+              name={selectedProfile.personaggio_nome}
+              avatarUrl={resolveMediaUrl(selectedProfile.foto_principale)}
+            />
           </div>
           <div className="text-sm text-gray-300 space-y-1">
             <div>KORP: <span className="text-white">{selectedProfile.korp_nome || '-'}</span></div>

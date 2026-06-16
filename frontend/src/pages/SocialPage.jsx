@@ -11,7 +11,7 @@ const SocialPage = ({ onLogout }) => {
     params.set('tab', 'messaggi');
     if (recipient?.id) params.set('compose_target_id', String(recipient.id));
     if (recipient?.nome) params.set('compose_target_nome', String(recipient.nome));
-    navigate(`/app?${params.toString()}`);
+    navigate(`/app/play?${params.toString()}`);
   };
 
   return (
