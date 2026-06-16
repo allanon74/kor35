@@ -188,6 +188,8 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         if (payload.prefettura === '') payload.prefettura = null;
         payload.prefettura_esterna = !!payload.prefettura_esterna;
         payload.peso_influencer = Math.max(1, parseInt(payload.peso_influencer, 10) || 1);
+        const charId = payload.id;
+        delete payload.id;
         
         // Pulizia e validazione ID Tipologia per il backend
         if (payload.tipologia !== undefined) {
@@ -220,7 +222,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             const list = Array.isArray(oldList) ? oldList : []; 
             
             if (editMode) {
-                return list.map(p => p.id === payload.id ? { ...p, ...payload } : p);
+                return list.map(p => p.id === charId ? { ...p, ...payload, id: charId } : p);
             } else {
                 const tempId = 'temp-' + Date.now();
                 return [...list, { 
@@ -238,9 +240,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
 
         try {
             if (editMode) {
-                await updatePersonaggio(payload.id, payload, onLogout);
+                await updatePersonaggio(charId, payload, onLogout);
                 // Aggiorna dettagli se è il PG selezionato
-                if (String(payload.id) === String(selectedCharacterId)) {
+                if (String(charId) === String(selectedCharacterId)) {
                     refreshCharacterData();
                 }
             } else {

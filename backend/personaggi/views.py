@@ -4866,7 +4866,6 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = serializer.instance
         user = self.request.user
-        old_peso = int(getattr(instance, "peso_influencer", None) or 1)
         rigenera_like = str(self.request.data.get("rigenera_like_influencer", "")).lower() in ("1", "true", "yes")
         next_campaign = serializer.validated_data.get("campagna", instance.campagna)
         if next_campaign and next_campaign.id != instance.campagna_id:
@@ -4874,35 +4873,52 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
                 raise serializers.ValidationError("Solo i master della campagna corrente possono spostare il personaggio.")
             if not _is_master_in_campaign(user, next_campaign):
                 raise serializers.ValidationError("Solo i master della campagna di destinazione possono spostare il personaggio.")
+
+        def _fk_id(val):
+            if val is None:
+                return None
+            return getattr(val, "pk", val)
+
         era = serializer.validated_data.get("era", instance.era)
-        if "prefettura" in serializer.validated_data:
-            prefettura = serializer.validated_data.get("prefettura")
-        elif "era" in serializer.validated_data:
-            prefettura = None
-        else:
-            prefettura = instance.prefettura
-        prefettura_esterna = bool(serializer.validated_data.get("prefettura_esterna", instance.prefettura_esterna))
-        changing_era_data = (
-            ("era" in serializer.validated_data)
-            or ("prefettura" in serializer.validated_data)
-            or ("prefettura_esterna" in serializer.validated_data)
+        prefettura = (
+            serializer.validated_data.get("prefettura")
+            if "prefettura" in serializer.validated_data
+            else instance.prefettura
         )
+        prefettura_esterna = bool(serializer.validated_data.get("prefettura_esterna", instance.prefettura_esterna))
+        changing_era_data = False
+        if "era" in serializer.validated_data and _fk_id(era) != _fk_id(instance.era):
+            changing_era_data = True
+        if "prefettura" in serializer.validated_data and _fk_id(prefettura) != _fk_id(instance.prefettura):
+            changing_era_data = True
+        if "prefettura_esterna" in serializer.validated_data and prefettura_esterna != bool(instance.prefettura_esterna):
+            changing_era_data = True
+
         can_override_era_lock = user.is_superuser or _is_master_in_campaign(user, instance.campagna)
         if changing_era_data and not can_override_era_lock:
             if not instance.can_edit_era_prefettura():
                 raise serializers.ValidationError("Non puoi più modificare Era/Prefettura dopo l'inizio del primo evento.")
-        personaggio = serializer.save(prefettura=None if changing_era_data else instance.prefettura)
-        personaggio.assegna_era_e_prefettura(
-            era=era,
-            prefettura=prefettura,
-            prefettura_esterna=prefettura_esterna,
-            force=bool(can_override_era_lock),
-        )
-        new_peso = int(getattr(personaggio, "peso_influencer", None) or 1)
-        if rigenera_like and new_peso != old_peso:
-            from social.influencer import rigenera_like_personaggio
 
-            rigenera_like_personaggio(personaggio)
+        with transaction.atomic():
+            personaggio = serializer.save()
+            if changing_era_data:
+                try:
+                    personaggio.assegna_era_e_prefettura(
+                        era=era,
+                        prefettura=prefettura,
+                        prefettura_esterna=prefettura_esterna,
+                        force=bool(can_override_era_lock),
+                    )
+                except ValidationError as exc:
+                    raise serializers.ValidationError(str(exc)) from exc
+
+            if rigenera_like:
+                from social.influencer import RigeneraLikeInfluencerError, rigenera_like_personaggio
+
+                try:
+                    rigenera_like_personaggio(personaggio)
+                except RigeneraLikeInfluencerError as exc:
+                    raise serializers.ValidationError(str(exc)) from exc
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def add_resources(self, request, pk=None):
