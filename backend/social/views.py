@@ -2,7 +2,8 @@ from datetime import datetime
 import logging
 
 from django.utils import timezone
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, F, OuterRef, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -22,6 +23,7 @@ from .models import (
     SOCIAL_GROUP_STATUS_REQUESTED,
     SOCIAL_VISIBILITY_KORP,
     SocialComment,
+    SocialCommentLike,
     SocialCommentTag,
     SocialGroup,
     SocialGroupMembership,
@@ -39,6 +41,12 @@ from .models import (
     SocialStoryTag,
     SocialStoryView,
     extract_mentioned_personaggi_ids,
+)
+from .influencer import (
+    compute_like_peso,
+    random_likes_base,
+    total_comment_likes,
+    total_post_likes,
 )
 from .serializers import (
     SocialCommentSerializer,
@@ -244,6 +252,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             korp_visibilita=story.korp_visibilita if story.visibilita == SOCIAL_VISIBILITY_KORP else None,
             evento=story.evento,
             created_at=story.created_at,
+            likes_base=random_likes_base(story.autore),
         )
         if story.media:
             name = str(story.media.name or "").lower()
@@ -262,6 +271,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
                 testo=rp.testo,
                 evento=story.evento,
                 created_at=rp.created_at,
+                likes_base=random_likes_base(rp.autore),
             )
             ids = extract_mentioned_personaggi_ids(c.testo)
             existing = set(SocialCommentTag.objects.filter(comment=c).values_list("personaggio_id", flat=True))
@@ -271,7 +281,16 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
 
         # Migra reactions -> like post (1 per autore)
         for r in story.reactions.select_related("autore", "autore__social_profile").all():
-            SocialLike.objects.get_or_create(post=post, autore=r.autore, defaults={"created_at": r.created_at})
+            target = total_post_likes(post)
+            peso = compute_like_peso(r.autore, target)
+            like, created = SocialLike.objects.get_or_create(
+                post=post,
+                autore=r.autore,
+                defaults={"created_at": r.created_at, "peso_like": peso},
+            )
+            if not created and not like.peso_like:
+                like.peso_like = peso
+                like.save(update_fields=["peso_like", "updated_at"])
 
         story.converted_post = post
         story.save(update_fields=["converted_post", "updated_at"])
@@ -526,7 +545,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in {"update", "partial_update", "destroy"}:
             return [permissions.IsAdminUser()]
-        if self.action in {"create", "like", "comments"}:
+        if self.action in {"create", "like", "comments", "comment_like"}:
             return [permissions.IsAuthenticatedOrReadOnly()]
         return [permissions.IsAuthenticatedOrReadOnly()]
 
@@ -564,7 +583,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             ).exists()
             if not is_member:
                 raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")
-        post = serializer.save(autore=personaggio, evento=get_evento_in_corso())
+        post = serializer.save(autore=personaggio, evento=get_evento_in_corso(), likes_base=random_likes_base(personaggio))
         self._sync_tags_for_post(post)
 
     def perform_update(self, serializer):
@@ -580,32 +599,82 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         personaggio = self.get_personaggio()
         if not personaggio:
             return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
-        like, created = SocialLike.objects.get_or_create(post=post, autore=personaggio)
-        if not created:
+        like = SocialLike.objects.filter(post=post, autore=personaggio).first()
+        if like:
             like.delete()
             return Response({"liked": False}, status=status.HTTP_200_OK)
-        return Response({"liked": True}, status=status.HTTP_201_CREATED)
+        target = total_post_likes(post)
+        peso = compute_like_peso(personaggio, target)
+        SocialLike.objects.create(post=post, autore=personaggio, peso_like=peso)
+        return Response({"liked": True, "peso_like": peso}, status=status.HTTP_201_CREATED)
+
+    def _comments_queryset(self, post, personaggio=None):
+        qs = (
+            post.comments.select_related("autore", "autore__social_profile", "evento")
+            .annotate(
+                _likes_user_sum=Coalesce(Sum("likes__peso_like"), Value(0)),
+                likes_total=F("likes_base") + F("_likes_user_sum"),
+            )
+        )
+        if personaggio:
+            qs = qs.annotate(
+                liked_by_me_flag=Exists(
+                    SocialCommentLike.objects.filter(comment_id=OuterRef("pk"), autore=personaggio)
+                )
+            )
+        return qs
 
     @action(detail=True, methods=["get", "post"], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
     def comments(self, request, pk=None):
         post = self.get_object()
+        personaggio = self.get_personaggio()
         if request.method.lower() == "get":
-            qs = post.comments.select_related("autore", "autore__social_profile", "evento").all()
+            qs = self._comments_queryset(post, personaggio=personaggio)
             paginator = SocialCommentPagination()
             page = paginator.paginate_queryset(qs, request, view=self)
-            serializer = SocialCommentSerializer(page, many=True)
+            serializer = SocialCommentSerializer(page, many=True, context=self.get_serializer_context())
             return paginator.get_paginated_response(serializer.data)
 
         if not request.user.is_authenticated:
             raise permissions.PermissionDenied("Login richiesto.")
-        personaggio = self.get_personaggio()
         if not personaggio:
             return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
         serializer = SocialCommentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        comment = serializer.save(post=post, autore=personaggio, evento=get_evento_in_corso())
+        comment = serializer.save(
+            post=post,
+            autore=personaggio,
+            evento=get_evento_in_corso(),
+            likes_base=random_likes_base(personaggio),
+        )
         self._sync_tags_for_comment(comment)
-        return Response(SocialCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+        return Response(
+            SocialCommentSerializer(comment, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path=r"comments/(?P<comment_id>[^/.]+)/like",
+    )
+    def comment_like(self, request, pk=None, comment_id=None):
+        post = self.get_object()
+        personaggio = self.get_personaggio()
+        if not personaggio:
+            return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
+        comment = SocialComment.objects.filter(id=comment_id, post=post).first()
+        if not comment:
+            return Response({"detail": "Commento non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        like = SocialCommentLike.objects.filter(comment=comment, autore=personaggio).first()
+        if like:
+            like.delete()
+            return Response({"liked": False}, status=status.HTTP_200_OK)
+        target = total_comment_likes(comment)
+        peso = compute_like_peso(personaggio, target)
+        SocialCommentLike.objects.create(comment=comment, autore=personaggio, peso_like=peso)
+        return Response({"liked": True, "peso_like": peso}, status=status.HTTP_201_CREATED)
 
     @action(
         detail=True,

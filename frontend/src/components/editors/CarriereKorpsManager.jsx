@@ -162,6 +162,14 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
           />
           <input
             type="number"
+            min={0}
+            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+            placeholder="Bonus peso influencer InstaFame"
+            value={form.bonus_peso_influencer ?? 0}
+            onChange={(e) => setForm({ ...form, bonus_peso_influencer: e.target.value })}
+          />
+          <input
+            type="number"
             className="w-32 bg-gray-800 border border-gray-700 rounded p-2 text-white"
             value={form.ordine ?? 0}
             onChange={(e) => setForm({ ...form, ordine: parseInt(e.target.value || '0', 10) })}
@@ -461,6 +469,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         nome: form.nome,
         bonus_stipendio_evento: form.bonus_stipendio_evento ?? 0,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
+        bonus_peso_influencer: form.bonus_peso_influencer ?? 0,
         ordine: form.ordine ?? 0,
         attiva: form.attiva !== false,
       };

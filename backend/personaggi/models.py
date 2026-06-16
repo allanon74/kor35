@@ -1474,6 +1474,10 @@ class Carica(A_modello):
         default=0,
         help_text="Bonus crediti evento assegnato ai membri con questa carica.",
     )
+    bonus_peso_influencer = models.PositiveIntegerField(
+        default=0,
+        help_text="Bonus al peso influencer InstaFame per i membri con questa carica.",
+    )
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)
 
@@ -3600,6 +3604,11 @@ class Personaggio(Inventario):
     prefettura_esterna = models.BooleanField(default=False)
     campagna = models.ForeignKey("Campagna", on_delete=models.PROTECT, related_name="personaggi", default=get_default_campagna_id, db_index=True)
     watch_enabled = models.BooleanField(default=False, db_index=True)
+    peso_influencer = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Peso influencer InstaFame",
+        help_text="Peso base per like simulati su InstaFame (1 = minimo). Le cariche attive possono aumentarlo.",
+    )
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")

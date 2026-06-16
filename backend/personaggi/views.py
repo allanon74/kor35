@@ -4813,6 +4813,17 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = None  # <--- AGGIUNGI QUESTA RIGA: Disabilita la paginazione
 
+    def get_serializer(self, *args, **kwargs):
+        serializer = super().get_serializer(*args, **kwargs)
+        user = self.request.user
+        active_campaign = _get_active_campaign(self.request)
+        can_edit_peso = user.is_staff or user.is_superuser or _can_operate_in_campaign(
+            user, active_campaign, needs_master=False
+        )
+        if not can_edit_peso and "peso_influencer" in serializer.fields:
+            serializer.fields["peso_influencer"].read_only = True
+        return serializer
+
     def get_queryset(self):
         user = self.request.user
         active_campaign = _get_active_campaign(self.request)
@@ -4855,6 +4866,8 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         instance = serializer.instance
         user = self.request.user
+        old_peso = int(getattr(instance, "peso_influencer", None) or 1)
+        rigenera_like = str(self.request.data.get("rigenera_like_influencer", "")).lower() in ("1", "true", "yes")
         next_campaign = serializer.validated_data.get("campagna", instance.campagna)
         if next_campaign and next_campaign.id != instance.campagna_id:
             if not _is_master_in_campaign(user, instance.campagna):
@@ -4885,6 +4898,11 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             prefettura_esterna=prefettura_esterna,
             force=bool(can_override_era_lock),
         )
+        new_peso = int(getattr(personaggio, "peso_influencer", None) or 1)
+        if rigenera_like and new_peso != old_peso:
+            from social.influencer import rigenera_like_personaggio
+
+            rigenera_like_personaggio(personaggio)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def add_resources(self, request, pk=None):

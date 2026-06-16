@@ -32,6 +32,7 @@ import {
   socialRequestJoinGroup,
   socialSetGroupMemberRole,
   socialToggleLike,
+  socialToggleCommentLike,
   socialUpdateComment,
   socialUpdateGroupPost,
   socialUpdatePost,
@@ -55,6 +56,40 @@ const formatProfilePrefettura = (profileData) => {
   const sigla = profileData.prefettura_regione_sigla || profileData.regione;
   return sigla ? `${sigla} ${profileData.prefettura_nome}` : profileData.prefettura_nome;
 };
+
+const authorInitials = (name) =>
+  String(name || 'PG')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((x) => x[0]?.toUpperCase())
+    .join('') || 'PG';
+
+function SocialAuthorAvatar({ name, avatarUrl, size = 'md', onClick }) {
+  const dim = size === 'sm' ? 'w-8 h-8 text-xs' : 'w-10 h-10 text-sm';
+  const inner = avatarUrl ? (
+    <img src={avatarUrl} alt={name || 'Profilo'} className="h-full w-full object-cover" />
+  ) : (
+    <span className="font-extrabold text-amber-100">{authorInitials(name)}</span>
+  );
+  const shell = (
+    <div
+      className={`${dim} shrink-0 rounded-full p-[2px] bg-linear-to-tr from-fuchsia-400 via-amber-300 to-rose-400`}
+    >
+      <div className="h-full w-full rounded-full bg-[#120a15] border border-white/10 overflow-hidden flex items-center justify-center">
+        {inner}
+      </div>
+    </div>
+  );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className="shrink-0" title={name || ''}>
+        {shell}
+      </button>
+    );
+  }
+  return shell;
+}
 
 const STORY_MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 const STORY_MAX_VIDEO_SECONDS = 30;
@@ -177,6 +212,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [notificationsUnread, setNotificationsUnread] = useState(0);
   const [likingPostById, setLikingPostById] = useState({});
   const [likedFxByPost, setLikedFxByPost] = useState({});
+  const [likingCommentById, setLikingCommentById] = useState({});
+  const [likedFxByComment, setLikedFxByComment] = useState({});
   const [socialViewMode, setSocialViewMode] = useState('FEED');
   const [groups, setGroups] = useState([]);
   const [selectedGroupId, setSelectedGroupId] = useState(null);
@@ -603,6 +640,25 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       await loadAll();
     } finally {
       setLikingPostById((prev) => ({ ...prev, [postId]: false }));
+    }
+  };
+
+  const handleToggleCommentLike = async (postId, commentId) => {
+    const key = `${postId}-${commentId}`;
+    if (likingCommentById[key]) return;
+    setLikingCommentById((prev) => ({ ...prev, [key]: true }));
+    try {
+      await socialToggleCommentLike(postId, commentId, selectedCharacterId, onLogout);
+      setLikedFxByComment((prev) => ({ ...prev, [key]: true }));
+      window.setTimeout(() => {
+        setLikedFxByComment((prev) => ({ ...prev, [key]: false }));
+      }, 700);
+      const data = await socialGetComments(postId, onLogout, 1, 10);
+      const rows = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
+      setCommentsByPost((prev) => ({ ...prev, [postId]: rows }));
+      await loadAll();
+    } finally {
+      setLikingCommentById((prev) => ({ ...prev, [key]: false }));
     }
   };
 
@@ -1784,7 +1840,13 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         {filteredPosts.map((post) => (
           <article key={post.id} className="rounded-3xl border border-amber-300/35 bg-linear-to-b from-[#24152a]/96 to-[#1a111f]/96 p-3 md:p-4 space-y-3 shadow-[0_14px_34px_rgba(0,0,0,0.40)]">
             <div className="flex justify-between items-start gap-3">
-              <div>
+              <div className="flex items-start gap-3 min-w-0">
+                <SocialAuthorAvatar
+                  name={post.autore_nome}
+                  avatarUrl={post.autore_avatar}
+                  onClick={() => openProfile(post.autore)}
+                />
+                <div className="min-w-0">
                 <div className="h-1 w-16 rounded-full bg-linear-to-r from-amber-300 via-yellow-200 to-amber-400 mb-2" />
                 <h3 className="font-bold text-base md:text-lg text-amber-100">{post.titolo}</h3>
                 <p className="text-xs text-gray-400">
@@ -1793,6 +1855,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                   </button>{' '}
                   · {new Date(post.created_at).toLocaleString('it-IT')}
                 </p>
+                </div>
               </div>
               <span className="text-xs px-2 py-1 rounded-full bg-[#2d1d31] border border-amber-300/40 text-amber-100">
                 {post.visibilita === 'KORP' ? 'Solo KORP' : 'Pubblico'}
@@ -1942,7 +2005,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               <div className="space-y-2">
                 {commentsToRender.map((c) => (
                   <div key={c.id} className="text-sm bg-gray-800/70 rounded p-2">
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2">
+                      <SocialAuthorAvatar
+                        size="sm"
+                        name={c.autore_nome}
+                        avatarUrl={c.autore_avatar}
+                        onClick={() => openProfile(c.autore)}
+                      />
+                    <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
                       <div className="flex-1 min-w-0">
                         <span className="font-semibold text-gray-200">{c.autore_nome}:</span>{' '}
                         {editingCommentByPost[post.id]?.id === c.id ? (
@@ -1999,6 +2069,19 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                           )}
                         </div>
                       )}
+                    </div>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCommentLike(post.id, c.id)}
+                        disabled={Boolean(likingCommentById[`${post.id}-${c.id}`])}
+                        className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[#3a1d2a] border border-rose-300/30 text-rose-200 hover:bg-[#4a2333] disabled:opacity-60 ${
+                          likedFxByComment[`${post.id}-${c.id}`] ? 'ring-2 ring-rose-300/60 scale-105' : ''
+                        }`}
+                      >
+                        <Heart size={13} fill={c.liked_by_me ? 'currentColor' : 'none'} /> {c.likes_count || 0}
+                      </button>
                     </div>
                     {c.tags?.length > 0 && (
                       <span className="text-xs text-amber-300/90 ml-2">

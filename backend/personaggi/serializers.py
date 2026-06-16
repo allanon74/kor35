@@ -329,6 +329,7 @@ class CaricaStaffSerializer(serializers.ModelSerializer):
             "nome",
             "bonus_stipendio_evento",
             "bonus_crediti_evento",
+            "bonus_peso_influencer",
             "ordine",
             "attiva",
         )
@@ -2202,6 +2203,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
     watch_enabled = serializers.BooleanField(read_only=True)
     watch_binding = serializers.SerializerMethodField()
+    peso_influencer = serializers.IntegerField(read_only=True)
+    peso_influencer_effettivo = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -2225,7 +2228,13 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'era', 'prefettura', 'prefettura_esterna',
             'avatar_url',
             'watch_enabled', 'watch_binding',
+            'peso_influencer', 'peso_influencer_effettivo',
         )
+
+    def get_peso_influencer_effettivo(self, obj):
+        from social.influencer import get_effective_peso_influencer
+
+        return get_effective_peso_influencer(obj)
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))
@@ -2729,6 +2738,8 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     can_edit_era = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     impostazioni_ui = serializers.JSONField(required=False)
+    peso_influencer = serializers.IntegerField(required=False, min_value=1)
+    peso_influencer_effettivo = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -2744,8 +2755,15 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'can_edit_razza', 'can_edit_era',
             'avatar_url',
             'impostazioni_ui',
+            'peso_influencer',
+            'peso_influencer_effettivo',
         )
-        read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario')
+        read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario', 'peso_influencer_effettivo')
+
+    def get_peso_influencer_effettivo(self, obj):
+        from social.influencer import get_effective_peso_influencer
+
+        return get_effective_peso_influencer(obj)
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))
@@ -2897,6 +2915,8 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
     campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
     avatar_url = serializers.SerializerMethodField()
+    peso_influencer = serializers.IntegerField(read_only=True)
+    peso_influencer_effettivo = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -2909,8 +2929,15 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'era_nome', 'prefettura_nome', 'prefettura_era_nome', 'prefettura_regione_sigla',
             'avatar_url',
             'watch_enabled',
+            'peso_influencer',
+            'peso_influencer_effettivo',
             )
         read_only_fields = ('crediti', 'punti_caratteristica') 
+
+    def get_peso_influencer_effettivo(self, obj):
+        from social.influencer import get_effective_peso_influencer
+
+        return get_effective_peso_influencer(obj)
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get("request"))

@@ -90,6 +90,10 @@ class SocialPost(SyncableModel, models.Model):
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_posts")
     created_at = models.DateTimeField(default=timezone.now)
     public_slug = models.SlugField(max_length=64, unique=True, blank=True)
+    likes_base = models.PositiveIntegerField(
+        default=1,
+        help_text="Like iniziali simulati (statici) alla creazione del post.",
+    )
 
     class Meta:
         verbose_name = "Post Social"
@@ -135,6 +139,10 @@ class SocialComment(SyncableModel, models.Model):
     testo = models.TextField()
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True, related_name="social_comments")
     created_at = models.DateTimeField(default=timezone.now)
+    likes_base = models.PositiveIntegerField(
+        default=1,
+        help_text="Like iniziali simulati (statici) alla creazione del commento.",
+    )
 
     class Meta:
         verbose_name = "Commento Social"
@@ -148,6 +156,10 @@ class SocialComment(SyncableModel, models.Model):
 class SocialLike(SyncableModel, models.Model):
     post = models.ForeignKey(SocialPost, on_delete=models.CASCADE, related_name="likes")
     autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_likes")
+    peso_like = models.PositiveIntegerField(
+        default=1,
+        help_text="Peso statico del like (simulazione popolazione).",
+    )
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -158,6 +170,25 @@ class SocialLike(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.autore.nome} -> {self.post_id}"
+
+
+class SocialCommentLike(SyncableModel, models.Model):
+    comment = models.ForeignKey(SocialComment, on_delete=models.CASCADE, related_name="likes")
+    autore = models.ForeignKey(Personaggio, on_delete=models.CASCADE, related_name="social_comment_likes")
+    peso_like = models.PositiveIntegerField(
+        default=1,
+        help_text="Peso statico del like al commento.",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Like Commento Social"
+        verbose_name_plural = "Like Commenti Social"
+        unique_together = ("comment", "autore")
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.autore.nome} -> comment {self.comment_id}"
 
 
 class SocialPostTag(SyncableModel, models.Model):

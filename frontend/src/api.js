@@ -274,6 +274,15 @@ export const socialToggleLike = (postId, personaggioId, onLogout) => {
   return fetchAuthenticated(endpoint, { method: 'POST' }, onLogout);
 };
 
+export const socialToggleCommentLike = (postId, commentId, personaggioId, onLogout) => {
+  const qp = personaggioId ? `?personaggio_id=${personaggioId}` : '';
+  return fetchAuthenticated(
+    `/api/social/posts/${postId}/comments/${commentId}/like/${qp}`,
+    { method: 'POST' },
+    onLogout
+  );
+};
+
 export const socialGetComments = (postId, onLogout, page = 1, pageSize = 10) => {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -2336,6 +2345,10 @@ export const updatePersonaggio = (id, data, onLogout) => {
         method: 'PATCH',
         body: JSON.stringify(data)
     }, onLogout);
+};
+
+export const getGestionePersonaggio = (id, onLogout) => {
+    return fetchAuthenticated(`/api/personaggi/api/gestione-personaggi/${id}/`, { method: 'GET' }, onLogout);
 };
 
 export const deletePersonaggio = (id, onLogout) => {

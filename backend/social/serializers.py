@@ -1,4 +1,5 @@
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q, Sum, Value
+from django.db.models.functions import Coalesce
 from rest_framework import serializers
 
 from personaggi.models import (
@@ -12,9 +13,11 @@ from personaggi.models import (
 )
 
 from .display_names import social_display_name, social_display_name_from_profile
+from personaggi.serializers import _personaggio_avatar_url
 from .models import (
     SOCIAL_GROUP_STATUS_ACTIVE,
     SocialComment,
+    SocialCommentLike,
     SocialCommentTag,
     SocialGroup,
     SocialGroupMembership,
@@ -189,23 +192,57 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
 
 class SocialCommentSerializer(serializers.ModelSerializer):
     autore_nome = serializers.SerializerMethodField()
+    autore_avatar = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
+    likes_count = serializers.SerializerMethodField()
+    liked_by_me = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialComment
-        fields = ("id", "post", "autore", "autore_nome", "testo", "evento", "created_at", "tags")
-        read_only_fields = ("post", "autore", "evento", "created_at")
+        fields = (
+            "id",
+            "post",
+            "autore",
+            "autore_nome",
+            "autore_avatar",
+            "testo",
+            "evento",
+            "created_at",
+            "likes_count",
+            "liked_by_me",
+            "tags",
+        )
+        read_only_fields = ("post", "autore", "evento", "created_at", "likes_count", "liked_by_me")
 
     def get_autore_nome(self, obj):
         return social_display_name(obj.autore)
 
+    def get_autore_avatar(self, obj):
+        return _personaggio_avatar_url(obj.autore, self.context.get("request"))
+
     def get_tags(self, obj):
         return _personaggio_tag_rows(obj.tags)
+
+    def get_likes_count(self, obj):
+        if hasattr(obj, "likes_total"):
+            return int(obj.likes_total or 0)
+        from .influencer import total_comment_likes
+
+        return total_comment_likes(obj)
+
+    def get_liked_by_me(self, obj):
+        personaggio = self.context.get("personaggio")
+        if not personaggio:
+            return False
+        if hasattr(obj, "liked_by_me_flag"):
+            return bool(obj.liked_by_me_flag)
+        return SocialCommentLike.objects.filter(comment=obj, autore=personaggio).exists()
 
 
 class SocialPostSerializer(serializers.ModelSerializer):
     autore_nome = serializers.SerializerMethodField()
-    likes_count = serializers.IntegerField(read_only=True)
+    autore_avatar = serializers.SerializerMethodField()
+    likes_count = serializers.SerializerMethodField()
     comments_count = serializers.IntegerField(read_only=True)
     liked_by_me = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
@@ -219,6 +256,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "id",
             "autore",
             "autore_nome",
+            "autore_avatar",
             "titolo",
             "testo",
             "immagine",
@@ -242,6 +280,16 @@ class SocialPostSerializer(serializers.ModelSerializer):
         if not personaggio:
             return False
         return SocialLike.objects.filter(post=obj, autore=personaggio).exists()
+
+    def get_likes_count(self, obj):
+        if hasattr(obj, "likes_total"):
+            return int(obj.likes_total or 0)
+        from .influencer import total_post_likes
+
+        return total_post_likes(obj)
+
+    def get_autore_avatar(self, obj):
+        return _personaggio_avatar_url(obj.autore, self.context.get("request"))
 
     def validate(self, attrs):
         vis = attrs.get("visibilita", getattr(self.instance, "visibilita", None))
@@ -523,7 +571,8 @@ def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None)
 
 def visible_posts_queryset_for_personaggio(personaggio, request=None):
     base = SocialPost.objects.select_related("autore", "autore__social_profile", "evento", "korp_visibilita").annotate(
-        likes_count=Count("likes", distinct=True),
+        _likes_user_sum=Coalesce(Sum("likes__peso_like"), Value(0)),
+        likes_total=F("likes_base") + F("_likes_user_sum"),
         comments_count=Count("comments", distinct=True),
     )
     active_campaign = _get_active_campaign_from_request(request)
