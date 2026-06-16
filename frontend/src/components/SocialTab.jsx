@@ -41,9 +41,20 @@ import {
   socialGetMyStoryActivity,
   socialGetMyStoryHistory,
   socialConvertStoryToPost,
+  getEre,
+  updatePersonaggio,
 } from '../api';
 import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
+import ProfileImageField from './ProfileImageField';
+import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
+import { prepareProfileImageForUpload } from '../utils/profileImage';
+
+const formatProfilePrefettura = (profileData) => {
+  if (!profileData?.prefettura_nome) return '-';
+  const sigla = profileData.prefettura_regione_sigla || profileData.regione;
+  return sigla ? `${sigla} ${profileData.prefettura_nome}` : profileData.prefettura_nome;
+};
 
 const STORY_MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 const STORY_MAX_VIDEO_SECONDS = 30;
@@ -159,6 +170,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [isCreatingStory, setIsCreatingStory] = useState(false);
   const [showIdentityModal, setShowIdentityModal] = useState(false);
   const [showMyProfileModal, setShowMyProfileModal] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSavedNotice, setProfileSavedNotice] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [notificationsUnread, setNotificationsUnread] = useState(0);
@@ -208,12 +221,18 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   };
 
   const [profileForm, setProfileForm] = useState({
-    regione: '',
-    prefettura: '',
+    nickname: '',
     descrizione: '',
     professioni: '',
-    era_provenienza: '',
     foto_principale: null,
+    foto_rotazione: 0,
+  });
+  const [ere, setEre] = useState([]);
+  const [characterLocation, setCharacterLocation] = useState({
+    era: '',
+    prefettura: '',
+    prefettura_esterna: false,
+    can_edit_era: true,
   });
 
   const normalizePostsPayload = useCallback((payload) => {
@@ -426,12 +445,17 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       setProfile(profileData || null);
       if (profileData) {
         setProfileForm({
-          regione: profileData.regione || '',
-          prefettura: profileData.prefettura || '',
+          nickname: profileData.nickname || '',
           descrizione: profileData.descrizione || '',
           professioni: profileData.professioni || '',
-          era_provenienza: profileData.era_provenienza || '',
           foto_principale: null,
+          foto_rotazione: 0,
+        });
+        setCharacterLocation({
+          era: profileData.era || '',
+          prefettura: profileData.prefettura || '',
+          prefettura_esterna: !!profileData.prefettura_esterna,
+          can_edit_era: profileData.can_edit_era !== false,
         });
       }
     } catch (err) {
@@ -783,19 +807,89 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     await loadAll();
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    getEre(onLogout)
+      .then((data) => {
+        if (!cancelled) setEre(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setEre([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [onLogout]);
+
+  const hasMultipleEre = ere.length > 1;
+  useEffect(() => {
+    if (hasMultipleEre || ere.length !== 1) return;
+    const onlyEraId = String(ere[0].id);
+    if (String(characterLocation.era || '') === onlyEraId) return;
+    setCharacterLocation((prev) => ({ ...prev, era: onlyEraId, prefettura: '' }));
+  }, [hasMultipleEre, ere, characterLocation.era]);
+
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (profileSaving) return;
     const fd = new FormData();
-    fd.append('regione', profileForm.regione || '');
-    fd.append('prefettura', profileForm.prefettura || '');
+    fd.append('nickname', profileForm.nickname || '');
     fd.append('descrizione', profileForm.descrizione || '');
     fd.append('professioni', profileForm.professioni || '');
-    fd.append('era_provenienza', profileForm.era_provenienza || '');
-    if (profileForm.foto_principale) fd.append('foto_principale', profileForm.foto_principale);
-    const updated = await socialUpdateMyProfile(fd, selectedCharacterId, onLogout);
-    setProfile(updated);
-    setProfileForm((prev) => ({ ...prev, foto_principale: null }));
+    try {
+      const preparedPhoto = await prepareProfileImageForUpload({
+        file: profileForm.foto_principale,
+        remoteUrl: profile?.foto_principale || null,
+        rotationDegrees: profileForm.foto_rotazione,
+      });
+      if (preparedPhoto) fd.append('foto_principale', preparedPhoto);
+    } catch (err) {
+      alert(err?.message || 'Impossibile elaborare la foto profilo.');
+      return;
+    }
+    const locationChanged =
+      String(characterLocation.era || '') !== String(profile?.era || '') ||
+      String(characterLocation.prefettura || '') !== String(profile?.prefettura || '') ||
+      !!characterLocation.prefettura_esterna !== !!profile?.prefettura_esterna;
+    setProfileSaving(true);
+    try {
+      if (characterLocation.can_edit_era && locationChanged) {
+        await updatePersonaggio(
+          selectedCharacterId,
+          {
+            era: characterLocation.era || null,
+            prefettura: characterLocation.prefettura || null,
+            prefettura_esterna: !!characterLocation.prefettura_esterna,
+          },
+          onLogout
+        );
+      }
+      const updated = await socialUpdateMyProfile(fd, selectedCharacterId, onLogout);
+      const refreshed = await socialGetMyProfile(selectedCharacterId, onLogout);
+      setProfile(refreshed || updated || null);
+      if (refreshed) {
+        setCharacterLocation({
+          era: refreshed.era || '',
+          prefettura: refreshed.prefettura || '',
+          prefettura_esterna: !!refreshed.prefettura_esterna,
+          can_edit_era: refreshed.can_edit_era !== false,
+        });
+      }
+      setProfileForm((prev) => ({ ...prev, foto_principale: null, foto_rotazione: 0 }));
+      setShowMyProfileModal(false);
+      setProfileSavedNotice(true);
+    } catch (err) {
+      alert(err?.message || 'Errore durante il salvataggio del profilo.');
+    } finally {
+      setProfileSaving(false);
+    }
   };
+
+  useEffect(() => {
+    if (!profileSavedNotice) return undefined;
+    const timer = window.setTimeout(() => setProfileSavedNotice(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [profileSavedNotice]);
 
   const subtitle = useMemo(() => 'il social network numero 1 di tutta KOR!', []);
   const feedPrefsKey = useMemo(
@@ -1209,6 +1303,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
   return (
     <>
+      {profileSavedNotice && (
+        <div
+          role="status"
+          className="fixed top-16 left-1/2 -translate-x-1/2 z-[60] rounded-xl border border-emerald-400/40 bg-emerald-950/95 px-4 py-2 text-sm font-semibold text-emerald-100 shadow-lg backdrop-blur"
+        >
+          Profilo salvato
+        </div>
+      )}
       <div className="p-3 md:p-6 space-y-4 md:space-y-6 bg-linear-to-b from-[#120d17] via-[#2b1424] to-[#100c14] min-h-full">
       <section className="sticky top-1 z-20 rounded-3xl border border-amber-300/50 bg-linear-to-r from-[#1a101d]/95 via-[#2a1622]/95 to-[#1a101d]/95 backdrop-blur-md p-3 md:p-4 shadow-[0_12px_35px_rgba(0,0,0,0.45)]">
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
@@ -2242,19 +2344,61 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           </div>
           <form onSubmit={handleSaveProfile} className="space-y-3">
             <div className="text-xs text-gray-400">
-              <div>Nome: <span className="text-gray-200">{profile?.personaggio_nome || '-'}</span></div>
+              <div>Nome personaggio: <span className="text-gray-200">{profile?.personaggio_nome || '-'}</span></div>
               <div>KORP: <span className="text-gray-200">{profile?.korp_nome || '-'}</span></div>
               <div>Segno zodiacale: <span className="text-gray-200">{profile?.segno_zodiacale || '-'}</span></div>
+              <div>Visibile agli altri come: <span className="text-amber-200">{(profileForm.nickname || '').trim() || profile?.personaggio_nome || '-'}</span></div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <input className="bg-gray-800 rounded p-2 border border-gray-700" placeholder="Regione" value={profileForm.regione} onChange={(e) => setProfileForm((p) => ({ ...p, regione: e.target.value }))} />
-              <input className="bg-gray-800 rounded p-2 border border-gray-700" placeholder="Prefettura" value={profileForm.prefettura} onChange={(e) => setProfileForm((p) => ({ ...p, prefettura: e.target.value }))} />
+            <div>
+              <label className="text-xs text-gray-400">Nickname InstaFame (opzionale)</label>
+              <input
+                className="mt-1 w-full bg-gray-800 rounded p-2 border border-gray-700"
+                placeholder="Nome mostrato ad altri giocatori"
+                maxLength={60}
+                value={profileForm.nickname}
+                onChange={(e) => setProfileForm((p) => ({ ...p, nickname: e.target.value }))}
+              />
+              <p className="text-[11px] text-gray-500 mt-1">
+                Se impostato, sostituisce il nome personaggio in post, story, commenti e messaggi privati.
+              </p>
             </div>
             <input className="w-full bg-gray-800 rounded p-2 border border-gray-700" placeholder="Professioni" value={profileForm.professioni} onChange={(e) => setProfileForm((p) => ({ ...p, professioni: e.target.value }))} />
-            <input className="w-full bg-gray-800 rounded p-2 border border-gray-700" placeholder="Era di provenienza" value={profileForm.era_provenienza} onChange={(e) => setProfileForm((p) => ({ ...p, era_provenienza: e.target.value }))} />
+            {!characterLocation.can_edit_era && (
+              <div className="rounded-lg border border-amber-700/60 bg-amber-950/40 text-amber-100 p-2 text-xs">
+                Era e prefettura sono gestite dalla scheda personaggio: il primo evento associato e gia iniziato.
+              </div>
+            )}
+            <PersonaggioEraPrefetturaFields
+              ere={ere}
+              era={characterLocation.era}
+              prefettura={characterLocation.prefettura}
+              prefetturaEsterna={characterLocation.prefettura_esterna}
+              canEditEra={characterLocation.can_edit_era}
+              onChange={(patch) => setCharacterLocation((prev) => ({ ...prev, ...patch }))}
+              selectClassName="w-full bg-gray-800 rounded p-2 border border-gray-700"
+              labelClassName="text-xs text-gray-400"
+              eraReadonlyClassName="w-full bg-gray-800 rounded p-2 border border-gray-700 text-sm text-gray-200"
+            />
             <textarea className="w-full bg-gray-800 rounded p-2 border border-gray-700 min-h-20" placeholder="Descrizione" value={profileForm.descrizione} onChange={(e) => setProfileForm((p) => ({ ...p, descrizione: e.target.value }))} />
-            <input type="file" accept="image/*" onChange={(e) => setProfileForm((p) => ({ ...p, foto_principale: e.target.files?.[0] || null }))} />
-            <button className="w-full bg-amber-700 hover:bg-amber-600 rounded p-2 font-bold">Salva Profilo</button>
+            <ProfileImageField
+              label="Foto profilo"
+              hint="Ruota l'immagine prima di salvare se necessario."
+              file={profileForm.foto_principale}
+              remoteUrl={profile?.foto_principale || null}
+              rotation={profileForm.foto_rotazione}
+              fallbackLetter={profile?.personaggio_nome || '?'}
+              accentClass="file:bg-amber-700"
+              rotateButtonClass="bg-amber-900/50 hover:bg-amber-800/70 border-amber-700/50 text-amber-100"
+              onFileChange={(nextFile) => setProfileForm((p) => ({ ...p, foto_principale: nextFile }))}
+              onRotationChange={(nextRotation) => setProfileForm((p) => ({ ...p, foto_rotazione: nextRotation }))}
+            />
+            <button
+              type="submit"
+              disabled={profileSaving}
+              className="w-full bg-amber-700 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed rounded p-2 font-bold"
+            >
+              {profileSaving ? 'Salvataggio...' : 'Salva Profilo'}
+            </button>
           </form>
         </div>
       </div>
@@ -2269,10 +2413,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           <div className="text-sm text-gray-300 space-y-1">
             <div>KORP: <span className="text-white">{selectedProfile.korp_nome || '-'}</span></div>
             <div>Segno: <span className="text-white">{selectedProfile.segno_zodiacale || '-'}</span></div>
-            <div>Regione: <span className="text-white">{selectedProfile.regione || '-'}</span></div>
-            <div>Prefettura: <span className="text-white">{selectedProfile.prefettura || '-'}</span></div>
+            <div>Regione: <span className="text-white">{selectedProfile.prefettura_regione_sigla || selectedProfile.regione || '-'}</span></div>
+            <div>Prefettura: <span className="text-white">{formatProfilePrefettura(selectedProfile)}</span></div>
             <div>Professioni: <span className="text-white">{selectedProfile.professioni || '-'}</span></div>
-            <div>Era: <span className="text-white">{selectedProfile.era_provenienza || '-'}</span></div>
+            <div>Era: <span className="text-white">{selectedProfile.era_nome || selectedProfile.era_provenienza || '-'}</span></div>
             <div>Descrizione: <span className="text-white">{selectedProfile.descrizione || '-'}</span></div>
           </div>
           {selectedProfile.personaggio !== Number(selectedCharacterId) && (

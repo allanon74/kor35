@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from gestione_plot.models import Evento
 from personaggi.models import Messaggio, Personaggio, get_active_korp, PersonaggioCarrieraMembership
 
+from .display_names import social_display_name
 from .models import (
     SOCIAL_GROUP_ROLE_ADMIN,
     SOCIAL_GROUP_ROLE_MEMBER,
@@ -109,7 +110,7 @@ class SocialStoryPagination(PageNumberPagination):
 def visible_stories_queryset_for_personaggio(personaggio):
     now = timezone.now()
     base = (
-        SocialStory.objects.select_related("autore", "evento", "korp_visibilita")
+        SocialStory.objects.select_related("autore", "autore__social_profile", "evento", "korp_visibilita")
         .filter(expires_at__gt=now)
         .annotate(
             views_count=Count("views", distinct=True),
@@ -254,7 +255,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         sync_post_tags(post)
 
         # Migra replies -> commenti post
-        for rp in story.replies.select_related("autore").all():
+        for rp in story.replies.select_related("autore", "autore__social_profile").all():
             c = SocialComment.objects.create(
                 post=post,
                 autore=rp.autore,
@@ -269,7 +270,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             )
 
         # Migra reactions -> like post (1 per autore)
-        for r in story.reactions.select_related("autore").all():
+        for r in story.reactions.select_related("autore", "autore__social_profile").all():
             SocialLike.objects.get_or_create(post=post, autore=r.autore, defaults={"created_at": r.created_at})
 
         story.converted_post = post
@@ -313,7 +314,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
     def replies(self, request, pk=None):
         story = self.get_object()
         if request.method.lower() == "get":
-            qs = story.replies.select_related("autore").all()
+            qs = story.replies.select_related("autore", "autore__social_profile").all()
             serializer = SocialStoryReplySerializer(qs, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -411,7 +412,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
 
         qs = (
             SocialStory.objects.filter(autore=personaggio)
-            .select_related("autore", "evento", "korp_visibilita")
+            .select_related("autore", "autore__social_profile", "evento", "korp_visibilita")
             .annotate(
                 views_count=Count("views", distinct=True),
                 reactions_count=Count("reactions", distinct=True),
@@ -423,7 +424,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
 
         recent_events = []
         for s in stories[:30]:
-            for v in s.views.select_related("viewer").all()[:10]:
+            for v in s.views.select_related("viewer", "viewer__social_profile").all()[:10]:
                 recent_events.append(
                     {
                         "kind": "view",
@@ -431,11 +432,11 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
                         "story_id": s.id,
                         "story_text": (s.testo or "")[:80],
                         "actor_id": v.viewer_id,
-                        "actor_name": v.viewer.nome if v.viewer else "",
+                        "actor_name": social_display_name(v.viewer),
                         "payload": "",
                     }
                 )
-            for r in s.reactions.select_related("autore").all()[:10]:
+            for r in s.reactions.select_related("autore", "autore__social_profile").all()[:10]:
                 recent_events.append(
                     {
                         "kind": "reaction",
@@ -443,11 +444,11 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
                         "story_id": s.id,
                         "story_text": (s.testo or "")[:80],
                         "actor_id": r.autore_id,
-                        "actor_name": r.autore.nome if r.autore else "",
+                        "actor_name": social_display_name(r.autore),
                         "payload": r.emoji or "",
                     }
                 )
-            for rp in s.replies.select_related("autore").all()[:10]:
+            for rp in s.replies.select_related("autore", "autore__social_profile").all()[:10]:
                 recent_events.append(
                     {
                         "kind": "reply",
@@ -455,7 +456,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
                         "story_id": s.id,
                         "story_text": (s.testo or "")[:80],
                         "actor_id": rp.autore_id,
-                        "actor_name": rp.autore.nome if rp.autore else "",
+                        "actor_name": social_display_name(rp.autore),
                         "payload": (rp.testo or "")[:120],
                     }
                 )
@@ -504,7 +505,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         include_expired = str(request.query_params.get("include_expired", "true")).lower() != "false"
         qs = (
             SocialStory.objects.filter(autore=personaggio)
-            .select_related("autore", "evento", "korp_visibilita")
+            .select_related("autore", "autore__social_profile", "evento", "korp_visibilita")
             .annotate(
                 views_count=Count("views", distinct=True),
                 reactions_count=Count("reactions", distinct=True),
@@ -589,7 +590,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
     def comments(self, request, pk=None):
         post = self.get_object()
         if request.method.lower() == "get":
-            qs = post.comments.select_related("autore", "evento").all()
+            qs = post.comments.select_related("autore", "autore__social_profile", "evento").all()
             paginator = SocialCommentPagination()
             page = paginator.paginate_queryset(qs, request, view=self)
             serializer = SocialCommentSerializer(page, many=True)
@@ -669,7 +670,7 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         personaggio = self.get_personaggio()
-        qs = SocialGroup.objects.select_related("creatore").all()
+        qs = SocialGroup.objects.select_related("creatore", "creatore__social_profile").all()
         if self.request.user.is_staff:
             return qs
         if not personaggio:
@@ -703,7 +704,7 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         group_ids = SocialGroupMembership.objects.filter(
             personaggio=personaggio, status=SOCIAL_GROUP_STATUS_ACTIVE
         ).values_list("group_id", flat=True)
-        groups = SocialGroup.objects.filter(id__in=group_ids).select_related("creatore")
+        groups = SocialGroup.objects.filter(id__in=group_ids).select_related("creatore", "creatore__social_profile")
         serializer = self.get_serializer(groups, many=True)
         return Response(serializer.data)
 
@@ -801,7 +802,7 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         personaggio = self.get_personaggio()
         if not (request.user.is_staff or self._is_active_member(group, personaggio) or not group.is_hidden):
             raise permissions.PermissionDenied("Gruppo non accessibile.")
-        qs = group.memberships.select_related("personaggio", "invited_by").all().order_by("-created_at")
+        qs = group.memberships.select_related("personaggio", "personaggio__social_profile", "invited_by", "invited_by__social_profile").all().order_by("-created_at")
         paginator = SocialGroupMemberPagination()
         page = paginator.paginate_queryset(qs, request, view=self)
         serializer = SocialGroupMembershipSerializer(page, many=True)
@@ -857,7 +858,7 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         if not (request.user.is_staff or self._is_active_member(group, personaggio)):
             raise permissions.PermissionDenied("Solo i membri possono vedere/scrivere post nel gruppo.")
         if request.method.lower() == "get":
-            qs = group.posts.select_related("autore").all()
+            qs = group.posts.select_related("autore", "autore__social_profile").all()
             paginator = SocialGroupPostPagination()
             page = paginator.paginate_queryset(qs, request, view=self)
             serializer = SocialGroupPostSerializer(page, many=True)
@@ -904,7 +905,7 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
         if not (request.user.is_staff or self._is_active_member(group, personaggio)):
             raise permissions.PermissionDenied("Solo i membri possono vedere/scrivere messaggi nel gruppo.")
         if request.method.lower() == "get":
-            qs = group.messages.select_related("autore").all()
+            qs = group.messages.select_related("autore", "autore__social_profile").all()
             paginator = SocialGroupMessagePagination()
             page = paginator.paginate_queryset(qs, request, view=self)
             serializer = SocialGroupMessageSerializer(page, many=True)
@@ -937,7 +938,13 @@ class SocialProfileMeView(APIView):
         personaggio = resolve_active_personaggio(request.user, requested, request=request)
         if not personaggio:
             return None
-        profile, _ = SocialProfile.objects.get_or_create(personaggio=personaggio)
+        profile, _ = SocialProfile.objects.select_related(
+            "personaggio",
+            "personaggio__era",
+            "personaggio__prefettura",
+            "personaggio__prefettura__regione",
+            "personaggio__segno_zodiacale",
+        ).get_or_create(personaggio=personaggio)
         return profile
 
     def get(self, request):
@@ -972,7 +979,13 @@ class SocialProfileDetailView(APIView):
         personaggio = Personaggio.objects.filter(id=personaggio_id).first()
         if not personaggio:
             return Response({"detail": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
-        profile, _ = SocialProfile.objects.get_or_create(personaggio=personaggio)
+        profile, _ = SocialProfile.objects.select_related(
+            "personaggio",
+            "personaggio__era",
+            "personaggio__prefettura",
+            "personaggio__prefettura__regione",
+            "personaggio__segno_zodiacale",
+        ).get_or_create(personaggio=personaggio)
         return Response(SocialProfilePublicSerializer(profile).data)
 
 
@@ -1078,22 +1091,22 @@ class SocialNotificationsView(APIView):
         likes_qs = (
             SocialLike.objects.filter(post__autore=personaggio)
             .exclude(autore=personaggio)
-            .select_related("autore", "post")
+            .select_related("autore", "autore__social_profile", "post")
         )
         comments_qs = (
             SocialComment.objects.filter(post__autore=personaggio)
             .exclude(autore=personaggio)
-            .select_related("autore", "post")
+            .select_related("autore", "autore__social_profile", "post")
         )
         post_mentions_qs = (
             SocialPostTag.objects.filter(personaggio=personaggio)
             .exclude(post__autore=personaggio)
-            .select_related("post", "post__autore")
+            .select_related("post", "post__autore", "post__autore__social_profile")
         )
         comment_mentions_qs = (
             SocialCommentTag.objects.filter(personaggio=personaggio)
             .exclude(comment__autore=personaggio)
-            .select_related("comment", "comment__autore", "comment__post")
+            .select_related("comment", "comment__autore", "comment__autore__social_profile", "comment__post")
         )
 
         events = []
@@ -1105,7 +1118,7 @@ class SocialNotificationsView(APIView):
                     "post_id": like.post_id,
                     "post_title": like.post.titolo or "",
                     "actor_id": like.autore_id,
-                    "actor_name": like.autore.nome if like.autore else "",
+                    "actor_name": social_display_name(like.autore),
                     "text": "",
                 }
             )
@@ -1117,7 +1130,7 @@ class SocialNotificationsView(APIView):
                     "post_id": comment.post_id,
                     "post_title": comment.post.titolo or "",
                     "actor_id": comment.autore_id,
-                    "actor_name": comment.autore.nome if comment.autore else "",
+                    "actor_name": social_display_name(comment.autore),
                     "text": comment.testo or "",
                 }
             )
@@ -1130,7 +1143,7 @@ class SocialNotificationsView(APIView):
                     "post_id": tag.post_id,
                     "post_title": tag.post.titolo or "",
                     "actor_id": tag.post.autore_id,
-                    "actor_name": tag.post.autore.nome if tag.post and tag.post.autore else "",
+                    "actor_name": social_display_name(tag.post.autore) if tag.post else "",
                     "text": tag.post.testo or "",
                 }
             )
@@ -1142,7 +1155,7 @@ class SocialNotificationsView(APIView):
                     "post_id": tag.comment.post_id if tag.comment else None,
                     "post_title": tag.comment.post.titolo if tag.comment and tag.comment.post else "",
                     "actor_id": tag.comment.autore_id if tag.comment else None,
-                    "actor_name": tag.comment.autore.nome if tag.comment and tag.comment.autore else "",
+                    "actor_name": social_display_name(tag.comment.autore) if tag.comment else "",
                     "text": tag.comment.testo if tag.comment else "",
                 }
             )

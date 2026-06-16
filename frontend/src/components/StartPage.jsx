@@ -20,6 +20,9 @@ import PasswordChangeModal from './PasswordChangeModal';
 import RichTextEditor from './RichTextEditor';
 import EventSubscriptionStartPanel from './EventSubscriptionStartPanel';
 import CreazioneGuidataModal from './CreazioneGuidataModal';
+import ProfileImageField from './ProfileImageField';
+import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
+import { prepareProfileImageForUpload } from '../utils/profileImage';
 
 export default function StartPage({ onLogout, onSwitchToMaster }) {
   const navigate = useNavigate();
@@ -69,7 +72,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   });
   const [editPermissions, setEditPermissions] = useState({ can_edit_era: true, can_edit_razza: true });
   const [avatarFile, setAvatarFile] = useState(null);
-  const [avatarPreviewBlob, setAvatarPreviewBlob] = useState(null);
+  const [avatarRotation, setAvatarRotation] = useState(0);
   const [avatarRemoteUrl, setAvatarRemoteUrl] = useState(null);
   const [showGuidedWizard, setShowGuidedWizard] = useState(false);
   const [guidedWizardLoading, setGuidedWizardLoading] = useState(false);
@@ -119,16 +122,6 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   ]);
 
   useEffect(() => {
-    if (!avatarFile) {
-      setAvatarPreviewBlob(null);
-      return undefined;
-    }
-    const u = URL.createObjectURL(avatarFile);
-    setAvatarPreviewBlob(u);
-    return () => URL.revokeObjectURL(u);
-  }, [avatarFile]);
-
-  useEffect(() => {
     let mounted = true;
     const load = async () => {
       setIsLoading(true);
@@ -176,18 +169,6 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     };
   }, [onLogout]);
 
-  const selectedEra = useMemo(
-    () => ere.find((e) => String(e.id) === String(formData.era)),
-    [ere, formData.era]
-  );
-  const allPrefetture = useMemo(
-    () => ere.flatMap((era) => (era.prefetture || []).map((p) => ({ ...p, era_ref: era }))),
-    [ere]
-  );
-  const prefettureDisponibili = useMemo(() => {
-    if (formData.prefettura_esterna) return allPrefetture;
-    return selectedEra?.prefetture || [];
-  }, [formData.prefettura_esterna, allPrefetture, selectedEra]);
   const hasMultipleEre = ere.length > 1;
 
   useEffect(() => {
@@ -200,6 +181,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   const openCreate = () => {
     setIsCreateMode(true);
     setAvatarFile(null);
+    setAvatarRotation(0);
     setAvatarRemoteUrl(null);
     setFormData({
       id: null,
@@ -223,6 +205,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
   const openEdit = (char) => {
     setIsCreateMode(false);
     setAvatarFile(null);
+    setAvatarRotation(0);
     setAvatarRemoteUrl(char.avatar_url || null);
     setFormData({
       id: char.id,
@@ -374,10 +357,22 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         const updatedChar = await updatePersonaggio(payload.id, payload, onLogout);
         savedCampaignId = updatedChar?.campagna ? String(updatedChar.campagna) : savedCampaignId;
       }
-      if (avatarFile && charId) {
-        const fd = new FormData();
-        fd.append('foto_principale', avatarFile);
-        await socialUpdateMyProfile(fd, charId, onLogout);
+      if (charId) {
+        try {
+          const preparedAvatar = await prepareProfileImageForUpload({
+            file: avatarFile,
+            remoteUrl: avatarRemoteUrl ? resolveMediaUrl(avatarRemoteUrl) : null,
+            rotationDegrees: avatarRotation,
+          });
+          if (preparedAvatar) {
+            const fd = new FormData();
+            fd.append('foto_principale', preparedAvatar);
+            await socialUpdateMyProfile(fd, charId, onLogout);
+          }
+        } catch (avatarErr) {
+          alert(avatarErr?.message || 'Errore salvataggio avatar InstaFame.');
+          return;
+        }
       }
       const updated = await getPersonaggiEditList(onLogout, { mineOnly: true });
       const ordered = Array.isArray(updated)
@@ -395,6 +390,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         }
       }
       setAvatarFile(null);
+      setAvatarRotation(0);
       setShowEditor(false);
     } catch (err) {
       alert(err?.message || 'Errore salvataggio personaggio');
@@ -420,7 +416,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     navigate('/app/play?tab=home');
   };
 
-  const modalAvatarSrc = avatarPreviewBlob || (avatarRemoteUrl ? resolveMediaUrl(avatarRemoteUrl) : null);
+  const modalAvatarRemoteSrc = avatarRemoteUrl ? resolveMediaUrl(avatarRemoteUrl) : null;
   const loginMethod = String(localStorage.getItem('kor35_login_method') || 'local').toLowerCase();
   const effectiveAdStatus =
     loginMethod === 'arcana'
@@ -719,29 +715,16 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                   Il background non e piu modificabile per questo personaggio.
                 </div>
               )}
-              <div>
-                <label className="text-xs text-gray-400 uppercase">Avatar (InstaFame e schede)</label>
-                <div className="mt-2 flex flex-wrap items-center gap-4">
-                  <div className="h-20 w-20 rounded-full border border-gray-600 bg-gray-900 overflow-hidden flex items-center justify-center shrink-0">
-                    {modalAvatarSrc ? (
-                      <img src={modalAvatarSrc} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-2xl font-black text-indigo-300">
-                        {(formData.nome || '?').charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="text-sm text-gray-300 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-indigo-700 file:text-white"
-                      onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-                    />
-                    <p className="text-[11px] text-gray-500 mt-1">Usato anche per InstaFame e la scheda personaggio.</p>
-                  </div>
-                </div>
-              </div>
+              <ProfileImageField
+                label="Avatar (InstaFame e schede)"
+                hint="Usato anche per InstaFame e la scheda personaggio."
+                file={avatarFile}
+                remoteUrl={modalAvatarRemoteSrc}
+                rotation={avatarRotation}
+                fallbackLetter={formData.nome || '?'}
+                onFileChange={setAvatarFile}
+                onRotationChange={setAvatarRotation}
+              />
               <div>
                 <label className="text-xs text-gray-400 uppercase">Nome</label>
                 <input
@@ -759,48 +742,14 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                   setFormData({ ...formData, testo: val })
                 }
               />
-              <div className="grid md:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-400 uppercase">Era</label>
-                  {hasMultipleEre ? (
-                    <select
-                      className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2"
-                      value={formData.era || ''}
-                      onChange={(e) =>
-                        setFormData({ ...formData, era: e.target.value || '', prefettura: '' })
-                      }
-                      disabled={!isCreateMode && !editPermissions.can_edit_era}
-                    >
-                      <option value="">Seleziona era</option>
-                      {ere.map((era) => (
-                        <option key={era.id} value={era.id}>
-                          {era.nome}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm text-gray-200">
-                      {ere[0]?.nome || 'Campagna base'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="text-xs text-gray-400 uppercase">Prefettura</label>
-                  <select
-                    className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2"
-                    value={formData.prefettura || ''}
-                    onChange={(e) => setFormData({ ...formData, prefettura: e.target.value || '' })}
-                    disabled={!isCreateMode && !editPermissions.can_edit_era}
-                  >
-                    <option value="">Seleziona prefettura</option>
-                    {prefettureDisponibili.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.regione_sigla ? `${p.regione_sigla} ${p.nome}` : p.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              <PersonaggioEraPrefetturaFields
+                ere={ere}
+                era={formData.era}
+                prefettura={formData.prefettura}
+                prefetturaEsterna={formData.prefettura_esterna}
+                canEditEra={isCreateMode || editPermissions.can_edit_era}
+                onChange={(patch) => setFormData((prev) => ({ ...prev, ...patch }))}
+              />
               {isCampaignStaffer && (
                 <div className="p-4 bg-gray-900/50 rounded-xl border border-gray-700 space-y-3">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber-400">
@@ -858,17 +807,6 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                   </label>
                 </div>
               )}
-              <label className="inline-flex items-center gap-2 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={!!formData.prefettura_esterna}
-                  onChange={(e) =>
-                    setFormData({ ...formData, prefettura_esterna: e.target.checked, prefettura: '' })
-                  }
-                  disabled={!isCreateMode && !editPermissions.can_edit_era}
-                />
-                Prefettura esterna
-              </label>
               <div className="text-xs text-gray-400">
                 Segni zodiacali disponibili: {segni.length > 0 ? segni.map((s) => s.nome).join(', ') : 'n/d'}
               </div>

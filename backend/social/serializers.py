@@ -11,6 +11,7 @@ from personaggi.models import (
     FEATURE_MODE_SHARED,
 )
 
+from .display_names import social_display_name, social_display_name_from_profile
 from .models import (
     SOCIAL_GROUP_STATUS_ACTIVE,
     SocialComment,
@@ -34,10 +35,34 @@ from .models import (
 )
 
 
+def _personaggio_tag_rows(tag_manager):
+    rows = []
+    for tag in tag_manager.select_related("personaggio", "personaggio__social_profile").all():
+        rows.append(
+            {
+                "personaggio_id": tag.personaggio_id,
+                "personaggio__nome": social_display_name(tag.personaggio),
+            }
+        )
+    return rows
+
+
 class SocialProfileSerializer(serializers.ModelSerializer):
     personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+    nome_pubblico = serializers.SerializerMethodField()
     korp_nome = serializers.SerializerMethodField()
     segno_zodiacale = serializers.CharField(source="personaggio.segno_zodiacale.nome", read_only=True)
+    era = serializers.IntegerField(source="personaggio.era_id", read_only=True, allow_null=True)
+    era_nome = serializers.CharField(source="personaggio.era.nome", read_only=True, allow_null=True)
+    prefettura = serializers.IntegerField(source="personaggio.prefettura_id", read_only=True, allow_null=True)
+    prefettura_nome = serializers.CharField(source="personaggio.prefettura.nome", read_only=True, allow_null=True)
+    prefettura_regione_sigla = serializers.CharField(
+        source="personaggio.prefettura.regione.sigla", read_only=True, allow_null=True
+    )
+    prefettura_esterna = serializers.BooleanField(source="personaggio.prefettura_esterna", read_only=True)
+    can_edit_era = serializers.SerializerMethodField()
+    regione = serializers.SerializerMethodField()
+    era_provenienza = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialProfile
@@ -45,26 +70,83 @@ class SocialProfileSerializer(serializers.ModelSerializer):
             "id",
             "personaggio",
             "personaggio_nome",
+            "nickname",
+            "nome_pubblico",
             "foto_principale",
             "regione",
             "prefettura",
+            "prefettura_nome",
+            "prefettura_regione_sigla",
+            "prefettura_esterna",
             "descrizione",
             "professioni",
             "era_provenienza",
+            "era",
+            "era_nome",
+            "can_edit_era",
             "korp_nome",
             "segno_zodiacale",
         )
-        read_only_fields = ("personaggio", "personaggio_nome", "korp_nome", "segno_zodiacale")
+        read_only_fields = (
+            "personaggio",
+            "personaggio_nome",
+            "nome_pubblico",
+            "korp_nome",
+            "segno_zodiacale",
+            "regione",
+            "prefettura",
+            "prefettura_nome",
+            "prefettura_regione_sigla",
+            "prefettura_esterna",
+            "era_provenienza",
+            "era",
+            "era_nome",
+            "can_edit_era",
+        )
+
+    def get_nome_pubblico(self, obj):
+        return social_display_name_from_profile(obj)
+
+    def validate_nickname(self, value):
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
 
     def get_korp_nome(self, obj):
         membership = get_active_korp_membership(obj.personaggio)
         return membership.carriera.nome if membership else None
 
+    def get_can_edit_era(self, obj):
+        try:
+            return obj.personaggio.can_edit_era_prefettura()
+        except Exception:
+            return False
+
+    def get_regione(self, obj):
+        pref = getattr(obj.personaggio, "prefettura", None)
+        if pref and getattr(pref, "regione", None):
+            return pref.regione.sigla or pref.regione.nome
+        return obj.regione
+
+    def get_era_provenienza(self, obj):
+        era = getattr(obj.personaggio, "era", None)
+        if era:
+            return era.nome
+        return obj.era_provenienza
+
 
 class SocialProfilePublicSerializer(serializers.ModelSerializer):
-    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+    personaggio_nome = serializers.SerializerMethodField()
     korp_nome = serializers.SerializerMethodField()
     segno_zodiacale = serializers.CharField(source="personaggio.segno_zodiacale.nome", read_only=True)
+    era_nome = serializers.CharField(source="personaggio.era.nome", read_only=True, allow_null=True)
+    prefettura_nome = serializers.CharField(source="personaggio.prefettura.nome", read_only=True, allow_null=True)
+    prefettura_regione_sigla = serializers.CharField(
+        source="personaggio.prefettura.regione.sigla", read_only=True, allow_null=True
+    )
+    regione = serializers.SerializerMethodField()
+    era_provenienza = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialProfile
@@ -74,22 +156,39 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
             "personaggio_nome",
             "foto_principale",
             "regione",
-            "prefettura",
+            "prefettura_nome",
+            "prefettura_regione_sigla",
             "descrizione",
             "professioni",
             "era_provenienza",
+            "era_nome",
             "korp_nome",
             "segno_zodiacale",
         )
         read_only_fields = fields
 
+    def get_personaggio_nome(self, obj):
+        return social_display_name_from_profile(obj)
+
     def get_korp_nome(self, obj):
         membership = get_active_korp_membership(obj.personaggio)
         return membership.carriera.nome if membership else None
 
+    def get_regione(self, obj):
+        pref = getattr(obj.personaggio, "prefettura", None)
+        if pref and getattr(pref, "regione", None):
+            return pref.regione.sigla or pref.regione.nome
+        return obj.regione
+
+    def get_era_provenienza(self, obj):
+        era = getattr(obj.personaggio, "era", None)
+        if era:
+            return era.nome
+        return obj.era_provenienza
+
 
 class SocialCommentSerializer(serializers.ModelSerializer):
-    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    autore_nome = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
 
     class Meta:
@@ -97,12 +196,15 @@ class SocialCommentSerializer(serializers.ModelSerializer):
         fields = ("id", "post", "autore", "autore_nome", "testo", "evento", "created_at", "tags")
         read_only_fields = ("post", "autore", "evento", "created_at")
 
+    def get_autore_nome(self, obj):
+        return social_display_name(obj.autore)
+
     def get_tags(self, obj):
-        return list(obj.tags.select_related("personaggio").values("personaggio_id", "personaggio__nome"))
+        return _personaggio_tag_rows(obj.tags)
 
 
 class SocialPostSerializer(serializers.ModelSerializer):
-    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    autore_nome = serializers.SerializerMethodField()
     likes_count = serializers.IntegerField(read_only=True)
     comments_count = serializers.IntegerField(read_only=True)
     liked_by_me = serializers.SerializerMethodField()
@@ -148,8 +250,11 @@ class SocialPostSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Per la visibilita KORP devi indicare una KORP.")
         return attrs
 
+    def get_autore_nome(self, obj):
+        return social_display_name(obj.autore)
+
     def get_tags(self, obj):
-        return list(obj.tags.select_related("personaggio").values("personaggio_id", "personaggio__nome"))
+        return _personaggio_tag_rows(obj.tags)
 
     def get_public_url(self, obj):
         if obj.visibilita != "PUB":
@@ -166,8 +271,8 @@ class SocialPostSerializer(serializers.ModelSerializer):
 
 
 class SocialGroupMembershipSerializer(serializers.ModelSerializer):
-    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
-    invited_by_nome = serializers.CharField(source="invited_by.nome", read_only=True)
+    personaggio_nome = serializers.SerializerMethodField()
+    invited_by_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialGroupMembership
@@ -185,9 +290,15 @@ class SocialGroupMembershipSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("joined_at", "created_at")
 
+    def get_personaggio_nome(self, obj):
+        return social_display_name(obj.personaggio)
+
+    def get_invited_by_nome(self, obj):
+        return social_display_name(obj.invited_by)
+
 
 class SocialGroupSerializer(serializers.ModelSerializer):
-    creatore_nome = serializers.CharField(source="creatore.nome", read_only=True)
+    creatore_nome = serializers.SerializerMethodField()
     members_count = serializers.SerializerMethodField()
     my_membership_status = serializers.SerializerMethodField()
     my_role = serializers.SerializerMethodField()
@@ -210,6 +321,9 @@ class SocialGroupSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("slug", "creatore", "created_at", "members_count", "my_membership_status", "my_role")
 
+    def get_creatore_nome(self, obj):
+        return social_display_name(obj.creatore)
+
     def get_members_count(self, obj):
         return obj.memberships.filter(status=SOCIAL_GROUP_STATUS_ACTIVE).count()
 
@@ -229,25 +343,31 @@ class SocialGroupSerializer(serializers.ModelSerializer):
 
 
 class SocialGroupPostSerializer(serializers.ModelSerializer):
-    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    autore_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialGroupPost
         fields = ("id", "group", "autore", "autore_nome", "titolo", "testo", "immagine", "video", "created_at")
         read_only_fields = ("group", "autore", "created_at")
 
+    def get_autore_nome(self, obj):
+        return social_display_name(obj.autore)
+
 
 class SocialGroupMessageSerializer(serializers.ModelSerializer):
-    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    autore_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialGroupMessage
         fields = ("id", "group", "autore", "autore_nome", "testo", "created_at")
         read_only_fields = ("group", "autore", "created_at")
 
+    def get_autore_nome(self, obj):
+        return social_display_name(obj.autore)
+
 
 class SocialStorySerializer(serializers.ModelSerializer):
-    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    autore_nome = serializers.SerializerMethodField()
     evento_titolo = serializers.CharField(source="evento.titolo", read_only=True)
     hashtags = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
@@ -298,12 +418,15 @@ class SocialStorySerializer(serializers.ModelSerializer):
             "my_reaction",
         )
 
+    def get_autore_nome(self, obj):
+        return social_display_name(obj.autore)
+
     def get_hashtags(self, obj):
         text = f"{obj.testo or ''}".strip()
         return extract_hashtags(text)
 
     def get_tags(self, obj):
-        return list(obj.tags.select_related("personaggio").values("personaggio_id", "personaggio__nome"))
+        return _personaggio_tag_rows(obj.tags)
 
     def get_viewed_by_me(self, obj):
         personaggio = self.context.get("personaggio")
@@ -326,12 +449,15 @@ class SocialStorySerializer(serializers.ModelSerializer):
 
 
 class SocialStoryReplySerializer(serializers.ModelSerializer):
-    autore_nome = serializers.CharField(source="autore.nome", read_only=True)
+    autore_nome = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialStoryReply
         fields = ("id", "story", "autore", "autore_nome", "testo", "created_at")
         read_only_fields = ("story", "autore", "created_at")
+
+    def get_autore_nome(self, obj):
+        return social_display_name(obj.autore)
 
 
 class SocialStoryHighlightItemSerializer(serializers.ModelSerializer):
@@ -344,7 +470,7 @@ class SocialStoryHighlightItemSerializer(serializers.ModelSerializer):
 
 
 class SocialStoryHighlightSerializer(serializers.ModelSerializer):
-    owner_nome = serializers.CharField(source="owner.nome", read_only=True)
+    owner_nome = serializers.SerializerMethodField()
     items = serializers.SerializerMethodField()
 
     class Meta:
@@ -352,8 +478,13 @@ class SocialStoryHighlightSerializer(serializers.ModelSerializer):
         fields = ("id", "owner", "owner_nome", "titolo", "created_at", "items")
         read_only_fields = ("owner", "owner_nome", "created_at", "items")
 
+    def get_owner_nome(self, obj):
+        return social_display_name(obj.owner)
+
     def get_items(self, obj):
-        qs = obj.items.select_related("story", "story__autore", "story__evento", "story__korp_visibilita").all()
+        qs = obj.items.select_related(
+            "story", "story__autore", "story__autore__social_profile", "story__evento", "story__korp_visibilita"
+        ).all()
         # Context: passa personaggio per viewed/reacted.
         personaggio = self.context.get("personaggio")
         return SocialStoryHighlightItemSerializer(qs, many=True, context={"personaggio": personaggio}).data
@@ -391,7 +522,7 @@ def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None)
 
 
 def visible_posts_queryset_for_personaggio(personaggio, request=None):
-    base = SocialPost.objects.select_related("autore", "evento", "korp_visibilita").annotate(
+    base = SocialPost.objects.select_related("autore", "autore__social_profile", "evento", "korp_visibilita").annotate(
         likes_count=Count("likes", distinct=True),
         comments_count=Count("comments", distinct=True),
     )

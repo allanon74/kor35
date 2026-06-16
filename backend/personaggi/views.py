@@ -2505,7 +2505,17 @@ class MessaggioListView(generics.ListAPIView):
         q_individuale = Q(tipo_messaggio=Messaggio.TIPO_INDIVIDUALE) & Q(destinatario_personaggio=target_pg)
         gruppi_id = target_pg.gruppi_appartenenza.values_list('id', flat=True)
         q_gruppo = Q(tipo_messaggio=Messaggio.TIPO_GRUPPO) & Q(destinatario_gruppo__id__in=gruppi_id)
-        messaggi = Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo, campagna=active_campaign).order_by('-data_invio')
+        messaggi = (
+            Messaggio.objects.filter(q_broadcast | q_individuale | q_gruppo, campagna=active_campaign)
+            .select_related(
+                "mittente",
+                "mittente_personaggio",
+                "mittente_personaggio__social_profile",
+                "destinatario_personaggio",
+                "destinatario_personaggio__social_profile",
+            )
+            .order_by("-data_invio")
+        )
 
         ids_cancellati = LetturaMessaggio.objects.filter(
             personaggio=target_pg, 
@@ -2684,7 +2694,12 @@ class ConversazioniView(APIView):
         q_individuale_inviati = Q(tipo_messaggio=Messaggio.TIPO_STAFF) & Q(mittente_personaggio=personaggio)
         
         messaggi = Messaggio.objects.filter(q_individuale_ricevuti | q_individuale_inviati).select_related(
-            'mittente', 'mittente_personaggio', 'destinatario_personaggio', 'in_risposta_a'
+            'mittente',
+            'mittente_personaggio',
+            'mittente_personaggio__social_profile',
+            'destinatario_personaggio',
+            'destinatario_personaggio__social_profile',
+            'in_risposta_a',
         )
         
         # Filtra messaggi cancellati
@@ -2696,6 +2711,8 @@ class ConversazioniView(APIView):
         messaggi = messaggi.exclude(id__in=ids_cancellati)
         
         # Raggruppa per conversazione (thread)
+        from social.display_names import social_display_name
+
         conversazioni = {}
         
         for msg in messaggi:
@@ -2721,9 +2738,13 @@ class ConversazioniView(APIView):
             if msg.mittente:
                 conversazioni[thread_id]['partecipanti'].add(('user', msg.mittente.id, msg.mittente.username))
             if msg.mittente_personaggio:
-                conversazioni[thread_id]['partecipanti'].add(('pg', msg.mittente_personaggio.id, msg.mittente_personaggio.nome))
+                conversazioni[thread_id]['partecipanti'].add(
+                    ('pg', msg.mittente_personaggio.id, social_display_name(msg.mittente_personaggio))
+                )
             if msg.destinatario_personaggio:
-                conversazioni[thread_id]['partecipanti'].add(('pg', msg.destinatario_personaggio.id, msg.destinatario_personaggio.nome))
+                conversazioni[thread_id]['partecipanti'].add(
+                    ('pg', msg.destinatario_personaggio.id, social_display_name(msg.destinatario_personaggio))
+                )
             
             # Aggiorna timestamp ultimo messaggio
             if msg.data_invio > conversazioni[thread_id]['ultimo_messaggio']:
@@ -3035,11 +3056,11 @@ class PersonaggioAutocompleteView(generics.ListAPIView):
             return Personaggio.objects.none()
         
         # 1. Filtro base
-        qs = Personaggio.objects.all()
+        qs = Personaggio.objects.select_related("social_profile")
         
-        # Se c'è una query di testo, filtriamo per nome
+        # Se c'è una query di testo, filtriamo per nome o nickname InstaFame
         if query:
-            qs = qs.filter(nome__icontains=query)
+            qs = qs.filter(Q(nome__icontains=query) | Q(social_profile__nickname__icontains=query))
             
         if current_char_id: 
             qs = qs.exclude(id=current_char_id)

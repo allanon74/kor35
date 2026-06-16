@@ -24,8 +24,8 @@ from .models import (
 
 @admin.register(SocialProfile)
 class SocialProfileAdmin(SummernoteModelAdmin):
-    list_display = ("personaggio", "regione", "prefettura", "created_at")
-    search_fields = ("personaggio__nome", "regione", "prefettura")
+    list_display = ("personaggio", "nickname", "regione", "prefettura", "created_at")
+    search_fields = ("personaggio__nome", "nickname", "regione", "prefettura")
     autocomplete_fields = ("personaggio",)
     summernote_fields = ("descrizione",)
 

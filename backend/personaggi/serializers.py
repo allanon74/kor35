@@ -3013,9 +3013,9 @@ class MessaggioSerializer(serializers.ModelSerializer):
     mittente = serializers.StringRelatedField(read_only=True)
     mittente_nome = serializers.SerializerMethodField()
     mittente_personaggio_id = serializers.IntegerField(source='mittente_personaggio.id', read_only=True, allow_null=True)
-    mittente_personaggio_nome = serializers.CharField(source='mittente_personaggio.nome', read_only=True, allow_null=True)
-    destinatario_personaggio = serializers.StringRelatedField(read_only=True)
-    destinatario_personaggio_id = serializers.IntegerField(source='destinatario_personaggio.id', read_only=True, allow_null=True)
+    mittente_personaggio_nome = serializers.SerializerMethodField()
+    destinatario_personaggio = serializers.SerializerMethodField()
+    destinatario_personaggio_id = serializers.SerializerMethodField()
     destinatario_gruppo = GruppoSerializer(read_only=True)
     letto = serializers.SerializerMethodField()
     mittente_is_staff = serializers.SerializerMethodField()
@@ -3042,11 +3042,27 @@ class MessaggioSerializer(serializers.ModelSerializer):
         # Per altri messaggi, usa is_letto_db se disponibile
         return getattr(obj, 'is_letto_db', False)
     
+    def get_destinatario_personaggio_id(self, obj):
+        return obj.destinatario_personaggio_id
+
+    def get_destinatario_personaggio(self, obj):
+        if not obj.destinatario_personaggio:
+            return None
+        from social.display_names import social_display_name
+        return social_display_name(obj.destinatario_personaggio)
+
+    def get_mittente_personaggio_nome(self, obj):
+        if not obj.mittente_personaggio:
+            return None
+        from social.display_names import social_display_name
+        return social_display_name(obj.mittente_personaggio)
+
     def get_mittente_nome(self, obj):
         if obj.mittente:
             return obj.mittente.username
         if obj.mittente_personaggio:
-            return obj.mittente_personaggio.nome
+            from social.display_names import social_display_name
+            return social_display_name(obj.mittente_personaggio)
         return None
     
     def get_mittente_is_staff(self, obj):
@@ -3100,10 +3116,15 @@ class ModelloAuraRequisitoMattoneSerializer(serializers.ModelSerializer):
 class PersonaggioAutocompleteSerializer(serializers.ModelSerializer):
     slots_occupati = serializers.SerializerMethodField()
     is_mine = serializers.SerializerMethodField() # <--- NUOVO CAMPO
+    nome = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
         fields = ('id', 'nome', 'slots_occupati', 'is_mine') # <--- AGGIUNTO QUI
+
+    def get_nome(self, obj):
+        from social.display_names import social_display_name
+        return social_display_name(obj)
 
     def get_slots_occupati(self, obj):
         # Recupera slot occupati (già discusso precedentemente)
