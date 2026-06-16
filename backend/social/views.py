@@ -45,8 +45,7 @@ from .models import (
 from .influencer import (
     compute_like_peso,
     random_likes_base,
-    total_comment_likes,
-    total_post_likes,
+    rigenera_like_personaggio,
 )
 from .serializers import (
     SocialCommentSerializer,
@@ -281,8 +280,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
 
         # Migra reactions -> like post (1 per autore)
         for r in story.reactions.select_related("autore", "autore__social_profile").all():
-            target = total_post_likes(post)
-            peso = compute_like_peso(r.autore, target)
+            peso = compute_like_peso(r.autore, post.autore)
             like, created = SocialLike.objects.get_or_create(
                 post=post,
                 autore=r.autore,
@@ -603,8 +601,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         if like:
             like.delete()
             return Response({"liked": False}, status=status.HTTP_200_OK)
-        target = total_post_likes(post)
-        peso = compute_like_peso(personaggio, target)
+        peso = compute_like_peso(personaggio, post.autore)
         SocialLike.objects.create(post=post, autore=personaggio, peso_like=peso)
         return Response({"liked": True, "peso_like": peso}, status=status.HTTP_201_CREATED)
 
@@ -664,15 +661,14 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         personaggio = self.get_personaggio()
         if not personaggio:
             return Response({"detail": "Nessun personaggio disponibile."}, status=status.HTTP_400_BAD_REQUEST)
-        comment = SocialComment.objects.filter(id=comment_id, post=post).first()
+        comment = SocialComment.objects.filter(id=comment_id, post=post).select_related("autore").first()
         if not comment:
             return Response({"detail": "Commento non trovato."}, status=status.HTTP_404_NOT_FOUND)
         like = SocialCommentLike.objects.filter(comment=comment, autore=personaggio).first()
         if like:
             like.delete()
             return Response({"liked": False}, status=status.HTTP_200_OK)
-        target = total_comment_likes(comment)
-        peso = compute_like_peso(personaggio, target)
+        peso = compute_like_peso(personaggio, comment.autore)
         SocialCommentLike.objects.create(comment=comment, autore=personaggio, peso_like=peso)
         return Response({"liked": True, "peso_like": peso}, status=status.HTTP_201_CREATED)
 

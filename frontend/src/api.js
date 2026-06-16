@@ -2351,6 +2351,14 @@ export const getGestionePersonaggio = (id, onLogout) => {
     return fetchAuthenticated(`/api/personaggi/api/gestione-personaggi/${id}/`, { method: 'GET' }, onLogout);
 };
 
+export const rigeneraLikeInfluencer = (id, onLogout) => {
+    return fetchAuthenticated(
+        `/api/personaggi/api/gestione-personaggi/${id}/rigenera-like-influencer/`,
+        { method: 'POST' },
+        onLogout
+    );
+};
+
 export const deletePersonaggio = (id, onLogout) => {
     return fetchAuthenticated(`/api/personaggi/api/gestione-personaggi/${id}/`, {
         method: 'DELETE',

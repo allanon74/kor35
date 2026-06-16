@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { socialGetPublicPostBySlug } from '../api';
+import { formatCount } from '../utils/formatCount';
 
 export default function SocialPublicPostPage() {
   const { slug } = useParams();
@@ -46,8 +47,8 @@ export default function SocialPublicPostPage() {
         {post.video && <video src={post.video} controls className="w-full rounded-lg border border-gray-200" />}
 
         <div className="text-sm text-gray-600 border-t border-gray-200 pt-3">
-          Like: <span className="font-semibold">{post.likes_count || 0}</span> · Commenti:{' '}
-          <span className="font-semibold">{post.comments_count || 0}</span>
+          Like: <span className="font-semibold">{formatCount(post.likes_count)}</span> · Commenti:{' '}
+          <span className="font-semibold">{formatCount(post.comments_count)}</span>
         </div>
       </div>
 

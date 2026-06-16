@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
     createPersonaggio, 
     updatePersonaggio,
-    getGestionePersonaggio, 
+    getGestionePersonaggio,
+    rigeneraLikeInfluencer, 
     getTipologiePersonaggio,
     getEre,
     staffAddResources,
@@ -70,6 +71,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const [staffFeedback, setStaffFeedback] = useState(null);
     const [originalPesoInfluencer, setOriginalPesoInfluencer] = useState(1);
     const [pesoInfluencerEffettivo, setPesoInfluencerEffettivo] = useState(null);
+    const [rigeneraLikeLoading, setRigeneraLikeLoading] = useState(false);
 
     useEffect(() => {
         // Carica tipologie, gestendo eventuali errori silenziosamente
@@ -271,6 +273,30 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const handlePesoInfluencerConfirm = async (rigenera) => {
         setStaffConfirm(null);
         await handleSaveOptimistic({ rigeneraLikeInfluencer: rigenera });
+    };
+
+    const handleRigeneraLikeInfluencer = async () => {
+        if (!editMode || !formData.id || rigeneraLikeLoading) return;
+        if (!window.confirm(
+            'Rigenerare tutti i like InstaFame messi da questo personaggio con la formula attuale? I totali visibili sui post cambieranno.'
+        )) {
+            return;
+        }
+        setRigeneraLikeLoading(true);
+        try {
+            await rigeneraLikeInfluencer(formData.id, onLogout);
+            setStaffFeedback({
+                type: 'success',
+                message: 'Like InstaFame rigenerati per questo personaggio.',
+            });
+        } catch (error) {
+            setStaffFeedback({
+                type: 'error',
+                message: error?.message || 'Rigenerazione like fallita.',
+            });
+        } finally {
+            setRigeneraLikeLoading(false);
+        }
     };
 
     // --- GESTIONE RISORSE STAFF ---
@@ -878,6 +904,16 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                                 </span>
                                             )}
                                         </p>
+                                        {editMode && (
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleRigeneraLikeInfluencer()}
+                                                disabled={rigeneraLikeLoading}
+                                                className="mt-2 text-xs px-3 py-1.5 rounded-lg border border-fuchsia-500/40 bg-fuchsia-950/40 text-fuchsia-200 hover:bg-fuchsia-900/50 disabled:opacity-60"
+                                            >
+                                                {rigeneraLikeLoading ? 'Rigenerazione...' : 'Rigenera like messi da questo PG'}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             )}

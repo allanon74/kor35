@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Heart } from 'lucide-react';
 import { resolveMediaUrl, socialMarkStoryViewed, socialReactStory, socialReplyStory } from '../api';
+import { formatCount } from '../utils/formatCount';
 
 const DEFAULT_DURATION_MS = 6500;
 const TEXT_PAGE_DURATION_MS = 4200;
@@ -315,7 +316,7 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
               ))}
               <div className="flex-1" />
               <div className="text-xs text-white/60 inline-flex items-center gap-1">
-                <Heart size={14} /> {Number(story?.reactions_count || 0)}
+                <Heart size={14} /> {formatCount(story?.reactions_count)}
               </div>
             </div>
 

@@ -4920,6 +4920,36 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
                 except RigeneraLikeInfluencerError as exc:
                     raise serializers.ValidationError(str(exc)) from exc
 
+    def _can_edit_peso_influencer(self, user, personaggio=None):
+        active_campaign = _get_active_campaign(self.request)
+        if personaggio and active_campaign and personaggio.campagna_id != active_campaign.id:
+            active_campaign = personaggio.campagna
+        return user.is_staff or user.is_superuser or _can_operate_in_campaign(
+            user, active_campaign, needs_master=False
+        )
+
+    @action(detail=True, methods=["post"], url_path="rigenera-like-influencer")
+    def rigenera_like_influencer_action(self, request, pk=None):
+        """Ricalcola i peso_like storici messi da questo personaggio (post e commenti)."""
+        personaggio = self.get_object()
+        if not self._can_edit_peso_influencer(request.user, personaggio):
+            raise permissions.PermissionDenied("Permessi insufficienti per rigenerare i like InstaFame.")
+        from social.influencer import RigeneraLikeInfluencerError, rigenera_like_personaggio
+
+        try:
+            post_n, comment_n = rigenera_like_personaggio(personaggio)
+        except RigeneraLikeInfluencerError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "ok": True,
+                "detail": f"Like InstaFame rigenerati: {post_n} post, {comment_n} commenti.",
+                "post_likes": post_n,
+                "comment_likes": comment_n,
+            },
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def add_resources(self, request, pk=None):
         personaggio = self.get_object()

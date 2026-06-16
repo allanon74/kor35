@@ -49,6 +49,7 @@ import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
+import { formatCount } from '../utils/formatCount';
 import { prepareProfileImageForUpload } from '../utils/profileImage';
 
 const formatProfilePrefettura = (profileData) => {
@@ -1917,10 +1918,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                   likedFxByPost[post.id] ? 'ring-2 ring-rose-300/60 scale-105' : ''
                 }`}
               >
-                <Heart size={16} fill={post.liked_by_me ? 'currentColor' : 'none'} /> {post.likes_count || 0}
+                <Heart size={16} fill={post.liked_by_me ? 'currentColor' : 'none'} /> {formatCount(post.likes_count)}
               </button>
               <button onClick={() => toggleComments(post.id)} className="inline-flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-full bg-[#1f253d] border border-sky-300/30 text-sky-200 hover:bg-[#2a3150]">
-                <MessageCircle size={16} /> {post.comments_count || 0}
+                <MessageCircle size={16} /> {formatCount(post.comments_count)}
               </button>
               {post.public_url && (
                 <button
@@ -2080,7 +2081,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                           likedFxByComment[`${post.id}-${c.id}`] ? 'ring-2 ring-rose-300/60 scale-105' : ''
                         }`}
                       >
-                        <Heart size={13} fill={c.liked_by_me ? 'currentColor' : 'none'} /> {c.likes_count || 0}
+                        <Heart size={13} fill={c.liked_by_me ? 'currentColor' : 'none'} /> {formatCount(c.likes_count)}
                       </button>
                     </div>
                     {c.tags?.length > 0 && (
@@ -2773,7 +2774,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                                 </span>
                               </div>
                               <div className="mt-1 text-[11px] text-gray-400">
-                                {new Date(s.created_at).toLocaleString('it-IT')} • 👁 {Number(s.views_count || 0)} • ❤️ {Number(s.reactions_count || 0)}
+                                {new Date(s.created_at).toLocaleString('it-IT')} • 👁 {formatCount(s.views_count)} • ❤️ {formatCount(s.reactions_count)}
                               </div>
                               <div className="mt-2 flex items-center gap-2">
                                 <button

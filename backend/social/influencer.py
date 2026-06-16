@@ -1,7 +1,6 @@
 """Logica peso influencer InstaFame (like simulati su popolazione ampia)."""
 
 import logging
-import math
 import random
 
 from django.db.models import Sum
@@ -36,15 +35,14 @@ def random_likes_base(personaggio):
     return random.randint(1, peso)
 
 
-def compute_like_peso(personaggio, target_total_likes):
+def compute_like_peso(liker, content_owner):
     """
     Peso statico di un singolo like:
-    random(1, peso_eff) moltiplicato per random(1, totale_like_target), /10 arrotondato per eccesso.
+    random(1, peso_liker) + random(1, peso_autore_post/commento).
     """
-    peso = get_effective_peso_influencer(personaggio)
-    base = random.randint(1, peso)
-    multiplier = random.randint(1, max(1, int(target_total_likes or 1)))
-    return max(1, math.ceil(base * multiplier / 10))
+    peso_liker = get_effective_peso_influencer(liker)
+    peso_owner = get_effective_peso_influencer(content_owner)
+    return random.randint(1, peso_liker) + random.randint(1, peso_owner)
 
 
 def _sum_like_peso(qs):
@@ -71,36 +69,40 @@ def total_comment_likes(comment, exclude_like_pk=None):
     return int(likes_base or 0) + _sum_like_peso(qs)
 
 
-def _rigenera_post_likes(personaggio):
-    from .models import SocialLike
-
-    for like in SocialLike.objects.filter(autore=personaggio).select_related("post"):
-        target = total_post_likes(like.post, exclude_like_pk=like.pk)
-        like.peso_like = compute_like_peso(personaggio, target)
+def _rigenera_post_likes_queryset(qs):
+    count = 0
+    for like in qs.select_related("autore", "post", "post__autore").iterator():
+        like.peso_like = compute_like_peso(like.autore, like.post.autore)
         like.save(update_fields=["peso_like", "updated_at"])
+        count += 1
+    return count
 
 
-def _rigenera_comment_likes(personaggio):
-    from django.apps import apps
-
-    if not apps.is_installed("social"):
-        return
+def _rigenera_comment_likes_queryset(qs):
     from .models import SocialCommentLike
 
-    for like in SocialCommentLike.objects.filter(autore=personaggio).select_related("comment"):
-        target = total_comment_likes(like.comment, exclude_like_pk=like.pk)
-        like.peso_like = compute_like_peso(personaggio, target)
+    count = 0
+    for like in qs.select_related("autore", "comment", "comment__autore").iterator():
+        like.peso_like = compute_like_peso(like.autore, like.comment.autore)
         like.save(update_fields=["peso_like", "updated_at"])
+        count += 1
+    return count
 
 
 def rigenera_like_personaggio(personaggio):
     """Ricalcola i peso_like di tutti i like dati da un personaggio (post e commenti)."""
+    from .models import SocialCommentLike, SocialLike
+
     try:
-        _rigenera_post_likes(personaggio)
+        post_count = _rigenera_post_likes_queryset(SocialLike.objects.filter(autore=personaggio))
         try:
-            _rigenera_comment_likes(personaggio)
+            comment_count = _rigenera_comment_likes_queryset(
+                SocialCommentLike.objects.filter(autore=personaggio)
+            )
         except ProgrammingError as exc:
             logger.warning("Rigenera like commenti saltata (migrazione social mancante?): %s", exc)
+            comment_count = 0
+        return post_count, comment_count
     except ProgrammingError as exc:
         raise RigeneraLikeInfluencerError(
             "Migrazioni InstaFame non applicate sul server (social.0008_influencer_likes). "
@@ -108,4 +110,26 @@ def rigenera_like_personaggio(personaggio):
         ) from exc
     except Exception as exc:
         logger.exception("Rigenera like influencer fallita per personaggio %s", personaggio.pk)
+        raise RigeneraLikeInfluencerError(str(exc)) from exc
+
+
+def rigenera_tutti_like_instafame():
+    """Ricalcola tutti i peso_like su post e commenti (operazione globale)."""
+    from .models import SocialCommentLike, SocialLike
+
+    try:
+        post_count = _rigenera_post_likes_queryset(SocialLike.objects.all())
+        try:
+            comment_count = _rigenera_comment_likes_queryset(SocialCommentLike.objects.all())
+        except ProgrammingError as exc:
+            logger.warning("Rigenera like commenti saltata (migrazione social mancante?): %s", exc)
+            comment_count = 0
+        return post_count, comment_count
+    except ProgrammingError as exc:
+        raise RigeneraLikeInfluencerError(
+            "Migrazioni InstaFame non applicate sul server (social.0008_influencer_likes). "
+            "Esegui migrate sul backend."
+        ) from exc
+    except Exception as exc:
+        logger.exception("Rigenera globale like influencer fallita")
         raise RigeneraLikeInfluencerError(str(exc)) from exc
