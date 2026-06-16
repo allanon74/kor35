@@ -650,6 +650,20 @@ export const staffSaveMinigiocoQrConfig = (qrId, formData, onLogout) =>
     onLogout
   );
 
+export const staffGetMinigiocoBiblioteca = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/minigioco-biblioteca/', { method: 'GET' }, onLogout);
+
+export const staffAggiornaMinigiocoBiblioteca = (target = 100, onLogout) =>
+  fetchAuthenticated(
+    '/api/personaggi/api/staff/minigioco-biblioteca/aggiorna/',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target }),
+    },
+    onLogout
+  );
+
 export const staffInspectQrCode = (qrId, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/staff/qr-inspect/${qrId}/`, { method: 'GET' }, onLogout);
 };

@@ -14,6 +14,8 @@ from personaggi.qr_minigioco import (
     tipi_pool,
     risolvi_difficolta,
     deve_saltare_minigioco,
+    minigioco_ha_immagine_disponibile,
+    risolvi_immagine_sessione,
     MINIGIOCO_TIPO_MEMORY,
     MINIGIOCO_TIPO_ROTATE,
     MINIGIOCO_TIPO_SLIDING,
@@ -144,3 +146,37 @@ class QrMinigiocoLogicTests(SimpleTestCase):
         )
         self.assertTrue(deve_saltare_minigioco(_Pg(stats={"PV": 6}), cfg))
         self.assertFalse(deve_saltare_minigioco(_Pg(stats={"PV": 5}), cfg))
+
+    def test_minigioco_ha_immagine_custom(self):
+        cfg = _Cfg(immagine=True, usa_biblioteca_se_vuota=True)
+        self.assertTrue(minigioco_ha_immagine_disponibile(cfg))
+
+    @patch("personaggi.minigioco_biblioteca.biblioteca_immagine_count", return_value=5)
+    def test_minigioco_ha_immagine_da_biblioteca(self, _mock_count):
+        cfg = _Cfg(immagine=None, usa_biblioteca_se_vuota=True)
+        self.assertTrue(minigioco_ha_immagine_disponibile(cfg))
+
+    @patch("personaggi.minigioco_biblioteca.biblioteca_immagine_count", return_value=0)
+    def test_minigioco_senza_immagine_né_biblioteca(self, _mock_count):
+        cfg = _Cfg(immagine=None, usa_biblioteca_se_vuota=True)
+        self.assertFalse(minigioco_ha_immagine_disponibile(cfg))
+
+    def test_risolvi_immagine_custom_prima_di_biblioteca(self):
+        img = MagicMock()
+        img.url = "/media/custom.jpg"
+        cfg = _Cfg(immagine=img)
+        url, bib = risolvi_immagine_sessione(cfg, seed=42)
+        self.assertEqual(url, "/media/custom.jpg")
+        self.assertIsNone(bib)
+
+    @patch("personaggi.minigioco_biblioteca.scegli_immagine_biblioteca")
+    @patch("personaggi.minigioco_biblioteca.immagine_biblioteca_url", return_value="/media/bib.jpg")
+    def test_risolvi_immagine_da_biblioteca(self, _mock_url, mock_scegli):
+        row = MagicMock()
+        mock_scegli.return_value = row
+        cfg = _Cfg(immagine=None, usa_biblioteca_se_vuota=True)
+        url, bib = risolvi_immagine_sessione(cfg, seed=99)
+        self.assertEqual(url, "/media/bib.jpg")
+        self.assertIs(bib, row)
+        mock_scegli.assert_called_once_with(99)
+

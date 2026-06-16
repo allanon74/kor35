@@ -16,7 +16,7 @@ from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
-    A_vista, Attivata, MinigiocoQrConfig,
+    A_vista, Attivata, MinigiocoQrConfig, MinigiocoBibliotecaImmagine,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
@@ -1321,6 +1321,7 @@ class StaffMinigiocoQrConfigView(APIView):
             "messaggio_vittoria": config.messaggio_vittoria or "",
             "timer_secondi": config.timer_secondi,
             "timer_scadenza_azione": config.timer_scadenza_azione,
+            "usa_biblioteca_se_vuota": config.usa_biblioteca_se_vuota,
             "immagine_url": img_url,
         }
 
@@ -1351,6 +1352,14 @@ class StaffMinigiocoQrConfigView(APIView):
         data = request.data
         if "attivo" in data:
             config.attivo = data.get("attivo") in (True, "true", "1", 1, "on")
+        if "usa_biblioteca_se_vuota" in data:
+            config.usa_biblioteca_se_vuota = data.get("usa_biblioteca_se_vuota") in (
+                True,
+                "true",
+                "1",
+                1,
+                "on",
+            )
         if "tipi_abilitati" in data:
             import json
 
@@ -1428,3 +1437,72 @@ class StaffMinigiocoQrConfigView(APIView):
 
         config.save()
         return Response({"qr_id": qr.id, "config": self._serialize(config, request)})
+
+
+class StaffMinigiocoBibliotecaView(APIView):
+    """GET elenco libreria immagini minigioco (staff)."""
+
+    permission_classes = [IsStaffOrMaster]
+
+    def get(self, request):
+        from personaggi.minigioco_biblioteca import BIBLIOTECA_TARGET, biblioteca_immagine_count
+
+        rows = MinigiocoBibliotecaImmagine.objects.order_by("-aggiunta_at")[:120]
+        items = []
+        for row in rows:
+            img_url = None
+            if row.immagine:
+                try:
+                    img_url = request.build_absolute_uri(row.immagine.url)
+                except Exception:
+                    img_url = None
+            items.append(
+                {
+                    "id": str(row.id),
+                    "titolo": row.titolo,
+                    "autore": row.autore,
+                    "licenza": row.licenza,
+                    "fonte": row.fonte,
+                    "immagine_url": img_url,
+                    "source_page_url": row.source_page_url,
+                }
+            )
+        ultima = MinigiocoBibliotecaImmagine.objects.order_by("-aggiunta_at").first()
+        return Response(
+            {
+                "count": biblioteca_immagine_count(),
+                "target": BIBLIOTECA_TARGET,
+                "ultimo_aggiornamento": ultima.aggiunta_at.isoformat() if ultima else None,
+                "items": items,
+            }
+        )
+
+
+class StaffMinigiocoBibliotecaAggiornaView(APIView):
+    """POST scarica ~100 immagini open license da Openverse."""
+
+    permission_classes = [IsStaffOrMaster]
+
+    def post(self, request):
+        from personaggi.minigioco_biblioteca import BIBLIOTECA_TARGET, aggiorna_biblioteca_immagini
+
+        raw_target = request.data.get("target")
+        try:
+            target = max(10, min(150, int(raw_target))) if raw_target not in (None, "") else BIBLIOTECA_TARGET
+        except (TypeError, ValueError):
+            target = BIBLIOTECA_TARGET
+
+        try:
+            result = aggiorna_biblioteca_immagini(target=target)
+        except Exception as exc:
+            return Response(
+                {"ok": False, "error": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if not result.get("ok"):
+            return Response(
+                result,
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(result, status=status.HTTP_200_OK)

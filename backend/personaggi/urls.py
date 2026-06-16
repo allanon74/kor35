@@ -22,6 +22,8 @@ from .views_staff import (
     DichiarazioneStaffViewSet,
     StaffQrInventoryScanView,
     StaffMinigiocoQrConfigView,
+    StaffMinigiocoBibliotecaView,
+    StaffMinigiocoBibliotecaAggiornaView,
     FormulaBuilderSchemaView, FormulaBuilderPreviewView,
     FormulaSemanticOptionsView,
 )
@@ -253,6 +255,16 @@ urlpatterns = [
         'api/staff/minigioco-qr/<str:qr_id>/',
         StaffMinigiocoQrConfigView.as_view(),
         name='staff-minigioco-qr-config',
+    ),
+    path(
+        'api/staff/minigioco-biblioteca/',
+        StaffMinigiocoBibliotecaView.as_view(),
+        name='staff-minigioco-biblioteca',
+    ),
+    path(
+        'api/staff/minigioco-biblioteca/aggiorna/',
+        StaffMinigiocoBibliotecaAggiornaView.as_view(),
+        name='staff-minigioco-biblioteca-aggiorna',
     ),
     path('api/staff/qr-inventario-scan/', StaffQrInventoryScanView.as_view(), name='staff-qr-inventario-scan'),
     path('api/staff/approva-proposta/<int:proposta_id>/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),

@@ -267,6 +267,39 @@ def immagine_url_per_config(config, request=None) -> str:
     return url
 
 
+def minigioco_ha_immagine_disponibile(config) -> bool:
+    if config and config.immagine:
+        return True
+    if not config or not getattr(config, "usa_biblioteca_se_vuota", True):
+        return False
+    from personaggi.minigioco_biblioteca import biblioteca_immagine_count
+
+    return biblioteca_immagine_count() > 0
+
+
+def risolvi_immagine_sessione(config, request=None, seed: int | None = None):
+    """
+    Ritorna (url, biblioteca_row|None).
+    Priorità: immagine dedicata QR → libreria casuale (seed).
+    """
+    from personaggi.minigioco_biblioteca import (
+        immagine_biblioteca_url,
+        scegli_immagine_biblioteca,
+    )
+
+    custom = immagine_url_per_config(config, request)
+    if custom:
+        return custom, None
+    if not config or not getattr(config, "usa_biblioteca_se_vuota", True):
+        return "", None
+    if seed is None:
+        seed = random.randint(1, 2_147_483_647)
+    row = scegli_immagine_biblioteca(seed)
+    if not row:
+        return "", None
+    return immagine_biblioteca_url(row, request), row
+
+
 def descrizione_difficolta(tipo: str, difficolta: int) -> str:
     cols, rows = grid_size(tipo, difficolta)
     if tipo == MINIGIOCO_TIPO_MEMORY:
@@ -302,6 +335,7 @@ def _crea_sessione(personaggio, qr_code, config, request=None):
     tipo, difficolta = scegli_tipo_e_difficolta(config, seed, personaggio=personaggio)
     game_seed = _rng(seed).randint(1, 2_147_483_647)
     stato = generate_game_state(tipo, difficolta, game_seed)
+    img_url, bib_row = risolvi_immagine_sessione(config, request, seed=seed)
     scadenza_at = None
     if config.timer_secondi and int(config.timer_secondi) > 0:
         scadenza_at = timezone.now() + timedelta(seconds=int(config.timer_secondi))
@@ -313,7 +347,8 @@ def _crea_sessione(personaggio, qr_code, config, request=None):
         difficolta=difficolta,
         seed=seed,
         stato_gioco=stato,
-        immagine_url=immagine_url_per_config(config, request),
+        immagine_url=img_url,
+        biblioteca_immagine=bib_row,
         scadenza_at=scadenza_at,
         stato=SESSIONE_IN_CORSO,
     )
@@ -364,7 +399,7 @@ def check_gate_minigioco(
     if not requisiti_minigioco_soddisfatti(personaggio, config):
         return None
 
-    if not config.immagine:
+    if not minigioco_ha_immagine_disponibile(config):
         return None
 
     in_corso = (

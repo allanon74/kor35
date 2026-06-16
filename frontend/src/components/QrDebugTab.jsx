@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, QrCode, ExternalLink } from 'lucide-react';
 import StaffQrTab from './StaffQrTab';
 import MinigiocoQrEditor from './editors/MinigiocoQrEditor';
+import MinigiocoBibliotecaPanel from './editors/MinigiocoBibliotecaPanel';
 import { staffInspectQrCode, staffQrInventarioScan } from '../api';
 
 /**
@@ -134,6 +135,8 @@ const QrDebugTab = ({ onLogout }) => {
         <h2 className="text-2xl font-black text-indigo-400 mb-2 uppercase tracking-wide">QR Debug Tool</h2>
         <p className="text-gray-400 text-sm">Ispeziona le associazioni QR per verificare configurazioni e debug</p>
       </div>
+
+      <MinigiocoBibliotecaPanel onLogout={onLogout} />
 
       {/* Mode Selector */}
       <div className="flex gap-2 mb-6">

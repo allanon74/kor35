@@ -3325,13 +3325,40 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
         choices=TIMER_SAZIONE_CHOICES,
         default=TIMER_RESET,
     )
+    usa_biblioteca_se_vuota = models.BooleanField(
+        default=True,
+        help_text="Se non c'è immagine dedicata sul QR, usa un'estrazione casuale dalla libreria staff.",
+    )
 
     class Meta:
         verbose_name = "Configurazione minigioco QR"
         verbose_name_plural = "Configurazioni minigioco QR"
 
     def __str__(self):
-        return f"Minigioco {self.tipo} @ QR {self.qr_code_id}"
+        return f"Minigioco @ QR {self.qr_code_id}"
+
+
+class MinigiocoBibliotecaImmagine(SyncableModel, models.Model):
+    """Immagine open license nella libreria condivisa minigiochi QR."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    immagine = models.ImageField(upload_to="minigioco_biblioteca/%Y/%m/")
+    titolo = models.CharField(max_length=200, blank=True, default="")
+    autore = models.CharField(max_length=200, blank=True, default="")
+    licenza = models.CharField(max_length=32, blank=True, default="")
+    fonte = models.CharField(max_length=32, default="openverse")
+    source_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    source_page_url = models.URLField(max_length=500, blank=True, default="")
+    search_query = models.CharField(max_length=120, blank=True, default="")
+    aggiunta_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Immagine biblioteca minigioco"
+        verbose_name_plural = "Immagini biblioteca minigioco"
+        ordering = ["-aggiunta_at"]
+
+    def __str__(self):
+        return self.titolo or str(self.id)
 
 
 class MinigiocoQrBlocco(SyncableModel, models.Model):
@@ -3400,6 +3427,13 @@ class MinigiocoQrSession(SyncableModel, models.Model):
     seed = models.PositiveIntegerField(default=0)
     stato_gioco = models.JSONField(default=dict, blank=True)
     immagine_url = models.CharField(max_length=500, blank=True, default="")
+    biblioteca_immagine = models.ForeignKey(
+        "MinigiocoBibliotecaImmagine",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sessioni",
+    )
     scadenza_at = models.DateTimeField(null=True, blank=True)
     stato = models.CharField(max_length=32, choices=STATO_CHOICES, default=STATO_IN_CORSO)
     completato_at = models.DateTimeField(null=True, blank=True)

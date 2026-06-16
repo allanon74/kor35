@@ -35,6 +35,7 @@ const emptyConfig = () => ({
   messaggio_vittoria: '',
   timer_secondi: '',
   timer_scadenza_azione: 'reset_minigioco',
+  usa_biblioteca_se_vuota: true,
   immagine_url: null,
 });
 
@@ -98,6 +99,7 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
     try {
       const fd = new FormData();
       fd.append('attivo', config.attivo ? 'true' : 'false');
+      fd.append('usa_biblioteca_se_vuota', config.usa_biblioteca_se_vuota ? 'true' : 'false');
       fd.append('tipi_abilitati', JSON.stringify(config.tipi_abilitati));
       fd.append('difficolta', String(Number(config.difficolta) || 4));
       fd.append('messaggio_pre', config.messaggio_pre || '');
@@ -148,7 +150,16 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
               checked={!!config.attivo}
               onChange={(e) => setConfig((c) => ({ ...c, attivo: e.target.checked }))}
             />
-            <span>Attivo (richiede immagine)</span>
+            <span>Attivo (richiede immagine o libreria)</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={config.usa_biblioteca_se_vuota !== false}
+              onChange={(e) => setConfig((c) => ({ ...c, usa_biblioteca_se_vuota: e.target.checked }))}
+            />
+            <span>Se senza immagine dedicata, usa libreria casuale</span>
           </label>
 
           <div>
@@ -244,6 +255,11 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
                 setRemoveImage(false);
               }}
             />
+            {!config.immagine_url && config.usa_biblioteca_se_vuota !== false && (
+              <p className="text-[11px] text-emerald-400 mt-1">
+                Nessuna immagine dedicata: verrà usata un&apos;estrazione dalla libreria staff.
+              </p>
+            )}
             {config.immagine_url && !removeImage && (
               <div className="mt-2 flex items-center gap-2">
                 <img src={config.immagine_url} alt="" className="h-16 w-16 object-cover rounded border border-gray-600" />
