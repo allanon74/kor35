@@ -40,7 +40,11 @@ const MinigiocoBibliotecaPanel = ({ onLogout }) => {
       );
       await load();
     } catch (e) {
-      setMsg(e.message || 'Errore aggiornamento libreria');
+      const detail =
+        e?.data?.error ||
+        (Array.isArray(e?.data?.openverse_errors) && e.data.openverse_errors[0]) ||
+        (Array.isArray(e?.data?.errors_sample) && e.data.errors_sample[0]);
+      setMsg(detail || e.message || 'Errore aggiornamento libreria');
     } finally {
       setUpdating(false);
     }

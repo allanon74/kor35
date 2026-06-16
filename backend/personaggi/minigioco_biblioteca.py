@@ -69,7 +69,7 @@ def _pick_download_url(item: dict) -> str:
     return ""
 
 
-def _fetch_openverse_page(query: str, page: int, page_size: int = 20) -> list[dict]:
+def _fetch_openverse_page(query: str, page: int, page_size: int = 20) -> tuple[list[dict], str | None]:
     try:
         resp = requests.get(
             OPENVERSE_API,
@@ -86,10 +86,11 @@ def _fetch_openverse_page(query: str, page: int, page_size: int = 20) -> list[di
         )
         resp.raise_for_status()
         data = resp.json()
-        return list(data.get("results") or [])
+        return list(data.get("results") or []), None
     except Exception as exc:
+        msg = f"{type(exc).__name__}: {exc}"
         logger.warning("Openverse page fallita q=%s p=%s: %s", query, page, exc)
-        return []
+        return [], msg
 
 
 def _download_image(url: str) -> bytes | None:
@@ -112,34 +113,26 @@ def _download_image(url: str) -> bytes | None:
         return None
 
 
-@transaction.atomic
-def aggiorna_biblioteca_immagini(*, target: int = BIBLIOTECA_TARGET) -> dict[str, Any]:
-    """
-    Sostituisce la libreria con fino a `target` immagini CC da Openverse.
-    """
-    from personaggi.models import MinigiocoBibliotecaImmagine
-
-    started = time.monotonic()
+def _raccogli_immagini_da_openverse(*, target: int) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    """Scarica in memoria senza toccare il DB. Ritorna (prepared, download_errors, openverse_errors)."""
+    prepared: list[dict[str, Any]] = []
     errors: list[str] = []
-    creati = 0
+    openverse_errors: list[str] = []
     seen_urls: set[str] = set()
-
-    for row in MinigiocoBibliotecaImmagine.objects.all():
-        if row.immagine:
-            row.immagine.delete(save=False)
-    MinigiocoBibliotecaImmagine.objects.all().delete()
-
     page_size = 20
+
     for query in SEARCH_QUERIES:
-        if creati >= target:
+        if len(prepared) >= target:
             break
         page = 1
-        while creati < target and page <= 8:
-            batch = _fetch_openverse_page(query, page, page_size=page_size)
+        while len(prepared) < target and page <= 8:
+            batch, ov_err = _fetch_openverse_page(query, page, page_size=page_size)
+            if ov_err:
+                openverse_errors.append(f"{query} p{page}: {ov_err}")
             if not batch:
                 break
             for item in batch:
-                if creati >= target:
+                if len(prepared) >= target:
                     break
                 url = _pick_download_url(item)
                 if not url or url in seen_urls:
@@ -150,31 +143,83 @@ def aggiorna_biblioteca_immagini(*, target: int = BIBLIOTECA_TARGET) -> dict[str
                     errors.append(f"skip download: {url[:80]}")
                     continue
                 titolo = (item.get("title") or query or "Openverse")[:200]
-                autore = (item.get("creator") or "")[:200]
-                licenza = (item.get("license") or "")[:32]
-                source_id = str(item.get("id") or "")[:64]
-                fname = f"{slugify(titolo)[:40] or 'img'}-{uuid.uuid4().hex[:8]}.jpg"
-                row = MinigiocoBibliotecaImmagine(
-                    titolo=titolo,
-                    autore=autore,
-                    licenza=licenza,
-                    fonte="openverse",
-                    source_id=source_id,
-                    source_page_url=(item.get("foreign_landing_url") or url)[:500],
-                    search_query=query[:120],
+                prepared.append(
+                    {
+                        "blob": blob,
+                        "titolo": titolo,
+                        "autore": (item.get("creator") or "")[:200],
+                        "licenza": (item.get("license") or "")[:32],
+                        "source_id": str(item.get("id") or "")[:64],
+                        "source_page_url": (item.get("foreign_landing_url") or url)[:500],
+                        "search_query": query[:120],
+                        "fname": f"{slugify(titolo)[:40] or 'img'}-{uuid.uuid4().hex[:8]}.jpg",
+                    }
                 )
-                row.immagine.save(fname, ContentFile(blob), save=False)
-                row.save()
-                creati += 1
             page += 1
 
+    return prepared, errors, openverse_errors
+
+
+def aggiorna_biblioteca_immagini(*, target: int = BIBLIOTECA_TARGET) -> dict[str, Any]:
+    """
+    Sostituisce la libreria con fino a `target` immagini CC da Openverse.
+    Scarica prima in memoria: se Openverse non risponde, la libreria esistente resta intatta.
+    """
+    from personaggi.models import MinigiocoBibliotecaImmagine
+
+    started = time.monotonic()
+    count_prima = biblioteca_immagine_count()
+    prepared, errors, openverse_errors = _raccogli_immagini_da_openverse(target=target)
     elapsed_ms = int((time.monotonic() - started) * 1000)
+
+    if not prepared:
+        err_msg = (
+            "Impossibile scaricare immagini da Openverse. "
+            "La libreria esistente non è stata modificata."
+        )
+        if openverse_errors:
+            err_msg += f" Dettaglio: {openverse_errors[0]}"
+        elif errors:
+            err_msg += f" Dettaglio: {errors[0]}"
+        return {
+            "ok": False,
+            "error": err_msg,
+            "count": count_prima,
+            "target": target,
+            "errors_count": len(errors),
+            "errors_sample": errors[:8],
+            "openverse_errors": openverse_errors[:8],
+            "aggiornato_at": timezone.now().isoformat(),
+            "elapsed_ms": elapsed_ms,
+        }
+
+    with transaction.atomic():
+        for row in MinigiocoBibliotecaImmagine.objects.all():
+            if row.immagine:
+                row.immagine.delete(save=False)
+        MinigiocoBibliotecaImmagine.objects.all().delete()
+
+        for item in prepared:
+            row = MinigiocoBibliotecaImmagine(
+                titolo=item["titolo"],
+                autore=item["autore"],
+                licenza=item["licenza"],
+                fonte="openverse",
+                source_id=item["source_id"],
+                source_page_url=item["source_page_url"],
+                search_query=item["search_query"],
+            )
+            row.immagine.save(item["fname"], ContentFile(item["blob"]), save=False)
+            row.save()
+
+    creati = len(prepared)
     return {
-        "ok": creati > 0,
+        "ok": True,
         "count": creati,
         "target": target,
         "errors_count": len(errors),
         "errors_sample": errors[:8],
+        "openverse_errors": openverse_errors[:8],
         "aggiornato_at": timezone.now().isoformat(),
         "elapsed_ms": elapsed_ms,
     }

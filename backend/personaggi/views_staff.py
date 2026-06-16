@@ -1504,6 +1504,6 @@ class StaffMinigiocoBibliotecaAggiornaView(APIView):
         if not result.get("ok"):
             return Response(
                 result,
-                status=status.HTTP_502_BAD_GATEWAY,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response(result, status=status.HTTP_200_OK)
