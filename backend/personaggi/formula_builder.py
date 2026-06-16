@@ -42,8 +42,8 @@ FORMULA_BUILDER_SCHEMA = {
             "kind": "single",
             "options": [
                 {"id": "none", "label": "-", "stats": {}},
-                {"id": "flusso", "label": "Flusso", "stats": {"flusso": 1}},
-                {"id": "dardo", "label": "Dardo", "stats": {"dardo": 1, "gittata": 3}},
+                {"id": "flusso", "label": "Flusso", "stats": {"flusso": 1, "gittata": 3}},
+                {"id": "dardo", "label": "Dardo", "stats": {"dardo": 1, "gittata": 10}},
                 {"id": "tocco", "label": "Tocco", "stats": {"tocco": 1}},
                 {"id": "cono", "label": "Cono", "stats": {"cono": 1}},
                 {"id": "esplos", "label": "Esplosione", "stats": {"esplos": 1}},

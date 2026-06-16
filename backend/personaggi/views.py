@@ -1589,6 +1589,25 @@ class QrCodeDetailView(APIView):
             if pid is not None:
                 scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
 
+        from personaggi import qr_minigioco
+
+        bypass_sid = request.query_params.get("minigioco_session_id")
+        gate = qr_minigioco.check_gate_minigioco(
+            qr_code=qr_code,
+            personaggio=scanner_pg,
+            request=request,
+            bypass_session_id=bypass_sid,
+        )
+        if gate:
+            if gate.get("tipo_modello") == "minigioco_bloccato":
+                return Response(gate, status=status.HTTP_200_OK)
+            if gate.get("blocked"):
+                return Response(
+                    {"error": gate.get("error", "Accesso negato.")},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(gate, status=status.HTTP_200_OK)
+
         # Innesco timer (sottoclasse A_vista)
         inn_timer = InnescoTimer.objects.filter(pk=vista_obj.pk).first()
         if inn_timer:

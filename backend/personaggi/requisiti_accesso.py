@@ -109,3 +109,9 @@ def personaggio_soddisfa_requisiti_gruppo(personaggio, regole: dict | None) -> T
     if messages:
         return False, messages[0]
     return True, ""
+
+
+def gruppo_requisiti_soddisfatto(personaggio, gruppo: dict | None) -> bool:
+    """True se il gruppo {operator, requisiti} è soddisfatto."""
+    ok, _ = personaggio_soddisfa_requisiti_gruppo(personaggio, gruppo)
+    return ok

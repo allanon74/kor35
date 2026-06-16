@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, QrCode, ExternalLink } from 'lucide-react';
 import StaffQrTab from './StaffQrTab';
+import MinigiocoQrEditor from './editors/MinigiocoQrEditor';
 import { staffInspectQrCode, staffQrInventarioScan } from '../api';
 
 /**
@@ -406,6 +407,8 @@ const QrDebugTab = ({ onLogout }) => {
               )}
             </div>
           </div>
+
+          <MinigiocoQrEditor qrId={qrData.id} onLogout={onLogout} />
 
           {/* Raw JSON Data (Collapsible) */}
           <details className="bg-gray-900 rounded-lg overflow-hidden">

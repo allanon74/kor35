@@ -608,13 +608,47 @@ export const getPersonaggioGameState = (id, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/personaggi/${cleanId}/game_state/`, { method: 'GET' }, onLogout);
 };
 
-export const getQrCodeData = (qrId, onLogout, personaggioId = null) => {
-  const q =
-    personaggioId != null && personaggioId !== ''
-      ? `?personaggio_id=${encodeURIComponent(String(personaggioId))}`
-      : '';
+export const getQrCodeData = (qrId, onLogout, personaggioId = null, minigiocoSessionId = null) => {
+  const params = new URLSearchParams();
+  if (personaggioId != null && personaggioId !== '') {
+    params.set('personaggio_id', String(personaggioId));
+  }
+  if (minigiocoSessionId) {
+    params.set('minigioco_session_id', String(minigiocoSessionId));
+  }
+  const q = params.toString() ? `?${params.toString()}` : '';
   return fetchAuthenticated(`/api/personaggi/api/qrcode/${qrId}/${q}`, { method: 'GET' }, onLogout);
 };
+
+export const minigiocoComplete = (sessionId, personaggioId, stato, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/minigioco/${sessionId}/complete/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ personaggio_id: personaggioId, stato }),
+    },
+    onLogout
+  );
+
+export const minigiocoExpire = (sessionId, personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/minigioco/${sessionId}/expire/`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ personaggio_id: personaggioId }),
+    },
+    onLogout
+  );
+
+export const staffGetMinigiocoQrConfig = (qrId, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/minigioco-qr/${qrId}/`, { method: 'GET' }, onLogout);
+
+export const staffSaveMinigiocoQrConfig = (qrId, formData, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/minigioco-qr/${qrId}/`,
+    { method: 'PUT', body: formData },
+    onLogout
+  );
 
 export const staffInspectQrCode = (qrId, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/staff/qr-inspect/${qrId}/`, { method: 'GET' }, onLogout);

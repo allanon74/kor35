@@ -5,9 +5,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import HomeTab from './HomeTab.jsx';
 import QrTab from './QrTab.jsx';
 import QrResultModal from './QrResultModal.jsx';
+import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
+import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 
@@ -118,6 +119,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(readStoredMainTab);
   const [qrResultData, setQrResultData] = useState(null);
+  const [minigiocoPayload, setMinigiocoPayload] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // --- [MODIFICA] Stato per Modale Password e Notifiche Staff ---
@@ -484,8 +486,40 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       }
   };
 
-  const handleScanSuccess = useCallback((jsonData) => setQrResultData(jsonData), []);
+  const handleScanSuccess = useCallback((jsonData) => {
+    if (jsonData?.tipo_modello === 'minigioco_richiesto') {
+      setMinigiocoPayload(jsonData);
+      return;
+    }
+    setQrResultData(jsonData);
+  }, []);
+
   const closeQrModal = useCallback(() => setQrResultData(null), []);
+  const closeMinigiocoModal = useCallback(() => setMinigiocoPayload(null), []);
+
+  const handleMinigiocoUnlocked = useCallback(
+    async (sessionId, qrcodeId, messaggio) => {
+      setMinigiocoPayload(null);
+      try {
+        const effect = await getQrCodeData(qrcodeId, onLogout, selectedCharacterId, sessionId);
+        if (messaggio && effect && !effect.messaggio) {
+          effect._minigioco_messaggio = messaggio;
+        }
+        setQrResultData(effect);
+      } catch (e) {
+        setQrResultData({
+          tipo_modello: 'errore',
+          messaggio: e.message || 'Impossibile caricare l\'effetto del QR dopo il minigioco.',
+        });
+      }
+    },
+    [onLogout, selectedCharacterId]
+  );
+
+  const handleMinigiocoBlocked = useCallback((payload) => {
+    setMinigiocoPayload(null);
+    setQrResultData(payload);
+  }, []);
   
   const handleMenuNavigation = useCallback((tabName) => {
     setActiveTab(tabName);
@@ -1199,6 +1233,18 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
             })}
           </nav>
       </div>
+
+      {minigiocoPayload && (
+        <MinigiocoModal
+          payload={minigiocoPayload}
+          qrcodeId={minigiocoPayload.qrcode_id}
+          personaggioId={selectedCharacterId}
+          onLogout={onLogout}
+          onUnlocked={handleMinigiocoUnlocked}
+          onBlocked={handleMinigiocoBlocked}
+          onClose={closeMinigiocoModal}
+        />
+      )}
 
       {qrResultData && (
         <QrResultModal data={qrResultData} onClose={closeQrModal} onLogout={onLogout} onStealSuccess={handleStealSuccess} />

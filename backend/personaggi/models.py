@@ -212,7 +212,7 @@ EXCLUSIVE_FORMAT_GROUPS = {
                 "params": ["dardo", ], 
                 "label": "Dardo",
                 "extra": {
-                    "when": "dardo > 0 and gittata == 3",
+                    "when": "dardo > 0 and gittata != 10",
                     "template": " {gittata} metri"
                 }
             },
@@ -3237,6 +3237,180 @@ class QrInventarioScanSession(SyncableModel, models.Model):
         indexes = [
             models.Index(fields=["user", "qr_code", "confermato_at"]),
             models.Index(fields=["personaggio", "qr_code"]),
+        ]
+
+
+def _default_tipi_minigioco_qr():
+    return ["sliding_puzzle", "memory", "rotate_tiles"]
+
+
+class MinigiocoQrConfig(SyncableModel, models.Model):
+    """Configurazione minigioco opzionale sul singolo QrCode fisico."""
+
+    TIPO_SLIDING = "sliding_puzzle"
+    TIPO_MEMORY = "memory"
+    TIPO_ROTATE = "rotate_tiles"
+    TIPO_CHOICES = (
+        (TIPO_SLIDING, "Sliding puzzle"),
+        (TIPO_MEMORY, "Memory"),
+        (TIPO_ROTATE, "Tessere rotabili"),
+    )
+    TIPI_DEFAULT = [TIPO_SLIDING, TIPO_MEMORY, TIPO_ROTATE]
+
+    TIMER_ATTIVA = "attiva_qr"
+    TIMER_BLOCCA = "blocca_qr"
+    TIMER_RESET = "reset_minigioco"
+    TIMER_SAZIONE_CHOICES = (
+        (TIMER_ATTIVA, "Attiva il QR"),
+        (TIMER_BLOCCA, "Blocca il QR (non riattivabile)"),
+        (TIMER_RESET, "Reset minigioco"),
+    )
+
+    qr_code = models.OneToOneField(
+        "QrCode",
+        on_delete=models.CASCADE,
+        related_name="configurazione_minigioco",
+    )
+    attivo = models.BooleanField(default=False)
+    tipo = models.CharField(
+        max_length=32,
+        choices=TIPO_CHOICES,
+        default=TIPO_SLIDING,
+        blank=True,
+        help_text="Legacy: ignorato se tipi_abilitati è valorizzato.",
+    )
+    tipi_abilitati = models.JSONField(
+        default=_default_tipi_minigioco_qr,
+        blank=True,
+        help_text="Pool giochi estratti a caso (es. sliding_puzzle, memory, rotate_tiles).",
+    )
+    difficolta_min = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Legacy: non usato se sono definite regole_difficolta.",
+    )
+    difficolta = models.PositiveSmallIntegerField(
+        default=4,
+        help_text="Difficoltà predefinita (1–4) se nessuna regola condizionale applica.",
+    )
+    immagine = models.ImageField(
+        upload_to="minigioco_qr/%Y/%m/",
+        blank=True,
+        null=True,
+        help_text="Immagine quadrata per puzzle/memory/rotate.",
+    )
+    requisiti_attivazione = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Mostra minigioco solo se il PG soddisfa questi requisiti (vuoto = sempre).",
+    )
+    esclusioni_minigioco = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista gruppi {operator, requisiti}: se uno matcha, salta il minigioco (effetto QR diretto).",
+    )
+    regole_difficolta = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Regole {operator, requisiti, difficolta}: se matchano, usa la difficoltà più favorevole al PG.",
+    )
+    messaggio_pre = models.TextField(blank=True, default="")
+    messaggio_vittoria = models.TextField(blank=True, default="")
+    timer_secondi = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Timer opzionale in secondi. Vuoto = nessun timer.",
+    )
+    timer_scadenza_azione = models.CharField(
+        max_length=32,
+        choices=TIMER_SAZIONE_CHOICES,
+        default=TIMER_RESET,
+    )
+
+    class Meta:
+        verbose_name = "Configurazione minigioco QR"
+        verbose_name_plural = "Configurazioni minigioco QR"
+
+    def __str__(self):
+        return f"Minigioco {self.tipo} @ QR {self.qr_code_id}"
+
+
+class MinigiocoQrBlocco(SyncableModel, models.Model):
+    """PG bloccato permanentemente su un QR (es. timer scaduto con esito blocca)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="minigioco_qr_blocchi",
+    )
+    qr_code = models.ForeignKey(
+        "QrCode",
+        on_delete=models.CASCADE,
+        related_name="minigioco_blocchi",
+    )
+    bloccato_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Blocco minigioco QR"
+        verbose_name_plural = "Blocchi minigioco QR"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["personaggio", "qr_code"],
+                name="personaggi_minigiocoqrblocco_pg_qr_uniq",
+            ),
+        ]
+
+
+class MinigiocoQrSession(SyncableModel, models.Model):
+    """Sessione runtime minigioco per personaggio + QR."""
+
+    STATO_IN_CORSO = "in_corso"
+    STATO_COMPLETATO = "completato"
+    STATO_SCADUTO_ATTIVA = "scaduto_attiva"
+    STATO_SCADUTO_BLOCCA = "scaduto_blocca"
+    STATO_SCADUTO_RESET = "scaduto_reset"
+    STATO_CHOICES = (
+        (STATO_IN_CORSO, "In corso"),
+        (STATO_COMPLETATO, "Completato"),
+        (STATO_SCADUTO_ATTIVA, "Scaduto — QR attivato"),
+        (STATO_SCADUTO_BLOCCA, "Scaduto — QR bloccato"),
+        (STATO_SCADUTO_RESET, "Scaduto — reset"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    personaggio = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="minigioco_qr_sessions",
+    )
+    qr_code = models.ForeignKey(
+        "QrCode",
+        on_delete=models.CASCADE,
+        related_name="minigioco_sessions",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="minigioco_qr_sessions",
+        null=True,
+        blank=True,
+    )
+    tipo = models.CharField(max_length=32)
+    difficolta = models.PositiveSmallIntegerField(default=2)
+    seed = models.PositiveIntegerField(default=0)
+    stato_gioco = models.JSONField(default=dict, blank=True)
+    immagine_url = models.CharField(max_length=500, blank=True, default="")
+    scadenza_at = models.DateTimeField(null=True, blank=True)
+    stato = models.CharField(max_length=32, choices=STATO_CHOICES, default=STATO_IN_CORSO)
+    completato_at = models.DateTimeField(null=True, blank=True)
+    avviato_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Sessione minigioco QR"
+        verbose_name_plural = "Sessioni minigioco QR"
+        indexes = [
+            models.Index(fields=["personaggio", "qr_code", "stato"]),
+            models.Index(fields=["qr_code", "stato"]),
         ]
 
 

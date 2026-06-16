@@ -16,7 +16,7 @@ from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
-    A_vista, Attivata,
+    A_vista, Attivata, MinigiocoQrConfig,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
     TIPO_PROPOSTA_INFUSIONE, TIPO_PROPOSTA_TESSITURA, TIPO_PROPOSTA_CERIMONIALE, Tier, 
     abilita_tier,
@@ -114,6 +114,29 @@ def _staff_qr_inspect_payload(qr, request):
     """
     ctx = {"request": request}
     base = {"id": qr.id, "testo_raw": qr.testo}
+
+    minigioco = getattr(qr, "configurazione_minigioco", None)
+    if minigioco is not None:
+        req = request
+        img_url = None
+        if minigioco.immagine:
+            try:
+                img_url = req.build_absolute_uri(minigioco.immagine.url) if req else minigioco.immagine.url
+            except Exception:
+                img_url = None
+        base["minigioco_config"] = {
+            "attivo": minigioco.attivo,
+            "tipi_abilitati": minigioco.tipi_abilitati or [],
+            "difficolta": minigioco.difficolta,
+            "requisiti_attivazione": minigioco.requisiti_attivazione or [],
+            "esclusioni_minigioco": minigioco.esclusioni_minigioco or [],
+            "regole_difficolta": minigioco.regole_difficolta or [],
+            "messaggio_pre": minigioco.messaggio_pre,
+            "messaggio_vittoria": minigioco.messaggio_vittoria,
+            "timer_secondi": minigioco.timer_secondi,
+            "timer_scadenza_azione": minigioco.timer_scadenza_azione,
+            "immagine_url": img_url,
+        }
 
     timer = getattr(qr, "configurazione_timer", None)
     if timer is not None:
@@ -261,6 +284,7 @@ class QrInspectorView(APIView):
                 "vista",
                 "configurazione_timer",
                 "configurazione_timer__tipologia",
+                "configurazione_minigioco",
             ).get(id=qr_id)
             return Response(_staff_qr_inspect_payload(qr, request))
         except QrCode.DoesNotExist:
@@ -1224,3 +1248,183 @@ class FormulaSemanticOptionsView(APIView):
             for m in mattoni
         ]
         return Response({"elementi_mattoni": data})
+
+
+class StaffMinigiocoQrConfigView(APIView):
+    """GET/PUT configurazione minigioco per un QrCode."""
+
+    permission_classes = [IsStaffOrMaster]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    @staticmethod
+    def _parse_json_list(raw):
+        import json
+
+        if isinstance(raw, list):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw) if raw.strip() else []
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    @staticmethod
+    def _sanitize_gruppi_requisiti(items):
+        out = []
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            reqs = item.get("requisiti") or []
+            if not isinstance(reqs, list) or not reqs:
+                continue
+            op = (item.get("operator") or "AND").strip().upper()
+            if op not in ("AND", "OR"):
+                op = "AND"
+            out.append({"operator": op, "requisiti": reqs})
+        return out
+
+    @staticmethod
+    def _sanitize_regole_difficolta(items):
+        out = []
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            reqs = item.get("requisiti") or []
+            if not isinstance(reqs, list) or not reqs:
+                continue
+            try:
+                diff = max(1, min(4, int(item.get("difficolta") or 4)))
+            except (TypeError, ValueError):
+                continue
+            op = (item.get("operator") or "AND").strip().upper()
+            if op not in ("AND", "OR"):
+                op = "AND"
+            out.append({"operator": op, "requisiti": reqs, "difficolta": diff})
+        return out
+
+    def _serialize(self, config, request):
+        img_url = None
+        if config.immagine:
+            try:
+                img_url = request.build_absolute_uri(config.immagine.url)
+            except Exception:
+                img_url = None
+        return {
+            "attivo": config.attivo,
+            "tipi_abilitati": config.tipi_abilitati or list(MinigiocoQrConfig.TIPI_DEFAULT),
+            "difficolta": config.difficolta,
+            "requisiti_attivazione": config.requisiti_attivazione or [],
+            "esclusioni_minigioco": config.esclusioni_minigioco or [],
+            "regole_difficolta": config.regole_difficolta or [],
+            "messaggio_pre": config.messaggio_pre or "",
+            "messaggio_vittoria": config.messaggio_vittoria or "",
+            "timer_secondi": config.timer_secondi,
+            "timer_scadenza_azione": config.timer_scadenza_azione,
+            "immagine_url": img_url,
+        }
+
+    def get(self, request, qr_id):
+        qr = get_object_or_404(QrCode, pk=qr_id)
+        config = getattr(qr, "configurazione_minigioco", None)
+        if not config:
+            return Response(
+                {
+                    "qr_id": qr.id,
+                    "config": None,
+                }
+            )
+        return Response({"qr_id": qr.id, "config": self._serialize(config, request)})
+
+    @transaction.atomic
+    def put(self, request, qr_id):
+        qr = get_object_or_404(QrCode, pk=qr_id)
+        config, _created = MinigiocoQrConfig.objects.get_or_create(
+            qr_code=qr,
+            defaults={
+                "tipi_abilitati": list(MinigiocoQrConfig.TIPI_DEFAULT),
+                "difficolta_min": 1,
+                "difficolta": 4,
+            },
+        )
+
+        data = request.data
+        if "attivo" in data:
+            config.attivo = data.get("attivo") in (True, "true", "1", 1, "on")
+        if "tipi_abilitati" in data:
+            import json
+
+            raw_tipi = data.get("tipi_abilitati")
+            if isinstance(raw_tipi, str):
+                try:
+                    raw_tipi = json.loads(raw_tipi) if raw_tipi.strip() else []
+                except json.JSONDecodeError:
+                    return Response(
+                        {"error": "tipi_abilitati JSON non valido."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            if isinstance(raw_tipi, list):
+                tipi = [str(t).strip() for t in raw_tipi if str(t).strip() in dict(MinigiocoQrConfig.TIPO_CHOICES)]
+                if tipi:
+                    config.tipi_abilitati = tipi
+        if "difficolta" in data:
+            try:
+                config.difficolta = max(1, min(4, int(data.get("difficolta"))))
+            except (TypeError, ValueError):
+                pass
+        if "esclusioni_minigioco" in data:
+            parsed = self._parse_json_list(data.get("esclusioni_minigioco"))
+            if parsed is None:
+                return Response(
+                    {"error": "esclusioni_minigioco JSON non valido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            config.esclusioni_minigioco = self._sanitize_gruppi_requisiti(parsed)
+        if "regole_difficolta" in data:
+            parsed = self._parse_json_list(data.get("regole_difficolta"))
+            if parsed is None:
+                return Response(
+                    {"error": "regole_difficolta JSON non valido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            config.regole_difficolta = self._sanitize_regole_difficolta(parsed)
+        if "messaggio_pre" in data:
+            config.messaggio_pre = str(data.get("messaggio_pre") or "")
+        if "messaggio_vittoria" in data:
+            config.messaggio_vittoria = str(data.get("messaggio_vittoria") or "")
+        if "timer_secondi" in data:
+            raw = data.get("timer_secondi")
+            if raw in (None, "", "null"):
+                config.timer_secondi = None
+            else:
+                try:
+                    config.timer_secondi = max(1, int(raw))
+                except (TypeError, ValueError):
+                    pass
+        if "timer_scadenza_azione" in data:
+            az = str(data.get("timer_scadenza_azione") or "").strip()
+            if az in dict(MinigiocoQrConfig.TIMER_SAZIONE_CHOICES):
+                config.timer_scadenza_azione = az
+        if "requisiti_attivazione" in data:
+            import json
+
+            raw_req = data.get("requisiti_attivazione")
+            if isinstance(raw_req, str):
+                try:
+                    raw_req = json.loads(raw_req) if raw_req.strip() else []
+                except json.JSONDecodeError:
+                    return Response(
+                        {"error": "requisiti_attivazione JSON non valido."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            if isinstance(raw_req, list):
+                config.requisiti_attivazione = raw_req
+        if "rimuovi_immagine" in data and data.get("rimuovi_immagine") in (True, "true", "1", 1):
+            if config.immagine:
+                config.immagine.delete(save=False)
+            config.immagine = None
+        if request.FILES.get("immagine"):
+            config.immagine = request.FILES["immagine"]
+
+        config.save()
+        return Response({"qr_id": qr.id, "config": self._serialize(config, request)})

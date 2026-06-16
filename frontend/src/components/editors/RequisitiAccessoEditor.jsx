@@ -303,6 +303,58 @@ export const RegoleAperturaEditor = ({ value, onChange, lookup }) => {
   );
 };
 
+export const RegoleGruppoListaEditor = ({ gruppi, onChange, lookup, renderExtra, addLabel = 'Aggiungi regola' }) => {
+  const list = Array.isArray(gruppi) ? gruppi : [];
+
+  const updateAt = (idx, patch) => {
+    onChange(list.map((g, i) => (i === idx ? { ...g, ...patch } : g)));
+  };
+
+  const removeAt = (idx) => onChange(list.filter((_, i) => i !== idx));
+
+  const add = () =>
+    onChange([
+      ...list,
+      { operator: 'AND', requisiti: [{ tipo: 'statistica', sigla: '', min: 1 }] },
+    ]);
+
+  return (
+    <div className="space-y-2">
+      {list.map((gruppo, idx) => (
+        <div key={idx} className="bg-gray-950/80 border border-gray-700 rounded p-2 space-y-2">
+          <div className="flex flex-wrap gap-2 items-center justify-between">
+            <select
+              className="bg-gray-800 border border-gray-600 rounded px-1 py-0.5 text-xs"
+              value={gruppo.operator || 'AND'}
+              onChange={(e) => updateAt(idx, { operator: e.target.value })}
+            >
+              <option value="AND">Tutti (AND)</option>
+              <option value="OR">Almeno uno (OR)</option>
+            </select>
+            {renderExtra ? renderExtra(gruppo, (patch) => updateAt(idx, patch)) : null}
+            <button type="button" className="text-red-400 p-1 ml-auto" onClick={() => removeAt(idx)} aria-label="Rimuovi">
+              <Trash2 size={14} />
+            </button>
+          </div>
+          <RequisitiListaEditor
+            requisiti={gruppo.requisiti || []}
+            onChange={(requisiti) => updateAt(idx, { requisiti })}
+            lookup={lookup}
+          />
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={add}
+        className="text-xs text-amber-400 flex items-center gap-1 hover:text-amber-300"
+      >
+        <Plus size={14} />
+        {addLabel}
+      </button>
+    </div>
+  );
+};
+
 export const RegoleVisibilitaEditor = ({ value, onChange, lookup }) => {
   const regole = value && typeof value === 'object' ? value : { operator: 'OR', requisiti: [] };
   return (

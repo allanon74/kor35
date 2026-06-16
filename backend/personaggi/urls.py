@@ -21,9 +21,11 @@ from .views_staff import (
     MattoniMagiciListView,
     DichiarazioneStaffViewSet,
     StaffQrInventoryScanView,
+    StaffMinigiocoQrConfigView,
     FormulaBuilderSchemaView, FormulaBuilderPreviewView,
     FormulaSemanticOptionsView,
 )
+from .views_minigioco import MinigiocoQrCompleteView, MinigiocoQrExpireView
 
 
 from .views import (AbilViewSet,
@@ -141,6 +143,16 @@ urlpatterns = [
     # Definisci il nuovo endpoint
     # L'app React chiamerà: /oggetti/api/qrcode/IL-TUO-ID/   
     path('api/qrcode/<str:qrcode_id>/', views.QrCodeDetailView.as_view(), name='api_qrcode_detail'),
+    path(
+        'api/minigioco/<uuid:session_id>/complete/',
+        MinigiocoQrCompleteView.as_view(),
+        name='api_minigioco_complete',
+    ),
+    path(
+        'api/minigioco/<uuid:session_id>/expire/',
+        MinigiocoQrExpireView.as_view(),
+        name='api_minigioco_expire',
+    ),
     
     # path('api/personaggi/', views.PersonaggioListView.as_view(), name='api_personaggio_list'),
     
@@ -237,6 +249,11 @@ urlpatterns = [
     path('api/classi_oggetto/', views.ClasseOggettoListView.as_view(), name='lista_classi_oggetto'),
     
     path('api/staff/qr-inspect/<str:qr_id>/', QrInspectorView.as_view(), name='staff-qr-inspect'),
+    path(
+        'api/staff/minigioco-qr/<str:qr_id>/',
+        StaffMinigiocoQrConfigView.as_view(),
+        name='staff-minigioco-qr-config',
+    ),
     path('api/staff/qr-inventario-scan/', StaffQrInventoryScanView.as_view(), name='staff-qr-inventario-scan'),
     path('api/staff/approva-proposta/<int:proposta_id>/', ApprovaPropostaView.as_view(), name='staff-approva-proposta'),
     

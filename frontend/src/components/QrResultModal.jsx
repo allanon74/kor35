@@ -758,6 +758,23 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess }) => {
           </div>
         );
 
+      case 'minigioco_bloccato':
+        return (
+          <div className="text-center py-8">
+            <X size={56} className="mx-auto text-red-500 mb-4" />
+            <h3 className="text-2xl font-bold text-red-400 mb-2">Accesso negato</h3>
+            <p className="text-gray-300">{data.messaggio || 'Questo QR non è più disponibile per il tuo personaggio.'}</p>
+          </div>
+        );
+
+      case 'errore':
+        return (
+          <div className="text-center py-8">
+            <h3 className="text-2xl font-bold text-red-400 mb-2">Errore</h3>
+            <p className="text-gray-300">{data.messaggio || data.error || 'Operazione non riuscita.'}</p>
+          </div>
+        );
+
       default:
         return (
           <div className="text-center">

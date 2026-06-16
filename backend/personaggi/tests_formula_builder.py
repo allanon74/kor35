@@ -25,6 +25,15 @@ from .models import (
 
 
 class FormulaBuilderLogicTests(TestCase):
+    def test_bersaglio_flusso_and_dardo_set_gittata(self):
+        flusso_stats = build_stats_by_selection({}, {"formula_target": "flusso"})
+        self.assertEqual(flusso_stats["flusso"], 1)
+        self.assertEqual(flusso_stats["gittata"], 3)
+
+        dardo_stats = build_stats_by_selection({}, {"formula_target": "dardo"})
+        self.assertEqual(dardo_stats["dardo"], 1)
+        self.assertEqual(dardo_stats["gittata"], 10)
+
     def test_build_stats_by_selection_resets_controlled_params(self):
         current = {"prefisso_puro": 1, "dardo": 1, "custom_param": 5}
         selections = {

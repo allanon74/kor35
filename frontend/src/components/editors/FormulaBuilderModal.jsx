@@ -164,6 +164,11 @@ const FormulaBuilderModal = ({
     return null;
   }
 
+  const TARGET_GITTATA_BY_OPTION = {
+    flusso: 3,
+    dardo: 10,
+  };
+
   const setSelectionValue = (sectionId, value, isMulti) => {
     setSelections((prev) => {
       if (!isMulti) {
@@ -175,6 +180,9 @@ const FormulaBuilderModal = ({
         : [...current, value];
       return { ...prev, [sectionId]: next };
     });
+    if (sectionId === 'formula_target' && TARGET_GITTATA_BY_OPTION[value] !== undefined) {
+      setNumericValues((prev) => ({ ...prev, gittata: TARGET_GITTATA_BY_OPTION[value] }));
+    }
   };
 
   const clearSourceSelections = () => {
