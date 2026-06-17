@@ -1547,6 +1547,22 @@ def get_active_korp(personaggio):
     m = get_active_korp_membership(personaggio)
     return m.carriera if m else None
 
+
+def get_active_korp_ids(personaggio):
+    """Id di tutte le KORP con membership attiva (data_a nulla) per il personaggio."""
+    if not personaggio:
+        return []
+    return list(
+        PersonaggioCarrieraMembership.objects.filter(
+            personaggio=personaggio,
+            data_a__isnull=True,
+            tipo_carriera__codice="korp",
+        )
+        .values_list("carriera_id", flat=True)
+        .distinct()
+    )
+
+
 class Punteggio(Tabella):
     sigla = models.CharField(max_length=3, unique=True)
     tipo = models.CharField(choices=punteggi_tipo, max_length=2)

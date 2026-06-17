@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from gestione_plot.models import Evento
-from personaggi.models import Messaggio, Personaggio, get_active_korp, PersonaggioCarrieraMembership
+from personaggi.models import Messaggio, Personaggio, get_active_korp_ids, PersonaggioCarrieraMembership
 
 from .post_media import apply_post_media_from_request
 from .display_names import social_display_name
@@ -128,22 +128,17 @@ def visible_stories_queryset_for_personaggio(personaggio):
             reactions_count=Count("reactions", distinct=True),
         )
     )
-    from .serializers import _get_active_campaign_from_request, _get_default_campaign, _social_mode_for_campaign
-    active_campaign = _get_active_campaign_from_request(getattr(personaggio, "_social_request", None))
-    default_campaign = _get_default_campaign()
-    mode = _social_mode_for_campaign(active_campaign)
-    if active_campaign:
-        png_kor35_q = Q(autore__campagna=default_campaign, autore__tipologia__giocante=False)
-        if mode == "SHARED" and default_campaign:
-            base = base.filter(Q(autore__campagna=active_campaign) | Q(autore__campagna=default_campaign) | png_kor35_q)
-        else:
-            base = base.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
+    from .serializers import _apply_social_author_campaign_filter
+
+    base = _apply_social_author_campaign_filter(base, getattr(personaggio, "_social_request", None))
     if not personaggio:
         return base.filter(visibilita="PUB")
-    active_korp = get_active_korp(personaggio)
-    if not active_korp:
+    active_korp_ids = get_active_korp_ids(personaggio)
+    if not active_korp_ids:
         return base.filter(visibilita="PUB")
-    return base.filter(Q(visibilita="PUB") | Q(visibilita="KORP", korp_visibilita=active_korp)).distinct()
+    return base.filter(
+        Q(visibilita="PUB") | Q(visibilita="KORP", korp_visibilita_id__in=active_korp_ids)
+    ).distinct()
 
 
 def sync_story_tags(story):

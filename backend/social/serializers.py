@@ -5,6 +5,7 @@ from rest_framework import serializers
 from personaggi.models import (
     Personaggio,
     get_active_korp,
+    get_active_korp_ids,
     get_active_korp_membership,
     Campagna,
     CampagnaFeaturePolicy,
@@ -581,6 +582,30 @@ def _social_mode_for_campaign(campagna):
     return row.mode if row else FEATURE_MODE_SHARED
 
 
+def _single_active_campaign_mode():
+    """Con una sola campagna attiva non isoliamo il feed per FK campagna dell'autore."""
+    return Campagna.objects.filter(attiva=True).count() <= 1
+
+
+def _apply_social_author_campaign_filter(qs, request=None):
+    if _single_active_campaign_mode():
+        return qs
+    active_campaign = _get_active_campaign_from_request(request)
+    default_campaign = _get_default_campaign()
+    if not active_campaign:
+        return qs
+    mode = _social_mode_for_campaign(active_campaign)
+    png_kor35_q = Q(
+        autore__campagna=default_campaign,
+        autore__tipologia__giocante=False,
+    )
+    if mode == FEATURE_MODE_SHARED and default_campaign:
+        return qs.filter(
+            Q(autore__campagna=active_campaign) | Q(autore__campagna=default_campaign) | png_kor35_q
+        )
+    return qs.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
+
+
 def owned_personaggi_queryset_for_user(user, request=None):
     """Personaggi del giocatore nel contesto campagna attiva (allineato a PersonaggioListView)."""
     active_campaign = _get_active_campaign_from_request(request)
@@ -614,24 +639,16 @@ def visible_posts_queryset_for_personaggio(personaggio, request=None):
         likes_total=F("likes_base") + F("_likes_user_sum"),
         comments_count=Count("comments", distinct=True),
     )
-    active_campaign = _get_active_campaign_from_request(request)
-    default_campaign = _get_default_campaign()
-    mode = _social_mode_for_campaign(active_campaign)
-    if active_campaign:
-        png_kor35_q = Q(
-            autore__campagna=default_campaign,
-            autore__tipologia__giocante=False,
-        )
-        if mode == FEATURE_MODE_SHARED and default_campaign:
-            base = base.filter(Q(autore__campagna=active_campaign) | Q(autore__campagna=default_campaign) | png_kor35_q)
-        else:
-            base = base.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
+    base = _apply_social_author_campaign_filter(base, request)
     if not personaggio:
-        return base.filter(visibilita="PUB")
-    active_korp = get_active_korp(personaggio)
-    if not active_korp:
-        return base.filter(visibilita="PUB")
-    return base.filter(
-        Q(visibilita="PUB")
-        | Q(visibilita="KORP", korp_visibilita=active_korp)
-    )
+        qs = base.filter(visibilita="PUB")
+    else:
+        active_korp_ids = get_active_korp_ids(personaggio)
+        if not active_korp_ids:
+            qs = base.filter(visibilita="PUB")
+        else:
+            qs = base.filter(
+                Q(visibilita="PUB")
+                | Q(visibilita="KORP", korp_visibilita_id__in=active_korp_ids)
+            )
+    return qs.order_by("-created_at", "-id")

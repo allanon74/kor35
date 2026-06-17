@@ -1455,7 +1455,11 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     try {
       const payload = await socialGetPosts(selectedCharacterId, onLogout, nextPage, PAGE_SIZE, { hashtag: hashtagFilter || undefined });
       const normalized = normalizePostsPayload(payload);
-      setPosts((prev) => [...prev, ...normalized.items]);
+      setPosts((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        const fresh = normalized.items.filter((p) => !seen.has(p.id));
+        return [...prev, ...fresh];
+      });
       setFeedPage(nextPage);
       setHasMorePosts(normalized.hasNext);
     } catch (err) {
