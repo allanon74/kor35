@@ -556,6 +556,12 @@ class SocialPostViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         personaggio = self.get_personaggio()
         qs = visible_posts_queryset_for_personaggio(personaggio, request=self.request)
+        if personaggio:
+            qs = qs.annotate(
+                liked_by_me_flag=Exists(
+                    SocialLike.objects.filter(post_id=OuterRef("pk"), autore=personaggio)
+                )
+            )
         hashtag = (self.request.query_params.get("hashtag") or "").strip().lstrip("#")
         if hashtag:
             token = f"#{hashtag}"

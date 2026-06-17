@@ -271,21 +271,42 @@ export const socialCreatePost = (formData, personaggioId, onLogout) => {
 };
 
 export const socialToggleLike = (postId, personaggioId, onLogout) => {
-  const endpoint = `/api/social/posts/${postId}/like/${personaggioId ? `?personaggio_id=${personaggioId}` : ''}`;
-  return fetchAuthenticated(endpoint, { method: 'POST' }, onLogout);
-};
-
-export const socialToggleCommentLike = (postId, commentId, personaggioId, onLogout) => {
-  const qp = personaggioId ? `?personaggio_id=${personaggioId}` : '';
+  const params = new URLSearchParams();
+  if (personaggioId != null && personaggioId !== '') {
+    params.set('personaggio_id', String(personaggioId));
+  }
+  const qs = params.toString();
   return fetchAuthenticated(
-    `/api/social/posts/${postId}/comments/${commentId}/like/${qp}`,
-    { method: 'POST' },
+    `/api/social/posts/${postId}/like/${qs ? `?${qs}` : ''}`,
+    {
+      method: 'POST',
+      body: personaggioId != null && personaggioId !== '' ? JSON.stringify({ personaggio_id: personaggioId }) : undefined,
+    },
     onLogout
   );
 };
 
-export const socialGetComments = (postId, onLogout, page = 1, pageSize = 10) => {
+export const socialToggleCommentLike = (postId, commentId, personaggioId, onLogout) => {
   const params = new URLSearchParams();
+  if (personaggioId != null && personaggioId !== '') {
+    params.set('personaggio_id', String(personaggioId));
+  }
+  const qs = params.toString();
+  return fetchAuthenticated(
+    `/api/social/posts/${postId}/comments/${commentId}/like/${qs ? `?${qs}` : ''}`,
+    {
+      method: 'POST',
+      body: personaggioId != null && personaggioId !== '' ? JSON.stringify({ personaggio_id: personaggioId }) : undefined,
+    },
+    onLogout
+  );
+};
+
+export const socialGetComments = (postId, personaggioId, onLogout, page = 1, pageSize = 10) => {
+  const params = new URLSearchParams();
+  if (personaggioId != null && personaggioId !== '') {
+    params.set('personaggio_id', String(personaggioId));
+  }
   params.set('page', String(page));
   params.set('page_size', String(pageSize));
   return fetchAuthenticated(`/api/social/posts/${postId}/comments/?${params.toString()}`, { method: 'GET' }, onLogout);

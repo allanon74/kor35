@@ -510,6 +510,12 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   }, [selectedCharacterId, loadAll]);
 
   useEffect(() => {
+    setCommentsByPost({});
+    setCommentsMetaByPost({});
+    setExpandedPostId(null);
+  }, [selectedCharacterId]);
+
+  useEffect(() => {
     if (!selectedCharacterId) return;
     loadStories();
   }, [selectedCharacterId, loadStories]);
@@ -656,7 +662,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       window.setTimeout(() => {
         setLikedFxByComment((prev) => ({ ...prev, [key]: false }));
       }, 700);
-      const data = await socialGetComments(postId, onLogout, 1, 10);
+      const data = await socialGetComments(postId, selectedCharacterId, onLogout, 1, 10);
       const rows = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
       setCommentsByPost((prev) => ({ ...prev, [postId]: rows }));
       await loadAll();
@@ -672,7 +678,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     }
     setExpandedPostId(postId);
     if (!commentsByPost[postId]) {
-      const payload = await socialGetComments(postId, onLogout, 1, 10);
+      const payload = await socialGetComments(postId, selectedCharacterId, onLogout, 1, 10);
       const normalized = normalizeCommentsPayload(payload);
       setCommentsByPost((prev) => ({ ...prev, [postId]: normalized.items }));
       setCommentsMetaByPost((prev) => ({
@@ -684,7 +690,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
   const ensureCommentsLoaded = async (postId) => {
     if (!commentsByPost[postId]) {
-      const payload = await socialGetComments(postId, onLogout, 1, 10);
+      const payload = await socialGetComments(postId, selectedCharacterId, onLogout, 1, 10);
       const normalized = normalizeCommentsPayload(payload);
       setCommentsByPost((prev) => ({ ...prev, [postId]: normalized.items }));
       setCommentsMetaByPost((prev) => ({
@@ -703,7 +709,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       [postId]: { ...meta, loadingMore: true },
     }));
     try {
-      const payload = await socialGetComments(postId, onLogout, nextPage, 10);
+      const payload = await socialGetComments(postId, selectedCharacterId, onLogout, nextPage, 10);
       const normalized = normalizeCommentsPayload(payload);
       setCommentsByPost((prev) => ({
         ...prev,
@@ -729,7 +735,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     setCommentSendingByPost((prev) => ({ ...prev, [postId]: true }));
     try {
       await socialCreateComment(postId, text, selectedCharacterId, onLogout);
-      const payload = await socialGetComments(postId, onLogout, 1, 10);
+      const payload = await socialGetComments(postId, selectedCharacterId, onLogout, 1, 10);
       const normalized = normalizeCommentsPayload(payload);
       setCommentsByPost((prev) => ({ ...prev, [postId]: normalized.items }));
       setCommentsMetaByPost((prev) => ({
@@ -769,7 +775,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     const text = String(draft.testo || '').trim();
     if (!text) return;
     await socialUpdateComment(postId, draft.id, text, selectedCharacterId, onLogout);
-    const payload = await socialGetComments(postId, onLogout, 1, 10);
+    const payload = await socialGetComments(postId, selectedCharacterId, onLogout, 1, 10);
     const normalized = normalizeCommentsPayload(payload);
     setCommentsByPost((prev) => ({ ...prev, [postId]: normalized.items }));
     setCommentsMetaByPost((prev) => ({
@@ -783,7 +789,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const removeComment = async (postId, commentId) => {
     if (!window.confirm('Eliminare questo commento?')) return;
     await socialDeleteComment(postId, commentId, selectedCharacterId, onLogout);
-    const payload = await socialGetComments(postId, onLogout, 1, 10);
+    const payload = await socialGetComments(postId, selectedCharacterId, onLogout, 1, 10);
     const normalized = normalizeCommentsPayload(payload);
     setCommentsByPost((prev) => ({ ...prev, [postId]: normalized.items }));
     setCommentsMetaByPost((prev) => ({

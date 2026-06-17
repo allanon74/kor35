@@ -6,7 +6,7 @@ import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
-import useStaffQrAssociation from '../../hooks/useStaffQrAssociation';
+import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
 import {
   staffGetManifesti,
   staffCreateManifesto,

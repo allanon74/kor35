@@ -279,6 +279,8 @@ class SocialPostSerializer(serializers.ModelSerializer):
         personaggio = self.context.get("personaggio")
         if not personaggio:
             return False
+        if hasattr(obj, "liked_by_me_flag"):
+            return bool(obj.liked_by_me_flag)
         return SocialLike.objects.filter(post=obj, autore=personaggio).exists()
 
     def get_likes_count(self, obj):
@@ -556,17 +558,29 @@ def _social_mode_for_campaign(campagna):
     return row.mode if row else FEATURE_MODE_SHARED
 
 
-def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None):
+def owned_personaggi_queryset_for_user(user, request=None):
+    """Personaggi del giocatore nel contesto campagna attiva (allineato a PersonaggioListView)."""
     active_campaign = _get_active_campaign_from_request(request)
+    default_campaign = _get_default_campaign()
     owned = Personaggio.objects.filter(proprietario=user)
-    if active_campaign:
-        owned = owned.filter(campagna=active_campaign)
-    owned = owned.order_by("id")
-    if explicit_personaggio_id:
-        pg = owned.filter(id=explicit_personaggio_id).first()
-        if pg:
-            return pg
-    return owned.first()
+    if not active_campaign:
+        return owned.order_by("id")
+    if default_campaign and active_campaign.id != default_campaign.id:
+        return owned.filter(
+            Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)
+        ).order_by("id")
+    return owned.filter(campagna=active_campaign).order_by("id")
+
+
+def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None):
+    if explicit_personaggio_id not in (None, ""):
+        try:
+            explicit_id = int(explicit_personaggio_id)
+        except (TypeError, ValueError):
+            return None
+        # InstaFame: like/commenti/post agiscono sempre come il personaggio scelto, non come giocatore.
+        return Personaggio.objects.filter(proprietario=user, id=explicit_id).first()
+    return owned_personaggi_queryset_for_user(user, request).first()
 
 
 def visible_posts_queryset_for_personaggio(personaggio, request=None):
