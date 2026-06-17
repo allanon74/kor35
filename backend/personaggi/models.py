@@ -1504,6 +1504,10 @@ class PersonaggioCarrieraMembership(A_modello):
         related_name="membership",
     )
     carica = models.ForeignKey(Carica, on_delete=models.SET_NULL, null=True, blank=True, related_name="membership")
+    visibile_social = models.BooleanField(
+        default=True,
+        help_text="Se attivo, la carica compare nel profilo social InstaFame del personaggio.",
+    )
     data_da = models.DateTimeField(default=timezone.now)
     data_a = models.DateTimeField(null=True, blank=True)
 
@@ -3861,6 +3865,19 @@ class Personaggio(Inventario):
         default=1,
         verbose_name="Peso influencer InstaFame",
         help_text="Peso base per like simulati su InstaFame (1 = minimo). Le cariche attive possono aumentarlo.",
+    )
+    badge_instafame = models.CharField(
+        max_length=8,
+        choices=[
+            ("", "Nessuno"),
+            ("GOLD", "Utente Gold"),
+            ("DIAMOND", "Utente Diamond"),
+            ("PREMIUM", "Utente Premium"),
+        ],
+        default="",
+        blank=True,
+        verbose_name="Badge InstaFame",
+        help_text="Badge verificato mostrato nel profilo social e sotto il nome su post/storie.",
     )
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)

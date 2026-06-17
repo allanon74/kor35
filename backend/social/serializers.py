@@ -14,6 +14,7 @@ from personaggi.models import (
 )
 
 from .display_names import social_display_name, social_display_name_from_profile
+from .author_display import get_personaggio_badge_instafame, social_cariche_for_personaggio
 from personaggi.serializers import _personaggio_avatar_url
 from .models import (
     SOCIAL_GROUP_STATUS_ACTIVE,
@@ -68,6 +69,8 @@ class SocialProfileSerializer(serializers.ModelSerializer):
     can_edit_era = serializers.SerializerMethodField()
     regione = serializers.SerializerMethodField()
     era_provenienza = serializers.SerializerMethodField()
+    badge_instafame = serializers.SerializerMethodField()
+    cariche_social = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialProfile
@@ -91,6 +94,8 @@ class SocialProfileSerializer(serializers.ModelSerializer):
             "can_edit_era",
             "korp_nome",
             "segno_zodiacale",
+            "badge_instafame",
+            "cariche_social",
         )
         read_only_fields = (
             "personaggio",
@@ -107,7 +112,15 @@ class SocialProfileSerializer(serializers.ModelSerializer):
             "era",
             "era_nome",
             "can_edit_era",
+            "badge_instafame",
+            "cariche_social",
         )
+
+    def get_badge_instafame(self, obj):
+        return get_personaggio_badge_instafame(obj.personaggio)
+
+    def get_cariche_social(self, obj):
+        return social_cariche_for_personaggio(obj.personaggio)
 
     def get_nome_pubblico(self, obj):
         return social_display_name_from_profile(obj)
@@ -152,6 +165,8 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
     )
     regione = serializers.SerializerMethodField()
     era_provenienza = serializers.SerializerMethodField()
+    badge_instafame = serializers.SerializerMethodField()
+    cariche_social = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialProfile
@@ -169,11 +184,19 @@ class SocialProfilePublicSerializer(serializers.ModelSerializer):
             "era_nome",
             "korp_nome",
             "segno_zodiacale",
+            "badge_instafame",
+            "cariche_social",
         )
         read_only_fields = fields
 
     def get_personaggio_nome(self, obj):
         return social_display_name_from_profile(obj)
+
+    def get_badge_instafame(self, obj):
+        return get_personaggio_badge_instafame(obj.personaggio)
+
+    def get_cariche_social(self, obj):
+        return social_cariche_for_personaggio(obj.personaggio)
 
     def get_korp_nome(self, obj):
         membership = get_active_korp_membership(obj.personaggio)
@@ -244,6 +267,7 @@ class SocialCommentSerializer(serializers.ModelSerializer):
 class SocialPostSerializer(serializers.ModelSerializer):
     autore_nome = serializers.SerializerMethodField()
     autore_avatar = serializers.SerializerMethodField()
+    autore_badge_instafame = serializers.SerializerMethodField()
     likes_count = serializers.SerializerMethodField()
     comments_count = serializers.IntegerField(read_only=True)
     liked_by_me = serializers.SerializerMethodField()
@@ -260,6 +284,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "autore",
             "autore_nome",
             "autore_avatar",
+            "autore_badge_instafame",
             "titolo",
             "testo",
             "immagine",
@@ -306,6 +331,9 @@ class SocialPostSerializer(serializers.ModelSerializer):
 
     def get_autore_nome(self, obj):
         return social_display_name(obj.autore)
+
+    def get_autore_badge_instafame(self, obj):
+        return get_personaggio_badge_instafame(obj.autore)
 
     def get_tags(self, obj):
         return _personaggio_tag_rows(obj.tags)
@@ -442,6 +470,7 @@ class SocialGroupMessageSerializer(serializers.ModelSerializer):
 
 class SocialStorySerializer(serializers.ModelSerializer):
     autore_nome = serializers.SerializerMethodField()
+    autore_badge_instafame = serializers.SerializerMethodField()
     evento_titolo = serializers.CharField(source="evento.titolo", read_only=True)
     hashtags = serializers.SerializerMethodField()
     tags = serializers.SerializerMethodField()
@@ -458,6 +487,7 @@ class SocialStorySerializer(serializers.ModelSerializer):
             "id",
             "autore",
             "autore_nome",
+            "autore_badge_instafame",
             "testo",
             "media",
             "text_size",
@@ -494,6 +524,9 @@ class SocialStorySerializer(serializers.ModelSerializer):
 
     def get_autore_nome(self, obj):
         return social_display_name(obj.autore)
+
+    def get_autore_badge_instafame(self, obj):
+        return get_personaggio_badge_instafame(obj.autore)
 
     def get_hashtags(self, obj):
         text = f"{obj.testo or ''}".strip()

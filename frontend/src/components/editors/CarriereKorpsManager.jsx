@@ -273,6 +273,14 @@ function MembershipModal({
             placeholder="Carica nella carriera…"
             disabled={!carrieraId}
           />
+          <label className="flex items-center gap-2 text-sm text-gray-200">
+            <input
+              type="checkbox"
+              checked={form.visibile_social !== false}
+              onChange={(e) => setForm({ ...form, visibile_social: e.target.checked })}
+            />
+            Carica visibile sul profilo social InstaFame
+          </label>
           {isKorp && !form.id && (
             <label className="flex items-start gap-2 p-3 rounded-lg border border-amber-600/50 bg-amber-950/30 text-sm text-amber-100">
               <input
@@ -429,6 +437,12 @@ export default function CarriereKorpsManager({ onLogout }) {
       { header: 'Tipo', render: (x) => x.tipo_carriera_codice || '—', width: 110 },
       { header: 'Carica', render: (x) => x.carica_nome || '—' },
       {
+        header: 'Social',
+        render: (x) => (x.visibile_social === false ? 'Nascosta' : 'Visibile'),
+        align: 'center',
+        width: 90,
+      },
+      {
         header: 'Stato',
         render: (x) => (x.data_a ? 'Chiusa' : 'Attiva'),
         align: 'center',
@@ -499,6 +513,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         carica: form.carica || form.carica_id || null,
         data_da: form.data_da || undefined,
         data_a: form.data_a || null,
+        visibile_social: form.visibile_social !== false,
       };
       if (form.id) {
         await staffUpdateCarriereMembership(form.id, payload, onLogout);

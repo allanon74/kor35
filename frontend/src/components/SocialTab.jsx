@@ -49,6 +49,7 @@ import {
 import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
 import InstafameMediaCarousel from './InstafameMediaCarousel';
+import InstafameAuthorBadge, { InstafameSocialCariche } from './InstafameAuthorBadge';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
@@ -1931,6 +1932,9 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                     <div className="text-[10px] text-gray-300 truncate w-16 text-center">
                       {s.autore_nome || 'PG'}
                     </div>
+                    <div className="w-16 flex justify-center">
+                      <InstafameAuthorBadge badge={s.autore_badge_instafame} className="scale-90 origin-top" />
+                    </div>
                   </button>
                 );
               })
@@ -1968,6 +1972,9 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                         </div>
                         <div className="text-[10px] text-gray-400 truncate w-16 text-center">
                           {s.autore_nome || 'PG'}
+                        </div>
+                        <div className="w-16 flex justify-center">
+                          <InstafameAuthorBadge badge={s.autore_badge_instafame} className="scale-90 origin-top" />
                         </div>
                       </button>
                     );
@@ -2079,6 +2086,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                   >
                     {post.autore_nome}
                   </button>
+                  <InstafameAuthorBadge badge={post.autore_badge_instafame} className="mt-0.5" />
                   <p className="text-[11px] text-gray-400">
                     {new Date(post.created_at).toLocaleString('it-IT')}
                     {post.evento_titolo ? ` · ${post.evento_titolo}` : ''}
@@ -2752,12 +2760,17 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             <h3 className="text-lg font-bold">Profilo social: {selectedProfile.personaggio_nome}</h3>
             <button onClick={() => setSelectedProfile(null)} className="text-gray-400 hover:text-white">X</button>
           </div>
-          <div className="flex justify-center">
+          <div className="flex items-start gap-3">
             <SocialAuthorAvatar
               size="lg"
               name={selectedProfile.personaggio_nome}
               avatarUrl={resolveMediaUrl(selectedProfile.foto_principale)}
             />
+            <div className="min-w-0 space-y-1 text-left">
+              <div className="font-semibold text-amber-100">{selectedProfile.personaggio_nome}</div>
+              <InstafameAuthorBadge badge={selectedProfile.badge_instafame} size="md" />
+              <InstafameSocialCariche cariche={selectedProfile.cariche_social} />
+            </div>
           </div>
           <div className="text-sm text-gray-300 space-y-1">
             <div>KORP: <span className="text-white">{selectedProfile.korp_nome || '-'}</span></div>

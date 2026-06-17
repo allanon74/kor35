@@ -147,6 +147,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
 
         let peso = Number(char.peso_influencer);
         let pesoEffettivo = Number(char.peso_influencer_effettivo);
+        let badgeInstafame = char.badge_instafame || '';
         if (isCampaignStaffer) {
             try {
                 const fresh = await getGestionePersonaggio(char.id, onLogout);
@@ -155,6 +156,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                 }
                 if (Number.isFinite(Number(fresh?.peso_influencer_effettivo)) && Number(fresh.peso_influencer_effettivo) >= 1) {
                     pesoEffettivo = Number(fresh.peso_influencer_effettivo);
+                }
+                if (fresh?.badge_instafame != null) {
+                    badgeInstafame = fresh.badge_instafame;
                 }
             } catch {
                 // fallback su lista in cache
@@ -171,6 +175,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             costume: char.costume || '',
             watch_enabled: !!char.watch_enabled,
             peso_influencer: peso,
+            badge_instafame: badgeInstafame || '',
             campagna: char.campagna || '',
             era: typeof char.era === 'object' ? (char.era?.id || '') : (char.era || ''),
             prefettura: typeof char.prefettura === 'object' ? (char.prefettura?.id || '') : (char.prefettura || ''),
@@ -190,6 +195,10 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         if (payload.prefettura === '') payload.prefettura = null;
         payload.prefettura_esterna = !!payload.prefettura_esterna;
         payload.peso_influencer = Math.max(1, parseInt(payload.peso_influencer, 10) || 1);
+        payload.badge_instafame = String(payload.badge_instafame || '').trim().toUpperCase();
+        if (!['GOLD', 'DIAMOND', 'PREMIUM'].includes(payload.badge_instafame)) {
+            payload.badge_instafame = '';
+        }
         const charId = payload.id;
         delete payload.id;
         
@@ -914,6 +923,22 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                                 {rigeneraLikeLoading ? 'Rigenerazione...' : 'Rigenera like messi da questo PG'}
                                             </button>
                                         )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">Badge InstaFame (verificato)</label>
+                                        <select
+                                            className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+                                            value={formData.badge_instafame || ''}
+                                            onChange={(e) => setFormData({ ...formData, badge_instafame: e.target.value })}
+                                        >
+                                            <option value="">Nessuno</option>
+                                            <option value="GOLD">Utente Gold</option>
+                                            <option value="DIAMOND">Utente Diamond</option>
+                                            <option value="PREMIUM">Utente Premium</option>
+                                        </select>
+                                        <p className="text-[11px] text-gray-500 mt-1">
+                                            Mostrato sotto il nome nel profilo social e sui post/storie di questo personaggio.
+                                        </p>
                                     </div>
                                 </div>
                             )}

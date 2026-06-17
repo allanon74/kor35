@@ -363,6 +363,7 @@ class PersonaggioCarrieraMembershipStaffSerializer(serializers.ModelSerializer):
             "carica",
             "data_da",
             "data_a",
+            "visibile_social",
             "carriera_nome",
             "carica_nome",
             "tipo_carriera_codice",
@@ -2750,6 +2751,11 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
     impostazioni_ui = serializers.JSONField(required=False)
     peso_influencer = serializers.IntegerField(required=False, min_value=1)
     peso_influencer_effettivo = serializers.SerializerMethodField()
+    badge_instafame = serializers.ChoiceField(
+        choices=[("", "Nessuno"), ("GOLD", "Gold"), ("DIAMOND", "Diamond"), ("PREMIUM", "Premium")],
+        required=False,
+        allow_blank=True,
+    )
 
     class Meta:
         model = Personaggio
@@ -2767,6 +2773,7 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'impostazioni_ui',
             'peso_influencer',
             'peso_influencer_effettivo',
+            'badge_instafame',
         )
         read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario', 'peso_influencer_effettivo')
 

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Heart } from 'lucide-react';
 import { resolveMediaUrl, socialMarkStoryViewed, socialReactStory, socialReplyStory } from '../api';
 import { formatCount } from '../utils/formatCount';
+import InstafameAuthorBadge from './InstafameAuthorBadge';
 import { HASHTAG_INLINE_REGEX } from '../utils/hashtags';
 
 const DEFAULT_DURATION_MS = 6500;
@@ -201,8 +202,9 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
       <div className="w-full max-w-md h-[92vh] rounded-2xl overflow-hidden border border-amber-300/25 bg-[#07040a] shadow-2xl flex flex-col">
         <div className="p-3 border-b border-amber-300/15 bg-black/40">
           <div className="flex items-center gap-3">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="text-sm font-bold text-amber-100 truncate">{story?.autore_nome || 'Story'}</div>
+              <InstafameAuthorBadge badge={story?.autore_badge_instafame} className="mt-0.5" />
               <div className="h-1 mt-2 rounded-full bg-white/10 overflow-hidden">
                 <div className="h-full bg-linear-to-r from-fuchsia-400 via-amber-300 to-rose-400" style={{ width: `${Math.round(progress * 100)}%` }} />
               </div>

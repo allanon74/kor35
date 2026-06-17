@@ -4851,6 +4851,8 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
         )
         if not can_edit_peso and "peso_influencer" in serializer.fields:
             serializer.fields["peso_influencer"].read_only = True
+        if not can_edit_peso and "badge_instafame" in serializer.fields:
+            serializer.fields["badge_instafame"].read_only = True
         return serializer
 
     def get_queryset(self):
