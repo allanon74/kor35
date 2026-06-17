@@ -50,6 +50,7 @@ import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
 import InstafameMediaCarousel from './InstafameMediaCarousel';
 import InstafameAuthorBadge, { InstafameSocialCariche } from './InstafameAuthorBadge';
+import InstafameTextArea from './InstafameTextArea';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
@@ -1576,11 +1577,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             onChange={(e) => setPostForm((p) => ({ ...p, titolo: e.target.value }))}
             required
           />
-          <textarea
-            className="w-full bg-gray-800 rounded p-2 border border-gray-700 min-h-24"
+          <InstafameTextArea
             placeholder="Testo del post..."
             value={postForm.testo}
-            onChange={(e) => updatePostTextWithMentions(e.target.value)}
+            onChange={updatePostTextWithMentions}
           />
           {mentionSuggestions.length > 0 && (
             <div className="bg-gray-800 border border-gray-700 rounded p-2 text-sm">
@@ -1760,11 +1760,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           </div>
           {showStoryComposer && (
             <form onSubmit={submitStory} className="mb-3 rounded-xl border border-amber-300/15 bg-black/25 p-3 space-y-2">
-              <textarea
-                className="w-full rounded-xl bg-white/5 border border-white/10 p-2 text-sm text-white placeholder:text-white/40 min-h-16"
+              <InstafameTextArea
+                className="!border-amber-300/15 !bg-black/25 rounded-xl"
+                textareaClassName="text-sm placeholder:text-white/40"
+                minHeightClass="min-h-16"
+                rows={3}
                 placeholder="Testo story (puoi usare @ e #)..."
                 value={storyForm.testo}
-                onChange={(e) => updateStoryTextWithMentions(e.target.value)}
+                onChange={updateStoryTextWithMentions}
               />
               {storyMentionSuggestions.length > 0 && (
                 <div className="bg-gray-800 border border-gray-700 rounded p-2 text-sm">
@@ -2219,13 +2222,14 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             </div>
 
             <div className="pt-2 border-t border-gray-700 space-y-2">
-              <div className="flex gap-2 items-center">
-                <input
-                  className="flex-1 bg-gray-800 rounded p-2 border border-gray-700 text-sm min-w-0"
+              <div className="flex gap-2 items-end">
+                <InstafameTextArea
+                  compact
+                  className="flex-1 min-w-0"
                   placeholder="Scrivi un commento..."
                   value={newCommentByPost[post.id] || ''}
                   onFocus={() => ensureCommentsLoaded(post.id)}
-                  onChange={(e) => updateCommentWithMentions(post.id, e.target.value)}
+                  onChange={(text) => updateCommentWithMentions(post.id, text)}
                 />
                 <button
                   onClick={() => submitComment(post.id)}
@@ -2280,13 +2284,16 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                       <div className="flex-1 min-w-0">
                         <span className="font-semibold text-gray-200">{c.autore_nome}:</span>{' '}
                         {editingCommentByPost[post.id]?.id === c.id ? (
-                          <textarea
-                            className="mt-1 w-full bg-gray-900 border border-gray-700 rounded p-2 text-gray-200 text-sm min-h-16"
+                          <InstafameTextArea
+                            compact
+                            className="mt-1"
+                            textareaClassName="text-sm text-gray-200"
+                            placeholder="Modifica commento..."
                             value={editingCommentByPost[post.id]?.testo || ''}
-                            onChange={(e) =>
+                            onChange={(testo) =>
                               setEditingCommentByPost((prev) => ({
                                 ...prev,
-                                [post.id]: { ...prev[post.id], testo: e.target.value },
+                                [post.id]: { ...prev[post.id], testo },
                               }))
                             }
                           />
@@ -2803,10 +2810,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               value={editingPost.titolo}
               onChange={(e) => setEditingPost((p) => ({ ...p, titolo: e.target.value }))}
             />
-            <textarea
-              className="w-full bg-gray-800 rounded p-2 border border-gray-700 min-h-24"
-              value={editingPost.testo}
-              onChange={(e) => setEditingPost((p) => ({ ...p, testo: e.target.value }))}
+            <InstafameTextArea
+              placeholder="Testo del post..."
+              value={editingPost.testo || ''}
+              onChange={(testo) => setEditingPost((p) => ({ ...p, testo }))}
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <select
