@@ -13,6 +13,7 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
   const [isScanning, setIsScanning] = useState(false);
   
   const html5QrCodeRef = useRef(null);
+  const processingRef = useRef(false);
   const qrReaderId = "staff-qr-reader-element";
 
   const rgbToHex = (r, g, b) => {
@@ -140,6 +141,8 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
   };
 
   const handleScanData = async (decodedText, scanMeta = null) => {
+    if (processingRef.current) return;
+    processingRef.current = true;
     setIsScanning(false);
     setIsLoading(true);
     setError('');
@@ -148,11 +151,15 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
       await stopWebcamScan();
       
       const qrId = normalizeScannedQrId(decodedText);
+      if (!qrId) {
+        throw new Error('QR non valido o illeggibile.');
+      }
       await onScanSuccess(qrId, scanMeta);
       
     } catch (err) {
       setError(err.message || 'Impossibile elaborare il QR.');
     } finally {
+      processingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -222,7 +229,7 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
     try {
       const fileScanner = new Html5Qrcode(qrReaderId, /* verbose= */ false);
       const decodedText = await fileScanner.scanFile(file, /* showImage= */ false);
-      handleScanData(decodedText, { colors: null });
+      await handleScanData(decodedText, { colors: null });
     } catch (err) {
       console.error("Errore scansione file:", err);
       setError("Impossibile leggere il QR code dal file. Prova un'altra immagine.");

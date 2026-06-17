@@ -5294,10 +5294,10 @@ class AssociaQrAVistaView(APIView):
     permission_classes = [permissions.IsAdminUser]  # Solo Staff
     
     def post(self, request, a_vista_id):
-        from .qr_logic import validate_qr_id
+        from .qr_logic import AssociaQrConflict, associa_qrcode_a_vista, validate_qr_id
 
         qr_id_raw = request.data.get('qr_id')
-        force = request.data.get('force', False)
+        force = bool(request.data.get('force', False))
         
         if not qr_id_raw:
             return Response({'error': 'qr_id è richiesto'}, status=status.HTTP_400_BAD_REQUEST)
@@ -5308,49 +5308,13 @@ class AssociaQrAVistaView(APIView):
             return Response({'error': 'qr_id non valido'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Verifica che l'elemento A_vista esista
             a_vista = A_vista.objects.get(pk=a_vista_id)
+            qr = QrCode.objects.get(id=qr_pk)
+            result = associa_qrcode_a_vista(qr, a_vista, force=force)
+            return Response(result)
         except A_vista.DoesNotExist:
             return Response({'error': 'Elemento non trovato'}, status=status.HTTP_404_NOT_FOUND)
-        
-        try:
-            qr = QrCode.objects.get(id=qr_pk)
-            
-            # Se il QR è già associato e force=False, restituisci errore con dettagli
-            if qr.vista and qr.vista != a_vista and not force:
-                from .qr_logic import descrivi_avista_per_associazione_qr
-
-                info = descrivi_avista_per_associazione_qr(qr.vista) or {
-                    "tipo": "sconosciuto",
-                    "nome": qr.vista.nome,
-                    "elemento_id": str(qr.vista.pk),
-                }
-                nome_associato = info["nome"]
-                tipo_elemento = info["tipo"]
-                return Response(
-                    {
-                        "error": "QR già associato",
-                        "already_associated": True,
-                        "qr_id": str(qr.id),
-                        "associazione_attuale": info,
-                        "message": (
-                            f'Questo QR è già associato a «{nome_associato}» ({tipo_elemento}). '
-                            "Confermi di volerlo spostare su questo elemento?"
-                        ),
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
-            
-            # Associa il QR all'elemento A_vista
-            qr.vista = a_vista
-            qr.save()
-            
-            return Response({
-                'status': 'success',
-                'message': 'QR associato con successo',
-                'qr_id': qr.id,
-                'a_vista_id': a_vista.id
-            })
-            
         except QrCode.DoesNotExist:
             return Response({'error': 'QR Code non trovato'}, status=status.HTTP_404_NOT_FOUND)
+        except AssociaQrConflict as exc:
+            return Response(exc.payload, status=status.HTTP_409_CONFLICT)

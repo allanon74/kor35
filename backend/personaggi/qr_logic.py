@@ -565,3 +565,65 @@ def descrivi_avista_per_associazione_qr(vista_obj):
     if inv and not Personaggio.objects.filter(inventario_ptr_id=pk).exists():
         return _out("inventario", inv)
     return _out("a_vista", vista_obj)
+
+
+class AssociaQrConflict(Exception):
+    """409: QR già collegato altrove e force=False."""
+
+    def __init__(self, payload: Dict[str, Any]):
+        self.payload = payload
+        super().__init__(payload.get("message", "QR già associato"))
+
+
+def associa_qrcode_a_vista(qr, a_vista, *, force: bool = False) -> Dict[str, Any]:
+    """
+    Collega un QrCode a un A_vista (o sottoclasse MTI: Manifesto, Tessitura, …).
+    - Confronto sempre su vista_id (non su istanze ORM: Manifesto != A_vista stesso pk).
+    - Stacca eventuale altro QR già sul target (vincolo OneToOne su vista_id).
+    """
+    from .models import QrCode
+
+    target_pk = a_vista.pk
+    current_pk = qr.vista_id
+
+    if current_pk == target_pk:
+        return {
+            "status": "success",
+            "message": "QR già associato a questo elemento",
+            "qr_id": qr.id,
+            "a_vista_id": target_pk,
+        }
+
+    if current_pk and current_pk != target_pk and not force:
+        info = descrivi_avista_per_associazione_qr(qr.vista) or {
+            "tipo": "sconosciuto",
+            "nome": getattr(qr.vista, "nome", str(qr.vista)),
+            "elemento_id": str(current_pk),
+        }
+        raise AssociaQrConflict(
+            {
+                "error": "QR già associato",
+                "already_associated": True,
+                "qr_id": str(qr.id),
+                "associazione_attuale": info,
+                "message": (
+                    f'Questo QR è già associato a «{info["nome"]}» ({info["tipo"]}). '
+                    "Confermi di volerlo spostare su questo elemento?"
+                ),
+            }
+        )
+
+    with transaction.atomic():
+        for other in QrCode.objects.select_for_update().filter(vista_id=target_pk).exclude(pk=qr.pk):
+            other.vista = None
+            other.save(update_fields=["vista", "updated_at"])
+
+        qr.vista_id = target_pk
+        qr.save(update_fields=["vista", "updated_at"])
+
+    return {
+        "status": "success",
+        "message": "QR associato con successo",
+        "qr_id": qr.id,
+        "a_vista_id": target_pk,
+    }

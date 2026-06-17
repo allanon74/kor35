@@ -6,8 +6,8 @@ import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
+import useStaffQrAssociation from '../../hooks/useStaffQrAssociation';
 import {
-  associaQrDiretto,
   staffGetManifesti,
   staffCreateManifesto,
   staffUpdateManifesto,
@@ -20,7 +20,6 @@ const ManifestoManager = ({ onBack, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [scanningId, setScanningId] = useState(null);
-  const [pendingQrConflict, setPendingQrConflict] = useState(null);
   const [msg, setMsg] = useState('');
 
   const load = useCallback(async () => {
@@ -34,6 +33,14 @@ const ManifestoManager = ({ onBack, onLogout }) => {
       setLoading(false);
     }
   }, [onLogout]);
+
+  const {
+    pendingQrConflict,
+    conflictLoading,
+    handleQrScan,
+    confirmConflict,
+    cancelConflict,
+  } = useStaffQrAssociation({ onLogout, onReload: load });
 
   useEffect(() => {
     load();
@@ -218,25 +225,12 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           </div>
           <div className="flex-1">
             <StaffQrTab
-              onScanSuccess={async (qr_id) => {
-                try {
-                  await associaQrDiretto(scanningId, qr_id, onLogout);
-                  setScanningId(null);
-                  setMsg('QR associato.');
-                  load();
-                } catch (error) {
-                  if (error.status === 409 && error.data?.already_associated) {
-                    setPendingQrConflict({
-                      targetId: scanningId,
-                      qrId: qr_id,
-                      errorData: error.data,
-                    });
-                    setScanningId(null);
-                  } else {
-                    setMsg(error.message || 'Errore associazione QR');
-                  }
-                }
-              }}
+              onScanSuccess={(qr_id) =>
+                handleQrScan(scanningId, qr_id, {
+                  closeScan: () => setScanningId(null),
+                  onMessage: setMsg,
+                })
+              }
               onLogout={onLogout}
             />
           </div>
@@ -249,20 +243,9 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         message=""
         confirmLabel="Sostituisci associazione"
         confirmTone="warning"
-        onCancel={() => setPendingQrConflict(null)}
-        onConfirm={async () => {
-          const p = pendingQrConflict;
-          if (!p?.qrId || !p?.targetId) return;
-          try {
-            await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
-            setPendingQrConflict(null);
-            setScanningId(null);
-            setMsg('QR associato (forzato).');
-            load();
-          } catch (e) {
-            setMsg(e.message || 'Errore');
-          }
-        }}
+        loading={conflictLoading}
+        onCancel={cancelConflict}
+        onConfirm={() => confirmConflict(setMsg)}
       >
         {pendingQrConflict?.errorData ? (
           <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo manifesto" />
