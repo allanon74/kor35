@@ -2,9 +2,11 @@ from datetime import datetime
 import logging
 
 from django.utils import timezone
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count, Exists, F, OuterRef, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework import permissions, status, viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
@@ -13,6 +15,7 @@ from rest_framework.views import APIView
 from gestione_plot.models import Evento
 from personaggi.models import Messaggio, Personaggio, get_active_korp, PersonaggioCarrieraMembership
 
+from .post_media import apply_post_media_from_request
 from .display_names import social_display_name
 from .models import (
     SOCIAL_GROUP_ROLE_ADMIN,
@@ -31,6 +34,7 @@ from .models import (
     SocialGroupPost,
     SocialLike,
     SocialPost,
+    SocialPostImage,
     SocialPostTag,
     SocialProfile,
     SocialStory,
@@ -256,10 +260,10 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         if story.media:
             name = str(story.media.name or "").lower()
             if name.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
-                post.immagine = story.media
+                SocialPostImage.objects.create(post=post, immagine=story.media, ordine=0)
             else:
                 post.video = story.media
-            post.save()
+                post.save(update_fields=["video", "updated_at"])
         sync_post_tags(post)
 
         # Migra replies -> commenti post
@@ -588,10 +592,28 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             if not is_member:
                 raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")
         post = serializer.save(autore=personaggio, evento=get_evento_in_corso(), likes_base=random_likes_base(personaggio))
+        try:
+            apply_post_media_from_request(post, self.request, replace_gallery=True)
+        except DjangoValidationError as exc:
+            post.delete()
+            raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc))
+        post.refresh_from_db()
+        post.full_clean()
         self._sync_tags_for_post(post)
 
     def perform_update(self, serializer):
         post = serializer.save()
+        try:
+            has_new_images = bool(self.request.FILES.getlist("immagini")) or bool(self.request.FILES.get("immagine"))
+            apply_post_media_from_request(
+                post,
+                self.request,
+                replace_gallery=has_new_images or str(self.request.data.get("clear_immagini", "")).lower() in {"1", "true", "yes"},
+            )
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc))
+        post.refresh_from_db()
+        post.full_clean()
         self._sync_tags_for_post(post)
 
     def _sync_tags_for_post(self, post):

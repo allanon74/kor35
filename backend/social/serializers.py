@@ -25,6 +25,7 @@ from .models import (
     SocialGroupPost,
     SocialLike,
     SocialPost,
+    SocialPostImage,
     SocialPostTag,
     SocialProfile,
     SocialStory,
@@ -249,6 +250,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
     public_url = serializers.SerializerMethodField()
     evento_titolo = serializers.CharField(source="evento.titolo", read_only=True)
     hashtags = serializers.SerializerMethodField()
+    immagini = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialPost
@@ -260,6 +262,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "titolo",
             "testo",
             "immagine",
+            "immagini",
             "video",
             "visibilita",
             "korp_visibilita",
@@ -273,7 +276,7 @@ class SocialPostSerializer(serializers.ModelSerializer):
             "hashtags",
             "public_url",
         )
-        read_only_fields = ("autore", "evento", "created_at", "likes_count", "comments_count", "liked_by_me")
+        read_only_fields = ("autore", "evento", "created_at", "likes_count", "comments_count", "liked_by_me", "immagini")
 
     def get_liked_by_me(self, obj):
         personaggio = self.context.get("personaggio")
@@ -318,6 +321,26 @@ class SocialPostSerializer(serializers.ModelSerializer):
     def get_hashtags(self, obj):
         text = f"{obj.titolo or ''} {obj.testo or ''}".strip()
         return extract_hashtags(text)
+
+    def get_immagini(self, obj):
+        request = self.context.get("request")
+        rows = obj.post_images.all()
+        urls = []
+        for row in rows:
+            if not row.immagine:
+                continue
+            url = row.immagine.url
+            if request:
+                url = request.build_absolute_uri(url)
+            urls.append(url)
+        if urls:
+            return urls
+        if obj.immagine:
+            url = obj.immagine.url
+            if request:
+                url = request.build_absolute_uri(url)
+            return [url]
+        return []
 
 
 class SocialGroupMembershipSerializer(serializers.ModelSerializer):
@@ -584,7 +607,9 @@ def resolve_active_personaggio(user, explicit_personaggio_id=None, request=None)
 
 
 def visible_posts_queryset_for_personaggio(personaggio, request=None):
-    base = SocialPost.objects.select_related("autore", "autore__social_profile", "evento", "korp_visibilita").annotate(
+    base = SocialPost.objects.select_related("autore", "autore__social_profile", "evento", "korp_visibilita").prefetch_related(
+        "post_images",
+    ).annotate(
         _likes_user_sum=Coalesce(Sum("likes__peso_like"), Value(0)),
         likes_total=F("likes_base") + F("_likes_user_sum"),
         comments_count=Count("comments", distinct=True),

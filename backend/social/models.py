@@ -23,6 +23,7 @@ SOCIAL_VISIBILITY_CHOICES = [
 
 MAX_IMAGE_SIZE = (1600, 1600)
 MAX_VIDEO_BYTES = 30 * 1024 * 1024
+MAX_POST_IMAGES = 8
 
 SOCIAL_GROUP_ROLE_MEMBER = "MEMBER"
 SOCIAL_GROUP_ROLE_ADMIN = "ADMIN"
@@ -45,6 +46,10 @@ SOCIAL_GROUP_STATUS_CHOICES = [
 
 def social_post_media_upload_to(instance, filename):
     return f"social/posts/{instance.autore_id}/{filename}"
+
+
+def social_post_image_upload_to(instance, filename):
+    return f"social/posts/{instance.post_id}/gallery/{filename}"
 
 
 def social_profile_image_upload_to(instance, filename):
@@ -104,10 +109,20 @@ class SocialPost(SyncableModel, models.Model):
         return f"{self.autore.nome} - {self.titolo}"
 
     def clean(self):
-        if not self.testo and not self.immagine and not self.video:
+        has_gallery = bool(self.pk and self.post_images.exists())
+        has_media = bool(self.testo or self.immagine or self.video or has_gallery)
+        if not has_media:
             raise ValidationError("Un post deve avere testo, immagine o video.")
         if self.immagine and self.video:
             raise ValidationError("Un post non puo avere contemporaneamente immagine e video.")
+        if self.pk and self.video and self.post_images.exists():
+            raise ValidationError("Un post non puo avere contemporaneamente video e piu immagini.")
+        if self.pk:
+            n_images = self.post_images.count()
+            if self.immagine and n_images == 0:
+                n_images = 1
+            if n_images > MAX_POST_IMAGES:
+                raise ValidationError(f"Massimo {MAX_POST_IMAGES} immagini per post.")
         if self.visibilita == SOCIAL_VISIBILITY_KORP and not self.korp_visibilita_id:
             raise ValidationError("Per la visibilita KORP devi selezionare una KORP.")
         if self.visibilita != SOCIAL_VISIBILITY_KORP and self.korp_visibilita_id:
@@ -131,6 +146,30 @@ class SocialPost(SyncableModel, models.Model):
             self.immagine = optimize_uploaded_image(self.immagine)
         self.clean()
         super().save(*args, **kwargs)
+
+
+class SocialPostImage(SyncableModel, models.Model):
+    post = models.ForeignKey(SocialPost, on_delete=models.CASCADE, related_name="post_images")
+    immagine = models.ImageField(upload_to=social_post_image_upload_to)
+    ordine = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Immagine post social"
+        verbose_name_plural = "Immagini post social"
+        ordering = ["ordine", "id"]
+        unique_together = ("post", "ordine")
+
+    def __str__(self):
+        return f"Immagine {self.ordine} post {self.post_id}"
+
+    def save(self, *args, **kwargs):
+        if self.immagine:
+            self.immagine = optimize_uploaded_image(self.immagine)
+        super().save(*args, **kwargs)
+        from .post_media import sync_post_cover_image
+
+        sync_post_cover_image(self.post)
 
 
 class SocialComment(SyncableModel, models.Model):

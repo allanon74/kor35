@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Copy, Heart, MessageCircle, Pencil, PlusSquare, Send, Sparkles, Star, Trash2, Users } from 'lucide-react';
+import { Bell, Camera, Copy, Heart, ImagePlus, MessageCircle, Pencil, PlusSquare, Send, Sparkles, Star, Trash2, Users, Video } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import {
   socialAcceptGroupInvite,
@@ -48,6 +48,7 @@ import {
 } from '../api';
 import StoryViewerModal from './StoryViewerModal';
 import StoryMediaCaptureModal from './StoryMediaCaptureModal';
+import InstafameMediaCarousel from './InstafameMediaCarousel';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
@@ -159,6 +160,7 @@ const compressImageFile = (file, maxEdge = STORY_IMAGE_MAX_EDGE, quality = 0.82)
 
 const SocialTab = ({ onLogout, onOpenMessages }) => {
   const PAGE_SIZE = 10;
+  const MAX_POST_IMAGES = 8;
   const { selectedCharacterId, isAdmin, personaggiList, selectCharacter, preferredCharacterId } = useCharacter();
   const [posts, setPosts] = useState([]);
   const [stories, setStories] = useState([]);
@@ -230,6 +232,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [groupInviteQuery, setGroupInviteQuery] = useState('');
   const [groupInviteSuggestions, setGroupInviteSuggestions] = useState([]);
   const sentinelRef = useRef(null);
+  const postImagesInputRef = useRef(null);
+  const postVideoInputRef = useRef(null);
   const postMediaCameraInputRef = useRef(null);
   const editMediaCameraInputRef = useRef(null);
   const groupPostMediaCameraInputRef = useRef(null);
@@ -240,25 +244,89 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     testo: '',
     visibilita: 'PUB',
     korp_visibilita: '',
-    immagine: null,
+    immagini: [],
     video: null,
   });
 
-  const handlePostMediaChange = (file) => {
+  const handlePostMediaChange = async (file) => {
     if (!file) {
-      setPostForm((p) => ({ ...p, immagine: null, video: null }));
+      setPostForm((p) => ({ ...p, immagini: [], video: null }));
       return;
     }
     if (String(file.type || '').startsWith('image/')) {
-      setPostForm((p) => ({ ...p, immagine: file, video: null }));
+      let prepared = file;
+      try {
+        prepared = await compressImageFile(file);
+      } catch {
+        prepared = file;
+      }
+      setPostForm((p) => {
+        const next = [...(p.immagini || []), prepared].slice(0, MAX_POST_IMAGES);
+        return { ...p, immagini: next, video: null };
+      });
       return;
     }
     if (String(file.type || '').startsWith('video/')) {
-      setPostForm((p) => ({ ...p, video: file, immagine: null }));
+      setPostForm((p) => ({ ...p, video: file, immagini: [] }));
       return;
     }
     alert('Formato non supportato. Usa una immagine o un video.');
   };
+
+  const handlePostImagesChange = async (fileList, inputEl) => {
+    const files = Array.from(fileList || []).filter((f) => String(f.type || '').startsWith('image/'));
+    if (!files.length) {
+      if (fileList?.length) alert('Seleziona solo file immagine (JPG, PNG, …).');
+      return;
+    }
+    const compressed = [];
+    for (const file of files) {
+      try {
+        compressed.push(await compressImageFile(file));
+      } catch {
+        compressed.push(file);
+      }
+    }
+    setPostForm((p) => {
+      const merged = [...(p.immagini || []), ...compressed].slice(0, MAX_POST_IMAGES);
+      return { ...p, immagini: merged, video: null };
+    });
+    if (inputEl) inputEl.value = '';
+  };
+
+  const handlePostVideoChange = (file, inputEl) => {
+    if (!file) return;
+    if (!String(file.type || '').startsWith('video/')) {
+      alert('Seleziona un file video (MP4, WebM, …).');
+      if (inputEl) inputEl.value = '';
+      return;
+    }
+    setPostForm((p) => ({ ...p, video: file, immagini: [] }));
+    if (inputEl) inputEl.value = '';
+  };
+
+  const clearPostVideo = () => {
+    setPostForm((p) => ({ ...p, video: null }));
+    if (postVideoInputRef.current) postVideoInputRef.current.value = '';
+  };
+
+  const removePostImageAt = (index) => {
+    setPostForm((p) => ({
+      ...p,
+      immagini: (p.immagini || []).filter((_, i) => i !== index),
+    }));
+  };
+
+  const postImagesPreviewUrls = useMemo(() => {
+    const files = postForm.immagini || [];
+    return files.map((file) => URL.createObjectURL(file));
+  }, [postForm.immagini]);
+
+  useEffect(() => {
+    return () => {
+      postImagesPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [postImagesPreviewUrls]);
 
   const [profileForm, setProfileForm] = useState({
     nickname: '',
@@ -571,7 +639,19 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     if (postForm.visibilita === 'KORP' && postForm.korp_visibilita) {
       fd.append('korp_visibilita', postForm.korp_visibilita);
     }
-    if (postForm.immagine) fd.append('immagine', postForm.immagine);
+    if (postForm.immagini?.length) {
+      for (const file of postForm.immagini) {
+        let prepared = file;
+        if (String(file.type || '').startsWith('image/')) {
+          try {
+            prepared = await compressImageFile(file);
+          } catch {
+            prepared = file;
+          }
+        }
+        fd.append('immagini', prepared);
+      }
+    }
     if (postForm.video) fd.append('video', postForm.video);
 
     try {
@@ -581,7 +661,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         testo: '',
         visibilita: 'PUB',
         korp_visibilita: '',
-        immagine: null,
+        immagini: [],
         video: null,
       });
       setShowComposer(false);
@@ -821,7 +901,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       testo: post.testo || '',
       visibilita: post.visibilita || 'PUB',
       korp_visibilita: post.korp_visibilita || '',
-      immagine: null,
+      immagini: [],
       video: null,
     });
   };
@@ -837,33 +917,71 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     } else {
       fd.append('korp_visibilita', '');
     }
-    if (editingPost.immagine) {
-      fd.append('immagine', editingPost.immagine);
+    if (editingPost.immagini?.length) {
+      for (const file of editingPost.immagini) {
+        let prepared = file;
+        if (file instanceof File && String(file.type || '').startsWith('image/')) {
+          try {
+            prepared = await compressImageFile(file);
+          } catch {
+            prepared = file;
+          }
+        }
+        fd.append('immagini', prepared);
+      }
       fd.append('video', '');
     }
     if (editingPost.video) {
       fd.append('video', editingPost.video);
-      fd.append('immagine', '');
+      fd.append('clear_immagini', '1');
     }
     await socialUpdatePost(editingPost.id, fd, onLogout);
     setEditingPost(null);
     await loadAll();
   };
 
-  const handleEditMediaChange = (file) => {
+  const handleEditMediaChange = async (file) => {
     if (!file) {
-      setEditingPost((p) => ({ ...p, immagine: null, video: null }));
+      setEditingPost((p) => ({ ...p, immagini: [], video: null }));
       return;
     }
     if (String(file.type || '').startsWith('image/')) {
-      setEditingPost((p) => ({ ...p, immagine: file, video: null }));
+      let prepared = file;
+      try {
+        prepared = await compressImageFile(file);
+      } catch {
+        prepared = file;
+      }
+      setEditingPost((p) => ({
+        ...p,
+        immagini: [...(p.immagini || []), prepared].slice(0, MAX_POST_IMAGES),
+        video: null,
+      }));
       return;
     }
     if (String(file.type || '').startsWith('video/')) {
-      setEditingPost((p) => ({ ...p, video: file, immagine: null }));
+      setEditingPost((p) => ({ ...p, video: file, immagini: [] }));
       return;
     }
     alert('Formato non supportato. Usa una immagine o un video.');
+  };
+
+  const handleEditImagesChange = async (fileList) => {
+    const files = Array.from(fileList || []).filter((f) => String(f.type || '').startsWith('image/'));
+    if (!files.length) return;
+    const compressed = [];
+    for (const file of files) {
+      try {
+        compressed.push(await compressImageFile(file));
+      } catch {
+        compressed.push(file);
+      }
+    }
+    setEditingPost((p) => ({
+      ...p,
+      immagini: [...(p.immagini || []), ...compressed].slice(0, MAX_POST_IMAGES),
+      video: null,
+    }));
   };
 
   const removePost = async (postId) => {
@@ -1491,33 +1609,112 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </select>
             )}
           </div>
-          <div className="text-sm space-y-1">
-            <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept="image/*,video/*"
-                onChange={(e) => handlePostMediaChange(e.target.files?.[0] || null)}
-              />
+          <div className="text-sm space-y-3 rounded-xl border border-gray-700 bg-gray-800/40 p-3">
+            <div className="text-xs font-semibold text-amber-200/90 uppercase tracking-wide">Media del post</div>
+            <p className="text-xs text-gray-400">
+              Scegli <strong className="text-gray-300">foto</strong> (fino a {MAX_POST_IMAGES}) <strong className="text-gray-300">oppure</strong> un <strong className="text-gray-300">video</strong> — non entrambi.
+            </p>
+
+            <input
+              ref={postImagesInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={(e) => handlePostImagesChange(e.target.files, e.target)}
+            />
+            <input
+              ref={postVideoInputRef}
+              type="file"
+              accept="video/*"
+              className="hidden"
+              onChange={(e) => handlePostVideoChange(e.target.files?.[0] || null, e.target)}
+            />
+            <input
+              ref={postMediaCameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                handlePostMediaChange(e.target.files?.[0] || null);
+                e.target.value = '';
+              }}
+            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => postMediaCameraInputRef.current?.click?.()}
-                className="px-3 py-2 rounded-lg border border-amber-300/20 bg-white/5 hover:bg-white/10 text-xs font-semibold text-amber-100/90"
-                title="Scatta/Registra dalla camera"
+                disabled={Boolean(postForm.video) || (postForm.immagini?.length || 0) >= MAX_POST_IMAGES}
+                onClick={() => postImagesInputRef.current?.click()}
+                className="flex flex-col items-start gap-1 rounded-lg border border-sky-400/35 bg-sky-950/40 hover:bg-sky-900/50 disabled:opacity-45 disabled:cursor-not-allowed px-3 py-2.5 text-left"
               >
-                Camera
+                <span className="inline-flex items-center gap-2 font-semibold text-sky-100 text-sm">
+                  <ImagePlus size={18} /> Carica foto
+                </span>
+                <span className="text-[11px] text-sky-200/70">Galleria · fino a {MAX_POST_IMAGES} immagini</span>
               </button>
-              <input
-                ref={postMediaCameraInputRef}
-                type="file"
-                accept="image/*,video/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => handlePostMediaChange(e.target.files?.[0] || null)}
-              />
+
+              <button
+                type="button"
+                disabled={Boolean(postForm.video) || (postForm.immagini?.length || 0) > 0}
+                onClick={() => postVideoInputRef.current?.click()}
+                className="flex flex-col items-start gap-1 rounded-lg border border-violet-400/35 bg-violet-950/40 hover:bg-violet-900/50 disabled:opacity-45 disabled:cursor-not-allowed px-3 py-2.5 text-left"
+              >
+                <span className="inline-flex items-center gap-2 font-semibold text-violet-100 text-sm">
+                  <Video size={18} /> Carica video
+                </span>
+                <span className="text-[11px] text-violet-200/70">Un solo file video per post</span>
+              </button>
             </div>
-            <div className="text-xs text-gray-400">
-              Carica una foto o un video (uno solo per post).
-            </div>
+
+            <button
+              type="button"
+              disabled={Boolean(postForm.video) || (postForm.immagini?.length || 0) >= MAX_POST_IMAGES}
+              onClick={() => postMediaCameraInputRef.current?.click()}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-300/25 bg-amber-950/30 hover:bg-amber-900/40 text-xs font-semibold text-amber-100 disabled:opacity-45 disabled:cursor-not-allowed"
+            >
+              <Camera size={16} /> Scatta foto con la camera
+            </button>
+
+            {(postForm.immagini?.length || 0) > 0 && (
+              <div className="text-xs text-sky-200/80">
+                {postForm.immagini.length}/{MAX_POST_IMAGES} foto selezionate
+              </div>
+            )}
+            {postImagesPreviewUrls.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {postImagesPreviewUrls.map((url, i) => (
+                  <div key={url} className="relative w-16 h-16 rounded border border-gray-600 overflow-hidden">
+                    <img src={url} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePostImageAt(i)}
+                      className="absolute top-0 right-0 bg-black/70 text-white text-xs px-1"
+                      aria-label="Rimuovi foto"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {postForm.video && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-violet-400/30 bg-violet-950/30 px-3 py-2 text-sm text-violet-100">
+                <span className="inline-flex items-center gap-2 min-w-0">
+                  <Video size={16} className="shrink-0" />
+                  <span className="truncate">{postForm.video.name || 'Video selezionato'}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={clearPostVideo}
+                  className="text-xs text-violet-200 hover:text-white underline shrink-0"
+                >
+                  Rimuovi
+                </button>
+              </div>
+            )}
           </div>
           <button
             type="submit"
@@ -1846,36 +2043,61 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           </div>
         )}
         {!loading && filteredPosts.length === 0 && <div className="text-gray-400">Nessun post per questo filtro.</div>}
-        {filteredPosts.map((post) => (
-          <article key={post.id} className="rounded-3xl border border-amber-300/35 bg-linear-to-b from-[#24152a]/96 to-[#1a111f]/96 p-3 md:p-4 space-y-3 shadow-[0_14px_34px_rgba(0,0,0,0.40)]">
-            <div className="flex justify-between items-start gap-3">
-              <div className="flex items-start gap-3 min-w-0">
+        {filteredPosts.map((post) => {
+          const postImages =
+            Array.isArray(post.immagini) && post.immagini.length > 0
+              ? post.immagini
+              : post.immagine
+                ? [post.immagine]
+                : [];
+
+          return (
+          <article key={post.id} className="rounded-3xl border border-amber-300/35 bg-linear-to-b from-[#24152a]/96 to-[#1a111f]/96 overflow-hidden shadow-[0_14px_34px_rgba(0,0,0,0.40)]">
+            <div className="flex justify-between items-center gap-3 px-3 pt-3 pb-2 md:px-4">
+              <div className="flex items-center gap-3 min-w-0">
                 <SocialAuthorAvatar
                   name={post.autore_nome}
                   avatarUrl={post.autore_avatar}
                   onClick={() => openProfile(post.autore)}
                 />
                 <div className="min-w-0">
-                <div className="h-1 w-16 rounded-full bg-linear-to-r from-amber-300 via-yellow-200 to-amber-400 mb-2" />
-                <h3 className="font-bold text-base md:text-lg text-amber-100">{post.titolo}</h3>
-                <p className="text-xs text-gray-400">
-                  <button type="button" onClick={() => openProfile(post.autore)} className="underline decoration-dotted hover:text-white">
+                  <button
+                    type="button"
+                    onClick={() => openProfile(post.autore)}
+                    className="font-semibold text-sm text-amber-100 hover:text-white truncate block text-left"
+                  >
                     {post.autore_nome}
-                  </button>{' '}
-                  · {new Date(post.created_at).toLocaleString('it-IT')}
-                </p>
+                  </button>
+                  <p className="text-[11px] text-gray-400">
+                    {new Date(post.created_at).toLocaleString('it-IT')}
+                    {post.evento_titolo ? ` · ${post.evento_titolo}` : ''}
+                  </p>
                 </div>
               </div>
-              <span className="text-xs px-2 py-1 rounded-full bg-[#2d1d31] border border-amber-300/40 text-amber-100">
+              <span className="text-xs px-2 py-1 rounded-full bg-[#2d1d31] border border-amber-300/40 text-amber-100 shrink-0">
                 {post.visibilita === 'KORP' ? 'Solo KORP' : 'Pubblico'}
               </span>
             </div>
-            {post.evento_titolo && (
-              <div className="inline-flex items-center text-[11px] px-2 py-1 rounded border border-amber-400/40 bg-amber-900/20 text-amber-200">
-                Evento: {post.evento_titolo}
+
+            {postImages.length > 0 && (
+              <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth />
+            )}
+            {post.video && (
+              <div className="w-full aspect-4/5 overflow-hidden border-y border-gray-700/60 bg-black">
+                <video controls src={resolveMediaUrl(post.video)} className="h-full w-full object-cover" />
               </div>
             )}
-            {post.testo && <p className="text-gray-200 text-sm md:text-base leading-relaxed">{renderTextWithMentions(post.testo, post.tags)}</p>}
+
+            <div className="px-3 py-3 md:px-4 space-y-2.5">
+            <div className="space-y-1.5 text-sm md:text-base leading-relaxed">
+              {post.titolo && (
+                <p className="font-semibold text-amber-100">{post.titolo}</p>
+              )}
+              {post.testo && (
+                <p className="text-gray-200">{renderTextWithMentions(post.testo, post.tags)}</p>
+              )}
+            </div>
+
             {Array.isArray(post.hashtags) && post.hashtags.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {post.hashtags.map((h) => (
@@ -1908,17 +2130,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 ))}
               </div>
             )}
-            {post.immagine && (
-              <div className="w-full max-w-md mx-auto aspect-4/5 rounded-lg overflow-hidden border border-gray-700 bg-black/40">
-                <img src={post.immagine} alt={post.titolo} className="h-full w-full object-cover" />
-              </div>
-            )}
-            {post.video && (
-              <div className="w-full max-w-md mx-auto aspect-4/5 rounded-lg overflow-hidden border border-gray-700 bg-black">
-                <video controls src={post.video} className="h-full w-full object-cover" />
-              </div>
-            )}
-            <div className="flex gap-2 flex-wrap">
+
+            <div className="flex gap-2 flex-wrap pt-0.5">
               <button
                 onClick={() => handleToggleLike(post.id)}
                 disabled={Boolean(likingPostById[post.id])}
@@ -1963,6 +2176,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 </>
               )}
             </div>
+
             <div className="pt-2 border-t border-gray-700 space-y-2">
               <div className="flex gap-2 items-center">
                 <input
@@ -2122,8 +2336,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 );
               })()}
             </div>
+            </div>
           </article>
-        ))}
+          );
+        })}
         {!loading && hasMorePosts && (
           <div ref={sentinelRef} className="py-5 text-center text-gray-400 text-sm">
             {loadingMorePosts ? 'Caricamento post precedenti...' : 'Scorri per caricare altri post'}
@@ -2565,32 +2781,38 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 </select>
               )}
             </div>
-            <div className="text-sm space-y-1">
-              <div className="flex items-center gap-2">
+            <div className="text-sm space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="file"
-                  accept="image/*,video/*"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => handleEditImagesChange(e.target.files)}
+                />
+                <input
+                  type="file"
+                  accept="video/*"
                   onChange={(e) => handleEditMediaChange(e.target.files?.[0] || null)}
                 />
                 <button
                   type="button"
                   onClick={() => editMediaCameraInputRef.current?.click?.()}
                   className="px-3 py-2 rounded-lg border border-amber-300/20 bg-white/5 hover:bg-white/10 text-xs font-semibold text-amber-100/90"
-                  title="Scatta/Registra dalla camera"
+                  title="Scatta dalla camera"
                 >
                   Camera
                 </button>
                 <input
                   ref={editMediaCameraInputRef}
                   type="file"
-                  accept="image/*,video/*"
+                  accept="image/*"
                   capture="environment"
                   className="hidden"
                   onChange={(e) => handleEditMediaChange(e.target.files?.[0] || null)}
                 />
               </div>
               <div className="text-xs text-gray-400">
-                Carica una foto o un video (uno solo per post).
+                Nuovo set: fino a {MAX_POST_IMAGES} foto oppure un video (sostituisce le foto esistenti).
               </div>
             </div>
             <button onClick={saveEditedPost} className="w-full bg-indigo-600 hover:bg-indigo-500 rounded p-2 font-bold">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { socialGetPublicPostBySlug } from '../api';
+import { socialGetPublicPostBySlug, resolveMediaUrl } from '../api';
+import InstafameMediaCarousel from '../components/InstafameMediaCarousel';
 import { formatCount } from '../utils/formatCount';
 
 export default function SocialPublicPostPage() {
@@ -33,22 +34,41 @@ export default function SocialPublicPostPage() {
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
   if (!post) return null;
 
+  const postImages =
+    Array.isArray(post.immagini) && post.immagini.length > 0
+      ? post.immagini
+      : post.immagine
+        ? [post.immagine]
+        : [];
+
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-8">
-      <div className="bg-white rounded-xl shadow border border-gray-200 p-5 space-y-4">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{post.titolo}</h1>
-        <p className="text-sm text-gray-500">
-          Pubblicato da <span className="font-semibold">{post.autore_nome}</span> ·{' '}
-          {new Date(post.created_at).toLocaleString('it-IT')}
-        </p>
+      <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+        <div className="px-5 pt-5 pb-3">
+          <p className="text-sm text-gray-500">
+            <span className="font-semibold text-gray-900">{post.autore_nome}</span>
+            {' · '}
+            {new Date(post.created_at).toLocaleString('it-IT')}
+          </p>
+        </div>
 
-        {post.testo && <p className="text-gray-800 whitespace-pre-wrap">{post.testo}</p>}
-        {post.immagine && <img src={post.immagine} alt={post.titolo} className="w-full rounded-lg border border-gray-200" />}
-        {post.video && <video src={post.video} controls className="w-full rounded-lg border border-gray-200" />}
+        {postImages.length > 0 && (
+          <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth className="border-gray-200" />
+        )}
+        {post.video && (
+          <div className="w-full aspect-4/5 overflow-hidden border-y border-gray-200 bg-black">
+            <video controls src={resolveMediaUrl(post.video)} className="h-full w-full object-cover" />
+          </div>
+        )}
 
-        <div className="text-sm text-gray-600 border-t border-gray-200 pt-3">
-          Like: <span className="font-semibold">{formatCount(post.likes_count)}</span> · Commenti:{' '}
-          <span className="font-semibold">{formatCount(post.comments_count)}</span>
+        <div className="px-5 py-4 space-y-3">
+          {post.titolo && <h1 className="text-xl md:text-2xl font-bold text-gray-900">{post.titolo}</h1>}
+          {post.testo && <p className="text-gray-800 whitespace-pre-wrap">{post.testo}</p>}
+
+          <div className="text-sm text-gray-600 border-t border-gray-200 pt-3">
+            Like: <span className="font-semibold">{formatCount(post.likes_count)}</span> · Commenti:{' '}
+            <span className="font-semibold">{formatCount(post.comments_count)}</span>
+          </div>
         </div>
       </div>
 

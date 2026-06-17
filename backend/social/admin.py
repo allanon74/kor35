@@ -10,6 +10,7 @@ from .models import (
     SocialGroupPost,
     SocialLike,
     SocialPost,
+    SocialPostImage,
     SocialPostTag,
     SocialProfile,
     SocialStory,
@@ -56,13 +57,19 @@ class SocialCommentTagInline(admin.TabularInline):
     autocomplete_fields = ("personaggio",)
 
 
+class SocialPostImageInline(admin.TabularInline):
+    model = SocialPostImage
+    extra = 0
+    readonly_fields = ("created_at",)
+
+
 @admin.register(SocialPost)
 class SocialPostAdmin(SummernoteModelAdmin):
     list_display = ("titolo", "autore", "visibilita", "korp_visibilita", "evento", "public_slug", "created_at")
     list_filter = ("visibilita", "korp_visibilita", "evento")
     search_fields = ("titolo", "testo", "autore__nome")
     autocomplete_fields = ("autore", "korp_visibilita", "evento")
-    inlines = [SocialPostTagInline, SocialCommentInline, SocialLikeInline]
+    inlines = [SocialPostImageInline, SocialPostTagInline, SocialCommentInline, SocialLikeInline]
     summernote_fields = ("testo",)
 
 
