@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Send, Heart } from 'lucide-react';
 import { resolveMediaUrl, socialMarkStoryViewed, socialReactStory, socialReplyStory } from '../api';
 import { formatCount } from '../utils/formatCount';
+import { HASHTAG_INLINE_REGEX } from '../utils/hashtags';
 
 const DEFAULT_DURATION_MS = 6500;
 const TEXT_PAGE_DURATION_MS = 4200;
@@ -150,11 +151,11 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
     }
     if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
 
-    const hashtagRegex = /(^|[\s.,;:!?()[\]{}])#([A-Za-z0-9_]{2,40})/g;
     const renderWithHashtags = (value, keyPrefix) => {
       const chunks = [];
       let hl = 0;
       let h;
+      const hashtagRegex = new RegExp(HASHTAG_INLINE_REGEX.source, HASHTAG_INLINE_REGEX.flags);
       while ((h = hashtagRegex.exec(value)) !== null) {
         const full = h[0];
         const lead = h[1] || '';

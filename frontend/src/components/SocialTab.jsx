@@ -52,6 +52,7 @@ import InstafameMediaCarousel from './InstafameMediaCarousel';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
+import { HASHTAG_INLINE_REGEX, normalizeHashtagFilter } from '../utils/hashtags';
 import { prepareProfileImageForUpload } from '../utils/profileImage';
 
 const formatProfilePrefettura = (profileData) => {
@@ -1379,11 +1380,11 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       last = end;
     }
     if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
-    const hashtagRegex = /(^|[\s.,;:!?()[\]{}])#([A-Za-z0-9_]{2,40})/g;
     const renderWithHashtags = (value, keyPrefix) => {
       const chunks = [];
       let last = 0;
       let h;
+      const hashtagRegex = new RegExp(HASHTAG_INLINE_REGEX.source, HASHTAG_INLINE_REGEX.flags);
       while ((h = hashtagRegex.exec(value)) !== null) {
         const full = h[0];
         const lead = h[1] || '';
@@ -1397,7 +1398,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             key={`${keyPrefix}-h-${hashIndex}-${tag}`}
             type="button"
             onClick={() => {
-              setHashtagFilter(tag.toLowerCase());
+              setHashtagFilter(normalizeHashtagFilter(tag));
               setFeedFilter('ALL');
             }}
             className="underline decoration-dotted text-fuchsia-300 hover:text-fuchsia-100"
@@ -2137,7 +2138,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                     key={`ph-${post.id}-${h}`}
                     type="button"
                     onClick={() => {
-                      setHashtagFilter(String(h).toLowerCase());
+                      setHashtagFilter(normalizeHashtagFilter(h));
                       setFeedFilter('ALL');
                     }}
                     className="text-xs px-2 py-1 rounded-full bg-fuchsia-900/40 border border-fuchsia-400/30 text-fuchsia-100 hover:bg-fuchsia-800/50"
