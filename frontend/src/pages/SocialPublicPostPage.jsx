@@ -41,41 +41,76 @@ export default function SocialPublicPostPage() {
         ? [post.immagine]
         : [];
 
+  const hasMedia = postImages.length > 0 || Boolean(post.video);
+
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-8">
-      <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
-        <div className="px-5 pt-5 pb-3">
-          <p className="text-sm text-gray-500">
-            <span className="font-semibold text-gray-900">{post.autore_nome}</span>
-            {' · '}
-            {new Date(post.created_at).toLocaleString('it-IT')}
-          </p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-5xl mx-auto p-4 md:p-8">
+        <div
+          className={`bg-white rounded-xl shadow border border-gray-200 overflow-hidden ${
+            hasMedia ? 'lg:grid lg:grid-cols-2 lg:items-stretch' : 'max-w-2xl mx-auto'
+          }`}
+        >
+          {hasMedia && (
+            <div className="px-5 pt-5 pb-3 lg:hidden">
+              <p className="text-sm text-gray-500">
+                <span className="font-semibold text-gray-900">{post.autore_nome}</span>
+                {' · '}
+                {new Date(post.created_at).toLocaleString('it-IT')}
+              </p>
+            </div>
+          )}
+
+          {(postImages.length > 0 || post.video) && (
+            <div className="lg:flex lg:items-center lg:justify-center lg:bg-black lg:min-h-[360px] lg:max-h-[720px] lg:border-r lg:border-gray-200">
+              {postImages.length > 0 ? (
+                <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth className="border-gray-200" />
+              ) : (
+                <div className="w-full aspect-4/5 overflow-hidden border-y border-gray-200 bg-black lg:aspect-auto lg:h-full lg:max-h-[720px] lg:border-y-0">
+                  <video controls src={resolveMediaUrl(post.video)} className="h-full w-full object-cover lg:object-contain" />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className={hasMedia ? 'lg:flex lg:flex-col lg:min-h-[360px]' : ''}>
+            {hasMedia && (
+              <div className="hidden lg:block px-5 pt-5 pb-3 border-b border-gray-200">
+                <p className="text-sm text-gray-500">
+                  <span className="font-semibold text-gray-900">{post.autore_nome}</span>
+                  {' · '}
+                  {new Date(post.created_at).toLocaleString('it-IT')}
+                </p>
+              </div>
+            )}
+
+            {!hasMedia && (
+              <div className="px-5 pt-5 pb-3">
+                <p className="text-sm text-gray-500">
+                  <span className="font-semibold text-gray-900">{post.autore_nome}</span>
+                  {' · '}
+                  {new Date(post.created_at).toLocaleString('it-IT')}
+                </p>
+              </div>
+            )}
+
+            <div className={`px-5 py-4 space-y-3 ${hasMedia ? 'lg:flex-1 lg:overflow-y-auto' : ''}`}>
+              {post.titolo && <h1 className="text-xl md:text-2xl font-bold text-gray-900">{post.titolo}</h1>}
+              {post.testo && <p className="text-gray-800 whitespace-pre-wrap">{post.testo}</p>}
+
+              <div className="text-sm text-gray-600 border-t border-gray-200 pt-3">
+                Like: <span className="font-semibold">{formatCount(post.likes_count)}</span> · Commenti:{' '}
+                <span className="font-semibold">{formatCount(post.comments_count)}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {postImages.length > 0 && (
-          <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth className="border-gray-200" />
-        )}
-        {post.video && (
-          <div className="w-full aspect-4/5 overflow-hidden border-y border-gray-200 bg-black">
-            <video controls src={resolveMediaUrl(post.video)} className="h-full w-full object-cover" />
-          </div>
-        )}
-
-        <div className="px-5 py-4 space-y-3">
-          {post.titolo && <h1 className="text-xl md:text-2xl font-bold text-gray-900">{post.titolo}</h1>}
-          {post.testo && <p className="text-gray-800 whitespace-pre-wrap">{post.testo}</p>}
-
-          <div className="text-sm text-gray-600 border-t border-gray-200 pt-3">
-            Like: <span className="font-semibold">{formatCount(post.likes_count)}</span> · Commenti:{' '}
-            <span className="font-semibold">{formatCount(post.comments_count)}</span>
-          </div>
+        <div className="mt-4 text-center">
+          <Link to="/app/social" className="text-indigo-600 hover:text-indigo-500 font-semibold">
+            Apri InstaFame
+          </Link>
         </div>
-      </div>
-
-      <div className="mt-4 text-center">
-        <Link to="/app/social" className="text-indigo-600 hover:text-indigo-500 font-semibold">
-          Apri InstaFame
-        </Link>
       </div>
     </div>
   );

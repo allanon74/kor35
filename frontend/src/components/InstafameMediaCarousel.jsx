@@ -36,7 +36,7 @@ const InstafameMediaCarousel = ({ images = [], alt = '', className = '', fullWid
     <div
       className={`relative overflow-hidden bg-black/40 ${
         fullWidth
-          ? 'w-full aspect-4/5 border-y border-gray-700/60'
+          ? 'w-full aspect-4/5 border-y border-gray-700/60 lg:aspect-auto lg:h-full lg:min-h-[280px] lg:max-h-[640px] lg:border-y-0'
           : 'w-full max-w-md mx-auto aspect-4/5 rounded-lg border border-gray-700'
       } ${className}`}
     >
@@ -49,7 +49,7 @@ const InstafameMediaCarousel = ({ images = [], alt = '', className = '', fullWid
         <img
           src={slides[safeIndex]}
           alt={alt}
-          className="h-full w-full object-cover select-none pointer-events-none"
+          className="h-full w-full object-cover select-none pointer-events-none lg:object-contain"
           draggable={false}
         />
       </button>

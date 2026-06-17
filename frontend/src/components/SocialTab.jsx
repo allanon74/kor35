@@ -1561,7 +1561,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
       {socialViewMode === 'FEED' && showComposer && (
       <section className="grid grid-cols-1 gap-4">
-        <form onSubmit={handleCreatePost} className="rounded-2xl border border-indigo-500/30 bg-gray-900/70 p-3 md:p-4 space-y-3 max-w-4xl">
+        <form onSubmit={handleCreatePost} className="rounded-2xl border border-indigo-500/30 bg-gray-900/70 p-3 md:p-4 space-y-3 max-w-4xl mx-auto w-full">
           <div className="flex items-center gap-2 text-indigo-300 font-bold"><PlusSquare size={18} /> Nuovo Post</div>
           <input
             className="w-full bg-gray-800 rounded p-2 border border-gray-700"
@@ -1728,7 +1728,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       )}
 
       {socialViewMode === 'FEED' && (
-      <section className="space-y-4">
+      <section className="space-y-4 lg:max-w-5xl lg:mx-auto lg:w-full">
         <div className="rounded-2xl border border-amber-300/20 bg-black/30 p-3">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-bold text-amber-200">Storie</div>
@@ -2050,10 +2050,16 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               : post.immagine
                 ? [post.immagine]
                 : [];
+          const hasMedia = postImages.length > 0 || Boolean(post.video);
 
           return (
           <article key={post.id} className="rounded-3xl border border-amber-300/35 bg-linear-to-b from-[#24152a]/96 to-[#1a111f]/96 overflow-hidden shadow-[0_14px_34px_rgba(0,0,0,0.40)]">
-            <div className="flex justify-between items-center gap-3 px-3 pt-3 pb-2 md:px-4">
+            <div className={hasMedia ? 'lg:grid lg:grid-cols-2 lg:grid-rows-[auto_1fr] lg:items-stretch' : ''}>
+            <div
+              className={`flex justify-between items-center gap-3 px-3 pt-3 pb-2 md:px-4 ${
+                hasMedia ? 'lg:col-start-2 lg:row-start-1 lg:border-b lg:border-gray-700/40 lg:shrink-0' : ''
+              }`}
+            >
               <div className="flex items-center gap-3 min-w-0">
                 <SocialAuthorAvatar
                   name={post.autore_nome}
@@ -2080,15 +2086,37 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             </div>
 
             {postImages.length > 0 && (
-              <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth />
+              <div
+                className={
+                  hasMedia
+                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:items-center lg:justify-center lg:bg-black/60 lg:min-h-[360px] lg:max-h-[640px] lg:border-r lg:border-gray-700/50'
+                    : ''
+                }
+              >
+                <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth />
+              </div>
             )}
             {post.video && (
-              <div className="w-full aspect-4/5 overflow-hidden border-y border-gray-700/60 bg-black">
-                <video controls src={resolveMediaUrl(post.video)} className="h-full w-full object-cover" />
+              <div
+                className={`w-full aspect-4/5 overflow-hidden border-y border-gray-700/60 bg-black ${
+                  hasMedia
+                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:aspect-auto lg:h-full lg:min-h-[360px] lg:max-h-[640px] lg:border-y-0 lg:flex lg:items-center lg:justify-center'
+                    : ''
+                }`}
+              >
+                <video
+                  controls
+                  src={resolveMediaUrl(post.video)}
+                  className="h-full w-full object-cover lg:object-contain lg:max-h-[640px]"
+                />
               </div>
             )}
 
-            <div className="px-3 py-3 md:px-4 space-y-2.5">
+            <div
+              className={`px-3 py-3 md:px-4 space-y-2.5 ${
+                hasMedia ? 'lg:col-start-2 lg:row-start-2 lg:overflow-y-auto lg:max-h-[min(560px,72vh)] lg:min-h-0' : ''
+              }`}
+            >
             <div className="space-y-1.5 text-sm md:text-base leading-relaxed">
               {post.titolo && (
                 <p className="font-semibold text-amber-100">{post.titolo}</p>
@@ -2335,6 +2363,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </div>
                 );
               })()}
+            </div>
             </div>
             </div>
           </article>
