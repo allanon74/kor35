@@ -154,6 +154,10 @@ def _frontend_login_url(request) -> str:
         return configured
     if not configured.startswith("/"):
         configured = f"/{configured}"
+    # Allinea host/scheme alla redirect_uri registrata su Arcana (evita http dietro proxy).
+    client_origin = _client_registered_origin()
+    if client_origin:
+        return f"{client_origin}{configured}"
     return request.build_absolute_uri(configured)
 
 
@@ -398,6 +402,7 @@ class ArcanaSSOCallbackView(APIView):
             )
             local_token, _ = Token.objects.get_or_create(user=user)
         except Exception:
+            logger.exception("Arcana SSO callback failed")
             return HttpResponseRedirect(f"{login_url}?arcana_error=callback_failed")
 
         ticket = _base64url(secrets.token_bytes(24))

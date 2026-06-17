@@ -335,27 +335,29 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
 };
 
 const LazyList = ({ items, renderItem, batchSize = 10 }) => {
-    const [displayedItems, setDisplayedItems] = useState([]);
-    
-    useEffect(() => {
-        // Reset quando cambiano gli items
-        setDisplayedItems(items.slice(0, batchSize));
-    }, [items, batchSize]);
+    const itemsKey = items.map((item) => item.id).join(',');
+    const [visibleCount, setVisibleCount] = useState(batchSize);
 
+    useEffect(() => {
+        setVisibleCount(batchSize);
+    }, [itemsKey, batchSize]);
+
+    const displayedItems = items.slice(0, visibleCount);
     const showMore = () => {
-        setDisplayedItems(prev => items.slice(0, prev.length + batchSize));
+        setVisibleCount((prev) => Math.min(prev + batchSize, items.length));
     };
 
     return (
         <div className="space-y-2">
             {displayedItems.map(renderItem)}
             
-            {displayedItems.length < items.length && (
+            {visibleCount < items.length && (
                 <button 
+                    type="button"
                     onClick={showMore}
                     className="w-full py-3 mt-2 text-sm font-bold text-gray-400 bg-gray-800/50 hover:bg-gray-700 border border-dashed border-gray-600 rounded-lg transition-colors flex items-center justify-center gap-2"
                 >
-                    <ChevronDown size={16} /> Carica altri ({items.length - displayedItems.length})
+                    <ChevronDown size={16} /> Carica altri ({items.length - visibleCount})
                 </button>
             )}
         </div>

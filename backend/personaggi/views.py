@@ -1522,8 +1522,13 @@ class QrCodeDetailView(APIView):
     """
 
     def get(self, request, qrcode_id, format=None):
+        from personaggi.qr_logic import validate_qr_uuid
+
         try:
-            qr_code = QrCode.objects.select_related("vista").get(id=qrcode_id)
+            qr_uuid = validate_qr_uuid(qrcode_id)
+            qr_code = QrCode.objects.select_related("vista").get(id=qr_uuid)
+        except (ValueError, TypeError):
+            return Response({"error": "ID QrCode non valido."}, status=status.HTTP_400_BAD_REQUEST)
         except QrCode.DoesNotExist:
             return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -5284,11 +5289,18 @@ class AssociaQrAVistaView(APIView):
     permission_classes = [permissions.IsAdminUser]  # Solo Staff
     
     def post(self, request, a_vista_id):
-        qr_id = request.data.get('qr_id')
+        from .qr_logic import validate_qr_uuid
+
+        qr_id_raw = request.data.get('qr_id')
         force = request.data.get('force', False)
         
-        if not qr_id:
+        if not qr_id_raw:
             return Response({'error': 'qr_id è richiesto'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            qr_uuid = validate_qr_uuid(qr_id_raw)
+        except (ValueError, TypeError):
+            return Response({'error': 'qr_id non valido'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             # Verifica che l'elemento A_vista esista
@@ -5297,7 +5309,7 @@ class AssociaQrAVistaView(APIView):
             return Response({'error': 'Elemento non trovato'}, status=status.HTTP_404_NOT_FOUND)
         
         try:
-            qr = QrCode.objects.get(id=qr_id)
+            qr = QrCode.objects.get(id=qr_uuid)
             
             # Se il QR è già associato e force=False, restituisci errore con dettagli
             if qr.vista and qr.vista != a_vista and not force:

@@ -72,6 +72,9 @@ urlpatterns = [
     # --- API REST BACKEND (Tutte sotto /app/) ---
     path('api/', include([
         path('personaggi/', include('personaggi.urls')),
+        # Alias legacy (ex app oggetti): elenco QR stampabili
+        path('oggetti/qr/', personaggi_views.qr_code_list_view, name='qr_code_list_legacy'),
+        path('oggetti/qr/<str:pk>/', personaggi_views.qr_code_detail_view, name='qr_code_detail_legacy'),
         path('auth/arcana/', include('personaggi.sso_urls')),
         path('plot/', include('gestione_plot.urls')),
         path('social/', include('social.urls')),

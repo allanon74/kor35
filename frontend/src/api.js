@@ -3,6 +3,7 @@
  * Richiesto con reverse proxy (prod, mirror) che inoltra /api e /media a Django.
  * Solo se serve un host diverso (caso raro): imposta VITE_API_URL al build.
  */
+import { normalizeScannedQrId } from './utils/qrScan';
 const _viteApi = import.meta.env.VITE_API_URL;
 export const API_BASE_URL =
   _viteApi != null && String(_viteApi).trim() !== ''
@@ -609,6 +610,7 @@ export const getPersonaggioGameState = (id, onLogout) => {
 };
 
 export const getQrCodeData = (qrId, onLogout, personaggioId = null, minigiocoSessionId = null) => {
+  const cleanId = normalizeScannedQrId(qrId);
   const params = new URLSearchParams();
   if (personaggioId != null && personaggioId !== '') {
     params.set('personaggio_id', String(personaggioId));
@@ -617,7 +619,7 @@ export const getQrCodeData = (qrId, onLogout, personaggioId = null, minigiocoSes
     params.set('minigioco_session_id', String(minigiocoSessionId));
   }
   const q = params.toString() ? `?${params.toString()}` : '';
-  return fetchAuthenticated(`/api/personaggi/api/qrcode/${qrId}/${q}`, { method: 'GET' }, onLogout);
+  return fetchAuthenticated(`/api/personaggi/api/qrcode/${cleanId}/${q}`, { method: 'GET' }, onLogout);
 };
 
 export const minigiocoComplete = (sessionId, personaggioId, stato, onLogout) =>

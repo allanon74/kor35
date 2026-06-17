@@ -3,9 +3,38 @@ Logica QR lato server: manifesti, inventario a doppia scansione, innesco timer, 
 """
 from __future__ import annotations
 
+import re
+import uuid
 from datetime import timedelta
 import random
 from typing import Any, Dict, List, Optional, Tuple
+
+_UUID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+
+
+def parse_scanned_qr_id(raw) -> str:
+    """
+    Normalizza il payload letto da scanner (UUID puro, URL con ?id=, path con UUID).
+    """
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    query_match = re.search(r"[?&]id=([0-9a-f-]{36})", s, re.IGNORECASE)
+    if query_match:
+        return query_match.group(1)
+    path_match = _UUID_RE.search(s)
+    if path_match:
+        return path_match.group(0)
+    return s
+
+
+def validate_qr_uuid(raw) -> uuid.UUID:
+    """UUID valido o ValueError."""
+    parsed = parse_scanned_qr_id(raw)
+    return uuid.UUID(str(parsed))
 
 from django.db import transaction
 from django.utils import timezone

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { normalizeScannedQrId } from '../utils/qrScan';
 
 /**
  * Componente semplificato per scansione QR lato staff.
@@ -146,8 +147,8 @@ const StaffQrTab = ({ onScanSuccess, onLogout }) => {
     try {
       await stopWebcamScan();
       
-      // Per uso staff, passiamo ID e metadata opzionali (es. colori stimati)
-      onScanSuccess(decodedText, scanMeta);
+      const qrId = normalizeScannedQrId(decodedText);
+      await onScanSuccess(qrId, scanMeta);
       
     } catch (err) {
       setError(err.message || 'Impossibile elaborare il QR.');

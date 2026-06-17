@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { getQrCodeData } from '../api'; // IMPORTA LA NUOVA FUNZIONE API
+import { normalizeScannedQrId } from '../utils/qrScan';
 import { useCharacter } from './CharacterContext'; // Importa per sapere chi sta scansionando
 import { Timer } from 'lucide-react'; // Icona Timer
 
@@ -37,8 +38,8 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
     try {
       await stopWebcamScan();
 
-      // USA LA NUOVA FUNZIONE API
-      const jsonData = await getQrCodeData(decodedText, onLogout, selectedCharacterId);
+      const qrId = normalizeScannedQrId(decodedText);
+      const jsonData = await getQrCodeData(qrId, onLogout, selectedCharacterId);
       
       onScanSuccess(jsonData); // Passa il JSON alla modale
       

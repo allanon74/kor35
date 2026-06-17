@@ -258,6 +258,15 @@ CHANNEL_LAYERS = {
     },
 }
 
+# Cache condivisa tra worker Gunicorn (SSO Arcana: state PKCE + ticket one-shot).
+_redis_host = env("REDIS_HOST", default="127.0.0.1")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"redis://{_redis_host}:6379/1",
+    }
+}
+
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases

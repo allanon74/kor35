@@ -26,6 +26,24 @@ location ^~ /pilot/ {
     try_files $uri $uri/ /pilot/index.html;
 }
 
+    location = /personaggi/qr/ {
+        set $upstream_backend backend:8000;
+        proxy_pass http://$upstream_backend/api/personaggi/qr/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /personaggi/oggetti/qr/ {
+        set $upstream_backend backend:8000;
+        proxy_pass http://$upstream_backend/api/oggetti/qr/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
 location / {
     root /usr/share/nginx/html;
     index index.html;

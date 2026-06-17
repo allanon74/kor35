@@ -35,7 +35,16 @@ const LoginPage = ({ onLoginSuccess }) => {
     const ssoError = params.get('arcana_error');
 
     if (ssoError) {
-      setMessage({ text: 'Errore login Arcana Domine. Riprova.', type: 'error' });
+      const ssoMessages = {
+        callback_failed: 'Errore durante il completamento login su Arcana Domine.',
+        invalid_state: 'Sessione SSO scaduta o già usata. Riprova dal pulsante Arcana.',
+        missing_code_or_state: 'Risposta incompleta da Arcana Domine.',
+        missing_access_token: 'Token di accesso non ricevuto da Arcana Domine.',
+      };
+      setMessage({
+        text: ssoMessages[ssoError] || `Errore login Arcana Domine (${ssoError}). Riprova.`,
+        type: 'error',
+      });
       return;
     }
 
