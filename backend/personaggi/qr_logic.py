@@ -13,28 +13,55 @@ _UUID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
     re.IGNORECASE,
 )
+# PK QrCode: CharField max 14 (generate_short_id), non UUID.
+_QR_SHORT_ID_RE = re.compile(r"^[A-Za-z0-9]{1,14}$")
 
 
 def parse_scanned_qr_id(raw) -> str:
     """
-    Normalizza il payload letto da scanner (UUID puro, URL con ?id=, path con UUID).
+    Normalizza il payload letto da scanner:
+    - ID corto KOR35 (es. aB3xK9mN2pQ7rS)
+    - URL con ?id= / path /api/qrcode/<id>/
+    - UUID legacy (se presente in vecchi QR)
     """
     s = str(raw or "").strip()
     if not s:
         return ""
-    query_match = re.search(r"[?&]id=([0-9a-f-]{36})", s, re.IGNORECASE)
+
+    query_match = re.search(r"[?&]id=([A-Za-z0-9]{1,14})\b", s)
     if query_match:
         return query_match.group(1)
-    path_match = _UUID_RE.search(s)
+
+    path_match = re.search(r"/qrcode[s]?/([A-Za-z0-9]{1,14})(?:/|\?|$)", s, re.IGNORECASE)
     if path_match:
-        return path_match.group(0)
+        return path_match.group(1)
+
+    uuid_match = _UUID_RE.search(s)
+    if uuid_match:
+        return uuid_match.group(0)
+
+    if _QR_SHORT_ID_RE.match(s):
+        return s
+
+    # Token unico alfanumerico 8–14 char (foto/schermo rumoroso).
+    tokens = re.findall(r"[A-Za-z0-9]{8,14}", s)
+    if len(tokens) == 1:
+        return tokens[0]
+
     return s
 
 
-def validate_qr_uuid(raw) -> uuid.UUID:
-    """UUID valido o ValueError."""
+def validate_qr_id(raw) -> str:
+    """ID QrCode valido o ValueError."""
     parsed = parse_scanned_qr_id(raw)
-    return uuid.UUID(str(parsed))
+    if _QR_SHORT_ID_RE.match(parsed):
+        return parsed
+    # Compatibilità eventuali QR con UUID nel payload.
+    try:
+        return str(uuid.UUID(parsed))
+    except (ValueError, TypeError, AttributeError):
+        pass
+    raise ValueError("qr_id non valido")
 
 from django.db import transaction
 from django.utils import timezone

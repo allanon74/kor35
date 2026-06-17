@@ -1469,11 +1469,16 @@ class RevocaCerimonialeView(APIView):
 
 
 def qr_code_html_view(request: HttpRequest) -> HttpResponse:
-    uuid_str = request.GET.get('id')
-    if not uuid_str: return HttpResponse("ID non fornito.", status=400)
+    from personaggi.qr_logic import validate_qr_id
+
+    raw_id = request.GET.get('id')
+    if not raw_id:
+        return HttpResponse("ID non fornito.", status=400)
     try:
-        qrcode = QrCode.objects.get(id=uuid.UUID(uuid_str))
-    except (QrCode.DoesNotExist, ValueError): return HttpResponse("QrCode non trovato o ID non valido.", status=404)
+        qr_pk = validate_qr_id(raw_id)
+        qrcode = QrCode.objects.get(id=qr_pk)
+    except (QrCode.DoesNotExist, ValueError):
+        return HttpResponse("QrCode non trovato o ID non valido.", status=404)
     testo_contenuto = qrcode.testo
     if not testo_contenuto: testo_html = "<i>(Nessun testo definito per questo QrCode)</i>"
     else: testo_html = f"<p>{testo_contenuto}</p>" 
@@ -1522,12 +1527,12 @@ class QrCodeDetailView(APIView):
     """
 
     def get(self, request, qrcode_id, format=None):
-        from personaggi.qr_logic import validate_qr_uuid
+        from personaggi.qr_logic import validate_qr_id
 
         try:
-            qr_uuid = validate_qr_uuid(qrcode_id)
-            qr_code = QrCode.objects.select_related("vista").get(id=qr_uuid)
-        except (ValueError, TypeError):
+            qr_pk = validate_qr_id(qrcode_id)
+            qr_code = QrCode.objects.select_related("vista").get(id=qr_pk)
+        except ValueError:
             return Response({"error": "ID QrCode non valido."}, status=status.HTTP_400_BAD_REQUEST)
         except QrCode.DoesNotExist:
             return Response({"error": "QrCode non trovato."}, status=status.HTTP_404_NOT_FOUND)
@@ -5289,7 +5294,7 @@ class AssociaQrAVistaView(APIView):
     permission_classes = [permissions.IsAdminUser]  # Solo Staff
     
     def post(self, request, a_vista_id):
-        from .qr_logic import validate_qr_uuid
+        from .qr_logic import validate_qr_id
 
         qr_id_raw = request.data.get('qr_id')
         force = request.data.get('force', False)
@@ -5298,7 +5303,7 @@ class AssociaQrAVistaView(APIView):
             return Response({'error': 'qr_id è richiesto'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            qr_uuid = validate_qr_uuid(qr_id_raw)
+            qr_pk = validate_qr_id(qr_id_raw)
         except (ValueError, TypeError):
             return Response({'error': 'qr_id non valido'}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -5309,7 +5314,7 @@ class AssociaQrAVistaView(APIView):
             return Response({'error': 'Elemento non trovato'}, status=status.HTTP_404_NOT_FOUND)
         
         try:
-            qr = QrCode.objects.get(id=qr_uuid)
+            qr = QrCode.objects.get(id=qr_pk)
             
             # Se il QR è già associato e force=False, restituisci errore con dettagli
             if qr.vista and qr.vista != a_vista and not force:
