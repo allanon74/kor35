@@ -35,13 +35,14 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
 
   const formatSlotEquipBonus = (link) => {
     const slots = (link.slot_equip_ammessi || []).join(', ') || '?';
-    const parts = [];
-    const perOgg = link.valore_per_oggetto_equip ?? 1;
-    if (perOgg) parts.push(`+${perOgg}/oggetto`);
-    if (link.conta_potenziamenti_equip !== false) {
-      const perPot = link.valore_per_potenziamento_equip ?? 1;
-      if (perPot) parts.push(`+${perPot}/MAT-MOD`);
-    }
+    const perUnit = link.valore_per_unita_slot_equip ?? 1;
+    const mode = link.modalita_conteggio_slot_equip || 'TUTTI_OGGETTI';
+    const modeLabels = {
+      TUTTI_OGGETTI: 'oggetto equipaggiato',
+      OGNI_POTENZIAMENTO: 'MAT/MOD',
+      OGGETTI_MODIFICATI: 'oggetto modificato',
+    };
+    const parts = [`+${perUnit}/${modeLabels[mode] || 'unità'}`];
     if (link.valore) parts.push(`${link.valore > 0 ? '+' : ''}${link.valore} fisso`);
     return ` (${parts.join(', ')} negli slot: ${slots})`;
   };

@@ -17,12 +17,29 @@ const PHYSICAL_EQUIP_SLOTS = [
     { key: 'shield', label: 'Scudo' },
 ];
 
+const SLOT_EQUIP_CONTEGGIO_OPTIONS = [
+    {
+        value: 'TUTTI_OGGETTI',
+        label: 'Tutti gli oggetti equipaggiati',
+        hint: 'Ogni oggetto fisico negli slot selezionati, modificato o meno.',
+    },
+    {
+        value: 'OGNI_POTENZIAMENTO',
+        label: 'Ogni Materia/Mod installata',
+        hint: 'Conta ogni singola Materia o Mod montata su oggetti equipaggiati.',
+    },
+    {
+        value: 'OGGETTI_MODIFICATI',
+        label: 'Oggetti modificati',
+        hint: 'Solo oggetti equipaggiati con almeno una Materia/Mod (max 1 per oggetto).',
+    },
+];
+
 const EMPTY_SLOT_EQUIP_STAT = {
     usa_bonus_slot_equip: false,
     slot_equip_ammessi: [],
-    valore_per_oggetto_equip: 1,
-    conta_potenziamenti_equip: true,
-    valore_per_potenziamento_equip: 1,
+    modalita_conteggio_slot_equip: 'TUTTI_OGGETTI',
+    valore_per_unita_slot_equip: 1,
 };
 
 const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, onAdd, onRemove, showSlotEquipBonus = false }) => {
@@ -113,35 +130,41 @@ const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, 
                         ))}
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div>
-                        <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">+ per oggetto</label>
-                        <input
-                          type="number"
-                          className="w-full bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
-                          value={item.valore_per_oggetto_equip ?? 1}
-                          onChange={(e) => onChange(i, 'valore_per_oggetto_equip', parseInt(e.target.value, 10) || 0)}
-                        />
+                    <div>
+                      <label className="text-[9px] uppercase text-emerald-600 font-black block mb-2">Modalità conteggio</label>
+                      <div className="space-y-2">
+                        {SLOT_EQUIP_CONTEGGIO_OPTIONS.map((opt) => (
+                          <label
+                            key={opt.value}
+                            className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                              (item.modalita_conteggio_slot_equip || 'TUTTI_OGGETTI') === opt.value
+                                ? 'border-emerald-500 bg-emerald-950/40'
+                                : 'border-gray-700 bg-gray-900/50 hover:border-gray-600'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`slot-equip-mode-${i}`}
+                              className="mt-0.5 accent-emerald-500"
+                              checked={(item.modalita_conteggio_slot_equip || 'TUTTI_OGGETTI') === opt.value}
+                              onChange={() => onChange(i, 'modalita_conteggio_slot_equip', opt.value)}
+                            />
+                            <span>
+                              <span className="text-[11px] font-bold text-gray-200 block">{opt.label}</span>
+                              <span className="text-[10px] text-gray-500">{opt.hint}</span>
+                            </span>
+                          </label>
+                        ))}
                       </div>
-                      <div>
-                        <ConditionToggle
-                          label="Conta MAT/MOD installati"
-                          checked={item.conta_potenziamenti_equip !== false}
-                          onChange={(v) => onChange(i, 'conta_potenziamenti_equip', v)}
-                          color="emerald"
-                        />
-                        {item.conta_potenziamenti_equip !== false && (
-                          <input
-                            type="number"
-                            className="w-full mt-2 bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
-                            value={item.valore_per_potenziamento_equip ?? 1}
-                            onChange={(e) => onChange(i, 'valore_per_potenziamento_equip', parseInt(e.target.value, 10) || 0)}
-                          />
-                        )}
-                      </div>
-                      <div className="text-[10px] text-gray-500 self-end pb-2">
-                        Il bonus scala solo per chi possiede l&apos;abilità. Ogni oggetto fisico equipaggiato negli slot selezionati conta; opzionalmente anche ogni Materia/Mod sull&apos;oggetto.
-                      </div>
+                    </div>
+                    <div className="w-40">
+                      <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">Valore per unità</label>
+                      <input
+                        type="number"
+                        className="w-full bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
+                        value={item.valore_per_unita_slot_equip ?? 1}
+                        onChange={(e) => onChange(i, 'valore_per_unita_slot_equip', parseInt(e.target.value, 10) || 0)}
+                      />
                     </div>
                   </>
                 )}
@@ -191,4 +214,4 @@ const M2MSelector = ({ options, selected = [], onToggle, color }) => (
 );
 
 export default StatModInline;
-export { EMPTY_SLOT_EQUIP_STAT, PHYSICAL_EQUIP_SLOTS };
+export { EMPTY_SLOT_EQUIP_STAT, PHYSICAL_EQUIP_SLOTS, SLOT_EQUIP_CONTEGGIO_OPTIONS };

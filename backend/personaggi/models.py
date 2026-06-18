@@ -1998,6 +1998,22 @@ PHYSICAL_EQUIP_SLOT_KEYS = (
     'armor', 'melee', 'ranged', 'focus', 'shield',
 )
 
+SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI = 'TUTTI_OGGETTI'
+SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO = 'OGNI_POTENZIAMENTO'
+SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI = 'OGGETTI_MODIFICATI'
+
+SLOT_EQUIP_CONTEGGIO_CHOICES = (
+    (SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI, 'Tutti gli oggetti equipaggiati'),
+    (SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO, 'Ogni Materia/Mod installata'),
+    (SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI, 'Oggetti modificati (almeno 1 MAT/MOD)'),
+)
+
+SLOT_EQUIP_CONTEGGIO_LABELS = {
+    SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti equipaggiati',
+    SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'MAT/MOD installati',
+    SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti modificati',
+}
+
 
 def parse_slot_equip_ammessi(raw):
     """Normalizza la lista slot fisici ammessi per bonus abilità."""
@@ -2018,12 +2034,12 @@ def parse_slot_equip_ammessi(raw):
 
 def conta_equipaggiamento_nei_slot(personaggio, slot_keys):
     """
-    Conta oggetti fisici equipaggiati e potenziamenti MAT/MOD sugli host,
+    Conta oggetti fisici equipaggiati, potenziamenti MAT/MOD e host modificati,
     limitatamente agli slot indicati.
     """
     slots = set(parse_slot_equip_ammessi(slot_keys))
     if not slots:
-        return {'oggetti': 0, 'potenziamenti': 0}
+        return {'oggetti': 0, 'potenziamenti': 0, 'oggetti_modificati': 0}
 
     oggetti_qs = personaggio.get_oggetti().filter(
         tipo_oggetto=TIPO_OGGETTO_FISICO,
@@ -2033,14 +2049,23 @@ def conta_equipaggiamento_nei_slot(personaggio, slot_keys):
 
     n_oggetti = 0
     n_potenziamenti = 0
+    n_oggetti_modificati = 0
     for oggetto in oggetti_qs:
         if oggetto.is_danneggiato:
             continue
         n_oggetti += 1
+        has_mat_mod = False
         for pot in oggetto.potenziamenti_installati.all():
             if pot.tipo_oggetto in (TIPO_OGGETTO_MATERIA, TIPO_OGGETTO_MOD):
                 n_potenziamenti += 1
-    return {'oggetti': n_oggetti, 'potenziamenti': n_potenziamenti}
+                has_mat_mod = True
+        if has_mat_mod:
+            n_oggetti_modificati += 1
+    return {
+        'oggetti': n_oggetti,
+        'potenziamenti': n_potenziamenti,
+        'oggetti_modificati': n_oggetti_modificati,
+    }
 
 
 def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
@@ -2053,16 +2078,18 @@ def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
     bonus = 0.0
     parts = []
 
-    per_ogg = int(stat_link.valore_per_oggetto_equip or 0)
-    if per_ogg and counts['oggetti']:
-        bonus += per_ogg * counts['oggetti']
-        parts.append(f"{counts['oggetti']} oggett{'o' if counts['oggetti'] == 1 else 'i'}")
-
-    if stat_link.conta_potenziamenti_equip:
-        per_pot = int(stat_link.valore_per_potenziamento_equip or 0)
-        if per_pot and counts['potenziamenti']:
-            bonus += per_pot * counts['potenziamenti']
-            parts.append(f"{counts['potenziamenti']} MAT/MOD")
+    modalita = stat_link.modalita_conteggio_slot_equip or SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI
+    per_unita = int(stat_link.valore_per_unita_slot_equip or 0)
+    count_key = {
+        SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI: 'oggetti',
+        SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO: 'potenziamenti',
+        SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI: 'oggetti_modificati',
+    }.get(modalita, 'oggetti')
+    n_units = counts.get(count_key, 0)
+    if per_unita and n_units:
+        bonus += per_unita * n_units
+        label = SLOT_EQUIP_CONTEGGIO_LABELS.get(modalita, count_key)
+        parts.append(f"{n_units} {label}")
 
     flat = int(stat_link.valore or 0)
     if flat:
@@ -2093,18 +2120,16 @@ class AbilitaStatistica(CondizioneStatisticaMixin):
         verbose_name="Slot equipaggiamento",
         help_text="Lista slot fisici (es. melee, armor, fingers).",
     )
-    valore_per_oggetto_equip = models.IntegerField(
-        default=1,
-        verbose_name="Valore per oggetto equipaggiato",
+    modalita_conteggio_slot_equip = models.CharField(
+        max_length=24,
+        choices=SLOT_EQUIP_CONTEGGIO_CHOICES,
+        default=SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI,
+        verbose_name="Modalità conteggio slot",
     )
-    conta_potenziamenti_equip = models.BooleanField(
-        default=True,
-        verbose_name="Conta potenziamenti MAT/MOD",
-        help_text="Aggiunge un bonus per ogni Materia/Mod installata su oggetti equipaggiati negli slot.",
-    )
-    valore_per_potenziamento_equip = models.IntegerField(
+    valore_per_unita_slot_equip = models.IntegerField(
         default=1,
-        verbose_name="Valore per potenziamento MAT/MOD",
+        verbose_name="Valore per unità",
+        help_text="Moltiplicatore applicato alla modalità di conteggio scelta.",
     )
 
     class Meta: unique_together = ('abilita', 'statistica')

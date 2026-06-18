@@ -17,6 +17,9 @@ from .models import (
     Personaggio,
     PersonaggioAbilita,
     Punteggio,
+    SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI,
+    SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO,
+    SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI,
     Statistica,
     Tessitura,
     TessituraEffettoRuntime,
@@ -675,16 +678,15 @@ class AbilitaBonusSlotEquipTests(TestCase):
             costo_pc=0,
             costo_crediti=0,
         )
-        AbilitaStatistica.objects.create(
+        self.stat_link = AbilitaStatistica.objects.create(
             abilita=self.abilita,
             statistica=self.stat,
             tipo_modificatore=MODIFICATORE_ADDITIVO,
             valore=0,
             usa_bonus_slot_equip=True,
             slot_equip_ammessi=["melee", "fingers"],
-            valore_per_oggetto_equip=1,
-            conta_potenziamenti_equip=True,
-            valore_per_potenziamento_equip=1,
+            modalita_conteggio_slot_equip=SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO,
+            valore_per_unita_slot_equip=1,
         )
         PersonaggioAbilita.objects.create(personaggio=self.pg, abilita=self.abilita)
 
@@ -723,6 +725,10 @@ class AbilitaBonusSlotEquipTests(TestCase):
             ospitato_su=self.oggetto_melee,
         )
 
+    def _set_modalita(self, modalita):
+        self.stat_link.modalita_conteggio_slot_equip = modalita
+        self.stat_link.save(update_fields=["modalita_conteggio_slot_equip", "updated_at"])
+
     def _bonus(self):
         if hasattr(self.pg, "_modificatori_calcolati_cache"):
             del self.pg._modificatori_calcolati_cache
@@ -740,11 +746,38 @@ class AbilitaBonusSlotEquipTests(TestCase):
         oggetto.sposta_in_inventario(alt_pg)
         self.assertEqual(alt_pg.modificatori_calcolati.get("DFS", {}).get("add", 0), 0)
 
-    def test_bonus_per_oggetti_e_mod_nei_slot_selezionati(self):
-        # 2 oggetti equip (melee + fingers) + 1 mod su melee = 3
-        self.assertEqual(self._bonus(), 3.0)
+    def test_modalita_ogni_potenziamento(self):
+        # 1 mod su melee
+        self.assertEqual(self._bonus(), 1.0)
+
+    def test_modalita_tutti_oggetti(self):
+        self._set_modalita(SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI)
+        # 2 oggetti equip (melee + fingers), mod irrilevante
+        self.assertEqual(self._bonus(), 2.0)
+
+    def test_modalita_oggetti_modificati_un_solo_bonus_per_host(self):
+        self._set_modalita(SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI)
+        Oggetto.objects.create(
+            nome="Mod extra",
+            tipo_oggetto=TIPO_OGGETTO_MOD,
+            cariche_attuali=1,
+            ospitato_su=self.oggetto_melee,
+        )
+        # solo spada modificata conta, non l'anello nudo
+        self.assertEqual(self._bonus(), 1.0)
+
+    def test_modalita_ogni_potenziamento_con_due_mod_sullo_stesso_host(self):
+        Oggetto.objects.create(
+            nome="Mod extra",
+            tipo_oggetto=TIPO_OGGETTO_MOD,
+            cariche_attuali=1,
+            ospitato_su=self.oggetto_melee,
+        )
+        # 2 mod su melee
+        self.assertEqual(self._bonus(), 2.0)
 
     def test_slot_non_selezionato_non_conta(self):
+        self._set_modalita(SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI)
         oggetto_vest = Oggetto.objects.create(
             nome="Veste test",
             tipo_oggetto=TIPO_OGGETTO_FISICO,
@@ -753,8 +786,7 @@ class AbilitaBonusSlotEquipTests(TestCase):
             slot_equip="vest",
         )
         oggetto_vest.sposta_in_inventario(self.pg)
-        # vest non è negli slot ammessi: bonus invariato
-        self.assertEqual(self._bonus(), 3.0)
+        self.assertEqual(self._bonus(), 2.0)
 
     def test_materia_conta_come_potenziamento(self):
         Oggetto.objects.create(
@@ -762,5 +794,5 @@ class AbilitaBonusSlotEquipTests(TestCase):
             tipo_oggetto=TIPO_OGGETTO_MATERIA,
             ospitato_su=self.oggetto_ring,
         )
-        # +1 materia su anello
-        self.assertEqual(self._bonus(), 4.0)
+        # 1 mod melee + 1 materia ring
+        self.assertEqual(self._bonus(), 2.0)
