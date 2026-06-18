@@ -17,6 +17,7 @@ from personaggi.models import Messaggio, Personaggio, get_active_korp_ids, Perso
 
 from .post_media import apply_post_media_from_request
 from .display_names import social_display_name
+from .mention_notifications import format_mention_message, instafame_deep_link_path
 from .models import (
     SOCIAL_GROUP_ROLE_ADMIN,
     SOCIAL_GROUP_ROLE_MEMBER,
@@ -145,20 +146,31 @@ def visible_stories_queryset_for_personaggio(personaggio):
 
 def sync_story_tags(story):
     ids = extract_mentioned_personaggi_ids(story.testo)
-    SocialStoryTag.objects.filter(story=story).exclude(personaggio_id__in=ids).delete()
     existing = set(SocialStoryTag.objects.filter(story=story).values_list("personaggio_id", flat=True))
+    new_ids = [pid for pid in ids if pid not in existing]
+    SocialStoryTag.objects.filter(story=story).exclude(personaggio_id__in=ids).delete()
     SocialStoryTag.objects.bulk_create(
-        [SocialStoryTag(story=story, personaggio_id=pid) for pid in ids if pid not in existing]
+        [SocialStoryTag(story=story, personaggio_id=pid) for pid in new_ids]
     )
+    if new_ids:
+        from .mention_notifications import notify_instafame_mentions
+
+        notify_instafame_mentions(story.autore, new_ids, "story", story=story)
 
 
 def sync_post_tags(post):
-    ids = extract_mentioned_personaggi_ids(post.testo)
-    SocialPostTag.objects.filter(post=post).exclude(personaggio_id__in=ids).delete()
+    text = f"{post.titolo or ''}\n{post.testo or ''}".strip()
+    ids = extract_mentioned_personaggi_ids(text)
     existing = set(SocialPostTag.objects.filter(post=post).values_list("personaggio_id", flat=True))
+    new_ids = [pid for pid in ids if pid not in existing]
+    SocialPostTag.objects.filter(post=post).exclude(personaggio_id__in=ids).delete()
     SocialPostTag.objects.bulk_create(
-        [SocialPostTag(post=post, personaggio_id=pid) for pid in ids if pid not in existing]
+        [SocialPostTag(post=post, personaggio_id=pid) for pid in new_ids]
     )
+    if new_ids:
+        from .mention_notifications import notify_instafame_mentions
+
+        notify_instafame_mentions(post.autore, new_ids, "post", post=post)
 
 
 class SocialStoryViewSet(viewsets.ModelViewSet):
@@ -726,11 +738,16 @@ class SocialPostViewSet(viewsets.ModelViewSet):
 
     def _sync_tags_for_comment(self, comment):
         ids = extract_mentioned_personaggi_ids(comment.testo)
-        SocialCommentTag.objects.filter(comment=comment).exclude(personaggio_id__in=ids).delete()
         existing = set(SocialCommentTag.objects.filter(comment=comment).values_list("personaggio_id", flat=True))
+        new_ids = [pid for pid in ids if pid not in existing]
+        SocialCommentTag.objects.filter(comment=comment).exclude(personaggio_id__in=ids).delete()
         SocialCommentTag.objects.bulk_create(
-            [SocialCommentTag(comment=comment, personaggio_id=pid) for pid in ids if pid not in existing]
+            [SocialCommentTag(comment=comment, personaggio_id=pid) for pid in new_ids]
         )
+        if new_ids:
+            from .mention_notifications import notify_instafame_mentions
+
+            notify_instafame_mentions(comment.autore, new_ids, "comment", comment=comment, post=comment.post)
 
 
 class SocialGroupViewSet(viewsets.ModelViewSet):
@@ -1195,8 +1212,45 @@ class SocialNotificationsView(APIView):
         comment_mentions_qs = (
             SocialCommentTag.objects.filter(personaggio=personaggio)
             .exclude(comment__autore=personaggio)
-            .select_related("comment", "comment__autore", "comment__autore__social_profile", "comment__post")
+            .select_related(
+                "comment",
+                "comment__autore",
+                "comment__autore__social_profile",
+                "comment__post",
+                "personaggio",
+                "personaggio__social_profile",
+            )
         )
+        story_mentions_qs = (
+            SocialStoryTag.objects.filter(personaggio=personaggio)
+            .exclude(story__autore=personaggio)
+            .select_related(
+                "story",
+                "story__autore",
+                "story__autore__social_profile",
+                "personaggio",
+                "personaggio__social_profile",
+            )
+        )
+
+        def _mention_event(kind, created_at, actor, target_pg, source_kind, post_id=None, post_title="", text="", comment_id=None, story_id=None):
+            actor_name = social_display_name(actor) if actor else ""
+            target_name = social_display_name(target_pg) if target_pg else ""
+            return {
+                "kind": kind,
+                "created_at": created_at,
+                "post_id": post_id,
+                "post_title": post_title or "",
+                "comment_id": comment_id,
+                "story_id": story_id,
+                "actor_id": getattr(actor, "id", None),
+                "actor_name": actor_name,
+                "target_id": getattr(target_pg, "id", None),
+                "target_name": target_name,
+                "text": text or "",
+                "message": format_mention_message(actor_name, target_name, source_kind) if actor_name and target_name else "",
+                "link": instafame_deep_link_path(post_id=post_id, comment_id=comment_id, story_id=story_id),
+            }
 
         events = []
         for like in likes_qs[:limit]:
@@ -1223,30 +1277,44 @@ class SocialNotificationsView(APIView):
                     "text": comment.testo or "",
                 }
             )
-        # SocialPostTag non ha created_at (solo updated_at su SyncableModel): usiamo updated_at come istante menzione.
         for tag in post_mentions_qs[:limit]:
             events.append(
-                {
-                    "kind": "mention_post",
-                    "created_at": tag.updated_at,
-                    "post_id": tag.post_id,
-                    "post_title": tag.post.titolo or "",
-                    "actor_id": tag.post.autore_id,
-                    "actor_name": social_display_name(tag.post.autore) if tag.post else "",
-                    "text": tag.post.testo or "",
-                }
+                _mention_event(
+                    "mention_post",
+                    tag.updated_at,
+                    tag.post.autore if tag.post else None,
+                    personaggio,
+                    "post",
+                    post_id=tag.post_id,
+                    post_title=tag.post.titolo if tag.post else "",
+                    text=tag.post.testo if tag.post else "",
+                )
             )
         for tag in comment_mentions_qs[:limit]:
             events.append(
-                {
-                    "kind": "mention_comment",
-                    "created_at": tag.updated_at,
-                    "post_id": tag.comment.post_id if tag.comment else None,
-                    "post_title": tag.comment.post.titolo if tag.comment and tag.comment.post else "",
-                    "actor_id": tag.comment.autore_id if tag.comment else None,
-                    "actor_name": social_display_name(tag.comment.autore) if tag.comment else "",
-                    "text": tag.comment.testo if tag.comment else "",
-                }
+                _mention_event(
+                    "mention_comment",
+                    tag.updated_at,
+                    tag.comment.autore if tag.comment else None,
+                    personaggio,
+                    "comment",
+                    post_id=tag.comment.post_id if tag.comment else None,
+                    post_title=tag.comment.post.titolo if tag.comment and tag.comment.post else "",
+                    text=tag.comment.testo if tag.comment else "",
+                    comment_id=tag.comment_id,
+                )
+            )
+        for tag in story_mentions_qs[:limit]:
+            events.append(
+                _mention_event(
+                    "mention_story",
+                    tag.created_at,
+                    tag.story.autore if tag.story else None,
+                    personaggio,
+                    "story",
+                    text=tag.story.testo if tag.story else "",
+                    story_id=tag.story_id,
+                )
             )
 
         events.sort(key=lambda e: e["created_at"], reverse=True)

@@ -518,7 +518,6 @@ class SocialStoryHighlightItem(SyncableModel, models.Model):
 
 
 MENTION_TOKEN_REGEX = re.compile(r"@([A-Za-z0-9_]+)")
-# Lettere, cifre, _ e - (es. #A-phone). Segmenti separati da -/_ senza doppio trattino.
 HASHTAG_TOKEN_REGEX = re.compile(r"(?<!\w)#([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)")
 HASHTAG_MIN_LEN = 2
 HASHTAG_MAX_LEN = 40
@@ -531,20 +530,9 @@ def extract_mentioned_personaggi_ids(text):
     if not tokens:
         return []
 
-    explicit_ids = {int(t) for t in tokens if t.isdigit()}
-    names = {t.replace("_", " ").strip() for t in tokens if not t.isdigit()}
+    from .mention_notifications import personaggi_ids_for_mention_tokens
 
-    found_ids = set()
-    if explicit_ids:
-        found_ids.update(Personaggio.objects.filter(id__in=explicit_ids).values_list("id", flat=True))
-
-    for nome in names:
-        if not nome:
-            continue
-        matched = Personaggio.objects.filter(nome__iexact=nome).values_list("id", flat=True)
-        found_ids.update(matched)
-
-    return list(found_ids)
+    return personaggi_ids_for_mention_tokens(tokens)
 
 
 def extract_hashtags(text):

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Bell, Camera, Copy, Heart, ImagePlus, MessageCircle, Pencil, PlusSquare, Send, Sparkles, Star, Trash2, Users, Video } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import {
@@ -194,6 +195,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedPostId, setExpandedPostId] = useState(null);
+  const [highlightCommentId, setHighlightCommentId] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [commentsByPost, setCommentsByPost] = useState({});
   const [commentsMetaByPost, setCommentsMetaByPost] = useState({});
   const [newCommentByPost, setNewCommentByPost] = useState({});
@@ -1180,14 +1183,69 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   };
 
   const openPostFromNotification = async (notification) => {
+    if (notification?.story_id) {
+      const idx = stories.findIndex((s) => Number(s.id) === Number(notification.story_id));
+      if (idx >= 0) {
+        setStoryViewerIndex(idx);
+        setStoryViewerOpen(true);
+      }
+      await markNotificationsAsRead();
+      setShowActivityModal(false);
+      return;
+    }
     if (!notification?.post_id) return;
     setSocialViewMode('FEED');
     setFeedFilter('ALL');
     setExpandedPostId(notification.post_id);
     await ensureCommentsLoaded(notification.post_id);
+    if (notification.comment_id) {
+      setHighlightCommentId(Number(notification.comment_id));
+    }
     await markNotificationsAsRead();
     setShowActivityModal(false);
   };
+
+  useEffect(() => {
+    const postId = searchParams.get('post');
+    const commentId = searchParams.get('comment');
+    const storyId = searchParams.get('story');
+    if (!postId && !storyId) return;
+    if (loading) return;
+
+    let cancelled = false;
+    (async () => {
+      if (storyId && stories.length > 0) {
+        const idx = stories.findIndex((s) => Number(s.id) === Number(storyId));
+        if (idx >= 0) {
+          setStoryViewerIndex(idx);
+          setStoryViewerOpen(true);
+        }
+      }
+      if (postId) {
+        setSocialViewMode('FEED');
+        setFeedFilter('ALL');
+        const numericPostId = Number(postId);
+        setExpandedPostId(numericPostId);
+        await ensureCommentsLoaded(numericPostId);
+        if (commentId) setHighlightCommentId(Number(commentId));
+      }
+      if (!cancelled) setSearchParams({}, { replace: true });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, stories, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!highlightCommentId || !expandedPostId) return undefined;
+    const timer = window.setTimeout(() => {
+      const el = document.querySelector(`[data-comment-id="${highlightCommentId}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => setHighlightCommentId(null), 2500);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [highlightCommentId, expandedPostId, commentsByPost]);
 
   const handleCreateGroup = async (e) => {
     e.preventDefault();
@@ -1373,7 +1431,17 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
   const renderTextWithMentions = (text, tags) => {
     if (!text) return null;
-    const mapById = new Map((tags || []).map((t) => [String(t.personaggio_id), t.personaggio__nome || `#${t.personaggio_id}`]));
+    const byId = new Map();
+    const byToken = new Map();
+    for (const t of tags || []) {
+      const id = String(t.personaggio_id);
+      const label = t.personaggio__nome || `#${id}`;
+      const entry = { id: Number(t.personaggio_id), label };
+      byId.set(id, entry);
+      byToken.set(id, entry);
+      const underscored = label.replace(/\s+/g, '_');
+      if (underscored) byToken.set(underscored, entry);
+    }
     const parts = [];
     const regex = /@([A-Za-z0-9_]+)/g;
     let last = 0;
@@ -1383,8 +1451,9 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       const end = regex.lastIndex;
       const token = m[1];
       if (start > last) parts.push({ type: 'text', value: text.slice(last, start) });
-      if (/^\d+$/.test(token) && mapById.has(token)) {
-        parts.push({ type: 'mention', id: Number(token), label: mapById.get(token), raw: m[0] });
+      const mention = (/^\d+$/.test(token) ? byId.get(token) : null) || byToken.get(token);
+      if (mention) {
+        parts.push({ type: 'mention', id: mention.id, label: mention.label, raw: m[0] });
       } else {
         parts.push({ type: 'text', value: m[0] });
       }
@@ -2223,8 +2292,20 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               >
                 <Heart size={16} fill={post.liked_by_me ? 'currentColor' : 'none'} /> {formatCount(post.likes_count)}
               </button>
-              <button onClick={() => toggleComments(post.id)} className="inline-flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-full bg-[#1f253d] border border-sky-300/30 text-sky-200 hover:bg-[#2a3150]">
-                <MessageCircle size={16} /> {formatCount(post.comments_count)}
+              <button
+                onClick={() => toggleComments(post.id)}
+                className={`inline-flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-full border transition-all ${
+                  Number(post.comments_count || 0) > 0
+                    ? 'bg-sky-600/45 border-sky-100/70 text-sky-50 font-semibold shadow-[0_0_14px_rgba(56,189,248,0.38)] ring-1 ring-sky-200/40'
+                    : 'bg-[#1f253d] border-sky-300/30 text-sky-200 hover:bg-[#2a3150]'
+                }`}
+              >
+                <MessageCircle
+                  size={16}
+                  fill={Number(post.comments_count || 0) > 0 ? 'currentColor' : 'none'}
+                  strokeWidth={Number(post.comments_count || 0) > 0 ? 2.25 : 2}
+                />
+                {formatCount(post.comments_count)}
               </button>
               {post.public_url && (
                 <button
@@ -2310,7 +2391,15 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 return (
               <div className="space-y-2">
                 {commentsToRender.map((c) => (
-                  <div key={c.id} className="text-sm bg-gray-800/70 rounded p-2">
+                  <div
+                    key={c.id}
+                    data-comment-id={c.id}
+                    className={`text-sm rounded p-2 transition-colors ${
+                      Number(highlightCommentId) === Number(c.id)
+                        ? 'bg-sky-900/50 ring-2 ring-sky-300/60'
+                        : 'bg-gray-800/70'
+                    }`}
+                  >
                     <div className="flex items-start gap-2">
                       <SocialAuthorAvatar
                         size="sm"
@@ -2999,12 +3088,28 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 >
                   <div className="text-xs text-gray-400 mb-1">{new Date(n.created_at).toLocaleString('it-IT')}</div>
                   <div className="text-sm text-gray-100">
-                    {n.kind === 'like' && <span><b>{n.actor_name}</b> ha messo like al tuo post.</span>}
-                    {n.kind === 'comment' && <span><b>{n.actor_name}</b> ha commentato il tuo post.</span>}
-                    {n.kind === 'mention_post' && <span><b>{n.actor_name}</b> ti ha menzionato in un post.</span>}
-                    {n.kind === 'mention_comment' && <span><b>{n.actor_name}</b> ti ha menzionato in un commento.</span>}
+                    {n.message || (
+                      <>
+                        {n.kind === 'like' && <span><b>{n.actor_name}</b> ha messo like al tuo post.</span>}
+                        {n.kind === 'comment' && <span><b>{n.actor_name}</b> ha commentato il tuo post.</span>}
+                        {n.kind === 'mention_post' && (
+                          <span><b>{n.actor_name}</b> ha citato <b>{n.target_name || 'te'}</b> in un post di InstaFame.</span>
+                        )}
+                        {n.kind === 'mention_comment' && (
+                          <span><b>{n.actor_name}</b> ha citato <b>{n.target_name || 'te'}</b> in un commento di InstaFame.</span>
+                        )}
+                        {n.kind === 'mention_story' && (
+                          <span><b>{n.actor_name}</b> ha citato <b>{n.target_name || 'te'}</b> in una story di InstaFame.</span>
+                        )}
+                      </>
+                    )}
                   </div>
-                  {n.post_title && <div className="text-xs text-amber-200/80 mt-1">Post: {n.post_title}</div>}
+                  {n.post_title && n.kind !== 'mention_story' && (
+                    <div className="text-xs text-amber-200/80 mt-1">Post: {n.post_title}</div>
+                  )}
+                  {(n.link || n.post_id || n.story_id) && (
+                    <div className="text-[11px] text-sky-300/90 mt-1">Tocca per aprire</div>
+                  )}
                 </button>
               ))}
             </div>
