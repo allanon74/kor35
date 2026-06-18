@@ -63,7 +63,7 @@ def social_story_media_upload_to(instance, filename):
 
 class SocialProfile(SyncableModel, models.Model):
     personaggio = models.OneToOneField(Personaggio, on_delete=models.CASCADE, related_name="social_profile")
-    nickname = models.CharField(max_length=60, null=True, blank=True)
+    nickname = models.CharField(max_length=120, null=True, blank=True)
     foto_principale = models.ImageField(upload_to=social_profile_image_upload_to, null=True, blank=True)
     regione = models.CharField(max_length=120, null=True, blank=True)
     prefettura = models.CharField(max_length=120, null=True, blank=True)
@@ -78,6 +78,11 @@ class SocialProfile(SyncableModel, models.Model):
 
     def __str__(self):
         return f"Profilo social {self.personaggio.nome}"
+
+    def clean(self):
+        from .nickname_validation import clean_nickname_value_model
+
+        self.nickname = clean_nickname_value_model(self.nickname)
 
     def save(self, *args, **kwargs):
         if self.foto_principale:

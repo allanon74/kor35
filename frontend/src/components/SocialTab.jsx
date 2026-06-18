@@ -51,6 +51,7 @@ import StoryMediaCaptureModal from './StoryMediaCaptureModal';
 import InstafameMediaCarousel from './InstafameMediaCarousel';
 import InstafameAuthorBadge, { InstafameSocialCariche } from './InstafameAuthorBadge';
 import InstafameTextArea from './InstafameTextArea';
+import InstafameNicknameInput from './InstafameNicknameInput';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
@@ -1020,17 +1021,18 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     if (profileSaving) return;
-    const fd = new FormData();
-    fd.append('nickname', profileForm.nickname || '');
-    fd.append('descrizione', profileForm.descrizione || '');
-    fd.append('professioni', profileForm.professioni || '');
+    const profilePayload = {
+      nickname: profileForm.nickname || '',
+      descrizione: profileForm.descrizione || '',
+      professioni: profileForm.professioni || '',
+    };
+    let preparedPhoto = null;
     try {
-      const preparedPhoto = await prepareProfileImageForUpload({
+      preparedPhoto = await prepareProfileImageForUpload({
         file: profileForm.foto_principale,
         remoteUrl: profile?.foto_principale || null,
         rotationDegrees: profileForm.foto_rotazione,
       });
-      if (preparedPhoto) fd.append('foto_principale', preparedPhoto);
     } catch (err) {
       alert(err?.message || 'Impossibile elaborare la foto profilo.');
       return;
@@ -1052,7 +1054,12 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           onLogout
         );
       }
-      const updated = await socialUpdateMyProfile(fd, selectedCharacterId, onLogout);
+      const updated = await socialUpdateMyProfile(profilePayload, selectedCharacterId, onLogout);
+      if (preparedPhoto) {
+        const photoFd = new FormData();
+        photoFd.append('foto_principale', preparedPhoto);
+        await socialUpdateMyProfile(photoFd, selectedCharacterId, onLogout);
+      }
       const refreshed = await socialGetMyProfile(selectedCharacterId, onLogout);
       setProfile(refreshed || updated || null);
       if (refreshed) {
@@ -2741,12 +2748,10 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             </div>
             <div>
               <label className="text-xs text-gray-400">Nickname InstaFame (opzionale)</label>
-              <input
-                className="mt-1 w-full bg-gray-800 rounded p-2 border border-gray-700"
-                placeholder="Nome mostrato ad altri giocatori"
-                maxLength={60}
+              <InstafameNicknameInput
+                className="mt-1"
                 value={profileForm.nickname}
-                onChange={(e) => setProfileForm((p) => ({ ...p, nickname: e.target.value }))}
+                onChange={(nickname) => setProfileForm((p) => ({ ...p, nickname }))}
               />
               <p className="text-[11px] text-gray-500 mt-1">
                 Se impostato, sostituisce il nome personaggio in post, story, commenti e messaggi privati.

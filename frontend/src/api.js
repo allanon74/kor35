@@ -343,9 +343,47 @@ export const socialGetMyProfile = (personaggioId, onLogout) => {
   return fetchAuthenticated(`/api/social/profile/me/${qp}`, { method: 'GET' }, onLogout);
 };
 
-export const socialUpdateMyProfile = (formData, personaggioId, onLogout) => {
+function formDataHasUpload(fd) {
+  for (const value of fd.values()) {
+    if (value instanceof Blob) return true;
+  }
+  return false;
+}
+
+function formDataToPlainObject(fd) {
+  const out = {};
+  for (const [key, value] of fd.entries()) {
+    if (value instanceof Blob) continue;
+    out[key] = String(value);
+  }
+  return out;
+}
+
+/**
+ * Aggiorna profilo InstaFame.
+ * - Oggetto plain o FormData senza file → JSON PATCH (UTF-8, emoji nel nickname/descrizione).
+ * - FormData con file → multipart PATCH (solo upload foto).
+ */
+export const socialUpdateMyProfile = (payload, personaggioId, onLogout) => {
   const qp = personaggioId ? `?personaggio_id=${personaggioId}` : '';
-  return fetchAuthenticated(`/api/social/profile/me/${qp}`, { method: 'PATCH', body: formData }, onLogout);
+  const endpoint = `/api/social/profile/me/${qp}`;
+
+  if (payload instanceof FormData) {
+    if (formDataHasUpload(payload)) {
+      return fetchAuthenticated(endpoint, { method: 'PATCH', body: payload }, onLogout);
+    }
+    return fetchAuthenticated(
+      endpoint,
+      { method: 'PATCH', body: JSON.stringify(formDataToPlainObject(payload)) },
+      onLogout
+    );
+  }
+
+  return fetchAuthenticated(
+    endpoint,
+    { method: 'PATCH', body: JSON.stringify(payload || {}) },
+    onLogout
+  );
 };
 
 export const socialGetKorpList = (onLogout) => {

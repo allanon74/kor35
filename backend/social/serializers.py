@@ -14,6 +14,7 @@ from personaggi.models import (
 )
 
 from .display_names import social_display_name, social_display_name_from_profile
+from .nickname_validation import clean_nickname_value
 from .author_display import get_personaggio_badge_instafame, social_cariche_for_personaggio
 from personaggi.serializers import _personaggio_avatar_url
 from .models import (
@@ -126,10 +127,7 @@ class SocialProfileSerializer(serializers.ModelSerializer):
         return social_display_name_from_profile(obj)
 
     def validate_nickname(self, value):
-        if value is None:
-            return None
-        cleaned = str(value).strip()
-        return cleaned or None
+        return clean_nickname_value(value)
 
     def get_korp_nome(self, obj):
         membership = get_active_korp_membership(obj.personaggio)
