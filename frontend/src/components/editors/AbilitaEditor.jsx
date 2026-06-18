@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { staffCreateAbilita, staffUpdateAbilita, staffGetAbilita, getAbilitaEditorResources, staffGetFormulaSemanticOptions } from '../../api';
 import RichTextEditor from '../RichTextEditor';
-import StatModInline from './inlines/StatModInline';
+import StatModInline, { EMPTY_SLOT_EQUIP_STAT } from './inlines/StatModInline';
 import GenericRelationInline from './inlines/GenericRelationInline';
 import SearchableSelect from './SearchableSelect';
 import EditorSaveActions from './EditorSaveActions';
@@ -232,7 +232,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
             ...formData,
             statistiche: [
                 ...formData.statistiche,
-                { statistica: null, valore: 1, tipo_modificatore: 'ADD' } // Default
+                { statistica: null, valore: 1, tipo_modificatore: 'ADD', ...EMPTY_SLOT_EQUIP_STAT } // Default
             ]
         });
     };
@@ -814,6 +814,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                          Usiamolo esattamente come in OggettoEditor. */}
                     <StatModInline 
                         items={formData.statistiche}
+                        showSlotEquipBonus
                         
                         // PROPS FONDAMENTALI (senza queste crasha il map)
                         options={statsOptions}        
@@ -825,8 +826,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                             ...formData, 
                             statistiche: [
                                 ...formData.statistiche, 
-                                // Struttura oggetto vuoto allineata a OggettoEditor
-                                { statistica: null, valore: 0, tipo_modificatore: 'ADD' }
+                                { statistica: null, valore: 0, tipo_modificatore: 'ADD', ...EMPTY_SLOT_EQUIP_STAT }
                             ]
                         })}
                         

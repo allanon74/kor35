@@ -22,6 +22,8 @@ from .models import (
     TessituraEffettoRuntime,
     TipologiaPersonaggio,
     TIPO_OGGETTO_FISICO,
+    TIPO_OGGETTO_MOD,
+    TIPO_OGGETTO_MATERIA,
     abilita_punteggio,
     CARATTERISTICA,
 )
@@ -659,3 +661,106 @@ class EquipOggettoTecnologicoAteTests(TestCase):
         self.assertEqual(stato, "Equipaggiato")
         self.oggetto.refresh_from_db()
         self.assertTrue(self.oggetto.is_equipaggiato)
+
+
+class AbilitaBonusSlotEquipTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="slot-bonus-user", password="x")
+        self.pg = Personaggio.objects.create(nome="PG Slot Bonus", proprietario=self.user)
+        self.caratt = Punteggio.objects.create(nome="Car Slot", sigla="CSR", tipo=CARATTERISTICA)
+        self.stat = Statistica.objects.create(nome="Difesa Slot", sigla="DFS", parametro="DFS")
+        self.abilita = Abilita.objects.create(
+            nome="Maestro equip",
+            caratteristica=self.caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        AbilitaStatistica.objects.create(
+            abilita=self.abilita,
+            statistica=self.stat,
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+            valore=0,
+            usa_bonus_slot_equip=True,
+            slot_equip_ammessi=["melee", "fingers"],
+            valore_per_oggetto_equip=1,
+            conta_potenziamenti_equip=True,
+            valore_per_potenziamento_equip=1,
+        )
+        PersonaggioAbilita.objects.create(personaggio=self.pg, abilita=self.abilita)
+
+        self.oggetto_melee = Oggetto.objects.create(
+            nome="Spada test",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            slot_fisici_possibili="melee",
+            oggetto_base_generatore=OggettoBase.objects.create(
+                nome="Template spada",
+                tipo_oggetto=TIPO_OGGETTO_FISICO,
+            ),
+        )
+        self.oggetto_melee.sposta_in_inventario(self.pg)
+        self.oggetto_melee.is_equipaggiato = True
+        self.oggetto_melee.slot_equip = "melee"
+        self.oggetto_melee.save(update_fields=["is_equipaggiato", "slot_equip", "updated_at"])
+
+        self.oggetto_ring = Oggetto.objects.create(
+            nome="Anello test",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            slot_fisici_possibili="fingers",
+            oggetto_base_generatore=OggettoBase.objects.create(
+                nome="Template anello",
+                tipo_oggetto=TIPO_OGGETTO_FISICO,
+            ),
+        )
+        self.oggetto_ring.sposta_in_inventario(self.pg)
+        self.oggetto_ring.is_equipaggiato = True
+        self.oggetto_ring.slot_equip = "fingers"
+        self.oggetto_ring.save(update_fields=["is_equipaggiato", "slot_equip", "updated_at"])
+
+        self.mod = Oggetto.objects.create(
+            nome="Mod test",
+            tipo_oggetto=TIPO_OGGETTO_MOD,
+            cariche_attuali=3,
+            ospitato_su=self.oggetto_melee,
+        )
+
+    def _bonus(self):
+        if hasattr(self.pg, "_modificatori_calcolati_cache"):
+            del self.pg._modificatori_calcolati_cache
+        return self.pg.modificatori_calcolati.get("DFS", {}).get("add", 0)
+
+    def test_senza_abilita_nessun_bonus(self):
+        alt_pg = Personaggio.objects.create(nome="Alt PG", proprietario=self.user)
+        oggetto = Oggetto.objects.create(
+            nome="Spada alt",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            slot_fisici_possibili="melee",
+            is_equipaggiato=True,
+            slot_equip="melee",
+        )
+        oggetto.sposta_in_inventario(alt_pg)
+        self.assertEqual(alt_pg.modificatori_calcolati.get("DFS", {}).get("add", 0), 0)
+
+    def test_bonus_per_oggetti_e_mod_nei_slot_selezionati(self):
+        # 2 oggetti equip (melee + fingers) + 1 mod su melee = 3
+        self.assertEqual(self._bonus(), 3.0)
+
+    def test_slot_non_selezionato_non_conta(self):
+        oggetto_vest = Oggetto.objects.create(
+            nome="Veste test",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            slot_fisici_possibili="vest",
+            is_equipaggiato=True,
+            slot_equip="vest",
+        )
+        oggetto_vest.sposta_in_inventario(self.pg)
+        # vest non è negli slot ammessi: bonus invariato
+        self.assertEqual(self._bonus(), 3.0)
+
+    def test_materia_conta_come_potenziamento(self):
+        Oggetto.objects.create(
+            nome="Materia test",
+            tipo_oggetto=TIPO_OGGETTO_MATERIA,
+            ospitato_su=self.oggetto_ring,
+        )
+        # +1 materia su anello
+        self.assertEqual(self._bonus(), 4.0)

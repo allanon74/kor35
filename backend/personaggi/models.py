@@ -1993,11 +1993,120 @@ class CaratteristicaModificatore(SyncableModel, models.Model):
     ogni_x_punti = models.IntegerField(default=1)
     class Meta: unique_together = ('caratteristica', 'statistica_modificata')
 
+PHYSICAL_EQUIP_SLOT_KEYS = (
+    'head', 'neck', 'vest', 'shoulders', 'arms', 'fingers', 'feet', 'belt',
+    'armor', 'melee', 'ranged', 'focus', 'shield',
+)
+
+
+def parse_slot_equip_ammessi(raw):
+    """Normalizza la lista slot fisici ammessi per bonus abilità."""
+    valid = set(PHYSICAL_EQUIP_SLOT_KEYS)
+    if isinstance(raw, list):
+        vals = raw
+    elif isinstance(raw, str):
+        vals = [v.strip() for v in raw.split(',') if v.strip()]
+    else:
+        return []
+    out = []
+    for v in vals:
+        key = str(v).strip()
+        if key in valid and key not in out:
+            out.append(key)
+    return out
+
+
+def conta_equipaggiamento_nei_slot(personaggio, slot_keys):
+    """
+    Conta oggetti fisici equipaggiati e potenziamenti MAT/MOD sugli host,
+    limitatamente agli slot indicati.
+    """
+    slots = set(parse_slot_equip_ammessi(slot_keys))
+    if not slots:
+        return {'oggetti': 0, 'potenziamenti': 0}
+
+    oggetti_qs = personaggio.get_oggetti().filter(
+        tipo_oggetto=TIPO_OGGETTO_FISICO,
+        is_equipaggiato=True,
+        slot_equip__in=slots,
+    ).prefetch_related('potenziamenti_installati')
+
+    n_oggetti = 0
+    n_potenziamenti = 0
+    for oggetto in oggetti_qs:
+        if oggetto.is_danneggiato:
+            continue
+        n_oggetti += 1
+        for pot in oggetto.potenziamenti_installati.all():
+            if pot.tipo_oggetto in (TIPO_OGGETTO_MATERIA, TIPO_OGGETTO_MOD):
+                n_potenziamenti += 1
+    return {'oggetti': n_oggetti, 'potenziamenti': n_potenziamenti}
+
+
+def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
+    """Bonus dinamico da AbilitaStatistica legato agli slot equipaggiati."""
+    if not stat_link.usa_bonus_slot_equip:
+        return 0.0, ''
+
+    slots = parse_slot_equip_ammessi(stat_link.slot_equip_ammessi)
+    counts = conta_equipaggiamento_nei_slot(personaggio, slots)
+    bonus = 0.0
+    parts = []
+
+    per_ogg = int(stat_link.valore_per_oggetto_equip or 0)
+    if per_ogg and counts['oggetti']:
+        bonus += per_ogg * counts['oggetti']
+        parts.append(f"{counts['oggetti']} oggett{'o' if counts['oggetti'] == 1 else 'i'}")
+
+    if stat_link.conta_potenziamenti_equip:
+        per_pot = int(stat_link.valore_per_potenziamento_equip or 0)
+        if per_pot and counts['potenziamenti']:
+            bonus += per_pot * counts['potenziamenti']
+            parts.append(f"{counts['potenziamenti']} MAT/MOD")
+
+    flat = int(stat_link.valore or 0)
+    if flat:
+        bonus += flat
+        parts.append(f"bonus fisso {flat:+d}")
+
+    if not parts:
+        return 0.0, ''
+
+    slot_label = ', '.join(slots) if slots else '—'
+    detail = f"equip. slot [{slot_label}]: " + ', '.join(parts)
+    return bonus, detail
+
+
 class AbilitaStatistica(CondizioneStatisticaMixin):
     abilita = models.ForeignKey('Abilita', on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     valore = models.IntegerField(default=0)
+    usa_bonus_slot_equip = models.BooleanField(
+        default=False,
+        verbose_name="Bonus per slot equipaggiati",
+        help_text="Se attivo, il bonus scala con oggetti fisici equipaggiati negli slot selezionati.",
+    )
+    slot_equip_ammessi = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name="Slot equipaggiamento",
+        help_text="Lista slot fisici (es. melee, armor, fingers).",
+    )
+    valore_per_oggetto_equip = models.IntegerField(
+        default=1,
+        verbose_name="Valore per oggetto equipaggiato",
+    )
+    conta_potenziamenti_equip = models.BooleanField(
+        default=True,
+        verbose_name="Conta potenziamenti MAT/MOD",
+        help_text="Aggiunge un bonus per ogni Materia/Mod installata su oggetti equipaggiati negli slot.",
+    )
+    valore_per_potenziamento_equip = models.IntegerField(
+        default=1,
+        verbose_name="Valore per potenziamento MAT/MOD",
+    )
+
     class Meta: unique_together = ('abilita', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore}"
     
@@ -5119,17 +5228,25 @@ class Personaggio(Inventario):
             if stat_link.usa_condizione_text: return False
             return True
 
+        def _apply_abilita_stat_link(stat_link):
+            if stat_link.usa_bonus_slot_equip:
+                if not _is_global(stat_link):
+                    return
+                bonus, _detail = calcola_bonus_abilita_slot_equip(self, stat_link)
+                if bonus:
+                    _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, bonus)
+            elif _is_global(stat_link):
+                _add(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+
         # 1. Abilità
         for l in AbilitaStatistica.objects.filter(abilita__personaggioabilita__personaggio=self).select_related('statistica'): 
-            if _is_global(l):
-                _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+            _apply_abilita_stat_link(l)
 
         # 1b. Forma camaleonte del giorno: stessi modificatori di una forma reale.
         forma_oggi = self.get_forma_camaleonte_del_giorno()
         if forma_oggi:
             for l in AbilitaStatistica.objects.filter(abilita=forma_oggi).select_related('statistica'):
-                if _is_global(l):
-                    _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+                _apply_abilita_stat_link(l)
         
         # 2. Oggetti e Innesti (CON CHECK TIMER)
         oggetti_inventario = self.get_oggetti().select_related(
@@ -5197,8 +5314,7 @@ class Personaggio(Inventario):
         runtime_abilita_ids = [rt.abilita_temporanea_id for rt in runtime_qs if rt.abilita_temporanea_id]
         if runtime_abilita_ids:
             for l in AbilitaStatistica.objects.filter(abilita_id__in=runtime_abilita_ids).select_related('statistica'):
-                if _is_global(l):
-                    _add(l.statistica.parametro, l.tipo_modificatore, l.valore)
+                _apply_abilita_stat_link(l)
 
         for runtime in runtime_qs:
             runtime_obj = getattr(runtime, 'oggetto_runtime', None)
@@ -5321,7 +5437,12 @@ class Personaggio(Inventario):
         for link in AbilitaStatistica.objects.filter(
             abilita__personaggioabilita__personaggio=self
         ).select_related('statistica', 'abilita'):
-            if _is_global(link):
+            if link.usa_bonus_slot_equip and _is_global(link):
+                bonus, detail = calcola_bonus_abilita_slot_equip(self, link)
+                if bonus:
+                    fonte = f"Abilità: {link.abilita.nome} ({detail})"
+                    _add_mod(link.statistica.parametro, fonte, link.tipo_modificatore, bonus)
+            elif _is_global(link):
                 fonte = f"Abilità: {link.abilita.nome}"
                 _add_mod(link.statistica.parametro, fonte, link.tipo_modificatore, link.valore)
         

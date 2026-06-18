@@ -33,6 +33,19 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
     // CORREZIONE 1: Filtra i valori nulli E quelli con modificatore 0
     .filter(item => item !== null && item.valore !== 0); 
 
+  const formatSlotEquipBonus = (link) => {
+    const slots = (link.slot_equip_ammessi || []).join(', ') || '?';
+    const parts = [];
+    const perOgg = link.valore_per_oggetto_equip ?? 1;
+    if (perOgg) parts.push(`+${perOgg}/oggetto`);
+    if (link.conta_potenziamenti_equip !== false) {
+      const perPot = link.valore_per_potenziamento_equip ?? 1;
+      if (perPot) parts.push(`+${perPot}/MAT-MOD`);
+    }
+    if (link.valore) parts.push(`${link.valore > 0 ? '+' : ''}${link.valore} fisso`);
+    return ` (${parts.join(', ')} negli slot: ${slots})`;
+  };
+
   const statisticheModificate = (skill.statistiche_modificate || [])
     .map(link => {
         const punteggio = punteggiList.find(p => p.id === link.statistica.id);
@@ -41,8 +54,11 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
         }
         return null;
     })
-    // CORREZIONE 1: Filtra i valori nulli E quelli con modificatore 0
-    .filter(item => item !== null && item.valore !== 0);
+    .filter(item => {
+      if (item === null) return false;
+      if (item.usa_bonus_slot_equip) return true;
+      return item.valore !== 0;
+    });
     
   const showModifiche = punteggiModificati.length > 0 || statisticheModificate.length > 0;
   // --- Fine Logica ---
@@ -121,10 +137,13 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
                 <PunteggioDisplay
                   key={`stat-${link.punteggio.id}`}
                   punteggio={link.punteggio}
-                  // CORREZIONE 2: Aggiunto uno spazio iniziale
-                  value={link.tipo_modificatore === 'ADD' ? 
-                         (link.valore > 0 ? ` +${link.valore}` : ` ${link.valore}`) : 
-                         ` x${link.valore}`}
+                  value={
+                    link.usa_bonus_slot_equip
+                      ? formatSlotEquipBonus(link)
+                      : link.tipo_modificatore === 'ADD'
+                        ? (link.valore > 0 ? ` +${link.valore}` : ` ${link.valore}`)
+                        : ` x${link.valore}`
+                  }
                   displayText="name"
                   iconType="inv_circle"
                 />

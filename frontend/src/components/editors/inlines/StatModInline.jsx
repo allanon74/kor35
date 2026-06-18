@@ -1,13 +1,45 @@
 import React from 'react';
 import SearchableSelect from '../SearchableSelect';
 
-const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, onAdd, onRemove }) => {
+const PHYSICAL_EQUIP_SLOTS = [
+    { key: 'head', label: 'Testa' },
+    { key: 'neck', label: 'Collo' },
+    { key: 'vest', label: 'Veste' },
+    { key: 'shoulders', label: 'Spalle' },
+    { key: 'arms', label: 'Braccia' },
+    { key: 'fingers', label: 'Dita' },
+    { key: 'feet', label: 'Piedi' },
+    { key: 'belt', label: 'Cintura' },
+    { key: 'armor', label: 'Armatura' },
+    { key: 'melee', label: 'Armi mischia' },
+    { key: 'ranged', label: 'Armi distanza' },
+    { key: 'focus', label: 'Focus' },
+    { key: 'shield', label: 'Scudo' },
+];
+
+const EMPTY_SLOT_EQUIP_STAT = {
+    usa_bonus_slot_equip: false,
+    slot_equip_ammessi: [],
+    valore_per_oggetto_equip: 1,
+    conta_potenziamenti_equip: true,
+    valore_per_potenziamento_equip: 1,
+};
+
+const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, onAdd, onRemove, showSlotEquipBonus = false }) => {
   const toggleM2M = (index, field, id) => {
     const currentList = items[index][field] || [];
     const newList = currentList.includes(id)
       ? currentList.filter(item => item !== id)
       : [...currentList, id];
     onChange(index, field, newList);
+  };
+
+  const toggleSlotEquip = (index, slotKey) => {
+    const current = items[index].slot_equip_ammessi || [];
+    const newList = current.includes(slotKey)
+      ? current.filter((key) => key !== slotKey)
+      : [...current, slotKey];
+    onChange(index, 'slot_equip_ammessi', newList);
   };
 
   return (
@@ -43,12 +75,78 @@ const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, 
                 </select>
               </div>
               <div className="w-24">
-                <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">Valore</label>
+                <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">
+                  {item.usa_bonus_slot_equip ? 'Bonus fisso' : 'Valore'}
+                </label>
                 <input type="number" step="any" className="w-full bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
                   value={item.valore} onChange={e => onChange(i, 'valore', e.target.value)} />
               </div>
               <button onClick={() => onRemove(i)} className="self-end mb-1 text-red-500 hover:bg-red-500/10 p-2 rounded transition-colors text-xl">✕</button>
             </div>
+
+            {showSlotEquipBonus && (
+              <div className="bg-emerald-950/20 p-3 rounded border border-emerald-900/40 space-y-3">
+                <ConditionToggle
+                  label="Bonus per oggetti equipaggiati (solo con abilità)"
+                  checked={!!item.usa_bonus_slot_equip}
+                  onChange={(v) => onChange(i, 'usa_bonus_slot_equip', v)}
+                  color="emerald"
+                />
+                {item.usa_bonus_slot_equip && (
+                  <>
+                    <div>
+                      <label className="text-[9px] uppercase text-emerald-600 font-black block mb-2">Slot ammessi</label>
+                      <div className="flex flex-wrap gap-1">
+                        {PHYSICAL_EQUIP_SLOTS.map((slot) => (
+                          <button
+                            key={slot.key}
+                            type="button"
+                            onClick={() => toggleSlotEquip(i, slot.key)}
+                            className={`text-[9px] px-2 py-0.5 rounded border transition-all ${
+                              (item.slot_equip_ammessi || []).includes(slot.key)
+                                ? 'bg-emerald-600 border-emerald-400 text-white'
+                                : 'bg-gray-900 border-gray-700 text-gray-600'
+                            }`}
+                          >
+                            {slot.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[9px] uppercase text-gray-500 font-black block mb-1">+ per oggetto</label>
+                        <input
+                          type="number"
+                          className="w-full bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
+                          value={item.valore_per_oggetto_equip ?? 1}
+                          onChange={(e) => onChange(i, 'valore_per_oggetto_equip', parseInt(e.target.value, 10) || 0)}
+                        />
+                      </div>
+                      <div>
+                        <ConditionToggle
+                          label="Conta MAT/MOD installati"
+                          checked={item.conta_potenziamenti_equip !== false}
+                          onChange={(v) => onChange(i, 'conta_potenziamenti_equip', v)}
+                          color="emerald"
+                        />
+                        {item.conta_potenziamenti_equip !== false && (
+                          <input
+                            type="number"
+                            className="w-full mt-2 bg-gray-900 p-2 rounded text-sm text-center border border-gray-600 text-white"
+                            value={item.valore_per_potenziamento_equip ?? 1}
+                            onChange={(e) => onChange(i, 'valore_per_potenziamento_equip', parseInt(e.target.value, 10) || 0)}
+                          />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-gray-500 self-end pb-2">
+                        Il bonus scala solo per chi possiede l&apos;abilità. Ogni oggetto fisico equipaggiato negli slot selezionati conta; opzionalmente anche ogni Materia/Mod sull&apos;oggetto.
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/30 p-3 rounded border border-gray-800">
               <div className="space-y-2">
@@ -93,3 +191,4 @@ const M2MSelector = ({ options, selected = [], onToggle, color }) => (
 );
 
 export default StatModInline;
+export { EMPTY_SLOT_EQUIP_STAT, PHYSICAL_EQUIP_SLOTS };

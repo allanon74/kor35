@@ -618,7 +618,12 @@ class AbilitaStatisticaSmallSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AbilitaStatistica
-        fields = ('statistica', 'valore', 'tipo_modificatore')
+        fields = (
+            'statistica', 'valore', 'tipo_modificatore',
+            'usa_bonus_slot_equip', 'slot_equip_ammessi',
+            'valore_per_oggetto_equip', 'conta_potenziamenti_equip',
+            'valore_per_potenziamento_equip',
+        )
 
 
 class ModelloAuraSerializer(serializers.ModelSerializer):
