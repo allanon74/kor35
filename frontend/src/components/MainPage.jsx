@@ -691,6 +691,13 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                 />
             );
         }
+        if (tabDef.id === 'scommesse') {
+            return (
+                <div className="flex min-h-full flex-col">
+                    <Component onLogout={onLogout} />
+                </div>
+            );
+        }
         return <Component onLogout={onLogout} />;
     }
     return <HomeTab onLogout={onLogout} />;

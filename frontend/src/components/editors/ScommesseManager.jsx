@@ -325,15 +325,17 @@ const ScommesseManager = ({ onBack, onLogout }) => {
                   </div>
                   {cal.incontri?.length > 0 && (
                     <div className="mt-2 space-y-1 border-t border-gray-700 pt-2">
-                      {cal.incontri.map((inc) => (
+                      {cal.incontri.map((inc) => {
+                        const pareggioOk = inc.pareggio_consentito ?? pareggioConsentito(cal.sport_tipo_risultato);
+                        return (
                         <div key={inc.id} className="flex justify-between text-xs text-gray-300">
                           <span>{inc.squadra_casa_nome} vs {inc.squadra_trasferta_nome}</span>
                           <span className="text-gray-500">
-                            {inc.quota_casa}/{inc.pareggio_consentito !== false ? `${inc.quota_pareggio}/` : ''}{inc.quota_trasferta}
+                            {pareggioOk ? `${inc.quota_casa}/${inc.quota_pareggio}/${inc.quota_trasferta}` : `${inc.quota_casa}/${inc.quota_trasferta}`}
                             {inc.esito ? ` → ${inc.esito} (${inc.risultato_formattato || `${inc.gol_casa}-${inc.gol_trasferta}`})` : ''}
                           </span>
                         </div>
-                      ))}
+                      );})}
                     </div>
                   )}
                 </div>

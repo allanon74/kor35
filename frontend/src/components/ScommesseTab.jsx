@@ -120,7 +120,9 @@ const ScommesseTab = ({ onLogout }) => {
   const [codici, setCodici] = useState([]);
   const [valoreAll, setValoreAll] = useState(0);
   const [config, setConfig] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [listRefreshing, setListRefreshing] = useState(false);
+  const [openingCalendarioId, setOpeningCalendarioId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState('');
   const [selezioni, setSelezioni] = useState({});
@@ -134,9 +136,12 @@ const ScommesseTab = ({ onLogout }) => {
 
   const pgId = char?.id ?? selectedCharacterId;
 
-  const loadList = useCallback(async () => {
-    setLoading(true);
-    setStatus('');
+  const loadList = useCallback(async ({ silent = false } = {}) => {
+    if (silent) setListRefreshing(true);
+    else {
+      setInitialLoading(true);
+      setStatus('');
+    }
     try {
       const calRes = await scommesseGetCalendari(onLogout);
       const calList = Array.isArray(calRes?.calendari) ? calRes.calendari : (Array.isArray(calRes) ? calRes : []);
@@ -159,9 +164,10 @@ const ScommesseTab = ({ onLogout }) => {
     } catch (e) {
       setStatus(e.message);
     } finally {
-      setLoading(false);
+      if (silent) setListRefreshing(false);
+      else setInitialLoading(false);
     }
-  }, [onLogout, pgId, char]);
+  }, [onLogout, pgId]);
 
   useEffect(() => { loadList(); }, [loadList]);
 
@@ -181,20 +187,38 @@ const ScommesseTab = ({ onLogout }) => {
   };
 
   const openCalendario = async (id) => {
-    setLoading(true);
+    const calId = id != null ? String(id) : '';
+    if (!calId || openingCalendarioId) return;
+    setOpeningCalendarioId(calId);
+    setStatus('');
     try {
-      const data = await scommesseGetCalendario(id, onLogout);
+      const data = await scommesseGetCalendario(calId, onLogout);
+      if (!data?.id) {
+        throw new Error('Risposta calendario non valida.');
+      }
       setCalendarioDetail(data);
       setSelezioni({});
       setView('detail');
     } catch (e) {
-      setStatus(e.message);
+      const msg = e?.message || 'Impossibile aprire il calendario.';
+      setStatus(msg.includes('404') || msg.toLowerCase().includes('non disponibile')
+        ? 'Calendario non più disponibile. Aggiorna la pagina.'
+        : msg);
     } finally {
-      setLoading(false);
+      setOpeningCalendarioId(null);
     }
   };
 
-  const toggleSelezione = (incontroId, esito) => {
+  const esitiPerIncontro = (inc, fallbackPareggio) => {
+    const pareggioOk = inc.pareggio_consentito ?? fallbackPareggio;
+    return esitiScommessa(pareggioOk);
+  };
+
+  const toggleSelezione = (incontroId, esito, puoScommettere, messaggioChiuso) => {
+    if (!puoScommettere) {
+      setStatus(messaggioChiuso);
+      return;
+    }
     setSelezioni((prev) => {
       const cur = prev[incontroId];
       if (cur === esito) {
@@ -214,7 +238,12 @@ const ScommesseTab = ({ onLogout }) => {
     for (const inc of calendarioDetail.incontri) {
       const esito = selezioni[inc.id];
       if (!esito) continue;
-      const q = esito === '1' ? Number(inc.quota_casa) : esito === 'X' ? Number(inc.quota_pareggio) : Number(inc.quota_trasferta);
+      const pareggioRiga = inc.pareggio_consentito ?? pareggioConsentito(calendarioDetail.sport_tipo_risultato);
+      const q = esito === '1'
+        ? Number(inc.quota_casa)
+        : esito === 'X' && pareggioRiga
+          ? Number(inc.quota_pareggio)
+          : Number(inc.quota_trasferta);
       tot *= q;
     }
     return tot.toFixed(2);
@@ -241,7 +270,7 @@ const ScommesseTab = ({ onLogout }) => {
         onLogout,
       );
       await refreshCharacterData();
-      await loadList();
+      await loadList({ silent: true });
       setSelezioni({});
       setCodiceInput('');
       setStatus('Scommessa registrata!');
@@ -268,7 +297,7 @@ const ScommesseTab = ({ onLogout }) => {
     }
   };
 
-  if (loading && view === 'list') {
+  if (initialLoading && view === 'list') {
     return (
       <div className="flex h-full items-center justify-center text-gray-400">
         <Loader2 className="animate-spin" size={32} />
@@ -277,11 +306,16 @@ const ScommesseTab = ({ onLogout }) => {
   }
 
   if (view === 'detail' && calendarioDetail) {
-    const puoScommettere = calendarioDetail.scommesse_aperte;
+    const puoScommettere = !!calendarioDetail.scommesse_aperte;
+    const risultatiPubblicati = !!calendarioDetail.risultati_visibili;
     const pareggioOk = calendarioDetail.sport_pareggio_consentito
       ?? pareggioConsentito(calendarioDetail.sport_tipo_risultato);
-    const esitiCalendario = esitiScommessa(pareggioOk);
     const tipoSport = calendarioDetail.sport_tipo_risultato;
+    const messaggioChiuso = risultatiPubblicati
+      ? 'Scommesse chiuse: risultati già pubblicati.'
+      : calendarioDetail.data_apertura
+        ? `Scommesse aprono il ${new Date(calendarioDetail.data_apertura).toLocaleString('it-IT')}`
+        : 'Scommesse non ancora aperte.';
     return (
       <div className="flex h-full flex-col bg-gray-900 text-gray-100">
         <SquadraStoricoModal
@@ -292,7 +326,7 @@ const ScommesseTab = ({ onLogout }) => {
           onOpenAvversario={apriStoricoSquadra}
         />
         <div className="border-b border-gray-700 px-4 py-3">
-          <button type="button" onClick={() => { setView('list'); setCalendarioDetail(null); }} className="mb-2 flex items-center gap-1 text-sm text-indigo-400">
+          <button type="button" onClick={() => { setView('list'); setCalendarioDetail(null); loadList({ silent: true }); }} className="mb-2 flex items-center gap-1 text-sm text-indigo-400">
             <ChevronLeft size={16} /> Indietro
           </button>
           <h2 className="text-lg font-bold">{calendarioDetail.titolo || calendarioDetail.sport_nome}</h2>
@@ -300,12 +334,37 @@ const ScommesseTab = ({ onLogout }) => {
             {calendarioDetail.sport_tipo_risultato_label || labelTipoRisultato(tipoSport)}
             {pareggioOk ? '' : ' · senza pareggio'}
             {' · '}Risultati: {new Date(calendarioDetail.data_risoluzione).toLocaleString('it-IT')}
-            {calendarioDetail.risultati_visibili ? ' (pubblicati)' : ' (nascosti)'}
+            {risultatiPubblicati ? ' (pubblicati)' : ' (nascosti)'}
           </p>
+          {puoScommettere && (
+            <p className="mt-2 rounded bg-indigo-950/50 px-2 py-1 text-xs text-indigo-200">
+              Scommesse aperte — scegli gli esiti e inserisci l&apos;importo in basso
+            </p>
+          )}
+          {!puoScommettere && risultatiPubblicati && (
+            <p className="mt-2 rounded bg-emerald-950/40 px-2 py-1 text-xs text-emerald-300">
+              Scommesse chiuse — consultazione risultati
+            </p>
+          )}
+          {!puoScommettere && !risultatiPubblicati && (
+            <p className="mt-2 rounded bg-amber-950/40 px-2 py-1 text-xs text-amber-200">
+              {messaggioChiuso}
+            </p>
+          )}
+          {status && (
+            <p className="mt-2 rounded border border-amber-600/40 bg-amber-950/30 px-2 py-1 text-xs text-amber-200">
+              {status}
+            </p>
+          )}
         </div>
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {calendarioDetail.incontri?.map((inc) => (
+          {(calendarioDetail.incontri?.length ?? 0) === 0 && (
+            <p className="text-center text-sm text-gray-500">Nessun incontro in questo calendario.</p>
+          )}
+          {calendarioDetail.incontri?.map((inc) => {
+            const esitiRiga = esitiPerIncontro(inc, pareggioOk);
+            return (
             <div key={inc.id} className="rounded-lg border border-gray-700 bg-gray-800 p-3">
               <div className="mb-2 text-center">
                 <NomeSquadraClick
@@ -325,17 +384,18 @@ const ScommesseTab = ({ onLogout }) => {
                   Risultato: {inc.esito} ({inc.risultato_formattato || formattaRisultato(inc.tipo_risultato || tipoSport, inc.gol_casa, inc.gol_trasferta)})
                 </div>
               )}
-              <div className={`grid justify-center gap-2 ${esitiCalendario.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                {esitiCalendario.map((e) => {
+              <div className={`grid justify-center gap-2 ${esitiRiga.length === 2 ? 'grid-cols-2 max-w-xs mx-auto' : 'grid-cols-3'}`}>
+                {esitiRiga.map((e) => {
                   const quota = e.id === '1' ? inc.quota_casa : e.id === 'X' ? inc.quota_pareggio : inc.quota_trasferta;
                   const active = selezioni[inc.id] === e.id;
                   return (
                     <button
                       key={e.id}
                       type="button"
-                      disabled={!puoScommettere}
-                      onClick={() => toggleSelezione(inc.id, e.id)}
-                      className={`min-w-[4rem] rounded px-3 py-2 text-sm font-bold ${active ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-gray-200'} disabled:opacity-60`}
+                      onClick={() => toggleSelezione(inc.id, e.id, puoScommettere, messaggioChiuso)}
+                      className={`min-w-[4rem] rounded px-3 py-2 text-sm font-bold transition-colors ${
+                        active ? 'bg-indigo-600 text-white' : puoScommettere ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-800 text-gray-500'
+                      }`}
                     >
                       {e.label}
                       <div className="text-[10px] font-normal opacity-80">{quota}</div>
@@ -344,7 +404,7 @@ const ScommesseTab = ({ onLogout }) => {
                 })}
               </div>
             </div>
-          ))}
+          );})}
         </div>
 
         {puoScommettere && (
@@ -386,8 +446,44 @@ const ScommesseTab = ({ onLogout }) => {
     );
   }
 
-  const attivi = calendari.filter((c) => c.scommesse_aperte || !c.risultati_visibili);
+  const scommettiOra = calendari.filter((c) => c.scommesse_aperte);
+  const inArrivo = calendari.filter((c) => !c.scommesse_aperte && !c.risultati_visibili);
   const conclusi = calendari.filter((c) => c.risultati_visibili);
+
+  const renderCalendarioCard = (cal, { variant = 'active' } = {}) => {
+    const calId = String(cal.id);
+    const isOpening = openingCalendarioId === calId;
+    const subtitle = cal.scommesse_aperte
+      ? `${cal.num_incontri} eventi · Scommesse aperte — tocca per giocare`
+      : cal.risultati_visibili
+        ? `${cal.num_incontri} incontri · risultati pubblicati`
+        : cal.data_apertura
+          ? `${cal.num_incontri} eventi · apre il ${new Date(cal.data_apertura).toLocaleString('it-IT')}`
+          : `${cal.num_incontri} eventi · in attesa apertura`;
+    return (
+      <button
+        key={calId}
+        type="button"
+        onClick={() => openCalendario(calId)}
+        className={`w-full rounded-lg border p-3 text-left transition-colors ${
+          variant === 'done'
+            ? 'border-gray-700 bg-gray-800/60 hover:border-indigo-500'
+            : 'border-indigo-700/40 bg-gray-800 hover:border-indigo-400 hover:bg-gray-800/90'
+        } ${isOpening ? 'opacity-80' : ''}`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-bold text-gray-100">{cal.titolo || cal.sport_nome}</div>
+          {isOpening ? <Loader2 className="animate-spin shrink-0 text-indigo-400" size={16} /> : null}
+        </div>
+        <div className="text-xs text-gray-400">{subtitle}</div>
+        {cal.data_risoluzione && (
+          <div className="mt-1 text-[11px] text-gray-500">
+            Risultati: {new Date(cal.data_risoluzione).toLocaleString('it-IT')}
+          </div>
+        )}
+      </button>
+    );
+  };
 
   return (
     <div className="flex h-full flex-col bg-gray-900 text-gray-100">
@@ -405,6 +501,7 @@ const ScommesseTab = ({ onLogout }) => {
         </div>
         <p className="mt-1 text-xs text-gray-400">
           Crediti: {char?.crediti ?? '—'} CR
+          {listRefreshing ? ' · aggiornamento…' : ''}
           {config?.importo_max_senza_codice_default && (
             <> · Max senza codice: {config.importo_max_senza_codice_default} CR</>
           )}
@@ -412,6 +509,12 @@ const ScommesseTab = ({ onLogout }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {status && (
+          <div className="rounded border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+            {status}
+          </div>
+        )}
+
         {isAllibratore && (
           <section className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -437,20 +540,20 @@ const ScommesseTab = ({ onLogout }) => {
         )}
 
         <section>
-          <h3 className="mb-2 text-sm font-bold uppercase text-gray-400">Calendari attivi</h3>
-          {attivi.length === 0 && <p className="text-sm text-gray-500">Nessun calendario aperto.</p>}
+          <h3 className="mb-2 text-sm font-bold uppercase text-emerald-400">Scommetti ora</h3>
+          {scommettiOra.length === 0 && (
+            <p className="text-sm text-gray-500">Nessun calendario aperto alle puntate. Controlla &quot;In arrivo&quot; sotto.</p>
+          )}
           <div className="space-y-2">
-            {attivi.map((cal) => (
-              <button
-                key={cal.id}
-                type="button"
-                onClick={() => openCalendario(cal.id)}
-                className="w-full rounded-lg border border-gray-700 bg-gray-800 p-3 text-left hover:border-indigo-500"
-              >
-                <div className="font-bold">{cal.titolo || cal.sport_nome}</div>
-                <div className="text-xs text-gray-400">{cal.num_incontri} eventi · {cal.scommesse_aperte ? 'Scommesse aperte' : 'In attesa risultati'}</div>
-              </button>
-            ))}
+            {scommettiOra.map((cal) => renderCalendarioCard(cal))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="mb-2 text-sm font-bold uppercase text-gray-400">In arrivo</h3>
+          {inArrivo.length === 0 && <p className="text-sm text-gray-500">Nessun calendario in programma.</p>}
+          <div className="space-y-2">
+            {inArrivo.map((cal) => renderCalendarioCard(cal))}
           </div>
         </section>
 
@@ -458,17 +561,7 @@ const ScommesseTab = ({ onLogout }) => {
           <h3 className="mb-2 text-sm font-bold uppercase text-gray-400">Risultati recenti</h3>
           {conclusi.length === 0 && <p className="text-sm text-gray-500">Nessun risultato recente.</p>}
           <div className="space-y-2">
-            {conclusi.map((cal) => (
-              <button
-                key={cal.id}
-                type="button"
-                onClick={() => openCalendario(cal.id)}
-                className="w-full rounded-lg border border-gray-700 bg-gray-800/60 p-3 text-left"
-              >
-                <div className="font-bold text-gray-300">{cal.titolo || cal.sport_nome}</div>
-                <div className="text-xs text-gray-500">Visibile fino al {cal.visibile_fino ? new Date(cal.visibile_fino).toLocaleString('it-IT') : '—'}</div>
-              </button>
-            ))}
+            {conclusi.map((cal) => renderCalendarioCard(cal, { variant: 'done' }))}
           </div>
         </section>
 
@@ -477,7 +570,13 @@ const ScommesseTab = ({ onLogout }) => {
           {puntate.length === 0 && <p className="text-sm text-gray-500">Nessuna puntata.</p>}
           <div className="space-y-2">
             {puntate.map((p) => (
-              <div key={p.id} className="rounded border border-gray-700 bg-gray-800 p-3 text-sm">
+              <button
+                key={p.id}
+                type="button"
+                disabled={!p.calendario}
+                onClick={() => p.calendario && openCalendario(String(p.calendario))}
+                className="w-full rounded border border-gray-700 bg-gray-800 p-3 text-left text-sm hover:border-indigo-500 disabled:opacity-60"
+              >
                 <div className="flex items-center justify-between">
                   <span className="font-bold">{p.calendario_titolo}</span>
                   {p.stato === 'WON' && <CheckCircle2 className="text-emerald-400" size={18} />}
@@ -487,13 +586,12 @@ const ScommesseTab = ({ onLogout }) => {
                 <div className="text-xs text-gray-400 mt-1">
                   {p.importo} CR · quota {p.quota_totale} · {p.tipo}
                   {p.vincita != null && p.stato === 'WON' ? ` · vincita ${p.vincita} CR` : ''}
+                  {p.calendario ? ' · Tocca per dettagli' : ''}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </section>
-
-        {status && view === 'list' && <p className="text-sm text-amber-300">{status}</p>}
       </div>
     </div>
   );
