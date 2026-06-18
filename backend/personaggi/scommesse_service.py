@@ -259,15 +259,12 @@ def storico_risultati_squadra(squadra_id, limit=12):
             "gol_fatti": punti_fatti,
             "gol_subiti": punti_subiti,
             "risultato_formattato": formatta_risultato(tipo_risultato, inc.gol_casa, inc.gol_trasferta),
-            "potenza_squadra_al_match": inc.potenza_casa_effettiva if is_casa else inc.potenza_trasferta_effettiva,
-            "potenza_avversario_al_match": inc.potenza_trasferta_effettiva if is_casa else inc.potenza_casa_effettiva,
         })
 
     return {
         "squadra": {
             "id": squadra.id,
             "nome": squadra.nome,
-            "potenza": squadra.potenza,
             "sport_nome": squadra.sport.nome,
         },
         "risultati": righe,

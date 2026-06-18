@@ -44,10 +44,9 @@ function SquadraStoricoModal({ squadra, storico, loading, onClose, onOpenAvversa
         <div className="flex items-start justify-between border-b border-gray-700 p-4">
           <div>
             <h3 className="text-lg font-bold">{storico?.squadra?.nome || squadra.nome}</h3>
-            <p className="text-xs text-gray-400">
-              {storico?.squadra?.sport_nome || ''}
-              {storico?.squadra?.potenza != null ? ` · Potenza ${storico.squadra.potenza}` : ''}
-            </p>
+            {storico?.squadra?.sport_nome ? (
+              <p className="text-xs text-gray-400">{storico.squadra.sport_nome}</p>
+            ) : null}
           </div>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Chiudi">
             <X size={22} />
@@ -60,7 +59,7 @@ function SquadraStoricoModal({ squadra, storico, loading, onClose, onOpenAvversa
             </div>
           )}
           {!loading && risultati.length === 0 && (
-            <p className="text-sm text-gray-500">Nessun risultato pubblicato per questa squadra.</p>
+            <p className="text-sm text-gray-500">Nessuno scontro precedente con risultato pubblicato.</p>
           )}
           {!loading && risultati.length > 0 && (
             <ul className="space-y-3">
