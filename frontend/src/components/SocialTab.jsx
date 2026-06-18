@@ -162,7 +162,7 @@ const compressImageFile = (file, maxEdge = STORY_IMAGE_MAX_EDGE, quality = 0.82)
   });
 
 const SocialTab = ({ onLogout, onOpenMessages }) => {
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 30;
   const MAX_POST_IMAGES = 8;
   const { selectedCharacterId, isAdmin, personaggiList, selectCharacter, preferredCharacterId } = useCharacter();
   const [posts, setPosts] = useState([]);
@@ -206,6 +206,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [feedSort, setFeedSort] = useState('RECENT');
   const [hashtagFilter, setHashtagFilter] = useState('');
   const [feedPage, setFeedPage] = useState(1);
+  const [feedTotalCount, setFeedTotalCount] = useState(null);
   const [hasMorePosts, setHasMorePosts] = useState(false);
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [showComposer, setShowComposer] = useState(false);
@@ -348,11 +349,13 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
   const normalizePostsPayload = useCallback((payload) => {
     if (Array.isArray(payload)) {
-      return { items: payload, hasNext: false };
+      return { items: payload, hasNext: false, total: payload.length };
     }
+    const total = Number(payload?.count);
     return {
       items: Array.isArray(payload?.results) ? payload.results : [],
       hasNext: Boolean(payload?.next),
+      total: Number.isFinite(total) ? total : null,
     };
   }, []);
 
@@ -551,6 +554,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       const normalized = normalizePostsPayload(postsData);
       setPosts(normalized.items);
       setFeedPage(1);
+      setFeedTotalCount(normalized.total);
       setHasMorePosts(normalized.hasNext);
       setKorpList(Array.isArray(korpData) ? korpData : []);
       setProfile(profileData || null);
@@ -1451,6 +1455,30 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     return sorted;
   }, [posts, feedFilter, selectedCharacterId, feedSort]);
 
+  const feedProgressLabel = useMemo(() => {
+    if (loading) return null;
+    const shown = filteredPosts.length;
+    const loaded = posts.length;
+    const total = feedTotalCount;
+    const clientFilterActive = feedFilter !== 'ALL';
+
+    if (!clientFilterActive && total != null && total > 0) {
+      if (loaded >= total) {
+        return shown === total ? `Tutti i ${total} post` : `Mostrati ${shown} di ${total}`;
+      }
+      return `Mostrati ${loaded} di ${total}${hasMorePosts ? ' — scorri per altri' : ''}`;
+    }
+    if (clientFilterActive && loaded > 0) {
+      const filterLabels = { PUB: 'Pubblici', KORP: 'Solo KORP', MINE: 'I miei' };
+      const filterName = filterLabels[feedFilter] || feedFilter;
+      return `Mostrati ${shown} · filtro «${filterName}» (${loaded} caricati${total != null ? ` su ${total}` : ''})`;
+    }
+    if (loaded > 0) {
+      return `Mostrati ${shown} post`;
+    }
+    return null;
+  }, [loading, filteredPosts.length, posts.length, feedTotalCount, feedFilter, hasMorePosts]);
+
   const loadNextPosts = useCallback(async () => {
     if (loading || loadingMorePosts || !hasMorePosts) return;
     const nextPage = feedPage + 1;
@@ -1464,6 +1492,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         return [...prev, ...fresh];
       });
       setFeedPage(nextPage);
+      if (normalized.total != null) setFeedTotalCount(normalized.total);
       setHasMorePosts(normalized.hasNext);
     } catch (err) {
       console.error('Errore caricamento pagina successiva feed', err);
@@ -2044,6 +2073,9 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               Piu discussi
             </button>
           </div>
+          {feedProgressLabel && (
+            <p className="text-[11px] md:text-xs text-gray-400 px-0.5">{feedProgressLabel}</p>
+          )}
         </div>
         </div>
         {loading && (
@@ -2391,7 +2423,9 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
         })}
         {!loading && hasMorePosts && (
           <div ref={sentinelRef} className="py-5 text-center text-gray-400 text-sm">
-            {loadingMorePosts ? 'Caricamento post precedenti...' : 'Scorri per caricare altri post'}
+            {loadingMorePosts
+              ? `Caricamento post...${feedTotalCount != null ? ` (${posts.length} di ${feedTotalCount})` : ''}`
+              : `Scorri per caricare altri post${feedTotalCount != null ? ` (${posts.length} di ${feedTotalCount})` : ''}`}
           </div>
         )}
       </section>

@@ -256,7 +256,7 @@ export const getArcanaSSOStatus = async () => {
 };
 
 // --- SOCIAL (Fame-stagram) ---
-export const socialGetPosts = (personaggioId, onLogout, page = 1, pageSize = 10, options = {}) => {
+export const socialGetPosts = (personaggioId, onLogout, page = 1, pageSize = 30, options = {}) => {
   const params = new URLSearchParams();
   if (personaggioId) params.set('personaggio_id', String(personaggioId));
   params.set('page', String(page));
