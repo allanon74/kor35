@@ -1325,9 +1325,17 @@ class SocialNotificationsView(APIView):
         if since_param:
             try:
                 since_dt = datetime.fromisoformat(since_param.replace("Z", "+00:00"))
-                unread_count = sum(1 for e in events if e["created_at"] > since_dt)
+                if timezone.is_naive(since_dt):
+                    since_dt = timezone.make_aware(since_dt)
+                unread_count = sum(
+                    1
+                    for e in events
+                    if e["created_at"] and e["created_at"] > since_dt
+                )
             except (ValueError, TypeError):
-                unread_count = 0
+                unread_count = len(events)
+        else:
+            unread_count = len(events)
 
         return Response(
             {

@@ -1173,6 +1173,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const openActivityModal = async () => {
     await loadNotifications();
     setShowActivityModal(true);
+    await markNotificationsAsRead();
   };
 
   const markNotificationsAsRead = async () => {
