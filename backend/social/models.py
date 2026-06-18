@@ -24,6 +24,7 @@ SOCIAL_VISIBILITY_CHOICES = [
 MAX_IMAGE_SIZE = (1600, 1600)
 MAX_VIDEO_BYTES = 30 * 1024 * 1024
 MAX_POST_IMAGES = 8
+STORY_TTL_HOURS = 24
 
 SOCIAL_GROUP_ROLE_MEMBER = "MEMBER"
 SOCIAL_GROUP_ROLE_ADMIN = "ADMIN"
@@ -408,7 +409,7 @@ class SocialStory(SyncableModel, models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            self.expires_at = (self.created_at or timezone.now()) + timezone.timedelta(hours=24)
+            self.expires_at = (self.created_at or timezone.now()) + timezone.timedelta(hours=STORY_TTL_HOURS)
         # Se è un'immagine, comprimila (come per i post).
         if self.media and hasattr(self.media, "name"):
             name = str(self.media.name or "").lower()
@@ -416,6 +417,23 @@ class SocialStory(SyncableModel, models.Model):
                 self.media = optimize_uploaded_image(self.media)
         self.clean()
         super().save(*args, **kwargs)
+
+
+def social_story_active_q(now=None):
+    """Story ancora visibili nel feed (24h da created_at se expires_at mancante)."""
+    from django.db.models import Q
+
+    now = now or timezone.now()
+    cutoff = now - timezone.timedelta(hours=STORY_TTL_HOURS)
+    return Q(expires_at__gt=now) | Q(expires_at__isnull=True, created_at__gt=cutoff)
+
+
+def social_story_expired_q(now=None):
+    from django.db.models import Q
+
+    now = now or timezone.now()
+    cutoff = now - timezone.timedelta(hours=STORY_TTL_HOURS)
+    return Q(expires_at__lte=now) | Q(expires_at__isnull=True, created_at__lte=cutoff)
 
 
 class SocialStoryTag(SyncableModel, models.Model):

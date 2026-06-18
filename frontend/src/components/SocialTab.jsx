@@ -54,6 +54,7 @@ import InstafameTextArea from './InstafameTextArea';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
+import { isStoryActive, storyExpiresAtMs } from '../utils/story';
 import { HASHTAG_INLINE_REGEX, normalizeHashtagFilter } from '../utils/hashtags';
 import { prepareProfileImageForUpload } from '../utils/profileImage';
 
@@ -511,14 +512,11 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     const now = Date.now();
     if (storyHistoryFilter === 'ALL') return list;
     if (storyHistoryFilter === 'ACTIVE') {
-      return list.filter((s) => {
-        const exp = s?.expires_at ? new Date(s.expires_at).getTime() : 0;
-        return exp > now;
-      });
+      return list.filter((s) => isStoryActive(s, now));
     }
     if (storyHistoryFilter === 'EXPIRED') {
       return list.filter((s) => {
-        const exp = s?.expires_at ? new Date(s.expires_at).getTime() : 0;
+        const exp = storyExpiresAtMs(s);
         return exp > 0 && exp <= now;
       });
     }
@@ -1931,7 +1929,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 {storiesLoading ? 'Caricamento...' : 'Nessuna story attiva.'}
               </div>
             ) : (
-              stories.filter((s) => !s.viewed_by_me).map((s, i) => {
+              stories.filter((s) => !s.viewed_by_me).map((s) => {
                 const viewed = !!s.viewed_by_me;
                 const initials = String(s.autore_nome || 'PG')
                   .split(' ')
@@ -1944,7 +1942,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                     key={`story-${s.id}`}
                     type="button"
                     onClick={() => {
-                      setStoryViewerIndex(i);
+                      const realIdx = stories.findIndex((x) => Number(x.id) === Number(s.id));
+                      setStoryViewerIndex(realIdx >= 0 ? realIdx : 0);
                       setStoryViewerOpen(true);
                     }}
                     className="shrink-0 w-16 flex flex-col items-center gap-1"
@@ -3086,7 +3085,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                     {filteredStoryHistory.length > 0 ? (
                       <div className="space-y-2">
                         {filteredStoryHistory.map((s) => {
-                          const isExpired = s?.expires_at ? new Date(s.expires_at).getTime() <= Date.now() : false;
+                          const isExpired = !isStoryActive(s);
                           return (
                             <div
                               key={`sh-${s.id}`}

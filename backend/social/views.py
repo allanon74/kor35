@@ -45,6 +45,8 @@ from .models import (
     SocialStoryTag,
     SocialStoryView,
     extract_mentioned_personaggi_ids,
+    social_story_active_q,
+    social_story_expired_q,
 )
 from .influencer import (
     compute_like_peso,
@@ -122,7 +124,7 @@ def visible_stories_queryset_for_personaggio(personaggio):
     now = timezone.now()
     base = (
         SocialStory.objects.select_related("autore", "autore__social_profile", "evento", "korp_visibilita")
-        .filter(expires_at__gt=now)
+        .filter(social_story_active_q(now))
         .annotate(
             views_count=Count("views", distinct=True),
             reactions_count=Count("reactions", distinct=True),
@@ -230,8 +232,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
         qs = SocialStory.objects.filter(
             auto_publish_mode=SocialStory.AUTO_PUBLISH_ON_EXPIRE,
             converted_post__isnull=True,
-            expires_at__lte=now,
-        )[:50]
+        ).filter(social_story_expired_q(now))[:50]
         for s in qs:
             try:
                 self._promote_story_to_post(s)
@@ -529,7 +530,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             .order_by("-created_at")
         )
         if not include_expired:
-            qs = qs.filter(expires_at__gt=timezone.now())
+            qs = qs.filter(social_story_active_q())
         rows = [SocialStorySerializer(s, context={"personaggio": personaggio, "request": request}).data for s in qs[:200]]
         return Response({"count": len(rows), "results": rows})
 
