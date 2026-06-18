@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
     createPersonaggio, 
     updatePersonaggio,
+    deletePersonaggio,
     getGestionePersonaggio,
     rigeneraLikeInfluencer, 
     getTipologiePersonaggio,
@@ -18,7 +19,7 @@ import {
 } from '../api';
 import { useCharacter } from './CharacterContext';
 import { 
-    User, Users, Plus, Edit, X, ShieldAlert, Coins, Zap, Gem, RotateCcw, Skull, Heart, Watch
+    User, Users, Plus, Edit, X, ShieldAlert, Coins, Zap, Gem, RotateCcw, Skull, Heart, Watch, Trash2
 } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import BuildVersions from './BuildVersions';
@@ -33,6 +34,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         isCampaignMaster,
         isCampaignStaffer,
         isAdmin, 
+        isGlobalSuperuser,
         viewAll, 
         toggleViewAll, 
         selectCharacter,
@@ -116,6 +118,13 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                     refreshCharacterData();
                 }
                 setStaffFeedback({ type: 'success', message: 'Personaggio rivissuto.' });
+            } else if (kind === 'delete') {
+                await deletePersonaggio(char.id, onLogout);
+                await fetchPersonaggi();
+                if (String(char.id) === String(selectedCharacterId)) {
+                    selectCharacter('');
+                }
+                setStaffFeedback({ type: 'success', message: 'Personaggio archiviato.' });
             }
         } catch (error) {
             setStaffFeedback({
@@ -413,6 +422,15 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         }
     };
 
+    const canDeleteCharacter = useCallback(
+        (char) => {
+            if (!char?.id || String(char.id).startsWith('temp-')) return false;
+            if (char.is_own) return true;
+            return isCampaignMaster || isGlobalSuperuser || isAdmin;
+        },
+        [isCampaignMaster, isGlobalSuperuser, isAdmin]
+    );
+
     const handleSelect = (char) => {
         const charId = char?.id;
         if (String(charId).startsWith('temp-')) return;
@@ -633,8 +651,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             </div>
                         </div>
 
-                        {staffToolbar && (
                         <div className="relative z-20 flex w-full shrink-0 flex-wrap touch-manipulation items-center justify-start gap-2 md:w-auto md:justify-end">
+                        {staffToolbar && (
+                            <>
                             <button
                                 type="button"
                                 onClick={(e) => handleOpenResourceModal(char, e)}
@@ -687,8 +706,22 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                     <Skull size={18} aria-hidden />
                                 </button>
                             )}
-                        </div>
+                            </>
                         )}
+                        {canDeleteCharacter(char) && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setStaffConfirm({ kind: 'delete', char });
+                                }}
+                                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-600 bg-gray-900/80 text-gray-400 transition-colors hover:border-red-700 hover:bg-red-950/60 hover:text-red-300"
+                                title="Archivia personaggio"
+                            >
+                                <Trash2 size={18} aria-hidden />
+                            </button>
+                        )}
+                        </div>
                     </div>
                     );
                     })}
@@ -712,6 +745,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             {staffConfirm.kind === 'reset' && 'Reset personaggio'}
                             {staffConfirm.kind === 'kill' && 'Segnare come morto'}
                             {staffConfirm.kind === 'revive' && 'Rivivere personaggio'}
+                            {staffConfirm.kind === 'delete' && 'Archiviare personaggio'}
                             {staffConfirm.kind === 'peso_influencer' && 'Peso influencer InstaFame'}
                         </h3>
                         <p className="mt-3 text-sm leading-relaxed text-gray-300">
@@ -729,6 +763,13 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             {staffConfirm.kind === 'revive' && (
                                 <>
                                     Rivivere il personaggio <strong className="text-white">«{staffConfirm.char.nome}»</strong>?
+                                </>
+                            )}
+                            {staffConfirm.kind === 'delete' && (
+                                <>
+                                    Archiviare <strong className="text-white">«{staffConfirm.char.nome}»</strong>?
+                                    I dati restano nel database ma il personaggio sparisce dall&apos;app.
+                                    Solo lo staff master può ripristinarlo o eliminarlo definitivamente.
                                 </>
                             )}
                             {staffConfirm.kind === 'peso_influencer' && (

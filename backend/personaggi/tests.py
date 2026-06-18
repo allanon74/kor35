@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
@@ -796,3 +797,100 @@ class AbilitaBonusSlotEquipTests(TestCase):
         )
         # 1 mod melee + 1 materia ring
         self.assertEqual(self._bonus(), 2.0)
+
+
+class PersonaggioSoftDeleteTests(APITestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="pg-owner", password="x")
+        self.other = User.objects.create_user(username="pg-other", password="x")
+        self.master = User.objects.create_user(username="pg-master", password="x")
+        self.campagna = Campagna.objects.create(
+            slug="kor35-softdel",
+            nome="Kor35 SoftDel",
+            is_default=False,
+            is_base=False,
+            attiva=True,
+        )
+        CampagnaUtente.objects.create(campagna=self.campagna, user=self.owner, ruolo="PLAYER", attivo=True)
+        CampagnaUtente.objects.create(campagna=self.campagna, user=self.other, ruolo="PLAYER", attivo=True)
+        CampagnaUtente.objects.create(campagna=self.campagna, user=self.master, ruolo="MASTER", attivo=True)
+        self.tipologia = TipologiaPersonaggio.objects.create(nome="Tipo SoftDel", giocante=True)
+        self.pg = Personaggio.objects.create(
+            nome="PG SoftDel",
+            proprietario=self.owner,
+            tipologia=self.tipologia,
+            campagna=self.campagna,
+        )
+
+    def test_owner_soft_delete_hides_from_list(self):
+        self.client.force_authenticate(user=self.owner)
+        url = f"/api/personaggi/api/gestione-personaggi/{self.pg.id}/"
+        r = self.client.delete(url, HTTP_X_CAMPAGNA=self.campagna.slug)
+        self.assertEqual(r.status_code, status.HTTP_204_NO_CONTENT)
+        self.pg.refresh_from_db()
+        self.assertIsNotNone(self.pg.eliminato_at)
+        self.assertFalse(Personaggio.objects.filter(pk=self.pg.pk).exists())
+        self.assertTrue(Personaggio.all_objects.filter(pk=self.pg.pk, eliminato_at__isnull=False).exists())
+        list_r = self.client.get("/api/personaggi/api/personaggi/", HTTP_X_CAMPAGNA=self.campagna.slug)
+        self.assertEqual(list_r.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_r.data), 0)
+
+    def test_other_player_cannot_delete(self):
+        self.client.force_authenticate(user=self.other)
+        url = f"/api/personaggi/api/gestione-personaggi/{self.pg.id}/"
+        r = self.client.delete(url, HTTP_X_CAMPAGNA=self.campagna.slug)
+        self.assertIn(r.status_code, (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND))
+
+    def test_master_can_restore_deleted(self):
+        self.pg.eliminato_at = timezone.now()
+        self.pg.save(update_fields=["eliminato_at", "updated_at"])
+        self.client.force_authenticate(user=self.master)
+        url = f"/api/personaggi/api/staff/personaggi-eliminati/{self.pg.id}/restore/"
+        r = self.client.post(url, HTTP_X_CAMPAGNA=self.campagna.slug)
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.pg.refresh_from_db()
+        self.assertIsNone(self.pg.eliminato_at)
+        self.assertTrue(Personaggio.objects.filter(pk=self.pg.pk).exists())
+
+    def _archive_pg(self):
+        self.pg.eliminato_at = timezone.now()
+        self.pg.save(update_fields=["eliminato_at", "updated_at"])
+
+    def _ids_from_list_response(self, data):
+        if isinstance(data, list):
+            return {row.get("id") for row in data}
+        if isinstance(data, dict) and "results" in data:
+            return {row.get("id") for row in data["results"]}
+        return set()
+
+    def test_archived_hidden_from_player_facing_lists(self):
+        """Regressione: PG archiviato assente da tutte le liste giocatore, visibile solo in staff eliminati."""
+        self._archive_pg()
+        h = {"HTTP_X_CAMPAGNA": self.campagna.slug}
+
+        self.client.force_authenticate(user=self.owner)
+        endpoints = [
+            "/api/personaggi/api/personaggi/",
+            "/api/personaggi/api/gestione-personaggi/",
+            f"/api/personaggi/api/personaggi/search/?q=SoftDel&current_char_id=",
+        ]
+        for path in endpoints:
+            r = self.client.get(path, **h)
+            self.assertEqual(r.status_code, status.HTTP_200_OK, msg=path)
+            self.assertNotIn(
+                self.pg.id,
+                self._ids_from_list_response(r.data),
+                msg=f"PG archiviato ancora in {path}",
+            )
+
+        detail = self.client.get(f"/api/personaggi/api/personaggi/{self.pg.id}/", **h)
+        self.assertEqual(detail.status_code, status.HTTP_404_NOT_FOUND)
+
+        self.client.force_authenticate(user=self.master)
+        master_list = self.client.get("/api/personaggi/api/personaggi/?view_all=true", **h)
+        self.assertEqual(master_list.status_code, status.HTTP_200_OK)
+        self.assertNotIn(self.pg.id, self._ids_from_list_response(master_list.data))
+
+        staff_deleted = self.client.get("/api/personaggi/api/staff/personaggi-eliminati/", **h)
+        self.assertEqual(staff_deleted.status_code, status.HTTP_200_OK)
+        self.assertIn(self.pg.id, self._ids_from_list_response(staff_deleted.data))

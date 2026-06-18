@@ -70,6 +70,7 @@ from .serializers import (
     A_vistaSerializer,
     AttivataSerializer,
     PersonaggioPublicSerializer,
+    PersonaggioEliminatoStaffSerializer,
 )
 
 
@@ -830,7 +831,7 @@ class InventarioStaffViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Esclude i personaggi (inventari che hanno proprietario)
         qs = Inventario.objects.exclude(
-            id__in=Personaggio.objects.values_list('inventario_ptr_id', flat=True)
+            id__in=Personaggio.all_objects.values_list('inventario_ptr_id', flat=True)
         ).order_by('-id')
         return annotate_staff_avista_qr(qs)
     
@@ -1565,3 +1566,72 @@ class StaffMinigiocoBibliotecaAggiornaView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response(result, status=status.HTTP_200_OK)
+
+
+class PersonaggioEliminatiStaffViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Personaggi archiviati (soft-delete). Solo master/head master possono
+    ripristinarli o eliminarli definitivamente dal database.
+    """
+
+    serializer_class = PersonaggioEliminatoStaffSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def _master_queryset(self):
+        from personaggi.views import _can_operate_in_campaign, _get_active_campaign, _get_default_campaign
+
+        user = self.request.user
+        active_campaign = _get_active_campaign(self.request)
+        default_campaign = _get_default_campaign()
+        if not _can_operate_in_campaign(user, active_campaign, needs_master=True) and not user.is_superuser:
+            return Personaggio.all_objects.none()
+
+        qs = (
+            Personaggio.all_objects.filter(eliminato_at__isnull=False)
+            .select_related("proprietario", "tipologia", "campagna")
+            .order_by("-eliminato_at", "nome")
+        )
+        if active_campaign and default_campaign and active_campaign.id != default_campaign.id:
+            qs = qs.filter(
+                Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)
+            )
+        elif active_campaign:
+            qs = qs.filter(campagna=active_campaign)
+        return qs
+
+    def get_queryset(self):
+        return self._master_queryset()
+
+    def _ensure_master(self, personaggio):
+        from personaggi.views import _can_operate_in_campaign
+
+        user = self.request.user
+        if user.is_superuser:
+            return
+        if not _can_operate_in_campaign(user, personaggio.campagna, needs_master=True):
+            raise permissions.PermissionDenied("Solo i master possono gestire i personaggi eliminati.")
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def restore(self, request, pk=None):
+        personaggio = get_object_or_404(self._master_queryset(), pk=pk)
+        self._ensure_master(personaggio)
+        personaggio.eliminato_at = None
+        personaggio.save(update_fields=["eliminato_at", "updated_at"])
+        personaggio.aggiungi_log(f"Personaggio ripristinato da {request.user.username}.")
+        serializer = self.get_serializer(personaggio)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="hard-delete")
+    @transaction.atomic
+    def hard_delete(self, request, pk=None):
+        personaggio = get_object_or_404(self._master_queryset(), pk=pk)
+        self._ensure_master(personaggio)
+        nome = personaggio.nome
+        personaggio_id = personaggio.pk
+        personaggio.delete()
+        return Response(
+            {"ok": True, "message": f"Personaggio «{nome}» (id {personaggio_id}) eliminato definitivamente."},
+            status=status.HTTP_200_OK,
+        )

@@ -3986,7 +3986,27 @@ def aura_fonte_mattoni_per_tecnica(tecnica):
     return tecnica.aura_richiesta
 
 
+class PersonaggioQuerySet(models.QuerySet):
+    def attivi(self):
+        return self.filter(eliminato_at__isnull=True)
+
+    def eliminati(self):
+        return self.filter(eliminato_at__isnull=False)
+
+
+class PersonaggioActiveManager(models.Manager.from_queryset(PersonaggioQuerySet)):
+    def get_queryset(self):
+        return super().get_queryset().filter(eliminato_at__isnull=True)
+
+
+class PersonaggioAllManager(models.Manager.from_queryset(PersonaggioQuerySet)):
+    pass
+
+
 class Personaggio(Inventario):
+    objects = PersonaggioActiveManager()
+    all_objects = PersonaggioAllManager()
+
     proprietario = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
     tipologia = models.ForeignKey(TipologiaPersonaggio, on_delete=models.PROTECT, related_name="personaggi", default=get_default_tipologia)
     segno_zodiacale = models.ForeignKey("SegnoZodiacale", on_delete=models.SET_NULL, related_name="personaggi", null=True, blank=True)
@@ -4015,6 +4035,13 @@ class Personaggio(Inventario):
     )
     data_nascita = models.DateTimeField(default=timezone.now)
     data_morte = models.DateTimeField(null=True, blank=True)
+    eliminato_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name="Eliminato il",
+        help_text="Se valorizzato, il personaggio è archiviato e non compare nell'app.",
+    )
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
     
     abilita_possedute = models.ManyToManyField(Abilita, through='PersonaggioAbilita', blank=True)

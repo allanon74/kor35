@@ -100,6 +100,7 @@ export const STAFF_TOOLS_REGISTRY = {
   scommesse: { id: 'scommesse', label: 'Scommesse', icon: Trophy, color: 'bg-amber-600', componentKey: 'scommesse' },
   'manuali-pdf': { id: 'manuali-pdf', label: 'Manuali PDF', icon: FileText, color: 'bg-rose-800', componentKey: 'manuali-pdf' },
   'negozi-mercante': { id: 'negozi-mercante', label: 'Negozi mercante', icon: Package, color: 'bg-amber-900', componentKey: 'negozi-mercante' },
+  'personaggi-eliminati': { id: 'personaggi-eliminati', label: 'Personaggi eliminati', icon: Skull, color: 'bg-red-900', componentKey: 'personaggi-eliminati' },
 };
 
 export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
@@ -135,7 +136,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'teal',
       order: 2,
       collapsed_default: true,
-      tool_ids: ['creazione-guidata', 'inventari', 'proposte', 'immagini', 'manuali-pdf', 'risorse-pool'],
+      tool_ids: ['creazione-guidata', 'inventari', 'proposte', 'immagini', 'manuali-pdf', 'risorse-pool', 'personaggi-eliminati'],
     },
     {
       id: 'comunicazione',

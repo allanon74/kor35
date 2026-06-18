@@ -107,6 +107,11 @@ router.register(
     views_staff.PersonaggioCarrieraMembershipStaffViewSet,
     basename='staff-personaggi-carriere-membership',
 )
+router.register(
+    r'staff/personaggi-eliminati',
+    views_staff.PersonaggioEliminatiStaffViewSet,
+    basename='staff-personaggi-eliminati',
+)
 
 router.register(r'tipologiepersonaggio', views.TipologiaPersonaggioViewSet)
 router.register(r'gestione-personaggi', views.PersonaggioManageViewSet, basename='gestione-personaggi')

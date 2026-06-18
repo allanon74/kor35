@@ -4981,6 +4981,27 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    def destroy(self, request, *args, **kwargs):
+        """Soft-delete: archivia il personaggio (dati conservati, nascosto nell'app)."""
+        personaggio = self.get_object()
+        user = request.user
+        is_owner = personaggio.proprietario_id == user.id
+        is_master = _can_operate_in_campaign(user, personaggio.campagna, needs_master=True)
+        if not (is_owner or is_master or user.is_superuser):
+            return Response(
+                {"error": "Non hai il permesso di eliminare questo personaggio."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        UserSocialPreference.objects.filter(preferred_personaggio=personaggio).update(
+            preferred_personaggio=None,
+            updated_at=timezone.now(),
+        )
+        personaggio.eliminato_at = timezone.now()
+        personaggio.save(update_fields=["eliminato_at", "updated_at"])
+        personaggio.aggiungi_log(f"Personaggio archiviato da {user.username}.")
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAdminUser])
     def add_resources(self, request, pk=None):
         personaggio = self.get_object()

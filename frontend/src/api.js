@@ -2542,6 +2542,19 @@ export const deletePersonaggio = (id, onLogout) => {
     }, onLogout);
 };
 
+export const staffGetPersonaggiEliminati = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/staff/personaggi-eliminati/', { method: 'GET' }, onLogout);
+
+export const staffRestorePersonaggioEliminato = (id, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/staff/personaggi-eliminati/${id}/restore/`, { method: 'POST' }, onLogout);
+
+export const staffHardDeletePersonaggioEliminato = (id, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/staff/personaggi-eliminati/${id}/hard-delete/`,
+        { method: 'POST' },
+        onLogout
+    );
+
 // --- CREAZIONE GUIDATA PERSONAGGIO ---
 const _creazioneGuidataQuery = (personaggioId, effetti, modalitaTest) => {
     const params = new URLSearchParams();

@@ -50,6 +50,7 @@ const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuida
 const ScommesseManager = lazy(() => import('./editors/ScommesseManager'));
 const ManualePdfManager = lazy(() => import('./editors/ManualePdfManager'));
 const NegozioMercanteManager = lazy(() => import('./editors/NegozioMercanteManager'));
+const PersonaggiEliminatiManager = lazy(() => import('./editors/PersonaggiEliminatiManager'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -83,6 +84,7 @@ const STAFF_COMPONENT_MAP = {
     scommesse: ScommesseManager,
     'manuali-pdf': ManualePdfManager,
     'negozi-mercante': NegozioMercanteManager,
+    'personaggi-eliminati': PersonaggiEliminatiManager,
 };
 
 const DIRECT_LOAD_TOOLS = new Set(['plot', 'qr-debug']);

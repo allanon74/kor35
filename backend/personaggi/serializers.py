@@ -2938,6 +2938,7 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
     peso_influencer = serializers.IntegerField(read_only=True)
     peso_influencer_effettivo = serializers.SerializerMethodField()
+    is_own = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -2952,8 +2953,16 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
             'watch_enabled',
             'peso_influencer',
             'peso_influencer_effettivo',
+            'is_own',
             )
         read_only_fields = ('crediti', 'punti_caratteristica') 
+
+    def get_is_own(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        return obj.proprietario_id == user.id
 
     def get_peso_influencer_effettivo(self, obj):
         from social.influencer import get_effective_peso_influencer
@@ -2967,6 +2976,36 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
         user = obj.proprietario
         if not user:
             return "Nessun Proprietario"
+        return f"{user.first_name} {user.last_name}".strip() or user.username
+
+
+class PersonaggioEliminatoStaffSerializer(serializers.ModelSerializer):
+    proprietario_nome = serializers.SerializerMethodField()
+    tipologia_nome = serializers.CharField(source="tipologia.nome", read_only=True)
+    campagna_nome = serializers.CharField(source="campagna.nome", read_only=True)
+    proprietario_username = serializers.CharField(source="proprietario.username", read_only=True)
+
+    class Meta:
+        model = Personaggio
+        fields = (
+            "id",
+            "nome",
+            "proprietario_nome",
+            "proprietario_username",
+            "tipologia_nome",
+            "campagna_nome",
+            "eliminato_at",
+            "data_nascita",
+            "data_morte",
+            "crediti",
+            "punti_caratteristica",
+        )
+        read_only_fields = fields
+
+    def get_proprietario_nome(self, obj):
+        user = obj.proprietario
+        if not user:
+            return "—"
         return f"{user.first_name} {user.last_name}".strip() or user.username
 
 
