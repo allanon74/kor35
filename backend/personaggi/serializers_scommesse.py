@@ -1,6 +1,11 @@
 from rest_framework import serializers
 
 from personaggi.scommesse_logic import calendario_ancora_visibile, calendario_visibile_fino, risultati_pubblicati
+from personaggi.scommesse_risultati import (
+    formatta_risultato,
+    meta_tipo_risultato,
+    pareggio_consentito,
+)
 from personaggi.scommesse_models import (
     CalendarioScommesse,
     CodiceScommessa,
@@ -15,17 +20,26 @@ from personaggi.scommesse_models import (
 
 class SportScommesseSerializer(serializers.ModelSerializer):
     num_squadre = serializers.SerializerMethodField()
+    tipo_risultato_label = serializers.SerializerMethodField()
+    pareggio_consentito = serializers.SerializerMethodField()
 
     class Meta:
         model = SportScommesse
         fields = [
             "id", "sync_id", "nome", "descrizione", "campagna", "attivo",
+            "tipo_risultato", "tipo_risultato_label", "pareggio_consentito",
             "created_at", "updated_at", "num_squadre",
         ]
         read_only_fields = ["id", "sync_id", "created_at", "updated_at"]
 
     def get_num_squadre(self, obj):
         return obj.squadre.filter(attiva=True).count()
+
+    def get_tipo_risultato_label(self, obj):
+        return meta_tipo_risultato(obj.tipo_risultato).label
+
+    def get_pareggio_consentito(self, obj):
+        return pareggio_consentito(obj.tipo_risultato)
 
 
 class SquadraScommesseSerializer(serializers.ModelSerializer):
@@ -46,6 +60,9 @@ class IncontroScommesseSerializer(serializers.ModelSerializer):
     esito = serializers.SerializerMethodField()
     gol_casa = serializers.SerializerMethodField()
     gol_trasferta = serializers.SerializerMethodField()
+    risultato_formattato = serializers.SerializerMethodField()
+    pareggio_consentito = serializers.SerializerMethodField()
+    tipo_risultato = serializers.SerializerMethodField()
 
     class Meta:
         model = IncontroScommesse
@@ -54,10 +71,18 @@ class IncontroScommesseSerializer(serializers.ModelSerializer):
             "squadra_casa", "squadra_casa_nome",
             "squadra_trasferta", "squadra_trasferta_nome",
             "quota_casa", "quota_pareggio", "quota_trasferta",
-            "esito", "gol_casa", "gol_trasferta",
+            "esito", "gol_casa", "gol_trasferta", "risultato_formattato",
+            "tipo_risultato", "pareggio_consentito",
             "created_at", "updated_at",
         ]
         read_only_fields = fields
+
+    def _tipo_risultato(self, obj):
+        cal = self.context.get("calendario") or obj.calendario
+        sport = getattr(cal, "sport", None)
+        if sport is not None:
+            return sport.tipo_risultato
+        return None
 
     def _risultati_visibili(self, obj):
         cal = self.context.get("calendario") or obj.calendario
@@ -76,10 +101,24 @@ class IncontroScommesseSerializer(serializers.ModelSerializer):
     def get_gol_trasferta(self, obj):
         return obj.gol_trasferta if self._risultati_visibili(obj) else None
 
+    def get_risultato_formattato(self, obj):
+        if not self._risultati_visibili(obj):
+            return None
+        return formatta_risultato(self._tipo_risultato(obj), obj.gol_casa, obj.gol_trasferta)
+
+    def get_tipo_risultato(self, obj):
+        return self._tipo_risultato(obj)
+
+    def get_pareggio_consentito(self, obj):
+        return pareggio_consentito(self._tipo_risultato(obj))
+
 
 class IncontroScommesseStaffSerializer(serializers.ModelSerializer):
     squadra_casa_nome = serializers.CharField(source="squadra_casa.nome", read_only=True)
     squadra_trasferta_nome = serializers.CharField(source="squadra_trasferta.nome", read_only=True)
+    risultato_formattato = serializers.SerializerMethodField()
+    tipo_risultato = serializers.SerializerMethodField()
+    pareggio_consentito = serializers.SerializerMethodField()
 
     class Meta:
         model = IncontroScommesse
@@ -89,14 +128,33 @@ class IncontroScommesseStaffSerializer(serializers.ModelSerializer):
             "squadra_trasferta", "squadra_trasferta_nome",
             "potenza_casa_effettiva", "potenza_trasferta_effettiva",
             "quota_casa", "quota_pareggio", "quota_trasferta",
-            "esito", "gol_casa", "gol_trasferta",
+            "esito", "gol_casa", "gol_trasferta", "risultato_formattato",
+            "tipo_risultato", "pareggio_consentito",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "sync_id", "created_at", "updated_at"]
 
+    def _tipo_risultato(self, obj):
+        cal = self.context.get("calendario")
+        if cal is not None:
+            return cal.sport.tipo_risultato
+        return obj.calendario.sport.tipo_risultato
+
+    def get_risultato_formattato(self, obj):
+        return formatta_risultato(self._tipo_risultato(obj), obj.gol_casa, obj.gol_trasferta)
+
+    def get_tipo_risultato(self, obj):
+        return self._tipo_risultato(obj)
+
+    def get_pareggio_consentito(self, obj):
+        return pareggio_consentito(self._tipo_risultato(obj))
+
 
 class CalendarioScommesseListSerializer(serializers.ModelSerializer):
     sport_nome = serializers.CharField(source="sport.nome", read_only=True)
+    sport_tipo_risultato = serializers.CharField(source="sport.tipo_risultato", read_only=True)
+    sport_tipo_risultato_label = serializers.SerializerMethodField()
+    sport_pareggio_consentito = serializers.SerializerMethodField()
     num_incontri = serializers.SerializerMethodField()
     risultati_visibili = serializers.SerializerMethodField()
     visibile_fino = serializers.SerializerMethodField()
@@ -105,12 +163,20 @@ class CalendarioScommesseListSerializer(serializers.ModelSerializer):
     class Meta:
         model = CalendarioScommesse
         fields = [
-            "id", "sync_id", "sport", "sport_nome", "titolo",
+            "id", "sync_id", "sport", "sport_nome",
+            "sport_tipo_risultato", "sport_tipo_risultato_label", "sport_pareggio_consentito",
+            "titolo",
             "data_apertura", "data_risoluzione", "importo_max_senza_codice",
             "attivo", "liquidato", "num_incontri",
             "risultati_visibili", "visibile_fino", "scommesse_aperte",
             "created_at", "updated_at",
         ]
+
+    def get_sport_tipo_risultato_label(self, obj):
+        return meta_tipo_risultato(obj.sport.tipo_risultato).label
+
+    def get_sport_pareggio_consentito(self, obj):
+        return pareggio_consentito(obj.sport.tipo_risultato)
 
     def get_num_incontri(self, obj):
         return obj.incontri.count()
@@ -141,7 +207,9 @@ class CalendarioScommesseDetailSerializer(CalendarioScommesseListSerializer):
         qs = obj.incontri.select_related("squadra_casa", "squadra_trasferta").order_by("ordine")
         staff = self.context.get("staff_view", False)
         if staff:
-            return IncontroScommesseStaffSerializer(qs, many=True).data
+            return IncontroScommesseStaffSerializer(
+                qs, many=True, context={**self.context, "calendario": obj},
+            ).data
         return IncontroScommesseSerializer(
             qs, many=True, context={**self.context, "calendario": obj, "staff_view": staff}
         ).data

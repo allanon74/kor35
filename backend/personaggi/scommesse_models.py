@@ -11,6 +11,7 @@ from django.utils import timezone
 from kor35.syncing import SyncableModel
 
 from personaggi.scommesse_config import DEFAULT_SCOMMESSE_CONFIG, get_config_scommesse
+from personaggi.scommesse_risultati import TIPO_CALCIO, TIPO_RISULTATO_CHOICES, pareggio_consentito
 from personaggi.scommesse_logic import (
     ALLIBRATORE_SIGLA,
     ESITI_VALIDI,
@@ -40,6 +41,12 @@ class SportScommesse(SyncableModel, models.Model):
         db_index=True,
     )
     attivo = models.BooleanField(default=True)
+    tipo_risultato = models.CharField(
+        max_length=20,
+        choices=TIPO_RISULTATO_CHOICES,
+        default=TIPO_CALCIO,
+        help_text="Formato punteggio e regole pareggio per questo sport.",
+    )
 
     class Meta:
         verbose_name = "Sport scommesse"
@@ -118,6 +125,7 @@ class CalendarioScommesse(SyncableModel, models.Model):
         coppie = accoppia_squadre_random(squadre, seed_base)
         self.incontri.all().delete()
         cfg = get_config_scommesse(self.sport.campagna_id)
+        allow_draw = pareggio_consentito(self.sport.tipo_risultato)
 
         for idx, (casa, trasferta) in enumerate(coppie):
             seed_incontro = f"{seed_base}:{idx}:{casa.sync_id}:{trasferta.sync_id}"
@@ -127,11 +135,13 @@ class CalendarioScommesse(SyncableModel, models.Model):
                 seed_incontro,
                 margine=cfg.margine_book_default,
                 variabilita_pct=cfg.variabilita_potenza_pct,
+                allow_draw=allow_draw,
             )
             risultato = genera_esito_incontro(
                 quote["potenza_casa_effettiva"],
                 quote["potenza_trasferta_effettiva"],
                 seed_incontro,
+                tipo_risultato=self.sport.tipo_risultato,
             )
             IncontroScommesse.objects.create(
                 calendario=self,

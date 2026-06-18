@@ -43,18 +43,25 @@ def potenza_effettiva(potenza: int, rng: random.Random, variabilita_pct: int = 1
     return _decimal2(max(Decimal("1"), Decimal(potenza) * fattore))
 
 
-def calcola_probabilita_esito(potenza_casa_eff: Decimal, potenza_trasferta_eff: Decimal):
+def calcola_probabilita_esito(
+    potenza_casa_eff: Decimal,
+    potenza_trasferta_eff: Decimal,
+    *,
+    allow_draw: bool = True,
+):
     """Restituisce (p_casa, p_pareggio, p_trasferta) normalizzate."""
     pc = float(potenza_casa_eff)
     pt = float(potenza_trasferta_eff)
     if pc <= 0 and pt <= 0:
-        return (1 / 3, 1 / 3, 1 / 3)
+        if allow_draw:
+            return (1 / 3, 1 / 3, 1 / 3)
+        return (0.5, 0.0, 0.5)
     ratio = min(pc, pt) / max(pc, pt) if max(pc, pt) > 0 else 1.0
     draw_base = 0.15 + 0.15 * ratio
     total = pc + pt
     p_casa = (pc / total) * (1 - draw_base)
     p_trasf = (pt / total) * (1 - draw_base)
-    p_pareggio = draw_base
+    p_pareggio = draw_base if allow_draw else 0.0
     s = p_casa + p_trasf + p_pareggio
     return (p_casa / s, p_pareggio / s, p_trasf / s)
 
@@ -65,6 +72,8 @@ def calcola_quote(
     seed: str,
     margine: Decimal | None = None,
     variabilita_pct: int | None = None,
+    *,
+    allow_draw: bool = True,
 ) -> dict:
     """Calcola quote decimali 1/X/2 con variabilità sulle potenze."""
     cfg = get_config_scommesse()
@@ -72,13 +81,16 @@ def calcola_quote(
     var_pct = variabilita_pct if variabilita_pct is not None else cfg.variabilita_potenza_pct
     pc_eff = potenza_effettiva(potenza_casa, rng, var_pct)
     pt_eff = potenza_effettiva(potenza_trasferta, rng, var_pct)
-    p_casa, p_pareggio, p_trasf = calcola_probabilita_esito(pc_eff, pt_eff)
+    p_casa, p_pareggio, p_trasf = calcola_probabilita_esito(pc_eff, pt_eff, allow_draw=allow_draw)
     m = margine or cfg.margine_book_default
+    quota_pareggio = Decimal("0.00")
+    if allow_draw and p_pareggio > 0:
+        quota_pareggio = _decimal2(m / Decimal(str(p_pareggio)))
     return {
         "potenza_casa_effettiva": pc_eff,
         "potenza_trasferta_effettiva": pt_eff,
         "quota_casa": _decimal2(m / Decimal(str(p_casa))),
-        "quota_pareggio": _decimal2(m / Decimal(str(p_pareggio))),
+        "quota_pareggio": quota_pareggio,
         "quota_trasferta": _decimal2(m / Decimal(str(p_trasf))),
     }
 
@@ -94,27 +106,25 @@ def genera_esito_incontro(
     potenza_casa_eff: Decimal,
     potenza_trasferta_eff: Decimal,
     seed: str,
+    tipo_risultato: str | None = None,
 ) -> dict:
     """Genera esito e punteggio con RNG deterministico."""
+    from personaggi.scommesse_risultati import genera_punteggio_incontro, pareggio_consentito
+
+    allow_draw = pareggio_consentito(tipo_risultato)
     rng = _rng_from_seed(f"esito:{seed}")
-    p_casa, p_pareggio, p_trasf = calcola_probabilita_esito(potenza_casa_eff, potenza_trasferta_eff)
+    p_casa, p_pareggio, p_trasf = calcola_probabilita_esito(
+        potenza_casa_eff, potenza_trasferta_eff, allow_draw=allow_draw,
+    )
     r = rng.random()
     if r < p_casa:
         esito = ESITO_CASA
-    elif r < p_casa + p_pareggio:
+    elif allow_draw and r < p_casa + p_pareggio:
         esito = ESITO_PAREGGIO
     else:
         esito = ESITO_TRASFERTA
 
-    if esito == ESITO_PAREGGIO:
-        gol = rng.randint(0, 4)
-        gol_casa, gol_trasferta = gol, gol
-    elif esito == ESITO_CASA:
-        gol_trasferta = rng.randint(0, 3)
-        gol_casa = gol_trasferta + rng.randint(1, 3)
-    else:
-        gol_casa = rng.randint(0, 3)
-        gol_trasferta = gol_casa + rng.randint(1, 3)
+    gol_casa, gol_trasferta = genera_punteggio_incontro(tipo_risultato, esito, rng)
 
     return {
         "esito": esito,

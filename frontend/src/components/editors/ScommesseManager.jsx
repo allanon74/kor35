@@ -15,6 +15,7 @@ import {
   staffScommesseSaveSport,
   staffScommesseSaveSquadra,
 } from '../../api';
+import { TIPI_RISULTATO, labelTipoRisultato, pareggioConsentito } from '../../scommesse/risultatiSport';
 
 const toList = (data) => (Array.isArray(data) ? data : data?.results || []);
 
@@ -78,7 +79,12 @@ const ScommesseManager = ({ onBack, onLogout }) => {
     setSaving(true);
     try {
       await staffScommesseSaveSport(
-        { nome: formSport.nome, descrizione: formSport.descrizione || '', attivo: formSport.attivo !== false },
+        {
+          nome: formSport.nome,
+          descrizione: formSport.descrizione || '',
+          attivo: formSport.attivo !== false,
+          tipo_risultato: formSport.tipo_risultato || 'calcio',
+        },
         onLogout,
         formSport.id || null,
       );
@@ -226,7 +232,7 @@ const ScommesseManager = ({ onBack, onLogout }) => {
       <div className="flex-1 overflow-y-auto p-4">
         {subTab === 'sport' && (
           <div>
-            <button type="button" onClick={() => setFormSport({ nome: '', descrizione: '', attivo: true })} className="mb-4 flex items-center gap-2 rounded bg-emerald-700 px-3 py-2 text-sm font-bold">
+            <button type="button" onClick={() => setFormSport({ nome: '', descrizione: '', attivo: true, tipo_risultato: 'calcio' })} className="mb-4 flex items-center gap-2 rounded bg-emerald-700 px-3 py-2 text-sm font-bold">
               <Plus size={16} /> Nuovo sport
             </button>
             <div className="space-y-2">
@@ -234,7 +240,11 @@ const ScommesseManager = ({ onBack, onLogout }) => {
                 <div key={s.id} className="flex items-center justify-between rounded border border-gray-700 bg-gray-800 px-3 py-2">
                   <div>
                     <div className="font-bold">{s.nome}</div>
-                    <div className="text-xs text-gray-400">{s.num_squadre} squadre · {s.attivo ? 'attivo' : 'disattivo'}</div>
+                    <div className="text-xs text-gray-400">
+                      {labelTipoRisultato(s.tipo_risultato)}
+                      {pareggioConsentito(s.tipo_risultato) ? '' : ' · no X'}
+                      {' · '}{s.num_squadre} squadre · {s.attivo ? 'attivo' : 'disattivo'}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setFormSport(s)} className="text-indigo-400"><Pencil size={16} /></button>
@@ -301,7 +311,8 @@ const ScommesseManager = ({ onBack, onLogout }) => {
                     <div>
                       <div className="font-bold">{cal.titolo || cal.sport_nome}</div>
                       <div className="mt-1 text-xs text-gray-400">
-                        {cal.num_incontri} incontri · risoluzione {new Date(cal.data_risoluzione).toLocaleString('it-IT')}
+                        {cal.sport_tipo_risultato_label || labelTipoRisultato(cal.sport_tipo_risultato)}
+                        {' · '}{cal.num_incontri} incontri · risoluzione {new Date(cal.data_risoluzione).toLocaleString('it-IT')}
                       </div>
                       <div className="text-xs text-gray-500">
                         Max senza codice: {cal.importo_max_senza_codice} CR · {cal.scommesse_aperte ? 'scommesse aperte' : cal.risultati_visibili ? 'risultati pubblicati' : 'in attesa'}
@@ -318,8 +329,8 @@ const ScommesseManager = ({ onBack, onLogout }) => {
                         <div key={inc.id} className="flex justify-between text-xs text-gray-300">
                           <span>{inc.squadra_casa_nome} vs {inc.squadra_trasferta_nome}</span>
                           <span className="text-gray-500">
-                            {inc.quota_casa}/{inc.quota_pareggio}/{inc.quota_trasferta}
-                            {inc.esito ? ` → ${inc.esito} (${inc.gol_casa}-${inc.gol_trasferta})` : ''}
+                            {inc.quota_casa}/{inc.pareggio_consentito !== false ? `${inc.quota_pareggio}/` : ''}{inc.quota_trasferta}
+                            {inc.esito ? ` → ${inc.esito} (${inc.risultato_formattato || `${inc.gol_casa}-${inc.gol_trasferta}`})` : ''}
                           </span>
                         </div>
                       ))}
@@ -382,6 +393,20 @@ const ScommesseManager = ({ onBack, onLogout }) => {
               <div className="space-y-3">
                 <input className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" placeholder="Nome" value={formSport.nome} onChange={(e) => setFormSport({ ...formSport, nome: e.target.value })} />
                 <textarea className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" placeholder="Descrizione" rows={2} value={formSport.descrizione || ''} onChange={(e) => setFormSport({ ...formSport, descrizione: e.target.value })} />
+                <label className="block text-sm">
+                  <span className="mb-1 block text-gray-300">Tipo risultato</span>
+                  <select
+                    className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2"
+                    value={formSport.tipo_risultato || 'calcio'}
+                    onChange={(e) => setFormSport({ ...formSport, tipo_risultato: e.target.value })}
+                  >
+                    {TIPI_RISULTATO.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}{t.pareggio ? '' : ' (senza pareggio)'}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={formSport.attivo !== false} onChange={(e) => setFormSport({ ...formSport, attivo: e.target.checked })} /> Attivo</label>
               </div>
             )}

@@ -8,7 +8,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 |-------|-----------|
 | `.cursorrules` | Regole globali: UUID/sync, API, Docker, staff dashboard |
 | `.cursor/rules/edge-sync.mdc` | Sync LWW, MTI, tombstone, checklist implementazione |
-| `.cursor/rules/prod-docker-ops.mdc` | Compose prod, log, sync operativo |
+| `.cursor/rules/prod-docker-ops.mdc` | SSH prod (`kor35-prod` + proxy corkscrew), compose, log, sync |
 | `config/docker/SYNC.md` | Runbook Docker: ruoli nodo, `make sync-db`, media rsync |
 
 ## Checklist rapida (feature che tocca il DB)

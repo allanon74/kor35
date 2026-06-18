@@ -5,6 +5,81 @@ alwaysApply: true
 
 # Operazioni Docker — produzione (DigitalOcean)
 
+## Accesso SSH dal PC sviluppatore (Cursor / terminale locale)
+
+Gli agenti Cursor **non** hanno accesso diretto al server: eseguono comandi sulla macchina locale. Per operare su prod usare **`ssh kor35-prod`** (alias in `~/.ssh/config` del developer).
+
+### Rete aziendale: proxy HTTP CONNECT obbligatorio
+
+Da molte workstation (es. rete **gvcc**) la **porta 22 non è raggiungibile in diretto** verso `www.kor35.it` (TCP timeout). PuTTY funziona perché usa un **proxy HTTP CONNECT**; OpenSSH va configurato allo stesso modo.
+
+- **Non** usare `connect -U …`: il pacchetto Ubuntu `connect-proxy` **non** supporta `-U` per l’auth proxy.
+- Usare **`corkscrew`** + file credenziali dedicato (non committare password nel repo).
+
+Setup una tantum sul PC:
+
+```bash
+sudo apt install -y corkscrew
+chmod 700 ~/.ssh
+```
+
+File **`~/.ssh/kor35_proxy_auth`** (gitignored, `chmod 600`): una riga `username password` del proxy aziendale (stesse credenziali della sessione PuTTY → Connection → Proxy).
+
+Esempio **`~/.ssh/config`** (adattare host proxy se diverso da quello aziendale):
+
+```sshconfig
+Host kor35-prod
+    HostName www.kor35.it
+    User deploy
+    Port 22
+    IdentityFile ~/.ssh/id_docker
+    IdentitiesOnly yes
+    ProxyCommand corkscrew 172.23.44.10 8080 %h %p ~/.ssh/kor35_proxy_auth
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+```
+
+```bash
+ssh-keyscan -H www.kor35.it >> ~/.ssh/known_hosts
+chmod 600 ~/.ssh/config
+ssh kor35-prod 'echo OK && hostname'
+```
+
+Atteso nel log: `Authenticated to www.kor35.it (via proxy) using "publickey"`.
+
+**Chiave server:** `~/.ssh/id_docker` (su Windows spesso importata in PuTTY come `.ppk`). Utente remoto: **`deploy`**.
+
+### Comandi remoti (pattern per agenti)
+
+One-liner non interattivo (preferire `-o BatchMode=yes`):
+
+```bash
+ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35 && make status ENV=prod'
+```
+
+`exec` backend senza shell interattiva:
+
+```bash
+ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35/config/docker && \
+  COMPOSE_PROJECT_NAME=kor35-prod \
+  KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod \
+  docker compose -f compose.base.yml -f compose.prod.yml exec -T backend \
+  python manage.py shell -c "..."'
+```
+
+**Nota:** il workflow CI (`.github/workflows/test-ssh.yml`) può usare porta **2222** dai runner GitHub; dall’ufficio con proxy si usa invece **porta 22** verso `www.kor35.it`.
+
+### Diagnostica se SSH non parte
+
+| Sintomo | Causa probabile |
+|--------|------------------|
+| Hang su `Connecting to ... port 22` | Manca `ProxyCommand` (corkscrew) o proxy errato |
+| `unknown option '-U'` con `connect` | Usare corkscrew, non `connect -U` |
+| `Permission denied (publickey)` | Chiave sbagliata: serve `id_docker`, non altre chiavi |
+| HTTPS `www.kor35.it` OK ma SSH no | Normale senza proxy: solo 443 esce in diretto |
+
+---
+
 ## Path e nomi fissi
 
 - Monorepo sul server: **`/srv/kor35`**

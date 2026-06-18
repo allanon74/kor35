@@ -11,12 +11,14 @@ from personaggi.scommesse_config import get_config_scommesse
 from personaggi.scommesse_logic import (
     ALLIBRATORE_SIGLA,
     ESITI_VALIDI,
+    ESITO_PAREGGIO,
     applica_variazione_potenza_dopo_incontro,
     calcola_probabilita_esito,
     calendario_ancora_visibile,
     margine_allibratore,
     risultati_pubblicati,
 )
+from personaggi.scommesse_risultati import formatta_risultato, pareggio_consentito
 from personaggi.scommesse_models import (
     CalendarioScommesse,
     CodiceScommessa,
@@ -77,13 +79,14 @@ def _liquida_calendario(calendario: CalendarioScommesse):
     calendario.save(update_fields=["liquidato", "updated_at"])
 
 
-def _quota_selezione(incontro: IncontroScommesse, esito: str, margine_bonus=None) -> Decimal:
+def _quota_selezione(incontro: IncontroScommesse, esito: str, margine_bonus=None, allow_draw: bool = True) -> Decimal:
     base = incontro.quota_per_esito(esito)
     if margine_bonus is None:
         return base
     p_casa, p_pareggio, p_trasf = calcola_probabilita_esito(
         incontro.potenza_casa_effettiva,
         incontro.potenza_trasferta_effettiva,
+        allow_draw=allow_draw,
     )
     prob_map = {"1": p_casa, "X": p_pareggio, "2": p_trasf}
     prob = prob_map.get(esito, p_casa)
@@ -148,7 +151,7 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         for i in IncontroScommesse.objects.filter(
             calendario=calendario,
             id__in=incontro_ids,
-        )
+        ).select_related("calendario__sport")
     }
     if len(incontri) != len(incontro_ids):
         raise ValidationError("Uno o più incontri non appartengono a questo calendario.")
@@ -163,7 +166,10 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         incontro = incontri.get(str(sel["incontro_id"]))
         if not incontro:
             raise ValidationError("Incontro non valido.")
-        q = _quota_selezione(incontro, esito, margine_bonus)
+        tipo_sport = calendario.sport.tipo_risultato
+        if esito == ESITO_PAREGGIO and not pareggio_consentito(tipo_sport):
+            raise ValidationError("Il pareggio non è disponibile per questo sport.")
+        q = _quota_selezione(incontro, esito, margine_bonus, allow_draw=pareggio_consentito(tipo_sport))
         quota_totale *= q
 
     quota_totale = _decimal2(quota_totale)
@@ -238,16 +244,21 @@ def storico_risultati_squadra(squadra_id, limit=12):
             esito = "V"
         else:
             esito = "S"
+        tipo_risultato = inc.calendario.sport.tipo_risultato
+        punti_fatti = inc.gol_casa if is_casa else inc.gol_trasferta
+        punti_subiti = inc.gol_trasferta if is_casa else inc.gol_casa
         righe.append({
             "data_risoluzione": inc.calendario.data_risoluzione,
             "calendario_titolo": inc.calendario.titolo or inc.calendario.sport.nome,
             "sport_nome": inc.calendario.sport.nome,
+            "tipo_risultato": tipo_risultato,
             "avversario_id": avversario.id,
             "avversario_nome": avversario.nome,
             "in_casa": is_casa,
             "esito": esito,
-            "gol_fatti": inc.gol_casa if is_casa else inc.gol_trasferta,
-            "gol_subiti": inc.gol_trasferta if is_casa else inc.gol_casa,
+            "gol_fatti": punti_fatti,
+            "gol_subiti": punti_subiti,
+            "risultato_formattato": formatta_risultato(tipo_risultato, inc.gol_casa, inc.gol_trasferta),
             "potenza_squadra_al_match": inc.potenza_casa_effettiva if is_casa else inc.potenza_trasferta_effettiva,
             "potenza_avversario_al_match": inc.potenza_trasferta_effettiva if is_casa else inc.potenza_casa_effettiva,
         })

@@ -10,6 +10,7 @@ import {
   scommesseGetSquadraStorico,
   scommessePiazzaPuntata,
 } from '../api';
+import { esitiScommessa, formattaRisultato, labelTipoRisultato, pareggioConsentito } from '../scommesse/risultatiSport';
 
 const ESITO_LABEL = { V: 'Vittoria', S: 'Sconfitta', P: 'Pareggio' };
 const ESITO_CLASS = {
@@ -85,7 +86,7 @@ function SquadraStoricoModal({ squadra, storico, loading, onClose, onOpenAvversa
                   </p>
                   {r.gol_fatti != null && (
                     <p className="mt-1 text-xs text-gray-400">
-                      Risultato {r.gol_fatti}-{r.gol_subiti}
+                      Risultato {r.risultato_formattato || formattaRisultato(r.tipo_risultato, r.gol_fatti, r.gol_subiti)}
                       {r.calendario_titolo ? ` · ${r.calendario_titolo}` : ''}
                     </p>
                   )}
@@ -98,12 +99,6 @@ function SquadraStoricoModal({ squadra, storico, loading, onClose, onOpenAvversa
     </div>
   );
 }
-
-const ESITI = [
-  { id: '1', label: '1' },
-  { id: 'X', label: 'X' },
-  { id: '2', label: '2' },
-];
 
 function getValoreAllFromChar(char) {
   if (!char?.punteggi_base) return 0;
@@ -283,6 +278,10 @@ const ScommesseTab = ({ onLogout }) => {
 
   if (view === 'detail' && calendarioDetail) {
     const puoScommettere = calendarioDetail.scommesse_aperte;
+    const pareggioOk = calendarioDetail.sport_pareggio_consentito
+      ?? pareggioConsentito(calendarioDetail.sport_tipo_risultato);
+    const esitiCalendario = esitiScommessa(pareggioOk);
+    const tipoSport = calendarioDetail.sport_tipo_risultato;
     return (
       <div className="flex h-full flex-col bg-gray-900 text-gray-100">
         <SquadraStoricoModal
@@ -298,7 +297,9 @@ const ScommesseTab = ({ onLogout }) => {
           </button>
           <h2 className="text-lg font-bold">{calendarioDetail.titolo || calendarioDetail.sport_nome}</h2>
           <p className="text-xs text-gray-400">
-            Risultati: {new Date(calendarioDetail.data_risoluzione).toLocaleString('it-IT')}
+            {calendarioDetail.sport_tipo_risultato_label || labelTipoRisultato(tipoSport)}
+            {pareggioOk ? '' : ' · senza pareggio'}
+            {' · '}Risultati: {new Date(calendarioDetail.data_risoluzione).toLocaleString('it-IT')}
             {calendarioDetail.risultati_visibili ? ' (pubblicati)' : ' (nascosti)'}
           </p>
         </div>
@@ -321,11 +322,11 @@ const ScommesseTab = ({ onLogout }) => {
               </div>
               {inc.esito && (
                 <div className="mb-2 text-center text-sm text-emerald-400">
-                  Risultato: {inc.esito} ({inc.gol_casa}-{inc.gol_trasferta})
+                  Risultato: {inc.esito} ({inc.risultato_formattato || formattaRisultato(inc.tipo_risultato || tipoSport, inc.gol_casa, inc.gol_trasferta)})
                 </div>
               )}
-              <div className="grid grid-cols-3 justify-center gap-2">
-                {ESITI.map((e) => {
+              <div className={`grid justify-center gap-2 ${esitiCalendario.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                {esitiCalendario.map((e) => {
                   const quota = e.id === '1' ? inc.quota_casa : e.id === 'X' ? inc.quota_pareggio : inc.quota_trasferta;
                   const active = selezioni[inc.id] === e.id;
                   return (
