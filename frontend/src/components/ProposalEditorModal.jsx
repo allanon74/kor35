@@ -39,6 +39,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
     const [name, setName] = useState(proposal?.nome || '');
     const [description, setDescription] = useState(proposal?.descrizione || '');
     const [spiegazioneTeorie, setSpiegazioneTeorie] = useState(proposal?.spiegazione_teorie || '');
+    const [permettiVendita, setPermettiVendita] = useState(proposal?.permetti_vendita !== false);
     
     // Campi specifici Cerimoniale
     const [prerequisiti, setPrerequisiti] = useState(proposal?.prerequisiti || '');
@@ -274,6 +275,7 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
             effetto: isCerimoniale ? effetto : null,
             livello_proposto: isCerimoniale ? livelloCerimoniale : 1,
             spiegazione_teorie: spiegazioneTeorie.trim() || null,
+            permetti_vendita: permettiVendita,
         };
     };
 
@@ -420,6 +422,25 @@ const ProposalEditorModal = ({ proposal, type, onClose, onRefresh }) => {
                             rows={4}
                             placeholder="Descrivi le teorie, correnti o principi di gioco che giustificano la proposta..."
                         />
+                    </div>
+
+                    <div className="flex items-start gap-3 bg-gray-800/40 border border-gray-700 rounded-xl p-4">
+                        <input
+                            id="permetti-vendita"
+                            type="checkbox"
+                            checked={permettiVendita}
+                            onChange={(e) => setPermettiVendita(e.target.checked)}
+                            disabled={!isDraft}
+                            className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-900 text-indigo-500 focus:ring-indigo-500"
+                        />
+                        <label htmlFor="permetti-vendita" className="cursor-pointer">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+                                Permetti la vendita
+                            </span>
+                            <span className="text-sm text-gray-300 leading-snug">
+                                Se attivo, la tecnica creata sarà disponibile in Accademia. Se disattivato, resterà solo per te o per negozi speciali.
+                            </span>
+                        </label>
                     </div>
 
                     {/* LOGICA CERIMONIALE */}

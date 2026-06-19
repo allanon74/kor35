@@ -15,6 +15,7 @@ import re
 from .models import (
     PropostaTecnica, Personaggio, Messaggio, Punteggio,
     Infusione, Tessitura, Cerimoniale, Mattone,
+    PersonaggioInfusione, PersonaggioTessitura, PersonaggioCerimoniale,
     QrCode, Oggetto, OggettoBase, ClasseOggetto, Abilita, Inventario, Manifesto, Nodo, NodoRewardConfig, InnescoTimer,
     A_vista, Attivata, MinigiocoQrConfig, MinigiocoBibliotecaImmagine,
     STATO_PROPOSTA_BOZZA, STATO_PROPOSTA_APPROVATA, STATO_PROPOSTA_IN_VALUTAZIONE,
@@ -29,6 +30,9 @@ from .models import (
     FEATURE_MODE_SHARED,
 )
 
+from decimal import Decimal
+
+from .acquisto_costi import calcola_costo_creazione_proposta
 from .qr_logic import annotate_staff_avista_qr
 from .services import GestioneCraftingService
 from .formula_builder import (
@@ -624,25 +628,13 @@ class ApprovaPropostaView(APIView):
         tipo = proposta.tipo
         aura = proposta.aura
         
-        # --- 1. Calcolo Costi ---
-        stat_costo = None
-        if tipo == TIPO_PROPOSTA_INFUSIONE:
-            stat_costo = aura.stat_costo_creazione_infusione
-        elif tipo == TIPO_PROPOSTA_TESSITURA:
-            stat_costo = aura.stat_costo_creazione_tessitura
-        elif tipo == TIPO_PROPOSTA_CERIMONIALE:
-            stat_costo = aura.stat_costo_creazione_cerimoniale
-            
-        costo_unitario = 0
-        if stat_costo:
-            # Calcola il costo usando il metodo del personaggio (Correzione precedente)
-            costo_unitario = personaggio.get_valore_statistica(stat_costo.sigla)
-
         livello_finale = data.get('livello', proposta.livello)
         if tipo == TIPO_PROPOSTA_CERIMONIALE:
              livello_finale = data.get('liv', proposta.livello_proposto) or 1
 
-        costo_totale = int(costo_unitario) * int(livello_finale)
+        _, costo_totale = calcola_costo_creazione_proposta(
+            personaggio, proposta, livello_finale=livello_finale
+        )
 
         # Verifica Crediti
         if personaggio.crediti < costo_totale:
@@ -659,6 +651,8 @@ class ApprovaPropostaView(APIView):
                 data['proposta_creazione'] = proposta.id
                 data['aura_richiesta'] = aura.id
                 data['campagna'] = proposta.personaggio.campagna_id
+                if not proposta.permetti_vendita:
+                    data['escluso_negozio_ufficiale'] = True
                 
                 # Serializer Selection (Usiamo i FullEditor per abilitare la scrittura)
                 serializer = None
@@ -687,17 +681,31 @@ class ApprovaPropostaView(APIView):
                 # I FullEditorSerializer gestiscono automaticamente anche il salvataggio dei componenti
                 nuova_tecnica = serializer.save()
                 
-                # C. Assegna al Personaggio (Many2Many)
+                costo_pagato = Decimal(costo_totale)
+
+                # C. Assegna al Personaggio con costo pagato (per eventuale revoca)
                 if tipo == TIPO_PROPOSTA_INFUSIONE:
-                    personaggio.infusioni_possedute.add(nuova_tecnica)
+                    PersonaggioInfusione.objects.create(
+                        personaggio=personaggio,
+                        infusione=nuova_tecnica,
+                        costo_crediti_pagato=costo_pagato,
+                    )
                 elif tipo == TIPO_PROPOSTA_TESSITURA:
-                    personaggio.tessiture_possedute.add(nuova_tecnica)
+                    PersonaggioTessitura.objects.create(
+                        personaggio=personaggio,
+                        tessitura=nuova_tecnica,
+                        costo_crediti_pagato=costo_pagato,
+                    )
                 elif tipo == TIPO_PROPOSTA_CERIMONIALE:
-                    personaggio.cerimoniali_posseduti.add(nuova_tecnica)
+                    PersonaggioCerimoniale.objects.create(
+                        personaggio=personaggio,
+                        cerimoniale=nuova_tecnica,
+                        costo_crediti_pagato=costo_pagato,
+                    )
 
                 # D. Paga i crediti
                 if costo_totale > 0:
-                    personaggio.modifica_crediti(-costo_totale, f"Creazione {proposta.get_tipo_display()}: {nuova_tecnica.nome}")
+                    personaggio.modifica_crediti(-costo_pagato, f"Creazione {proposta.get_tipo_display()}: {nuova_tecnica.nome}")
 
                 # E. Aggiorna Proposta
                 proposta.stato = STATO_PROPOSTA_APPROVATA

@@ -13,6 +13,52 @@ from django.utils import timezone
 PARAMETRO_SCONTO_ABILITA = "rid_cos_ab"
 
 
+def applica_sconto_rct_tecnica(personaggio, costo_base: int) -> int:
+    """Sconto Comprensione (stat RCT, max 50%) su costi tecniche."""
+    costo_base = int(costo_base or 0)
+    if costo_base <= 0:
+        return 0
+    sconto_perc = personaggio.get_valore_statistica("RCT")
+    if sconto_perc > 0:
+        sconto_perc = min(int(sconto_perc), 50)
+        riduzione = (costo_base * sconto_perc) / 100
+        return int(max(0, costo_base - riduzione))
+    return costo_base
+
+
+def calcola_costo_creazione_proposta(personaggio, proposta, livello_finale=None) -> Tuple[int, int]:
+    """
+    Costo creazione da proposta approvata: (pieno, effettivo con sconto RCT).
+    livello_finale: override staff (es. liv/livello dal payload di approvazione).
+    """
+    from .models import (
+        TIPO_PROPOSTA_CERIMONIALE,
+        TIPO_PROPOSTA_INFUSIONE,
+        TIPO_PROPOSTA_TESSITURA,
+    )
+
+    aura = proposta.aura
+    stat_costo = None
+    if proposta.tipo == TIPO_PROPOSTA_INFUSIONE:
+        stat_costo = aura.stat_costo_creazione_infusione
+    elif proposta.tipo == TIPO_PROPOSTA_TESSITURA:
+        stat_costo = aura.stat_costo_creazione_tessitura
+    elif proposta.tipo == TIPO_PROPOSTA_CERIMONIALE:
+        stat_costo = aura.stat_costo_creazione_cerimoniale
+
+    if livello_finale is None:
+        livello_finale = proposta.livello
+    livello_finale = int(livello_finale or 0)
+
+    costo_unitario = 0
+    if stat_costo:
+        costo_unitario = personaggio.get_valore_statistica(stat_costo.sigla)
+
+    costo_pieno = int(costo_unitario) * livello_finale
+    costo_effettivo = applica_sconto_rct_tecnica(personaggio, costo_pieno)
+    return costo_pieno, costo_effettivo
+
+
 def calcola_costi_abilita_acquisto(personaggio, abilita) -> Tuple[int, Decimal]:
     """Ritorna (costo_pc, costo_crediti) come in AcquisisciAbilitaView."""
     mods = personaggio.modificatori_calcolati

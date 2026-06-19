@@ -558,27 +558,44 @@ class PropostaTecnicaAdmin(admin.ModelAdmin):
             obj.stato = STATO_PROPOSTA_APPROVATA
             if not obj.note_staff: obj.note_staff = f"Approvata automaticamente con la creazione di: {tecnica_creata.nome}"
             obj.save()
+
+            if not obj.permetti_vendita and not tecnica_creata.escluso_negozio_ufficiale:
+                tecnica_creata.escluso_negozio_ufficiale = True
+                tecnica_creata.save(update_fields=['escluso_negozio_ufficiale', 'non_acquistabile'])
             
             # --- LOGICA PAGAMENTO ---
-            costo = tecnica_creata.costo_crediti
+            from decimal import Decimal
+            from personaggi.acquisto_costi import calcola_costo_creazione_proposta
+
+            _, costo = calcola_costo_creazione_proposta(obj.personaggio, obj)
+            costo_pagato = Decimal(costo)
             if costo > 0:
-                obj.personaggio.modifica_crediti(-costo, f"Approvazione e creazione tecnica: {tecnica_creata.nome}")
+                obj.personaggio.modifica_crediti(-costo_pagato, f"Approvazione e creazione tecnica: {tecnica_creata.nome}")
                 obj.personaggio.aggiungi_log(f"Ha speso {costo} CR per la creazione della tecnica '{tecnica_creata.nome}'.")
             
             # --- ASSEGNAZIONE AL PERSONAGGIO ---
             pg = obj.personaggio
             if tipo_tecnica == 'infusione':
                 if not pg.infusioni_possedute.filter(id=tecnica_creata.id).exists():
-                    PersonaggioInfusione.objects.create(personaggio=pg, infusione=tecnica_creata, data_acquisizione=timezone.now())
+                    PersonaggioInfusione.objects.create(
+                        personaggio=pg, infusione=tecnica_creata,
+                        data_acquisizione=timezone.now(), costo_crediti_pagato=costo_pagato,
+                    )
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto l'infusione '{tecnica_creata.nome}'.")
             elif tipo_tecnica == 'tessitura':
                 if not pg.tessiture_possedute.filter(id=tecnica_creata.id).exists():
-                    PersonaggioTessitura.objects.create(personaggio=pg, tessitura=tecnica_creata, data_acquisizione=timezone.now())
+                    PersonaggioTessitura.objects.create(
+                        personaggio=pg, tessitura=tecnica_creata,
+                        data_acquisizione=timezone.now(), costo_crediti_pagato=costo_pagato,
+                    )
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto la tessitura '{tecnica_creata.nome}'.")
             # --- NUOVO: CERIMONIALE ---
             elif tipo_tecnica == 'cerimoniale':
                 if not pg.cerimoniali_posseduti.filter(id=tecnica_creata.id).exists():
-                    PersonaggioCerimoniale.objects.create(personaggio=pg, cerimoniale=tecnica_creata, data_acquisizione=timezone.now())
+                    PersonaggioCerimoniale.objects.create(
+                        personaggio=pg, cerimoniale=tecnica_creata,
+                        data_acquisizione=timezone.now(), costo_crediti_pagato=costo_pagato,
+                    )
                     pg.aggiungi_log(f"Proposta accettata! Ha ottenuto il cerimoniale '{tecnica_creata.nome}'.")
             # --------------------------
 
