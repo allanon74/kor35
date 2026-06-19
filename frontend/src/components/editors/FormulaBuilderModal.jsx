@@ -40,6 +40,7 @@ const FormulaBuilderModal = ({
   const [excludeAlwaysStatus, setExcludeAlwaysStatus] = useState(false);
   const [includeSpecificEffect, setIncludeSpecificEffect] = useState(false);
   const [effectDescription, setEffectDescription] = useState('');
+  const [omitFormulaSource, setOmitFormulaSource] = useState(false);
 
   const normalizedElementoOptions = useMemo(
     () => (elementoOptions || []).map((el) => ({
@@ -97,6 +98,7 @@ const FormulaBuilderModal = ({
     exclude_always_status: excludeAlwaysStatus,
     include_specific_effect: includeSpecificEffect,
     effect_description: effectDescription,
+    omit_formula_source: omitFormulaSource,
     source_element_id: wantsElementSource && effectiveSourceElementId ? effectiveSourceElementId : null,
   });
 
@@ -114,10 +116,17 @@ const FormulaBuilderModal = ({
     setExcludeAlwaysStatus(false);
     setIncludeSpecificEffect(false);
     setEffectDescription('');
+    setOmitFormulaSource(
+      Boolean(
+        formulaValue
+        && !String(formulaValue).includes('{formula_source}')
+        && (String(formulaValue).includes('{danni_mischia}') || String(formulaValue).includes('{danni_distanza}'))
+      )
+    );
     staffGetFormulaBuilderSchema(onLogout)
       .then((data) => setSchema(data || null))
       .catch((err) => console.error('Errore schema formula builder:', err));
-  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId]);
+  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId, formulaValue]);
 
   useEffect(() => {
     if (!open || !schema) {
@@ -154,6 +163,7 @@ const FormulaBuilderModal = ({
     excludeAlwaysStatus,
     includeSpecificEffect,
     effectDescription,
+    omitFormulaSource,
     formulaValue,
     statsByParamFromForm,
     numericValues,
@@ -187,6 +197,16 @@ const FormulaBuilderModal = ({
 
   const clearSourceSelections = () => {
     setSelections((prev) => ({ ...prev, formula_source: [] }));
+  };
+
+  const toggleOmitFormulaSource = () => {
+    setOmitFormulaSource((prev) => {
+      const next = !prev;
+      if (next) {
+        setSelections((s) => ({ ...s, formula_source: [] }));
+      }
+      return next;
+    });
   };
 
   const handleApply = async () => {
@@ -250,10 +270,14 @@ const FormulaBuilderModal = ({
                   {isSourceSection && (
                     <button
                       type="button"
-                      onClick={clearSourceSelections}
-                      className="text-[11px] px-2 py-0.5 rounded border border-gray-600 text-gray-300 hover:bg-gray-800"
+                      onClick={toggleOmitFormulaSource}
+                      className={`text-[11px] px-2 py-0.5 rounded border ${
+                        omitFormulaSource
+                          ? 'border-amber-400 bg-amber-900/40 text-amber-100'
+                          : 'border-gray-600 text-gray-300 hover:bg-gray-800'
+                      }`}
                     >
-                      Nessuna sorgente
+                      Ometti sorgente in formula
                     </button>
                   )}
                 </div>
@@ -266,9 +290,14 @@ const FormulaBuilderModal = ({
                       <button
                         key={opt.id}
                         type="button"
-                        onClick={() => setSelectionValue(section.id, opt.id, isMulti)}
+                        onClick={() => !omitFormulaSource && setSelectionValue(section.id, opt.id, isMulti)}
+                        disabled={isSourceSection && omitFormulaSource}
                         className={`px-3 py-1 text-sm rounded border ${
-                          active ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-200'
+                          isSourceSection && omitFormulaSource
+                            ? 'opacity-40 cursor-not-allowed bg-gray-900 border-gray-700 text-gray-500'
+                            : active
+                              ? 'bg-indigo-600 border-indigo-400 text-white'
+                              : 'bg-gray-800 border-gray-600 text-gray-200'
                         }`}
                       >
                         {opt.label}
@@ -278,11 +307,18 @@ const FormulaBuilderModal = ({
                 </div>
                 {isSourceSection && (
                   <p className="mt-2 text-xs text-gray-500">
-                    Puoi combinare più voci (es. Chop + Elemento). In gioco le abilità possono aggiungere altre
-                    sorgenti tramite regola «Aggiungi sorgente/elemento».
+                    Con danno mischia/distanza la sorgente implicita compare come{' '}
+                    <code className="text-emerald-300">(Chop!)</code> /{' '}
+                    <code className="text-emerald-300">(Pierce!)</code> se il totale danno è 1. Puoi combinare
+                    più voci (es. Chop + Elemento). Usa «Ometti sorgente» solo se non vuoi alcuna dichiarazione.
                   </p>
                 )}
-                {isSourceSection && wantsElementSource && (
+                {isSourceSection && omitFormulaSource && (
+                  <p className="mt-2 text-xs text-amber-300">
+                    La sorgente non comparirà in formula (né Chop né (Chop!)).
+                  </p>
+                )}
+                {isSourceSection && wantsElementSource && !omitFormulaSource && (
                   <div className="mt-3 space-y-2">
                     {tessituraElementoId ? (
                       <p className="text-sm text-emerald-300">

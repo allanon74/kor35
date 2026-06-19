@@ -436,12 +436,69 @@ def _render_exclusive_template(template, value_map, object_map=None):
     return re.sub(r"\{([^}]+)\}", _replace, str(template))
 
 
+IMPLICIT_SOURCE_PARENS = {
+    "chop": "(Chop!)",
+    "blam": "(Blam!)",
+    "pierce": "(Pierce!)",
+    "mental": "(Mental!)",
+}
+
+
+def _implicit_source_paren_for_param(param):
+    return IMPLICIT_SOURCE_PARENS.get(str(param or "").strip().lower(), "")
+
+
+def _attack_damage_total(value_map, mode):
+    if mode == "mischia":
+        return float(value_map.get("dannimis", 0) or 0) + float(value_map.get("dannigen", 0) or 0)
+    if mode == "distanza":
+        return float(value_map.get("dannidis", 0) or 0) + float(value_map.get("dannigen", 0) or 0)
+    return 0.0
+
+
+def _should_use_implicit_source_paren(param, value_map):
+    param = str(param or "").strip().lower()
+    if param in ("chop", "blam", "mental"):
+        if not _is_truthy_numeric(value_map.get("dmg_mischia")):
+            return False
+        return _attack_damage_total(value_map, "mischia") <= 1
+    if param == "pierce":
+        if not _is_truthy_numeric(value_map.get("dmg_distanza")):
+            return False
+        return _attack_damage_total(value_map, "distanza") <= 1
+    return False
+
+
+def infer_implicit_source_paren(value_map):
+    """
+    Sorgente implicita quando chop/blam/pierce non compaiono in formula ma il contesto
+    attacco lo richiede (es. spada con 1 danno mischia: niente «Uno», ma serve un segno).
+    """
+    if not isinstance(value_map, dict):
+        return ""
+    checks = (
+        ("blam", "blam"),
+        ("chop", "chop"),
+        ("mental", "mental"),
+        ("pierce", "pierce"),
+        ("dmg_distanza", "pierce"),
+        ("dmg_mischia", "chop"),
+    )
+    for ctx_key, param in checks:
+        if _is_truthy_numeric(value_map.get(ctx_key)):
+            return _implicit_source_paren_for_param(param)
+    return ""
+
+
 def build_exclusive_group_text(group_key, value_map, groups_config=None, object_map=None):
     """
     Costruisce il testo di un gruppo esclusivo (es. "Puro/Ineluttabile! ").
     """
     config = (groups_config or EXCLUSIVE_FORMAT_GROUPS).get(group_key)
     if not config:
+        return ""
+
+    if group_key == "formula_source" and value_map.get("__formula_source_suppressed__"):
         return ""
 
     entries = config.get("entries") or []
@@ -466,11 +523,21 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
         is_active = any(_is_truthy_numeric(value_map.get(param, 0)) for param in params)
         if is_active and label not in seen:
             if group_key == "formula_source":
+                suppressed = False
                 for p in params:
-                    override_label = source_label_overrides.get(p)
-                    if override_label:
+                    if p in source_label_overrides:
+                        override_label = source_label_overrides[p]
+                        if str(override_label or "").strip() == "":
+                            value_map["__formula_source_suppressed__"] = True
+                            suppressed = True
+                            break
                         label = str(override_label).strip()
                         break
+                if suppressed:
+                    continue
+                primary = params[0]
+                if _should_use_implicit_source_paren(primary, value_map):
+                    label = _implicit_source_paren_for_param(primary)
             part = label
 
             # Extra opzionale per entry (dict o lista di dict/stringhe).
@@ -548,6 +615,13 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
             if lbl and lbl not in seen:
                 active_parts.append(lbl)
                 seen.add(lbl)
+
+    if group_key == "formula_source" and not active_parts:
+        if value_map.get("__formula_source_suppressed__"):
+            return ""
+        implicit = infer_implicit_source_paren(value_map)
+        if implicit:
+            active_parts.append(implicit)
 
     if not active_parts:
         return ""
@@ -1061,7 +1135,17 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     
     formula_finale = pattern_if.sub(replace_conditional_block, formula_out)
     formula_finale = pattern_placeholder.sub(resolve_placeholder, formula_finale)
-    
+
+    if (
+        formula_out
+        and "{formula_source}" in formula_out
+        and not str(formula_finale or "").strip()
+        and not eval_context.get("__formula_source_suppressed__")
+    ):
+        fallback = infer_implicit_source_paren(eval_context)
+        if fallback:
+            formula_finale = f"{fallback} "
+
     # Costruzione Output HTML
     parts = []
     if testo_finale: parts.append(testo_finale)
@@ -5724,13 +5808,17 @@ class Personaggio(Inventario):
             if not _rule_when_matches(rule):
                 continue
 
-            to_label = _label(rule.to_mattone) or _label(rule.to_punteggio) or (rule.source_label or "").strip()
-
-            if rule.rule_type == FORMULA_RULE_SOURCE_OVERRIDE and to_label:
-                source_override = to_label
+            to_label = _label(rule.to_mattone) or _label(rule.to_punteggio)
+            if rule.rule_type == FORMULA_RULE_SOURCE_OVERRIDE:
+                if rule.to_mattone_id or rule.to_punteggio_id:
+                    source_override = to_label or ""
+                elif rule.source_label is not None:
+                    source_override = str(rule.source_label).strip()
                 continue
 
-            if rule.rule_type == FORMULA_RULE_SOURCE_APPEND and to_label:
+            append_label = to_label or (rule.source_label or "").strip()
+
+            if rule.rule_type == FORMULA_RULE_SOURCE_APPEND and append_label:
                 if rule.from_punteggio_id and aura_obj:
                     if getattr(aura_obj, "id", None) != rule.from_punteggio_id:
                         continue
@@ -5739,8 +5827,8 @@ class Personaggio(Inventario):
                     expected = _label(rule.from_mattone).lower()
                     if expected and current_el != expected:
                         continue
-                if to_label not in source_append_labels:
-                    source_append_labels.append(to_label)
+                if append_label not in source_append_labels:
+                    source_append_labels.append(append_label)
                 continue
 
             if rule.rule_type == FORMULA_RULE_ELEMENT_REPLACE and to_label and elemento_obj:
@@ -5767,7 +5855,7 @@ class Personaggio(Inventario):
             source_label = _element_label(elemento_obj)
             if source_label:
                 out["source_labels"] = {"elemento_src": source_label}
-        if source_override:
+        if source_override is not None:
             labels = out.get("source_labels", {})
             labels.update({
                 "chop": source_override,
