@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from kor35.syncing import (
+    apply_natural_pk_precheck,
     build_model_sync_records,
     pagina_regolamento_sync_field_allowed,
     touch_sync_updated_at,
@@ -414,6 +415,26 @@ class Command(BaseCommand):
                     update_data[field.name] = dt
                 continue
             update_data[field.name] = value
+
+        pk_result, local_obj = apply_natural_pk_precheck(
+            model, sync_id, row, update_data, remote_updated_at, local_obj
+        )
+        if pk_result == "skipped":
+            return "skipped"
+        if pk_result == "defer":
+            err_key = f"{model_label}: natural_pk_mismatch"
+            self._defer_errors[err_key] = self._defer_errors.get(err_key, 0) + 1
+            return "defer"
+        if pk_result == "applied" and local_obj is not None:
+            obj = local_obj
+            for field_name, raw_values in m2m_updates.items():
+                resolved_list, unresolved = self._resolve_m2m_values(model, field_name, raw_values)
+                if unresolved:
+                    return "defer"
+                getattr(obj, field_name).set(resolved_list)
+            if remote_updated_at:
+                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+            return "applied"
 
         if model_label == "personaggi.minigiocoqrconfig":
             qr_code = update_data.get("qr_code")

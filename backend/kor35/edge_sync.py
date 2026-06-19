@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from kor35.syncing import (
+    apply_natural_pk_precheck,
     build_model_sync_records,
     pagina_regolamento_sync_field_allowed,
     touch_sync_updated_at,
@@ -394,6 +395,21 @@ class EdgeSyncView(APIView):
         for field_name, raw_list in m2m_raw.items():
             field = model._meta.get_field(field_name)
             m2m_updates[field_name] = self._resolve_m2m_values(field, raw_list)
+
+        pk_result, local = apply_natural_pk_precheck(
+            model, sync_id, row, update_data, remote_updated_at, local
+        )
+        if pk_result == "skipped":
+            return "skipped"
+        if pk_result == "defer":
+            return "defer"
+        if pk_result == "applied" and local is not None:
+            obj = local
+            for field_name, related_list in m2m_updates.items():
+                getattr(obj, field_name).set(related_list)
+            if remote_updated_at:
+                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+            return "applied"
 
         if model_label == "personaggi.minigiocoqrconfig":
             qr_code = update_data.get("qr_code")

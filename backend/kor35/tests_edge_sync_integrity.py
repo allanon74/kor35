@@ -135,6 +135,66 @@ class EdgeSyncMinigiocoQrConfigMergeTests(TestCase):
         self.assertEqual(cfg.messaggio_pre, "Pronto?")
 
 
+class EdgeSyncQrCodeNaturalPkTests(TestCase):
+    """QrCode.id (codice stampato) deve viaggiare nel payload sync."""
+
+    def test_serialize_includes_qrcode_id(self):
+        qr = QrCode.objects.create(testo="export id test")
+        row = serialize_for_sync(qr)
+        self.assertEqual(row.get("id"), qr.id)
+
+    def test_apply_creates_qrcode_with_master_id(self):
+        master_sync_id = uuid.uuid4()
+        master_id = "FIXEDqrID0001"
+        remote_updated = timezone.now()
+        row = {
+            "sync_id": str(master_sync_id),
+            "id": master_id,
+            "testo": "Da master",
+            "inventario_presente": False,
+            "inventario_colore_codice": "",
+            "inventario_colore_sfondo": "",
+            "stl_creato": False,
+            "qr_stampato": False,
+            "vista": None,
+            "updated_at": remote_updated.isoformat(),
+        }
+        view = EdgeSyncView()
+        result = view._try_apply_one(QrCode, row)
+        self.assertEqual(result, "applied")
+        qr = QrCode.objects.get(sync_id=master_sync_id)
+        self.assertEqual(qr.id, master_id)
+        self.assertEqual(qr.testo, "Da master")
+
+    def test_apply_merges_local_qrcode_by_id_when_sync_id_differs(self):
+        master_sync_id = uuid.uuid4()
+        local_sync_id = uuid.uuid4()
+        master_id = "MERGEqrID00002"
+        QrCode.objects.create(id=master_id, sync_id=local_sync_id, testo="Locale")
+
+        remote_updated = timezone.now()
+        row = {
+            "sync_id": str(master_sync_id),
+            "id": master_id,
+            "testo": "Da master",
+            "inventario_presente": False,
+            "inventario_colore_codice": "",
+            "inventario_colore_sfondo": "",
+            "stl_creato": False,
+            "qr_stampato": True,
+            "vista": None,
+            "updated_at": remote_updated.isoformat(),
+        }
+        view = EdgeSyncView()
+        result = view._try_apply_one(QrCode, row)
+        self.assertEqual(result, "applied")
+
+        qr = QrCode.objects.get(id=master_id)
+        self.assertEqual(str(qr.sync_id), str(master_sync_id))
+        self.assertEqual(qr.testo, "Da master")
+        self.assertTrue(qr.qr_stampato)
+
+
 class EdgeSyncMtiChildLwwTests(TestCase):
     """Campi MTI figlio (es. Tessitura) non devono essere sovrascritti da payload più vecchi."""
 
