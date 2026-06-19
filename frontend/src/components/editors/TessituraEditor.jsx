@@ -205,7 +205,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     }
   };
 
-  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, elementoPrincipaleId }) => {
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, elementoPrincipaleId, formulaBuilderSelezioni }) => {
     const controlledSet = new Set(controlledParams || []);
     const byParam = new Map((statsOptions || []).map((s) => [s.parametro, s]));
     const current = formData.statistiche_base || [];
@@ -222,6 +222,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
       ...prev,
       formula: mergedFormula,
       statistiche_base: [...kept, ...fromBuilder],
+      formula_builder_selezioni: formulaBuilderSelezioni || {},
       ...(elementoPrincipaleId != null ? { elemento_principale: elementoPrincipaleId } : {}),
     }));
   };
@@ -380,6 +381,8 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         defaultFormulaType="weave"
         elementoPrincipaleId={formData.elemento_principale?.id || formData.elemento_principale}
         elementoOptions={elementoSelectOptions}
+        savedSelections={formData.formula_builder_selezioni}
+        savedFormulaType={formData.formula_builder_selezioni?.formula_type}
       />
 
       <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />

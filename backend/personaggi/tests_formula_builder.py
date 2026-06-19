@@ -310,6 +310,29 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertIn("pierce", rendered)
         self.assertNotIn("chop", rendered)
 
+    def test_persisted_formula_builder_selezioni_used_on_render(self):
+        formula = build_formula_template(
+            "attack",
+            {"formula_damage_mode": "mischia", "formula_source": ["pierce"]},
+        )
+        selezioni = {
+            "formula_type": "attack",
+            "formula_damage_mode": "mischia",
+            "formula_source": ["pierce"],
+        }
+        rendered = formatta_testo_generico(
+            None,
+            formula=formula,
+            statistiche_base=[],
+            context={
+                "formula_builder_selezioni": selezioni,
+                "attack_formula_template": formula,
+            },
+            solo_formula=True,
+        ).lower()
+        self.assertIn("pierce", rendered)
+        self.assertNotIn("chop", rendered)
+
     def test_weave_sources_are_always_explicit_with_bang(self):
         stats = build_stats_by_selection(
             {},

@@ -13,6 +13,8 @@ const FormulaBuilderModal = ({
   entityName = '',
   elementoPrincipaleId = null,
   elementoOptions = [],
+  savedSelections = null,
+  savedFormulaType = null,
 }) => {
   const [schema, setSchema] = useState(null);
   const [formulaType, setFormulaType] = useState(defaultFormulaType);
@@ -43,6 +45,33 @@ const FormulaBuilderModal = ({
   const [effectDescription, setEffectDescription] = useState('');
   const [omitFormulaSource, setOmitFormulaSource] = useState(false);
   const wasOpenRef = useRef(false);
+
+  const restoreFromSavedSelections = (sel) => {
+    const data = sel && typeof sel === 'object' ? sel : {};
+    if (data.formula_type) {
+      setFormulaType(data.formula_type);
+    } else if (savedFormulaType) {
+      setFormulaType(savedFormulaType);
+    } else {
+      setFormulaType(defaultFormulaType || 'attack');
+    }
+    const nextSelections = {};
+    ['formula_type', 'formula_prefix', 'formula_target', 'formula_source', 'formula_status', 'formula_damage_mode'].forEach((key) => {
+      if (data[key] !== undefined && data[key] !== null) {
+        nextSelections[key] = data[key];
+      }
+    });
+    setSelections(nextSelections);
+    setSourceElementId(data.source_element_id ? String(data.source_element_id) : '');
+    setIncludeCura(!!data.include_cura);
+    setExcludeAlwaysRango(!!data.exclude_always_rango);
+    setExcludeAlwaysMolt(!!data.exclude_always_molt);
+    setExcludeAlwaysPrefix(!!data.exclude_always_prefix);
+    setExcludeAlwaysStatus(!!data.exclude_always_status);
+    setIncludeSpecificEffect(!!data.include_specific_effect);
+    setEffectDescription(data.effect_description || '');
+    setOmitFormulaSource(!!data.omit_formula_source);
+  };
 
   const normalizedElementoOptions = useMemo(
     () => (elementoOptions || []).map((el) => ({
@@ -153,27 +182,31 @@ const FormulaBuilderModal = ({
     }
     wasOpenRef.current = true;
 
-    setFormulaType(defaultFormulaType || 'attack');
-    setSelections({});
-    setSourceElementId('');
-    setIncludeCura(false);
-    setExcludeAlwaysRango(false);
-    setExcludeAlwaysMolt(false);
-    setExcludeAlwaysPrefix(false);
-    setExcludeAlwaysStatus(false);
-    setIncludeSpecificEffect(false);
-    setEffectDescription('');
-    setOmitFormulaSource(
-      Boolean(
-        formulaValue
-        && !String(formulaValue).includes('{formula_source}')
-        && (String(formulaValue).includes('{danni_mischia}') || String(formulaValue).includes('{danni_distanza}'))
-      )
-    );
+    if (savedSelections && Object.keys(savedSelections).length > 0) {
+      restoreFromSavedSelections(savedSelections);
+    } else {
+      setFormulaType(defaultFormulaType || 'attack');
+      setSelections({});
+      setSourceElementId('');
+      setIncludeCura(false);
+      setExcludeAlwaysRango(false);
+      setExcludeAlwaysMolt(false);
+      setExcludeAlwaysPrefix(false);
+      setExcludeAlwaysStatus(false);
+      setIncludeSpecificEffect(false);
+      setEffectDescription('');
+      setOmitFormulaSource(
+        Boolean(
+          formulaValue
+          && !String(formulaValue).includes('{formula_source}')
+          && (String(formulaValue).includes('{danni_mischia}') || String(formulaValue).includes('{danni_distanza}'))
+        )
+      );
+    }
     staffGetFormulaBuilderSchema(onLogout)
       .then((data) => setSchema(data || null))
       .catch((err) => console.error('Errore schema formula builder:', err));
-  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId, formulaValue]);
+  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId, formulaValue, savedSelections, savedFormulaType]);
 
   useEffect(() => {
     if (!open || !schema) {
@@ -280,6 +313,10 @@ const FormulaBuilderModal = ({
         formulaText: (res?.formula_template || schema?.default_template || '').trim(),
         customText: '',
         controlledParams: [...getControlledParams(schema), ...NUMERIC_CONTROLLED_PARAMS],
+        formulaBuilderSelezioni: {
+          formula_type: formulaType,
+          ...buildSelectionsPayload(),
+        },
         elementoPrincipaleId:
           wantsElementSource && effectiveSourceElementId
             ? parseInt(effectiveSourceElementId, 10)

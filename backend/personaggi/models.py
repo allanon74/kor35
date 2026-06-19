@@ -1035,6 +1035,10 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 base_values[param] = val
                 eval_context[param] = val
 
+    if context and context.get('formula_builder_selezioni'):
+        from .formula_builder import apply_saved_formula_builder_selezioni
+        apply_saved_formula_builder_selezioni(eval_context, context.get('formula_builder_selezioni'))
+
     # 2. Calcolo Modificatori (dal Personaggio)
     mods_attivi = {}
     if personaggio:
@@ -2679,6 +2683,12 @@ class Infusione(Tecnica):
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
     )
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
+    )
     statistiche_base = models.ManyToManyField(Statistica, through='InfusioneStatisticaBase', blank=True, related_name='infusione_statistiche_base')
     # Statistiche MODIFICATORI (Es. +1 Forza) - REINTRODOTTO
     statistiche = models.ManyToManyField(Statistica, through='InfusioneStatistica', blank=True, related_name='infusione_statistiche')
@@ -2740,13 +2750,19 @@ class Infusione(Tecnica):
         base_text = formatta_testo_generico(
             self.testo, 
             statistiche_base=self.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
-            context={'livello': self.livello, 'aura': self.aura_richiesta}, 
+            context={'livello': self.livello, 'aura': self.aura_richiesta, 'formula_builder_selezioni': self.formula_builder_selezioni or {}, 'attack_formula_template': self.formula_attacco, 'formula_kind': FORMULA_SCOPE_ATTACK},
             formula=self.formula_attacco
         )
         return base_text + genera_html_cariche(self, None)
     
 class Tessitura(Tecnica):
     formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
+    )
     elemento_principale = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO})
     caratteristiche = models.ManyToManyField(Punteggio, through='TessituraCaratteristica', related_name="tessiture_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     statistiche_base = models.ManyToManyField(Statistica, through='TessituraStatisticaBase', blank=True, related_name='tessitura_statistiche_base')
@@ -2816,7 +2832,15 @@ class Tessitura(Tecnica):
             statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').order_by(
                 '-statistica__formula', 'statistica__ordine', 'statistica__nome'
             ).all(),
-            context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta},
+            context={
+                'elemento': self.elemento_principale,
+                'livello': self.livello,
+                'aura': self.aura_richiesta,
+                'formula_kind': FORMULA_SCOPE_WEAVE,
+                'allow_implicit_formula_source': False,
+                'formula_builder_selezioni': self.formula_builder_selezioni or {},
+                'attack_formula_template': self.formula,
+            },
         )
         return base + formatta_html_costi_attivazione_tessitura(self)
     
@@ -4096,6 +4120,12 @@ class OggettoBase(SyncableModel, models.Model):
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
         help_text="Es. {rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}{formula_source}{danni_mischia}{formula_cura}{formula_status} oppure versione distanza con {danni_distanza}.",
     )
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
+    )
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoBaseStatisticaBase', blank=True, related_name='template_base')
     statistiche_modificatori = models.ManyToManyField(Statistica, through='OggettoBaseModificatore', blank=True, related_name='template_modificatori')
     slot_fisici_possibili = models.CharField(
@@ -4176,6 +4206,12 @@ class Oggetto(A_vista):
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
         help_text="Es. {rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}{formula_source}{danni_mischia}{formula_cura}{formula_status} oppure versione distanza con {danni_distanza}.",
+    )
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
     )
     in_vendita = models.BooleanField(default=False, verbose_name="In vendita al negozio?")
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")
@@ -4286,7 +4322,7 @@ class Oggetto(A_vista):
         base_text = formatta_testo_generico(
             self.testo, 
             statistiche_base=self.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
-            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': raccogli_modificatori_solo_oggetto(self)}
+            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': raccogli_modificatori_solo_oggetto(self), 'formula_builder_selezioni': self.formula_builder_selezioni or {}, 'attack_formula_template': self.attacco_base, 'formula_kind': FORMULA_SCOPE_ATTACK}
         )
         return base_text + genera_html_cariche(self, None)
     
@@ -6213,6 +6249,7 @@ class Personaggio(Inventario):
                 'formula_kind': FORMULA_SCOPE_ATTACK,
                 'attack_formula_template': item.attacco_base,
                 'classe_oggetto': item.classe_oggetto.nome if item.classe_oggetto else '',
+                'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {},
             }
             testo_finale = formatta_testo_generico(
                 item.testo,
@@ -6224,7 +6261,7 @@ class Personaggio(Inventario):
             
         elif isinstance(item, Infusione):
             stats = item.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'formula_kind': FORMULA_SCOPE_ATTACK}
+            ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'formula_kind': FORMULA_SCOPE_ATTACK, 'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {}, 'attack_formula_template': item.formula_attacco}
             testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
             
         elif isinstance(item, Attivata):

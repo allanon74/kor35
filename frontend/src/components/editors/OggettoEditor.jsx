@@ -148,7 +148,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
     }
   };
 
-  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, formulaBuilderSelezioni }) => {
     const statsOptions = (punteggiList || []).filter((p) => p.tipo === 'ST');
     const controlledSet = new Set(controlledParams || []);
     const byParam = new Map(statsOptions.map((s) => [s.parametro, s]));
@@ -166,6 +166,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       ...prev,
       attacco_base: mergedFormula,
       statistiche_base: [...kept, ...fromBuilder],
+      formula_builder_selezioni: formulaBuilderSelezioni || {},
     }));
   };
 
@@ -297,6 +298,8 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
         formulaValue={formData.attacco_base}
         entityName={formData.nome}
         defaultFormulaType="attack"
+        savedSelections={formData.formula_builder_selezioni}
+        savedFormulaType={formData.formula_builder_selezioni?.formula_type}
       />
     </div>
   );

@@ -218,6 +218,25 @@ def build_stats_by_selection(current_stats, selections):
     return stats
 
 
+def apply_saved_formula_builder_selezioni(eval_context, selezioni):
+    """
+    Applica le scelte persistite del formula builder (sorgente Pierce/Chop, tipo danno, …)
+    al contesto numerico usato da formatta_testo_generico.
+    """
+    if not selezioni or not isinstance(selezioni, dict):
+        return
+    eval_context = eval_context if isinstance(eval_context, dict) else {}
+    current = {}
+    for key in ("dannimis", "dannidis", "dannigen"):
+        if key in eval_context:
+            current[key] = eval_context[key]
+    merged = build_stats_by_selection(current, selezioni)
+    extra_keys = ("dmg_mischia", "dmg_distanza", "elemento_src")
+    for key in set(FORMULA_CONTROLLED_PARAMS) | set(extra_keys):
+        if key in merged:
+            eval_context[key] = merged[key]
+
+
 @dataclass
 class _FakeStatistica:
     parametro: str

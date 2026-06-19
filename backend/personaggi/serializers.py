@@ -1345,6 +1345,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'formula_kind': FORMULA_SCOPE_ATTACK,
             'attack_formula_template': obj.attacco_base,
             'classe_oggetto': obj.classe_oggetto.nome if obj.classe_oggetto else '',
+            'formula_builder_selezioni': getattr(obj, 'formula_builder_selezioni', None) or {},
         }
 
         if personaggio:

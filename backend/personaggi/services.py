@@ -1161,6 +1161,7 @@ class GestioneCraftingService:
             is_tecnologico=template.is_tecnologico,
             costo_acquisto=costo,
             attacco_base=template.attacco_base,
+            formula_builder_selezioni=template.formula_builder_selezioni or {},
             oggetto_base_generatore=template,
             in_vendita=False,
             is_equipaggiato=False,
@@ -1205,6 +1206,7 @@ class GestioneCraftingService:
         oggetto.slot_fisici_possibili = template.slot_fisici_possibili
         oggetto.is_tecnologico = template.is_tecnologico
         oggetto.attacco_base = template.attacco_base
+        oggetto.formula_builder_selezioni = template.formula_builder_selezioni or {}
         oggetto.is_pesante = template.is_pesante
         oggetto.save()
 

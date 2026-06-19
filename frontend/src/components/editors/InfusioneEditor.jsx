@@ -145,7 +145,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
 
   const currentCaricheId = formData.statistica_cariche?.id || formData.statistica_cariche;
 
-  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, formulaBuilderSelezioni }) => {
     const controlledSet = new Set(controlledParams || []);
     const byParam = new Map((statsOptions || []).map((s) => [s.parametro, s]));
     const current = formData.statistiche_base || [];
@@ -164,6 +164,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
       ...prev,
       formula_attacco: mergedFormula,
       statistiche_base: [...kept, ...fromBuilder],
+      formula_builder_selezioni: formulaBuilderSelezioni || {},
     }));
   };
 
@@ -333,6 +334,8 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         formulaValue={formData.formula_attacco}
         entityName={formData.nome}
         defaultFormulaType="attack"
+        savedSelections={formData.formula_builder_selezioni}
+        savedFormulaType={formData.formula_builder_selezioni?.formula_type}
       />
     </div>
   );
