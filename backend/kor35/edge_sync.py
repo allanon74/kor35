@@ -514,10 +514,19 @@ class EdgeSyncView(APIView):
                 existing = model.objects.filter(**kwargs).first()
                 if existing and str(existing.sync_id) != str(sync_id):
                     patch = dict(update_data)
-                    patch["sync_id"] = sync_id
+                    if model._meta.label_lower == "personaggi.campagna":
+                        patch["sync_id"] = sync_id
+                    for f in model._meta.concrete_fields:
+                        if isinstance(f, ForeignKey) and getattr(f.remote_field, "parent_link", False):
+                            patch.pop(f.name, None)
                     if remote_updated_at:
                         patch["updated_at"] = remote_updated_at
-                    model.objects.filter(pk=existing.pk).update(**patch)
+                    try:
+                        with transaction.atomic():
+                            model.objects.filter(pk=existing.pk).update(**patch)
+                    except IntegrityError:
+                        if "updated_at" in patch:
+                            model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
                     return True
         return False
 
