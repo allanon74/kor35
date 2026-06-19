@@ -330,6 +330,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statsOptions={statsOptions}
         statisticheBase={formData.statistiche_base || []}
         formulaValue={formData.formula_attacco}
+        entityName={formData.nome}
         defaultFormulaType="attack"
       />
     </div>

@@ -261,6 +261,84 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertIn("{formula_prefix}", tpl)
         self.assertIn("{formula_status}", tpl)
 
+    def test_build_formula_template_capacity_prefixes_entity_name(self):
+        tpl = build_formula_template(
+            "capacity",
+            {"entity_name": "ScanLink", "formula_source": ["mental"]},
+        )
+        self.assertTrue(tpl.startswith("Capacità ScanLink: "))
+        self.assertIn("{formula_source}", tpl)
+        self.assertNotIn("{formula_type}", tpl)
+
+    def test_capacity_preview_renders_entity_prefix(self):
+        stats = build_stats_by_selection({}, {"formula_source": ["mental"]})
+        formula = build_formula_template(
+            "capacity",
+            {"entity_name": "ScanLink", "formula_source": ["mental"]},
+        )
+        rendered = render_formula_preview(
+            formula=formula,
+            stats_by_param=stats,
+            context={"entity_name": "ScanLink"},
+        )
+        self.assertIn("Capacità ScanLink:", rendered)
+        self.assertIn("Mental", rendered)
+
+    def test_pierce_source_with_distanza_damage_shows_pierce_not_chop(self):
+        stats = build_stats_by_selection(
+            {"dannidis": 1, "dannigen": 0},
+            {"formula_damage_mode": "distanza", "formula_source": ["pierce"]},
+        )
+        formula = build_formula_template(
+            "attack",
+            {"formula_damage_mode": "distanza", "formula_source": ["pierce"]},
+        )
+        rendered = render_formula_preview(formula=formula, stats_by_param=stats).lower()
+        self.assertIn("pierce", rendered)
+        self.assertNotIn("chop", rendered)
+
+    def test_pierce_on_mischia_attack_keeps_pierce_not_chop(self):
+        stats = build_stats_by_selection(
+            {"dannimis": 1, "dannigen": 0},
+            {"formula_damage_mode": "mischia", "formula_source": ["pierce"]},
+        )
+        formula = build_formula_template(
+            "attack",
+            {"formula_damage_mode": "mischia", "formula_source": ["pierce"]},
+        )
+        rendered = render_formula_preview(formula=formula, stats_by_param=stats).lower()
+        self.assertIn("pierce", rendered)
+        self.assertNotIn("chop", rendered)
+
+    def test_weave_sources_are_always_explicit_with_bang(self):
+        stats = build_stats_by_selection(
+            {},
+            {"formula_source": ["chop", "blam"]},
+        )
+        formula = "{formula_source}"
+        rendered = render_formula_preview(
+            formula=formula,
+            stats_by_param=stats,
+            context={"formula_kind": "WEA", "allow_implicit_formula_source": False},
+        )
+        self.assertIn("Chop!", rendered)
+        self.assertIn("Blam!", rendered)
+        self.assertIn("/", rendered)
+        self.assertNotIn("(Chop!)", rendered)
+
+    def test_weave_without_source_does_not_infer_chop(self):
+        stats = build_stats_by_selection(
+            {"dannimis": 1, "dannigen": 0},
+            {"formula_damage_mode": "mischia"},
+        )
+        formula = "{formula_source}{danni_mischia}"
+        rendered = render_formula_preview(
+            formula=formula,
+            stats_by_param=stats,
+            context={"formula_kind": "WEA", "allow_implicit_formula_source": False},
+        ).lower()
+        self.assertNotIn("chop", rendered)
+
     def test_build_formula_template_excludes_always_blocks_when_requested(self):
         tpl = build_formula_template(
             "attack",

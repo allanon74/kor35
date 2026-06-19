@@ -1188,8 +1188,13 @@ class FormulaBuilderPreviewView(APIView):
         formula_type = payload.get("formula_type") or "attack"
         if formula_type == "weave":
             context.setdefault("formula_kind", FORMULA_SCOPE_WEAVE)
+            context["allow_implicit_formula_source"] = False
+        elif formula_type == "capacity":
+            context.setdefault("formula_kind", FORMULA_SCOPE_ATTACK)
+            context["allow_implicit_formula_source"] = False
         else:
             context.setdefault("formula_kind", FORMULA_SCOPE_ATTACK)
+            context["allow_implicit_formula_source"] = True
 
         source_ids = selections.get("formula_source")
         if isinstance(source_ids, str):
@@ -1204,6 +1209,9 @@ class FormulaBuilderPreviewView(APIView):
             elemento = Punteggio.objects.filter(pk=element_id).first()
             if elemento:
                 context["elemento"] = elemento
+        entity_name = (selections.get("entity_name") or context.get("entity_name") or "").strip()
+        if entity_name:
+            context["entity_name"] = entity_name
         return context
 
     def post(self, request):

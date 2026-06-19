@@ -456,9 +456,17 @@ def _attack_damage_total(value_map, mode):
     return 0.0
 
 
+def _implicit_formula_source_allowed(value_map):
+    if not isinstance(value_map, dict):
+        return True
+    return value_map.get("__allow_implicit_formula_source__", True) is not False
+
+
 def _should_use_implicit_source_paren(param, value_map):
+    if not _implicit_formula_source_allowed(value_map):
+        return False
     param = str(param or "").strip().lower()
-    if param in ("chop", "blam", "mental"):
+    if param in ("chop", "blam"):
         if not _is_truthy_numeric(value_map.get("dmg_mischia")):
             return False
         return _attack_damage_total(value_map, "mischia") <= 1
@@ -471,15 +479,16 @@ def _should_use_implicit_source_paren(param, value_map):
 
 def infer_implicit_source_paren(value_map):
     """
-    Sorgente implicita quando chop/blam/pierce non compaiono in formula ma il contesto
-    attacco lo richiede (es. spada con 1 danno mischia: niente «Uno», ma serve un segno).
+    Sorgente implicita solo per attacchi: (Chop!)/(Blam!) in mischia o (Pierce!) a distanza
+    quando il danno totale è 1 e la sorgente non è stata dichiarata esplicitamente.
     """
+    if not _implicit_formula_source_allowed(value_map):
+        return ""
     if not isinstance(value_map, dict):
         return ""
     checks = (
         ("blam", "blam"),
         ("chop", "chop"),
-        ("mental", "mental"),
         ("pierce", "pierce"),
         ("dmg_distanza", "pierce"),
         ("dmg_mischia", "chop"),
@@ -538,6 +547,13 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
                 primary = params[0]
                 if _should_use_implicit_source_paren(primary, value_map):
                     label = _implicit_source_paren_for_param(primary)
+                elif (
+                    group_key == "formula_source"
+                    and not _implicit_formula_source_allowed(value_map)
+                    and label
+                    and not label.endswith("!")
+                ):
+                    label = f"{label}!"
             part = label
 
             # Extra opzionale per entry (dict o lista di dict/stringhe).
@@ -613,15 +629,22 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
         for lbl in append_labels:
             lbl = str(lbl or "").strip()
             if lbl and lbl not in seen:
+                if (
+                    not _implicit_formula_source_allowed(value_map)
+                    and lbl
+                    and not lbl.endswith("!")
+                ):
+                    lbl = f"{lbl}!"
                 active_parts.append(lbl)
                 seen.add(lbl)
 
     if group_key == "formula_source" and not active_parts:
         if value_map.get("__formula_source_suppressed__"):
             return ""
-        implicit = infer_implicit_source_paren(value_map)
-        if implicit:
-            active_parts.append(implicit)
+        if _implicit_formula_source_allowed(value_map):
+            implicit = infer_implicit_source_paren(value_map)
+            if implicit:
+                active_parts.append(implicit)
 
     if not active_parts:
         return ""
@@ -964,6 +987,16 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         if 'caratteristica_associata_valore' in context:
              eval_context['caratt'] = context['caratteristica_associata_valore']
 
+    allow_implicit_source = True
+    if context:
+        if context.get("allow_implicit_formula_source") is False:
+            allow_implicit_source = False
+        elif str(context.get("formula_kind") or "").upper() == FORMULA_SCOPE_WEAVE:
+            allow_implicit_source = False
+    if formula_out.lstrip().startswith("Capacità "):
+        allow_implicit_source = False
+    eval_context["__allow_implicit_formula_source__"] = allow_implicit_source
+
     # Placeholder formula: variabili mancanti devono valere 0 (evita NameError
     # in espressioni come "dannimis + dannigen" quando uno dei due non esiste).
     for _k in (
@@ -1125,6 +1158,11 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
              r_txt = get_testo_rango(rango_val)
              testo_completo = testo_completo.replace("{rango}", r_txt)
              formula_out = formula_out.replace("{rango}", r_txt)
+
+        entity_name = str(context.get("entity_name") or "").strip()
+        if entity_name:
+            testo_completo = testo_completo.replace("{entity_name}", entity_name)
+            formula_out = formula_out.replace("{entity_name}", entity_name)
     # fine sezione aggiunte
     
     # Esegue le sostituzioni
@@ -1141,6 +1179,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         and "{formula_source}" in formula_out
         and not str(formula_finale or "").strip()
         and not eval_context.get("__formula_source_suppressed__")
+        and _implicit_formula_source_allowed(eval_context)
     ):
         fallback = infer_implicit_source_paren(eval_context)
         if fallback:

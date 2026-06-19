@@ -8,12 +8,12 @@ FORMULA_BUILDER_SCHEMA = {
     "types": [
         {"id": "attack", "label": "Attacco"},
         {"id": "weave", "label": "Tessitura"},
-        {"id": "capacity", "label": "Capacita"},
+        {"id": "capacity", "label": "Capacità"},
     ],
     "type_templates": {
         "attack": ["rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage_mode", "formula_cura", "formula_status"],
         "weave": ["formula_type", "rango", "molt", "formula_prefix", "formula_target", "formula_source", "formula_damage_mode", "formula_cura", "formula_status"],
-        "capacity": ["formula_type", "formula_prefix", "formula_source", "formula_status"],
+        "capacity": ["capacity_header", "formula_prefix", "formula_source", "formula_status"],
     },
     "sections": [
         {
@@ -146,6 +146,16 @@ def _iter_selected_options(selections):
             option = valid_options.get(option_id)
             if option:
                 yield section_id, option
+
+
+SOURCE_KEYWORD_IDS = ("chop", "blam", "pierce", "mental")
+
+
+def _capacity_header_text(selections):
+    entity_name = str((selections or {}).get("entity_name") or "").strip()
+    if entity_name:
+        return f"Capacità {entity_name}: "
+    return "Capacità {entity_name}: "
 
 
 def _source_selection_ids(selections):
@@ -288,6 +298,9 @@ def build_formula_template(formula_type, selections):
 
     out = []
     for block in blocks:
+        if block == "capacity_header":
+            out.append(_capacity_header_text(selected_map))
+            continue
         placeholder = placeholder_by_block.get(block)
         if not placeholder:
             continue

@@ -333,6 +333,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
         statsOptions={punteggiList.filter((p) => p.tipo === 'ST')}
         statisticheBase={formData.statistiche_base || []}
         formulaValue={formData.attacco_base}
+        entityName={formData.nome}
         defaultFormulaType="attack"
       />
 

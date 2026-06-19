@@ -376,6 +376,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statsOptions={statsOptions}
         statisticheBase={formData.statistiche_base || []}
         formulaValue={formData.formula}
+        entityName={formData.nome}
         defaultFormulaType="weave"
         elementoPrincipaleId={formData.elemento_principale?.id || formData.elemento_principale}
         elementoOptions={elementoSelectOptions}
@@ -737,6 +738,7 @@ const RuntimeObjectWizardModal = ({
           })
           .filter(Boolean)}
         formulaValue={draft.formula}
+        entityName={draft.nome}
         defaultFormulaType="attack"
       />
     </div>
