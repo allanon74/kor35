@@ -7,13 +7,16 @@ const TIPO_OPTS = [
   { id: 'sliding_puzzle', label: 'Sliding puzzle' },
   { id: 'memory', label: 'Memory' },
   { id: 'rotate_tiles', label: 'Tessere rotabili' },
+  { id: 'simon', label: 'Sequenza (Simon)' },
+  { id: 'pattern_lock', label: 'Pattern lock' },
+  { id: 'pipe_connect', label: 'Collega i tubi' },
 ];
 
 const DIFFICOLTA_INFO = {
-  1: 'facile (2×2)',
-  2: 'media (3×3)',
-  3: 'difficile (4×4)',
-  4: 'molto difficile (5×5)',
+  1: 'facile',
+  2: 'media',
+  3: 'difficile',
+  4: 'molto difficile',
 };
 
 const TIMER_AZIONE_OPTS = [
@@ -150,7 +153,7 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
               checked={!!config.attivo}
               onChange={(e) => setConfig((c) => ({ ...c, attivo: e.target.checked }))}
             />
-            <span>Attivo (richiede immagine o libreria)</span>
+            <span>Attivo (puzzle/memory/rotate richiedono immagine o libreria)</span>
           </label>
 
           <label className="flex items-center gap-2">

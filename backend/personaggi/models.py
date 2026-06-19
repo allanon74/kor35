@@ -3479,7 +3479,14 @@ class QrInventarioScanSession(SyncableModel, models.Model):
 
 
 def _default_tipi_minigioco_qr():
-    return ["sliding_puzzle", "memory", "rotate_tiles"]
+    return [
+        "sliding_puzzle",
+        "memory",
+        "rotate_tiles",
+        "simon",
+        "pattern_lock",
+        "pipe_connect",
+    ]
 
 
 class MinigiocoQrConfig(SyncableModel, models.Model):
@@ -3488,12 +3495,25 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
     TIPO_SLIDING = "sliding_puzzle"
     TIPO_MEMORY = "memory"
     TIPO_ROTATE = "rotate_tiles"
+    TIPO_SIMON = "simon"
+    TIPO_PATTERN = "pattern_lock"
+    TIPO_PIPE = "pipe_connect"
     TIPO_CHOICES = (
         (TIPO_SLIDING, "Sliding puzzle"),
         (TIPO_MEMORY, "Memory"),
         (TIPO_ROTATE, "Tessere rotabili"),
+        (TIPO_SIMON, "Sequenza (Simon)"),
+        (TIPO_PATTERN, "Pattern lock"),
+        (TIPO_PIPE, "Collega i tubi"),
     )
-    TIPI_DEFAULT = [TIPO_SLIDING, TIPO_MEMORY, TIPO_ROTATE]
+    TIPI_DEFAULT = [
+        TIPO_SLIDING,
+        TIPO_MEMORY,
+        TIPO_ROTATE,
+        TIPO_SIMON,
+        TIPO_PATTERN,
+        TIPO_PIPE,
+    ]
 
     TIMER_ATTIVA = "attiva_qr"
     TIMER_BLOCCA = "blocca_qr"
@@ -3520,7 +3540,7 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
     tipi_abilitati = models.JSONField(
         default=_default_tipi_minigioco_qr,
         blank=True,
-        help_text="Pool giochi estratti a caso (es. sliding_puzzle, memory, rotate_tiles).",
+        help_text="Pool giochi estratti a caso (sliding_puzzle, memory, simon, …).",
     )
     difficolta_min = models.PositiveSmallIntegerField(
         default=1,
