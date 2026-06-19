@@ -17,6 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from kor35.syncing import (
+    apply_natural_pk_precheck,
     build_model_sync_records,
     pagina_regolamento_sync_field_allowed,
     touch_sync_updated_at,
@@ -395,6 +396,45 @@ class EdgeSyncView(APIView):
             field = model._meta.get_field(field_name)
             m2m_updates[field_name] = self._resolve_m2m_values(field, raw_list)
 
+        pk_result, local = apply_natural_pk_precheck(
+            model, sync_id, row, update_data, remote_updated_at, local
+        )
+        if pk_result == "skipped":
+            return "skipped"
+        if pk_result == "defer":
+            return "defer"
+        if pk_result == "applied" and local is not None:
+            obj = local
+            for field_name, related_list in m2m_updates.items():
+                getattr(obj, field_name).set(related_list)
+            if remote_updated_at:
+                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+            return "applied"
+
+        if model_label == "personaggi.minigiocoqrconfig":
+            qr_code = update_data.get("qr_code")
+            if qr_code is not None:
+                existing = model.objects.filter(qr_code=qr_code).first()
+                if existing and str(existing.sync_id) != str(sync_id):
+                    if (
+                        existing.updated_at
+                        and remote_updated_at
+                        and remote_updated_at <= existing.updated_at
+                    ):
+                        return "skipped"
+                    if self._merge_minigioco_qr_config_by_qr_code(
+                        model, sync_id, update_data, remote_updated_at
+                    ):
+                        obj = model.objects.filter(sync_id=sync_id).first()
+                        if obj is None:
+                            obj = model.objects.filter(qr_code=qr_code).first()
+                        if obj is not None:
+                            for field_name, related_list in m2m_updates.items():
+                                getattr(obj, field_name).set(related_list)
+                            if remote_updated_at:
+                                model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+                            return "applied"
+
         try:
             obj, _ = model.objects.update_or_create(sync_id=sync_id, defaults=update_data)
         except IntegrityError:
@@ -406,6 +446,20 @@ class EdgeSyncView(APIView):
                         for field_name, related_list in m2m_updates.items():
                             getattr(obj, field_name).set(related_list)
                         if remote_updated_at and obj is not None:
+                            model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
+                        return "applied"
+            if model._meta.label_lower == "personaggi.minigiocoqrconfig":
+                merged = self._merge_minigioco_qr_config_by_qr_code(
+                    model, sync_id, update_data, remote_updated_at
+                )
+                if merged:
+                    obj = model.objects.filter(sync_id=sync_id).first()
+                    if obj is None:
+                        obj = model.objects.filter(qr_code=update_data.get("qr_code")).first()
+                    if obj is not None:
+                        for field_name, related_list in m2m_updates.items():
+                            getattr(obj, field_name).set(related_list)
+                        if remote_updated_at:
                             model.objects.filter(pk=obj.pk).update(updated_at=remote_updated_at)
                         return "applied"
             merged = self._merge_by_unique_together_key(
@@ -495,11 +549,30 @@ class EdgeSyncView(APIView):
             obj = model.objects.filter(**{field.name: val}).first()
             if obj is not None:
                 return obj
+
+        for field in model._meta.concrete_fields:
+            if not isinstance(field, ForeignKey):
+                continue
+            if not getattr(field, "unique", False):
+                continue
+            if getattr(field.remote_field, "parent_link", False):
+                continue
+            val = update_data.get(field.name)
+            if val is None:
+                continue
+            obj = model.objects.filter(**{field.name: val}).first()
+            if obj is not None:
+                return obj
         return None
 
     def _merge_by_unique_together_key(self, model, sync_id, update_data, remote_updated_at):
         if model._meta.label_lower == "social.socialprofile":
             if self._merge_social_profile_by_personaggio(model, update_data, remote_updated_at):
+                return True
+        if model._meta.label_lower == "personaggi.minigiocoqrconfig":
+            if self._merge_minigioco_qr_config_by_qr_code(
+                model, sync_id, update_data, remote_updated_at
+            ):
                 return True
         if model._meta.label_lower == "personaggi.segnozodiacale":
             if self._merge_segno_zodiacale_by_numero(model, update_data, remote_updated_at):
@@ -546,6 +619,27 @@ class EdgeSyncView(APIView):
         except IntegrityError:
             if "updated_at" in patch:
                 model.objects.filter(pk=existing.pk).update(updated_at=patch["updated_at"])
+        return True
+
+    def _merge_minigioco_qr_config_by_qr_code(self, model, sync_id, update_data, remote_updated_at):
+        qr_code = update_data.get("qr_code")
+        if qr_code is None:
+            return False
+        existing = model.objects.filter(qr_code=qr_code).first()
+        if not existing:
+            return False
+        if str(existing.sync_id) == str(sync_id):
+            return False
+        patch = dict(update_data)
+        patch["sync_id"] = sync_id
+        if remote_updated_at:
+            patch["updated_at"] = remote_updated_at
+        try:
+            with transaction.atomic():
+                model.objects.filter(pk=existing.pk).update(**patch)
+        except IntegrityError:
+            patch.pop("sync_id", None)
+            model.objects.filter(pk=existing.pk).update(**patch)
         return True
 
     def _merge_segno_zodiacale_by_numero(self, model, update_data, remote_updated_at):

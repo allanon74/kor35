@@ -177,6 +177,66 @@ def pagina_regolamento_row_is_menu_only(row: dict[str, Any]) -> bool:
     return bool(row.get(SYNC_MENU_ONLY_KEY))
 
 
+def natural_primary_key_field(model: type[models.Model]) -> str | None:
+    """
+    PK non auto-increment (es. QrCode.id corto stampato sul fisico) da includere nel payload.
+    """
+    pk = model._meta.pk
+    if pk is None:
+        return None
+    if isinstance(pk, (models.AutoField, models.BigAutoField, models.SmallAutoField)):
+        return None
+    if isinstance(pk, models.ForeignKey) and getattr(pk.remote_field, "parent_link", False):
+        return None
+    return pk.name
+
+
+def apply_natural_pk_precheck(
+    model: type[models.Model],
+    sync_id,
+    row: dict[str, Any],
+    update_data: dict[str, Any],
+    remote_updated_at,
+    local_obj: models.Model | None,
+) -> tuple[Literal["noop", "skipped", "applied", "defer"], models.Model | None]:
+    """
+    Allinea record con PK naturale (QrCode.id): merge per id se sync_id diverge,
+    oppure prepara update_data per create con id esplicito.
+    """
+    pk_name = natural_primary_key_field(model)
+    if not pk_name:
+        return "noop", local_obj
+    want_pk = row.get(pk_name)
+    if not want_pk:
+        return "noop", local_obj
+
+    if local_obj is not None and getattr(local_obj, pk_name) != want_pk:
+        if model.objects.filter(**{pk_name: want_pk}).exists():
+            return "defer", local_obj
+        return "defer", local_obj
+
+    if local_obj is None:
+        by_pk = model.objects.filter(**{pk_name: want_pk}).first()
+        if by_pk is not None:
+            if str(by_pk.sync_id) == str(sync_id):
+                return "noop", by_pk
+            if (
+                by_pk.updated_at
+                and remote_updated_at
+                and remote_updated_at <= by_pk.updated_at
+            ):
+                return "skipped", None
+            patch = dict(update_data)
+            patch["sync_id"] = sync_id
+            if remote_updated_at:
+                patch["updated_at"] = remote_updated_at
+            model.objects.filter(pk=by_pk.pk).update(**patch)
+            return "applied", model.objects.filter(pk=by_pk.pk).first()
+        update_data[pk_name] = want_pk
+
+    return "noop", local_obj
+
+
 def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
     """
     Export minimalista di un record con FK espresse tramite sync key.
@@ -215,6 +275,10 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
             elif hasattr(related_obj, "sync_id"):
                 related_items.append(str(related_obj.sync_id))
         data[m2m_field.name] = related_items
+
+    pk_name = natural_primary_key_field(model)
+    if pk_name:
+        data[pk_name] = getattr(instance, pk_name, None)
 
     return data
 
