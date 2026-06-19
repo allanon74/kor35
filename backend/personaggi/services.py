@@ -26,6 +26,61 @@ from .models import (
     TessituraEffettoRuntime, TessituraOggettoRuntime, AbilitaStatistica,
 )
 
+
+class CostiAttivazioneService:
+    """Verifica e applica costi risorsa all'attivazione di infusioni/tessiture."""
+
+    @staticmethod
+    def _iter_costi(tecnica):
+        if isinstance(tecnica, Infusione):
+            return tecnica.costi_attivazione.select_related('statistica').all()
+        if isinstance(tecnica, Tessitura):
+            return tecnica.costi_attivazione.select_related('statistica').all()
+        return []
+
+    @staticmethod
+    def ha_costi(tecnica):
+        return any(True for _ in CostiAttivazioneService._iter_costi(tecnica))
+
+    @staticmethod
+    def verifica_costi(personaggio, tecnica):
+        mancanti = []
+        for row in CostiAttivazioneService._iter_costi(tecnica):
+            sigla = row.statistica.sigla
+            qty = int(row.costo or 0)
+            if qty <= 0:
+                continue
+            cur = personaggio.get_risorsa_corrente_runtime(sigla)
+            if cur < qty:
+                mancanti.append(f'{row.statistica.nome} ({cur}/{qty})')
+        if mancanti:
+            raise ValidationError('Risorse insufficienti: ' + ', '.join(mancanti))
+
+    @staticmethod
+    def applica_costi(personaggio, tecnica, motivo='Attivazione'):
+        nome = getattr(tecnica, 'nome', '') or 'tecnica'
+        for row in CostiAttivazioneService._iter_costi(tecnica):
+            qty = int(row.costo or 0)
+            if qty <= 0:
+                continue
+            personaggio.consuma_risorsa_attivazione(
+                row.statistica.sigla,
+                qty,
+                motivo=f'{motivo}: {nome}',
+            )
+
+    @staticmethod
+    def proprietario_da_oggetto(oggetto):
+        inventario = oggetto.inventario_corrente
+        if not inventario:
+            return None
+        if hasattr(inventario, 'personaggio_ptr'):
+            return inventario.personaggio_ptr
+        if hasattr(inventario, 'personaggio'):
+            return inventario.personaggio
+        return None
+
+
 class GestioneOggettiService:
     PHYSICAL_SLOT_DEFAULTS = {
         'head': 1,
@@ -798,30 +853,40 @@ class GestioneOggettiService:
         return True
 
     @staticmethod
-    def usa_carica_oggetto(oggetto):
+    def usa_carica_oggetto(oggetto, personaggio=None):
         """
-        Consuma una carica e avvia il timer se previsto.
+        Consuma una carica, eventuali costi risorsa e avvia il timer se previsto.
         """
         if oggetto.cariche_attuali <= 0:
             raise ValidationError("Oggetto scarico.")
-            
+
+        if personaggio is None:
+            personaggio = CostiAttivazioneService.proprietario_da_oggetto(oggetto)
+        infusione = oggetto.infusione_generatrice
+
         with transaction.atomic():
+            if personaggio and infusione and CostiAttivazioneService.ha_costi(infusione):
+                personaggio = Personaggio.objects.select_for_update().get(pk=personaggio.pk)
+                oggetto = Oggetto.objects.select_for_update().get(pk=oggetto.pk)
+                CostiAttivazioneService.verifica_costi(personaggio, infusione)
+                CostiAttivazioneService.applica_costi(
+                    personaggio, infusione, motivo=f'Attivazione oggetto {oggetto.nome}'
+                )
+
             oggetto.cariche_attuali -= 1
-            
-            # Gestione Timer
-            infusione = oggetto.infusione_generatrice
+
             attiva_timer = False
             if infusione and infusione.durata_attivazione > 0:
                 durata = infusione.durata_attivazione
                 oggetto.data_fine_attivazione = timezone.now() + timedelta(seconds=durata)
                 attiva_timer = True
-            
+
             oggetto.save()
-            
+
         return {
-            "cariche": oggetto.cariche_attuali, 
+            "cariche": oggetto.cariche_attuali,
             "attivo_fino_a": oggetto.data_fine_attivazione,
-            "has_timer": attiva_timer
+            "has_timer": attiva_timer,
         }
     
     @staticmethod
@@ -1314,6 +1379,13 @@ class TessituraRuntimeService:
         durata = int(getattr(tessitura, "durata_effetto_secondi", 0) or 0)
         if durata <= 0:
             raise ValidationError("Durata effetto non configurata.")
+
+        personaggio = Personaggio.objects.select_for_update().get(pk=personaggio.pk)
+        if CostiAttivazioneService.ha_costi(tessitura):
+            CostiAttivazioneService.verifica_costi(personaggio, tessitura)
+            CostiAttivazioneService.applica_costi(
+                personaggio, tessitura, motivo=f'Attivazione tessitura {tessitura.nome}'
+            )
 
         now_ts = timezone.now()
         personaggio._expire_tessiture_runtime(now_ts=now_ts)

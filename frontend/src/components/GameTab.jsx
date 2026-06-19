@@ -16,8 +16,10 @@ import {
 import { gameComaControl } from '../api';
 import { getOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
 import { getTacticalPoolCurrent, risorsePoolVisibiliInGame } from '../lib/gamePoolUtils';
+import { evaluateActivationCosts } from '../lib/activationCostUtils';
+import ActivationCostPreview from './ActivationCostPreview';
 
-import ActiveItemWidget from './ActiveItemWidget'; 
+import ActiveItemWidget from './ActiveItemWidget';
 
 /** Etichetta rango difesa: resa visiva stabile in base al livello */
 const RankDefLabel = ({ x, y, rankValue, fill, fontSize = '11', textAnchor = 'middle' }) => {
@@ -951,6 +953,8 @@ const GameTab = ({ onNavigate }) => {
                             const runtimeAttivo = runtimeByTessitura.get(String(tessitura.id));
                             const canActivateRuntime =
                                 !!tessitura.usa_effetto_temporaneo && Number(tessitura.durata_effetto_secondi || 0) > 0;
+                            const runtimeCostEval = evaluateActivationCosts(char, tessitura.costi_attivazione);
+                            const canPayRuntimeCosts = runtimeCostEval.affordable;
                             return (
                                 <div key={`tessitura-${tessitura.id}`} className="bg-linear-to-r from-purple-900/20 to-gray-900/20 border border-purple-500/30 p-3 rounded-lg shadow-sm">
                                     <div className="flex justify-between items-start mb-2">
@@ -962,34 +966,53 @@ const GameTab = ({ onNavigate }) => {
                                             <div className="text-[10px] text-purple-300/60 uppercase">Tessitura • Lv.{tessitura.livello}</div>
                                         </div>
                                         {canActivateRuntime && (
-                                            <div className="flex items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        attivaRuntimeMutation.mutate({
-                                                            charId: char.id,
-                                                            tessituraId: tessitura.id,
-                                                        })
-                                                    }
-                                                    disabled={attivaRuntimeMutation.isPending || readOnlyGame}
-                                                    className="px-2 py-1 rounded bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
-                                                >
-                                                    {runtimeAttivo ? 'Riattiva' : 'Attiva'}
-                                                </button>
-                                                {runtimeAttivo && (
+                                            <div className="flex flex-col items-end gap-1">
+                                                <div className="flex items-center gap-2">
                                                     <button
                                                         type="button"
                                                         onClick={() =>
-                                                            stopRuntimeMutation.mutate({
+                                                            attivaRuntimeMutation.mutate({
                                                                 charId: char.id,
-                                                                runtimeId: runtimeAttivo.id,
+                                                                tessituraId: tessitura.id,
                                                             })
                                                         }
-                                                        disabled={stopRuntimeMutation.isPending || readOnlyGame}
-                                                        className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
+                                                        disabled={
+                                                            attivaRuntimeMutation.isPending
+                                                            || readOnlyGame
+                                                            || !canPayRuntimeCosts
+                                                        }
+                                                        title={
+                                                            !canPayRuntimeCosts
+                                                                ? `Risorse insufficienti: ${runtimeCostEval.label}`
+                                                                : undefined
+                                                        }
+                                                        className="px-2 py-1 rounded bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
                                                     >
-                                                        Stop
+                                                        {runtimeAttivo ? 'Riattiva' : 'Attiva'}
                                                     </button>
+                                                    {runtimeAttivo && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                stopRuntimeMutation.mutate({
+                                                                    charId: char.id,
+                                                                    runtimeId: runtimeAttivo.id,
+                                                                })
+                                                            }
+                                                            disabled={stopRuntimeMutation.isPending || readOnlyGame}
+                                                            className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
+                                                        >
+                                                            Stop
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {tessitura.costi_attivazione?.length > 0 && (
+                                                    <ActivationCostPreview
+                                                        char={char}
+                                                        costi={tessitura.costi_attivazione}
+                                                        compact
+                                                        className="text-right"
+                                                    />
                                                 )}
                                             </div>
                                         )}

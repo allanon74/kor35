@@ -8,6 +8,7 @@ import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
+import ActivationCostInline from './inlines/ActivationCostInline';
 
 /** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
 const mergeAbilitaTemporaneaOption = (rows, selected) => {
@@ -69,6 +70,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     abilita_temporanea: null,
     durata_effetto_secondi: 0,
     oggetto_runtime_config_str: '',
+    costi_attivazione: [],
   };
 
   const hydrateForm = (data) => {
@@ -155,7 +157,11 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statistiche_base: (formData.statistiche_base || []).map(sb => ({
           ...sb,
           statistica: sb.statistica?.id || sb.statistica
-        }))
+        })),
+        costi_attivazione: (formData.costi_attivazione || []).map((row) => ({
+          statistica: row.statistica?.id || row.statistica,
+          costo: parseInt(row.costo ?? 1, 10) || 1,
+        })).filter((row) => row.statistica && row.costo > 0),
       };
       if (formData.oggetto_runtime_config_str && String(formData.oggetto_runtime_config_str).trim()) {
         try {
@@ -294,6 +300,23 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
               </div>
             </>
           )}
+          <ActivationCostInline
+            items={formData.costi_attivazione || []}
+            options={statsOptions}
+            onAdd={() => setFormData({
+              ...formData,
+              costi_attivazione: [...(formData.costi_attivazione || []), { statistica: null, costo: 1 }],
+            })}
+            onChange={(i, field, value) => {
+              const list = [...(formData.costi_attivazione || [])];
+              list[i] = { ...list[i], [field]: value };
+              setFormData({ ...formData, costi_attivazione: list });
+            }}
+            onRemove={(i) => setFormData({
+              ...formData,
+              costi_attivazione: (formData.costi_attivazione || []).filter((_, idx) => idx !== i),
+            })}
+          />
         </div>
         <div>
           <Input label="Formula Tessitura (es. {caratt} + 1d10)" value={formData.formula} onChange={v => setFormData({...formData, formula: v})} />

@@ -16,13 +16,16 @@ from .models import (
     OggettoBase,
     OggettoInInventario,
     Personaggio,
-    PersonaggioAbilita,
+    Infusione,
+    InfusioneCostoAttivazione,
+    PersonaggioStatisticaBase,
     Punteggio,
     SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI,
     SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO,
     SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI,
     Statistica,
     Tessitura,
+    TessituraCostoAttivazione,
     TessituraEffettoRuntime,
     TipologiaPersonaggio,
     TIPO_OGGETTO_FISICO,
@@ -894,3 +897,64 @@ class PersonaggioSoftDeleteTests(APITestCase):
         staff_deleted = self.client.get("/api/personaggi/api/staff/personaggi-eliminati/", **h)
         self.assertEqual(staff_deleted.status_code, status.HTTP_200_OK)
         self.assertIn(self.pg.id, self._ids_from_list_response(staff_deleted.data))
+
+
+class CostiAttivazioneTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="costi-user", password="x")
+        self.client.force_authenticate(user=self.user)
+        self.pg = Personaggio.objects.create(nome="PG Costi", proprietario=self.user)
+        self.aura = Punteggio.objects.create(nome="Aura Costi", sigla="ACO", tipo=AURA)
+        self.stat_cha = Statistica.objects.create(
+            nome="Chakra test", sigla="CHA", parametro="CHA", is_risorsa_pool=True,
+            valore_base_predefinito=5,
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat_cha, valore_base=5,
+        )
+        self.stat_cog = Statistica.objects.create(
+            nome="Cog test", sigla="COG", parametro="COG", valore_base_predefinito=3,
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat_cog, valore_base=3,
+        )
+        self.pg.imposta_risorsa_pool_tattica("CHA", 5)
+        self.pg.save(update_fields=["risorse_consumabili", "statistiche_temporanee", "updated_at"])
+
+    def test_usa_oggetto_consuma_costo_attivazione(self):
+        infusione = Infusione.objects.create(nome="Inf costi", aura_richiesta=self.aura, testo="x")
+        InfusioneCostoAttivazione.objects.create(infusione=infusione, statistica=self.stat_cha, costo=2)
+        oggetto = GestioneOggettiService.crea_oggetto_da_infusione(infusione, self.pg)
+        oggetto.cariche_attuali = 3
+        oggetto.save(update_fields=["cariche_attuali"])
+
+        r = self.client.post(
+            "/api/personaggi/api/game/usa_oggetto/",
+            {"oggetto_id": oggetto.id, "char_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.pg.refresh_from_db()
+        oggetto.refresh_from_db()
+        self.assertEqual(oggetto.cariche_attuali, 2)
+        self.assertEqual(self.pg.get_risorsa_corrente("CHA"), 3)
+
+    def test_attiva_tessitura_runtime_consuma_costo(self):
+        tessitura = Tessitura.objects.create(
+            nome="Tess costi",
+            aura_richiesta=self.aura,
+            usa_effetto_temporaneo=True,
+            durata_effetto_secondi=60,
+            formula="1",
+        )
+        TessituraCostoAttivazione.objects.create(tessitura=tessitura, statistica=self.stat_cha, costo=1)
+        self.pg.tessiture_possedute.add(tessitura)
+
+        r = self.client.post(
+            "/api/personaggi/api/game/attiva_tessitura_runtime/",
+            {"char_id": self.pg.id, "tessitura_id": tessitura.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.pg.refresh_from_db()
+        self.assertEqual(self.pg.get_risorsa_corrente("CHA"), 4)

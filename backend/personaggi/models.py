@@ -1155,6 +1155,24 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         
     return "".join(parts)
 
+
+def calcola_cariche_massime_da_infusione(infusione, personaggio=None):
+    """
+    Tetto cariche da statistica_cariche dell'infusione:
+    valore base (InfusioneStatisticaBase o default catalogo) + modificatori PG se presente.
+    Allineato a GestioneOggettiService.crea_oggetto_da_infusione e get_cariche_massime.
+    """
+    if not infusione or not infusione.statistica_cariche:
+        return 0
+    stat_def = infusione.statistica_cariche
+    stat_base_link = infusione.infusionestatisticabase_set.filter(statistica=stat_def).first()
+    valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
+    if personaggio:
+        mods = personaggio.modificatori_calcolati.get(stat_def.parametro, {'add': 0.0, 'mol': 1.0})
+        return max(0, int(round((valore_base + mods['add']) * mods['mol'])))
+    return valore_base
+
+
 def genera_html_cariche(item, personaggio=None):
     """Genera il blocco HTML per le cariche di Infusioni e Oggetti."""
     source = None
@@ -1169,9 +1187,7 @@ def genera_html_cariche(item, personaggio=None):
 
     # 1. Calcolo Cariche Totali
     stat = source.statistica_cariche
-    valore_totale = stat.valore_base_predefinito
-    if personaggio:
-        valore_totale = personaggio.get_valore_statistica(stat.sigla)
+    valore_totale = calcola_cariche_massime_da_infusione(source, personaggio)
     
     # 2. Formattazione Durata (da secondi a testo)
     durata_str = ""
@@ -1209,8 +1225,28 @@ def genera_html_cariche(item, personaggio=None):
     if details:
         html += f"<div style='{row_style}'>{' &nbsp;|&nbsp; '.join(details)}</div>"
 
+    costi_rows = []
+    if isinstance(source, Infusione):
+        costi_rows = list(source.costi_attivazione.select_related('statistica').all())
+    if costi_rows:
+        costi_txt = ', '.join(f"-{row.costo} {row.statistica.sigla}" for row in costi_rows)
+        html += f"<div style='{row_style}'><span style='{label_style}'>Costi attivazione:</span> {costi_txt}</div>"
+
     html += "</div>"
     return html
+
+
+def formatta_html_costi_attivazione_tessitura(tessitura):
+    """Blocco HTML costi attivazione per anteprima tessiture."""
+    rows = list(tessitura.costi_attivazione.select_related('statistica').all())
+    if not rows:
+        return ""
+    box_style = (
+        "margin-top: 8px; padding: 6px 10px; border: 1px solid rgba(255,255,255,0.15); "
+        "background-color: rgba(0,0,0,0.15); border-radius: 6px; font-size: 0.85em;"
+    )
+    costi_txt = ', '.join(f"-{row.costo} {row.statistica.sigla}" for row in rows)
+    return f"<div style='{box_style}'><strong>Costi attivazione:</strong> {costi_txt}</div>"
 
 
 # --- TIPI --- 
@@ -2621,7 +2657,15 @@ class Tessitura(Tecnica):
         
     @property
     def TestoFormattato(self): 
-        return formatta_testo_generico(self.testo, formula=self.formula, statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta})
+        base = formatta_testo_generico(
+            self.testo,
+            formula=self.formula,
+            statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').order_by(
+                '-statistica__formula', 'statistica__ordine', 'statistica__nome'
+            ).all(),
+            context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta},
+        )
+        return base + formatta_html_costi_attivazione_tessitura(self)
     
 class Cerimoniale(Tecnica):
     """
@@ -2714,6 +2758,37 @@ class TessituraStatisticaBase(SyncableModel, models.Model):
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
     def __str__(self): return f"{self.statistica.nome}: {self.valore_base}"
+
+
+class InfusioneCostoAttivazione(SyncableModel, models.Model):
+    """Risorse consumate all'attivazione dell'oggetto generato (oltre alla carica)."""
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE, related_name='costi_attivazione')
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    costo = models.PositiveIntegerField(default=1, verbose_name="Costo")
+
+    class Meta:
+        unique_together = ('infusione', 'statistica')
+        verbose_name = "Costo attivazione infusione"
+        verbose_name_plural = "Costi attivazione infusione"
+
+    def __str__(self):
+        return f"{self.statistica.sigla}: -{self.costo}"
+
+
+class TessituraCostoAttivazione(SyncableModel, models.Model):
+    """Risorse consumate all'attivazione runtime della tessitura."""
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE, related_name='costi_attivazione')
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    costo = models.PositiveIntegerField(default=1, verbose_name="Costo")
+
+    class Meta:
+        unique_together = ('tessitura', 'statistica')
+        verbose_name = "Costo attivazione tessitura"
+        verbose_name_plural = "Costi attivazione tessitura"
+
+    def __str__(self):
+        return f"{self.statistica.sigla}: -{self.costo}"
+
 
 class Manifesto(A_vista):
     """
@@ -4706,6 +4781,55 @@ class Personaggio(Inventario):
         )
         self._crea_effetti_temporanei_da_abilita(sigla)
         self.sync_recuperi_automatici(only_sigla=sigla)
+        if hasattr(self, '_modificatori_calcolati_cache'):
+            delattr(self, '_modificatori_calcolati_cache')
+        return nuovo
+
+    def consuma_risorsa_attivazione(self, sigla, quantita=1, motivo=''):
+        """
+        Consuma N punti da una risorsa pool o runtime (PV, PA, CHA, PS, FRT, …).
+        Usato dai costi di attivazione oggetti/tessiture.
+        """
+        sigla = (sigla or '').strip().upper()
+        if sigla == 'CHK':
+            sigla = 'CHA'
+        if sigla == 'PG':
+            sigla = 'PS'
+        try:
+            quantita = int(quantita)
+        except (TypeError, ValueError):
+            raise ValueError('Quantità non valida.')
+        if quantita <= 0:
+            return self.get_risorsa_corrente_runtime(sigla)
+        stat = Statistica.objects.filter(sigla=sigla).first()
+        if not stat:
+            raise ValueError(f'Statistica {sigla} non trovata.')
+        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
+        if max_v <= 0:
+            raise ValueError(f'{stat.nome}: pool non disponibile (massimo 0).')
+        cur = self.get_risorsa_corrente_runtime(sigla)
+        if cur < quantita:
+            raise ValueError(f'{stat.nome}: insufficiente ({cur}/{quantita}).')
+        nuovo = cur - quantita
+        desc = (motivo or f'Consumo attivazione {quantita} pt. {stat.nome} ({sigla})')[:240]
+        update_fields = ['updated_at']
+        if stat.is_risorsa_pool:
+            self._set_risorsa_corrente(sigla, nuovo)
+            update_fields.append('risorse_consumabili')
+            RisorsaStatisticaMovimento.objects.create(
+                personaggio=self,
+                statistica_sigla=sigla,
+                importo=-quantita,
+                descrizione=desc,
+                tipo_movimento=RISORSA_MOV_CONSUMO,
+            )
+            self._crea_effetti_temporanei_da_abilita(sigla)
+            self.sync_recuperi_automatici(only_sigla=sigla)
+        else:
+            self._set_risorsa_corrente_runtime(sigla, nuovo)
+            update_fields.append('statistiche_temporanee')
+        self.save(update_fields=update_fields)
+        self.aggiungi_log(f'{desc}. Rimasti: {nuovo}/{max_v}.')
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo

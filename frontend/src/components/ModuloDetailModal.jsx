@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { X, Loader2, Zap, Swords, Lock, Battery, Clock } from 'lucide-react';
 import { getOggettoDetail } from '../api';
 import PunteggioDisplay from './PunteggioDisplay';
+import { useCharacter } from './CharacterContext';
+import ActivationCostPreview from './ActivationCostPreview';
+import { evaluateActivationCosts } from '../lib/activationCostUtils';
 
 const formatDuration = (seconds) => {
     if (!seconds) return "";
@@ -18,6 +21,7 @@ const formatDuration = (seconds) => {
 };
 
 const ModuloDetailModal = ({ moduloId, onClose, onLogout }) => {
+  const { selectedCharacterData: char } = useCharacter();
   const [modulo, setModulo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -204,9 +208,9 @@ const ModuloDetailModal = ({ moduloId, onClose, onLogout }) => {
               </div>
 
               {/* Info Cariche e Durata */}
-              {(modulo.cariche_massime > 0 || modulo.durata_totale > 0) && (
+              {(modulo.cariche_massime > 0 || modulo.durata_totale > 0 || (modulo.costi_attivazione?.length > 0)) && (
                 <div className="bg-black/30 border border-gray-600/50 p-3 rounded-lg">
-                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Energia</h4>
+                  <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">Energia e attivazione</h4>
                   
                   {modulo.cariche_massime > 0 && (
                     <div className="flex items-center gap-2 text-sm mb-2">
@@ -235,6 +239,30 @@ const ModuloDetailModal = ({ moduloId, onClose, onLogout }) => {
                   {modulo.costo_ricarica > 0 && (
                     <div className="mt-2 text-xs text-gray-500">
                       Costo ricarica: <span className="font-bold text-yellow-300">{modulo.costo_ricarica} CR</span>
+                    </div>
+                  )}
+
+                  {modulo.costi_attivazione?.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-700/80">
+                      <p className="text-[10px] uppercase tracking-wider text-amber-500/80 font-bold mb-2">
+                        Costi per attivazione (oltre alla carica)
+                      </p>
+                      {char ? (
+                        <>
+                          <ActivationCostPreview char={char} costi={modulo.costi_attivazione} />
+                          {!evaluateActivationCosts(char, modulo.costi_attivazione).affordable && (
+                            <p className="mt-2 text-[11px] text-red-400">
+                              Risorse insufficienti per attivare ora.
+                            </p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-xs text-amber-200/80 font-mono">
+                          {modulo.costi_attivazione
+                            .map((r) => `-${r.costo} ${r.statistica?.sigla || '?'}`)
+                            .join(', ')}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

@@ -11,6 +11,7 @@ import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import SearchableSelect from './SearchableSelect';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
+import ActivationCostInline from './inlines/ActivationCostInline';
 
 const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
@@ -28,7 +29,8 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     slot_corpo_permessi: '', 
     componenti: [],
     statistiche_base: [],
-    modificatori: []
+    modificatori: [],
+    costi_attivazione: [],
   };
 
   const [formData, setFormData] = useState({ ...defaultData, ...initialData });
@@ -91,13 +93,23 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         }
       });
 
+      const costiMap = new Map();
+      (formData.costi_attivazione || []).forEach((row) => {
+        const sId = row.statistica?.id || row.statistica;
+        const costo = parseInt(row.costo ?? 1, 10) || 1;
+        if (sId && costo > 0) {
+          costiMap.set(sId, { statistica: sId, costo, id: undefined });
+        }
+      });
+
       const dataToSend = { 
         ...formData,
         statistica_cariche: formData.statistica_cariche?.id || formData.statistica_cariche || null,
         aura_richiesta: formData.aura_richiesta?.id || formData.aura_richiesta || null,
         aura_infusione: formData.aura_infusione?.id || formData.aura_infusione || null,
         modificatori: Array.from(modsMap.values()),
-        statistiche_base: Array.from(baseMap.values())
+        statistiche_base: Array.from(baseMap.values()),
+        costi_attivazione: Array.from(costiMap.values()),
       };
       
       if (onSave) {
@@ -260,6 +272,23 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
                 <Input label="Durata Attivazione (sec)" type="number" value={formData.durata_attivazione} onChange={v => setFormData({...formData, durata_attivazione: v})} />
             </div>
             <RichTextEditor label="Metodo e Note di Ricarica" value={formData.metodo_ricarica} onChange={v => setFormData({...formData, metodo_ricarica: v})} />
+            <ActivationCostInline
+              items={formData.costi_attivazione || []}
+              options={statsOptions}
+              onAdd={() => setFormData({
+                ...formData,
+                costi_attivazione: [...(formData.costi_attivazione || []), { statistica: null, costo: 1 }],
+              })}
+              onChange={(i, field, value) => {
+                const list = [...(formData.costi_attivazione || [])];
+                list[i] = { ...list[i], [field]: value };
+                setFormData({ ...formData, costi_attivazione: list });
+              }}
+              onRemove={(i) => setFormData({
+                ...formData,
+                costi_attivazione: (formData.costi_attivazione || []).filter((_, idx) => idx !== i),
+              })}
+            />
           </div>
         )}
       </div>

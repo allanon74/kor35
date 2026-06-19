@@ -1,8 +1,15 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import PunteggioDisplay from './PunteggioDisplay.jsx';
+import ActivationCostPreview from './ActivationCostPreview';
+import { evaluateActivationCosts } from '../lib/activationCostUtils';
 
-const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica' }) => {
+const ACTIVATION_COST_LABELS = {
+  Infusione: "Costi all'uso dell'oggetto (per attivazione)",
+  Tessitura: 'Costi attivazione effetto runtime',
+};
+
+const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null }) => {
   if (!tecnica) return null;
 
   const testoDescrizione = tecnica.testo_formattato_personaggio || tecnica.TestoFormattato || tecnica.testo;
@@ -13,6 +20,9 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica' }) => {
   const costoPieno = tecnica.costo_pieno ?? (tecnica.costo_crediti || tecnica.livello * 100);
   const costoEffettivo = tecnica.costo_effettivo ?? costoPieno;
   const hasDiscount = costoEffettivo < costoPieno;
+  const activationCosts = tecnica.costi_attivazione || [];
+  const activationEval = char ? evaluateActivationCosts(char, activationCosts) : null;
+  const activationLabel = ACTIVATION_COST_LABELS[type] || 'Costi attivazione';
 
   return (
     <div 
@@ -70,6 +80,28 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica' }) => {
             <p className="text-gray-500 italic text-sm">Nessuna descrizione disponibile.</p>
             )}
         </div>
+
+        {activationCosts.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-xs font-bold text-amber-500/90 uppercase mb-2 tracking-wider">
+              {activationLabel}
+            </h3>
+            {char ? (
+              <>
+                <ActivationCostPreview char={char} costi={activationCosts} />
+                {activationEval && !activationEval.affordable && (
+                  <p className="mt-2 text-[11px] text-red-400 font-medium">
+                    Risorse insufficienti con il personaggio attuale.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-amber-200/80 font-mono">
+                {activationCosts.map((r) => `-${r.costo} ${r.statistica?.sigla || '?'}`).join(', ')}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Mattoni Componenti */}
         {tecnica.mattoni && tecnica.mattoni.length > 0 && (

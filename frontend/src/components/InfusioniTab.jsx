@@ -358,7 +358,12 @@ const InfusioniTab = ({ onLogout }) => {
       
       {/* Modale Dettagli Infusione */}
       {modalItem && (
-        <TecnicaDetailModal tecnica={modalItem} type="Infusione" onClose={() => setModalItem(null)} />
+        <TecnicaDetailModal
+          tecnica={modalItem}
+          type="Infusione"
+          char={char}
+          onClose={() => setModalItem(null)}
+        />
       )}
 
       {/* Modale Gestione Proposte */}

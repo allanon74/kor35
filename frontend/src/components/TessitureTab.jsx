@@ -15,6 +15,8 @@ import GenericGroupedList from './GenericGroupedList';
 import PunteggioDisplay from './PunteggioDisplay';     
 import IconaPunteggio from './IconaPunteggio';
 import ProposalManager from './ProposalManager';
+import ActivationCostPreview from './ActivationCostPreview';
+import { evaluateActivationCosts } from '../lib/activationCostUtils';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -212,6 +214,8 @@ const TessitureTab = ({ onLogout }) => {
     const secondi = creazioneInCorso ? (countdowns[creazioneInCorso.id] ?? creazioneInCorso.secondi_rimanenti ?? 0) : 0;
     const hasRuntimeConfig = !!item.usa_effetto_temporaneo && Number(item.durata_effetto_secondi || 0) > 0;
     const runtimeAttivo = runtimeByTessitura.get(String(item.id));
+    const runtimeCostEval = evaluateActivationCosts(char, item.costi_attivazione);
+    const canPayRuntimeCosts = !runtimeAttivo ? runtimeCostEval.affordable : true;
 
     return (
       <li className="flex justify-between items-center py-2 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
@@ -254,26 +258,41 @@ const TessitureTab = ({ onLogout }) => {
               </button>
             )}
             {hasRuntimeConfig && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (runtimeAttivo) {
-                    stopRuntimeMutation.mutate({ charId: selectedCharacterId, runtimeId: runtimeAttivo.id });
-                  } else {
-                    attivaRuntimeMutation.mutate({ charId: selectedCharacterId, tessituraId: item.id });
+              <div className="flex flex-col items-end gap-0.5">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (runtimeAttivo) {
+                      stopRuntimeMutation.mutate({ charId: selectedCharacterId, runtimeId: runtimeAttivo.id });
+                    } else {
+                      attivaRuntimeMutation.mutate({ charId: selectedCharacterId, tessituraId: item.id });
+                    }
+                  }}
+                  disabled={
+                    attivaRuntimeMutation.isPending
+                    || stopRuntimeMutation.isPending
+                    || (!runtimeAttivo && !canPayRuntimeCosts)
                   }
-                }}
-                disabled={attivaRuntimeMutation.isPending || stopRuntimeMutation.isPending}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                  runtimeAttivo
-                    ? 'bg-rose-800 hover:bg-rose-700 text-white'
-                    : 'bg-purple-700 hover:bg-purple-600 text-white'
-                }`}
-                title={runtimeAttivo ? 'Ferma effetto temporaneo' : 'Attiva effetto temporaneo'}
-              >
-                <Timer size={14} />
-                {runtimeAttivo ? `Stop (${runtimeAttivo.secondi_rimanenti || 0}s)` : 'Attiva'}
-              </button>
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                    runtimeAttivo
+                      ? 'bg-rose-800 hover:bg-rose-700 text-white'
+                      : 'bg-purple-700 hover:bg-purple-600 text-white'
+                  } disabled:opacity-40`}
+                  title={
+                    !runtimeAttivo && !canPayRuntimeCosts
+                      ? `Risorse insufficienti: ${runtimeCostEval.label}`
+                      : runtimeAttivo
+                        ? 'Ferma effetto temporaneo'
+                        : 'Attiva effetto temporaneo'
+                  }
+                >
+                  <Timer size={14} />
+                  {runtimeAttivo ? `Stop (${runtimeAttivo.secondi_rimanenti || 0}s)` : 'Attiva'}
+                </button>
+                {!runtimeAttivo && item.costi_attivazione?.length > 0 && (
+                  <ActivationCostPreview char={char} costi={item.costi_attivazione} compact className="max-w-[140px] text-right" />
+                )}
+              </div>
             )}
             <button
                 onClick={(e) => handleToggleFavorite(item, e)}
@@ -560,7 +579,12 @@ const TessitureTab = ({ onLogout }) => {
       </div>
       
       {modalItem && (
-        <TecnicaDetailModal tecnica={modalItem} type="Tessitura" onClose={() => setModalItem(null)} />
+        <TecnicaDetailModal
+          tecnica={modalItem}
+          type="Tessitura"
+          char={char}
+          onClose={() => setModalItem(null)}
+        />
       )}
 
       {/* Modale Proposal Manager - NUOVA AGGIUNTA */}
