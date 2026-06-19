@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from kor35.edge_sync import EdgeSyncView
 from kor35.syncing import serialize_for_sync
-from personaggi.models import Punteggio, Tessitura
+from personaggi.models import MinigiocoQrConfig, Punteggio, QrCode, Tessitura
 from pilotaggio.models import SottosistemaNave
 
 
@@ -53,6 +53,86 @@ class EdgeSyncScalarUniqueMergeTests(TestCase):
         obj = view._find_existing_after_merge(SottosistemaNave, row, update_data)
         self.assertIsNotNone(obj)
         self.assertEqual(obj.codice, "2")
+
+
+class EdgeSyncMinigiocoQrConfigMergeTests(TestCase):
+    """OneToOne qr_code: config staff locale con sync_id diverso dal master."""
+
+    def test_merge_minigioco_qr_config_by_qr_code_aligns_sync_id(self):
+        qr = QrCode.objects.create(testo="QR minigioco sync test")
+        local_sync_id = uuid.uuid4()
+        master_sync_id = uuid.uuid4()
+        MinigiocoQrConfig.objects.create(
+            qr_code=qr,
+            sync_id=local_sync_id,
+            attivo=False,
+            tipi_abilitati=["simon"],
+        )
+
+        view = EdgeSyncView()
+        update_data = {
+            "qr_code": qr,
+            "attivo": True,
+            "tipi_abilitati": ["memory", "simon"],
+            "difficolta": 3,
+            "difficolta_min": 1,
+            "tipo": "sliding_puzzle",
+            "requisiti_attivazione": [],
+            "esclusioni_minigioco": [],
+            "regole_difficolta": [],
+            "messaggio_pre": "",
+            "messaggio_vittoria": "",
+            "timer_scadenza_azione": "reset_minigioco",
+            "usa_biblioteca_se_vuota": True,
+        }
+        remote_updated = timezone.now()
+        merged = view._merge_minigioco_qr_config_by_qr_code(
+            MinigiocoQrConfig, master_sync_id, update_data, remote_updated
+        )
+        self.assertTrue(merged)
+
+        cfg = MinigiocoQrConfig.objects.get(qr_code=qr)
+        self.assertEqual(str(cfg.sync_id), str(master_sync_id))
+        self.assertTrue(cfg.attivo)
+        self.assertEqual(cfg.tipi_abilitati, ["memory", "simon"])
+
+    def test_try_apply_one_merges_when_local_config_has_different_sync_id(self):
+        qr = QrCode.objects.create(testo="QR minigioco apply test")
+        local_sync_id = uuid.uuid4()
+        master_sync_id = uuid.uuid4()
+        MinigiocoQrConfig.objects.create(
+            qr_code=qr,
+            sync_id=local_sync_id,
+            attivo=False,
+        )
+
+        remote_updated = timezone.now()
+        row = {
+            "sync_id": str(master_sync_id),
+            "qr_code": str(qr.sync_id),
+            "attivo": True,
+            "tipi_abilitati": ["pipe_connect"],
+            "difficolta": 2,
+            "difficolta_min": 1,
+            "tipo": "sliding_puzzle",
+            "requisiti_attivazione": [],
+            "esclusioni_minigioco": [],
+            "regole_difficolta": [],
+            "messaggio_pre": "Pronto?",
+            "messaggio_vittoria": "Fatto!",
+            "timer_scadenza_azione": "reset_minigioco",
+            "usa_biblioteca_se_vuota": True,
+            "updated_at": remote_updated.isoformat(),
+        }
+
+        view = EdgeSyncView()
+        result = view._try_apply_one(MinigiocoQrConfig, row)
+        self.assertEqual(result, "applied")
+
+        cfg = MinigiocoQrConfig.objects.get(qr_code=qr)
+        self.assertEqual(str(cfg.sync_id), str(master_sync_id))
+        self.assertTrue(cfg.attivo)
+        self.assertEqual(cfg.messaggio_pre, "Pronto?")
 
 
 class EdgeSyncMtiChildLwwTests(TestCase):
