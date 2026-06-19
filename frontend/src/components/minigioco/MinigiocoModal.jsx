@@ -3,12 +3,63 @@ import { X, Timer, Loader, Puzzle } from 'lucide-react';
 import SlidingPuzzle from './SlidingPuzzle';
 import MemoryGame from './MemoryGame';
 import RotateTiles from './RotateTiles';
+import SimonGame from './SimonGame';
+import PatternLock from './PatternLock';
+import PipeConnect from './PipeConnect';
 import { minigiocoComplete, minigiocoExpire } from '../../api';
 
 const TIPO_LABELS = {
   sliding_puzzle: 'Ricomponi l\'immagine',
   memory: 'Memory',
   rotate_tiles: 'Ruota le tessere',
+  simon: 'Sequenza (Simon)',
+  pattern_lock: 'Pattern lock',
+  pipe_connect: 'Collega i tubi',
+};
+
+const rotatePipeMask = (mask, times) => {
+  let conn = mask & 15;
+  for (let t = 0; t < (times % 4); t += 1) {
+    let next = 0;
+    if (conn & 1) next |= 2;
+    if (conn & 2) next |= 4;
+    if (conn & 4) next |= 8;
+    if (conn & 8) next |= 1;
+    conn = next;
+  }
+  return conn;
+};
+
+const isPipeSolved = (size, bases, rotations, start, end) => {
+  const total = size * size;
+  if (!bases?.length || bases.length !== total) return false;
+  const conns = bases.map((b, i) => rotatePipeMask(Number(b) || 0, Number(rotations?.[i]) || 0));
+  const stack = [start];
+  const seen = new Set([start]);
+  while (stack.length) {
+    const cur = stack.pop();
+    if (cur === end) return true;
+    const r = Math.floor(cur / size);
+    const c = cur % size;
+    const dirs = [
+      [-1, 0, 1, 4],
+      [0, 1, 2, 8],
+      [1, 0, 4, 1],
+      [0, -1, 8, 2],
+    ];
+    for (const [dr, dc, outM, inM] of dirs) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr >= 0 && nr < size && nc >= 0 && nc < size) {
+        const nxt = nr * size + nc;
+        if (!seen.has(nxt) && (conns[cur] & outM) && (conns[nxt] & inM)) {
+          seen.add(nxt);
+          stack.push(nxt);
+        }
+      }
+    }
+  }
+  return false;
 };
 
 const isSolvedClient = (tipo, stato) => {
@@ -28,6 +79,26 @@ const isSolvedClient = (tipo, stato) => {
   if (tipo === 'rotate_tiles') {
     const rots = stato.rotations || [];
     return rots.length > 0 && rots.every((r) => (Number(r) || 0) % 4 === 0);
+  }
+  if (tipo === 'simon') {
+    const seq = stato.sequence || [];
+    const inp = stato.player_input || [];
+    return seq.length > 0 && inp.length === seq.length && JSON.stringify(inp) === JSON.stringify(seq);
+  }
+  if (tipo === 'pattern_lock') {
+    const pat = stato.pattern || [];
+    const inp = stato.player_input || [];
+    return pat.length > 0 && inp.length === pat.length && JSON.stringify(inp) === JSON.stringify(pat);
+  }
+  if (tipo === 'pipe_connect') {
+    const size = stato.size || 4;
+    return isPipeSolved(
+      size,
+      stato.bases,
+      stato.rotations,
+      stato.start ?? 0,
+      stato.end ?? size * size - 1
+    );
   }
   return false;
 };
@@ -117,15 +188,23 @@ const MinigiocoModal = ({
   const tryComplete = useCallback(async () => {
     if (!session?.session_id || busy) return;
     const tipo = session.tipo;
+    const sg = session.stato_gioco || {};
     const fullState = {
+      ...sg,
       ...statoGioco,
       tiles: statoGioco.tiles,
-      cards: statoGioco.cards ?? session.stato_gioco?.cards,
+      cards: statoGioco.cards ?? sg.cards,
       matched: statoGioco.matched,
       rotations: statoGioco.rotations,
-      cols: statoGioco.cols || session.stato_gioco?.cols,
-      rows: statoGioco.rows || session.stato_gioco?.rows,
-      size: statoGioco.size || session.stato_gioco?.size,
+      sequence: sg.sequence,
+      player_input: statoGioco.player_input,
+      pattern: sg.pattern,
+      bases: sg.bases,
+      size: statoGioco.size ?? sg.size,
+      start: sg.start,
+      end: sg.end,
+      cols: statoGioco.cols ?? sg.cols,
+      rows: statoGioco.rows ?? sg.rows,
     };
     if (!isSolvedClient(tipo, fullState)) return;
 
@@ -142,13 +221,16 @@ const MinigiocoModal = ({
   }, [session, statoGioco, busy, personaggioId, onLogout, onUnlocked, qrcodeId]);
 
   useEffect(() => {
-    if (isSolvedClient(session?.tipo, statoGioco)) {
+    const sg = session?.stato_gioco || {};
+    const full = { ...sg, ...statoGioco, sequence: sg.sequence, pattern: sg.pattern, bases: sg.bases };
+    if (isSolvedClient(session?.tipo, full)) {
       tryComplete();
     }
-  }, [statoGioco, session?.tipo, tryComplete]);
+  }, [statoGioco, session?.tipo, session?.stato_gioco, tryComplete]);
 
   const tipo = session?.tipo;
   const imageUrl = session?.immagine_url;
+  const needsImage = ['sliding_puzzle', 'memory', 'rotate_tiles'].includes(tipo);
 
   const renderGame = () => {
     if (tipo === 'sliding_puzzle') {
@@ -183,6 +265,38 @@ const MinigiocoModal = ({
           size={size}
           rotations={statoGioco.rotations || []}
           imageUrl={imageUrl}
+          onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
+        />
+      );
+    }
+    if (tipo === 'simon') {
+      return (
+        <SimonGame
+          numButtons={session.stato_gioco?.num_buttons || 4}
+          sequence={session.stato_gioco?.sequence || []}
+          playerInput={statoGioco.player_input || []}
+          onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
+        />
+      );
+    }
+    if (tipo === 'pattern_lock') {
+      return (
+        <PatternLock
+          pattern={session.stato_gioco?.pattern || []}
+          playerInput={statoGioco.player_input || []}
+          onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
+        />
+      );
+    }
+    if (tipo === 'pipe_connect') {
+      const sg = session.stato_gioco || {};
+      return (
+        <PipeConnect
+          size={statoGioco.size || sg.size || 4}
+          bases={sg.bases || []}
+          rotations={statoGioco.rotations || sg.rotations || []}
+          start={sg.start ?? 0}
+          end={sg.end}
           onChange={(patch) => setStatoGioco((s) => ({ ...s, ...patch }))}
         />
       );
@@ -228,6 +342,10 @@ const MinigiocoModal = ({
               <Timer className="w-4 h-4" />
               {secondsLeft}s
             </div>
+          )}
+
+          {needsImage && !imageUrl && (
+            <p className="text-xs text-amber-400 text-center">Immagine non disponibile.</p>
           )}
 
           {renderGame()}

@@ -18,6 +18,14 @@ from personaggi.qr_minigioco import (
     risolvi_immagine_sessione,
     MINIGIOCO_TIPO_MEMORY,
     MINIGIOCO_TIPO_ROTATE,
+    MINIGIOCO_TIPO_SIMON,
+    MINIGIOCO_TIPO_PATTERN,
+    MINIGIOCO_TIPO_PIPE,
+    generate_game_state,
+    verify_simon,
+    verify_pattern_lock,
+    verify_pipe_connect,
+    tipi_pool_giocabili,
     MINIGIOCO_TIPO_SLIDING,
 )
 
@@ -71,7 +79,8 @@ class QrMinigiocoLogicTests(SimpleTestCase):
         solved = {"tiles": list(range(size * size))}
         self.assertTrue(verify_solution(MINIGIOCO_TIPO_SLIDING, 2, solved))
 
-    def test_scegli_tipo_e_difficolta_deterministico(self):
+    @patch("personaggi.qr_minigioco.minigioco_ha_immagine_disponibile", return_value=True)
+    def test_scegli_tipo_e_difficolta_deterministico(self, _mock_img):
         cfg = _Cfg(
             tipi_abilitati=[MINIGIOCO_TIPO_SLIDING, MINIGIOCO_TIPO_MEMORY, MINIGIOCO_TIPO_ROTATE],
             difficolta=4,
@@ -220,6 +229,35 @@ class MinigiocoBibliotecaTests(TestCase):
         self.assertTrue(_license_ok_for_minigioco("CC0 1.0"))
         self.assertFalse(_license_ok_for_minigioco("CC BY-NC 4.0"))
         self.assertFalse(_license_ok_for_minigioco("CC BY-ND 4.0"))
+
+    def test_simon_verify(self):
+        self.assertTrue(verify_simon([0, 2, 1], [0, 2, 1]))
+        self.assertFalse(verify_simon([0, 2, 1], [0, 2, 0]))
+
+    def test_pattern_verify(self):
+        self.assertTrue(verify_pattern_lock([0, 1, 2, 5], [0, 1, 2, 5]))
+        self.assertFalse(verify_pattern_lock([0, 1, 2, 5], [0, 1, 2]))
+
+    def test_pipe_verify(self):
+        size = 3
+        bases = [2, 10, 8] + [0] * 6
+        rots = [0] * 9
+        self.assertTrue(verify_pipe_connect(bases, rots, size, 0, 2))
+
+    def test_generate_tier_a_states(self):
+        simon = generate_game_state(MINIGIOCO_TIPO_SIMON, 2, 42)
+        self.assertEqual(len(simon["sequence"]), 4)
+        pattern = generate_game_state(MINIGIOCO_TIPO_PATTERN, 2, 99)
+        self.assertEqual(len(pattern["pattern"]), 5)
+        pipe = generate_game_state(MINIGIOCO_TIPO_PIPE, 2, 7)
+        self.assertEqual(pipe["size"], 4)
+        self.assertEqual(len(pipe["bases"]), 16)
+
+    @patch("personaggi.minigioco_biblioteca.biblioteca_immagine_count", return_value=0)
+    def test_tipi_pool_senza_immagine(self, _mock):
+        cfg = _Cfg(tipi_abilitati=[MINIGIOCO_TIPO_SIMON, MINIGIOCO_TIPO_SLIDING], usa_biblioteca_se_vuota=True)
+        pool = tipi_pool_giocabili(cfg)
+        self.assertEqual(pool, [MINIGIOCO_TIPO_SIMON])
 
     @patch("personaggi.minigioco_biblioteca.requests.post")
     def test_registra_openverse_salva_su_db(self, mock_post):

@@ -1,5 +1,5 @@
 """
-Minigiochi QR: sliding puzzle, memory, rotate tiles.
+Minigiochi QR: sliding puzzle, memory, rotate tiles, simon, pattern lock, pipe connect.
 Gate sulla scansione + timer opzionale con esiti configurabili.
 """
 from __future__ import annotations
@@ -19,11 +19,25 @@ from personaggi.requisiti_accesso import (
 MINIGIOCO_TIPO_SLIDING = "sliding_puzzle"
 MINIGIOCO_TIPO_MEMORY = "memory"
 MINIGIOCO_TIPO_ROTATE = "rotate_tiles"
+MINIGIOCO_TIPO_SIMON = "simon"
+MINIGIOCO_TIPO_PATTERN = "pattern_lock"
+MINIGIOCO_TIPO_PIPE = "pipe_connect"
 
 MINIGIOCO_TIPI = (
     MINIGIOCO_TIPO_SLIDING,
     MINIGIOCO_TIPO_MEMORY,
     MINIGIOCO_TIPO_ROTATE,
+    MINIGIOCO_TIPO_SIMON,
+    MINIGIOCO_TIPO_PATTERN,
+    MINIGIOCO_TIPO_PIPE,
+)
+
+MINIGIOCO_TIPI_SENZA_IMMAGINE = frozenset(
+    {
+        MINIGIOCO_TIPO_SIMON,
+        MINIGIOCO_TIPO_PATTERN,
+        MINIGIOCO_TIPO_PIPE,
+    }
 )
 
 TIMER_SCADENZA_ATTIVA = "attiva_qr"
@@ -41,6 +55,13 @@ STATI_SBLocco = frozenset({SESSIONE_COMPLETATO, SESSIONE_SCADUTO_ATTIVA})
 _SLIDING_GRID = {1: 2, 2: 3, 3: 4, 4: 5}
 _ROTATE_GRID = {1: 2, 2: 3, 3: 4, 4: 5}
 _MEMORY_GRID = {1: (2, 2), 2: (3, 4), 3: (4, 4), 4: (4, 5)}
+_SIMON_LEN = {1: 3, 2: 4, 3: 5, 4: 6}
+_SIMON_BUTTONS = {1: 4, 2: 4, 3: 5, 4: 6}
+_PATTERN_LEN = {1: 4, 2: 5, 3: 6, 4: 7}
+_PIPE_GRID = {1: 3, 2: 4, 3: 5, 4: 6}
+
+# Maschere connessioni tubi: N=1, E=2, S=4, W=8
+_PIPE_BASE_MASKS = (5, 10, 3, 6, 12, 9, 7, 14, 13, 11, 15)
 
 
 def _rng(seed: int) -> random.Random:
@@ -51,6 +72,13 @@ def grid_size(tipo: str, difficolta: int) -> Tuple[int, int]:
     d = max(1, min(4, int(difficolta or 2)))
     if tipo == MINIGIOCO_TIPO_MEMORY:
         return _MEMORY_GRID[d]
+    if tipo == MINIGIOCO_TIPO_SIMON:
+        return _SIMON_BUTTONS[d], _SIMON_LEN[d]
+    if tipo == MINIGIOCO_TIPO_PATTERN:
+        return 3, 3
+    if tipo == MINIGIOCO_TIPO_PIPE:
+        n = _PIPE_GRID[d]
+        return n, n
     n = _SLIDING_GRID[d] if tipo == MINIGIOCO_TIPO_SLIDING else _ROTATE_GRID[d]
     return n, n
 
@@ -107,6 +135,156 @@ def generate_rotate_state(size: int, seed: int) -> List[int]:
     return rotations
 
 
+def generate_simon_state(difficolta: int, seed: int) -> Dict[str, Any]:
+    d = max(1, min(4, int(difficolta or 2)))
+    length = _SIMON_LEN[d]
+    num_buttons = _SIMON_BUTTONS[d]
+    rng = _rng(seed)
+    sequence = [rng.randrange(num_buttons) for _ in range(length)]
+    return {
+        "num_buttons": num_buttons,
+        "sequence": sequence,
+        "player_input": [],
+    }
+
+
+def _pattern_neighbors_3x3(idx: int) -> List[int]:
+    r, c = divmod(idx, 3)
+    out = []
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if dr == 0 and dc == 0:
+                continue
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < 3 and 0 <= nc < 3:
+                out.append(nr * 3 + nc)
+    return out
+
+
+def generate_pattern_lock_state(difficolta: int, seed: int) -> Dict[str, Any]:
+    d = max(1, min(4, int(difficolta or 2)))
+    target_len = _PATTERN_LEN[d]
+    rng = _rng(seed)
+    for _ in range(80):
+        start = rng.randrange(9)
+        pattern = [start]
+        visited = {start}
+        while len(pattern) < target_len:
+            opts = [n for n in _pattern_neighbors_3x3(pattern[-1]) if n not in visited]
+            if not opts:
+                break
+            nxt = rng.choice(opts)
+            pattern.append(nxt)
+            visited.add(nxt)
+        if len(pattern) >= target_len:
+            return {"pattern": pattern, "player_input": []}
+    # fallback lineare
+    return {"pattern": list(range(min(target_len, 9))), "player_input": []}
+
+
+def _rotate_pipe_mask(mask: int, times: int) -> int:
+    conn = int(mask) & 15
+    for _ in range(times % 4):
+        new = 0
+        if conn & 1:
+            new |= 2
+        if conn & 2:
+            new |= 4
+        if conn & 4:
+            new |= 8
+        if conn & 8:
+            new |= 1
+        conn = new
+    return conn
+
+
+def _pipe_mask_for_cell(r: int, c: int, path_set: set[tuple[int, int]]) -> int:
+    conn = 0
+    if (r - 1, c) in path_set:
+        conn |= 1
+    if (r, c + 1) in path_set:
+        conn |= 2
+    if (r + 1, c) in path_set:
+        conn |= 4
+    if (r, c - 1) in path_set:
+        conn |= 8
+    return conn
+
+
+def _encode_pipe_tile(mask: int, rng: random.Random) -> Tuple[int, int]:
+    if mask == 0:
+        return 0, rng.randint(0, 3)
+    for base in _PIPE_BASE_MASKS:
+        for rot in range(4):
+            if _rotate_pipe_mask(base, rot) == mask:
+                scramble = rng.randint(0, 3)
+                return base, (rot + scramble) % 4
+    return 15, rng.randint(0, 3)
+
+
+def _generate_pipe_path(size: int, rng: random.Random) -> List[tuple[int, int]]:
+    target = (size - 1, size - 1)
+
+    def walk(pos: tuple[int, int], visited: set[tuple[int, int]], path: list[tuple[int, int]]) -> bool:
+        if pos == target:
+            return True
+        r, c = pos
+        opts = []
+        for dr, dc in ((0, 1), (1, 0), (0, -1), (-1, 0)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < size and 0 <= nc < size and (nr, nc) not in visited:
+                dist = abs(nr - target[0]) + abs(nc - target[1])
+                opts.append((dist, (nr, nc)))
+        if not opts:
+            return False
+        opts.sort(key=lambda x: x[0])
+        rng.shuffle(opts)
+        for _, nxt in opts[:3]:
+            visited.add(nxt)
+            path.append(nxt)
+            if walk(nxt, visited, path):
+                return True
+            path.pop()
+            visited.remove(nxt)
+        return False
+
+    for _ in range(60):
+        visited = {(0, 0)}
+        path = [(0, 0)]
+        if walk((0, 0), visited, path):
+            return path
+    # percorso L
+    path = [(0, c) for c in range(size)]
+    path += [(r, size - 1) for r in range(1, size)]
+    return path
+
+
+def generate_pipe_connect_state(difficolta: int, seed: int) -> Dict[str, Any]:
+    d = max(1, min(4, int(difficolta or 2)))
+    size = _PIPE_GRID[d]
+    rng = _rng(seed)
+    path = _generate_pipe_path(size, rng)
+    path_set = set(path)
+    bases: List[int] = []
+    rotations: List[int] = []
+    for r in range(size):
+        for c in range(size):
+            if (r, c) in path_set:
+                mask = _pipe_mask_for_cell(r, c, path_set)
+            else:
+                mask = 0
+            base, rot = _encode_pipe_tile(mask, rng)
+            bases.append(base)
+            rotations.append(rot)
+    return {
+        "size": size,
+        "start": 0,
+        "end": size * size - 1,
+        "bases": bases,
+        "rotations": rotations,
+    }
+
+
 def generate_game_state(tipo: str, difficolta: int, seed: int) -> Dict[str, Any]:
     cols, rows = grid_size(tipo, difficolta)
     if tipo == MINIGIOCO_TIPO_SLIDING:
@@ -117,6 +295,12 @@ def generate_game_state(tipo: str, difficolta: int, seed: int) -> Dict[str, Any]
     if tipo == MINIGIOCO_TIPO_ROTATE:
         size = cols
         return {"tipo": tipo, "size": size, "rotations": generate_rotate_state(size, seed)}
+    if tipo == MINIGIOCO_TIPO_SIMON:
+        return {"tipo": tipo, **generate_simon_state(difficolta, seed)}
+    if tipo == MINIGIOCO_TIPO_PATTERN:
+        return {"tipo": tipo, **generate_pattern_lock_state(difficolta, seed)}
+    if tipo == MINIGIOCO_TIPO_PIPE:
+        return {"tipo": tipo, **generate_pipe_connect_state(difficolta, seed)}
     raise ValueError(f"Tipo minigioco sconosciuto: {tipo}")
 
 
@@ -139,16 +323,80 @@ def verify_rotate(rotations: List[int], size: int) -> bool:
     return len(rotations) == size * size and all(int(r) % 4 == 0 for r in rotations)
 
 
-def verify_solution(tipo: str, difficolta: int, client_state: dict) -> bool:
+def verify_simon(sequence: List[int], player_input: List[int]) -> bool:
+    if not sequence:
+        return False
+    return list(player_input or []) == list(sequence)
+
+
+def verify_pattern_lock(pattern: List[int], player_input: List[int]) -> bool:
+    if not pattern:
+        return False
+    return list(player_input or []) == list(pattern)
+
+
+def verify_pipe_connect(
+    bases: List[int],
+    rotations: List[int],
+    size: int,
+    start: int,
+    end: int,
+) -> bool:
+    total = size * size
+    if len(bases) != total or len(rotations) != total:
+        return False
+    conns = [_rotate_pipe_mask(int(bases[i]), int(rotations[i])) for i in range(total)]
+
+    def idx_rc(idx: int) -> tuple[int, int]:
+        return divmod(idx, size)
+
+    def connected(a: int, b: int) -> bool:
+        ar, ac = idx_rc(a)
+        br, bc = idx_rc(b)
+        if ar == br and ac + 1 == bc:
+            return bool(conns[a] & 2 and conns[b] & 8)
+        if ac == bc and ar + 1 == br:
+            return bool(conns[a] & 4 and conns[b] & 1)
+        return False
+
+    stack = [start]
+    seen = {start}
+    while stack:
+        cur = stack.pop()
+        if cur == end:
+            return True
+        r, c = idx_rc(cur)
+        for dr, dc, out_mask, in_mask in (
+            (-1, 0, 1, 4),
+            (0, 1, 2, 8),
+            (1, 0, 4, 1),
+            (0, -1, 8, 2),
+        ):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < size and 0 <= nc < size:
+                nxt = nr * size + nc
+                if nxt not in seen and (conns[cur] & out_mask) and (conns[nxt] & in_mask):
+                    seen.add(nxt)
+                    stack.append(nxt)
+    return False
+
+
+def verify_solution(
+    tipo: str,
+    difficolta: int,
+    client_state: dict,
+    server_state: dict | None = None,
+) -> bool:
     if not isinstance(client_state, dict):
         return False
+    server_state = server_state or {}
     cols, rows = grid_size(tipo, difficolta)
     if tipo == MINIGIOCO_TIPO_SLIDING:
         size = cols
         return verify_sliding(client_state.get("tiles") or [], size)
     if tipo == MINIGIOCO_TIPO_MEMORY:
         return verify_memory(
-            client_state.get("cards") or [],
+            client_state.get("cards") or server_state.get("cards") or [],
             client_state.get("matched") or [],
             cols,
             rows,
@@ -156,6 +404,25 @@ def verify_solution(tipo: str, difficolta: int, client_state: dict) -> bool:
     if tipo == MINIGIOCO_TIPO_ROTATE:
         size = cols
         return verify_rotate(client_state.get("rotations") or [], size)
+    if tipo == MINIGIOCO_TIPO_SIMON:
+        return verify_simon(
+            server_state.get("sequence") or [],
+            client_state.get("player_input") or [],
+        )
+    if tipo == MINIGIOCO_TIPO_PATTERN:
+        return verify_pattern_lock(
+            server_state.get("pattern") or [],
+            client_state.get("player_input") or [],
+        )
+    if tipo == MINIGIOCO_TIPO_PIPE:
+        size = int(server_state.get("size") or cols or 3)
+        return verify_pipe_connect(
+            server_state.get("bases") or [],
+            client_state.get("rotations") or [],
+            size,
+            int(server_state.get("start") or 0),
+            int(server_state.get("end") or (size * size - 1)),
+        )
     return False
 
 
@@ -170,6 +437,15 @@ def tipi_pool(config) -> List[str]:
     if legacy in MINIGIOCO_TIPI:
         return [legacy]
     return list(MINIGIOCO_TIPI)
+
+
+def tipi_pool_giocabili(config) -> List[str]:
+    """Filtra tipi che richiedono immagine se non disponibile."""
+    tipi = tipi_pool(config)
+    if minigioco_ha_immagine_disponibile(config):
+        return tipi
+    senza_img = [t for t in tipi if t in MINIGIOCO_TIPI_SENZA_IMMAGINE]
+    return senza_img
 
 
 def difficolta_default(config) -> int:
@@ -206,7 +482,10 @@ def deve_saltare_minigioco(personaggio, config) -> bool:
 def scegli_tipo_e_difficolta(config, seed: int, personaggio=None) -> Tuple[str, int]:
     """Estrae tipo a caso; difficoltà da regole condizionali sul personaggio."""
     rng = _rng(seed)
-    tipo = rng.choice(tipi_pool(config))
+    pool = tipi_pool_giocabili(config)
+    if not pool:
+        pool = list(MINIGIOCO_TIPI_SENZA_IMMAGINE)
+    tipo = rng.choice(pool)
     if personaggio is not None:
         difficolta = risolvi_difficolta(personaggio, config)
     else:
@@ -217,7 +496,7 @@ def scegli_tipo_e_difficolta(config, seed: int, personaggio=None) -> Tuple[str, 
 def _config_attiva(config) -> bool:
     if not config or not config.attivo:
         return False
-    if not tipi_pool(config):
+    if not tipi_pool_giocabili(config):
         return False
     return True
 
@@ -268,7 +547,7 @@ def immagine_url_per_config(config, request=None) -> str:
 
 
 def minigioco_ha_immagine_disponibile(config) -> bool:
-    if config and config.immagine:
+    if config and getattr(config, "immagine", None):
         return True
     if not config or not getattr(config, "usa_biblioteca_se_vuota", True):
         return False
@@ -301,9 +580,16 @@ def risolvi_immagine_sessione(config, request=None, seed: int | None = None):
 
 
 def descrizione_difficolta(tipo: str, difficolta: int) -> str:
+    d = max(1, min(4, int(difficolta or 2)))
     cols, rows = grid_size(tipo, difficolta)
     if tipo == MINIGIOCO_TIPO_MEMORY:
         return f"{cols}×{rows} ({(cols * rows) // 2} coppie)"
+    if tipo == MINIGIOCO_TIPO_SIMON:
+        return f"{_SIMON_LEN[d]} simboli · {_SIMON_BUTTONS[d]} tasti"
+    if tipo == MINIGIOCO_TIPO_PATTERN:
+        return f"{_PATTERN_LEN[d]} nodi"
+    if tipo == MINIGIOCO_TIPO_PIPE:
+        return f"{cols}×{rows} tubi"
     return f"{cols}×{rows}"
 
 
@@ -399,7 +685,7 @@ def check_gate_minigioco(
     if not requisiti_minigioco_soddisfatti(personaggio, config):
         return None
 
-    if not minigioco_ha_immagine_disponibile(config):
+    if not tipi_pool_giocabili(config):
         return None
 
     in_corso = (
@@ -462,7 +748,7 @@ def completa_sessione(session_id, personaggio, client_state: dict) -> Tuple[bool
                 return True, payload.get("messaggio", ""), payload
             return False, payload.get("messaggio") or payload.get("error") or "Tempo scaduto.", payload
 
-    if not verify_solution(sess.tipo, sess.difficolta, client_state):
+    if not verify_solution(sess.tipo, sess.difficolta, client_state, sess.stato_gioco or {}):
         return False, "Soluzione non corretta.", None
 
     now = timezone.now()
