@@ -1324,6 +1324,8 @@ class StaffMinigiocoQrConfigView(APIView):
             "timer_secondi": config.timer_secondi,
             "timer_scadenza_azione": config.timer_scadenza_azione,
             "usa_biblioteca_se_vuota": config.usa_biblioteca_se_vuota,
+            "modalita_sblocco": config.modalita_sblocco,
+            "sblocco_secondi": config.sblocco_secondi,
             "immagine_url": img_url,
         }
 
@@ -1416,6 +1418,25 @@ class StaffMinigiocoQrConfigView(APIView):
             az = str(data.get("timer_scadenza_azione") or "").strip()
             if az in dict(MinigiocoQrConfig.TIMER_SAZIONE_CHOICES):
                 config.timer_scadenza_azione = az
+        if "modalita_sblocco" in data:
+            mod = str(data.get("modalita_sblocco") or "").strip()
+            if mod in dict(MinigiocoQrConfig.SBLOCCO_CHOICES):
+                config.modalita_sblocco = mod
+        if "sblocco_secondi" in data:
+            raw = data.get("sblocco_secondi")
+            if raw in (None, "", "null"):
+                config.sblocco_secondi = None
+            else:
+                try:
+                    config.sblocco_secondi = max(1, int(raw))
+                except (TypeError, ValueError):
+                    pass
+        if config.modalita_sblocco == MinigiocoQrConfig.SBLOCCO_TEMPORANEO:
+            if not config.sblocco_secondi:
+                return Response(
+                    {"error": "sblocco_secondi obbligatorio con modalità temporaneo."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         if "requisiti_attivazione" in data:
             import json
 

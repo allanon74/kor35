@@ -14,7 +14,7 @@ from kor35.sync_tombstone import (
     record_tombstone_for_instance,
     tombstone_blocks_record_apply,
 )
-from personaggi.models import SyncTombstone, Tessitura, Punteggio
+from personaggi.models import Carriera, SyncTombstone, Tessitura, Punteggio, TIER_3, TipoCarriera
 
 
 class SyncTombstoneTests(TestCase):
@@ -132,3 +132,28 @@ class SyncTombstoneTests(TestCase):
             ],
         )
         self.assertFalse(Tessitura.objects.filter(pk=tess.pk).exists())
+
+    def test_apply_tombstone_deferred_when_fk_protect(self):
+        tipo = TipoCarriera.objects.create(codice="tomb-fk-test", nome="Tipo FK test")
+        Carriera.objects.create(
+            nome="Carriera FK test",
+            descrizione="",
+            tipo=TIER_3,
+            tipo_carriera=tipo,
+        )
+        registry = get_sync_model_registry(("personaggi",))
+        result = apply_one_tombstone_row(
+            registry,
+            {
+                "model_label": tipo._meta.label_lower,
+                "sync_id": str(tipo.sync_id),
+                "deleted_at": timezone.now().isoformat(),
+            },
+        )
+        self.assertEqual(result, "deferred")
+        self.assertTrue(TipoCarriera.objects.filter(pk=tipo.pk).exists())
+        self.assertTrue(
+            SyncTombstone.objects.filter(
+                model_label=tipo._meta.label_lower, sync_id=tipo.sync_id
+            ).exists()
+        )

@@ -77,6 +77,11 @@ class EdgeSyncView(APIView):
                 self._apply_groups(incoming_records.get("auth.group", []))
                 self._apply_sync_models(incoming_records)
 
+            apply_tombstone_rows(
+                self._sync_model_registry(),
+                incoming_records.get(TOMBSTONE_PAYLOAD_KEY, []) or [],
+            )
+
             outgoing = self._build_outgoing(last_sync_timestamp)
         except ValidationError:
             raise
@@ -268,8 +273,6 @@ class EdgeSyncView(APIView):
             raise ValidationError(
                 f"Sync FK unresolved: model={first.model_key} sync_id={first.payload.get('sync_id')}"
             )
-
-        apply_tombstone_rows(registry, incoming_records.get(TOMBSTONE_PAYLOAD_KEY, []) or [])
 
     def _apply_zodiac_catalog(self, rows):
         if not rows:

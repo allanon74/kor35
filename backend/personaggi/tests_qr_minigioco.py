@@ -1,8 +1,11 @@
 """Test logica minigioco QR."""
 from unittest.mock import MagicMock, patch
 
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
+from personaggi.models import MinigiocoQrConfig, MinigiocoQrSession, QrCode, TipologiaPersonaggio, Personaggio
 from personaggi.qr_minigioco import (
     generate_game_state,
     generate_sliding_state,
@@ -27,6 +30,11 @@ from personaggi.qr_minigioco import (
     verify_pipe_connect,
     tipi_pool_giocabili,
     MINIGIOCO_TIPO_SLIDING,
+    ha_sblocco_minigioco,
+    session_allows_bypass,
+    SESSIONE_COMPLETATO,
+    SESSIONE_SCADUTO_ATTIVA,
+    BYPASS_TRANSITO_SECONDI,
 )
 
 
@@ -314,4 +322,87 @@ class MinigiocoBibliotecaTests(TestCase):
         status = openverse_config_status()
         self.assertTrue(status["configured"])
         self.assertEqual(status["source"], "database")
+
+
+User = get_user_model()
+
+
+class MinigiocoModalitaSbloccoTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="mg_sblocco", password="x")
+        self.tipo_pg = TipologiaPersonaggio.objects.create(nome="Std mg sblocco")
+        self.pg = Personaggio.objects.create(
+            nome="PG mg",
+            proprietario=self.user,
+            tipologia=self.tipo_pg,
+        )
+        self.qr = QrCode.objects.create(testo="QR modalità sblocco")
+        self.config = MinigiocoQrConfig.objects.create(
+            qr_code=self.qr,
+            attivo=True,
+            tipi_abilitati=[MINIGIOCO_TIPO_SIMON],
+        )
+
+    def _session_completata(self, *, quando=None):
+        return MinigiocoQrSession.objects.create(
+            personaggio=self.pg,
+            qr_code=self.qr,
+            user=self.user,
+            tipo=MINIGIOCO_TIPO_SIMON,
+            difficolta=2,
+            stato=SESSIONE_COMPLETATO,
+            completato_at=quando or timezone.now(),
+        )
+
+    def test_permanente_sblocca_dopo_vittoria(self):
+        self.config.modalita_sblocco = MinigiocoQrConfig.SBLOCCO_PERMANENTE
+        self.config.save()
+        self._session_completata()
+        self.assertTrue(ha_sblocco_minigioco(self.pg, self.qr, self.config))
+
+    def test_ogni_scansione_non_sblocca(self):
+        self.config.modalita_sblocco = MinigiocoQrConfig.SBLOCCO_OGNI_SCANSIONE
+        self.config.save()
+        self._session_completata()
+        self.assertFalse(ha_sblocco_minigioco(self.pg, self.qr, self.config))
+
+    def test_temporaneo_scade(self):
+        self.config.modalita_sblocco = MinigiocoQrConfig.SBLOCCO_TEMPORANEO
+        self.config.sblocco_secondi = 60
+        self.config.save()
+        self._session_completata(quando=timezone.now() - timezone.timedelta(seconds=120))
+        self.assertFalse(ha_sblocco_minigioco(self.pg, self.qr, self.config))
+
+    def test_temporaneo_ancora_valido(self):
+        self.config.modalita_sblocco = MinigiocoQrConfig.SBLOCCO_TEMPORANEO
+        self.config.sblocco_secondi = 300
+        self.config.save()
+        self._session_completata(quando=timezone.now() - timezone.timedelta(seconds=30))
+        self.assertTrue(ha_sblocco_minigioco(self.pg, self.qr, self.config))
+
+    def test_bypass_ogni_scansione_solo_transito_immediato(self):
+        self.config.modalita_sblocco = MinigiocoQrConfig.SBLOCCO_OGNI_SCANSIONE
+        self.config.save()
+        recente = self._session_completata()
+        self.assertTrue(session_allows_bypass(str(recente.id), self.pg, self.qr))
+        MinigiocoQrSession.objects.filter(pk=recente.pk).update(
+            completato_at=timezone.now() - timezone.timedelta(seconds=BYPASS_TRANSITO_SECONDI + 5)
+        )
+        recente.refresh_from_db()
+        self.assertFalse(session_allows_bypass(str(recente.id), self.pg, self.qr))
+
+    def test_scaduto_attiva_conta_come_sblocco_temporaneo(self):
+        self.config.modalita_sblocco = MinigiocoQrConfig.SBLOCCO_TEMPORANEO
+        self.config.sblocco_secondi = 600
+        self.config.save()
+        MinigiocoQrSession.objects.create(
+            personaggio=self.pg,
+            qr_code=self.qr,
+            user=self.user,
+            tipo=MINIGIOCO_TIPO_SIMON,
+            difficolta=2,
+            stato=SESSIONE_SCADUTO_ATTIVA,
+            completato_at=timezone.now(),
+        )
+        self.assertTrue(ha_sblocco_minigioco(self.pg, self.qr, self.config))
 

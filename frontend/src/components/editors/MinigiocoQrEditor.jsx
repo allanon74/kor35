@@ -25,6 +25,12 @@ const TIMER_AZIONE_OPTS = [
   { id: 'reset_minigioco', label: 'Reset minigioco' },
 ];
 
+const SBLOCCO_OPTS = [
+  { id: 'ogni_scansione', label: 'Minigioco a ogni scansione' },
+  { id: 'permanente', label: 'Una volta risolto, per sempre' },
+  { id: 'temporaneo', label: 'Sblocco temporaneo (N secondi)' },
+];
+
 const ALL_TIPI = TIPO_OPTS.map((o) => o.id);
 
 const emptyConfig = () => ({
@@ -39,6 +45,8 @@ const emptyConfig = () => ({
   timer_secondi: '',
   timer_scadenza_azione: 'reset_minigioco',
   usa_biblioteca_se_vuota: true,
+  modalita_sblocco: 'permanente',
+  sblocco_secondi: '',
   immagine_url: null,
 });
 
@@ -63,6 +71,8 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
       if (!Array.isArray(cfg.esclusioni_minigioco)) cfg.esclusioni_minigioco = [];
       if (!Array.isArray(cfg.regole_difficolta)) cfg.regole_difficolta = [];
       if (cfg.timer_secondi == null) cfg.timer_secondi = '';
+      if (cfg.sblocco_secondi == null) cfg.sblocco_secondi = '';
+      if (!cfg.modalita_sblocco) cfg.modalita_sblocco = 'permanente';
       setConfig(cfg);
       setImageFile(null);
       setRemoveImage(false);
@@ -96,6 +106,13 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
       setMsg('Seleziona almeno un tipo di gioco.');
       return;
     }
+    if (config.modalita_sblocco === 'temporaneo') {
+      const sec = Number(config.sblocco_secondi);
+      if (!sec || sec < 1) {
+        setMsg('Indica i secondi di sblocco (≥ 1) per la modalità temporanea.');
+        return;
+      }
+    }
 
     setSaving(true);
     setMsg('');
@@ -108,6 +125,12 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
       fd.append('messaggio_pre', config.messaggio_pre || '');
       fd.append('messaggio_vittoria', config.messaggio_vittoria || '');
       fd.append('timer_scadenza_azione', config.timer_scadenza_azione);
+      fd.append('modalita_sblocco', config.modalita_sblocco || 'permanente');
+      if (config.modalita_sblocco === 'temporaneo' && config.sblocco_secondi !== '') {
+        fd.append('sblocco_secondi', String(config.sblocco_secondi));
+      } else {
+        fd.append('sblocco_secondi', '');
+      }
       fd.append('requisiti_attivazione', JSON.stringify(config.requisiti_attivazione || []));
       fd.append('esclusioni_minigioco', JSON.stringify(config.esclusioni_minigioco || []));
       fd.append('regole_difficolta', JSON.stringify(config.regole_difficolta || []));
@@ -121,6 +144,8 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
       const data = await staffSaveMinigiocoQrConfig(qrId, fd, onLogout);
       const cfg = data?.config ? { ...emptyConfig(), ...data.config } : emptyConfig();
       if (cfg.timer_secondi == null) cfg.timer_secondi = '';
+      if (cfg.sblocco_secondi == null) cfg.sblocco_secondi = '';
+      if (!cfg.modalita_sblocco) cfg.modalita_sblocco = 'permanente';
       setConfig(cfg);
       setImageFile(null);
       setRemoveImage(false);
@@ -294,6 +319,49 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
               onChange={(e) => setConfig((c) => ({ ...c, messaggio_vittoria: e.target.value }))}
             />
           </label>
+
+          <div className="p-3 bg-gray-900/50 rounded border border-gray-700 space-y-2">
+            <span className="text-gray-400 text-xs font-semibold uppercase tracking-wide">
+              Dopo la vittoria
+            </span>
+            <label className="block">
+              <span className="text-gray-500 text-xs">Quando saltare il minigioco</span>
+              <select
+                className="w-full mt-0.5 bg-gray-900 border border-gray-600 rounded px-2 py-1"
+                value={config.modalita_sblocco || 'permanente'}
+                onChange={(e) => setConfig((c) => ({ ...c, modalita_sblocco: e.target.value }))}
+              >
+                {SBLOCCO_OPTS.map((o) => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+            {config.modalita_sblocco === 'temporaneo' && (
+              <label className="block">
+                <span className="text-gray-500 text-xs">Durata sblocco (secondi)</span>
+                <input
+                  type="number"
+                  min={1}
+                  className="w-full mt-0.5 bg-gray-900 border border-gray-600 rounded px-2 py-1"
+                  value={config.sblocco_secondi}
+                  onChange={(e) => setConfig((c) => ({ ...c, sblocco_secondi: e.target.value }))}
+                />
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Dopo questo intervallo il PG dovrà rifare il minigioco alla prossima scansione.
+                </p>
+              </label>
+            )}
+            {config.modalita_sblocco === 'ogni_scansione' && (
+              <p className="text-[11px] text-gray-500">
+                Ogni nuova scansione richiede un minigioco (salvo partita già in corso).
+              </p>
+            )}
+            {config.modalita_sblocco === 'permanente' && (
+              <p className="text-[11px] text-gray-500">
+                Comportamento predefinito: una vittoria vale per sempre su questo QR (per PG).
+              </p>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
