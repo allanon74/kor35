@@ -52,6 +52,9 @@ SESSIONE_SCADUTO_RESET = "scaduto_reset"
 
 STATI_SBLocco = frozenset({SESSIONE_COMPLETATO, SESSIONE_SCADUTO_ATTIVA})
 
+# Finestra per bypass immediato post-vittoria (caricamento effetto QR) in modalità ogni_scansione.
+BYPASS_TRANSITO_SECONDI = 120
+
 _SLIDING_GRID = {1: 2, 2: 3, 3: 4, 4: 5}
 _ROTATE_GRID = {1: 2, 2: 3, 3: 4, 4: 5}
 _MEMORY_GRID = {1: (2, 2), 2: (3, 4), 3: (4, 4), 4: (4, 5)}
@@ -507,18 +510,61 @@ def personaggio_bloccato_su_qr(personaggio, qr_code) -> bool:
     return MinigiocoQrBlocco.objects.filter(personaggio=personaggio, qr_code=qr_code).exists()
 
 
-def ha_sblocco_minigioco(personaggio, qr_code) -> bool:
-    from .models import MinigiocoQrSession
+def _modalita_sblocco_config(config) -> str:
+    from .models import MinigiocoQrConfig
 
-    return MinigiocoQrSession.objects.filter(
-        personaggio=personaggio,
-        qr_code=qr_code,
-        stato__in=STATI_SBLocco,
-    ).exists()
+    if not config:
+        return MinigiocoQrConfig.SBLOCCO_PERMANENTE
+    return getattr(config, "modalita_sblocco", None) or MinigiocoQrConfig.SBLOCCO_PERMANENTE
+
+
+def _sblocco_sessione_ancora_valido(config, sess) -> bool:
+    """True se la sessione completata consente ancora di saltare il minigioco."""
+    from .models import MinigiocoQrConfig
+
+    if sess.stato not in STATI_SBLocco:
+        return False
+    modalita = _modalita_sblocco_config(config)
+    if modalita == MinigiocoQrConfig.SBLOCCO_OGNI_SCANSIONE:
+        return False
+    if modalita == MinigiocoQrConfig.SBLOCCO_PERMANENTE:
+        return True
+    if modalita == MinigiocoQrConfig.SBLOCCO_TEMPORANEO:
+        secondi = int(getattr(config, "sblocco_secondi", 0) or 0)
+        if secondi <= 0 or not sess.completato_at:
+            return False
+        return timezone.now() < sess.completato_at + timedelta(seconds=secondi)
+    return True
+
+
+def ha_sblocco_minigioco(personaggio, qr_code, config=None) -> bool:
+    from .models import MinigiocoQrConfig, MinigiocoQrSession
+
+    if config is None:
+        try:
+            config = qr_code.configurazione_minigioco
+        except MinigiocoQrConfig.DoesNotExist:
+            return False
+
+    if _modalita_sblocco_config(config) == MinigiocoQrConfig.SBLOCCO_OGNI_SCANSIONE:
+        return False
+
+    latest = (
+        MinigiocoQrSession.objects.filter(
+            personaggio=personaggio,
+            qr_code=qr_code,
+            stato__in=STATI_SBLocco,
+        )
+        .order_by("-completato_at", "-updated_at")
+        .first()
+    )
+    if not latest:
+        return False
+    return _sblocco_sessione_ancora_valido(config, latest)
 
 
 def session_allows_bypass(session_id, personaggio, qr_code) -> bool:
-    from .models import MinigiocoQrSession
+    from .models import MinigiocoQrConfig, MinigiocoQrSession
 
     try:
         sess = MinigiocoQrSession.objects.get(pk=session_id)
@@ -526,7 +572,20 @@ def session_allows_bypass(session_id, personaggio, qr_code) -> bool:
         return False
     if sess.personaggio_id != personaggio.pk or sess.qr_code_id != qr_code.id:
         return False
-    return sess.stato in STATI_SBLocco
+    if sess.stato not in STATI_SBLocco:
+        return False
+
+    try:
+        config = qr_code.configurazione_minigioco
+    except MinigiocoQrConfig.DoesNotExist:
+        return True
+
+    modalita = _modalita_sblocco_config(config)
+    if modalita == MinigiocoQrConfig.SBLOCCO_OGNI_SCANSIONE:
+        if not sess.completato_at:
+            return False
+        return timezone.now() < sess.completato_at + timedelta(seconds=BYPASS_TRANSITO_SECONDI)
+    return _sblocco_sessione_ancora_valido(config, sess)
 
 
 def requisiti_minigioco_soddisfatti(personaggio, config) -> bool:
@@ -676,7 +735,7 @@ def check_gate_minigioco(
             "tipo_modello": "minigioco_bloccato",
         }
 
-    if ha_sblocco_minigioco(personaggio, qr_code):
+    if ha_sblocco_minigioco(personaggio, qr_code, config):
         return None
 
     if deve_saltare_minigioco(personaggio, config):

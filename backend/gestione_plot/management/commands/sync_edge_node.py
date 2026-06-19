@@ -188,6 +188,7 @@ class Command(BaseCommand):
                 pending.append((model, row))
 
         max_rounds = max(len(pending), 1)
+        tombstone_rows = incoming_payload.get(TOMBSTONE_PAYLOAD_KEY, []) or []
         with transaction.atomic():
             for _ in range(max_rounds):
                 if not pending:
@@ -209,7 +210,7 @@ class Command(BaseCommand):
                 if progressed == 0:
                     break
 
-            apply_tombstone_rows(model_registry, incoming_payload.get(TOMBSTONE_PAYLOAD_KEY, []) or [])
+        apply_tombstone_rows(model_registry, tombstone_rows)
 
         if pending:
             first_model, first_row = pending[0]

@@ -6,17 +6,22 @@ Conflitti: deleted_at del tombstone vs updated_at del record (Last-Write-Wins).
 
 from __future__ import annotations
 
+import logging
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, Iterator
+from typing import Any, Iterator, Literal
 
 from django.apps import apps
-from django.db import models
+from django.db import IntegrityError, connection, models, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+logger = logging.getLogger(__name__)
+
 TOMBSTONE_PAYLOAD_KEY = "sync.tombstone"
+
+ApplyTombstoneResult = Literal["deleted", "skipped", "deferred"]
 
 _skip_tombstone_on_delete: ContextVar[bool] = ContextVar("skip_tombstone_on_delete", default=False)
 
@@ -161,22 +166,40 @@ def clear_stale_tombstone_before_record_apply(model_label: str, sync_id, remote_
 def apply_tombstone_rows(registry: dict[str, type[models.Model]], rows: list[dict[str, Any]]) -> None:
     if not tombstone_table_ready():
         return
-    for row in rows:
-        apply_one_tombstone_row(registry, row)
+    pending = list(rows or [])
+    max_rounds = max(len(pending), 1)
+    for _ in range(max_rounds):
+        if not pending:
+            break
+        next_pending: list[dict[str, Any]] = []
+        for row in pending:
+            result = apply_one_tombstone_row(registry, row)
+            if result == "deferred":
+                next_pending.append(row)
+        if len(next_pending) == len(pending):
+            break
+        pending = next_pending
+    if pending:
+        logger.warning(
+            "Tombstone non applicate (%d): record ancora referenziati in locale",
+            len(pending),
+        )
 
 
-def apply_one_tombstone_row(registry: dict[str, type[models.Model]], row: dict[str, Any]) -> None:
+def apply_one_tombstone_row(
+    registry: dict[str, type[models.Model]], row: dict[str, Any]
+) -> ApplyTombstoneResult:
     if not tombstone_table_ready():
         return
     model_label = row.get("model_label")
     sync_id_raw = row.get("sync_id")
     remote_deleted_at = parse_datetime(row.get("deleted_at")) if row.get("deleted_at") else None
     if not model_label or not sync_id_raw or not remote_deleted_at:
-        return
+        return "skipped"
     try:
         sync_id = uuid.UUID(str(sync_id_raw))
     except (TypeError, ValueError):
-        return
+        return "skipped"
 
     SyncTombstone = apps.get_model("personaggi", "SyncTombstone")
     existing = SyncTombstone.objects.filter(model_label=model_label, sync_id=sync_id).first()
@@ -191,12 +214,24 @@ def apply_one_tombstone_row(registry: dict[str, type[models.Model]], row: dict[s
 
     model = registry.get(model_label)
     if not model:
-        return
+        return "skipped"
     local = model.objects.filter(sync_id=sync_id).first()
     if not local:
-        return
+        return "skipped"
     local_updated = getattr(local, "updated_at", None)
     if local_updated is not None and remote_deleted_at < local_updated:
-        return
-    with suppress_tombstone_on_delete():
-        local.delete()
+        return "skipped"
+    try:
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            with suppress_tombstone_on_delete():
+                local.delete()
+    except IntegrityError:
+        logger.warning(
+            "Tombstone delete deferred (FK): %s sync_id=%s",
+            model_label,
+            sync_id,
+        )
+        return "deferred"
+    return "deleted"

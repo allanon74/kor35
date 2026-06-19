@@ -179,12 +179,14 @@ def pagina_regolamento_row_is_menu_only(row: dict[str, Any]) -> bool:
 
 def natural_primary_key_field(model: type[models.Model]) -> str | None:
     """
-    PK non auto-increment (es. QrCode.id corto stampato sul fisico) da includere nel payload.
+    PK non auto-increment da includere nel payload (es. QrCode.id corto stampato sul fisico).
+
+    Modelli con UUIDField come PK usano sync_id come identità tra nodi — non esportare id.
     """
     pk = model._meta.pk
     if pk is None:
         return None
-    if isinstance(pk, (models.AutoField, models.BigAutoField, models.SmallAutoField)):
+    if isinstance(pk, (models.AutoField, models.BigAutoField, models.SmallAutoField, models.UUIDField)):
         return None
     if isinstance(pk, models.ForeignKey) and getattr(pk.remote_field, "parent_link", False):
         return None

@@ -3524,6 +3524,15 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
         (TIMER_RESET, "Reset minigioco"),
     )
 
+    SBLOCCO_OGNI_SCANSIONE = "ogni_scansione"
+    SBLOCCO_PERMANENTE = "permanente"
+    SBLOCCO_TEMPORANEO = "temporaneo"
+    SBLOCCO_CHOICES = (
+        (SBLOCCO_OGNI_SCANSIONE, "Minigioco a ogni scansione"),
+        (SBLOCCO_PERMANENTE, "Una volta risolto, per sempre"),
+        (SBLOCCO_TEMPORANEO, "Sblocco temporaneo (N secondi)"),
+    )
+
     qr_code = models.OneToOneField(
         "QrCode",
         on_delete=models.CASCADE,
@@ -3586,6 +3595,17 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
     usa_biblioteca_se_vuota = models.BooleanField(
         default=True,
         help_text="Se non c'è immagine dedicata sul QR, usa un'estrazione casuale dalla libreria staff.",
+    )
+    modalita_sblocco = models.CharField(
+        max_length=24,
+        choices=SBLOCCO_CHOICES,
+        default=SBLOCCO_PERMANENTE,
+        help_text="Per quanto tempo, dopo la vittoria, il PG può saltare il minigioco su questo QR.",
+    )
+    sblocco_secondi = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Durata sblocco in secondi (solo modalità temporaneo).",
     )
 
     class Meta:
