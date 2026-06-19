@@ -101,8 +101,7 @@ class FormulaBuilderLogicTests(TestCase):
             "{formula_source}{danni_mischia}{formula_status}"
         )
         rendered = render_formula_preview(formula=formula, stats_by_param=stats)
-        self.assertIn("(chop)", rendered.lower())
-        self.assertNotIn("uno", rendered.lower())
+        self.assertIn("(chop!)", rendered.lower())
 
     def test_distanza_one_damage_without_pierce_stat_shows_implicit_pierce(self):
         stats = build_stats_by_selection(
@@ -111,10 +110,33 @@ class FormulaBuilderLogicTests(TestCase):
         )
         formula = "{formula_source}{danni_distanza}"
         rendered = render_formula_preview(formula=formula, stats_by_param=stats)
-        self.assertIn("(pierce)", rendered.lower())
+        self.assertIn("(pierce!)", rendered.lower())
         self.assertNotIn("uno", rendered.lower())
 
-    def test_annulled_source_override_shows_paren_chop(self):
+    def test_mischia_chop_with_damage_one_shows_paren_chop(self):
+        stats = build_stats_by_selection(
+            {"dannimis": 1, "dannigen": 0},
+            {"formula_damage_mode": "mischia", "formula_source": ["chop"]},
+        )
+        formula = "{formula_source}{danni_mischia}"
+        rendered = render_formula_preview(formula=formula, stats_by_param=stats).lower()
+        self.assertIn("(chop!)", rendered)
+        self.assertNotIn("uno", rendered)
+
+    def test_build_formula_template_mischia_includes_source_by_default(self):
+        tpl = build_formula_template("attack", {"formula_damage_mode": "mischia"})
+        self.assertIn("{formula_source}", tpl)
+        self.assertIn("{danni_mischia}", tpl)
+
+    def test_build_formula_template_omit_source_excludes_placeholder(self):
+        tpl = build_formula_template(
+            "attack",
+            {"formula_damage_mode": "mischia", "omit_formula_source": True},
+        )
+        self.assertNotIn("{formula_source}", tpl)
+        self.assertIn("{danni_mischia}", tpl)
+
+    def test_annulled_source_override_suppresses_source_entirely(self):
         user_model = get_user_model()
         user = user_model.objects.create_user(username="formula_source_annul", password="x")
         from .models import Personaggio, PersonaggioAbilita
@@ -160,16 +182,15 @@ class FormulaBuilderLogicTests(TestCase):
             context={"formula_kind": "ATT", "attack_formula_template": formula},
             solo_formula=True,
         ).lower()
-        self.assertIn("(chop)", rendered)
-        self.assertNotIn("chop ", rendered)
+        self.assertNotIn("chop", rendered)
         self.assertIn("due!", rendered)
 
-    def test_annulled_blam_override_shows_paren_blam(self):
+    def test_annulled_blam_override_suppresses_blam(self):
         rendered = build_exclusive_group_text(
             "formula_source",
             {"blam": 1, "__formula_source_labels__": {"blam": ""}},
         )
-        self.assertEqual(rendered.strip(), "(Blam)")
+        self.assertEqual(rendered.strip(), "")
 
     def test_formatta_danno_formula_display_rules(self):
         self.assertEqual(formatta_danno_formula(1), "")

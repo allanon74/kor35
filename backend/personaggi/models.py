@@ -437,15 +437,36 @@ def _render_exclusive_template(template, value_map, object_map=None):
 
 
 IMPLICIT_SOURCE_PARENS = {
-    "chop": "(Chop)",
-    "blam": "(Blam)",
-    "pierce": "(Pierce)",
-    "mental": "(Mental)",
+    "chop": "(Chop!)",
+    "blam": "(Blam!)",
+    "pierce": "(Pierce!)",
+    "mental": "(Mental!)",
 }
 
 
 def _implicit_source_paren_for_param(param):
     return IMPLICIT_SOURCE_PARENS.get(str(param or "").strip().lower(), "")
+
+
+def _attack_damage_total(value_map, mode):
+    if mode == "mischia":
+        return float(value_map.get("dannimis", 0) or 0) + float(value_map.get("dannigen", 0) or 0)
+    if mode == "distanza":
+        return float(value_map.get("dannidis", 0) or 0) + float(value_map.get("dannigen", 0) or 0)
+    return 0.0
+
+
+def _should_use_implicit_source_paren(param, value_map):
+    param = str(param or "").strip().lower()
+    if param in ("chop", "blam", "mental"):
+        if not _is_truthy_numeric(value_map.get("dmg_mischia")):
+            return False
+        return _attack_damage_total(value_map, "mischia") <= 1
+    if param == "pierce":
+        if not _is_truthy_numeric(value_map.get("dmg_distanza")):
+            return False
+        return _attack_damage_total(value_map, "distanza") <= 1
+    return False
 
 
 def infer_implicit_source_paren(value_map):
@@ -477,6 +498,9 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
     if not config:
         return ""
 
+    if group_key == "formula_source" and value_map.get("__formula_source_suppressed__"):
+        return ""
+
     entries = config.get("entries") or []
     active_parts = []
     seen = set()
@@ -499,14 +523,21 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
         is_active = any(_is_truthy_numeric(value_map.get(param, 0)) for param in params)
         if is_active and label not in seen:
             if group_key == "formula_source":
+                suppressed = False
                 for p in params:
                     if p in source_label_overrides:
                         override_label = source_label_overrides[p]
                         if str(override_label or "").strip() == "":
-                            label = _implicit_source_paren_for_param(p)
-                        else:
-                            label = str(override_label).strip()
+                            value_map["__formula_source_suppressed__"] = True
+                            suppressed = True
+                            break
+                        label = str(override_label).strip()
                         break
+                if suppressed:
+                    continue
+                primary = params[0]
+                if _should_use_implicit_source_paren(primary, value_map):
+                    label = _implicit_source_paren_for_param(primary)
             part = label
 
             # Extra opzionale per entry (dict o lista di dict/stringhe).
@@ -586,6 +617,8 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
                 seen.add(lbl)
 
     if group_key == "formula_source" and not active_parts:
+        if value_map.get("__formula_source_suppressed__"):
+            return ""
         implicit = infer_implicit_source_paren(value_map)
         if implicit:
             active_parts.append(implicit)
@@ -1103,7 +1136,12 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     formula_finale = pattern_if.sub(replace_conditional_block, formula_out)
     formula_finale = pattern_placeholder.sub(resolve_placeholder, formula_finale)
 
-    if formula_out and not str(formula_finale or "").strip():
+    if (
+        formula_out
+        and "{formula_source}" in formula_out
+        and not str(formula_finale or "").strip()
+        and not eval_context.get("__formula_source_suppressed__")
+    ):
         fallback = infer_implicit_source_paren(eval_context)
         if fallback:
             formula_finale = f"{fallback} "

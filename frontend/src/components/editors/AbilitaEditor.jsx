@@ -961,18 +961,18 @@ const FORMULA_RULE_OPTIONS = [
 const SOURCE_KEYWORD_EMPTY = '__EMPTY__';
 
 const SOURCE_KEYWORD_OPTIONS = [
-    { id: SOURCE_KEYWORD_EMPTY, nome: '— Vuoto (Chop/Blam tra parentesi)' },
     { id: 'Chop!', nome: 'Chop!' },
     { id: 'Blam!', nome: 'Blam!' },
     { id: 'Pierce!', nome: 'Pierce!' },
     { id: 'Mental!', nome: 'Mental!' },
+    { id: SOURCE_KEYWORD_EMPTY, nome: '— Vuoto (ometti sorgente in formula)' },
 ];
 
 function sourceOverrideSelectValue(sourceLabel) {
-    if (sourceLabel === '' || sourceLabel === null || sourceLabel === undefined) {
+    if (sourceLabel === '' || sourceLabel === null) {
         return SOURCE_KEYWORD_EMPTY;
     }
-    return sourceLabel;
+    return sourceLabel || '';
 }
 
 function sourceOverrideFromSelect(value) {
@@ -982,7 +982,7 @@ function sourceOverrideFromSelect(value) {
 
 function formatSourceOverrideLabel(sourceLabel) {
     if (sourceLabel === '' || sourceLabel === null) {
-        return '— vuoto (Chop/Blam tra parentesi)';
+        return '— vuoto (ometti sorgente)';
     }
     return sourceLabel || '-';
 }
@@ -1056,8 +1056,8 @@ function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOpti
                                 minOptionsForSearch={99}
                             />
                             <p className="mt-1 text-[11px] text-gray-500">
-                                «Vuoto» annulla Chop/Blam/Pierce in formula e mostra il tipo tra parentesi, es.{' '}
-                                <code className="text-emerald-300">(Chop)</code>.
+                                «Vuoto» omette del tutto la sorgente in formula (né Chop né (Chop!)). Per il default
+                                implicito usa il costruttore formula sull&apos;oggetto/tessitura.
                             </p>
                         </div>
                     )}
@@ -1206,7 +1206,7 @@ function buildFormulaRulePreview(rule, punteggi) {
 
     if (rule.rule_type === 'SOURCE_OVERRIDE') {
         if (rule.source_label === '' || rule.source_label === null) {
-            return `Annulla la sorgente dichiarata: in formula compare (Chop)/(Blam)/(Pierce) tra parentesi su ${scopeLabel}${whenLabel}.`;
+            return `Omette del tutto la sorgente in formula su ${scopeLabel}${whenLabel}.`;
         }
         return `Usa "${toName}" al posto della sorgente base su ${scopeLabel}${whenLabel}.`;
     }
