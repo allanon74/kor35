@@ -404,4 +404,8 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
         savedFormulaType={formData.formula_builder_selezioni?.formula_type}
       />
 
+    </div>
+  );
+};
+
 export default OggettoBaseEditor;
