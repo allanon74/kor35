@@ -8,6 +8,7 @@ import EditorSaveActions from './EditorSaveActions';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import FormulaBuilderModal from './FormulaBuilderModal';
 import CatalogoAccademiaFlags from './CatalogoAccademiaFlags';
+import ActivationCostInline from './inlines/ActivationCostInline';
 
 /** Garantisce che l'abilità già salvata compaia nel select anche se fuori dalla prima pagina API. */
 const mergeAbilitaTemporaneaOption = (rows, selected) => {
@@ -69,6 +70,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     abilita_temporanea: null,
     durata_effetto_secondi: 0,
     oggetto_runtime_config_str: '',
+    costi_attivazione: [],
   };
 
   const hydrateForm = (data) => {
@@ -155,7 +157,11 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statistiche_base: (formData.statistiche_base || []).map(sb => ({
           ...sb,
           statistica: sb.statistica?.id || sb.statistica
-        }))
+        })),
+        costi_attivazione: (formData.costi_attivazione || []).map((row) => ({
+          statistica: row.statistica?.id || row.statistica,
+          costo: parseInt(row.costo ?? 1, 10) || 1,
+        })).filter((row) => row.statistica && row.costo > 0),
       };
       if (formData.oggetto_runtime_config_str && String(formData.oggetto_runtime_config_str).trim()) {
         try {
@@ -199,7 +205,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
     }
   };
 
-  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, elementoPrincipaleId }) => {
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, elementoPrincipaleId, formulaBuilderSelezioni }) => {
     const controlledSet = new Set(controlledParams || []);
     const byParam = new Map((statsOptions || []).map((s) => [s.parametro, s]));
     const current = formData.statistiche_base || [];
@@ -216,6 +222,7 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
       ...prev,
       formula: mergedFormula,
       statistiche_base: [...kept, ...fromBuilder],
+      formula_builder_selezioni: formulaBuilderSelezioni || {},
       ...(elementoPrincipaleId != null ? { elemento_principale: elementoPrincipaleId } : {}),
     }));
   };
@@ -294,6 +301,23 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
               </div>
             </>
           )}
+          <ActivationCostInline
+            items={formData.costi_attivazione || []}
+            options={statsOptions}
+            onAdd={() => setFormData({
+              ...formData,
+              costi_attivazione: [...(formData.costi_attivazione || []), { statistica: null, costo: 1 }],
+            })}
+            onChange={(i, field, value) => {
+              const list = [...(formData.costi_attivazione || [])];
+              list[i] = { ...list[i], [field]: value };
+              setFormData({ ...formData, costi_attivazione: list });
+            }}
+            onRemove={(i) => setFormData({
+              ...formData,
+              costi_attivazione: (formData.costi_attivazione || []).filter((_, idx) => idx !== i),
+            })}
+          />
         </div>
         <div>
           <Input label="Formula Tessitura (es. {caratt} + 1d10)" value={formData.formula} onChange={v => setFormData({...formData, formula: v})} />
@@ -353,9 +377,12 @@ const TessituraEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         statsOptions={statsOptions}
         statisticheBase={formData.statistiche_base || []}
         formulaValue={formData.formula}
+        entityName={formData.nome}
         defaultFormulaType="weave"
         elementoPrincipaleId={formData.elemento_principale?.id || formData.elemento_principale}
         elementoOptions={elementoSelectOptions}
+        savedSelections={formData.formula_builder_selezioni}
+        savedFormulaType={formData.formula_builder_selezioni?.formula_type}
       />
 
       <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
@@ -714,6 +741,7 @@ const RuntimeObjectWizardModal = ({
           })
           .filter(Boolean)}
         formulaValue={draft.formula}
+        entityName={draft.nome}
         defaultFormulaType="attack"
       />
     </div>

@@ -35,6 +35,7 @@ from .models import (
     # NUOVI MODELLI INTERMEDI
     InfusioneCaratteristica, TessituraCaratteristica, PropostaTecnicaCaratteristica,
     InfusioneStatisticaBase, TessituraStatisticaBase, ModelloAura, InfusioneStatistica,
+    InfusioneCostoAttivazione, TessituraCostoAttivazione,
     CerimonialeCaratteristica,
     OggettoBase, OggettoBaseStatisticaBase, OggettoBaseModificatore, 
     ForgiaturaInCorso, 
@@ -495,7 +496,7 @@ class TabellaSerializer(serializers.ModelSerializer):
 class StatisticaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Statistica
-        fields = ('id', 'nome', 'sigla', 'parametro', 'valore_base_predefinito', 'formula')
+        fields = ('id', 'nome', 'sigla', 'parametro', 'valore_base_predefinito', 'formula', 'is_risorsa_pool')
 
 
 class PunteggioSerializer(serializers.ModelSerializer):
@@ -989,6 +990,27 @@ class TessituraStatisticaBaseSerializer(serializers.ModelSerializer):
         rep['statistica'] = StatisticaSerializer(instance.statistica).data
         return rep
 
+
+class TecnicaCostoAttivazioneSerializer(serializers.ModelSerializer):
+    class Meta:
+        fields = ('statistica', 'costo')
+        validators = []
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['statistica'] = StatisticaSerializer(instance.statistica).data
+        return rep
+
+
+class InfusioneCostoAttivazioneSerializer(TecnicaCostoAttivazioneSerializer):
+    class Meta(TecnicaCostoAttivazioneSerializer.Meta):
+        model = InfusioneCostoAttivazione
+
+
+class TessituraCostoAttivazioneSerializer(TecnicaCostoAttivazioneSerializer):
+    class Meta(TecnicaCostoAttivazioneSerializer.Meta):
+        model = TessituraCostoAttivazione
+
 class TessituraCaratteristicaSerializer(serializers.ModelSerializer):
     class Meta:
         model = TessituraCaratteristica
@@ -1086,6 +1108,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     spegne_a_zero_cariche = serializers.SerializerMethodField()
     attacco_base = serializers.CharField(read_only=True)
     attacco_formattato = serializers.SerializerMethodField()
+    costi_attivazione = serializers.SerializerMethodField()
     
     # Usa il serializer completo per le statistiche per avere i dettagli (condizioni, icone, ecc)
     statistiche = OggettoStatisticaSerializer(source='oggettostatistica_set', many=True, read_only=True)
@@ -1106,6 +1129,7 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
             'cariche_massime', 'durata_totale', 'costo_ricarica', 'testo_ricarica', 'seconds_remaining',
             'data_fine_attivazione',
             'is_active', 'spegne_a_zero_cariche', 
+            'costi_attivazione',
             'statistiche', 'componenti', 
             'attacco_base', 'attacco_formattato',
         ]
@@ -1113,6 +1137,15 @@ class OggettoPotenziamentoSerializer(serializers.ModelSerializer):
     def get_spegne_a_zero_cariche(self, obj):
         # Recupera il flag dall'aura (Punteggio) associata all'oggetto
         return obj.aura.spegne_a_zero_cariche if obj.aura else False
+
+    def get_costi_attivazione(self, obj):
+        infusione = obj.infusione_generatrice
+        if not infusione:
+            return []
+        return InfusioneCostoAttivazioneSerializer(
+            infusione.costi_attivazione.select_related('statistica').all(),
+            many=True,
+        ).data
 
     def get_cariche_massime(self, obj):
         if not obj.infusione_generatrice or not obj.infusione_generatrice.statistica_cariche:
@@ -1212,6 +1245,7 @@ class OggettoSerializer(serializers.ModelSerializer):
     deve_essere_attivato = serializers.SerializerMethodField()
     aura_dettagli = serializers.SerializerMethodField()
     slot_fisici_possibili = serializers.SerializerMethodField()
+    costi_attivazione = serializers.SerializerMethodField()
 
     class Meta:
         model = Oggetto
@@ -1260,6 +1294,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'seconds_remaining',
             'is_active',
             'cariche_massime', 'durata_totale', 'testo_ricarica', 'costo_ricarica', 
+            'costi_attivazione',
             'spegne_a_zero_cariche',
             'deve_essere_attivato',
             'is_pesante',
@@ -1284,6 +1319,15 @@ class OggettoSerializer(serializers.ModelSerializer):
             return []
         return GestioneOggettiService._infer_physical_slots(obj)
 
+    def get_costi_attivazione(self, obj):
+        infusione = obj.infusione_generatrice
+        if not infusione:
+            return []
+        return InfusioneCostoAttivazioneSerializer(
+            infusione.costi_attivazione.select_related('statistica').all(),
+            many=True,
+        ).data
+
     def get_attacco_formattato(self, obj):
         if not obj.attacco_base:
             return None
@@ -1291,8 +1335,8 @@ class OggettoSerializer(serializers.ModelSerializer):
         personaggio = self.context.get('personaggio')
         # Passa le statistiche_base dell'oggetto per includere i valori base
         statistiche_base = obj.oggettostatisticabase_set.select_related('statistica').all()
-        item_mods = obj.oggettostatistica_set.select_related('statistica').all()
-        from .models import FORMULA_SCOPE_ATTACK
+        from .models import FORMULA_SCOPE_ATTACK, raccogli_modificatori_solo_oggetto
+        item_mods = raccogli_modificatori_solo_oggetto(obj)
 
         context = {
             'livello': obj.livello,
@@ -1301,6 +1345,7 @@ class OggettoSerializer(serializers.ModelSerializer):
             'formula_kind': FORMULA_SCOPE_ATTACK,
             'attack_formula_template': obj.attacco_base,
             'classe_oggetto': obj.classe_oggetto.nome if obj.classe_oggetto else '',
+            'formula_builder_selezioni': getattr(obj, 'formula_builder_selezioni', None) or {},
         }
 
         if personaggio:
@@ -1406,6 +1451,7 @@ class AttivataSerializer(serializers.ModelSerializer):
 
 class InfusioneSerializer(serializers.ModelSerializer):
     statistiche_base = InfusioneStatisticaBaseSerializer(source='infusionestatisticabase_set', many=True, read_only=True)
+    costi_attivazione = InfusioneCostoAttivazioneSerializer(many=True, read_only=True)
     
     # MODIFICA: 'componenti' invece di 'mattoni'
     componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
@@ -1429,6 +1475,7 @@ class InfusioneSerializer(serializers.ModelSerializer):
             'livello', 'aura_richiesta', 'aura_infusione',
             'componenti', # NEW
             'statistiche_base',
+            'costi_attivazione',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
             'tipo_risultato', 'non_acquistabile',
         )
@@ -1442,6 +1489,7 @@ class InfusioneSerializer(serializers.ModelSerializer):
 
 class TessituraSerializer(serializers.ModelSerializer):
     statistiche_base = TessituraStatisticaBaseSerializer(source='tessiturastatisticabase_set', many=True, read_only=True)
+    costi_attivazione = TessituraCostoAttivazioneSerializer(many=True, read_only=True)
     
     # MODIFICA: 'componenti' invece di 'mattoni'
     componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
@@ -1465,6 +1513,7 @@ class TessituraSerializer(serializers.ModelSerializer):
             'livello', 'aura_richiesta', 'elemento_principale',
             'componenti', # NEW
             'statistiche_base',
+            'costi_attivazione',
             'costo_crediti', 'costo_pieno', 'costo_effettivo',
             'usa_effetto_temporaneo', 'abilita_temporanea', 'durata_effetto_secondi', 'oggetto_runtime_config',
             'non_acquistabile',
@@ -1606,7 +1655,7 @@ class CerimonialeStaffListSerializer(serializers.ModelSerializer):
 
 class TecnicaBaseMasterMixin:
     """Mixin aggiornato per gestire M2M e update annidati"""
-    def handle_nested_data(self, instance, components_data, stats_base_data, modifiers_data=None):
+    def handle_nested_data(self, instance, components_data, stats_base_data, modifiers_data=None, costi_attivazione_data=None):
         # 1. Componenti
         if components_data is not None:
             instance.componenti.all().delete()
@@ -1620,6 +1669,12 @@ class TecnicaBaseMasterMixin:
                 getattr(instance, related_base_name).all().delete()
                 for stat in stats_base_data:
                     getattr(instance, related_base_name).create(**stat)
+
+        # 2b. Costi attivazione risorsa
+        if costi_attivazione_data is not None and hasattr(instance, 'costi_attivazione'):
+            instance.costi_attivazione.all().delete()
+            for row in costi_attivazione_data:
+                instance.costi_attivazione.create(**row)
 
         # 3. Modificatori (Solo Infusioni) con gestione Many-to-Many
         if modifiers_data is not None:
@@ -1640,6 +1695,7 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     componenti = InfusioneCaratteristicaSerializer(many=True, required=False)
     statistiche_base = InfusioneStatisticaBaseSerializer(many=True, required=False, source='infusionestatisticabase_set')
     modificatori = InfusioneStatisticaSerializer(many=True, required=False, source='infusionestatistica_set')
+    costi_attivazione = InfusioneCostoAttivazioneSerializer(many=True, required=False)
     livello = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -1661,27 +1717,26 @@ class InfusioneFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
         comp = validated_data.pop('componenti', [])
         s_base = validated_data.pop('infusionestatisticabase_set', [])
         mods = validated_data.pop('infusionestatistica_set', [])
+        costi = validated_data.pop('costi_attivazione', [])
         instance = Infusione.objects.create(**validated_data)
-        self.handle_nested_data(instance, comp, s_base, mods)
+        self.handle_nested_data(instance, comp, s_base, mods, costi)
         return instance
     
     @transaction.atomic
     def update(self, instance, validated_data):
-        # Estraiamo i dati annidati per gestirli manualmente via Mixin
         comp = validated_data.pop('componenti', None)
         s_base = validated_data.pop('infusionestatisticabase_set', None)
         mods = validated_data.pop('infusionestatistica_set', None)
+        costi = validated_data.pop('costi_attivazione', None)
         
-        # Aggiorniamo i campi base dell'infusione
         instance = super().update(instance, validated_data)
-        
-        # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
-        self.handle_nested_data(instance, comp, s_base, mods)
+        self.handle_nested_data(instance, comp, s_base, mods, costi)
         return instance
 
 class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
     componenti = TessituraCaratteristicaSerializer(many=True, required=False)
     statistiche_base = TessituraStatisticaBaseSerializer(many=True, required=False, source='tessiturastatisticabase_set')
+    costi_attivazione = TessituraCostoAttivazioneSerializer(many=True, required=False)
     livello = serializers.IntegerField(read_only=True) # Campo calcolato per la lista
 
     class Meta:
@@ -1701,21 +1756,19 @@ class TessituraFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMast
     def create(self, validated_data):
         comp = validated_data.pop('componenti', [])
         s_base = validated_data.pop('tessiturastatisticabase_set', [])
+        costi = validated_data.pop('costi_attivazione', [])
         instance = Tessitura.objects.create(**validated_data)
-        self.handle_nested_data(instance, comp, s_base)
+        self.handle_nested_data(instance, comp, s_base, None, costi)
         return instance
     
     @transaction.atomic
     def update(self, instance, validated_data):
-        # Estraiamo i dati annidati per gestirli manualmente via Mixin
         comp = validated_data.pop('componenti', None)
         s_base = validated_data.pop('tessiturastatisticabase_set', None)
+        costi = validated_data.pop('costi_attivazione', None)
 
-        # Aggiorniamo i campi base della tessitura
         instance = super().update(instance, validated_data)
-        
-        # Aggiorniamo le tabelle correlate (pulizia e ricreazione)
-        self.handle_nested_data(instance, comp, s_base)
+        self.handle_nested_data(instance, comp, s_base, None, costi)
         return instance
 
 class CerimonialeFullEditorSerializer(serializers.ModelSerializer, TecnicaBaseMasterMixin):
@@ -3359,7 +3412,7 @@ class OggettoBaseStatisticaBaseSerializer(serializers.ModelSerializer):
 class OggettoBaseModificatoreSerializer(serializers.ModelSerializer):
     class Meta:
         model = OggettoBaseModificatore
-        fields = ['statistica', 'valore', 'tipo_modificatore']
+        fields = ['statistica', 'valore', 'tipo_modificatore', 'solo_oggetto_ospitante']
         validators = []
         
     def to_representation(self, instance):

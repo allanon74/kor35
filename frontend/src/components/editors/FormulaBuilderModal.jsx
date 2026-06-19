@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { staffGetFormulaBuilderSchema, staffPreviewFormulaBuilder } from '../../api';
 
 const FormulaBuilderModal = ({
@@ -10,8 +10,11 @@ const FormulaBuilderModal = ({
   statisticheBase = [],
   formulaValue = '',
   defaultFormulaType = 'attack',
+  entityName = '',
   elementoPrincipaleId = null,
   elementoOptions = [],
+  savedSelections = null,
+  savedFormulaType = null,
 }) => {
   const [schema, setSchema] = useState(null);
   const [formulaType, setFormulaType] = useState(defaultFormulaType);
@@ -41,6 +44,34 @@ const FormulaBuilderModal = ({
   const [includeSpecificEffect, setIncludeSpecificEffect] = useState(false);
   const [effectDescription, setEffectDescription] = useState('');
   const [omitFormulaSource, setOmitFormulaSource] = useState(false);
+  const wasOpenRef = useRef(false);
+
+  const restoreFromSavedSelections = (sel) => {
+    const data = sel && typeof sel === 'object' ? sel : {};
+    if (data.formula_type) {
+      setFormulaType(data.formula_type);
+    } else if (savedFormulaType) {
+      setFormulaType(savedFormulaType);
+    } else {
+      setFormulaType(defaultFormulaType || 'attack');
+    }
+    const nextSelections = {};
+    ['formula_type', 'formula_prefix', 'formula_target', 'formula_source', 'formula_status', 'formula_damage_mode'].forEach((key) => {
+      if (data[key] !== undefined && data[key] !== null) {
+        nextSelections[key] = data[key];
+      }
+    });
+    setSelections(nextSelections);
+    setSourceElementId(data.source_element_id ? String(data.source_element_id) : '');
+    setIncludeCura(!!data.include_cura);
+    setExcludeAlwaysRango(!!data.exclude_always_rango);
+    setExcludeAlwaysMolt(!!data.exclude_always_molt);
+    setExcludeAlwaysPrefix(!!data.exclude_always_prefix);
+    setExcludeAlwaysStatus(!!data.exclude_always_status);
+    setIncludeSpecificEffect(!!data.include_specific_effect);
+    setEffectDescription(data.effect_description || '');
+    setOmitFormulaSource(!!data.omit_formula_source);
+  };
 
   const normalizedElementoOptions = useMemo(
     () => (elementoOptions || []).map((el) => ({
@@ -49,6 +80,44 @@ const FormulaBuilderModal = ({
     })),
     [elementoOptions]
   );
+
+  const templateBlocks = useMemo(() => {
+    const blocks = schema?.type_templates?.[formulaType] || schema?.type_templates?.attack || [];
+    return new Set(blocks);
+  }, [schema, formulaType]);
+
+  const visibleSections = useMemo(() => {
+    const blockToSection = {
+      formula_type: 'formula_type',
+      formula_prefix: 'formula_prefix',
+      formula_target: 'formula_target',
+      formula_source: 'formula_source',
+      formula_status: 'formula_status',
+      formula_damage_mode: 'formula_damage_mode',
+    };
+    const allowed = new Set(
+      Object.entries(blockToSection)
+        .filter(([block]) => templateBlocks.has(block))
+        .map(([, sectionId]) => sectionId)
+    );
+    return (schema?.sections || []).filter((section) => allowed.has(section.id));
+  }, [schema, templateBlocks]);
+
+  const visibleNumericParams = useMemo(() => {
+    const blocks = templateBlocks;
+    return NUMERIC_CONTROLLED_PARAMS.filter((param) => {
+      if (param === 'rango' || param === 'molt') return blocks.has(param);
+      if (param === 'dannimis' || param === 'dannidis' || param === 'dannigen') {
+        return blocks.has('formula_damage_mode');
+      }
+      if (param === 'cura' || param === 'curapf') return blocks.has('formula_cura');
+      if (param === 'gittata') return blocks.has('formula_target');
+      if (param === 'durata') return blocks.has('formula_status');
+      if (param === 'livello') return blocks.has('formula_type');
+      if (param === 'dcono' || param === 'area') return blocks.has('formula_target');
+      return false;
+    });
+  }, [templateBlocks]);
 
   const sourceSelections = useMemo(() => {
     const raw = selections.formula_source;
@@ -91,6 +160,7 @@ const FormulaBuilderModal = ({
 
   const buildSelectionsPayload = () => ({
     ...selections,
+    entity_name: (entityName || '').trim() || null,
     include_cura: includeCura,
     exclude_always_rango: excludeAlwaysRango,
     exclude_always_molt: excludeAlwaysMolt,
@@ -104,29 +174,39 @@ const FormulaBuilderModal = ({
 
   useEffect(() => {
     if (!open) {
+      wasOpenRef.current = false;
       return;
     }
-    setFormulaType(defaultFormulaType || 'attack');
-    setSelections({});
-    setSourceElementId('');
-    setIncludeCura(false);
-    setExcludeAlwaysRango(false);
-    setExcludeAlwaysMolt(false);
-    setExcludeAlwaysPrefix(false);
-    setExcludeAlwaysStatus(false);
-    setIncludeSpecificEffect(false);
-    setEffectDescription('');
-    setOmitFormulaSource(
-      Boolean(
-        formulaValue
-        && !String(formulaValue).includes('{formula_source}')
-        && (String(formulaValue).includes('{danni_mischia}') || String(formulaValue).includes('{danni_distanza}'))
-      )
-    );
+    if (wasOpenRef.current) {
+      return;
+    }
+    wasOpenRef.current = true;
+
+    if (savedSelections && Object.keys(savedSelections).length > 0) {
+      restoreFromSavedSelections(savedSelections);
+    } else {
+      setFormulaType(defaultFormulaType || 'attack');
+      setSelections({});
+      setSourceElementId('');
+      setIncludeCura(false);
+      setExcludeAlwaysRango(false);
+      setExcludeAlwaysMolt(false);
+      setExcludeAlwaysPrefix(false);
+      setExcludeAlwaysStatus(false);
+      setIncludeSpecificEffect(false);
+      setEffectDescription('');
+      setOmitFormulaSource(
+        Boolean(
+          formulaValue
+          && !String(formulaValue).includes('{formula_source}')
+          && (String(formulaValue).includes('{danni_mischia}') || String(formulaValue).includes('{danni_distanza}'))
+        )
+      );
+    }
     staffGetFormulaBuilderSchema(onLogout)
       .then((data) => setSchema(data || null))
       .catch((err) => console.error('Errore schema formula builder:', err));
-  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId, formulaValue]);
+  }, [open, onLogout, defaultFormulaType, elementoPrincipaleId, formulaValue, savedSelections, savedFormulaType]);
 
   useEffect(() => {
     if (!open || !schema) {
@@ -140,6 +220,9 @@ const FormulaBuilderModal = ({
         stats_by_param: { ...statsByParamFromForm, ...numericValues },
         selections: buildSelectionsPayload(),
         custom_text: '',
+        context: {
+          entity_name: (entityName || '').trim() || undefined,
+        },
       },
       onLogout
     )
@@ -164,7 +247,7 @@ const FormulaBuilderModal = ({
     includeSpecificEffect,
     effectDescription,
     omitFormulaSource,
-    formulaValue,
+    entityName,
     statsByParamFromForm,
     numericValues,
     onLogout,
@@ -180,6 +263,10 @@ const FormulaBuilderModal = ({
   };
 
   const setSelectionValue = (sectionId, value, isMulti) => {
+    if (sectionId === 'formula_source') {
+      setOmitFormulaSource(false);
+    }
+
     setSelections((prev) => {
       if (!isMulti) {
         return { ...prev, [sectionId]: value };
@@ -190,13 +277,10 @@ const FormulaBuilderModal = ({
         : [...current, value];
       return { ...prev, [sectionId]: next };
     });
+
     if (sectionId === 'formula_target' && TARGET_GITTATA_BY_OPTION[value] !== undefined) {
       setNumericValues((prev) => ({ ...prev, gittata: TARGET_GITTATA_BY_OPTION[value] }));
     }
-  };
-
-  const clearSourceSelections = () => {
-    setSelections((prev) => ({ ...prev, formula_source: [] }));
   };
 
   const toggleOmitFormulaSource = () => {
@@ -218,6 +302,9 @@ const FormulaBuilderModal = ({
           stats_by_param: { ...statsByParamFromForm, ...numericValues },
           selections: buildSelectionsPayload(),
           custom_text: '',
+          context: {
+            entity_name: (entityName || '').trim() || undefined,
+          },
         },
         onLogout
       );
@@ -226,6 +313,10 @@ const FormulaBuilderModal = ({
         formulaText: (res?.formula_template || schema?.default_template || '').trim(),
         customText: '',
         controlledParams: [...getControlledParams(schema), ...NUMERIC_CONTROLLED_PARAMS],
+        formulaBuilderSelezioni: {
+          formula_type: formulaType,
+          ...buildSelectionsPayload(),
+        },
         elementoPrincipaleId:
           wantsElementSource && effectiveSourceElementId
             ? parseInt(effectiveSourceElementId, 10)
@@ -236,6 +327,8 @@ const FormulaBuilderModal = ({
       console.error('Errore apply formula builder:', err);
     }
   };
+
+  const formulaTypeLabel = (schema?.types || []).find((t) => t.id === formulaType)?.label || formulaType;
 
   return (
     <div className="fixed inset-0 z-[10000] bg-black/70 flex items-center justify-center p-4">
@@ -249,7 +342,14 @@ const FormulaBuilderModal = ({
             <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Tipo formula</div>
             <select
               value={formulaType}
-              onChange={(e) => setFormulaType(e.target.value)}
+              onChange={(e) => {
+                const nextType = e.target.value;
+                setFormulaType(nextType);
+                setSelections({});
+                if (nextType !== 'attack') {
+                  setOmitFormulaSource(false);
+                }
+              }}
               className="w-full bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
             >
               {(schema?.types || []).map((t) => (
@@ -258,8 +358,16 @@ const FormulaBuilderModal = ({
                 </option>
               ))}
             </select>
+            {formulaType === 'capacity' && (
+              <p className="mt-2 text-xs text-emerald-300">
+                Prefisso formula:{' '}
+                <strong>
+                  Capacità {(entityName || '').trim() || '{nome entità}'}:
+                </strong>
+              </p>
+            )}
           </div>
-          {schema?.sections?.map((section) => {
+          {visibleSections.map((section) => {
             const isMulti = section.kind === 'multi';
             const selected = selections[section.id];
             const isSourceSection = section.id === 'formula_source';
@@ -267,7 +375,7 @@ const FormulaBuilderModal = ({
               <div key={section.id} className="border border-gray-700 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs uppercase tracking-widest text-gray-400">{section.label}</div>
-                  {isSourceSection && (
+                  {isSourceSection && formulaType === 'attack' && (
                     <button
                       type="button"
                       onClick={toggleOmitFormulaSource}
@@ -307,13 +415,24 @@ const FormulaBuilderModal = ({
                 </div>
                 {isSourceSection && (
                   <p className="mt-2 text-xs text-gray-500">
-                    Con danno mischia/distanza la sorgente implicita compare come{' '}
-                    <code className="text-emerald-300">(Chop!)</code> /{' '}
-                    <code className="text-emerald-300">(Pierce!)</code> se il totale danno è 1. Puoi combinare
-                    più voci (es. Chop + Elemento). Usa «Ometti sorgente» solo se non vuoi alcuna dichiarazione.
+                    Puoi combinare più voci (es. Chop + Blam + Elemento →{' '}
+                    <code className="text-emerald-300">Chop! / Blam! / Fuoco!</code>).
+                    {formulaType === 'attack' ? (
+                      <>
+                        {' '}Solo negli <strong>attacchi</strong>, con danno totale 1, Chop/Blam in mischia
+                        o Pierce a distanza possono comparire in forma compatta{' '}
+                        <code className="text-emerald-300">(Chop!)</code> /{' '}
+                        <code className="text-emerald-300">(Pierce!)</code> se non selezioni la sorgente.
+                      </>
+                    ) : (
+                      <>
+                        {' '}Per <strong>tessiture e capacità</strong> le sorgenti vanno sempre dichiarate
+                        esplicitamente (niente forma compatta).
+                      </>
+                    )}
                   </p>
                 )}
-                {isSourceSection && omitFormulaSource && (
+                {isSourceSection && formulaType === 'attack' && omitFormulaSource && (
                   <p className="mt-2 text-xs text-amber-300">
                     La sorgente non comparirà in formula (né Chop né (Chop!)).
                   </p>
@@ -359,56 +478,74 @@ const FormulaBuilderModal = ({
             );
           })}
 
-          <div className="border border-gray-700 rounded-lg p-3">
-            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Valori numerici</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {NUMERIC_CONTROLLED_PARAMS.map((param) => (
-                <label key={param} className="text-xs text-gray-300 flex flex-col gap-1">
-                  <span>{param}</span>
-                  <input
-                    type="number"
-                    value={numericValues[param] ?? 0}
-                    onChange={(e) =>
-                      setNumericValues((prev) => ({ ...prev, [param]: Number(e.target.value || 0) }))
-                    }
-                    className="bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
-                  />
-                </label>
-              ))}
+          {visibleNumericParams.length > 0 && (
+            <div className="border border-gray-700 rounded-lg p-3">
+              <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Valori numerici</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {visibleNumericParams.map((param) => (
+                  <label key={param} className="text-xs text-gray-300 flex flex-col gap-1">
+                    <span>{param}</span>
+                    <input
+                      type="number"
+                      value={numericValues[param] ?? 0}
+                      onChange={(e) =>
+                        setNumericValues((prev) => ({ ...prev, [param]: Number(e.target.value || 0) }))
+                      }
+                      className="bg-gray-950 p-2 rounded border border-gray-700 text-sm text-white"
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="border border-gray-700 rounded-lg p-3">
-            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Sezione opzionale</div>
-            <label className="flex items-center gap-2 text-sm text-gray-200">
-              <input type="checkbox" checked={includeCura} onChange={(e) => setIncludeCura(e.target.checked)} />
-              Inserisci cura nella formula
-            </label>
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-              <label className="flex items-center gap-2 text-sm text-gray-200">
-                <input type="checkbox" checked={excludeAlwaysRango} onChange={(e) => setExcludeAlwaysRango(e.target.checked)} />
-                Escludi SEMPRE rango
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-200">
-                <input type="checkbox" checked={excludeAlwaysMolt} onChange={(e) => setExcludeAlwaysMolt(e.target.checked)} />
-                Escludi SEMPRE moltiplicatore
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-200">
-                <input type="checkbox" checked={excludeAlwaysPrefix} onChange={(e) => setExcludeAlwaysPrefix(e.target.checked)} />
-                Escludi SEMPRE prefisso
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-200">
-                <input type="checkbox" checked={excludeAlwaysStatus} onChange={(e) => setExcludeAlwaysStatus(e.target.checked)} />
-                Escludi SEMPRE stato
-              </label>
+          {(templateBlocks.has('formula_cura') || templateBlocks.has('formula_prefix') || templateBlocks.has('formula_status')) && (
+            <div className="border border-gray-700 rounded-lg p-3">
+              <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Sezione opzionale</div>
+              {templateBlocks.has('formula_cura') && (
+                <label className="flex items-center gap-2 text-sm text-gray-200">
+                  <input type="checkbox" checked={includeCura} onChange={(e) => setIncludeCura(e.target.checked)} />
+                  Inserisci cura nella formula
+                </label>
+              )}
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                {templateBlocks.has('rango') && (
+                  <label className="flex items-center gap-2 text-sm text-gray-200">
+                    <input type="checkbox" checked={excludeAlwaysRango} onChange={(e) => setExcludeAlwaysRango(e.target.checked)} />
+                    Escludi SEMPRE rango
+                  </label>
+                )}
+                {templateBlocks.has('molt') && (
+                  <label className="flex items-center gap-2 text-sm text-gray-200">
+                    <input type="checkbox" checked={excludeAlwaysMolt} onChange={(e) => setExcludeAlwaysMolt(e.target.checked)} />
+                    Escludi SEMPRE moltiplicatore
+                  </label>
+                )}
+                {templateBlocks.has('formula_prefix') && (
+                  <label className="flex items-center gap-2 text-sm text-gray-200">
+                    <input type="checkbox" checked={excludeAlwaysPrefix} onChange={(e) => setExcludeAlwaysPrefix(e.target.checked)} />
+                    Escludi SEMPRE prefisso
+                  </label>
+                )}
+                {templateBlocks.has('formula_status') && (
+                  <label className="flex items-center gap-2 text-sm text-gray-200">
+                    <input type="checkbox" checked={excludeAlwaysStatus} onChange={(e) => setExcludeAlwaysStatus(e.target.checked)} />
+                    Escludi SEMPRE stato
+                  </label>
+                )}
+              </div>
+              {templateBlocks.has('formula_source') && (
+                <p className="mt-2 text-xs text-gray-500">
+                  La sorgente in formula usa sempre il placeholder <code className="text-emerald-300">{'{formula_source}'}</code>.
+                </p>
+              )}
+              {templateBlocks.has('formula_damage_mode') && (
+                <p className="mt-2 text-xs text-gray-500">
+                  In «Sezione danno» scegli nessun danno, danni mischia o danni distanza.
+                </p>
+              )}
             </div>
-            <p className="mt-2 text-xs text-gray-500">
-              La sorgente in formula usa sempre il placeholder <code className="text-emerald-300">{'{formula_source}'}</code>.
-            </p>
-            <p className="mt-2 text-xs text-gray-500">
-              In «Sezione danno» scegli nessun danno, danni mischia o danni distanza.
-            </p>
-          </div>
+          )}
 
           <div className="border border-gray-700 rounded-lg p-3">
             <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Effetto specifico</div>
@@ -432,7 +569,7 @@ const FormulaBuilderModal = ({
           </div>
 
           <div className="border border-gray-700 rounded-lg p-3">
-            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Preview</div>
+            <div className="text-xs uppercase tracking-widest text-gray-400 mb-2">Preview ({formulaTypeLabel})</div>
             <div className="text-sm text-emerald-300 min-h-8">
               {loadingPreview ? 'Aggiornamento preview...' : preview || '-'}
             </div>

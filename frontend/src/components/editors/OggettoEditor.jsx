@@ -148,7 +148,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
     }
   };
 
-  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams }) => {
+  const handleApplyFormulaBuilder = ({ statsByParam, formulaText, customText, controlledParams, formulaBuilderSelezioni }) => {
     const statsOptions = (punteggiList || []).filter((p) => p.tipo === 'ST');
     const controlledSet = new Set(controlledParams || []);
     const byParam = new Map(statsOptions.map((s) => [s.parametro, s]));
@@ -166,6 +166,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       ...prev,
       attacco_base: mergedFormula,
       statistiche_base: [...kept, ...fromBuilder],
+      formula_builder_selezioni: formulaBuilderSelezioni || {},
     }));
   };
 
@@ -276,7 +277,8 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
             options={punteggiList.filter(p => p.tipo === 'ST')} 
             auraOptions={punteggiList.filter(p => p.tipo === 'AU')} 
             elementOptions={punteggiList.filter(p => p.tipo === 'EL')} 
-            onAdd={() => setFormData({...formData, statistiche: [...formData.statistiche, {statistica:'', valore:0, tipo_modificatore:'ADD'}]})} 
+            showSoloOggettoOspitante
+            onAdd={() => setFormData({...formData, statistiche: [...formData.statistiche, {statistica:'', valore:0, tipo_modificatore:'ADD', solo_oggetto_ospitante: false}]})} 
             onChange={(i,f,v) => updateInline('statistiche', i, f, v)} 
             onRemove={i => setFormData({...formData, statistiche: formData.statistiche.filter((_,idx)=>idx!==i)})} 
           />
@@ -294,7 +296,10 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
         statsOptions={punteggiList.filter((p) => p.tipo === 'ST')}
         statisticheBase={formData.statistiche_base || []}
         formulaValue={formData.attacco_base}
+        entityName={formData.nome}
         defaultFormulaType="attack"
+        savedSelections={formData.formula_builder_selezioni}
+        savedFormulaType={formData.formula_builder_selezioni?.formula_type}
       />
     </div>
   );

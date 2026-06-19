@@ -456,9 +456,17 @@ def _attack_damage_total(value_map, mode):
     return 0.0
 
 
+def _implicit_formula_source_allowed(value_map):
+    if not isinstance(value_map, dict):
+        return True
+    return value_map.get("__allow_implicit_formula_source__", True) is not False
+
+
 def _should_use_implicit_source_paren(param, value_map):
+    if not _implicit_formula_source_allowed(value_map):
+        return False
     param = str(param or "").strip().lower()
-    if param in ("chop", "blam", "mental"):
+    if param in ("chop", "blam"):
         if not _is_truthy_numeric(value_map.get("dmg_mischia")):
             return False
         return _attack_damage_total(value_map, "mischia") <= 1
@@ -471,15 +479,16 @@ def _should_use_implicit_source_paren(param, value_map):
 
 def infer_implicit_source_paren(value_map):
     """
-    Sorgente implicita quando chop/blam/pierce non compaiono in formula ma il contesto
-    attacco lo richiede (es. spada con 1 danno mischia: niente «Uno», ma serve un segno).
+    Sorgente implicita solo per attacchi: (Chop!)/(Blam!) in mischia o (Pierce!) a distanza
+    quando il danno totale è 1 e la sorgente non è stata dichiarata esplicitamente.
     """
+    if not _implicit_formula_source_allowed(value_map):
+        return ""
     if not isinstance(value_map, dict):
         return ""
     checks = (
         ("blam", "blam"),
         ("chop", "chop"),
-        ("mental", "mental"),
         ("pierce", "pierce"),
         ("dmg_distanza", "pierce"),
         ("dmg_mischia", "chop"),
@@ -538,6 +547,13 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
                 primary = params[0]
                 if _should_use_implicit_source_paren(primary, value_map):
                     label = _implicit_source_paren_for_param(primary)
+                elif (
+                    group_key == "formula_source"
+                    and not _implicit_formula_source_allowed(value_map)
+                    and label
+                    and not label.endswith("!")
+                ):
+                    label = f"{label}!"
             part = label
 
             # Extra opzionale per entry (dict o lista di dict/stringhe).
@@ -613,15 +629,22 @@ def build_exclusive_group_text(group_key, value_map, groups_config=None, object_
         for lbl in append_labels:
             lbl = str(lbl or "").strip()
             if lbl and lbl not in seen:
+                if (
+                    not _implicit_formula_source_allowed(value_map)
+                    and lbl
+                    and not lbl.endswith("!")
+                ):
+                    lbl = f"{lbl}!"
                 active_parts.append(lbl)
                 seen.add(lbl)
 
     if group_key == "formula_source" and not active_parts:
         if value_map.get("__formula_source_suppressed__"):
             return ""
-        implicit = infer_implicit_source_paren(value_map)
-        if implicit:
-            active_parts.append(implicit)
+        if _implicit_formula_source_allowed(value_map):
+            implicit = infer_implicit_source_paren(value_map)
+            if implicit:
+                active_parts.append(implicit)
 
     if not active_parts:
         return ""
@@ -886,6 +909,105 @@ def formatta_valore_avanzato(valore, formato, context=None):
     # Default: Numero semplice
     return str(n)
 
+
+def stat_link_solo_oggetto_ospitante(stat_link):
+    return bool(getattr(stat_link, 'solo_oggetto_ospitante', False))
+
+
+def stat_link_attivo_in_contesto(personaggio, stat_link, context=None):
+    """True se il modificatore condizionale si applica nel contesto formula corrente."""
+    if not stat_link:
+        return False
+    has_conditions = (
+        stat_link.usa_limitazione_elemento
+        or stat_link.usa_limitazione_aura
+        or stat_link.usa_condizione_text
+    )
+    if not has_conditions:
+        return True
+
+    context = context or {}
+    elemento_target = context.get('elemento')
+    aura_target = context.get('aura')
+
+    eval_context = {}
+    if personaggio:
+        eval_context.update(personaggio.caratteristiche_base or {})
+    eval_context.update(context)
+    if 'caratteristica_associata_valore' in context:
+        eval_context['caratt'] = context['caratteristica_associata_valore']
+
+    if stat_link.usa_limitazione_elemento:
+        if not elemento_target:
+            return False
+        if not stat_link.limit_a_elementi.filter(pk=elemento_target.pk).exists():
+            return False
+
+    if stat_link.usa_limitazione_aura:
+        if not aura_target:
+            return False
+        if not stat_link.limit_a_aure.filter(pk=aura_target.pk).exists():
+            return False
+
+    if stat_link.usa_condizione_text and stat_link.condizione_text:
+        try:
+            if not evaluate_expression(stat_link.condizione_text, eval_context):
+                return False
+        except Exception:
+            return False
+
+    return True
+
+
+def raccogli_modificatori_solo_oggetto(oggetto_host):
+    """Modificatori marcati solo_oggetto_ospitante: host + potenziamenti montati attivi."""
+    if not oggetto_host:
+        return []
+
+    links = []
+    for stat_link in oggetto_host.oggettostatistica_set.select_related('statistica').all():
+        if stat_link_solo_oggetto_ospitante(stat_link):
+            links.append(stat_link)
+
+    potenziamenti = getattr(oggetto_host, 'potenziamenti_installati', None)
+    if potenziamenti is not None:
+        for potenziamento in potenziamenti.prefetch_related(
+            'oggettostatistica_set__statistica',
+            'oggettostatistica_set__limit_a_elementi',
+            'oggettostatistica_set__limit_a_aure',
+        ).all():
+            if potenziamento.is_active():
+                for stat_link in potenziamento.oggettostatistica_set.all():
+                    if stat_link_solo_oggetto_ospitante(stat_link):
+                        links.append(stat_link)
+    return links
+
+
+def applica_modificatori_stat_links_a_eval_context(eval_context, stat_links, personaggio=None, context=None):
+    """Applica add/mol di stat links al contesto numerico (dopo i modificatori globali PG)."""
+    if not stat_links:
+        return
+
+    mods = {}
+    for stat_link in stat_links:
+        if not stat_link_attivo_in_contesto(personaggio, stat_link, context):
+            continue
+        param = getattr(getattr(stat_link, 'statistica', None), 'parametro', None)
+        if not param:
+            continue
+        if param not in mods:
+            mods[param] = {'add': 0.0, 'mol': 1.0}
+        valore = float(stat_link.valore)
+        if stat_link.tipo_modificatore == MODIFICATORE_ADDITIVO:
+            mods[param]['add'] += valore
+        elif stat_link.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO:
+            mods[param]['mol'] *= valore
+
+    for param, mod_data in mods.items():
+        val_base = eval_context.get(param, 0)
+        eval_context[param] = (val_base + mod_data['add']) * mod_data['mol']
+
+
 # 4. FUNZIONE PRINCIPALE
 def formatta_testo_generico(testo, formula=None, statistiche_base=None, personaggio=None, context=None, solo_formula=False):
     testo_out = testo or ""
@@ -912,6 +1034,10 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                     val = getattr(item.statistica, 'valore_base_predefinito', 0)
                 base_values[param] = val
                 eval_context[param] = val
+
+    if context and context.get('formula_builder_selezioni'):
+        from .formula_builder import apply_saved_formula_builder_selezioni
+        apply_saved_formula_builder_selezioni(eval_context, context.get('formula_builder_selezioni'))
 
     # 2. Calcolo Modificatori (dal Personaggio)
     mods_attivi = {}
@@ -947,6 +1073,15 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
             val_finale = (val_base + mod_data['add']) * mod_data['mol']
             eval_context[param] = val_finale
 
+        # Modificatori solo sull'oggetto ospitante (Mod/Materia o flag su oggetto)
+        if context and context.get('item_modifiers') is not None:
+            applica_modificatori_stat_links_a_eval_context(
+                eval_context,
+                context.get('item_modifiers') or [],
+                personaggio=personaggio,
+                context=context,
+            )
+
     # 3. Preparazione Contesto Oggetti (per |NAME)
     object_context = {}
     if context:
@@ -963,6 +1098,16 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         # Helper legacy per le formule tessitura che usano "caratt"
         if 'caratteristica_associata_valore' in context:
              eval_context['caratt'] = context['caratteristica_associata_valore']
+
+    allow_implicit_source = True
+    if context:
+        if context.get("allow_implicit_formula_source") is False:
+            allow_implicit_source = False
+        elif str(context.get("formula_kind") or "").upper() == FORMULA_SCOPE_WEAVE:
+            allow_implicit_source = False
+    if formula_out.lstrip().startswith("Capacità "):
+        allow_implicit_source = False
+    eval_context["__allow_implicit_formula_source__"] = allow_implicit_source
 
     # Placeholder formula: variabili mancanti devono valere 0 (evita NameError
     # in espressioni come "dannimis + dannigen" quando uno dei due non esiste).
@@ -1125,6 +1270,11 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
              r_txt = get_testo_rango(rango_val)
              testo_completo = testo_completo.replace("{rango}", r_txt)
              formula_out = formula_out.replace("{rango}", r_txt)
+
+        entity_name = str(context.get("entity_name") or "").strip()
+        if entity_name:
+            testo_completo = testo_completo.replace("{entity_name}", entity_name)
+            formula_out = formula_out.replace("{entity_name}", entity_name)
     # fine sezione aggiunte
     
     # Esegue le sostituzioni
@@ -1141,6 +1291,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         and "{formula_source}" in formula_out
         and not str(formula_finale or "").strip()
         and not eval_context.get("__formula_source_suppressed__")
+        and _implicit_formula_source_allowed(eval_context)
     ):
         fallback = infer_implicit_source_paren(eval_context)
         if fallback:
@@ -1154,6 +1305,24 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
         parts.append(f"<strong>Formula:</strong> {formula_finale}")
         
     return "".join(parts)
+
+
+def calcola_cariche_massime_da_infusione(infusione, personaggio=None):
+    """
+    Tetto cariche da statistica_cariche dell'infusione:
+    valore base (InfusioneStatisticaBase o default catalogo) + modificatori PG se presente.
+    Allineato a GestioneOggettiService.crea_oggetto_da_infusione e get_cariche_massime.
+    """
+    if not infusione or not infusione.statistica_cariche:
+        return 0
+    stat_def = infusione.statistica_cariche
+    stat_base_link = infusione.infusionestatisticabase_set.filter(statistica=stat_def).first()
+    valore_base = stat_base_link.valore_base if stat_base_link else stat_def.valore_base_predefinito
+    if personaggio:
+        mods = personaggio.modificatori_calcolati.get(stat_def.parametro, {'add': 0.0, 'mol': 1.0})
+        return max(0, int(round((valore_base + mods['add']) * mods['mol'])))
+    return valore_base
+
 
 def genera_html_cariche(item, personaggio=None):
     """Genera il blocco HTML per le cariche di Infusioni e Oggetti."""
@@ -1169,9 +1338,7 @@ def genera_html_cariche(item, personaggio=None):
 
     # 1. Calcolo Cariche Totali
     stat = source.statistica_cariche
-    valore_totale = stat.valore_base_predefinito
-    if personaggio:
-        valore_totale = personaggio.get_valore_statistica(stat.sigla)
+    valore_totale = calcola_cariche_massime_da_infusione(source, personaggio)
     
     # 2. Formattazione Durata (da secondi a testo)
     durata_str = ""
@@ -1209,8 +1376,28 @@ def genera_html_cariche(item, personaggio=None):
     if details:
         html += f"<div style='{row_style}'>{' &nbsp;|&nbsp; '.join(details)}</div>"
 
+    costi_rows = []
+    if isinstance(source, Infusione):
+        costi_rows = list(source.costi_attivazione.select_related('statistica').all())
+    if costi_rows:
+        costi_txt = ', '.join(f"-{row.costo} {row.statistica.sigla}" for row in costi_rows)
+        html += f"<div style='{row_style}'><span style='{label_style}'>Costi attivazione:</span> {costi_txt}</div>"
+
     html += "</div>"
     return html
+
+
+def formatta_html_costi_attivazione_tessitura(tessitura):
+    """Blocco HTML costi attivazione per anteprima tessiture."""
+    rows = list(tessitura.costi_attivazione.select_related('statistica').all())
+    if not rows:
+        return ""
+    box_style = (
+        "margin-top: 8px; padding: 6px 10px; border: 1px solid rgba(255,255,255,0.15); "
+        "background-color: rgba(0,0,0,0.15); border-radius: 6px; font-size: 0.85em;"
+    )
+    costi_txt = ', '.join(f"-{row.costo} {row.statistica.sigla}" for row in rows)
+    return f"<div style='{box_style}'><strong>Costi attivazione:</strong> {costi_txt}</div>"
 
 
 # --- TIPI --- 
@@ -1348,6 +1535,12 @@ class CondizioneStatisticaMixin(SyncableModel, models.Model):
     limit_a_elementi = models.ManyToManyField('Punteggio', blank=True, limit_choices_to={'tipo': ELEMENTO}, related_name="%(class)s_limit_elementi", verbose_name="Elementi consentiti")
     usa_condizione_text = models.BooleanField("Usa Condizione Testuale", default=False)
     condizione_text = models.CharField("Condizione", max_length=255, blank=True, null=True, help_text="Es. caratt>6")
+    solo_oggetto_ospitante = models.BooleanField(
+        "Solo oggetto ospitante",
+        default=False,
+        help_text="Se attivo, il modificatore vale solo per le formule dell'oggetto su cui è montato "
+                  "(o dell'oggetto stesso), non per le statistiche generali del personaggio.",
+    )
     class Meta: abstract = True
 
 
@@ -2490,6 +2683,12 @@ class Infusione(Tecnica):
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
     )
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
+    )
     statistiche_base = models.ManyToManyField(Statistica, through='InfusioneStatisticaBase', blank=True, related_name='infusione_statistiche_base')
     # Statistiche MODIFICATORI (Es. +1 Forza) - REINTRODOTTO
     statistiche = models.ManyToManyField(Statistica, through='InfusioneStatistica', blank=True, related_name='infusione_statistiche')
@@ -2551,13 +2750,19 @@ class Infusione(Tecnica):
         base_text = formatta_testo_generico(
             self.testo, 
             statistiche_base=self.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
-            context={'livello': self.livello, 'aura': self.aura_richiesta}, 
+            context={'livello': self.livello, 'aura': self.aura_richiesta, 'formula_builder_selezioni': self.formula_builder_selezioni or {}, 'attack_formula_template': self.formula_attacco, 'formula_kind': FORMULA_SCOPE_ATTACK},
             formula=self.formula_attacco
         )
         return base_text + genera_html_cariche(self, None)
     
 class Tessitura(Tecnica):
     formula = models.TextField("Formula", blank=True, null=True, default=DEFAULT_WEAVE_FORMULA_TEMPLATE)
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
+    )
     elemento_principale = models.ForeignKey(Punteggio, on_delete=models.SET_NULL, null=True, blank=True, limit_choices_to={'tipo': ELEMENTO})
     caratteristiche = models.ManyToManyField(Punteggio, through='TessituraCaratteristica', related_name="tessiture_utilizzatrici", limit_choices_to={'tipo': CARATTERISTICA})
     statistiche_base = models.ManyToManyField(Statistica, through='TessituraStatisticaBase', blank=True, related_name='tessitura_statistiche_base')
@@ -2621,7 +2826,23 @@ class Tessitura(Tecnica):
         
     @property
     def TestoFormattato(self): 
-        return formatta_testo_generico(self.testo, formula=self.formula, statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), context={'elemento': self.elemento_principale, 'livello': self.livello, 'aura': self.aura_richiesta})
+        base = formatta_testo_generico(
+            self.testo,
+            formula=self.formula,
+            statistiche_base=self.tessiturastatisticabase_set.select_related('statistica').order_by(
+                '-statistica__formula', 'statistica__ordine', 'statistica__nome'
+            ).all(),
+            context={
+                'elemento': self.elemento_principale,
+                'livello': self.livello,
+                'aura': self.aura_richiesta,
+                'formula_kind': FORMULA_SCOPE_WEAVE,
+                'allow_implicit_formula_source': False,
+                'formula_builder_selezioni': self.formula_builder_selezioni or {},
+                'attack_formula_template': self.formula,
+            },
+        )
+        return base + formatta_html_costi_attivazione_tessitura(self)
     
 class Cerimoniale(Tecnica):
     """
@@ -2714,6 +2935,37 @@ class TessituraStatisticaBase(SyncableModel, models.Model):
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore_base = models.IntegerField(default=0)
     def __str__(self): return f"{self.statistica.nome}: {self.valore_base}"
+
+
+class InfusioneCostoAttivazione(SyncableModel, models.Model):
+    """Risorse consumate all'attivazione dell'oggetto generato (oltre alla carica)."""
+    infusione = models.ForeignKey(Infusione, on_delete=models.CASCADE, related_name='costi_attivazione')
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    costo = models.PositiveIntegerField(default=1, verbose_name="Costo")
+
+    class Meta:
+        unique_together = ('infusione', 'statistica')
+        verbose_name = "Costo attivazione infusione"
+        verbose_name_plural = "Costi attivazione infusione"
+
+    def __str__(self):
+        return f"{self.statistica.sigla}: -{self.costo}"
+
+
+class TessituraCostoAttivazione(SyncableModel, models.Model):
+    """Risorse consumate all'attivazione runtime della tessitura."""
+    tessitura = models.ForeignKey(Tessitura, on_delete=models.CASCADE, related_name='costi_attivazione')
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    costo = models.PositiveIntegerField(default=1, verbose_name="Costo")
+
+    class Meta:
+        unique_together = ('tessitura', 'statistica')
+        verbose_name = "Costo attivazione tessitura"
+        verbose_name_plural = "Costi attivazione tessitura"
+
+    def __str__(self):
+        return f"{self.statistica.sigla}: -{self.costo}"
+
 
 class Manifesto(A_vista):
     """
@@ -3868,6 +4120,12 @@ class OggettoBase(SyncableModel, models.Model):
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
         help_text="Es. {rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}{formula_source}{danni_mischia}{formula_cura}{formula_status} oppure versione distanza con {danni_distanza}.",
     )
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
+    )
     statistiche_base = models.ManyToManyField(Statistica, through='OggettoBaseStatisticaBase', blank=True, related_name='template_base')
     statistiche_modificatori = models.ManyToManyField(Statistica, through='OggettoBaseModificatore', blank=True, related_name='template_modificatori')
     slot_fisici_possibili = models.CharField(
@@ -3918,6 +4176,11 @@ class OggettoBaseModificatore(SyncableModel, models.Model):
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore = models.IntegerField(default=0)
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
+    solo_oggetto_ospitante = models.BooleanField(
+        "Solo oggetto ospitante",
+        default=False,
+        help_text="Se attivo, il modificatore vale solo per le formule dell'oggetto, non per il personaggio.",
+    )
     class Meta: verbose_name = "Modificatore Template"; verbose_name_plural = "Modificatori Template"
 
 class Oggetto(A_vista):
@@ -3943,6 +4206,12 @@ class Oggetto(A_vista):
         null=True,
         default=DEFAULT_ATTACK_FORMULA_TEMPLATE,
         help_text="Es. {rango|:RANGO}{molt|:MOLT}{formula_prefix}{formula_target}{formula_source}{danni_mischia}{formula_cura}{formula_status} oppure versione distanza con {danni_distanza}.",
+    )
+    formula_builder_selezioni = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Selezioni formula builder",
+        help_text="Scelte staff dal costruttore formula (sorgente, tipo danno, ecc.).",
     )
     in_vendita = models.BooleanField(default=False, verbose_name="In vendita al negozio?")
     infusione_generatrice = models.ForeignKey('Infusione', on_delete=models.SET_NULL, null=True, blank=True, related_name='oggetti_generati', help_text="L'infusione da cui deriva questa Materia/Mod/Innesto")
@@ -4053,7 +4322,7 @@ class Oggetto(A_vista):
         base_text = formatta_testo_generico(
             self.testo, 
             statistiche_base=self.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
-            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': self.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()}
+            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': raccogli_modificatori_solo_oggetto(self), 'formula_builder_selezioni': self.formula_builder_selezioni or {}, 'attack_formula_template': self.attacco_base, 'formula_kind': FORMULA_SCOPE_ATTACK}
         )
         return base_text + genera_html_cariche(self, None)
     
@@ -4706,6 +4975,55 @@ class Personaggio(Inventario):
         )
         self._crea_effetti_temporanei_da_abilita(sigla)
         self.sync_recuperi_automatici(only_sigla=sigla)
+        if hasattr(self, '_modificatori_calcolati_cache'):
+            delattr(self, '_modificatori_calcolati_cache')
+        return nuovo
+
+    def consuma_risorsa_attivazione(self, sigla, quantita=1, motivo=''):
+        """
+        Consuma N punti da una risorsa pool o runtime (PV, PA, CHA, PS, FRT, …).
+        Usato dai costi di attivazione oggetti/tessiture.
+        """
+        sigla = (sigla or '').strip().upper()
+        if sigla == 'CHK':
+            sigla = 'CHA'
+        if sigla == 'PG':
+            sigla = 'PS'
+        try:
+            quantita = int(quantita)
+        except (TypeError, ValueError):
+            raise ValueError('Quantità non valida.')
+        if quantita <= 0:
+            return self.get_risorsa_corrente_runtime(sigla)
+        stat = Statistica.objects.filter(sigla=sigla).first()
+        if not stat:
+            raise ValueError(f'Statistica {sigla} non trovata.')
+        max_v = self.get_valore_massimo_risorsa_runtime(sigla)
+        if max_v <= 0:
+            raise ValueError(f'{stat.nome}: pool non disponibile (massimo 0).')
+        cur = self.get_risorsa_corrente_runtime(sigla)
+        if cur < quantita:
+            raise ValueError(f'{stat.nome}: insufficiente ({cur}/{quantita}).')
+        nuovo = cur - quantita
+        desc = (motivo or f'Consumo attivazione {quantita} pt. {stat.nome} ({sigla})')[:240]
+        update_fields = ['updated_at']
+        if stat.is_risorsa_pool:
+            self._set_risorsa_corrente(sigla, nuovo)
+            update_fields.append('risorse_consumabili')
+            RisorsaStatisticaMovimento.objects.create(
+                personaggio=self,
+                statistica_sigla=sigla,
+                importo=-quantita,
+                descrizione=desc,
+                tipo_movimento=RISORSA_MOV_CONSUMO,
+            )
+            self._crea_effetti_temporanei_da_abilita(sigla)
+            self.sync_recuperi_automatici(only_sigla=sigla)
+        else:
+            self._set_risorsa_corrente_runtime(sigla, nuovo)
+            update_fields.append('statistiche_temporanee')
+        self.save(update_fields=update_fields)
+        self.aggiungi_log(f'{desc}. Rimasti: {nuovo}/{max_v}.')
         if hasattr(self, '_modificatori_calcolati_cache'):
             delattr(self, '_modificatori_calcolati_cache')
         return nuovo
@@ -5402,6 +5720,7 @@ class Personaggio(Inventario):
             if stat_link.usa_limitazione_elemento: return False
             if stat_link.usa_limitazione_aura: return False
             if stat_link.usa_condizione_text: return False
+            if stat_link_solo_oggetto_ospitante(stat_link): return False
             return True
 
         def _apply_abilita_stat_link(stat_link):
@@ -5607,6 +5926,7 @@ class Personaggio(Inventario):
             if stat_link.usa_limitazione_elemento: return False
             if stat_link.usa_limitazione_aura: return False
             if stat_link.usa_condizione_text: return False
+            if stat_link_solo_oggetto_ospitante(stat_link): return False
             return True
         
         # 1. Abilità
@@ -5711,6 +6031,8 @@ class Personaggio(Inventario):
 
         # Funzione helper CORE: decide se il modificatore si applica
         def _check_condition(stat_link):
+            if stat_link_solo_oggetto_ospitante(stat_link):
+                return False
             # 1. Se NON ha nessuna condizione, lo scartiamo (è globale, 
             #    quindi è già incluso in self.modificatori_calcolati).
             has_conditions = (
@@ -5919,7 +6241,7 @@ class Personaggio(Inventario):
         
         if isinstance(item, Oggetto):
             stats = item.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            item_mods = item.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
+            item_mods = raccogli_modificatori_solo_oggetto(item)
             ctx = {
                 'livello': item.livello,
                 'aura': item.aura,
@@ -5927,6 +6249,7 @@ class Personaggio(Inventario):
                 'formula_kind': FORMULA_SCOPE_ATTACK,
                 'attack_formula_template': item.attacco_base,
                 'classe_oggetto': item.classe_oggetto.nome if item.classe_oggetto else '',
+                'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {},
             }
             testo_finale = formatta_testo_generico(
                 item.testo,
@@ -5938,7 +6261,7 @@ class Personaggio(Inventario):
             
         elif isinstance(item, Infusione):
             stats = item.infusionestatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'formula_kind': FORMULA_SCOPE_ATTACK}
+            ctx = {'livello': item.livello, 'aura': item.aura_richiesta, 'formula_kind': FORMULA_SCOPE_ATTACK, 'formula_builder_selezioni': getattr(item, 'formula_builder_selezioni', None) or {}, 'attack_formula_template': item.formula_attacco}
             testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self, context=ctx, formula=item.formula_attacco)
             
         elif isinstance(item, Attivata):

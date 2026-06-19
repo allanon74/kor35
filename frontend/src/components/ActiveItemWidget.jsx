@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Activity, Battery, Clock, RefreshCw } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import { useOptimisticUseItem, useOptimisticRecharge } from '../hooks/useGameData';
+import ActivationCostPreview from './ActivationCostPreview';
+import { evaluateActivationCosts } from '../lib/activationCostUtils';
 
 const ActiveItemWidget = ({ item, onUpdate }) => {
     const useItemMutation = useOptimisticUseItem();
@@ -83,6 +85,13 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
     const isDepleted = !hasCharges && !isWorking;
     const isReallyActive = isBackendActive && !isDamaged;
 
+    const costEval = useMemo(
+        () => evaluateActivationCosts(selectedCharacterData, item.costi_attivazione),
+        [selectedCharacterData, item.costi_attivazione]
+    );
+    const canPayCosts = costEval.affordable;
+    const canUseCharge = hasCharges && !isWorking && !isDamaged && canPayCosts;
+
     return (
         <div className={`p-3 rounded-lg border shadow-sm w-full sm:w-[calc(50%-0.5rem)] flex flex-col gap-2 transition-all duration-300 ${
             isDamaged
@@ -115,6 +124,14 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
                 )}
             </div>
 
+            {(item.costi_attivazione?.length > 0) && (
+                <ActivationCostPreview
+                    char={selectedCharacterData}
+                    costi={item.costi_attivazione}
+                    compact
+                />
+            )}
+
             {/* Barra Cariche */}
             {maxCharges > 0 && (
                 <div className={`rounded p-1.5 flex justify-between items-center transition-colors ${isDepleted ? 'bg-red-900/20 border border-red-900/30' : 'bg-black/30'}`}>
@@ -127,11 +144,16 @@ const ActiveItemWidget = ({ item, onUpdate }) => {
                     
                     <button 
                         onClick={handleUseCharge}
-                        disabled={!hasCharges || isWorking || isDamaged}
+                        disabled={!canUseCharge}
+                        title={
+                            !canPayCosts
+                                ? `Risorse insufficienti: ${costEval.label}`
+                                : undefined
+                        }
                         className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider transition-all active:scale-95 ${
                             isWorking
                             ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600/50 cursor-default'
-                            : hasCharges
+                            : canUseCharge
                                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-sm hover:shadow-md'
                                 : 'bg-gray-700 text-gray-500 border-gray-600 cursor-not-allowed'
                         }`}

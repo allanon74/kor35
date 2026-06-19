@@ -30,6 +30,7 @@ from .models import (
 )
 
 from .qr_logic import annotate_staff_avista_qr
+from .services import GestioneCraftingService
 from .formula_builder import (
     FORMULA_BUILDER_SCHEMA,
     build_formula_template,
@@ -562,6 +563,14 @@ class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
+
+    @action(detail=True, methods=["post"], url_path="propaga-istanze")
+    def propaga_istanze(self, request, pk=None):
+        """Applica il template corrente a tutte le istanze Oggetto generate da questo OggettoBase."""
+        template = self.get_object()
+        dry_run = bool(request.data.get("dry_run"))
+        result = GestioneCraftingService.applica_template_a_istanze(template, dry_run=dry_run)
+        return Response(result, status=status.HTTP_200_OK)
 
 class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ClasseOggetto.objects.all()
@@ -1188,8 +1197,13 @@ class FormulaBuilderPreviewView(APIView):
         formula_type = payload.get("formula_type") or "attack"
         if formula_type == "weave":
             context.setdefault("formula_kind", FORMULA_SCOPE_WEAVE)
+            context["allow_implicit_formula_source"] = False
+        elif formula_type == "capacity":
+            context.setdefault("formula_kind", FORMULA_SCOPE_ATTACK)
+            context["allow_implicit_formula_source"] = False
         else:
             context.setdefault("formula_kind", FORMULA_SCOPE_ATTACK)
+            context["allow_implicit_formula_source"] = True
 
         source_ids = selections.get("formula_source")
         if isinstance(source_ids, str):
@@ -1204,6 +1218,9 @@ class FormulaBuilderPreviewView(APIView):
             elemento = Punteggio.objects.filter(pk=element_id).first()
             if elemento:
                 context["elemento"] = elemento
+        entity_name = (selections.get("entity_name") or context.get("entity_name") or "").strip()
+        if entity_name:
+            context["entity_name"] = entity_name
         return context
 
     def post(self, request):

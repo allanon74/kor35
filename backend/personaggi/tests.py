@@ -12,17 +12,24 @@ from .models import (
     Campagna,
     CampagnaUtente,
     MODIFICATORE_ADDITIVO,
+    MODIFICATORE_MOLTIPLICATIVO,
     Oggetto,
     OggettoBase,
+    OggettoBaseStatisticaBase,
     OggettoInInventario,
+    OggettoStatistica,
+    OggettoStatisticaBase,
     Personaggio,
-    PersonaggioAbilita,
+    Infusione,
+    InfusioneCostoAttivazione,
+    PersonaggioStatisticaBase,
     Punteggio,
     SLOT_EQUIP_CONTEGGIO_OGGETTI_MODIFICATI,
     SLOT_EQUIP_CONTEGGIO_OGNI_POTENZIAMENTO,
     SLOT_EQUIP_CONTEGGIO_TUTTI_OGGETTI,
     Statistica,
     Tessitura,
+    TessituraCostoAttivazione,
     TessituraEffettoRuntime,
     TipologiaPersonaggio,
     TIPO_OGGETTO_FISICO,
@@ -30,8 +37,10 @@ from .models import (
     TIPO_OGGETTO_MATERIA,
     abilita_punteggio,
     CARATTERISTICA,
+    formatta_testo_generico,
+    raccogli_modificatori_solo_oggetto,
 )
-from .serializers import PersonaggioDetailSerializer
+from .serializers import OggettoSerializer, PersonaggioDetailSerializer
 from .services import GestioneOggettiService
 from .sso import _upsert_local_user
 
@@ -894,3 +903,240 @@ class PersonaggioSoftDeleteTests(APITestCase):
         staff_deleted = self.client.get("/api/personaggi/api/staff/personaggi-eliminati/", **h)
         self.assertEqual(staff_deleted.status_code, status.HTTP_200_OK)
         self.assertIn(self.pg.id, self._ids_from_list_response(staff_deleted.data))
+
+
+class CostiAttivazioneTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="costi-user", password="x")
+        self.client.force_authenticate(user=self.user)
+        self.pg = Personaggio.objects.create(nome="PG Costi", proprietario=self.user)
+        self.aura = Punteggio.objects.create(nome="Aura Costi", sigla="ACO", tipo=AURA)
+        self.stat_cha = Statistica.objects.create(
+            nome="Chakra test", sigla="CHA", parametro="CHA", is_risorsa_pool=True,
+            valore_base_predefinito=5,
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat_cha, valore_base=5,
+        )
+        self.stat_cog = Statistica.objects.create(
+            nome="Cog test", sigla="COG", parametro="COG", valore_base_predefinito=3,
+        )
+        PersonaggioStatisticaBase.objects.create(
+            personaggio=self.pg, statistica=self.stat_cog, valore_base=3,
+        )
+        self.pg.imposta_risorsa_pool_tattica("CHA", 5)
+        self.pg.save(update_fields=["risorse_consumabili", "statistiche_temporanee", "updated_at"])
+
+    def test_usa_oggetto_consuma_costo_attivazione(self):
+        infusione = Infusione.objects.create(nome="Inf costi", aura_richiesta=self.aura, testo="x")
+        InfusioneCostoAttivazione.objects.create(infusione=infusione, statistica=self.stat_cha, costo=2)
+        oggetto = GestioneOggettiService.crea_oggetto_da_infusione(infusione, self.pg)
+        oggetto.cariche_attuali = 3
+        oggetto.save(update_fields=["cariche_attuali"])
+
+        r = self.client.post(
+            "/api/personaggi/api/game/usa_oggetto/",
+            {"oggetto_id": oggetto.id, "char_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.pg.refresh_from_db()
+        oggetto.refresh_from_db()
+        self.assertEqual(oggetto.cariche_attuali, 2)
+        self.assertEqual(self.pg.get_risorsa_corrente("CHA"), 3)
+
+    def test_attiva_tessitura_runtime_consuma_costo(self):
+        tessitura = Tessitura.objects.create(
+            nome="Tess costi",
+            aura_richiesta=self.aura,
+            usa_effetto_temporaneo=True,
+            durata_effetto_secondi=60,
+            formula="1",
+        )
+        TessituraCostoAttivazione.objects.create(tessitura=tessitura, statistica=self.stat_cha, costo=1)
+        self.pg.tessiture_possedute.add(tessitura)
+
+        r = self.client.post(
+            "/api/personaggi/api/game/attiva_tessitura_runtime/",
+            {"char_id": self.pg.id, "tessitura_id": tessitura.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.pg.refresh_from_db()
+        self.assertEqual(self.pg.get_risorsa_corrente("CHA"), 4)
+
+
+class OggettoBasePropagaIstanzeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="propaga-base-user", password="x")
+        self.pg = Personaggio.objects.create(nome="PG Propaga", proprietario=self.user)
+        self.stat_for = Statistica.objects.create(nome="Forza Prop", sigla="FPR", parametro="for_pr")
+        self.template = OggettoBase.objects.create(
+            nome="Spada listino",
+            descrizione="Vecchia descrizione",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            attacco_base="Chop!",
+            is_pesante=False,
+        )
+        OggettoBaseStatisticaBase.objects.create(
+            oggetto_base=self.template,
+            statistica=self.stat_for,
+            valore_base=2,
+        )
+        self.istanza = Oggetto.objects.create(
+            nome="Spada vecchia",
+            testo="Testo obsoleto",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            attacco_base="Pierce!",
+            costo_acquisto=99,
+            is_equipaggiato=True,
+            slot_equip="melee",
+            cariche_attuali=3,
+            oggetto_base_generatore=self.template,
+        )
+        self.istanza.sposta_in_inventario(self.pg)
+        self.istanza_non_collegata = Oggetto.objects.create(
+            nome="Oggetto custom",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+        )
+
+    def test_applica_template_aggiorna_solo_istanze_collegate(self):
+        from personaggi.services import GestioneCraftingService
+
+        self.template.nome = "Spada listino v2"
+        self.template.descrizione = "Nuova descrizione"
+        self.template.attacco_base = "{formula_source}{danni_mischia}"
+        self.template.is_pesante = True
+        self.template.save()
+
+        result = GestioneCraftingService.applica_template_a_istanze(self.template)
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["updated"], 1)
+
+        self.istanza.refresh_from_db()
+        self.assertEqual(self.istanza.nome, "Spada listino v2")
+        self.assertEqual(self.istanza.testo, "Nuova descrizione")
+        self.assertEqual(self.istanza.attacco_base, "{formula_source}{danni_mischia}")
+        self.assertTrue(self.istanza.is_pesante)
+        self.assertEqual(self.istanza.costo_acquisto, 99)
+        self.assertTrue(self.istanza.is_equipaggiato)
+        self.assertEqual(self.istanza.slot_equip, "melee")
+        self.assertEqual(self.istanza.cariche_attuali, 3)
+        self.assertEqual(self.istanza.oggettostatisticabase_set.count(), 1)
+        self.assertEqual(self.istanza.oggettostatisticabase_set.first().valore_base, 2)
+
+        self.istanza_non_collegata.refresh_from_db()
+        self.assertEqual(self.istanza_non_collegata.nome, "Oggetto custom")
+
+    def test_staff_endpoint_propaga_istanze(self):
+        from rest_framework.test import APIClient
+
+        staff = User.objects.create_user(
+            username="staff-propaga",
+            password="x",
+            is_staff=True,
+            is_superuser=True,
+        )
+        client = APIClient()
+        client.force_authenticate(user=staff)
+
+        self.template.descrizione = "Via API"
+        self.template.save()
+
+        res = client.post(
+            f"/api/personaggi/api/staff/oggetti-base/{self.template.id}/propaga-istanze/",
+            {"dry_run": False},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data.get("updated"), 1)
+        self.istanza.refresh_from_db()
+        self.assertEqual(self.istanza.testo, "Via API")
+
+
+class SoloOggettoOspitanteTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="solo-obj-user", password="x")
+        self.pg = Personaggio.objects.create(nome="PG Solo Obj", proprietario=self.user)
+        self.stat_rango = Statistica.objects.create(
+            nome="Rango Solo Oggetto",
+            sigla="RGO",
+            parametro="RGO",
+        )
+        self.spada = Oggetto.objects.create(
+            nome="Spada solo-obj",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            attacco_base="{RGO|:RGO}",
+            is_equipaggiato=True,
+            slot_equip="melee",
+            slot_fisici_possibili="melee",
+        )
+        self.spada.sposta_in_inventario(self.pg)
+        OggettoStatisticaBase.objects.create(
+            oggetto=self.spada,
+            statistica=self.stat_rango,
+            valore_base=1,
+        )
+        self.mod = Oggetto.objects.create(
+            nome="Mod solo-obj",
+            tipo_oggetto=TIPO_OGGETTO_MOD,
+            cariche_attuali=1,
+            ospitato_su=self.spada,
+        )
+
+    def _clear_mods_cache(self):
+        if hasattr(self.pg, "_modificatori_calcolati_cache"):
+            del self.pg._modificatori_calcolati_cache
+
+    def test_mod_solo_oggetto_escluso_da_modificatori_globali(self):
+        OggettoStatistica.objects.create(
+            oggetto=self.mod,
+            statistica=self.stat_rango,
+            valore=2,
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+            solo_oggetto_ospitante=True,
+        )
+        self._clear_mods_cache()
+        mods = self.pg.modificatori_calcolati
+        self.assertEqual(mods.get("RGO", {}).get("add", 0), 0)
+
+    def test_mod_globale_incluso_nei_modificatori_pg(self):
+        OggettoStatistica.objects.create(
+            oggetto=self.mod,
+            statistica=self.stat_rango,
+            valore=2,
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+            solo_oggetto_ospitante=False,
+        )
+        self._clear_mods_cache()
+        mods = self.pg.modificatori_calcolati
+        self.assertEqual(mods.get("RGO", {}).get("add", 0), 2.0)
+
+    def test_mod_solo_oggetto_applicato_in_formula_attacco_host(self):
+        OggettoStatistica.objects.create(
+            oggetto=self.mod,
+            statistica=self.stat_rango,
+            valore=2,
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+            solo_oggetto_ospitante=True,
+        )
+        item_mods = raccogli_modificatori_solo_oggetto(self.spada)
+        self.assertEqual(len(item_mods), 1)
+
+        formula = formatta_testo_generico(
+            None,
+            formula=self.spada.attacco_base,
+            statistiche_base=self.spada.oggettostatisticabase_set.select_related("statistica").all(),
+            personaggio=self.pg,
+            context={
+                "item_modifiers": item_mods,
+                "formula_kind": "ATT",
+                "attack_formula_template": self.spada.attacco_base,
+            },
+            solo_formula=True,
+        )
+        self.assertIn("3", formula)
+
+        ser = OggettoSerializer(self.spada, context={"personaggio": self.pg})
+        attacco = ser.get_attacco_formattato(self.spada)
+        self.assertIn("3", attacco)

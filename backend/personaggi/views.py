@@ -95,6 +95,7 @@ from . import qr_logic
 # --- IMPORT SERVICES ---
 from .services import (
     # monta_potenziamento, crea_oggetto_da_infusione, 
+    CostiAttivazioneService,
     GestioneOggettiService, GestioneCraftingService, CreazioneConsumabileService, TessituraRuntimeService,
 )
 from .campaigns import ensure_user_in_base_campaign
@@ -3275,12 +3276,21 @@ class OggettoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def usa_carica(self, request, pk=None):
         oggetto = self.get_object()
-        if oggetto.cariche_attuali <= 0: return Response({'error': 'Oggetto scarico o privo di cariche.'}, status=status.HTTP_400_BAD_REQUEST)
-        oggetto.cariche_attuali -= 1
-        oggetto.save()
+        if oggetto.cariche_attuali <= 0:
+            return Response({'error': 'Oggetto scarico o privo di cariche.'}, status=status.HTTP_400_BAD_REQUEST)
+        personaggio = CostiAttivazioneService.proprietario_da_oggetto(oggetto)
+        try:
+            result = GestioneOggettiService.usa_carica_oggetto(oggetto, personaggio=personaggio)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         durata_secondi = 0
-        if oggetto.infusione_generatrice: durata_secondi = oggetto.infusione_generatrice.durata_attivazione
-        return Response({'status': 'success', 'cariche_residue': oggetto.cariche_attuali, 'timer_durata': durata_secondi})
+        if oggetto.infusione_generatrice:
+            durata_secondi = oggetto.infusione_generatrice.durata_attivazione
+        return Response({
+            'status': 'success',
+            'cariche_residue': result['cariche'],
+            'timer_durata': durata_secondi,
+        })
 
     @action(detail=True, methods=['post'])
     def ricarica(self, request, pk=None):
@@ -4689,36 +4699,41 @@ class GameActionsViewSet(viewsets.ViewSet):
     def usa_oggetto(self, request):
         """
         Usa una carica di un oggetto. Se ha durata, imposta la scadenza.
+        Applica anche i costi risorsa configurati sull'infusione generatrice.
         """
         obj_id = request.data.get('oggetto_id')
-        char_id = request.data.get('char_id') # Opzionale, per verifica owner
-        
+        char_id = request.data.get('char_id')
+
         obj = get_object_or_404(Oggetto, pk=obj_id)
-        
-        # Verifica che l'oggetto appartenga a un PG dell'utente (sicurezza base)
-        if obj.inventario_corrente:
-             # Controllo blando: se l'inventario è un PG, deve essere dell'utente
-             if hasattr(obj.inventario_corrente, 'personaggio_ptr'):
-                 if obj.inventario_corrente.personaggio_ptr.proprietario != request.user:
-                     return Response({'error': 'Oggetto non tuo'}, status=403)
+        pg = None
+        if char_id:
+            pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
+        elif obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio_ptr'):
+            pg = obj.inventario_corrente.personaggio_ptr
+            if pg.proprietario != request.user:
+                return Response({'error': 'Oggetto non tuo'}, status=403)
+        elif obj.inventario_corrente and hasattr(obj.inventario_corrente, 'personaggio'):
+            pg = obj.inventario_corrente.personaggio
+            if pg.proprietario != request.user:
+                return Response({'error': 'Oggetto non tuo'}, status=403)
 
         if obj.cariche_attuali <= 0:
             return Response({'error': 'Oggetto scarico'}, status=400)
-            
-        # Consuma carica
-        obj.cariche_attuali -= 1
-        
-        # Gestione Timer
-        durata = 0
-        if obj.infusione_generatrice and obj.infusione_generatrice.durata_attivazione > 0:
-            durata = obj.infusione_generatrice.durata_attivazione
-            obj.data_fine_attivazione = timezone.now() + timedelta(seconds=durata)
-        
-        obj.save()
-        
-        # Serializziamo per tornare i dati aggiornati al frontend
-        serializer = OggettoSerializer(obj)
-        return Response(serializer.data)
+
+        try:
+            GestioneOggettiService.usa_carica_oggetto(obj, personaggio=pg)
+        except ValidationError as e:
+            return Response({'error': str(e)}, status=400)
+
+        obj.refresh_from_db()
+        if pg:
+            pg.refresh_from_db()
+        serializer = OggettoSerializer(obj, context={'personaggio': pg})
+        payload = serializer.data
+        if pg:
+            detail = PersonaggioDetailSerializer(pg, context={'request': request})
+            payload['personaggio'] = detail.data
+        return Response(payload)
 
     @action(detail=False, methods=['post'])
     def ricarica_oggetto(self, request):

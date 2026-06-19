@@ -1,5 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { keepPreviousData } from '@tanstack/react-query'; 
+import { keepPreviousData } from '@tanstack/react-query';
+import {
+  applyActivationCostsOptimistic,
+  mergePersonaggioGameCache,
+} from '../lib/activationCostUtils';
 import { 
   getPersonaggiList, 
   getPersonaggioDetail, 
@@ -424,8 +428,35 @@ export const useAttivaTessituraRuntime = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: ({ charId, tessituraId }) => gameAttivaTessituraRuntime(charId, tessituraId),
-        onSuccess: (_data, vars) => {
-            queryClient.invalidateQueries({ queryKey: ['personaggio', String(vars.charId)] });
+        onMutate: async ({ charId, tessituraId }) => {
+            const queryKey = ['personaggio', String(charId)];
+            await queryClient.cancelQueries({ queryKey });
+            const previousData = queryClient.getQueryData(queryKey);
+            if (previousData) {
+                const tess = (previousData.tessiture_possedute || []).find(
+                    (t) => String(t.id) === String(tessituraId)
+                );
+                if (tess?.costi_attivazione?.length) {
+                    queryClient.setQueryData(queryKey, (old) =>
+                        applyActivationCostsOptimistic(old, tess.costi_attivazione)
+                    );
+                }
+            }
+            return { previousData, queryKey };
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.previousData) {
+                queryClient.setQueryData(context.queryKey, context.previousData);
+            }
+        },
+        onSuccess: (data, _vars, context) => {
+            if (context?.queryKey && data?.personaggio) {
+                queryClient.setQueryData(context.queryKey, (old) =>
+                    mergePersonaggioGameCache(old, data.personaggio)
+                );
+            } else if (context?.queryKey) {
+                queryClient.invalidateQueries({ queryKey: context.queryKey });
+            }
         },
     });
 };
@@ -530,41 +561,78 @@ export const useOptimisticDiscard = () => {
 
 // C. USA OGGETTO
 export const useOptimisticUseItem = () => {
-    return useOptimisticAction(
-        ['personaggio'],
-        async ({ oggetto_id, charId }) => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ oggetto_id, charId }) => {
             return fetchAuthenticated('/api/personaggi/api/game/usa_oggetto/', {
                 method: 'POST',
-                body: JSON.stringify({ oggetto_id, char_id: charId })
+                body: JSON.stringify({ oggetto_id, char_id: charId }),
             });
         },
-        (oldData, { oggetto_id, durata_totale, is_aura_zero_off }) => {
-            if (!oldData.oggetti) return oldData;
-            return {
-                ...oldData,
-                oggetti: oldData.oggetti.map(obj => {
-                    if (obj.id !== oggetto_id) return obj;
-                    const attuali = obj.cariche_attuali || 0;
-                    const nuoveCariche = Math.max(0, (obj.cariche_attuali || 0) - 1);
-                    let updates = { cariche_attuali: nuoveCariche };
-                    if (durata_totale > 0) {
-                        if (attuali > 0) { // Puoi attivare solo se avevi cariche
-                            const now = new Date();
-                            // Imposta la fine nel futuro
-                            const endDate = new Date(now.getTime() + durata_totale * 1000);
-                            updates.data_fine_attivazione = endDate.toISOString();
-                            updates.is_active = true; // Diventa attivo
-                        }
+        onMutate: async (variables) => {
+            const charId = String(variables.charId);
+            const queryKey = ['personaggio', charId];
+            await queryClient.cancelQueries({ queryKey });
+            const previousData = queryClient.getQueryData(queryKey);
+
+            if (previousData) {
+                queryClient.setQueryData(queryKey, (old) => {
+                    if (!old?.oggetti) return old;
+                    let next = {
+                        ...old,
+                        oggetti: old.oggetti.map((obj) => {
+                            if (String(obj.id) !== String(variables.oggetto_id)) return obj;
+                            const attuali = obj.cariche_attuali || 0;
+                            const nuoveCariche = Math.max(0, attuali - 1);
+                            let updates = { cariche_attuali: nuoveCariche };
+                            if (variables.durata_totale > 0 && attuali > 0) {
+                                const endDate = new Date(Date.now() + variables.durata_totale * 1000);
+                                updates.data_fine_attivazione = endDate.toISOString();
+                                updates.is_active = true;
+                            }
+                            if (variables.is_aura_zero_off && nuoveCariche === 0) {
+                                updates.is_active = false;
+                                updates.data_fine_attivazione = null;
+                            }
+                            return { ...obj, ...updates };
+                        }),
+                    };
+                    const item = old.oggetti.find((o) => String(o.id) === String(variables.oggetto_id));
+                    if (item?.costi_attivazione?.length) {
+                        next = applyActivationCostsOptimistic(next, item.costi_attivazione);
                     }
-                    if (is_aura_zero_off && nuoveCariche === 0) {
-                        updates.is_active = false;
-                        updates.data_fine_attivazione = null; // Reset timer se si spegne forzatamente
-                    }
-                    return { ...obj, ...updates };
-                })
-            };
-        }
-    );
+                    return next;
+                });
+            }
+            return { previousData, queryKey };
+        },
+        onError: (_err, _vars, context) => {
+            if (context?.previousData) {
+                queryClient.setQueryData(context.queryKey, context.previousData);
+            }
+        },
+        onSuccess: (data, variables, context) => {
+            if (!context?.queryKey) return;
+            queryClient.setQueryData(context.queryKey, (old) => {
+                const oggettoPatch = data?.id ? data : null;
+                if (data?.personaggio) {
+                    return mergePersonaggioGameCache(old, data.personaggio, { oggettoPatch });
+                }
+                if (!old) return old;
+                let next = old;
+                if (oggettoPatch?.id && old.oggetti) {
+                    next = {
+                        ...old,
+                        oggetti: old.oggetti.map((o) =>
+                            String(o.id) === String(oggettoPatch.id) ? { ...o, ...oggettoPatch } : o
+                        ),
+                    };
+                }
+                return next;
+            });
+        },
+    });
 };
 
 // D. RICARICA OGGETTO
