@@ -6470,12 +6470,14 @@ class Personaggio(Inventario):
         costo_base = 0
         if hasattr(item, 'costo_crediti'): costo_base = item.costo_crediti
         if costo_base <= 0: return 0
+        if isinstance(item, (Infusione, Tessitura, Attivata, Cerimoniale)):
+            from .acquisto_costi import applica_sconto_rct_tecnica
+            return applica_sconto_rct_tecnica(self, costo_base)
         sconto_perc = 0
-        if isinstance(item, (Infusione, Tessitura, Attivata, Cerimoniale)): sconto_perc = self.get_valore_statistica('RCT')
-        elif isinstance(item, Oggetto): sconto_perc = self.get_valore_statistica('RCO')
+        if isinstance(item, Oggetto): sconto_perc = self.get_valore_statistica('RCO')
         elif isinstance(item, Abilita): sconto_perc = self.get_valore_statistica('RCA')
         if sconto_perc > 0:
-            sconto_perc = min(sconto_perc, 50) 
+            sconto_perc = min(sconto_perc, 50)
             riduzione = (costo_base * sconto_perc) / 100
             return int(max(0, costo_base - riduzione))
         return int(costo_base)
@@ -7054,6 +7056,11 @@ class PropostaTecnica(SyncableModel, models.Model):
         blank=True,
         null=True,
         help_text="Contesto narrativo delle teorie di gioco alla base della proposta.",
+    )
+    permetti_vendita = models.BooleanField(
+        default=True,
+        verbose_name="Permetti la vendita",
+        help_text="Se disattivato, la tecnica creata non sarà disponibile in Accademia.",
     )
     
     class Meta: 

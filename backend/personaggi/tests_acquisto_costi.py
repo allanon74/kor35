@@ -87,3 +87,50 @@ class RimborsoCostoPagatoTest(TestCase):
         )
         self.assertEqual(refund, Decimal("500"))
         self.assertNotEqual(refund, Decimal("1000"))
+
+
+class CreazionePropostaCostoRctTest(TestCase):
+    def setUp(self):
+        from personaggi.models import PropostaTecnica, PropostaTecnicaCaratteristica, Statistica, TIPO_PROPOSTA_TESSITURA
+
+        self.user = User.objects.create_user(username="pg_crea", password="x")
+        self.tipologia = TipologiaPersonaggio.objects.create(
+            nome="Std crea test",
+            crediti_iniziali=Decimal("10000"),
+            caratteristiche_iniziali=20,
+        )
+        self.campagna = Campagna.objects.create(nome="Camp crea", slug="camp-crea")
+        self.personaggio = Personaggio.objects.create(
+            nome="Artigiano",
+            proprietario=self.user,
+            tipologia=self.tipologia,
+            campagna=self.campagna,
+        )
+        self.stat_costo = Statistica.objects.create(nome="Costo Tess", sigla="CTT", parametro="CTT", is_costo=True)
+        self.aura = Punteggio.objects.create(
+            nome="Aura Crea",
+            sigla="ACR",
+            tipo=AURA,
+            stat_costo_creazione_tessitura=self.stat_costo,
+        )
+        self.proposta = PropostaTecnica.objects.create(
+            personaggio=self.personaggio,
+            tipo=TIPO_PROPOSTA_TESSITURA,
+            nome="Proposta test",
+            descrizione="x",
+            aura=self.aura,
+        )
+        PropostaTecnicaCaratteristica.objects.create(
+            proposta=self.proposta,
+            caratteristica=Punteggio.objects.create(nome="Matt", sigla="MAT", tipo="CA"),
+            valore=2,
+        )
+
+    def test_creazione_proposta_applica_sconto_rct(self):
+        from personaggi.acquisto_costi import calcola_costo_creazione_proposta
+
+        with patch.object(Personaggio, "get_valore_statistica") as mock_stat:
+            mock_stat.side_effect = lambda sigla: 100 if sigla != "RCT" else 50
+            pieno, effettivo = calcola_costo_creazione_proposta(self.personaggio, self.proposta)
+        self.assertEqual(pieno, 200)
+        self.assertEqual(effettivo, 100)

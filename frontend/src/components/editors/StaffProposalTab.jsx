@@ -281,6 +281,14 @@ const StaffProposalTab = ({ onLogout }) => {
                                 <div className="space-y-2 text-sm">
                                     <p><strong className="text-gray-400">Tipo:</strong> {selectedProposal.tipo}</p>
                                     <p><strong className="text-gray-400">Aura Richiesta:</strong> {getAuraName(selectedProposal)}</p>
+                                    <p>
+                                        <strong className="text-gray-400">Vendita in Accademia:</strong>{' '}
+                                        {selectedProposal.permetti_vendita !== false ? (
+                                            <span className="text-green-400">Sì</span>
+                                        ) : (
+                                            <span className="text-amber-400">No (solo negozi speciali)</span>
+                                        )}
+                                    </p>
                                     {selectedProposal.tipo === 'CER' && (
                                         <p><strong className="text-gray-400">Livello Proposto:</strong> {selectedProposal.livello_proposto}</p>
                                     )}
