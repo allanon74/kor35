@@ -2177,7 +2177,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
           return (
           <article key={post.id} className="rounded-3xl border border-amber-300/35 bg-linear-to-b from-[#24152a]/96 to-[#1a111f]/96 overflow-hidden shadow-[0_14px_34px_rgba(0,0,0,0.40)]">
-            <div className={hasMedia ? 'lg:grid lg:grid-cols-2 lg:grid-rows-[auto_1fr] lg:items-stretch' : ''}>
+            <div className={hasMedia ? 'lg:grid lg:grid-cols-2 lg:items-start' : ''}>
             <div
               className={`flex justify-between items-center gap-3 px-3 pt-3 pb-2 md:px-4 ${
                 hasMedia ? 'lg:col-start-2 lg:row-start-1 lg:border-b lg:border-gray-700/40 lg:shrink-0' : ''
@@ -2213,7 +2213,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               <div
                 className={
                   hasMedia
-                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:items-center lg:justify-center lg:bg-black/60 lg:min-h-[360px] lg:max-h-[640px] lg:border-r lg:border-gray-700/50'
+                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:items-start lg:justify-center lg:bg-black/60 lg:border-r lg:border-gray-700/50'
                     : ''
                 }
               >
@@ -2224,21 +2224,21 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               <div
                 className={`w-full aspect-4/5 overflow-hidden border-y border-gray-700/60 bg-black ${
                   hasMedia
-                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:aspect-auto lg:h-full lg:min-h-[360px] lg:max-h-[640px] lg:border-y-0 lg:flex lg:items-center lg:justify-center'
+                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:aspect-auto lg:border-y-0 lg:flex lg:items-start lg:justify-center'
                     : ''
                 }`}
               >
                 <video
                   controls
                   src={resolveMediaUrl(post.video)}
-                  className="h-full w-full object-cover lg:object-contain lg:max-h-[640px]"
+                  className="h-full w-full object-cover lg:object-contain lg:h-auto lg:max-h-none"
                 />
               </div>
             )}
 
             <div
               className={`px-3 py-3 md:px-4 space-y-2.5 ${
-                hasMedia ? 'lg:col-start-2 lg:row-start-2 lg:overflow-y-auto lg:max-h-[min(560px,72vh)] lg:min-h-0' : ''
+                hasMedia ? 'lg:col-start-2 lg:row-start-2' : ''
               }`}
             >
             <div className="space-y-1.5 text-sm md:text-base leading-relaxed">

@@ -883,7 +883,7 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                                         <div><strong>Tipo:</strong> {rule.rule_type}</div>
                                         <div><strong>Scope:</strong> {rule.scope}</div>
                                         <div><strong>Da:</strong> {findPunteggioName(punteggi, rule.from_punteggio) || findMattoneName(semanticMattoniOptions, rule.from_mattone) || '-'}</div>
-                                        <div><strong>A:</strong> {findPunteggioName(punteggi, rule.to_punteggio) || findMattoneName(semanticMattoniOptions, rule.to_mattone) || rule.source_label || '-'}</div>
+                                        <div><strong>A:</strong> {findPunteggioName(punteggi, rule.to_punteggio) || findMattoneName(semanticMattoniOptions, rule.to_mattone) || (rule.rule_type === 'SOURCE_OVERRIDE' ? formatSourceOverrideLabel(rule.source_label) : (rule.source_label || '-'))}</div>
                                         <div><strong>Condizione:</strong> {rule.when_expr || '-'}</div>
                                         <div><strong>Priorità:</strong> {rule.priority ?? 100}</div>
                                     </div>
@@ -958,12 +958,34 @@ const FORMULA_RULE_OPTIONS = [
     { id: 'ELEMENT_REPLACE', nome: 'Sostituisci elemento' },
 ];
 
+const SOURCE_KEYWORD_EMPTY = '__EMPTY__';
+
 const SOURCE_KEYWORD_OPTIONS = [
     { id: 'Chop!', nome: 'Chop!' },
     { id: 'Blam!', nome: 'Blam!' },
     { id: 'Pierce!', nome: 'Pierce!' },
     { id: 'Mental!', nome: 'Mental!' },
+    { id: SOURCE_KEYWORD_EMPTY, nome: '— Vuoto (ometti sorgente in formula)' },
 ];
+
+function sourceOverrideSelectValue(sourceLabel) {
+    if (sourceLabel === '' || sourceLabel === null) {
+        return SOURCE_KEYWORD_EMPTY;
+    }
+    return sourceLabel || '';
+}
+
+function sourceOverrideFromSelect(value) {
+    if (value === SOURCE_KEYWORD_EMPTY) return '';
+    return value || '';
+}
+
+function formatSourceOverrideLabel(sourceLabel) {
+    if (sourceLabel === '' || sourceLabel === null) {
+        return '— vuoto (ometti sorgente)';
+    }
+    return sourceLabel || '-';
+}
 
 function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOptions }) {
     const [draft, setDraft] = useState({
@@ -1029,10 +1051,14 @@ function FormulaRuleModal({ open, onClose, onSave, punteggi, semanticMattoniOpti
                             <label className="text-xs text-gray-500 uppercase font-bold">Parola chiave sorgente</label>
                             <SearchableSelect
                                 options={SOURCE_KEYWORD_OPTIONS}
-                                value={draft.source_label}
-                                onChange={(v) => setDraft({ ...draft, source_label: v || '' })}
+                                value={sourceOverrideSelectValue(draft.source_label)}
+                                onChange={(v) => setDraft({ ...draft, source_label: sourceOverrideFromSelect(v) })}
                                 minOptionsForSearch={99}
                             />
+                            <p className="mt-1 text-[11px] text-gray-500">
+                                «Vuoto» omette del tutto la sorgente in formula (né Chop né (Chop!)). Per il default
+                                implicito usa il costruttore formula sull&apos;oggetto/tessitura.
+                            </p>
                         </div>
                     )}
 
@@ -1173,10 +1199,15 @@ function buildFormulaRulePreview(rule, punteggi) {
     const scopeLabel =
         rule.scope === 'ATT' ? 'solo attacchi' : rule.scope === 'WEA' ? 'solo tessiture' : 'tutte le formule';
     const fromName = findPunteggioName(punteggi, rule.from_punteggio) || 'qualunque';
-    const toName = findPunteggioName(punteggi, rule.to_punteggio) || rule.source_label || 'destinazione';
+    const toName =
+        findPunteggioName(punteggi, rule.to_punteggio)
+        || (rule.rule_type === 'SOURCE_OVERRIDE' ? formatSourceOverrideLabel(rule.source_label) : (rule.source_label || 'destinazione'));
     const whenLabel = (rule.when_expr || '').trim() ? ` quando ${rule.when_expr}` : '';
 
     if (rule.rule_type === 'SOURCE_OVERRIDE') {
+        if (rule.source_label === '' || rule.source_label === null) {
+            return `Omette del tutto la sorgente in formula su ${scopeLabel}${whenLabel}.`;
+        }
         return `Usa "${toName}" al posto della sorgente base su ${scopeLabel}${whenLabel}.`;
     }
     if (rule.rule_type === 'SOURCE_APPEND') {

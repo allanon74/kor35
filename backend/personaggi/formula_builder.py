@@ -297,7 +297,10 @@ def build_formula_template(formula_type, selections):
             out.append(placeholder)
             continue
         if block == "formula_source":
-            if _block_included("formula_source"):
+            if selected_map.get("omit_formula_source"):
+                continue
+            damage_mode = _damage_mode_from_selections(selected_map)
+            if damage_mode in ("mischia", "distanza") or _block_included("formula_source"):
                 out.append("{formula_source}")
             continue
         if block == "formula_damage_mode":

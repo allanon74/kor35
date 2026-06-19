@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { X, Send, Heart } from 'lucide-react';
+import { X, Send, Heart, Pause } from 'lucide-react';
 import { resolveMediaUrl, socialMarkStoryViewed, socialReactStory, socialReplyStory } from '../api';
 import { formatCount } from '../utils/formatCount';
 import InstafameAuthorBadge from './InstafameAuthorBadge';
@@ -13,8 +13,11 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
   const [progress, setProgress] = useState(0);
   const [replyText, setReplyText] = useState('');
   const [textPage, setTextPage] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const rafRef = useRef(null);
   const startRef = useRef(0);
+  const elapsedRef = useRef(0);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -22,6 +25,8 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
     setProgress(0);
     setReplyText('');
     setTextPage(0);
+    setIsPaused(false);
+    elapsedRef.current = 0;
   }, [open, initialIndex]);
 
   const story = stories[idx] || null;
@@ -61,9 +66,12 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
 
   useEffect(() => {
     setTextPage(0);
+    setIsPaused(false);
+    elapsedRef.current = 0;
   }, [story?.id]);
 
   const goNext = () => {
+    elapsedRef.current = 0;
     if (idx < stories.length - 1) {
       setIdx((i) => i + 1);
       setProgress(0);
@@ -74,6 +82,7 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
   };
 
   const goPrev = () => {
+    elapsedRef.current = 0;
     if (idx > 0) {
       setIdx((i) => i - 1);
       setProgress(0);
@@ -98,17 +107,34 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
       });
   }, [open, story?.id]);
 
+  const togglePause = () => {
+    setIsPaused((prev) => {
+      const next = !prev;
+      if (next) {
+        videoRef.current?.pause();
+      } else {
+        videoRef.current?.play()?.catch(() => {});
+      }
+      return next;
+    });
+  };
+
   // Progress timer
   useEffect(() => {
-    if (!open || !story) return;
+    if (!open || !story || isPaused) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      return;
+    }
     const pageCount = Math.max(1, textPages.length);
     const duration = isTextOnlyStory
       ? Math.max(DEFAULT_DURATION_MS, pageCount * TEXT_PAGE_DURATION_MS)
       : DEFAULT_DURATION_MS;
-    startRef.current = performance.now();
+    startRef.current = performance.now() - elapsedRef.current * duration;
     const tick = (t) => {
       const elapsed = t - startRef.current;
       const p = Math.min(1, elapsed / duration);
+      elapsedRef.current = p;
       setProgress(p);
       if (isTextOnlyStory && pageCount > 1) {
         const nextPage = Math.min(pageCount - 1, Math.floor(elapsed / TEXT_PAGE_DURATION_MS));
@@ -116,6 +142,7 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
       }
       if (p >= 1) {
         rafRef.current = null;
+        elapsedRef.current = 0;
         goNext();
         return;
       }
@@ -126,7 +153,7 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     };
-  }, [open, idx, story?.id, isTextOnlyStory, textPages.length]);
+  }, [open, idx, story?.id, isTextOnlyStory, textPages.length, isPaused]);
 
   if (!open) return null;
 
@@ -229,15 +256,29 @@ const StoryViewerModal = ({ open, onClose, stories = [], initialIndex = 0, perso
           />
           <button
             type="button"
+            onClick={togglePause}
+            className="absolute inset-y-0 left-1/3 w-1/3 z-10"
+            title={isPaused ? 'Riprendi' : 'Pausa'}
+            aria-pressed={isPaused}
+          />
+          <button
+            type="button"
             onClick={goNext}
             className="absolute inset-y-0 right-0 w-1/3 z-10"
             title="Successiva"
           />
 
+          {isPaused && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+              <Pause size={52} strokeWidth={1.25} className="text-white/30 drop-shadow-[0_2px_12px_rgba(0,0,0,0.45)]" />
+            </div>
+          )}
+
           <div className="absolute inset-0 flex items-center justify-center bg-black">
             {mediaUrl ? (
               isVideo ? (
                 <video
+                  ref={videoRef}
                   src={mediaUrl}
                   className="w-full h-full object-contain"
                   playsInline
