@@ -1335,8 +1335,8 @@ class OggettoSerializer(serializers.ModelSerializer):
         personaggio = self.context.get('personaggio')
         # Passa le statistiche_base dell'oggetto per includere i valori base
         statistiche_base = obj.oggettostatisticabase_set.select_related('statistica').all()
-        item_mods = obj.oggettostatistica_set.select_related('statistica').all()
-        from .models import FORMULA_SCOPE_ATTACK
+        from .models import FORMULA_SCOPE_ATTACK, raccogli_modificatori_solo_oggetto
+        item_mods = raccogli_modificatori_solo_oggetto(obj)
 
         context = {
             'livello': obj.livello,
@@ -3411,7 +3411,7 @@ class OggettoBaseStatisticaBaseSerializer(serializers.ModelSerializer):
 class OggettoBaseModificatoreSerializer(serializers.ModelSerializer):
     class Meta:
         model = OggettoBaseModificatore
-        fields = ['statistica', 'valore', 'tipo_modificatore']
+        fields = ['statistica', 'valore', 'tipo_modificatore', 'solo_oggetto_ospitante']
         validators = []
         
     def to_representation(self, instance):

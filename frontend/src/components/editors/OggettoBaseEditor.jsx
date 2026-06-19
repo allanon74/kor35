@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useCharacter } from '../CharacterContext';
-import { staffUpdateOggettoBase, staffCreateOggettoBase, staffGetClassiOggetto } from '../../api';
+import {
+  staffUpdateOggettoBase,
+  staffCreateOggettoBase,
+  staffGetClassiOggetto,
+  staffPropagaOggettoBaseIstanze,
+} from '../../api';
 import StatBaseInline from './inlines/StatBaseInline';
 import StatModInline from './inlines/StatModInline';
 import RichTextEditor from '../RichTextEditor'; // Importazione corretta
@@ -31,6 +36,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
   const { punteggiList } = useCharacter();
   const [classi, setClassi] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [propagating, setPropagating] = useState(false);
   const [status, setStatus] = useState({ type: 'success', message: '' });
   const [isFormulaBuilderOpen, setIsFormulaBuilderOpen] = useState(false);
   
@@ -146,6 +152,42 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
         setStatus({ type: 'error', message: `Errore salvataggio: ${e.message || 'Controlla i dati.'}` });
     } finally {
         setSaving(false);
+    }
+  };
+
+  const handlePropagaIstanze = async () => {
+    if (!formData.id) return;
+    try {
+      setPropagating(true);
+      const preview = await staffPropagaOggettoBaseIstanze(formData.id, { dryRun: true }, onLogout);
+      const count = Number(preview?.count || 0);
+      if (count === 0) {
+        setStatus({
+          type: 'success',
+          message: 'Nessuna istanza Oggetto collegata a questo template.',
+        });
+        return;
+      }
+      const ok = window.confirm(
+        `Propagare il template "${formData.nome}" su ${count} istanz${count === 1 ? 'a' : 'e'}?\n\n`
+        + 'Verranno aggiornati nome, descrizione, tipo, classe, slot, flags, formula attacco e statistiche.\n'
+        + 'Non verranno modificati: costo acquisto, equipaggiamento, cariche, potenziamenti montati, inventario.'
+      );
+      if (!ok) return;
+      const result = await staffPropagaOggettoBaseIstanze(formData.id, { dryRun: false }, onLogout);
+      const updated = Number(result?.updated || 0);
+      setStatus({
+        type: 'success',
+        message: `Template propagato su ${updated} istanz${updated === 1 ? 'a' : 'e'}.`,
+      });
+    } catch (e) {
+      console.error('Errore propagazione template:', e);
+      setStatus({
+        type: 'error',
+        message: `Errore propagazione: ${e.message || 'operazione non riuscita'}`,
+      });
+    } finally {
+      setPropagating(false);
     }
   };
 
@@ -317,11 +359,33 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
             options={punteggiList.filter(p => p.tipo === 'ST')} 
             auraOptions={punteggiList.filter(p => p.tipo === 'AU')} 
             elementOptions={punteggiList.filter(p => p.tipo === 'EL')}
-            onAdd={() => setFormData({...formData, statistiche_modificatori: [...formData.statistiche_modificatori, {statistica:'', valore:0, tipo_modificatore:'ADD'}]})} 
+            showSoloOggettoOspitante
+            onAdd={() => setFormData({...formData, statistiche_modificatori: [...formData.statistiche_modificatori, {statistica:'', valore:0, tipo_modificatore:'ADD', solo_oggetto_ospitante: false}]})} 
             onChange={(i,f,v) => updateInline('statistiche_modificatori', i, f, v)}
             onRemove={i => setFormData({...formData, statistiche_modificatori: formData.statistiche_modificatori.filter((_,idx)=>idx!==i)})} 
           />
       </div>
+
+      {formData.id && (
+        <div className="bg-amber-950/20 p-4 rounded-xl border border-amber-700/40 space-y-3">
+          <h3 className="text-xs font-black uppercase text-amber-300 tracking-widest">
+            Propaga template alle istanze
+          </h3>
+          <p className="text-xs text-amber-100/80 leading-relaxed">
+            Applica questo modello a tutti gli oggetti creati dal negozio con{' '}
+            <code className="text-amber-200">oggetto_base_generatore</code> collegato a questo template.
+            Utile dopo aver corretto formula, statistiche o descrizione nel listino.
+          </p>
+          <button
+            type="button"
+            onClick={handlePropagaIstanze}
+            disabled={propagating || saving}
+            className="px-4 py-2 rounded bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-xs font-bold uppercase tracking-wide"
+          >
+            {propagating ? 'Propagazione...' : 'Propaga alle istanze collegate'}
+          </button>
+        </div>
+      )}
 
       <StaffMinigiocoQrSection qrcodeId={formData.qrcode_id} onLogout={onLogout} />
 

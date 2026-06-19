@@ -315,7 +315,8 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
         options={statsOptions}
         auraOptions={punteggiList.filter(p => p.tipo === 'AU')}
         elementOptions={punteggiList.filter(p => p.tipo === 'EL')}
-        onAdd={() => setFormData({...formData, modificatori: [...(formData.modificatori || []), {statistica: null, valore: 0, tipo_modificatore:'ADD', usa_limitazione_aura: false, limit_a_aure: [], usa_limitazione_elemento: false, limit_a_elementi: [], usa_condizione_text: false, condizione_text: ''}]})}
+        showSoloOggettoOspitante
+        onAdd={() => setFormData({...formData, modificatori: [...(formData.modificatori || []), {statistica: null, valore: 0, tipo_modificatore:'ADD', usa_limitazione_aura: false, limit_a_aure: [], usa_limitazione_elemento: false, limit_a_elementi: [], usa_condizione_text: false, condizione_text: '', solo_oggetto_ospitante: false}]})}
         onChange={(i, f, v) => updateInline('modificatori', i, f, v)}
         onRemove={(i) => setFormData({...formData, modificatori: formData.modificatori.filter((_, idx) => idx !== i)})}
       />

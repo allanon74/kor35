@@ -2151,6 +2151,13 @@ export const staffUpdateOggettoBase = (id, data, onLogout) =>
 export const staffDeleteOggettoBase = (id, onLogout) => 
     fetchAuthenticated(`/api/personaggi/api/staff/oggetti-base/${id}/`, { method: 'DELETE' }, onLogout);
 
+export const staffPropagaOggettoBaseIstanze = (id, { dryRun = false } = {}, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/staff/oggetti-base/${id}/propaga-istanze/`,
+        { method: 'POST', body: JSON.stringify({ dry_run: dryRun }) },
+        onLogout
+    );
+
 // Utility
 export const staffGetClassiOggetto = (onLogout) => 
     fetchAuthenticated('/api/personaggi/api/staff/classi-oggetto/', { method: 'GET' }, onLogout);

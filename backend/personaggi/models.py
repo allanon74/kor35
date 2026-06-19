@@ -909,6 +909,105 @@ def formatta_valore_avanzato(valore, formato, context=None):
     # Default: Numero semplice
     return str(n)
 
+
+def stat_link_solo_oggetto_ospitante(stat_link):
+    return bool(getattr(stat_link, 'solo_oggetto_ospitante', False))
+
+
+def stat_link_attivo_in_contesto(personaggio, stat_link, context=None):
+    """True se il modificatore condizionale si applica nel contesto formula corrente."""
+    if not stat_link:
+        return False
+    has_conditions = (
+        stat_link.usa_limitazione_elemento
+        or stat_link.usa_limitazione_aura
+        or stat_link.usa_condizione_text
+    )
+    if not has_conditions:
+        return True
+
+    context = context or {}
+    elemento_target = context.get('elemento')
+    aura_target = context.get('aura')
+
+    eval_context = {}
+    if personaggio:
+        eval_context.update(personaggio.caratteristiche_base or {})
+    eval_context.update(context)
+    if 'caratteristica_associata_valore' in context:
+        eval_context['caratt'] = context['caratteristica_associata_valore']
+
+    if stat_link.usa_limitazione_elemento:
+        if not elemento_target:
+            return False
+        if not stat_link.limit_a_elementi.filter(pk=elemento_target.pk).exists():
+            return False
+
+    if stat_link.usa_limitazione_aura:
+        if not aura_target:
+            return False
+        if not stat_link.limit_a_aure.filter(pk=aura_target.pk).exists():
+            return False
+
+    if stat_link.usa_condizione_text and stat_link.condizione_text:
+        try:
+            if not evaluate_expression(stat_link.condizione_text, eval_context):
+                return False
+        except Exception:
+            return False
+
+    return True
+
+
+def raccogli_modificatori_solo_oggetto(oggetto_host):
+    """Modificatori marcati solo_oggetto_ospitante: host + potenziamenti montati attivi."""
+    if not oggetto_host:
+        return []
+
+    links = []
+    for stat_link in oggetto_host.oggettostatistica_set.select_related('statistica').all():
+        if stat_link_solo_oggetto_ospitante(stat_link):
+            links.append(stat_link)
+
+    potenziamenti = getattr(oggetto_host, 'potenziamenti_installati', None)
+    if potenziamenti is not None:
+        for potenziamento in potenziamenti.prefetch_related(
+            'oggettostatistica_set__statistica',
+            'oggettostatistica_set__limit_a_elementi',
+            'oggettostatistica_set__limit_a_aure',
+        ).all():
+            if potenziamento.is_active():
+                for stat_link in potenziamento.oggettostatistica_set.all():
+                    if stat_link_solo_oggetto_ospitante(stat_link):
+                        links.append(stat_link)
+    return links
+
+
+def applica_modificatori_stat_links_a_eval_context(eval_context, stat_links, personaggio=None, context=None):
+    """Applica add/mol di stat links al contesto numerico (dopo i modificatori globali PG)."""
+    if not stat_links:
+        return
+
+    mods = {}
+    for stat_link in stat_links:
+        if not stat_link_attivo_in_contesto(personaggio, stat_link, context):
+            continue
+        param = getattr(getattr(stat_link, 'statistica', None), 'parametro', None)
+        if not param:
+            continue
+        if param not in mods:
+            mods[param] = {'add': 0.0, 'mol': 1.0}
+        valore = float(stat_link.valore)
+        if stat_link.tipo_modificatore == MODIFICATORE_ADDITIVO:
+            mods[param]['add'] += valore
+        elif stat_link.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO:
+            mods[param]['mol'] *= valore
+
+    for param, mod_data in mods.items():
+        val_base = eval_context.get(param, 0)
+        eval_context[param] = (val_base + mod_data['add']) * mod_data['mol']
+
+
 # 4. FUNZIONE PRINCIPALE
 def formatta_testo_generico(testo, formula=None, statistiche_base=None, personaggio=None, context=None, solo_formula=False):
     testo_out = testo or ""
@@ -969,6 +1068,15 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
             val_base = eval_context.get(param, 0)
             val_finale = (val_base + mod_data['add']) * mod_data['mol']
             eval_context[param] = val_finale
+
+        # Modificatori solo sull'oggetto ospitante (Mod/Materia o flag su oggetto)
+        if context and context.get('item_modifiers') is not None:
+            applica_modificatori_stat_links_a_eval_context(
+                eval_context,
+                context.get('item_modifiers') or [],
+                personaggio=personaggio,
+                context=context,
+            )
 
     # 3. Preparazione Contesto Oggetti (per |NAME)
     object_context = {}
@@ -1423,6 +1531,12 @@ class CondizioneStatisticaMixin(SyncableModel, models.Model):
     limit_a_elementi = models.ManyToManyField('Punteggio', blank=True, limit_choices_to={'tipo': ELEMENTO}, related_name="%(class)s_limit_elementi", verbose_name="Elementi consentiti")
     usa_condizione_text = models.BooleanField("Usa Condizione Testuale", default=False)
     condizione_text = models.CharField("Condizione", max_length=255, blank=True, null=True, help_text="Es. caratt>6")
+    solo_oggetto_ospitante = models.BooleanField(
+        "Solo oggetto ospitante",
+        default=False,
+        help_text="Se attivo, il modificatore vale solo per le formule dell'oggetto su cui è montato "
+                  "(o dell'oggetto stesso), non per le statistiche generali del personaggio.",
+    )
     class Meta: abstract = True
 
 
@@ -4032,6 +4146,11 @@ class OggettoBaseModificatore(SyncableModel, models.Model):
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
     valore = models.IntegerField(default=0)
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
+    solo_oggetto_ospitante = models.BooleanField(
+        "Solo oggetto ospitante",
+        default=False,
+        help_text="Se attivo, il modificatore vale solo per le formule dell'oggetto, non per il personaggio.",
+    )
     class Meta: verbose_name = "Modificatore Template"; verbose_name_plural = "Modificatori Template"
 
 class Oggetto(A_vista):
@@ -4167,7 +4286,7 @@ class Oggetto(A_vista):
         base_text = formatta_testo_generico(
             self.testo, 
             statistiche_base=self.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all(), 
-            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': self.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()}
+            context={'livello': self.livello, 'aura': self.aura, 'item_modifiers': raccogli_modificatori_solo_oggetto(self)}
         )
         return base_text + genera_html_cariche(self, None)
     
@@ -5565,6 +5684,7 @@ class Personaggio(Inventario):
             if stat_link.usa_limitazione_elemento: return False
             if stat_link.usa_limitazione_aura: return False
             if stat_link.usa_condizione_text: return False
+            if stat_link_solo_oggetto_ospitante(stat_link): return False
             return True
 
         def _apply_abilita_stat_link(stat_link):
@@ -5770,6 +5890,7 @@ class Personaggio(Inventario):
             if stat_link.usa_limitazione_elemento: return False
             if stat_link.usa_limitazione_aura: return False
             if stat_link.usa_condizione_text: return False
+            if stat_link_solo_oggetto_ospitante(stat_link): return False
             return True
         
         # 1. Abilità
@@ -5874,6 +5995,8 @@ class Personaggio(Inventario):
 
         # Funzione helper CORE: decide se il modificatore si applica
         def _check_condition(stat_link):
+            if stat_link_solo_oggetto_ospitante(stat_link):
+                return False
             # 1. Se NON ha nessuna condizione, lo scartiamo (è globale, 
             #    quindi è già incluso in self.modificatori_calcolati).
             has_conditions = (
@@ -6082,7 +6205,7 @@ class Personaggio(Inventario):
         
         if isinstance(item, Oggetto):
             stats = item.oggettostatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            item_mods = item.oggettostatistica_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
+            item_mods = raccogli_modificatori_solo_oggetto(item)
             ctx = {
                 'livello': item.livello,
                 'aura': item.aura,

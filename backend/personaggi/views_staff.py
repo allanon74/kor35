@@ -30,6 +30,7 @@ from .models import (
 )
 
 from .qr_logic import annotate_staff_avista_qr
+from .services import GestioneCraftingService
 from .formula_builder import (
     FORMULA_BUILDER_SCHEMA,
     build_formula_template,
@@ -562,6 +563,14 @@ class OggettoBaseStaffViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(campagna=_get_active_campaign(self.request))
+
+    @action(detail=True, methods=["post"], url_path="propaga-istanze")
+    def propaga_istanze(self, request, pk=None):
+        """Applica il template corrente a tutte le istanze Oggetto generate da questo OggettoBase."""
+        template = self.get_object()
+        dry_run = bool(request.data.get("dry_run"))
+        result = GestioneCraftingService.applica_template_a_istanze(template, dry_run=dry_run)
+        return Response(result, status=status.HTTP_200_OK)
 
 class ClasseOggettoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ClasseOggetto.objects.all()

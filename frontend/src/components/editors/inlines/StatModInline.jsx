@@ -42,7 +42,7 @@ const EMPTY_SLOT_EQUIP_STAT = {
     valore_per_unita_slot_equip: 1,
 };
 
-const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, onAdd, onRemove, showSlotEquipBonus = false }) => {
+const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, onAdd, onRemove, showSlotEquipBonus = false, showSoloOggettoOspitante = false }) => {
   const toggleM2M = (index, field, id) => {
     const currentList = items[index][field] || [];
     const newList = currentList.includes(id)
@@ -100,6 +100,20 @@ const StatModInline = ({ items, options, auraOptions, elementOptions, onChange, 
               </div>
               <button onClick={() => onRemove(i)} className="self-end mb-1 text-red-500 hover:bg-red-500/10 p-2 rounded transition-colors text-xl">✕</button>
             </div>
+
+            {showSoloOggettoOspitante && (
+              <div className="bg-cyan-950/20 p-3 rounded border border-cyan-900/40">
+                <ConditionToggle
+                  label="Solo oggetto ospitante (non modifica il PG)"
+                  checked={!!item.solo_oggetto_ospitante}
+                  onChange={(v) => onChange(i, 'solo_oggetto_ospitante', v)}
+                  color="cyan"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Il bonus vale solo per le formule di questo oggetto (o dell&apos;oggetto su cui è montata la Mod/Materia), non per le statistiche generali del personaggio.
+                </p>
+              </div>
+            )}
 
             {showSlotEquipBonus && (
               <div className="bg-emerald-950/20 p-3 rounded border border-emerald-900/40 space-y-3">

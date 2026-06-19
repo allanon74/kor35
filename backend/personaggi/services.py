@@ -593,7 +593,8 @@ class GestioneOggettiService:
                 usa_limitazione_aura=stat_man.usa_limitazione_aura,
                 usa_limitazione_elemento=stat_man.usa_limitazione_elemento,
                 usa_condizione_text=stat_man.usa_condizione_text,
-                condizione_text=stat_man.condizione_text
+                condizione_text=stat_man.condizione_text,
+                solo_oggetto_ospitante=stat_man.solo_oggetto_ospitante,
             )
             stat_obj.limit_a_aure.set(stat_man.limit_a_aure.all())
             stat_obj.limit_a_elementi.set(stat_man.limit_a_elementi.all())
@@ -1182,6 +1183,7 @@ class GestioneCraftingService:
                 defaults={
                     'valore': mod_link.valore,
                     'tipo_modificatore': mod_link.tipo_modificatore,
+                    'solo_oggetto_ospitante': mod_link.solo_oggetto_ospitante,
                 },
             )
             if not created:
@@ -1192,6 +1194,55 @@ class GestioneCraftingService:
 
         nuovo_oggetto.sposta_in_inventario(personaggio)
         return nuovo_oggetto
+
+    @staticmethod
+    def _applica_campi_template_su_istanza(template, oggetto):
+        """Allinea un'istanza Oggetto al template OggettoBase (campi di modello condivisi)."""
+        oggetto.nome = template.nome
+        oggetto.testo = template.descrizione
+        oggetto.tipo_oggetto = template.tipo_oggetto
+        oggetto.classe_oggetto = template.classe_oggetto
+        oggetto.slot_fisici_possibili = template.slot_fisici_possibili
+        oggetto.is_tecnologico = template.is_tecnologico
+        oggetto.attacco_base = template.attacco_base
+        oggetto.is_pesante = template.is_pesante
+        oggetto.save()
+
+        oggetto.oggettostatisticabase_set.all().delete()
+        for stat_link in template.oggettobasestatisticabase_set.all():
+            OggettoStatisticaBase.objects.create(
+                oggetto=oggetto,
+                statistica=stat_link.statistica,
+                valore_base=stat_link.valore_base,
+            )
+
+        oggetto.oggettostatistica_set.all().delete()
+        for mod_link in template.oggettobasemodificatore_set.all():
+            OggettoStatistica.objects.create(
+                oggetto=oggetto,
+                statistica=mod_link.statistica,
+                valore=mod_link.valore,
+                tipo_modificatore=mod_link.tipo_modificatore,
+                solo_oggetto_ospitante=mod_link.solo_oggetto_ospitante,
+            )
+
+    @staticmethod
+    def applica_template_a_istanze(template, *, dry_run=False):
+        """
+        Propaga il modello OggettoBase a tutte le istanze collegate (oggetto_base_generatore).
+        Non tocca stato runtime: equipaggiamento, cariche, costo_acquisto, potenziamenti montati, inventario.
+        """
+        qs = Oggetto.objects.filter(oggetto_base_generatore=template)
+        count = qs.count()
+        if dry_run:
+            return {"count": count, "updated": 0, "dry_run": True}
+
+        updated = 0
+        with transaction.atomic():
+            for oggetto in qs.select_for_update():
+                GestioneCraftingService._applica_campi_template_su_istanza(template, oggetto)
+                updated += 1
+        return {"count": count, "updated": updated, "dry_run": False}
 
     @staticmethod
     def acquista_da_negozio(personaggio, oggetto_base_id):

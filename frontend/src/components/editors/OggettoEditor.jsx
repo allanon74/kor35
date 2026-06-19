@@ -276,7 +276,8 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
             options={punteggiList.filter(p => p.tipo === 'ST')} 
             auraOptions={punteggiList.filter(p => p.tipo === 'AU')} 
             elementOptions={punteggiList.filter(p => p.tipo === 'EL')} 
-            onAdd={() => setFormData({...formData, statistiche: [...formData.statistiche, {statistica:'', valore:0, tipo_modificatore:'ADD'}]})} 
+            showSoloOggettoOspitante
+            onAdd={() => setFormData({...formData, statistiche: [...formData.statistiche, {statistica:'', valore:0, tipo_modificatore:'ADD', solo_oggetto_ospitante: false}]})} 
             onChange={(i,f,v) => updateInline('statistiche', i, f, v)} 
             onRemove={i => setFormData({...formData, statistiche: formData.statistiche.filter((_,idx)=>idx!==i)})} 
           />
