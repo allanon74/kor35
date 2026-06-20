@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Puzzle, Save, Loader } from 'lucide-react';
 import RequisitiListaEditor, { RegoleGruppoListaEditor } from './RequisitiAccessoEditor';
 import { staffGetMinigiocoQrConfig, staffSaveMinigiocoQrConfig } from '../../api';
+import useRequisitiAccessoLookup from '../../hooks/useRequisitiAccessoLookup';
 
 const TIPO_OPTS = [
   { id: 'sliding_puzzle', label: 'Sliding puzzle' },
@@ -33,7 +34,7 @@ const SBLOCCO_OPTS = [
 
 const ALL_TIPI = TIPO_OPTS.map((o) => o.id);
 
-const emptyConfig = () => ({
+export const emptyMinigiocoConfig = () => ({
   attivo: false,
   tipi_abilitati: [...ALL_TIPI],
   difficolta: 4,
@@ -50,16 +51,50 @@ const emptyConfig = () => ({
   immagine_url: null,
 });
 
-const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
-  const [config, setConfig] = useState(emptyConfig());
+const emptyConfig = emptyMinigiocoConfig;
+
+const MinigiocoQrEditor = ({
+  qrId,
+  onLogout,
+  lookup: lookupProp = {},
+  templateMode = false,
+  templateConfig,
+  onTemplateChange,
+}) => {
+  const { lookup, loading: lookupLoading } = useRequisitiAccessoLookup(onLogout, lookupProp);
+  const [config, setConfigRaw] = useState(emptyConfig());
+
+  const setConfig = useCallback(
+    (updater) => {
+      setConfigRaw((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (templateMode && onTemplateChange) {
+          onTemplateChange(next);
+        }
+        return next;
+      });
+    },
+    [templateMode, onTemplateChange],
+  );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [removeImage, setRemoveImage] = useState(false);
 
+  useEffect(() => {
+    if (!templateMode) return;
+    const cfg = templateConfig
+      ? { ...emptyConfig(), ...templateConfig }
+      : emptyConfig();
+    if (!Array.isArray(cfg.tipi_abilitati) || cfg.tipi_abilitati.length === 0) {
+      cfg.tipi_abilitati = [...ALL_TIPI];
+    }
+    setConfigRaw(cfg);
+  }, [templateMode, templateConfig]);
+
   const load = useCallback(async () => {
-    if (!qrId) return;
+    if (templateMode || !qrId) return;
     setLoading(true);
     setMsg('');
     try {
@@ -81,7 +116,7 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
     } finally {
       setLoading(false);
     }
-  }, [qrId, onLogout]);
+  }, [qrId, onLogout, templateMode]);
 
   useEffect(() => {
     load();
@@ -157,14 +192,16 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
     }
   };
 
-  if (!qrId) return null;
+  if (!templateMode && !qrId) return null;
 
   return (
-    <div className="mt-6 p-4 bg-gray-800/60 rounded-lg border border-indigo-700/50">
-      <div className="flex items-center gap-2 mb-3 text-indigo-300 font-bold uppercase text-sm tracking-wide">
-        <Puzzle size={16} />
-        Minigioco QR
-      </div>
+    <div className={`${templateMode ? '' : 'mt-6'} p-4 bg-gray-800/60 rounded-lg border border-indigo-700/50`}>
+      {!templateMode ? (
+        <div className="flex items-center gap-2 mb-3 text-indigo-300 font-bold uppercase text-sm tracking-wide">
+          <Puzzle size={16} />
+          Minigioco QR
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="flex items-center gap-2 text-gray-400 text-sm">
@@ -236,6 +273,7 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
               gruppi={config.regole_difficolta || []}
               onChange={(regole_difficolta) => setConfig((c) => ({ ...c, regole_difficolta }))}
               lookup={lookup}
+              lookupLoading={lookupLoading}
               addLabel="Aggiungi regola difficoltà"
               renderExtra={(gruppo, patch) => (
                 <label className="flex items-center gap-1 text-xs text-gray-400">
@@ -265,6 +303,7 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
               gruppi={config.esclusioni_minigioco || []}
               onChange={(esclusioni_minigioco) => setConfig((c) => ({ ...c, esclusioni_minigioco }))}
               lookup={lookup}
+              lookupLoading={lookupLoading}
               addLabel="Aggiungi esclusione"
             />
             <p className="text-[11px] text-gray-500 mt-1">
@@ -394,18 +433,21 @@ const MinigiocoQrEditor = ({ qrId, onLogout, lookup = {} }) => {
               requisiti={config.requisiti_attivazione || []}
               onChange={(requisiti_attivazione) => setConfig((c) => ({ ...c, requisiti_attivazione }))}
               lookup={lookup}
+              lookupLoading={lookupLoading}
             />
           </div>
 
-          <button
-            type="button"
-            disabled={saving}
-            onClick={save}
-            className="flex items-center justify-center gap-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded font-bold disabled:opacity-50"
-          >
-            {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Salva minigioco
-          </button>
+          {!templateMode ? (
+            <button
+              type="button"
+              disabled={saving}
+              onClick={save}
+              className="flex items-center justify-center gap-2 w-full py-2 bg-indigo-600 hover:bg-indigo-500 rounded font-bold disabled:opacity-50"
+            >
+              {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Salva minigioco
+            </button>
+          ) : null}
 
           {msg && <p className="text-xs text-center text-amber-300">{msg}</p>}
         </div>

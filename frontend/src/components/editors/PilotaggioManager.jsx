@@ -1,6 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import StaffQrTab from '../StaffQrTab';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
+import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
+import PilotSottosistemaModal from './PilotSottosistemaModal';
+import {
+  applyDefaultMinigiocoToQr,
+  MINIGIOCO_PAGE_KEYS,
+} from '../../utils/staffMinigiocoDefaults';
+import { staffSaveMinigiocoQrConfig } from '../../api';
 import {
   staffAssociaPilotSottosistemaQr,
   staffCreatePilotComandoCritico,
@@ -281,6 +288,8 @@ export default function PilotaggioManager({ onLogout }) {
   const [nuovoEvento, setNuovoEvento] = useState(defaultEvento);
   const [nuovoCritico, setNuovoCritico] = useState({ pattern: '', nome: '', attivo: true });
   const [editSottoId, setEditSottoId] = useState(null);
+  const [sottoModalMode, setSottoModalMode] = useState(null);
+  const [createEventoModalOpen, setCreateEventoModalOpen] = useState(false);
   const [editSotto, setEditSotto] = useState({
     codice: '', nome: '', gruppo: '', ordine_gruppo: 0, ordine: 0, tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
     capacita_storage: 0, coeff_ricarica_storage: 0.5, capacita_carburante: 0,
@@ -404,6 +413,53 @@ export default function PilotaggioManager({ onLogout }) {
     loadData();
   }, [loadData]);
 
+  const resetNuovoSotto = () => ({
+    codice: '',
+    nome: '',
+    gruppo: '',
+    ordine_gruppo: 0,
+    ordine: 0,
+    tipo: 'standard',
+    coeff_produzione: 0,
+    coeff_consumo_energia: 1,
+    coeff_consumo_carburante: 0,
+    coeff_effetto_speciale: 1,
+    rampa_livelli_per_tick: 1,
+    capacita_storage: 0,
+    coeff_ricarica_storage: 0.5,
+    capacita_carburante: 0,
+    effetti_guasto_json: JSON.stringify(defaultEffettiGuasto(), null, 2),
+    effetti_inversione_json: JSON.stringify(defaultEffettiComandoCritico(), null, 2),
+    effetti_espulsione_json: JSON.stringify(defaultEffettiComandoCritico(), null, 2),
+    guasto_percent_per_livello_json: JSON.stringify(defaultGuastoCurve(), null, 2),
+    ripristino_percent_per_livello_json: JSON.stringify(defaultCurveZero(), null, 2),
+    colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
+  });
+
+  const openCreateSottoModal = () => {
+    setNuovoSotto(resetNuovoSotto());
+    setNuovoEffettoGuastoBuilder(defaultEffettoGuastoBuilder());
+    setSottoModalMode('create');
+  };
+
+  const closeSottoModal = () => {
+    setSottoModalMode(null);
+    setEditSottoId(null);
+  };
+
+  const closeCreateEventoModal = useCallback(() => {
+    setCreateEventoModalOpen(false);
+    setNuovoEvento(defaultEvento);
+    setCreateCaEffettoTipo('precipizio');
+    setCreateCaEffettoSottosistemaId('');
+    setRuleBuilder({
+      st: { conditions: [], expression: DEFAULT_RULE_EXPR },
+      sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
+      ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
+    });
+    setError('');
+  }, []);
+
   const addSottosistema = async () => {
     await staffCreatePilotSottosistema(
       {
@@ -440,16 +496,8 @@ export default function PilotaggioManager({ onLogout }) {
       },
       onLogout
     );
-    setNuovoSotto({
-      codice: '', nome: '', gruppo: '', ordine_gruppo: 0, ordine: 0, tipo: 'standard', coeff_produzione: 0, coeff_consumo_energia: 1, coeff_consumo_carburante: 0, coeff_effetto_speciale: 1, rampa_livelli_per_tick: 1,
-      capacita_storage: 0, coeff_ricarica_storage: 0.5, capacita_carburante: 0,
-      effetti_guasto_json: JSON.stringify(defaultEffettiGuasto(), null, 2),
-      effetti_inversione_json: JSON.stringify(defaultEffettiComandoCritico(), null, 2),
-      effetti_espulsione_json: JSON.stringify(defaultEffettiComandoCritico(), null, 2),
-      guasto_percent_per_livello_json: JSON.stringify(defaultGuastoCurve(), null, 2),
-      ripristino_percent_per_livello_json: JSON.stringify(defaultCurveZero(), null, 2),
-      colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
-    });
+    setNuovoSotto(resetNuovoSotto());
+    closeSottoModal();
     loadData();
   };
 
@@ -492,6 +540,7 @@ export default function PilotaggioManager({ onLogout }) {
     setNuovoEvento(defaultEvento);
     setCreateCaEffettoTipo('precipizio');
     setCreateCaEffettoSottosistemaId('');
+    closeCreateEventoModal();
     loadData();
   };
   const addComandoCritico = async () => {
@@ -556,7 +605,7 @@ export default function PilotaggioManager({ onLogout }) {
       },
       onLogout
     );
-    setEditSottoId(null);
+    closeSottoModal();
     loadData();
   };
 
@@ -887,294 +936,110 @@ export default function PilotaggioManager({ onLogout }) {
             {qrStatus.message}
           </div>
         ) : null}
-        <div className="grid md:grid-cols-3 gap-3 mb-3">
-          <label className="block">
-            <span className="text-xs text-gray-400">Codice (1 carattere)</span>
-            <input className="bg-gray-800 rounded px-2 py-1 w-16 shrink-0 mt-1" maxLength={1} value={nuovoSotto.codice} onChange={(e) => setNuovoSotto((p) => ({ ...p, codice: e.target.value }))} placeholder="A" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Nome sottosistema</span>
-            <input className="bg-gray-800 rounded px-2 py-1 flex-1 min-w-0 mt-1 w-full" value={nuovoSotto.nome} onChange={(e) => setNuovoSotto((p) => ({ ...p, nome: e.target.value }))} placeholder="Reattore principale" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Gruppo sistema</span>
-            <input className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.gruppo} onChange={(e) => setNuovoSotto((p) => ({ ...p, gruppo: e.target.value }))} placeholder="Alimentazione / Difesa / ..." />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Ordine colonna (gruppo)</span>
-            <input type="number" min={0} step={1} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.ordine_gruppo ?? 0} onChange={(e) => setNuovoSotto((p) => ({ ...p, ordine_gruppo: e.target.value }))} />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Ordine nel gruppo</span>
-            <input type="number" min={0} step={1} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.ordine ?? 0} onChange={(e) => setNuovoSotto((p) => ({ ...p, ordine: e.target.value }))} />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Tipo sottosistema</span>
-            <select className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.tipo} onChange={(e) => setNuovoSotto((p) => ({ ...p, tipo: e.target.value }))}>
-              <option value="standard">standard</option><option value="generatore">generatore</option><option value="batteria">batteria</option><option value="serbatoio">serbatoio</option><option value="motore">motore</option><option value="portale">portale</option><option value="manovra">manovra</option>
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Produzione energia per livello</span>
-            <input type="number" step="0.1" className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.coeff_produzione} onChange={(e) => setNuovoSotto((p) => ({ ...p, coeff_produzione: e.target.value }))} placeholder="Es. 2.5" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Consumo energia per livello</span>
-            <input type="number" step="0.1" className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.coeff_consumo_energia} onChange={(e) => setNuovoSotto((p) => ({ ...p, coeff_consumo_energia: e.target.value }))} placeholder="Es. 1.0" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Consumo carburante per livello</span>
-            <input type="number" step="0.1" className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.coeff_consumo_carburante} onChange={(e) => setNuovoSotto((p) => ({ ...p, coeff_consumo_carburante: e.target.value }))} placeholder="Es. 0.8" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Coefficiente effetto speciale</span>
-            <input type="number" step="0.01" className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.coeff_effetto_speciale || 1} onChange={(e) => setNuovoSotto((p) => ({ ...p, coeff_effetto_speciale: e.target.value }))} placeholder="Portale: 0.15" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Rampa livelli per tick</span>
-            <input type="number" min={1} max={9} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.rampa_livelli_per_tick || 1} onChange={(e) => setNuovoSotto((p) => ({ ...p, rampa_livelli_per_tick: e.target.value }))} placeholder="Es. 1" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Capacita batterie (storage)</span>
-            <input type="number" step="0.1" className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.capacita_storage ?? 0} onChange={(e) => setNuovoSotto((p) => ({ ...p, capacita_storage: e.target.value }))} placeholder="Solo tipo batteria" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Coeff. ricarica batterie</span>
-            <input type="number" step="0.01" className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.coeff_ricarica_storage ?? 0.5} onChange={(e) => setNuovoSotto((p) => ({ ...p, coeff_ricarica_storage: e.target.value }))} placeholder="Solo tipo batteria" />
-          </label>
-          <label className="block">
-            <span className="text-xs text-gray-400">Capacita serbatoio carburante</span>
-            <input type="number" step="0.1" className="bg-gray-800 rounded px-2 py-1 mt-1 w-full" value={nuovoSotto.capacita_carburante ?? 0} onChange={(e) => setNuovoSotto((p) => ({ ...p, capacita_carburante: e.target.value }))} placeholder="Solo tipo serbatoio" />
-          </label>
-          <label className="block md:col-span-3">
-            <span className="text-xs text-gray-400">Effetto su guasto sottosistema (JSON)</span>
-            <textarea rows={5} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={nuovoSotto.effetti_guasto_json} onChange={(e) => setNuovoSotto((p) => ({ ...p, effetti_guasto_json: e.target.value }))} />
-          </label>
-          <div className="md:col-span-3 border border-gray-700 rounded p-2 bg-gray-900/60">
-            <div className="text-xs text-gray-300 mb-2">Generatore rapido JSON effetto guasto</div>
-            <div className="grid md:grid-cols-4 gap-2">
-              <select className="bg-gray-800 rounded px-2 py-1" value={nuovoEffettoGuastoBuilder.tipo} onChange={(e) => setNuovoEffettoGuastoBuilder((p) => ({ ...p, tipo: e.target.value }))}>
-                <option value="none">none</option>
-                <option value="guasto_altro_percent">guasto_altro_percent</option>
-                <option value="guasto_random_percent">guasto_random_percent</option>
-                <option value="riduci_carburante_percent">riduci_carburante_percent</option>
-                <option value="riduci_batterie_percent">riduci_batterie_percent</option>
-                <option value="allunga_distanza_percent">allunga_distanza_percent</option>
-                <option value="naufragio">naufragio</option>
-              </select>
-              <input type="number" step="0.1" min={0} max={100} disabled={['none', 'naufragio'].includes(nuovoEffettoGuastoBuilder.tipo)} className="bg-gray-800 rounded px-2 py-1 disabled:opacity-40" placeholder="valore %" value={nuovoEffettoGuastoBuilder.valore} onChange={(e) => setNuovoEffettoGuastoBuilder((p) => ({ ...p, valore: e.target.value }))} />
-              <input className="bg-gray-800 rounded px-2 py-1 disabled:opacity-40" maxLength={1} disabled={nuovoEffettoGuastoBuilder.tipo !== 'guasto_altro_percent'} placeholder="target codice" value={nuovoEffettoGuastoBuilder.target_codice} onChange={(e) => setNuovoEffettoGuastoBuilder((p) => ({ ...p, target_codice: e.target.value.toUpperCase() }))} />
-              <button type="button" disabled={!nuovoEffettoValidation.valid} className="px-3 py-1 rounded bg-indigo-700 disabled:opacity-40" onClick={() => setNuovoSotto((p) => ({ ...p, effetti_guasto_json: generaEffettoGuastoJson(nuovoEffettoGuastoBuilder) }))}>Genera JSON</button>
-            </div>
-            <div className={`text-xs mt-2 ${nuovoEffettoValidation.valid ? 'text-emerald-300' : 'text-amber-300'}`}>{nuovoEffettoValidation.message}</div>
-          </div>
-          <label className="block md:col-span-3">
-            <span className="text-xs text-gray-400">Effetto su attivazione INVERTI (JSON con probabilita_percent)</span>
-            <textarea rows={4} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={nuovoSotto.effetti_inversione_json} onChange={(e) => setNuovoSotto((p) => ({ ...p, effetti_inversione_json: e.target.value }))} />
-          </label>
-          <label className="block md:col-span-3">
-            <span className="text-xs text-gray-400">Effetto su attivazione ESPULSIONE (JSON con probabilita_percent)</span>
-            <textarea rows={4} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={nuovoSotto.effetti_espulsione_json} onChange={(e) => setNuovoSotto((p) => ({ ...p, effetti_espulsione_json: e.target.value }))} />
-          </label>
-          <label className="block md:col-span-1">
-            <span className="text-xs text-gray-400">Guasto % per livello (JSON 0..9)</span>
-            <textarea rows={6} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={nuovoSotto.guasto_percent_per_livello_json} onChange={(e) => setNuovoSotto((p) => ({ ...p, guasto_percent_per_livello_json: e.target.value }))} />
-          </label>
-          <label className="block md:col-span-1">
-            <span className="text-xs text-gray-400">Ripristino % per livello (JSON 0..9)</span>
-            <textarea rows={6} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={nuovoSotto.ripristino_percent_per_livello_json} onChange={(e) => setNuovoSotto((p) => ({ ...p, ripristino_percent_per_livello_json: e.target.value }))} />
-          </label>
-          <label className="block md:col-span-1">
-            <span className="text-xs text-gray-400">Colori per livello (HEX JSON 0..9)</span>
-            <textarea rows={6} className="bg-gray-800 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={nuovoSotto.colori_per_livello_json} onChange={(e) => setNuovoSotto((p) => ({ ...p, colori_per_livello_json: e.target.value }))} />
-          </label>
-          <div className="md:col-span-3">
-            <button className="px-3 py-1 rounded bg-indigo-600 shrink-0" onClick={addSottosistema}>Aggiungi sottosistema</button>
-          </div>
+        <StaffMinigiocoPageToolbar
+          pageKey={MINIGIOCO_PAGE_KEYS.pilotSottosistemi}
+          pageLabel="Pilotaggio — Sottosistemi"
+          onLogout={onLogout}
+        />
+        <div className="flex justify-end my-3">
+          <button
+            type="button"
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium"
+            onClick={openCreateSottoModal}
+          >
+            Nuovo sottosistema
+          </button>
         </div>
-        <div className="space-y-1 text-sm">
+        <div className="space-y-2 text-sm">
           {sottosistemi.map((s) => (
-            <div key={s.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-800/60 rounded px-2 py-2">
-              {editSottoId === s.id ? (
-                <div className="grid md:grid-cols-3 gap-2 w-full items-end">
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Codice</span>
-                    <input className="bg-gray-700 rounded px-2 py-1 w-16 shrink-0 mt-1" maxLength={1} value={editSotto.codice} onChange={(e) => setEditSotto((p) => ({ ...p, codice: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Nome</span>
-                    <input className="bg-gray-700 rounded px-2 py-1 flex-1 min-w-40 mt-1 w-full" value={editSotto.nome} onChange={(e) => setEditSotto((p) => ({ ...p, nome: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Gruppo</span>
-                    <input className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.gruppo || ''} onChange={(e) => setEditSotto((p) => ({ ...p, gruppo: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Ordine colonna (gruppo)</span>
-                    <input type="number" min={0} step={1} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.ordine_gruppo ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, ordine_gruppo: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Ordine nel gruppo</span>
-                    <input type="number" min={0} step={1} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.ordine ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, ordine: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Tipo</span>
-                    <select className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.tipo || 'standard'} onChange={(e) => setEditSotto((p) => ({ ...p, tipo: e.target.value }))}>
-                      <option value="standard">standard</option><option value="generatore">generatore</option><option value="batteria">batteria</option><option value="serbatoio">serbatoio</option><option value="motore">motore</option><option value="portale">portale</option><option value="manovra">manovra</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Prod. energia/livello</span>
-                    <input type="number" step="0.1" className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.coeff_produzione ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, coeff_produzione: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Cons. energia/livello</span>
-                    <input type="number" step="0.1" className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.coeff_consumo_energia ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, coeff_consumo_energia: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Cons. carburante/livello</span>
-                    <input type="number" step="0.1" className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.coeff_consumo_carburante ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, coeff_consumo_carburante: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Coeff. speciale</span>
-                    <input type="number" step="0.01" className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.coeff_effetto_speciale ?? 1} onChange={(e) => setEditSotto((p) => ({ ...p, coeff_effetto_speciale: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Rampa livelli/tick</span>
-                    <input type="number" min={1} max={9} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.rampa_livelli_per_tick ?? 1} onChange={(e) => setEditSotto((p) => ({ ...p, rampa_livelli_per_tick: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Capacita batterie (storage)</span>
-                    <input type="number" step="0.1" className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.capacita_storage ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, capacita_storage: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Coeff. ricarica batterie</span>
-                    <input type="number" step="0.01" className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.coeff_ricarica_storage ?? 0.5} onChange={(e) => setEditSotto((p) => ({ ...p, coeff_ricarica_storage: e.target.value }))} />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs text-gray-400">Capacita serbatoio carburante</span>
-                    <input type="number" step="0.1" className="bg-gray-700 rounded px-2 py-1 mt-1 w-full" value={editSotto.capacita_carburante ?? 0} onChange={(e) => setEditSotto((p) => ({ ...p, capacita_carburante: e.target.value }))} />
-                  </label>
-                  <label className="block md:col-span-3">
-                    <span className="text-xs text-gray-400">Effetto su guasto sottosistema (JSON)</span>
-                    <textarea rows={5} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={editSotto.effetti_guasto_json || ''} onChange={(e) => setEditSotto((p) => ({ ...p, effetti_guasto_json: e.target.value }))} />
-                  </label>
-                  <div className="md:col-span-3 border border-gray-600 rounded p-2 bg-gray-800/50">
-                    <div className="text-xs text-gray-300 mb-2">Generatore rapido JSON effetto guasto</div>
-                    <div className="grid md:grid-cols-4 gap-2">
-                      <select className="bg-gray-700 rounded px-2 py-1" value={editEffettoGuastoBuilder.tipo} onChange={(e) => setEditEffettoGuastoBuilder((p) => ({ ...p, tipo: e.target.value }))}>
-                        <option value="none">none</option>
-                        <option value="guasto_altro_percent">guasto_altro_percent</option>
-                        <option value="guasto_random_percent">guasto_random_percent</option>
-                        <option value="riduci_carburante_percent">riduci_carburante_percent</option>
-                        <option value="riduci_batterie_percent">riduci_batterie_percent</option>
-                        <option value="allunga_distanza_percent">allunga_distanza_percent</option>
-                        <option value="naufragio">naufragio</option>
-                      </select>
-                      <input type="number" step="0.1" min={0} max={100} disabled={['none', 'naufragio'].includes(editEffettoGuastoBuilder.tipo)} className="bg-gray-700 rounded px-2 py-1 disabled:opacity-40" placeholder="valore %" value={editEffettoGuastoBuilder.valore} onChange={(e) => setEditEffettoGuastoBuilder((p) => ({ ...p, valore: e.target.value }))} />
-                      <input className="bg-gray-700 rounded px-2 py-1 disabled:opacity-40" maxLength={1} disabled={editEffettoGuastoBuilder.tipo !== 'guasto_altro_percent'} placeholder="target codice" value={editEffettoGuastoBuilder.target_codice} onChange={(e) => setEditEffettoGuastoBuilder((p) => ({ ...p, target_codice: e.target.value.toUpperCase() }))} />
-                      <button type="button" disabled={!editEffettoValidation.valid} className="px-3 py-1 rounded bg-indigo-700 disabled:opacity-40" onClick={() => setEditSotto((p) => ({ ...p, effetti_guasto_json: generaEffettoGuastoJson(editEffettoGuastoBuilder) }))}>Genera JSON</button>
-                    </div>
-                    <div className={`text-xs mt-2 ${editEffettoValidation.valid ? 'text-emerald-300' : 'text-amber-300'}`}>{editEffettoValidation.message}</div>
-                  </div>
-                  <label className="block md:col-span-3">
-                    <span className="text-xs text-gray-400">Effetto su attivazione INVERTI (JSON con probabilita_percent)</span>
-                    <textarea rows={4} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={editSotto.effetti_inversione_json || ''} onChange={(e) => setEditSotto((p) => ({ ...p, effetti_inversione_json: e.target.value }))} />
-                  </label>
-                  <label className="block md:col-span-3">
-                    <span className="text-xs text-gray-400">Effetto su attivazione ESPULSIONE (JSON con probabilita_percent)</span>
-                    <textarea rows={4} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={editSotto.effetti_espulsione_json || ''} onChange={(e) => setEditSotto((p) => ({ ...p, effetti_espulsione_json: e.target.value }))} />
-                  </label>
-                  <label className="block md:col-span-1">
-                    <span className="text-xs text-gray-400">Guasto % per livello (JSON 0..9)</span>
-                    <textarea rows={6} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={editSotto.guasto_percent_per_livello_json || ''} onChange={(e) => setEditSotto((p) => ({ ...p, guasto_percent_per_livello_json: e.target.value }))} />
-                  </label>
-                  <label className="block md:col-span-1">
-                    <span className="text-xs text-gray-400">Ripristino % per livello (JSON 0..9)</span>
-                    <textarea rows={6} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={editSotto.ripristino_percent_per_livello_json || ''} onChange={(e) => setEditSotto((p) => ({ ...p, ripristino_percent_per_livello_json: e.target.value }))} />
-                  </label>
-                  <label className="block md:col-span-1">
-                    <span className="text-xs text-gray-400">Colori per livello (HEX JSON 0..9)</span>
-                    <textarea rows={6} className="bg-gray-700 rounded px-2 py-1 mt-1 w-full font-mono text-xs" value={editSotto.colori_per_livello_json || ''} onChange={(e) => setEditSotto((p) => ({ ...p, colori_per_livello_json: e.target.value }))} />
-                  </label>
-                  <button className="text-emerald-400 shrink-0" type="button" onClick={salvaSottosistema}>Salva</button>
-                  <button className="text-gray-300 shrink-0" type="button" onClick={() => setEditSottoId(null)}>Annulla</button>
-                </div>
-              ) : (
-                <>
-                  <span className="wrap-break-word">
-                    <strong>{s.codice}</strong> — {s.nome} ({s.gruppo || 'Senza gruppo'} / {s.tipo || 'standard'} · col.{s.ordine_gruppo ?? 0} · #{s.ordine ?? 0})
-                    {s.stato_qr === 'pronto'
-                      ? ' · QR collegato'
-                      : s.stato_qr === 'incompleto'
-                        ? ' · vista OK, manca ancora lo scan del cartellino'
-                        : ' · nessun QR'}
-                  </span>
-                  <div className="flex flex-wrap gap-2 shrink-0">
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded bg-gray-700 text-sm text-white"
-                      onClick={() => setScanningForSottosistemaId(s.id)}
-                    >
-                      Scansiona QR
-                    </button>
-                    <button
-                      type="button"
-                      className="px-2 py-1 rounded bg-indigo-800 text-sm text-white disabled:opacity-40"
-                      disabled={!s.qrcode_id}
-                      onClick={() => openMinigioco(s.qrcode_id, `${s.codice} — ${s.nome}`)}
-                      title={s.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
-                    >
-                      Minigioco
-                    </button>
-                    <button
-                      type="button"
-                      className="text-indigo-300 text-sm"
-                      onClick={async () => {
-                        setError('');
-                        try {
-                          const full = await staffGetPilotSottosistema(s.id, onLogout);
-                          setEditSottoId(full.id);
-                          setEditSotto({
-                            codice: full.codice || '',
-                            nome: full.nome || '',
-                            gruppo: full.gruppo || '',
-                            ordine_gruppo: full.ordine_gruppo ?? 0,
-                            ordine: full.ordine ?? 0,
-                            tipo: full.tipo || 'standard',
-                            coeff_produzione: full.coeff_produzione ?? 0,
-                            coeff_consumo_energia: full.coeff_consumo_energia ?? 1,
-                            coeff_consumo_carburante: full.coeff_consumo_carburante ?? 0,
-                            coeff_effetto_speciale: full.coeff_effetto_speciale ?? 1,
-                            rampa_livelli_per_tick: full.rampa_livelli_per_tick ?? 1,
-                            capacita_storage: full.capacita_storage ?? 0,
-                            coeff_ricarica_storage: full.coeff_ricarica_storage ?? 0.5,
-                            capacita_carburante: full.capacita_carburante ?? 0,
-                            effetti_guasto_json: JSON.stringify(full.effetti_guasto_json || defaultEffettiGuasto(), null, 2),
-                            effetti_inversione_json: JSON.stringify(full.effetti_inversione_json || defaultEffettiComandoCritico(), null, 2),
-                            effetti_espulsione_json: JSON.stringify(full.effetti_espulsione_json || defaultEffettiComandoCritico(), null, 2),
-                            guasto_percent_per_livello_json: JSON.stringify(full.guasto_percent_per_livello || defaultGuastoCurve(), null, 2),
-                            ripristino_percent_per_livello_json: JSON.stringify(full.ripristino_percent_per_livello || defaultCurveZero(), null, 2),
-                            colori_per_livello_json: JSON.stringify(full.colori_per_livello || defaultColorCurve(), null, 2),
-                          });
-                          setEditEffettoGuastoBuilder({
-                            tipo: String((full.effetti_guasto_json || {}).tipo || 'none'),
-                            valore: Number((full.effetti_guasto_json || {}).valore || 0),
-                            target_codice: String((full.effetti_guasto_json || {}).target_codice || ''),
-                          });
-                        } catch (err) {
-                          setError(err?.message || 'Impossibile caricare il sottosistema.');
-                        }
-                      }}
-                    >
-                      Modifica parametri
-                    </button>
-                    <button type="button" className="text-red-400 text-sm" onClick={() => staffDeletePilotSottosistema(s.id, onLogout).then(loadData)}>Elimina</button>
-                  </div>
-                </>
-              )}
+            <div
+              key={s.id}
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-800/60 rounded-lg px-3 py-2 border border-gray-700/80"
+            >
+              <span className="wrap-break-word min-w-0">
+                <strong className="font-mono text-indigo-200">{s.codice}</strong> — {s.nome}
+                <span className="text-gray-400 text-xs block sm:inline sm:ml-2">
+                  ({s.gruppo || 'Senza gruppo'} / {s.tipo || 'standard'} · col.{s.ordine_gruppo ?? 0} · #{s.ordine ?? 0})
+                  {s.stato_qr === 'pronto'
+                    ? ' · QR collegato'
+                    : s.stato_qr === 'incompleto'
+                      ? ' · vista OK, manca scan cartellino'
+                      : ' · nessun QR'}
+                </span>
+              </span>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded bg-gray-700 text-sm text-white"
+                  onClick={() => setScanningForSottosistemaId(s.id)}
+                >
+                  Scansiona QR
+                </button>
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded bg-indigo-800 text-sm text-white disabled:opacity-40"
+                  disabled={!s.qrcode_id}
+                  onClick={() => openMinigioco(s.qrcode_id, `${s.codice} — ${s.nome}`)}
+                  title={s.qrcode_id ? 'Configura minigioco QR' : 'Associa prima un QR'}
+                >
+                  Minigioco
+                </button>
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded bg-indigo-900/80 text-sm text-indigo-200"
+                  onClick={async () => {
+                    setError('');
+                    try {
+                      const full = await staffGetPilotSottosistema(s.id, onLogout);
+                      setEditSottoId(full.id);
+                      setEditSotto({
+                        codice: full.codice || '',
+                        nome: full.nome || '',
+                        gruppo: full.gruppo || '',
+                        ordine_gruppo: full.ordine_gruppo ?? 0,
+                        ordine: full.ordine ?? 0,
+                        tipo: full.tipo || 'standard',
+                        coeff_produzione: full.coeff_produzione ?? 0,
+                        coeff_consumo_energia: full.coeff_consumo_energia ?? 1,
+                        coeff_consumo_carburante: full.coeff_consumo_carburante ?? 0,
+                        coeff_effetto_speciale: full.coeff_effetto_speciale ?? 1,
+                        rampa_livelli_per_tick: full.rampa_livelli_per_tick ?? 1,
+                        capacita_storage: full.capacita_storage ?? 0,
+                        coeff_ricarica_storage: full.coeff_ricarica_storage ?? 0.5,
+                        capacita_carburante: full.capacita_carburante ?? 0,
+                        effetti_guasto_json: JSON.stringify(full.effetti_guasto_json || defaultEffettiGuasto(), null, 2),
+                        effetti_inversione_json: JSON.stringify(full.effetti_inversione_json || defaultEffettiComandoCritico(), null, 2),
+                        effetti_espulsione_json: JSON.stringify(full.effetti_espulsione_json || defaultEffettiComandoCritico(), null, 2),
+                        guasto_percent_per_livello_json: JSON.stringify(full.guasto_percent_per_livello || defaultGuastoCurve(), null, 2),
+                        ripristino_percent_per_livello_json: JSON.stringify(full.ripristino_percent_per_livello || defaultCurveZero(), null, 2),
+                        colori_per_livello_json: JSON.stringify(full.colori_per_livello || defaultColorCurve(), null, 2),
+                      });
+                      setEditEffettoGuastoBuilder({
+                        tipo: String((full.effetti_guasto_json || {}).tipo || 'none'),
+                        valore: Number((full.effetti_guasto_json || {}).valore || 0),
+                        target_codice: String((full.effetti_guasto_json || {}).target_codice || ''),
+                      });
+                      setSottoModalMode('edit');
+                    } catch (err) {
+                      setError(err?.message || 'Impossibile caricare il sottosistema.');
+                    }
+                  }}
+                >
+                  Modifica
+                </button>
+                <button
+                  type="button"
+                  className="px-2 py-1 rounded text-sm text-red-400 hover:bg-red-950/40"
+                  onClick={() => staffDeletePilotSottosistema(s.id, onLogout).then(loadData)}
+                >
+                  Elimina
+                </button>
+              </div>
             </div>
           ))}
+          {!sottosistemi.length ? (
+            <p className="text-gray-500 text-sm py-4 text-center">Nessun sottosistema. Clicca «Nuovo sottosistema».</p>
+          ) : null}
         </div>
       </section>
       ) : null}
@@ -1198,6 +1063,12 @@ export default function PilotaggioManager({ onLogout }) {
               onScanSuccess={async (qr_id) => {
                 try {
                   await staffAssociaPilotSottosistemaQr(scanningForSottosistemaId, qr_id, onLogout);
+                  await applyDefaultMinigiocoToQr(
+                    MINIGIOCO_PAGE_KEYS.pilotSottosistemi,
+                    qr_id,
+                    onLogout,
+                    staffSaveMinigiocoQrConfig,
+                  );
                   setScanningForSottosistemaId(null);
                   setQrStatus({ type: 'success', message: 'QR associato al sottosistema.' });
                   loadData();
@@ -1264,141 +1135,25 @@ export default function PilotaggioManager({ onLogout }) {
 
       {activeTab === 'eventi' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
-        <h3 className="font-semibold mb-3">Eventi viaggio (randomici)</h3>
-        <div className="grid md:grid-cols-7 gap-2 mb-3 border border-gray-700 rounded p-2">
-          <select className="bg-gray-800 rounded px-2 py-1" value={draftCondition.outcome} onChange={(e) => setDraftCondition((p) => ({ ...p, outcome: e.target.value }))}>
-            <option value="st">ST (migliora)</option>
-            <option value="sp">SP (stabile)</option>
-            <option value="ca">CA (precipita)</option>
-          </select>
-          <select className="bg-gray-800 rounded px-2 py-1" value={draftCondition.subsystem} onChange={(e) => setDraftCondition((p) => ({ ...p, subsystem: e.target.value }))}>
-            <option value="">Sottosistema...</option>
-            {sottosistemi.map((s) => <option key={s.id} value={s.codice}>{s.nome} ({s.codice})</option>)}
-          </select>
-          <select className="bg-gray-800 rounded px-2 py-1" value={draftCondition.op} onChange={(e) => setDraftCondition((p) => ({ ...p, op: e.target.value }))}>
-            {conditionOps.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          {draftCondition.op === 'between' ? (
-            <>
-              <input type="number" min={0} max={9} className="bg-gray-800 rounded px-2 py-1" value={draftCondition.min} onChange={(e) => setDraftCondition((p) => ({ ...p, min: e.target.value }))} placeholder="min" />
-              <input type="number" min={0} max={9} className="bg-gray-800 rounded px-2 py-1" value={draftCondition.max} onChange={(e) => setDraftCondition((p) => ({ ...p, max: e.target.value }))} placeholder="max" />
-            </>
-          ) : draftCondition.op === 'direction' ? (
-            <select className="bg-gray-800 rounded px-2 py-1" value={draftCondition.direction_rule} onChange={(e) => setDraftCondition((p) => ({ ...p, direction_rule: e.target.value }))}>
-              <option value="stessa_direzione">stessa_direzione</option>
-              <option value="direzione_opposta">direzione_opposta</option>
-              <option value="non_stessa_direzione">non_stessa_direzione</option>
-              <option value="non_direzione_opposta">non_direzione_opposta</option>
-            </select>
-          ) : (
-            (['piene', 'vuote', 'non_piene', 'non_vuote', 'distrutte', 'invertito', 'non_invertito', 'espulso', 'non_espulso'].includes(draftCondition.op)
-              ? <div className="bg-gray-800 rounded px-2 py-1 text-xs text-gray-300">Condizione booleana</div>
-              : <input type="number" min={0} max={9} className="bg-gray-800 rounded px-2 py-1" value={draftCondition.value} onChange={(e) => setDraftCondition((p) => ({ ...p, value: e.target.value }))} placeholder="val" />)
-          )}
-          <button className="px-3 py-1 rounded bg-indigo-700" onClick={addRuleCondition}>Aggiungi</button>
-          <button className="px-3 py-1 rounded bg-sky-700" onClick={generaJsonGuidaEvento}>Genera JSON ST/SP/CA</button>
-        </div>
-        <div className="grid md:grid-cols-3 gap-2 mb-3">
-          {['st', 'sp', 'ca'].map((k) => (
-            <div key={k} className="border border-gray-700 rounded p-2">
-              <div className="flex justify-between items-center mb-2">
-                <strong>{k.toUpperCase()}</strong>
-                <span className="text-[11px] text-gray-400">Usa formula con parentesi</span>
-              </div>
-              <input
-                className="bg-gray-800 rounded px-2 py-1 text-xs w-full mb-2 font-mono"
-                placeholder="(1 AND 2) OR 3"
-                value={ruleBuilder[k].expression || ''}
-                onChange={(e) => setRuleBuilder((p) => ({ ...p, [k]: { ...p[k], expression: e.target.value } }))}
-              />
-              <div className={`text-[11px] mb-2 ${ruleValidation[k].valid ? 'text-emerald-300' : 'text-amber-300'}`}>
-                {ruleValidation[k].valid ? 'OK' : 'Errore'}: {ruleValidation[k].message}
-              </div>
-              <div className="space-y-1 text-xs">
-                {(ruleBuilder[k].conditions || []).map((c, idx) => (
-                  <div key={`${k}-${idx}`} className="bg-gray-800 rounded px-2 py-1 flex justify-between gap-2">
-                    <span>
-                      {idx + 1}) {c.sottosistema} {c.op}{' '}
-                      {c.op === 'between' ? `${c.min}-${c.max}` : ''}
-                      {c.op === 'direction' ? c.direction_rule : ''}
-                      {![
-                        'between',
-                        'direction',
-                        'piene',
-                        'vuote',
-                        'non_piene',
-                        'non_vuote',
-                        'distrutte',
-                        'invertito',
-                        'non_invertito',
-                        'espulso',
-                        'non_espulso',
-                      ].includes(c.op)
-                        ? c.value
-                        : ''}
-                    </span>
-                    <button className="text-red-400" onClick={() => removeRuleCondition(k, idx)}>x</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="grid md:grid-cols-2 gap-2 mb-3">
-          <input className="bg-gray-800 rounded px-2 py-1" placeholder="Nome evento" value={nuovoEvento.nome} onChange={(e) => setNuovoEvento((p) => ({ ...p, nome: e.target.value }))} />
-          <input
-            className={`bg-gray-800 rounded px-2 py-1 font-mono ${isValidDurataTickSpec(nuovoEvento.durata_tick) ? '' : 'border border-red-600'}`}
-            placeholder='Durata tick: N | A-B | -N | -'
-            value={nuovoEvento.durata_tick}
-            onChange={(e) => {
-              const next = e.target.value.replace(/[^0-9-]/g, '');
-              setNuovoEvento((p) => ({ ...p, durata_tick: next }));
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="font-semibold">Eventi viaggio (randomici)</h3>
+          <button
+            type="button"
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium"
+            onClick={() => {
+              setError('');
+              setCreateEventoModalOpen(true);
             }}
-          />
-          <input className="bg-gray-800 rounded px-2 py-1 md:col-span-2" placeholder="Descrizione" value={nuovoEvento.descrizione} onChange={(e) => setNuovoEvento((p) => ({ ...p, descrizione: e.target.value }))} />
-          <p className="text-xs text-gray-400 md:col-span-2">
-            Durata evento: <code>N</code>=esatto, <code>A-B</code>=random tra estremi, <code>-N</code>=persiste ma se non arriva ST entro N tick la nave precipita, <code>-</code>=persiste finche non arriva ST.
-          </p>
-          <div className="md:col-span-2 rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 space-y-2">
-            <div className="text-xs font-semibold text-amber-200/90">Effetto esito CA (quando scatta la ramo CA)</div>
-            <p className="text-[11px] text-gray-400 leading-relaxed">
-              Di default il CA precipita la nave. Puoi invece applicare un guasto mirato a un sottosistema (il motore di gioco usa <code className="text-gray-300">ca_effetto</code> nel JSON regole).
-            </p>
-            <div className="flex flex-wrap gap-3 items-end">
-              <label className="block min-w-[10rem]">
-                <span className="text-xs text-gray-400">Tipo effetto CA</span>
-                <select
-                  className="bg-gray-800 rounded px-2 py-1 mt-1 w-full"
-                  value={createCaEffettoTipo}
-                  onChange={(e) => setCreateCaEffettoTipo(e.target.value)}
-                >
-                  <option value="precipizio">Precipizio nave</option>
-                  <option value="guasto_sottosistema">Guasto sottosistema</option>
-                </select>
-              </label>
-              {createCaEffettoTipo === 'guasto_sottosistema' ? (
-                <label className="block flex-1 min-w-[12rem]">
-                  <span className="text-xs text-gray-400">Sottosistema in guasto</span>
-                  <select
-                    className="bg-gray-800 rounded px-2 py-1 mt-1 w-full"
-                    value={createCaEffettoSottosistemaId}
-                    onChange={(e) => setCreateCaEffettoSottosistemaId(e.target.value)}
-                  >
-                    <option value="">Seleziona…</option>
-                    {sottosistemi.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.nome} ({s.codice})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-            </div>
-          </div>
-          <textarea className="bg-gray-800 rounded px-2 py-1 md:col-span-2 min-h-32 font-mono text-xs" placeholder="JSON regole avanzate (modificabile)" value={nuovoEvento.regole_json} onChange={(e) => setNuovoEvento((p) => ({ ...p, regole_json: e.target.value }))} />
-          <button className="px-3 py-1 rounded bg-indigo-600 md:col-span-2" onClick={addEvento}>Aggiungi evento</button>
+          >
+            Nuovo evento
+          </button>
         </div>
-        <div className="space-y-2 mt-2">
+        <StaffMinigiocoPageToolbar
+          pageKey={MINIGIOCO_PAGE_KEYS.pilotEventi}
+          pageLabel="Pilotaggio — Eventi"
+          onLogout={onLogout}
+        />
+        <div className="space-y-2 mt-3">
           {eventi.map((e) => (
             <div
               key={e.id}
@@ -1953,6 +1708,142 @@ export default function PilotaggioManager({ onLogout }) {
           </div>
         </div>
       ) : null}
+
+      <PilotSottosistemaModal
+        open={sottoModalMode !== null}
+        mode={sottoModalMode === 'edit' ? 'edit' : 'create'}
+        draft={sottoModalMode === 'edit' ? editSotto : nuovoSotto}
+        setDraft={sottoModalMode === 'edit' ? setEditSotto : setNuovoSotto}
+        effettoBuilder={sottoModalMode === 'edit' ? editEffettoGuastoBuilder : nuovoEffettoGuastoBuilder}
+        setEffettoBuilder={sottoModalMode === 'edit' ? setEditEffettoGuastoBuilder : setNuovoEffettoGuastoBuilder}
+        effettoValidation={sottoModalMode === 'edit' ? editEffettoValidation : nuovoEffettoValidation}
+        generaEffettoGuastoJson={generaEffettoGuastoJson}
+        onSave={sottoModalMode === 'edit' ? salvaSottosistema : addSottosistema}
+        onClose={closeSottoModal}
+      />
+
+      {createEventoModalOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          role="presentation"
+          onClick={closeCreateEventoModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="bg-gray-800 rounded-2xl w-full max-w-5xl max-h-[min(92vh,900px)] flex flex-col border border-indigo-500/40 shadow-2xl"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <div className="shrink-0 flex justify-between items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-700/90">
+              <div>
+                <h3 className="text-lg font-bold text-indigo-300">Nuovo evento viaggio</h3>
+                <p className="text-xs text-gray-400 mt-1">Nome, regole ST/SP/CA e collegamento sottosistema.</p>
+              </div>
+              <button type="button" className="shrink-0 px-3 py-1.5 rounded-lg text-sm text-gray-300 hover:bg-gray-700 border border-gray-600" onClick={closeCreateEventoModal}>
+                Chiudi
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4 space-y-4 text-sm">
+              {error ? (
+                <div className="rounded-lg border border-red-700/50 bg-red-950/50 px-3 py-2 text-sm text-red-100">{error}</div>
+              ) : null}
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Nome</span>
+                <input className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600" value={nuovoEvento.nome} onChange={(e) => setNuovoEvento((p) => ({ ...p, nome: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Descrizione</span>
+                <textarea className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 min-h-[72px]" value={nuovoEvento.descrizione} onChange={(e) => setNuovoEvento((p) => ({ ...p, descrizione: e.target.value }))} />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Durata tick</span>
+                <input
+                  className={`mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border font-mono text-sm ${isValidDurataTickSpec(nuovoEvento.durata_tick) ? 'border-gray-600' : 'border-red-500'}`}
+                  value={nuovoEvento.durata_tick}
+                  onChange={(e) => setNuovoEvento((p) => ({ ...p, durata_tick: e.target.value.replace(/[^0-9-]/g, '') }))}
+                  placeholder="N | A-B | -N | -"
+                />
+              </label>
+              <div className="rounded-xl border border-indigo-900/40 p-4 space-y-3 bg-gray-900/50">
+                <div className="text-xs font-semibold text-indigo-200/90 uppercase tracking-wide">Composer ST / SP / CA</div>
+                <div className="grid md:grid-cols-7 gap-2 border border-gray-700 rounded-lg p-2">
+                  <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.outcome} onChange={(e) => setDraftCondition((p) => ({ ...p, outcome: e.target.value }))}>
+                    <option value="st">ST</option><option value="sp">SP</option><option value="ca">CA</option>
+                  </select>
+                  <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.subsystem} onChange={(e) => setDraftCondition((p) => ({ ...p, subsystem: e.target.value }))}>
+                    <option value="">Sottosistema…</option>
+                    {sottosistemi.map((s) => <option key={s.id} value={s.codice}>{s.nome} ({s.codice})</option>)}
+                  </select>
+                  <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.op} onChange={(e) => setDraftCondition((p) => ({ ...p, op: e.target.value }))}>
+                    {conditionOps.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  {draftCondition.op === 'between' ? (
+                    <>
+                      <input type="number" min={0} max={9} className="bg-gray-900 rounded px-2 py-1" value={draftCondition.min} onChange={(e) => setDraftCondition((p) => ({ ...p, min: e.target.value }))} />
+                      <input type="number" min={0} max={9} className="bg-gray-900 rounded px-2 py-1" value={draftCondition.max} onChange={(e) => setDraftCondition((p) => ({ ...p, max: e.target.value }))} />
+                    </>
+                  ) : draftCondition.op === 'direction' ? (
+                    <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.direction_rule} onChange={(e) => setDraftCondition((p) => ({ ...p, direction_rule: e.target.value }))}>
+                      <option value="direzione_opposta">direzione_opposta</option>
+                    </select>
+                  ) : ['piene', 'vuote', 'non_piene', 'non_vuote', 'distrutte', 'invertito', 'non_invertito', 'espulso', 'non_espulso'].includes(draftCondition.op) ? (
+                    <div className="bg-gray-900 rounded px-2 py-1 text-xs text-gray-300">Booleana</div>
+                  ) : (
+                    <input type="number" min={0} max={9} className="bg-gray-900 rounded px-2 py-1" value={draftCondition.value} onChange={(e) => setDraftCondition((p) => ({ ...p, value: e.target.value }))} />
+                  )}
+                  <button type="button" className="px-3 py-1 rounded bg-indigo-700 text-sm" onClick={addRuleCondition}>Aggiungi</button>
+                  <button type="button" className="px-3 py-1 rounded bg-sky-700 text-sm" onClick={generaJsonGuidaEvento}>Aggiorna JSON</button>
+                </div>
+                <div className="grid md:grid-cols-3 gap-2">
+                  {['st', 'sp', 'ca'].map((k) => (
+                    <div key={`create-${k}`} className="border border-gray-700 rounded-lg p-2 bg-gray-950/40">
+                      <strong className="text-xs">{k.toUpperCase()}</strong>
+                      <input className="bg-gray-900 rounded px-2 py-1 text-xs w-full mt-1 mb-1 font-mono border border-gray-700" placeholder="(1 AND 2)" value={ruleBuilder[k].expression || ''} onChange={(e) => setRuleBuilder((p) => ({ ...p, [k]: { ...p[k], expression: e.target.value } }))} />
+                      <div className={`text-[11px] mb-1 ${ruleValidation[k].valid ? 'text-emerald-300' : 'text-amber-300'}`}>{ruleValidation[k].message}</div>
+                      {(ruleBuilder[k].conditions || []).map((c, idx) => (
+                        <div key={`${k}-c-${idx}`} className="text-[11px] flex justify-between bg-gray-900 rounded px-1 py-0.5 mb-0.5">
+                          <span>{idx + 1}) {c.sottosistema} {c.op}</span>
+                          <button type="button" className="text-red-400" onClick={() => removeRuleCondition(k, idx)}>x</button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 space-y-2">
+                <div className="text-xs font-semibold text-amber-200/90">Effetto esito CA</div>
+                <div className="flex flex-wrap gap-3 items-end">
+                  <label className="block min-w-[10rem]">
+                    <span className="text-xs text-gray-400">Tipo</span>
+                    <select className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700" value={createCaEffettoTipo} onChange={(e) => setCreateCaEffettoTipo(e.target.value)}>
+                      <option value="precipizio">Precipizio nave</option>
+                      <option value="guasto_sottosistema">Guasto sottosistema</option>
+                    </select>
+                  </label>
+                  {createCaEffettoTipo === 'guasto_sottosistema' ? (
+                    <label className="block flex-1 min-w-[12rem]">
+                      <span className="text-xs text-gray-400">Sottosistema</span>
+                      <select className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700" value={createCaEffettoSottosistemaId} onChange={(e) => setCreateCaEffettoSottosistemaId(e.target.value)}>
+                        <option value="">Seleziona…</option>
+                        {sottosistemi.map((s) => <option key={s.id} value={s.id}>{s.nome} ({s.codice})</option>)}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+              <label className="block">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regole avanzate (JSON)</span>
+                <textarea className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 min-h-[120px] font-mono text-xs" value={nuovoEvento.regole_json} onChange={(e) => setNuovoEvento((p) => ({ ...p, regole_json: e.target.value }))} />
+              </label>
+            </div>
+            <div className="shrink-0 flex justify-end gap-2 px-5 py-3 border-t border-gray-700 bg-gray-900/80">
+              <button type="button" className="px-4 py-2 rounded-lg border border-gray-600 text-gray-300 hover:bg-gray-700" onClick={closeCreateEventoModal}>Annulla</button>
+              <button type="button" className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium" onClick={addEvento}>Crea evento</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {minigiocoModal}
     </div>
   );

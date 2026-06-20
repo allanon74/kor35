@@ -5,13 +5,20 @@ import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
+import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
+import {
+  applyDefaultMinigiocoToQr,
+  MINIGIOCO_PAGE_KEYS,
+  unwrapStaffList,
+} from '../../utils/staffMinigiocoDefaults';
 import {
   staffGetManifesti,
   staffCreateManifesto,
   staffUpdateManifesto,
   staffDeleteManifesto,
+  staffSaveMinigiocoQrConfig,
 } from '../../api';
 
 const ManifestoManager = ({ onBack, onLogout }) => {
@@ -26,7 +33,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
     setLoading(true);
     try {
       const data = await staffGetManifesti(onLogout);
-      setItems(Array.isArray(data) ? data : []);
+      setItems(unwrapStaffList(data));
     } catch (e) {
       setMsg(e.message || 'Errore caricamento manifesti');
     } finally {
@@ -125,6 +132,11 @@ const ManifestoManager = ({ onBack, onLogout }) => {
               Nuovo
             </button>
           </div>
+          <StaffMinigiocoPageToolbar
+            pageKey={MINIGIOCO_PAGE_KEYS.manifesti}
+            pageLabel="Manifesti"
+            onLogout={onLogout}
+          />
           {loading ? (
             <p className="text-gray-400">Caricamento…</p>
           ) : (
@@ -225,12 +237,20 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           </div>
           <div className="flex-1">
             <StaffQrTab
-              onScanSuccess={(qr_id) =>
-                handleQrScan(scanningId, qr_id, {
+              onScanSuccess={async (qr_id) => {
+                const res = await handleQrScan(scanningId, qr_id, {
                   closeScan: () => setScanningId(null),
                   onMessage: setMsg,
-                })
-              }
+                });
+                if (res?.ok) {
+                  await applyDefaultMinigiocoToQr(
+                    MINIGIOCO_PAGE_KEYS.manifesti,
+                    qr_id,
+                    onLogout,
+                    staffSaveMinigiocoQrConfig,
+                  );
+                }
+              }}
               onLogout={onLogout}
             />
           </div>
@@ -245,7 +265,18 @@ const ManifestoManager = ({ onBack, onLogout }) => {
         confirmTone="warning"
         loading={conflictLoading}
         onCancel={cancelConflict}
-        onConfirm={() => confirmConflict(setMsg)}
+        onConfirm={async () => {
+          const qrId = pendingQrConflict?.qrId;
+          await confirmConflict(setMsg);
+          if (qrId) {
+            await applyDefaultMinigiocoToQr(
+              MINIGIOCO_PAGE_KEYS.manifesti,
+              qrId,
+              onLogout,
+              staffSaveMinigiocoQrConfig,
+            );
+          }
+        }}
       >
         {pendingQrConflict?.errorData ? (
           <QrAssociationConflictBody errorData={pendingQrConflict.errorData} targetHint="questo manifesto" />

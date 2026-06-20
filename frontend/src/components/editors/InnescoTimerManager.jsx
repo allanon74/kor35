@@ -5,7 +5,13 @@ import ConfirmDialog from './ConfirmDialog';
 import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
+import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
+import {
+  applyDefaultMinigiocoToQr,
+  MINIGIOCO_PAGE_KEYS,
+  unwrapStaffList,
+} from '../../utils/staffMinigiocoDefaults';
 import {
   associaQrDiretto,
   staffGetInnescoTimers,
@@ -15,6 +21,7 @@ import {
   staffGetEre,
   staffGetRegioni,
   staffGetKorps,
+  staffSaveMinigiocoQrConfig,
 } from '../../api';
 
 const emptyForm = () => ({
@@ -98,7 +105,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
     setLoading(true);
     try {
       const data = await staffGetInnescoTimers(onLogout);
-      setItems(Array.isArray(data) ? data : []);
+      setItems(unwrapStaffList(data));
     } catch (e) {
       setMsg(e.message || 'Errore caricamento');
     } finally {
@@ -193,6 +200,11 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               Nuovo
             </button>
           </div>
+          <StaffMinigiocoPageToolbar
+            pageKey={MINIGIOCO_PAGE_KEYS.innescoTimer}
+            pageLabel="Innesco timer"
+            onLogout={onLogout}
+          />
           {loading ? (
             <p className="text-gray-400">Caricamento…</p>
           ) : (
@@ -353,6 +365,12 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               onScanSuccess={async (qr_id) => {
                 try {
                   await associaQrDiretto(scanningId, qr_id, onLogout);
+                  await applyDefaultMinigiocoToQr(
+                    MINIGIOCO_PAGE_KEYS.innescoTimer,
+                    qr_id,
+                    onLogout,
+                    staffSaveMinigiocoQrConfig,
+                  );
                   setScanningId(null);
                   setMsg('QR associato.');
                   load();
@@ -389,6 +407,12 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
           if (!p?.qrId || !p?.targetId) return;
           try {
             await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
+            await applyDefaultMinigiocoToQr(
+              MINIGIOCO_PAGE_KEYS.innescoTimer,
+              p.qrId,
+              onLogout,
+              staffSaveMinigiocoQrConfig,
+            );
             setPendingQrConflict(null);
             setScanningId(null);
             setMsg('QR associato (forzato).');

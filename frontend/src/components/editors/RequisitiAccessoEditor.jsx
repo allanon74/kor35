@@ -1,5 +1,6 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import FilterableCombobox from './FilterableCombobox';
 
 const TIPO_REQUISITO_OPTS = [
   { id: 'statistica', label: 'Statistica (sigla)' },
@@ -22,7 +23,28 @@ const GIORNI_SETTIMANA = [
 
 const emptyRequisito = () => ({ tipo: 'statistica', sigla: '', min: 1 });
 
-const RequisitiListaEditor = ({ requisiti, onChange, lookup = {} }) => {
+const statisticaOptions = (lookup) =>
+  (lookup.statistiche || []).map((s) => ({
+    value: (s.sigla || '').toUpperCase(),
+    label: s.sigla ? `${s.sigla} — ${s.nome || s.sigla}` : s.nome,
+    searchText: `${s.sigla} ${s.nome}`,
+  })).filter((o) => o.value);
+
+const auraOptions = (lookup) =>
+  (lookup.auras || []).map((a) => ({
+    value: a.nome,
+    label: a.sigla ? `${a.nome} (${a.sigla})` : a.nome,
+    searchText: `${a.nome} ${a.sigla || ''}`,
+  })).filter((o) => o.value);
+
+const entityOptions = (list) =>
+  (list || []).map((x) => ({
+    value: x.id,
+    label: x.nome || String(x.id),
+    searchText: x.nome,
+  }));
+
+const RequisitiListaEditor = ({ requisiti, onChange, lookup = {}, lookupLoading = false }) => {
   const list = Array.isArray(requisiti) ? requisiti : [];
 
   const updateAt = (idx, patch) => {
@@ -53,12 +75,17 @@ const RequisitiListaEditor = ({ requisiti, onChange, lookup = {} }) => {
             </select>
             {tipo === 'statistica' && (
               <>
-                <input
-                  className="w-14 bg-gray-800 border border-gray-600 rounded px-1 text-xs uppercase"
-                  placeholder="SIG"
+                <FilterableCombobox
+                  options={statisticaOptions(lookup)}
                   value={req.sigla || ''}
-                  onChange={(e) => updateAt(idx, { sigla: e.target.value.toUpperCase() })}
+                  onChange={(sigla) => updateAt(idx, { sigla: String(sigla || '').toUpperCase() })}
+                  placeholder={lookupLoading ? 'Caricamento…' : 'Sigla statistica'}
+                  allowCustom
+                  normalizeCustom={(v) => v.toUpperCase()}
+                  disabled={lookupLoading}
+                  className="min-w-[140px]"
                 />
+                <span className="text-gray-500 text-xs">≥</span>
                 <input
                   type="number"
                   className="w-12 bg-gray-800 border border-gray-600 rounded px-1 text-xs"
@@ -69,12 +96,14 @@ const RequisitiListaEditor = ({ requisiti, onChange, lookup = {} }) => {
             )}
             {tipo === 'punteggio' && (
               <>
-                <input
-                  className="flex-1 min-w-[80px] bg-gray-800 border border-gray-600 rounded px-1 text-xs"
-                  placeholder="Nome aura"
+                <FilterableCombobox
+                  options={auraOptions(lookup)}
                   value={req.nome || ''}
-                  onChange={(e) => updateAt(idx, { nome: e.target.value })}
+                  onChange={(nome) => updateAt(idx, { nome: String(nome || '') })}
+                  placeholder={lookupLoading ? 'Caricamento…' : 'Aura / punteggio'}
+                  disabled={lookupLoading}
                 />
+                <span className="text-gray-500 text-xs">≥</span>
                 <input
                   type="number"
                   className="w-12 bg-gray-800 border border-gray-600 rounded px-1 text-xs"
@@ -84,26 +113,31 @@ const RequisitiListaEditor = ({ requisiti, onChange, lookup = {} }) => {
               </>
             )}
             {(tipo === 'abilita' || tipo === 'korp' || tipo === 'carriera' || tipo === 'carica') && (
-              <select
-                className="flex-1 min-w-[120px] bg-gray-800 border border-gray-600 rounded px-1 text-xs"
-                value={req.id ?? ''}
-                onChange={(e) => updateAt(idx, { id: e.target.value || null })}
-              >
-                <option value="">— seleziona —</option>
-                {(
+              <FilterableCombobox
+                options={
                   tipo === 'abilita'
-                    ? lookup.abilita
+                    ? entityOptions(lookup.abilita)
                     : tipo === 'korp'
-                      ? lookup.korps
+                      ? entityOptions(lookup.korps)
                       : tipo === 'carica'
-                        ? lookup.cariche
-                        : lookup.carriere
-                )?.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.nome}
-                  </option>
-                ))}
-              </select>
+                        ? entityOptions(lookup.cariche)
+                        : entityOptions(lookup.carriere)
+                }
+                value={req.id ?? ''}
+                onChange={(id) => updateAt(idx, { id: id || null })}
+                placeholder={
+                  lookupLoading
+                    ? 'Caricamento…'
+                    : tipo === 'abilita'
+                      ? 'Abilità'
+                      : tipo === 'korp'
+                        ? 'KORP'
+                        : tipo === 'carica'
+                          ? 'Carica'
+                          : 'Carriera'
+                }
+                disabled={lookupLoading}
+              />
             )}
             <button type="button" className="text-red-400 p-1" onClick={() => removeAt(idx)} aria-label="Rimuovi">
               <Trash2 size={14} />
@@ -303,7 +337,7 @@ export const RegoleAperturaEditor = ({ value, onChange, lookup }) => {
   );
 };
 
-export const RegoleGruppoListaEditor = ({ gruppi, onChange, lookup, renderExtra, addLabel = 'Aggiungi regola' }) => {
+export const RegoleGruppoListaEditor = ({ gruppi, onChange, lookup, lookupLoading, renderExtra, addLabel = 'Aggiungi regola' }) => {
   const list = Array.isArray(gruppi) ? gruppi : [];
 
   const updateAt = (idx, patch) => {
@@ -340,6 +374,7 @@ export const RegoleGruppoListaEditor = ({ gruppi, onChange, lookup, renderExtra,
             requisiti={gruppo.requisiti || []}
             onChange={(requisiti) => updateAt(idx, { requisiti })}
             lookup={lookup}
+            lookupLoading={lookupLoading}
           />
         </div>
       ))}
