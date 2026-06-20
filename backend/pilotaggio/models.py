@@ -338,7 +338,7 @@ class EventoNave(SyncableModel, models.Model):
         default="4",
         help_text=(
             'Durata evento in tick: "N", "A-B", "-N" o "-". '
-            '-N: persiste e precipita se nessun ST entro N tick. '
+            '-N: persiste fino a ST; se nessun ST entro N tick applica ca_effetto. '
             '-: persiste finche non arriva ST.'
         ),
     )

@@ -1637,7 +1637,8 @@ export default function PilotaggioManager({ onLogout }) {
                     placeholder="N | A-B | -N | -"
                   />
                   <p className="text-[11px] text-gray-500 mt-1">
-                    <code>N</code>, <code>A-B</code>, <code>-N</code>, <code>-</code>
+                    <code>N</code> durata fissa · <code>A-B</code> random · <code>-N</code> fino a ST, poi{' '}
+                    <code>ca_effetto</code> · <code>-</code> fino a ST senza limite
                   </p>
                 </label>
                 <label className="block">

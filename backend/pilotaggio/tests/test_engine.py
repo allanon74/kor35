@@ -497,3 +497,40 @@ class CaEffettoGuastoTests(TestCase):
         self.assertEqual(offline, 2)
         stato_a.refresh_from_db()
         self.assertFalse(stato_a.online)
+
+    def test_durata_tick_meno_n_scadenza_applica_ca_effetto(self):
+        from pilotaggio.engine import valuta_evento_tick
+
+        stato_b = StatoSottosistemaSessione.objects.get(
+            sessione=self.sessione, sottosistema=self.sotto_b
+        )
+        evento = EventoNave.objects.create(
+            nome="Scadenza -N",
+            descrizione="Test",
+            codice_soluzione_esatta="Z99",
+            durata_tick="-2",
+            regole_json={
+                "version": 3,
+                "ca_effetto": {
+                    "tipo": "guasto_sottosistemi",
+                    "modalita": "tutti",
+                    "sottosistema_ids": [str(self.sotto_b.pk)],
+                },
+            },
+        )
+        istanza = EventoAttivoSessione.objects.create(
+            sessione=self.sessione,
+            evento=evento,
+            deadline_at=timezone.now() + timedelta(seconds=30),
+            ticks_rimanenti=1,
+            persiste_fino_st=True,
+            precipita_a_scadenza=True,
+        )
+        esito, _ = valuta_evento_tick(self.sessione, istanza)
+        self.assertEqual(esito, "ca_guasto")
+        istanza.refresh_from_db()
+        self.assertEqual(istanza.esito, "guasto_ca")
+        stato_b.refresh_from_db()
+        self.assertFalse(stato_b.online)
+        self.sessione.refresh_from_db()
+        self.assertNotEqual(self.sessione.stato, SESSIONE_STATO_CRASHED)

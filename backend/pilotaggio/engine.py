@@ -886,7 +886,7 @@ def _durata_tick_config(spec_raw: str) -> tuple[Optional[int], bool, bool]:
     Ritorna (ticks_rimanenti, persiste_fino_st, precipita_a_scadenza).
     - N -> (N, False, False)
     - A-B -> (random[A,B], False, False)
-    - -N -> (N, True, True)
+    - -N -> (N, True, True)  # a scadenza tick: ca_effetto (non ST entro N tick)
     - - -> (None, True, False)
     """
     spec = str(spec_raw or "").strip()
@@ -914,7 +914,7 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
     - SP: evento resta attivo, defcon invariato
     - KO: evento resta attivo, defcon +1
     Poi aggiorna durata in tick:
-    - scadenza con `precipita_a_scadenza` => crash
+    - scadenza con `precipita_a_scadenza` => effetto catastrofe (`ca_effetto`)
     - altrimenti timeout e chiusura evento
     """
     regole = istanza.evento.regole_json or {}
@@ -965,12 +965,7 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
         istanza.ticks_rimanenti = max(0, int(istanza.ticks_rimanenti) - 1)
         if istanza.ticks_rimanenti <= 0:
             if istanza.precipita_a_scadenza:
-                istanza.esito = EVENTO_ESITO_PRECIPITAZIO
-                istanza.risolto_at = timezone.now()
-                istanza.save(
-                    update_fields=["ticks_rimanenti", "esito", "risolto_at", "updated_at"]
-                )
-                return "ca", forza_precipizio(sessione, reason="event_timeout_no_st")
+                return _applica_esito_ca_da_regole(sessione, istanza, regole)
             istanza.esito = EVENTO_ESITO_TIMEOUT
             istanza.risolto_at = timezone.now()
             istanza.save(
