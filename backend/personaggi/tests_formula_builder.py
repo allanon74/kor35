@@ -333,6 +333,30 @@ class FormulaBuilderLogicTests(TestCase):
         self.assertIn("pierce", rendered)
         self.assertNotIn("chop", rendered)
 
+    def test_oggetto_base_listino_attacco_rispetta_formula_builder_selezioni(self):
+        from .models import OggettoBase, TIPO_OGGETTO_FISICO
+        from .serializers import OggettoBaseSerializer
+
+        template = OggettoBase.objects.create(
+            nome="Spada negozio pierce",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            costo=10,
+            attacco_base=build_formula_template(
+                "attack",
+                {"formula_damage_mode": "mischia", "formula_source": ["pierce"]},
+            ),
+            formula_builder_selezioni={
+                "formula_type": "attack",
+                "formula_damage_mode": "mischia",
+                "formula_source": ["pierce"],
+            },
+            in_vendita=True,
+        )
+        ser = OggettoBaseSerializer(template)
+        rendered = (ser.data.get("attacco_formattato") or "").lower()
+        self.assertIn("pierce", rendered)
+        self.assertNotIn("chop", rendered)
+
     def test_weave_sources_are_always_explicit_with_bang(self):
         stats = build_stats_by_selection(
             {},

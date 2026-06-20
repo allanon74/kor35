@@ -1585,9 +1585,10 @@ export const getForgingQueue = (charId) => {
 
 // --- API NEGOZIO (SHOP) ---
 
-export const getShopItems = () => {
+export const getShopItems = (charId = null) => {
+  const qs = charId ? `?char_id=${encodeURIComponent(charId)}` : '';
   return fetchAuthenticated(
-    '/api/personaggi/api/negozio/listino/',
+    `/api/personaggi/api/negozio/listino/${qs}`,
     { method: 'GET' }
   );
 };

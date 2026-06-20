@@ -1915,26 +1915,34 @@ class OggettoBaseSerializer(serializers.ModelSerializer):
         """Formatta l'attacco_base usando le statistiche_base dell'OggettoBase"""
         if not obj.attacco_base:
             return None
-        
+
+        from .models import FORMULA_SCOPE_ATTACK
+
         personaggio = self.context.get('personaggio')
-        # Passa le statistiche_base dell'OggettoBase per includere i valori
         statistiche_base = obj.oggettobasestatisticabase_set.select_related('statistica').all()
-        
+        context = {
+            'formula_kind': FORMULA_SCOPE_ATTACK,
+            'attack_formula_template': obj.attacco_base,
+            'classe_oggetto': obj.classe_oggetto.nome if obj.classe_oggetto else '',
+            'formula_builder_selezioni': getattr(obj, 'formula_builder_selezioni', None) or {},
+        }
+
         if personaggio:
             return formatta_testo_generico(
-                None, 
-                formula=obj.attacco_base, 
+                None,
+                formula=obj.attacco_base,
                 statistiche_base=statistiche_base,
-                personaggio=personaggio, 
-                solo_formula=True
+                personaggio=personaggio,
+                context=context,
+                solo_formula=True,
             ).replace("<strong>Formula:</strong>", "").strip()
-        
-        # Senza personaggio, formatta comunque con le statistiche_base
+
         return formatta_testo_generico(
-            None, 
-            formula=obj.attacco_base, 
+            None,
+            formula=obj.attacco_base,
             statistiche_base=statistiche_base,
-            solo_formula=True
+            context=context,
+            solo_formula=True,
         ).replace("<strong>Formula:</strong>", "").strip()
 
     def get_stats_text(self, obj):

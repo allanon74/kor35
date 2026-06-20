@@ -245,18 +245,19 @@ export const useForgingQueue = (charId) => {
   });
 };
 
-export const useShopItems = (onLogout) => {
+export const useShopItems = (onLogout, charId = null) => {
   const queryClient = useQueryClient();
   const revisionPart = 'negozio_listino';
+  const charKey = charId ? String(charId) : 'none';
   return useQuery({
-    queryKey: ['shop_items'],
+    queryKey: ['shop_items', charKey],
     queryFn: () =>
       loadWithRevisionGate({
         queryClient,
-        queryKey: ['shop_items'],
+        queryKey: ['shop_items', charKey],
         revisionPart,
         onLogout,
-        fetchFull: () => getShopItems(),
+        fetchFull: () => getShopItems(charId),
       }),
     staleTime: 0,
     refetchOnWindowFocus: true,

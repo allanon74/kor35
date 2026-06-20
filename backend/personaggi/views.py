@@ -3501,8 +3501,16 @@ class NegozioViewSet(viewsets.ViewSet):
         try:
             from personaggi.accademia_catalogo import oggetto_base_accademia_qs
 
-            oggetti = oggetto_base_accademia_qs().order_by('tipo_oggetto', 'costo')
-            serializer = OggettoBaseSerializer(oggetti, many=True)
+            oggetti = oggetto_base_accademia_qs().select_related('classe_oggetto').order_by('tipo_oggetto', 'costo')
+            personaggio = None
+            char_id = request.query_params.get('char_id')
+            if char_id:
+                personaggio = Personaggio.objects.filter(pk=char_id, proprietario=request.user).first()
+            serializer = OggettoBaseSerializer(
+                oggetti,
+                many=True,
+                context={'personaggio': personaggio} if personaggio else {},
+            )
             return Response(serializer.data)
         except Exception as e:
             return Response({"error": f"Errore server: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
