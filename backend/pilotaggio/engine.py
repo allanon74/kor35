@@ -660,47 +660,173 @@ def _eval_expression(expr: dict, stati_by_key: dict, direzione_evento: str) -> b
     return _eval_leaf(expr, stati_by_key, direzione_evento)
 
 
+def _ca_guasto_ids_da_cfg(cfg: dict) -> List[str]:
+    """Estrae UUID sottosistema da chiavi singole/plurali nel payload ca_effetto."""
+    ids: List[str] = []
+    for key in ("sottosistema_ids", "sottosistemi_ids"):
+        val = (cfg or {}).get(key)
+        if isinstance(val, list):
+            ids.extend(str(x).strip() for x in val if str(x).strip())
+    sid = (cfg or {}).get("sottosistema_id")
+    if sid:
+        ids.append(str(sid).strip())
+    out: List[str] = []
+    seen = set()
+    for raw in ids:
+        if raw and raw not in seen:
+            seen.add(raw)
+            out.append(raw)
+    return out
+
+
+def _ca_guasto_codici_da_cfg(cfg: dict) -> List[str]:
+    """Estrae codici 1-char da chiavi singole/plurali nel payload ca_effetto."""
+    codes: List[str] = []
+    for key in ("sottosistema_codici", "sottosistemi_codici"):
+        val = (cfg or {}).get(key)
+        if isinstance(val, list):
+            codes.extend(
+                str(x).strip().upper()[:1] for x in val if str(x).strip()
+            )
+    scode = (cfg or {}).get("sottosistema_codice")
+    if scode:
+        codes.append(str(scode).strip().upper()[:1])
+    out: List[str] = []
+    seen = set()
+    for raw in codes:
+        if raw and raw not in seen:
+            seen.add(raw)
+            out.append(raw)
+    return out
+
+
+def _stato_sottosistema_ca_per_target(
+    sessione: SessioneVolo,
+    *,
+    sottosistema_id=None,
+    sottosistema_codice: str = "",
+) -> Optional[StatoSottosistemaSessione]:
+    """Risolve lo stato runtime per id o codice sottosistema (crea se assente)."""
+    stato = None
+    if sottosistema_id:
+        stato = (
+            StatoSottosistemaSessione.objects.select_related("sottosistema")
+            .filter(sessione=sessione, sottosistema_id=sottosistema_id)
+            .first()
+        )
+        if stato is None:
+            sdef = SottosistemaNave.objects.filter(pk=sottosistema_id).first()
+            if sdef:
+                stato = get_o_crea_stato_sottosistema(sessione, sdef)
+    else:
+        scode = str(sottosistema_codice or "").strip().upper()[:1]
+        if scode:
+            sdef = SottosistemaNave.objects.filter(codice=scode).first()
+            if sdef:
+                stato = get_o_crea_stato_sottosistema(sessione, sdef)
+    return stato
+
+
+def _forza_guasto_stato_sottosistema(
+    sessione: SessioneVolo, stato: StatoSottosistemaSessione, *, now=None
+) -> None:
+    """Segna offline un sottosistema e applica gli effetti guasto configurati."""
+    ts = now or timezone.now()
+    stato.online = False
+    stato.guasto_at = ts
+    stato.save(
+        update_fields=[
+            "online",
+            "guasto_at",
+            "recovery_at",
+            "livello_target",
+            "livello_attuale",
+            "updated_at",
+        ]
+    )
+    applica_effetto_guasto(sessione, stato)
+
+
+def _candidati_stati_ca_guasto(
+    sessione: SessioneVolo, cfg: dict
+) -> List[StatoSottosistemaSessione]:
+    """
+    Pool di stati runtime candidati al guasto CA.
+    Se non sono indicati id/codici, usa tutti i sottosistemi della sessione.
+    """
+    stati: List[StatoSottosistemaSessione] = []
+    seen_pks = set()
+    for sid in _ca_guasto_ids_da_cfg(cfg):
+        st = _stato_sottosistema_ca_per_target(sessione, sottosistema_id=sid)
+        if st is not None and st.pk not in seen_pks:
+            seen_pks.add(st.pk)
+            stati.append(st)
+    for code in _ca_guasto_codici_da_cfg(cfg):
+        st = _stato_sottosistema_ca_per_target(
+            sessione, sottosistema_codice=code
+        )
+        if st is not None and st.pk not in seen_pks:
+            seen_pks.add(st.pk)
+            stati.append(st)
+    if not stati:
+        stati = list(
+            StatoSottosistemaSessione.objects.select_related("sottosistema")
+            .filter(sessione=sessione)
+            .order_by("sottosistema__ordine", "sottosistema__codice")
+        )
+    solo_online = (cfg or {}).get("solo_online", True)
+    if solo_online:
+        stati = [st for st in stati if st.online and not st.espulso]
+    return stati
+
+
+def _seleziona_stati_ca_guasto(
+    sessione: SessioneVolo, cfg: dict
+) -> List[StatoSottosistemaSessione]:
+    """Risolve gli stati da mettere in guasto in base a ca_effetto."""
+    tipo = str((cfg or {}).get("tipo") or "precipizio").strip().lower()
+    if tipo == "guasto_sottosistema":
+        st = _stato_sottosistema_ca_per_target(
+            sessione,
+            sottosistema_id=(cfg or {}).get("sottosistema_id"),
+            sottosistema_codice=str((cfg or {}).get("sottosistema_codice") or ""),
+        )
+        return [st] if st is not None else []
+    if tipo != "guasto_sottosistemi":
+        return []
+
+    candidati = _candidati_stati_ca_guasto(sessione, cfg)
+    modalita = str((cfg or {}).get("modalita") or "tutti").strip().lower()
+    if modalita == "random":
+        quantita = max(1, int((cfg or {}).get("quantita") or 1))
+        if not candidati:
+            return []
+        k = min(quantita, len(candidati))
+        return random.sample(candidati, k=k)
+    return candidati
+
+
 def _applica_esito_ca_da_regole(
     sessione: SessioneVolo, istanza: EventoAttivoSessione, regole: dict
 ) -> Tuple[str, int]:
     """
     Quando le regole valutano CA: default precipizio nave; opzionale guasto forzato
-    su un sottosistema (regole_json['ca_effetto']).
+    su uno o più sottosistemi (regole_json['ca_effetto']).
     """
     cfg = (regole or {}).get("ca_effetto") if isinstance(regole, dict) else None
     tipo = str((cfg or {}).get("tipo") or "precipizio").strip().lower()
 
-    if tipo == "guasto_sottosistema":
-        sid = (cfg or {}).get("sottosistema_id")
-        scode = str((cfg or {}).get("sottosistema_codice") or "").strip().upper()[:1]
-        stato = None
-        if sid:
-            stato = (
-                StatoSottosistemaSessione.objects.select_related("sottosistema")
-                .filter(sessione=sessione, sottosistema_id=sid)
-                .first()
-            )
-        elif scode:
-            sdef = SottosistemaNave.objects.filter(codice=scode).first()
-            if sdef:
-                stato = (
-                    StatoSottosistemaSessione.objects.select_related("sottosistema")
-                    .filter(sessione=sessione, sottosistema_id=sdef.pk)
-                    .first()
-                )
-        if stato is None:
+    if tipo in {"guasto_sottosistema", "guasto_sottosistemi"}:
+        stati = _seleziona_stati_ca_guasto(sessione, cfg or {})
+        if not stati:
             istanza.esito = EVENTO_ESITO_PRECIPITAZIO
             istanza.risolto_at = timezone.now()
             istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
             return "ca", forza_precipizio(sessione, reason="ca_guasto_target_missing")
 
         now = timezone.now()
-        stato.online = False
-        stato.guasto_at = now
-        stato.save(
-            update_fields=["online", "guasto_at", "recovery_at", "livello_target", "livello_attuale", "updated_at"]
-        )
-        applica_effetto_guasto(sessione, stato)
+        for stato in stati:
+            _forza_guasto_stato_sottosistema(sessione, stato, now=now)
         istanza.esito = EVENTO_ESITO_GUASTO_CA
         istanza.risolto_at = now
         istanza.save(update_fields=["esito", "risolto_at", "updated_at"])

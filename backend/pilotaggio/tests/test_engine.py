@@ -352,3 +352,148 @@ class TimeoutEventoTests(TestCase):
         tick_sessione(s)
         s.refresh_from_db()
         self.assertEqual(s.defcon, 1)
+
+
+class CaEffettoGuastoTests(TestCase):
+    def setUp(self):
+        self.pilota = _crea_pilota()
+        self.sessione = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        self.sotto_a, _ = SottosistemaNave.objects.get_or_create(
+            codice="A",
+            defaults={"nome": "Manovra A", "gruppo": "Test", "ordine": 1},
+        )
+        self.sotto_b, _ = SottosistemaNave.objects.get_or_create(
+            codice="B",
+            defaults={"nome": "Sistema B", "gruppo": "Test", "ordine": 2},
+        )
+        self.sotto_c, _ = SottosistemaNave.objects.get_or_create(
+            codice="C",
+            defaults={"nome": "Sistema C", "gruppo": "Test", "ordine": 3},
+        )
+        for sdef in (self.sotto_a, self.sotto_b, self.sotto_c):
+            StatoSottosistemaSessione.objects.get_or_create(
+                sessione=self.sessione,
+                sottosistema=sdef,
+                defaults={"online": True},
+            )
+
+    def _istanza_ca(self, ca_effetto: dict) -> EventoAttivoSessione:
+        evento = EventoNave.objects.create(
+            nome="CA test",
+            descrizione="Test CA",
+            codice_soluzione_esatta="Z99",
+            regole_json={
+                "version": 3,
+                "ca": {"expression": {"op": "and", "items": [{"sottosistema": "A", "op": ">", "value": 0}]}},
+                "ca_effetto": ca_effetto,
+            },
+        )
+        return EventoAttivoSessione.objects.create(
+            sessione=self.sessione,
+            evento=evento,
+            deadline_at=timezone.now() + timedelta(seconds=30),
+        )
+
+    def test_ca_guasto_singolo_legacy(self):
+        from pilotaggio.engine import _applica_esito_ca_da_regole
+
+        istanza = self._istanza_ca(
+            {"tipo": "guasto_sottosistema", "sottosistema_id": str(self.sotto_a.pk)}
+        )
+        esito, _ = _applica_esito_ca_da_regole(
+            self.sessione, istanza, istanza.evento.regole_json
+        )
+        self.assertEqual(esito, "ca_guasto")
+        stato = StatoSottosistemaSessione.objects.get(
+            sessione=self.sessione, sottosistema=self.sotto_a
+        )
+        self.assertFalse(stato.online)
+        self.sessione.refresh_from_db()
+        self.assertNotEqual(self.sessione.stato, SESSIONE_STATO_CRASHED)
+
+    def test_ca_guasto_tutti_selezionati(self):
+        from pilotaggio.engine import _applica_esito_ca_da_regole
+
+        istanza = self._istanza_ca(
+            {
+                "tipo": "guasto_sottosistemi",
+                "modalita": "tutti",
+                "sottosistema_ids": [str(self.sotto_a.pk), str(self.sotto_b.pk)],
+            }
+        )
+        esito, _ = _applica_esito_ca_da_regole(
+            self.sessione, istanza, istanza.evento.regole_json
+        )
+        self.assertEqual(esito, "ca_guasto")
+        for sdef in (self.sotto_a, self.sotto_b):
+            stato = StatoSottosistemaSessione.objects.get(
+                sessione=self.sessione, sottosistema=sdef
+            )
+            self.assertFalse(stato.online)
+        stato_c = StatoSottosistemaSessione.objects.get(
+            sessione=self.sessione, sottosistema=self.sotto_c
+        )
+        self.assertTrue(stato_c.online)
+
+    def test_ca_guasto_random_da_elenco(self):
+        from unittest.mock import patch
+
+        from pilotaggio.engine import _applica_esito_ca_da_regole
+
+        stato_b = StatoSottosistemaSessione.objects.get(
+            sessione=self.sessione, sottosistema=self.sotto_b
+        )
+        stato_c = StatoSottosistemaSessione.objects.get(
+            sessione=self.sessione, sottosistema=self.sotto_c
+        )
+        istanza = self._istanza_ca(
+            {
+                "tipo": "guasto_sottosistemi",
+                "modalita": "random",
+                "quantita": 1,
+                "sottosistema_ids": [str(self.sotto_b.pk), str(self.sotto_c.pk)],
+            }
+        )
+        with patch(
+            "pilotaggio.engine.random.sample",
+            return_value=[stato_c],
+        ):
+            esito, _ = _applica_esito_ca_da_regole(
+                self.sessione, istanza, istanza.evento.regole_json
+            )
+        self.assertEqual(esito, "ca_guasto")
+        stato_b.refresh_from_db()
+        stato_c.refresh_from_db()
+        self.assertTrue(stato_b.online)
+        self.assertFalse(stato_c.online)
+
+    def test_ca_guasto_random_senza_elenco(self):
+        from unittest.mock import patch
+
+        from pilotaggio.engine import _applica_esito_ca_da_regole
+
+        stato_a = StatoSottosistemaSessione.objects.get(
+            sessione=self.sessione, sottosistema=self.sotto_a
+        )
+        istanza = self._istanza_ca(
+            {"tipo": "guasto_sottosistemi", "modalita": "random", "quantita": 2}
+        )
+        with patch(
+            "pilotaggio.engine.random.sample",
+            side_effect=lambda pool, k: pool[:k],
+        ):
+            esito, _ = _applica_esito_ca_da_regole(
+                self.sessione, istanza, istanza.evento.regole_json
+            )
+        self.assertEqual(esito, "ca_guasto")
+        offline = StatoSottosistemaSessione.objects.filter(
+            sessione=self.sessione, online=False
+        ).count()
+        self.assertEqual(offline, 2)
+        stato_a.refresh_from_db()
+        self.assertFalse(stato_a.online)

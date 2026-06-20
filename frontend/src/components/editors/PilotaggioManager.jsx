@@ -227,8 +227,49 @@ function ruleBuilderFromRegoleJson(rj) {
   return { st: branch('st'), sp: branch('sp'), ca: branch('ca') };
 }
 
+const defaultCaEffetto = () => ({
+  tipo: 'precipizio',
+  modalita: 'tutti',
+  sottosistema_ids: [],
+  quantita: 1,
+  pool: 'scelti',
+});
+
+/** Ricostruisce lo stato UI da `regole_json.ca_effetto`. */
+function caEffettoFromRegoleJson(rj) {
+  const cae = rj?.ca_effetto;
+  if (!cae || typeof cae !== 'object') return defaultCaEffetto();
+  const tipoRaw = String(cae.tipo || 'precipizio');
+  if (tipoRaw !== 'guasto_sottosistema' && tipoRaw !== 'guasto_sottosistemi') {
+    return defaultCaEffetto();
+  }
+  let ids = [];
+  if (Array.isArray(cae.sottosistema_ids)) ids = cae.sottosistema_ids.map(String);
+  else if (Array.isArray(cae.sottosistemi_ids)) ids = cae.sottosistemi_ids.map(String);
+  else if (cae.sottosistema_id) ids = [String(cae.sottosistema_id)];
+  ids = [...new Set(ids.map((x) => x.trim()).filter(Boolean))];
+  const modalita = String(cae.modalita || 'tutti') === 'random' ? 'random' : 'tutti';
+  const pool = modalita === 'random' && !ids.length ? 'tutti_sessione' : 'scelti';
+  return {
+    tipo: 'guasto_sottosistemi',
+    modalita,
+    sottosistema_ids: ids,
+    quantita: Math.max(1, Number(cae.quantita) || 1),
+    pool,
+  };
+}
+
+function toggleCaSottosistemaId(ids, id) {
+  const sid = String(id || '').trim();
+  if (!sid) return ids;
+  const set = new Set((ids || []).map(String));
+  if (set.has(sid)) set.delete(sid);
+  else set.add(sid);
+  return [...set];
+}
+
 /** Unisce ST/SP/CA (AST + metadati UI) e `ca_effetto` nel documento regole. */
-function mergeCaAndRulesIntoRegole(baseJson, rb, caTipo, caSottoId) {
+function mergeCaAndRulesIntoRegole(baseJson, rb, caEffetto) {
   const out =
     baseJson && typeof baseJson === 'object' && !Array.isArray(baseJson) ? { ...baseJson } : {};
   if (!out.version) out.version = 3;
@@ -252,20 +293,147 @@ function mergeCaAndRulesIntoRegole(baseJson, rb, caTipo, caSottoId) {
       _expr: rb[k].expression,
     };
   }
-  if (caTipo === 'guasto_sottosistema') {
-    const sid = String(caSottoId || '').trim();
-    if (!sid) {
-      return {
-        ok: false,
-        error: 'Per effetto CA «guasto sottosistema» seleziona un sottosistema.',
-        regole: null,
+  const ce = caEffetto && typeof caEffetto === 'object' ? caEffetto : defaultCaEffetto();
+  if (ce.tipo === 'guasto_sottosistemi') {
+    const ids = [...new Set((ce.sottosistema_ids || []).map((x) => String(x).trim()).filter(Boolean))];
+    if (ce.modalita === 'random') {
+      if (ce.pool === 'scelti' && !ids.length) {
+        return {
+          ok: false,
+          error: 'Per guasto CA random da elenco seleziona almeno un sottosistema.',
+          regole: null,
+        };
+      }
+      const payload = {
+        tipo: 'guasto_sottosistemi',
+        modalita: 'random',
+        quantita: Math.max(1, Number(ce.quantita) || 1),
       };
+      if (ids.length) payload.sottosistema_ids = ids;
+      out.ca_effetto = payload;
+    } else {
+      if (!ids.length) {
+        return {
+          ok: false,
+          error: 'Per guasto CA su sottosistemi scelti seleziona almeno un sottosistema.',
+          regole: null,
+        };
+      }
+      out.ca_effetto = { tipo: 'guasto_sottosistemi', modalita: 'tutti', sottosistema_ids: ids };
     }
-    out.ca_effetto = { tipo: 'guasto_sottosistema', sottosistema_id: sid };
   } else {
     out.ca_effetto = { tipo: 'precipizio' };
   }
   return { ok: true, error: '', regole: out };
+}
+
+function CaEffettoFields({ caEffetto, setCaEffetto, sottosistemi }) {
+  const ce = caEffetto && typeof caEffetto === 'object' ? caEffetto : defaultCaEffetto();
+  const isGuasto = ce.tipo === 'guasto_sottosistemi';
+  const showScelti = isGuasto && (ce.modalita === 'tutti' || ce.pool === 'scelti');
+  return (
+    <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 space-y-3">
+      <div className="text-xs font-semibold text-amber-200/90">Effetto esito CA</div>
+      <p className="text-[11px] text-gray-400 leading-relaxed">
+        Di default il CA precipita la nave. In alternativa puoi forzare il guasto di uno o più sottosistemi
+        (anche scelti a caso tra un elenco o tra tutti quelli online in sessione).
+      </p>
+      <div className="flex flex-wrap gap-3 items-end">
+        <label className="block min-w-[10rem]">
+          <span className="text-xs text-gray-400">Tipo effetto CA</span>
+          <select
+            className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
+            value={ce.tipo}
+            onChange={(ev) => {
+              const v = ev.target.value;
+              setCaEffetto(v === 'guasto_sottosistemi' ? { ...defaultCaEffetto(), tipo: 'guasto_sottosistemi' } : defaultCaEffetto());
+            }}
+          >
+            <option value="precipizio">Precipizio nave</option>
+            <option value="guasto_sottosistemi">Guasto sottosistema/i</option>
+          </select>
+        </label>
+        {isGuasto ? (
+          <label className="block min-w-[12rem]">
+            <span className="text-xs text-gray-400">Modalità guasto</span>
+            <select
+              className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
+              value={ce.modalita}
+              onChange={(ev) =>
+                setCaEffetto((p) => ({
+                  ...p,
+                  modalita: ev.target.value,
+                  pool: ev.target.value === 'random' ? p.pool || 'scelti' : 'scelti',
+                }))
+              }
+            >
+              <option value="tutti">Tutti i selezionati</option>
+              <option value="random">N random</option>
+            </select>
+          </label>
+        ) : null}
+        {isGuasto && ce.modalita === 'random' ? (
+          <>
+            <label className="block min-w-[12rem]">
+              <span className="text-xs text-gray-400">Pool random</span>
+              <select
+                className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
+                value={ce.pool}
+                onChange={(ev) =>
+                  setCaEffetto((p) => ({
+                    ...p,
+                    pool: ev.target.value,
+                    sottosistema_ids: ev.target.value === 'tutti_sessione' ? [] : p.sottosistema_ids,
+                  }))
+                }
+              >
+                <option value="scelti">Da elenco sotto</option>
+                <option value="tutti_sessione">Qualsiasi online in sessione</option>
+              </select>
+            </label>
+            <label className="block w-24">
+              <span className="text-xs text-gray-400">Quantità N</span>
+              <input
+                type="number"
+                min={1}
+                className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
+                value={ce.quantita}
+                onChange={(ev) => setCaEffetto((p) => ({ ...p, quantita: ev.target.value }))}
+              />
+            </label>
+          </>
+        ) : null}
+      </div>
+      {showScelti ? (
+        <div className="space-y-1">
+          <span className="text-xs text-gray-400">Sottosistemi</span>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 max-h-36 overflow-y-auto rounded border border-gray-700/80 bg-gray-950/40 p-2">
+            {sottosistemi.map((ss) => {
+              const checked = (ce.sottosistema_ids || []).map(String).includes(String(ss.id));
+              return (
+                <label key={ss.id} className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-600"
+                    checked={checked}
+                    onChange={() =>
+                      setCaEffetto((p) => ({
+                        ...p,
+                        sottosistema_ids: toggleCaSottosistemaId(p.sottosistema_ids, ss.id),
+                      }))
+                    }
+                  />
+                  <span>
+                    {ss.nome} <span className="font-mono text-indigo-300/90">({ss.codice})</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export default function PilotaggioManager({ onLogout }) {
@@ -326,10 +494,8 @@ export default function PilotaggioManager({ onLogout }) {
   const [editStatoId, setEditStatoId] = useState(null);
   const [editStato, setEditStato] = useState({});
   const [runtimeConfig, setRuntimeConfig] = useState(null);
-  const [editCaEffettoTipo, setEditCaEffettoTipo] = useState('precipizio');
-  const [editCaEffettoSottosistemaId, setEditCaEffettoSottosistemaId] = useState('');
-  const [createCaEffettoTipo, setCreateCaEffettoTipo] = useState('precipizio');
-  const [createCaEffettoSottosistemaId, setCreateCaEffettoSottosistemaId] = useState('');
+  const [editCaEffetto, setEditCaEffetto] = useState(defaultCaEffetto);
+  const [createCaEffetto, setCreateCaEffetto] = useState(defaultCaEffetto);
   const [editRuleBuilder, setEditRuleBuilder] = useState({
     st: { conditions: [], expression: DEFAULT_RULE_EXPR },
     sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
@@ -451,8 +617,7 @@ export default function PilotaggioManager({ onLogout }) {
   const closeCreateEventoModal = useCallback(() => {
     setCreateEventoModalOpen(false);
     setNuovoEvento(defaultEvento);
-    setCreateCaEffettoTipo('precipizio');
-    setCreateCaEffettoSottosistemaId('');
+    setCreateCaEffetto(defaultCaEffetto());
     setRuleBuilder({
       st: { conditions: [], expression: DEFAULT_RULE_EXPR },
       sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
@@ -520,7 +685,7 @@ export default function PilotaggioManager({ onLogout }) {
       setError('JSON regole non valido.');
       return;
     }
-    const merged = mergeCaAndRulesIntoRegole(regoleObj, ruleBuilder, createCaEffettoTipo, createCaEffettoSottosistemaId);
+    const merged = mergeCaAndRulesIntoRegole(regoleObj, ruleBuilder, createCaEffetto);
     if (!merged.ok) {
       setError(merged.error);
       return;
@@ -539,8 +704,7 @@ export default function PilotaggioManager({ onLogout }) {
       onLogout
     );
     setNuovoEvento(defaultEvento);
-    setCreateCaEffettoTipo('precipizio');
-    setCreateCaEffettoSottosistemaId('');
+    setCreateCaEffetto(defaultCaEffetto());
     closeCreateEventoModal();
     loadData();
   };
@@ -623,8 +787,7 @@ export default function PilotaggioManager({ onLogout }) {
       sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
       ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
     });
-    setEditCaEffettoTipo('precipizio');
-    setEditCaEffettoSottosistemaId('');
+    setEditCaEffetto(defaultCaEffetto());
     setError('');
   }, []);
 
@@ -643,14 +806,7 @@ export default function PilotaggioManager({ onLogout }) {
         }
         if (!rj || typeof rj !== 'object') rj = {};
         setEditRuleBuilder(ruleBuilderFromRegoleJson(rj));
-        const cae = rj.ca_effetto && typeof rj.ca_effetto === 'object' ? rj.ca_effetto : {};
-        if (cae.tipo === 'guasto_sottosistema') {
-          setEditCaEffettoTipo('guasto_sottosistema');
-          setEditCaEffettoSottosistemaId(String(cae.sottosistema_id || '').trim());
-        } else {
-          setEditCaEffettoTipo('precipizio');
-          setEditCaEffettoSottosistemaId('');
-        }
+        setEditCaEffetto(caEffettoFromRegoleJson(rj));
         setEditEvento({
           nome: e.nome || '',
           descrizione: e.descrizione ?? '',
@@ -701,8 +857,7 @@ export default function PilotaggioManager({ onLogout }) {
     const mergedRules = mergeCaAndRulesIntoRegole(
       regole_json,
       editRuleBuilder,
-      editCaEffettoTipo,
-      editCaEffettoSottosistemaId
+      editCaEffetto
     );
     if (!mergedRules.ok) {
       setError(mergedRules.error);
@@ -852,7 +1007,7 @@ export default function PilotaggioManager({ onLogout }) {
       setError('JSON regole esistente non valido: riparto da oggetto vuoto.');
       base = { version: 3 };
     }
-    const merged = mergeCaAndRulesIntoRegole(base, ruleBuilder, createCaEffettoTipo, createCaEffettoSottosistemaId);
+    const merged = mergeCaAndRulesIntoRegole(base, ruleBuilder, createCaEffetto);
     if (!merged.ok) {
       setError(merged.error);
       return;
@@ -869,7 +1024,7 @@ export default function PilotaggioManager({ onLogout }) {
       setError('JSON regole non valido in modifica.');
       return;
     }
-    const merged = mergeCaAndRulesIntoRegole(base, editRuleBuilder, editCaEffettoTipo, editCaEffettoSottosistemaId);
+    const merged = mergeCaAndRulesIntoRegole(base, editRuleBuilder, editCaEffetto);
     if (!merged.ok) {
       setError(merged.error);
       return;
@@ -1645,42 +1800,7 @@ export default function PilotaggioManager({ onLogout }) {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 space-y-2">
-                <div className="text-xs font-semibold text-amber-200/90">Effetto esito CA</div>
-                <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Di default il CA precipita la nave. In alternativa puoi forzare il guasto di un sottosistema specifico (campo <code className="text-gray-300">ca_effetto</code> nel JSON).
-                </p>
-                <div className="flex flex-wrap gap-3 items-end">
-                  <label className="block min-w-[10rem]">
-                    <span className="text-xs text-gray-400">Tipo effetto CA</span>
-                    <select
-                      className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
-                      value={editCaEffettoTipo}
-                      onChange={(ev) => setEditCaEffettoTipo(ev.target.value)}
-                    >
-                      <option value="precipizio">Precipizio nave</option>
-                      <option value="guasto_sottosistema">Guasto sottosistema</option>
-                    </select>
-                  </label>
-                  {editCaEffettoTipo === 'guasto_sottosistema' ? (
-                    <label className="block flex-1 min-w-[12rem]">
-                      <span className="text-xs text-gray-400">Sottosistema in guasto</span>
-                      <select
-                        className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700"
-                        value={editCaEffettoSottosistemaId}
-                        onChange={(ev) => setEditCaEffettoSottosistemaId(ev.target.value)}
-                      >
-                        <option value="">Seleziona…</option>
-                        {sottosistemi.map((ss) => (
-                          <option key={ss.id} value={ss.id}>
-                            {ss.nome} ({ss.codice})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                </div>
-              </div>
+              <CaEffettoFields caEffetto={editCaEffetto} setCaEffetto={setEditCaEffetto} sottosistemi={sottosistemi} />
 
               <label className="block">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regole avanzate (JSON)</span>
@@ -1824,27 +1944,7 @@ export default function PilotaggioManager({ onLogout }) {
                   ))}
                 </div>
               </div>
-              <div className="rounded-lg border border-amber-900/50 bg-amber-950/20 p-3 space-y-2">
-                <div className="text-xs font-semibold text-amber-200/90">Effetto esito CA</div>
-                <div className="flex flex-wrap gap-3 items-end">
-                  <label className="block min-w-[10rem]">
-                    <span className="text-xs text-gray-400">Tipo</span>
-                    <select className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700" value={createCaEffettoTipo} onChange={(e) => setCreateCaEffettoTipo(e.target.value)}>
-                      <option value="precipizio">Precipizio nave</option>
-                      <option value="guasto_sottosistema">Guasto sottosistema</option>
-                    </select>
-                  </label>
-                  {createCaEffettoTipo === 'guasto_sottosistema' ? (
-                    <label className="block flex-1 min-w-[12rem]">
-                      <span className="text-xs text-gray-400">Sottosistema</span>
-                      <select className="bg-gray-900 rounded px-2 py-1 mt-1 w-full border border-gray-700" value={createCaEffettoSottosistemaId} onChange={(e) => setCreateCaEffettoSottosistemaId(e.target.value)}>
-                        <option value="">Seleziona…</option>
-                        {sottosistemi.map((s) => <option key={s.id} value={s.id}>{s.nome} ({s.codice})</option>)}
-                      </select>
-                    </label>
-                  ) : null}
-                </div>
-              </div>
+              <CaEffettoFields caEffetto={createCaEffetto} setCaEffetto={setCreateCaEffetto} sottosistemi={sottosistemi} />
               <label className="block">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Regole avanzate (JSON)</span>
                 <textarea className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 min-h-[120px] font-mono text-xs" value={nuovoEvento.regole_json} onChange={(e) => setNuovoEvento((p) => ({ ...p, regole_json: e.target.value }))} />
