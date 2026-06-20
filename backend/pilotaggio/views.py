@@ -1189,7 +1189,7 @@ class StaffSottosistemaViewSet(viewsets.ModelViewSet):
         from django.db.models import BooleanField, OuterRef, Subquery
         from django.db.models.functions import Coalesce
 
-        from personaggi.models import MinigiocoQrConfig, QrCode
+        from personaggi.models import MinigiocoQrConfig
 
         qs = SottosistemaNave.objects.all().order_by(
             "ordine_gruppo", "gruppo", "ordine", "nome", "codice"
@@ -1197,9 +1197,7 @@ class StaffSottosistemaViewSet(viewsets.ModelViewSet):
         if self.action != "list":
             return qs
         cfg_sub = MinigiocoQrConfig.objects.filter(
-            qr_code_id=Subquery(
-                QrCode.objects.filter(vista_id=OuterRef("a_vista_id")).values("id")[:1]
-            )
+            qr_code__vista_id=OuterRef("a_vista_id"),
         ).values("usa_default_pagina")[:1]
         return qs.annotate(
             minigioco_usa_default=Coalesce(
