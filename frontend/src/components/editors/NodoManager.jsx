@@ -6,10 +6,12 @@ import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
+import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import {
   applyDefaultMinigiocoToQr,
   MINIGIOCO_PAGE_KEYS,
+  patchStaffListMinigiocoDefault,
   unwrapStaffList,
 } from '../../utils/staffMinigiocoDefaults';
 import {
@@ -19,7 +21,6 @@ import {
   staffCreateNodo,
   staffUpdateNodo,
   staffDeleteNodo,
-  staffSaveMinigiocoQrConfig,
 } from '../../api';
 
 const emptyForm = () => ({
@@ -173,7 +174,15 @@ const NodoManager = ({ onBack, onLogout }) => {
                     </div>
                     </div>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="flex gap-2 shrink-0 flex-wrap items-center justify-end">
+                    <StaffMinigiocoUsaDefaultToggle
+                      qrcodeId={n.qrcode_id}
+                      usaDefault={n.minigioco_usa_default}
+                      pageKey={MINIGIOCO_PAGE_KEYS.nodi}
+                      onLogout={onLogout}
+                      compact
+                      onChange={(val) => patchStaffListMinigiocoDefault(setItems, n.id, val)}
+                    />
                     {n.foto_posizione_url && (
                       <button
                         type="button"
@@ -384,12 +393,7 @@ const NodoManager = ({ onBack, onLogout }) => {
               onScanSuccess={async (qr_id) => {
                 try {
                   await associaQrDiretto(scanningId, qr_id, onLogout);
-                  await applyDefaultMinigiocoToQr(
-                    MINIGIOCO_PAGE_KEYS.nodi,
-                    qr_id,
-                    onLogout,
-                    staffSaveMinigiocoQrConfig,
-                  );
+                  await applyDefaultMinigiocoToQr(MINIGIOCO_PAGE_KEYS.nodi, qr_id, onLogout);
                   setScanningId(null);
                   setMsg('QR associato.');
                   load();
@@ -424,12 +428,7 @@ const NodoManager = ({ onBack, onLogout }) => {
           if (!p?.qrId || !p?.targetId) return;
           try {
             await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
-            await applyDefaultMinigiocoToQr(
-              MINIGIOCO_PAGE_KEYS.nodi,
-              p.qrId,
-              onLogout,
-              staffSaveMinigiocoQrConfig,
-            );
+            await applyDefaultMinigiocoToQr(MINIGIOCO_PAGE_KEYS.nodi, p.qrId, onLogout);
             setPendingQrConflict(null);
             setScanningId(null);
             setMsg('QR associato (forzato).');

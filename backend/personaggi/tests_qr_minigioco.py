@@ -406,3 +406,14 @@ class MinigiocoModalitaSbloccoTests(TestCase):
         )
         self.assertTrue(ha_sblocco_minigioco(self.pg, self.qr, self.config))
 
+
+class MinigiocoUsaDefaultPaginaTests(TestCase):
+    def test_default_false_e_toggle_su_config(self):
+        qr = QrCode.objects.create(testo="QR default flag")
+        cfg = MinigiocoQrConfig.objects.create(qr_code=qr, attivo=False)
+        self.assertFalse(cfg.usa_default_pagina)
+        cfg.usa_default_pagina = True
+        cfg.save(update_fields=["usa_default_pagina", "updated_at"])
+        cfg.refresh_from_db()
+        self.assertTrue(cfg.usa_default_pagina)
+

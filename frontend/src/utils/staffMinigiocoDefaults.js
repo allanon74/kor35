@@ -1,3 +1,5 @@
+import { staffSaveMinigiocoQrConfig } from '../api';
+
 /** Impostazioni minigioco di default per pagina staff (localStorage, per browser). */
 const STORAGE_KEY = 'kor35_staff_minigioco_page_defaults';
 
@@ -46,8 +48,11 @@ export function setPageMinigiocoApplyToNew(pageKey, applyToNew) {
 }
 
 /** Converte config JSON (senza immagine file) in FormData per staffSaveMinigiocoQrConfig. */
-export function minigiocoConfigToFormData(config) {
+export function minigiocoConfigToFormData(config, { usaDefaultPagina = null } = {}) {
   const fd = new FormData();
+  if (usaDefaultPagina !== null) {
+    fd.append('usa_default_pagina', usaDefaultPagina ? 'true' : 'false');
+  }
   if (!config || typeof config !== 'object') return fd;
   fd.append('attivo', config.attivo ? 'true' : 'false');
   fd.append('usa_biblioteca_se_vuota', config.usa_biblioteca_se_vuota !== false ? 'true' : 'false');
@@ -70,20 +75,53 @@ export function minigiocoConfigToFormData(config) {
   } else {
     fd.append('timer_secondi', '');
   }
+  if (usaDefaultPagina === null && config.usa_default_pagina != null) {
+    fd.append('usa_default_pagina', config.usa_default_pagina ? 'true' : 'false');
+  }
   return fd;
 }
 
-export async function applyDefaultMinigiocoToQr(pageKey, qrId, onLogout, staffSaveMinigiocoQrConfig) {
+export async function staffSetMinigiocoUsaDefault(qrId, usaDefault, onLogout) {
+  const fd = new FormData();
+  fd.append('usa_default_pagina', usaDefault ? 'true' : 'false');
+  return staffSaveMinigiocoQrConfig(qrId, fd, onLogout);
+}
+
+/**
+ * Copia il template pagina sul QR. Con forceApply salta il check applyToNew (toggle manuale).
+ */
+export async function applyDefaultMinigiocoToQr(
+  pageKey,
+  qrId,
+  onLogout,
+  _legacySaveArg = null,
+  { forceApply = false, usaDefaultPagina = true } = {},
+) {
   if (!qrId || !pageKey) return false;
   const { applyToNew, config } = loadPageMinigiocoSettings(pageKey);
-  if (!applyToNew || !config) return false;
-  const fd = minigiocoConfigToFormData(config);
-  await staffSaveMinigiocoQrConfig(qrId, fd, onLogout);
-  return true;
+  if (!forceApply && (!applyToNew || !config)) return false;
+  if (config) {
+    const fd = minigiocoConfigToFormData(config, { usaDefaultPagina });
+    await staffSaveMinigiocoQrConfig(qrId, fd, onLogout);
+    return true;
+  }
+  if (usaDefaultPagina) {
+    await staffSetMinigiocoUsaDefault(qrId, true, onLogout);
+    return true;
+  }
+  return false;
 }
 
 export function unwrapStaffList(data) {
   if (Array.isArray(data)) return data;
   if (data && Array.isArray(data.results)) return data.results;
   return [];
+}
+
+export function patchStaffListMinigiocoDefault(setItems, itemId, usaDefault) {
+  setItems((prev) =>
+    prev.map((row) =>
+      row.id === itemId ? { ...row, minigioco_usa_default: Boolean(usaDefault) } : row,
+    ),
+  );
 }

@@ -32,6 +32,7 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
 
     stato_qr = serializers.SerializerMethodField()
     qrcode_id = serializers.SerializerMethodField()
+    minigioco_usa_default = serializers.SerializerMethodField()
 
     class Meta:
         model = SottosistemaNave
@@ -68,8 +69,9 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
             "supporta_direzioni",
             "stato_qr",
             "qrcode_id",
+            "minigioco_usa_default",
         ]
-        read_only_fields = ["id", "stato_qr", "qrcode_id"]
+        read_only_fields = ["id", "stato_qr", "qrcode_id", "minigioco_usa_default"]
 
     def get_stato_qr(self, obj):
         """nessuno = no vista; incompleto = vista senza QR; pronto = QR collegato alla vista."""
@@ -94,6 +96,21 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
             qr = QrCode.objects.filter(vista_id=obj.a_vista_id).first()
         return qr.id if qr else None
 
+    def get_minigioco_usa_default(self, obj):
+        if hasattr(obj, "minigioco_usa_default"):
+            return bool(obj.minigioco_usa_default)
+        qrcode_id = self.get_qrcode_id(obj)
+        if not qrcode_id:
+            return False
+        from personaggi.models import MinigiocoQrConfig
+
+        val = (
+            MinigiocoQrConfig.objects.filter(qr_code_id=qrcode_id)
+            .values_list("usa_default_pagina", flat=True)
+            .first()
+        )
+        return bool(val)
+
 
 class SottosistemaNaveListSerializer(SottosistemaNaveSerializer):
     """Elenco leggero staff (liste tab) con stato/qrcode per minigioco."""
@@ -111,6 +128,7 @@ class SottosistemaNaveListSerializer(SottosistemaNaveSerializer):
             "attivo",
             "stato_qr",
             "qrcode_id",
+            "minigioco_usa_default",
         ]
         read_only_fields = fields
 

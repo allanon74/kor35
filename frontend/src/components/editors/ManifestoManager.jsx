@@ -6,11 +6,13 @@ import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
+import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
 import {
   applyDefaultMinigiocoToQr,
   MINIGIOCO_PAGE_KEYS,
+  patchStaffListMinigiocoDefault,
   unwrapStaffList,
 } from '../../utils/staffMinigiocoDefaults';
 import {
@@ -18,7 +20,6 @@ import {
   staffCreateManifesto,
   staffUpdateManifesto,
   staffDeleteManifesto,
-  staffSaveMinigiocoQrConfig,
 } from '../../api';
 
 const ManifestoManager = ({ onBack, onLogout }) => {
@@ -150,7 +151,15 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                       <div className="text-[10px] text-gray-500">id {m.id}</div>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap items-center justify-end">
+                    <StaffMinigiocoUsaDefaultToggle
+                      qrcodeId={m.qrcode_id}
+                      usaDefault={m.minigioco_usa_default}
+                      pageKey={MINIGIOCO_PAGE_KEYS.manifesti}
+                      onLogout={onLogout}
+                      compact
+                      onChange={(val) => patchStaffListMinigiocoDefault(setItems, m.id, val)}
+                    />
                     <button
                       type="button"
                       className="text-xs px-2 py-1 bg-gray-700 rounded"
@@ -243,12 +252,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
                   onMessage: setMsg,
                 });
                 if (res?.ok) {
-                  await applyDefaultMinigiocoToQr(
-                    MINIGIOCO_PAGE_KEYS.manifesti,
-                    qr_id,
-                    onLogout,
-                    staffSaveMinigiocoQrConfig,
-                  );
+                  await applyDefaultMinigiocoToQr(MINIGIOCO_PAGE_KEYS.manifesti, qr_id, onLogout);
                 }
               }}
               onLogout={onLogout}
@@ -269,12 +273,7 @@ const ManifestoManager = ({ onBack, onLogout }) => {
           const qrId = pendingQrConflict?.qrId;
           await confirmConflict(setMsg);
           if (qrId) {
-            await applyDefaultMinigiocoToQr(
-              MINIGIOCO_PAGE_KEYS.manifesti,
-              qrId,
-              onLogout,
-              staffSaveMinigiocoQrConfig,
-            );
+            await applyDefaultMinigiocoToQr(MINIGIOCO_PAGE_KEYS.manifesti, qrId, onLogout);
           }
         }}
       >

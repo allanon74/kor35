@@ -503,8 +503,24 @@ def annotate_qrcode_id_avista(qs):
 
 
 def annotate_staff_avista_qr(qs):
-    """has_qrcode + qrcode_id per liste/editor staff A_vista."""
-    return annotate_qrcode_id_avista(annotate_has_qrcode_avista(qs))
+    """has_qrcode + qrcode_id + minigioco_usa_default per liste/editor staff A_vista."""
+    from django.db.models import BooleanField, OuterRef, Subquery
+    from django.db.models.functions import Coalesce
+
+    from .models import MinigiocoQrConfig, QrCode
+
+    qs = annotate_qrcode_id_avista(annotate_has_qrcode_avista(qs))
+    cfg_sub = MinigiocoQrConfig.objects.filter(
+        qr_code_id=Subquery(
+            QrCode.objects.filter(vista_id=OuterRef("pk")).values("id")[:1]
+        )
+    ).values("usa_default_pagina")[:1]
+    return qs.annotate(
+        minigioco_usa_default=Coalesce(
+            Subquery(cfg_sub, output_field=BooleanField()),
+            False,
+        )
+    )
 
 
 def descrivi_avista_per_associazione_qr(vista_obj):

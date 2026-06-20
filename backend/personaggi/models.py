@@ -3859,6 +3859,10 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
         blank=True,
         help_text="Durata sblocco in secondi (solo modalità temporaneo).",
     )
+    usa_default_pagina = models.BooleanField(
+        default=False,
+        help_text="Se True, la config segue il template minigioco di pagina staff (copiato in DB al toggle).",
+    )
 
     class Meta:
         verbose_name = "Configurazione minigioco QR"

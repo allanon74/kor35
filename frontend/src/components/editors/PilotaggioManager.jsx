@@ -6,8 +6,9 @@ import PilotSottosistemaModal from './PilotSottosistemaModal';
 import {
   applyDefaultMinigiocoToQr,
   MINIGIOCO_PAGE_KEYS,
+  patchStaffListMinigiocoDefault,
 } from '../../utils/staffMinigiocoDefaults';
-import { staffSaveMinigiocoQrConfig } from '../../api';
+import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
 import {
   staffAssociaPilotSottosistemaQr,
   staffCreatePilotComandoCritico,
@@ -967,7 +968,21 @@ export default function PilotaggioManager({ onLogout }) {
                       : ' · nessun QR'}
                 </span>
               </span>
-              <div className="flex flex-wrap gap-2 shrink-0">
+              <div className="flex flex-wrap gap-2 shrink-0 items-center">
+                <StaffMinigiocoUsaDefaultToggle
+                  qrcodeId={s.qrcode_id}
+                  usaDefault={s.minigioco_usa_default}
+                  pageKey={MINIGIOCO_PAGE_KEYS.pilotSottosistemi}
+                  onLogout={onLogout}
+                  compact
+                  onChange={(val) =>
+                    setSottosistemi((prev) =>
+                      prev.map((row) =>
+                        row.id === s.id ? { ...row, minigioco_usa_default: Boolean(val) } : row,
+                      ),
+                    )
+                  }
+                />
                 <button
                   type="button"
                   className="px-2 py-1 rounded bg-gray-700 text-sm text-white"
@@ -1067,7 +1082,6 @@ export default function PilotaggioManager({ onLogout }) {
                     MINIGIOCO_PAGE_KEYS.pilotSottosistemi,
                     qr_id,
                     onLogout,
-                    staffSaveMinigiocoQrConfig,
                   );
                   setScanningForSottosistemaId(null);
                   setQrStatus({ type: 'success', message: 'QR associato al sottosistema.' });

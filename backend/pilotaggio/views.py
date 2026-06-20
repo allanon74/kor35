@@ -1183,10 +1183,30 @@ class PilotPrefettureView(generics.ListAPIView):
 
 
 class StaffSottosistemaViewSet(viewsets.ModelViewSet):
-    queryset = SottosistemaNave.objects.all().order_by(
-        "ordine_gruppo", "gruppo", "ordine", "nome", "codice"
-    )
     permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get_queryset(self):
+        from django.db.models import BooleanField, OuterRef, Subquery
+        from django.db.models.functions import Coalesce
+
+        from personaggi.models import MinigiocoQrConfig, QrCode
+
+        qs = SottosistemaNave.objects.all().order_by(
+            "ordine_gruppo", "gruppo", "ordine", "nome", "codice"
+        )
+        if self.action != "list":
+            return qs
+        cfg_sub = MinigiocoQrConfig.objects.filter(
+            qr_code_id=Subquery(
+                QrCode.objects.filter(vista_id=OuterRef("a_vista_id")).values("id")[:1]
+            )
+        ).values("usa_default_pagina")[:1]
+        return qs.annotate(
+            minigioco_usa_default=Coalesce(
+                Subquery(cfg_sub, output_field=BooleanField()),
+                False,
+            )
+        )
 
     def get_serializer_class(self):
         if self.action == "list":

@@ -1970,10 +1970,11 @@ class ManifestoStaffSerializer(serializers.ModelSerializer):
 
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
+    minigioco_usa_default = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Manifesto
-        fields = ("id", "nome", "testo", "requisiti_lettura", "has_qrcode", "qrcode_id")
+        fields = ("id", "nome", "testo", "requisiti_lettura", "has_qrcode", "qrcode_id", "minigioco_usa_default")
 
 
 class NodoSerializer(serializers.ModelSerializer):
@@ -2005,6 +2006,7 @@ class NodoStaffSerializer(serializers.ModelSerializer):
     foto_posizione_url = serializers.SerializerMethodField()
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
+    minigioco_usa_default = serializers.BooleanField(read_only=True, default=False)
     reward_config_nome = serializers.CharField(source="reward_config.nome", read_only=True)
 
     def get_foto_posizione_url(self, obj):
@@ -2032,6 +2034,7 @@ class NodoStaffSerializer(serializers.ModelSerializer):
             "reward_config_nome",
             "has_qrcode",
             "qrcode_id",
+            "minigioco_usa_default",
         )
         read_only_fields = ("campagna",)
 
@@ -2045,6 +2048,7 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
     campagna = serializers.PrimaryKeyRelatedField(read_only=True)
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
+    minigioco_usa_default = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = InnescoTimer
@@ -2063,6 +2067,7 @@ class InnescoTimerStaffSerializer(serializers.ModelSerializer):
             "target_korps_ids",
             "has_qrcode",
             "qrcode_id",
+            "minigioco_usa_default",
         )
         read_only_fields = ("campagna", "target_ere_ids", "target_regioni_ids", "target_korps_ids")
 

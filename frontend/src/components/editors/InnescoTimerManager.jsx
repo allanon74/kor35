@@ -6,10 +6,12 @@ import QrAssociationConflictBody from './QrAssociationConflictBody';
 import StaffQrBadge from './StaffQrBadge';
 import StaffMinigiocoQrSection from './StaffMinigiocoQrSection';
 import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
+import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import {
   applyDefaultMinigiocoToQr,
   MINIGIOCO_PAGE_KEYS,
+  patchStaffListMinigiocoDefault,
   unwrapStaffList,
 } from '../../utils/staffMinigiocoDefaults';
 import {
@@ -21,7 +23,6 @@ import {
   staffGetEre,
   staffGetRegioni,
   staffGetKorps,
-  staffSaveMinigiocoQrConfig,
 } from '../../api';
 
 const emptyForm = () => ({
@@ -220,7 +221,15 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
                       </div>
                     </div>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="flex gap-2 shrink-0 flex-wrap items-center justify-end">
+                    <StaffMinigiocoUsaDefaultToggle
+                      qrcodeId={t.qrcode_id}
+                      usaDefault={t.minigioco_usa_default}
+                      pageKey={MINIGIOCO_PAGE_KEYS.innescoTimer}
+                      onLogout={onLogout}
+                      compact
+                      onChange={(val) => patchStaffListMinigiocoDefault(setItems, t.id, val)}
+                    />
                     <button type="button" className="text-xs px-2 py-1 bg-gray-700 rounded" onClick={() => setEditing({ ...emptyForm(), ...t })}>
                       Modifica
                     </button>
@@ -365,12 +374,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
               onScanSuccess={async (qr_id) => {
                 try {
                   await associaQrDiretto(scanningId, qr_id, onLogout);
-                  await applyDefaultMinigiocoToQr(
-                    MINIGIOCO_PAGE_KEYS.innescoTimer,
-                    qr_id,
-                    onLogout,
-                    staffSaveMinigiocoQrConfig,
-                  );
+                  await applyDefaultMinigiocoToQr(MINIGIOCO_PAGE_KEYS.innescoTimer, qr_id, onLogout);
                   setScanningId(null);
                   setMsg('QR associato.');
                   load();
@@ -407,12 +411,7 @@ const InnescoTimerManager = ({ onBack, onLogout }) => {
           if (!p?.qrId || !p?.targetId) return;
           try {
             await associaQrDiretto(p.targetId, p.qrId, onLogout, true);
-            await applyDefaultMinigiocoToQr(
-              MINIGIOCO_PAGE_KEYS.innescoTimer,
-              p.qrId,
-              onLogout,
-              staffSaveMinigiocoQrConfig,
-            );
+            await applyDefaultMinigiocoToQr(MINIGIOCO_PAGE_KEYS.innescoTimer, p.qrId, onLogout);
             setPendingQrConflict(null);
             setScanningId(null);
             setMsg('QR associato (forzato).');

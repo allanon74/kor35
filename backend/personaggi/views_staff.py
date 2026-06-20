@@ -1351,6 +1351,7 @@ class StaffMinigiocoQrConfigView(APIView):
             "usa_biblioteca_se_vuota": config.usa_biblioteca_se_vuota,
             "modalita_sblocco": config.modalita_sblocco,
             "sblocco_secondi": config.sblocco_secondi,
+            "usa_default_pagina": config.usa_default_pagina,
             "immagine_url": img_url,
         }
 
@@ -1383,6 +1384,14 @@ class StaffMinigiocoQrConfigView(APIView):
             config.attivo = data.get("attivo") in (True, "true", "1", 1, "on")
         if "usa_biblioteca_se_vuota" in data:
             config.usa_biblioteca_se_vuota = data.get("usa_biblioteca_se_vuota") in (
+                True,
+                "true",
+                "1",
+                1,
+                "on",
+            )
+        if "usa_default_pagina" in data:
+            config.usa_default_pagina = data.get("usa_default_pagina") in (
                 True,
                 "true",
                 "1",
