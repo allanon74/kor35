@@ -53,6 +53,7 @@ urlpatterns = [
     path("runtime/tick-control/", views.PilotTickRuntimeControlView.as_view(), name="pilot-runtime-tick-control"),
 
     path("subsystems/qr-action/", views.PilotSubsystemQrActionView.as_view(), name="pilot-subsystem-qr"),
+    path("subsystems/qr-repair/", views.PilotSubsystemQrRepairView.as_view(), name="pilot-subsystem-qr-repair"),
 
     path("catalog/", views.PilotCatalogView.as_view(), name="pilot-catalog"),
     path("prefetture/", views.PilotPrefettureView.as_view(), name="pilot-prefetture"),

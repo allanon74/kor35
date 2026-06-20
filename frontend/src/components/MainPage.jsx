@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 // --- LOGICA PWA ---
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -8,7 +8,7 @@ import QrResultModal from './QrResultModal.jsx';
 import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
+import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 
@@ -120,6 +120,8 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [activeTab, setActiveTab] = useState(readStoredMainTab);
   const [qrResultData, setQrResultData] = useState(null);
   const [minigiocoPayload, setMinigiocoPayload] = useState(null);
+  const [pilotRepairing, setPilotRepairing] = useState(false);
+  const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // --- [MODIFICA] Stato per Modale Password e Notifiche Staff ---
@@ -495,11 +497,82 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, []);
 
   const closeQrModal = useCallback(() => setQrResultData(null), []);
-  const closeMinigiocoModal = useCallback(() => setMinigiocoPayload(null), []);
+  const closeMinigiocoModal = useCallback(() => {
+    setMinigiocoPayload(null);
+    minigiocoIntentRef.current = null;
+  }, []);
+
+  const handlePilotRipara = useCallback(
+    async (qrId, needsMinigioco) => {
+      if (!selectedCharacterId) {
+        setQrResultData({
+          tipo_modello: 'errore',
+          messaggio: 'Seleziona un personaggio per riparare il sottosistema.',
+        });
+        return;
+      }
+      setPilotRepairing(true);
+      try {
+        if (needsMinigioco) {
+          minigiocoIntentRef.current = { type: 'pilot_ripara', qrId };
+          const gate = await getQrCodeData(qrId, onLogout, selectedCharacterId, null, { pilotRipara: true });
+          if (gate?.tipo_modello === 'minigioco_richiesto') {
+            setMinigiocoPayload(gate);
+            return;
+          }
+          minigiocoIntentRef.current = null;
+          if (gate?.tipo_modello === 'minigioco_bloccato') {
+            setQrResultData(gate);
+            return;
+          }
+          setQrResultData(gate);
+          return;
+        }
+        const result = await pilotSubsystemRepair(qrId, selectedCharacterId, onLogout);
+        setQrResultData(result);
+      } catch (e) {
+        minigiocoIntentRef.current = null;
+        setQrResultData({
+          tipo_modello: 'errore',
+          messaggio: e.message || 'Riparazione non riuscita.',
+        });
+      } finally {
+        setPilotRepairing(false);
+      }
+    },
+    [onLogout, selectedCharacterId]
+  );
 
   const handleMinigiocoUnlocked = useCallback(
     async (sessionId, qrcodeId, messaggio) => {
       setMinigiocoPayload(null);
+      const intent = minigiocoIntentRef.current;
+      minigiocoIntentRef.current = null;
+
+      if (intent?.type === 'pilot_ripara') {
+        setPilotRepairing(true);
+        try {
+          const result = await pilotSubsystemRepair(
+            intent.qrId || qrcodeId,
+            selectedCharacterId,
+            onLogout,
+            sessionId
+          );
+          if (messaggio && result && !result.messaggio) {
+            result._minigioco_messaggio = messaggio;
+          }
+          setQrResultData(result);
+        } catch (e) {
+          setQrResultData({
+            tipo_modello: 'errore',
+            messaggio: e.message || 'Riparazione non riuscita dopo il minigioco.',
+          });
+        } finally {
+          setPilotRepairing(false);
+        }
+        return;
+      }
+
       try {
         const effect = await getQrCodeData(qrcodeId, onLogout, selectedCharacterId, sessionId);
         if (messaggio && effect && !effect.messaggio) {
@@ -1254,7 +1327,14 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       )}
 
       {qrResultData && (
-        <QrResultModal data={qrResultData} onClose={closeQrModal} onLogout={onLogout} onStealSuccess={handleStealSuccess} />
+        <QrResultModal
+          data={qrResultData}
+          onClose={closeQrModal}
+          onLogout={onLogout}
+          onStealSuccess={handleStealSuccess}
+          onPilotRipara={handlePilotRipara}
+          pilotRepairing={pilotRepairing}
+        />
       )}
 
       {/* --- [MODIFICA] MODALE CAMBIO PASSWORD --- */}

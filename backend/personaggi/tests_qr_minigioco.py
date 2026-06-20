@@ -339,6 +339,7 @@ class MinigiocoModalitaSbloccoTests(TestCase):
         self.qr = QrCode.objects.create(testo="QR modalità sblocco")
         self.config = MinigiocoQrConfig.objects.create(
             qr_code=self.qr,
+            sezione_attiva=True,
             attivo=True,
             tipi_abilitati=[MINIGIOCO_TIPO_SIMON],
         )
@@ -416,4 +417,65 @@ class MinigiocoUsaDefaultPaginaTests(TestCase):
         cfg.save(update_fields=["usa_default_pagina", "updated_at"])
         cfg.refresh_from_db()
         self.assertTrue(cfg.usa_default_pagina)
+
+
+class MinigiocoSezioneAccessoTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="mg_accesso", password="x")
+        self.tipo_pg = TipologiaPersonaggio.objects.create(nome="Std mg accesso")
+        self.pg = Personaggio.objects.create(
+            nome="PG accesso",
+            proprietario=self.user,
+            tipologia=self.tipo_pg,
+        )
+        self.qr = QrCode.objects.create(testo="QR accesso gate")
+        self.config = MinigiocoQrConfig.objects.create(
+            qr_code=self.qr,
+            sezione_attiva=True,
+            attivo=False,
+            requisiti_attivazione=[{"tipo": "statistica", "sigla": "PV", "min": 99}],
+            messaggio_accesso_negato="Pannello bloccato.",
+        )
+
+    def test_sezione_disattiva_ignora_gate(self):
+        from personaggi.qr_minigioco import check_gate_minigioco
+
+        self.config.sezione_attiva = False
+        self.config.attivo = True
+        self.config.tipi_abilitati = [MINIGIOCO_TIPO_SIMON]
+        self.config.save()
+        self.assertIsNone(check_gate_minigioco(qr_code=self.qr, personaggio=self.pg))
+
+    @patch("personaggi.models.Statistica.objects.filter")
+    def test_requisiti_non_soddisfatti_blocca_qr(self, mock_stat):
+        from personaggi.qr_minigioco import check_gate_minigioco
+
+        mock_stat.return_value.first.return_value = None
+        gate = check_gate_minigioco(qr_code=self.qr, personaggio=self.pg)
+        self.assertEqual(gate["tipo_modello"], "minigioco_bloccato")
+        self.assertEqual(gate["messaggio"], "Pannello bloccato.")
+
+    @patch("personaggi.models.Statistica.objects.filter")
+    def test_requisiti_ok_senza_minigioco_prosegue(self, mock_stat):
+        from personaggi.qr_minigioco import check_gate_minigioco
+
+        mock_stat.return_value.first.return_value = None
+        self.config.requisiti_attivazione = [{"tipo": "statistica", "sigla": "PV", "min": 1}]
+        self.config.save()
+        with patch.object(self.pg, "get_valore_statistica", return_value=5):
+            gate = check_gate_minigioco(qr_code=self.qr, personaggio=self.pg)
+        self.assertIsNone(gate)
+
+    @patch("personaggi.qr_minigioco.minigioco_ha_immagine_disponibile", return_value=True)
+    @patch("personaggi.models.Statistica.objects.filter")
+    def test_requisiti_ok_con_minigioco_attivo(self, mock_stat, _mock_img):
+        from personaggi.qr_minigioco import check_gate_minigioco
+
+        mock_stat.return_value.first.return_value = None
+        self.config.requisiti_attivazione = []
+        self.config.attivo = True
+        self.config.tipi_abilitati = [MINIGIOCO_TIPO_SIMON]
+        self.config.save()
+        gate = check_gate_minigioco(qr_code=self.qr, personaggio=self.pg)
+        self.assertEqual(gate["tipo_modello"], "minigioco_richiesto")
 

@@ -131,10 +131,12 @@ def _staff_qr_inspect_payload(qr, request):
             except Exception:
                 img_url = None
         base["minigioco_config"] = {
+            "sezione_attiva": minigioco.sezione_attiva,
             "attivo": minigioco.attivo,
             "tipi_abilitati": minigioco.tipi_abilitati or [],
             "difficolta": minigioco.difficolta,
             "requisiti_attivazione": minigioco.requisiti_attivazione or [],
+            "messaggio_accesso_negato": minigioco.messaggio_accesso_negato or "",
             "esclusioni_minigioco": minigioco.esclusioni_minigioco or [],
             "regole_difficolta": minigioco.regole_difficolta or [],
             "messaggio_pre": minigioco.messaggio_pre,
@@ -1338,10 +1340,12 @@ class StaffMinigiocoQrConfigView(APIView):
             except Exception:
                 img_url = None
         return {
+            "sezione_attiva": config.sezione_attiva,
             "attivo": config.attivo,
             "tipi_abilitati": config.tipi_abilitati or list(MinigiocoQrConfig.TIPI_DEFAULT),
             "difficolta": config.difficolta,
             "requisiti_attivazione": config.requisiti_attivazione or [],
+            "messaggio_accesso_negato": config.messaggio_accesso_negato or "",
             "esclusioni_minigioco": config.esclusioni_minigioco or [],
             "regole_difficolta": config.regole_difficolta or [],
             "messaggio_pre": config.messaggio_pre or "",
@@ -1380,6 +1384,8 @@ class StaffMinigiocoQrConfigView(APIView):
         )
 
         data = request.data
+        if "sezione_attiva" in data:
+            config.sezione_attiva = data.get("sezione_attiva") in (True, "true", "1", 1, "on")
         if "attivo" in data:
             config.attivo = data.get("attivo") in (True, "true", "1", 1, "on")
         if "usa_biblioteca_se_vuota" in data:
@@ -1485,6 +1491,8 @@ class StaffMinigiocoQrConfigView(APIView):
                     )
             if isinstance(raw_req, list):
                 config.requisiti_attivazione = raw_req
+        if "messaggio_accesso_negato" in data:
+            config.messaggio_accesso_negato = str(data.get("messaggio_accesso_negato") or "")
         if "rimuovi_immagine" in data and data.get("rimuovi_immagine") in (True, "true", "1", 1):
             if config.immagine:
                 config.immagine.delete(save=False)

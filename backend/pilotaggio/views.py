@@ -1085,6 +1085,57 @@ class PilotSubsystemQrActionView(APIView):
         )
 
 
+class PilotSubsystemQrRepairView(APIView):
+    """
+    POST /api/pilot/subsystems/qr-repair/
+    Body: {qr_id, personaggio_id, minigioco_session_id?}
+
+    Ripara un sottosistema guasto (dopo minigioco se configurato).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from pilotaggio.qr_sottosistema import ripristina_sottosistema_da_qr
+
+        qr_id = (request.data.get("qr_id") or "").strip()
+        personaggio_id = request.data.get("personaggio_id")
+        minigioco_session_id = (request.data.get("minigioco_session_id") or "").strip() or None
+
+        if not qr_id:
+            return Response({"error": "qr_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
+        if not personaggio_id:
+            return Response(
+                {"error": "personaggio_id mancante."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pg = Personaggio.objects.filter(pk=personaggio_id, proprietario=request.user).first()
+        if not pg:
+            return Response(
+                {"error": "Personaggio non valido per questo utente."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        qr = QrCode.objects.select_related("vista").filter(id=qr_id).first()
+        if not qr:
+            return Response({"error": "QR non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        result = ripristina_sottosistema_da_qr(
+            qr_code=qr,
+            personaggio=pg,
+            minigioco_session_id=minigioco_session_id,
+        )
+        if not result.get("ok"):
+            return Response(
+                {"error": result.get("error", "Riparazione non riuscita.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        out = {k: v for k, v in result.items() if k != "ok"}
+        return Response(out, status=status.HTTP_200_OK)
+
+
 # ---------------------------------------------------------------------------
 # 4) Cataloghi pubblici (per la console pilota e per dropdown frontend)
 # ---------------------------------------------------------------------------

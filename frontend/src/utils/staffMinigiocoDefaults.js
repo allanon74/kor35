@@ -54,6 +54,7 @@ export function minigiocoConfigToFormData(config, { usaDefaultPagina = null } = 
     fd.append('usa_default_pagina', usaDefaultPagina ? 'true' : 'false');
   }
   if (!config || typeof config !== 'object') return fd;
+  fd.append('sezione_attiva', config.sezione_attiva ? 'true' : 'false');
   fd.append('attivo', config.attivo ? 'true' : 'false');
   fd.append('usa_biblioteca_se_vuota', config.usa_biblioteca_se_vuota !== false ? 'true' : 'false');
   fd.append('tipi_abilitati', JSON.stringify(config.tipi_abilitati || []));
@@ -68,6 +69,7 @@ export function minigiocoConfigToFormData(config, { usaDefaultPagina = null } = 
     fd.append('sblocco_secondi', '');
   }
   fd.append('requisiti_attivazione', JSON.stringify(config.requisiti_attivazione || []));
+  fd.append('messaggio_accesso_negato', config.messaggio_accesso_negato || '');
   fd.append('esclusioni_minigioco', JSON.stringify(config.esclusioni_minigioco || []));
   fd.append('regole_difficolta', JSON.stringify(config.regole_difficolta || []));
   if (config.timer_secondi !== '' && config.timer_secondi != null) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft } from 'lucide-react';
+import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
@@ -585,11 +585,116 @@ const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose }) => {
   );
 };
 
+//##################################################################
+// ## VISTA QR: SOTTOSSISTEMA PILOTAGGIO (runtime + riparazione) ##
+//##################################################################
+const PilotSottosistemaView = ({ data, qrId, onPilotRipara, repairing }) => {
+  const d = data?.dati || {};
+  const sottos = d.sottosistema || {};
+  const stato = d.stato || {};
+  const guasto = d.guasto;
+  const inRipristino = d.in_ripristino;
+  const puoRiparare = d.puo_riparare;
+  const minigiocoRiparazione = d.minigioco_riparazione;
+  const sessioneAttiva = d.sessione_attiva;
+  const riparato = data?.azione === 'riparato';
+  const colore = stato.colore_livello_attuale || '#6366f1';
+  const livello = stato.livello_attuale ?? '—';
+
+  let statusLabel = 'Online';
+  let statusClass = 'text-emerald-400';
+  if (inRipristino) {
+    statusLabel = `Ripristino (${stato.recovery_remaining_seconds ?? 0}s)`;
+    statusClass = 'text-amber-400';
+  } else if (guasto) {
+    statusLabel = 'Guasto';
+    statusClass = 'text-red-400';
+  }
+
+  return (
+    <div className="space-y-5">
+      {riparato && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-950/50 border border-emerald-700/50">
+          <CheckCircle2 className="text-emerald-400 shrink-0" size={28} />
+          <p className="text-emerald-200 text-sm">{data.messaggio || 'Sottosistema riparato.'}</p>
+        </div>
+      )}
+
+      <div className="text-center">
+        <span
+          className="inline-block font-mono text-3xl font-black px-4 py-2 rounded-lg border-2"
+          style={{ borderColor: colore, color: colore }}
+        >
+          {sottos.codice || '?'}
+        </span>
+        <h3 className="text-xl font-bold text-white mt-3">{sottos.nome || 'Sottosistema'}</h3>
+        {sottos.tipo && (
+          <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">{sottos.tipo}</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="bg-gray-900/60 rounded-lg p-3 border border-gray-700">
+          <div className="text-gray-500 text-xs uppercase mb-1">Livello</div>
+          <div className="text-2xl font-bold" style={{ color: colore }}>{livello}</div>
+        </div>
+        <div className="bg-gray-900/60 rounded-lg p-3 border border-gray-700">
+          <div className="text-gray-500 text-xs uppercase mb-1">Stato</div>
+          <div className={`text-lg font-bold ${statusClass}`}>{statusLabel}</div>
+        </div>
+      </div>
+
+      {!sessioneAttiva && (
+        <p className="text-amber-200/90 text-sm text-center border border-amber-800/40 rounded-md p-2 bg-amber-950/30">
+          Nessuna sessione di volo attiva: stato di catalogo.
+        </p>
+      )}
+
+      {data?._minigioco_messaggio && (
+        <p className="text-cyan-300/90 text-sm text-center">{data._minigioco_messaggio}</p>
+      )}
+
+      {d.manifesto_testo && (
+        <details className="bg-gray-900/40 rounded-lg border border-gray-700">
+          <summary className="cursor-pointer p-3 text-sm text-gray-400">Informazioni aggiuntive</summary>
+          <div
+            className="px-3 pb-3 text-sm text-gray-300 prose prose-invert max-w-none"
+            dangerouslySetInnerHTML={{ __html: d.manifesto_testo }}
+          />
+        </details>
+      )}
+
+      {puoRiparare && onPilotRipara && !riparato && (
+        <button
+          type="button"
+          disabled={repairing}
+          onClick={() => onPilotRipara(qrId, minigiocoRiparazione)}
+          className="w-full flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {repairing ? (
+            <Loader className="animate-spin" size={20} />
+          ) : (
+            <Wrench size={20} />
+          )}
+          {minigiocoRiparazione ? 'Ripara (minigioco)' : 'Ripara'}
+        </button>
+      )}
+
+      {guasto && !puoRiparare && !inRipristino && sessioneAttiva && (
+        <p className="text-gray-400 text-sm text-center flex items-center justify-center gap-2">
+          <AlertTriangle size={16} className="text-amber-500" />
+          Seleziona il personaggio corretto per avviare la riparazione.
+        </p>
+      )}
+    </div>
+  );
+};
+
 
 //##################################################################
 // ## COMPONENTE MODALE PRINCIPALE (EXPORT) ##
 //##################################################################
-const QrResultModal = ({ data, onClose, onLogout, onStealSuccess }) => {
+const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara, pilotRepairing }) => {
   
   const { addTimer } = useTimers(); // <--- Accediamo alla logica dei timer
   const lastProcessedQr = useRef(null); // Per evitare che il timer scatti multipli in caso di re-render
@@ -765,6 +870,16 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess }) => {
             <h3 className="text-2xl font-bold text-red-400 mb-2">Accesso negato</h3>
             <p className="text-gray-300">{data.messaggio || 'Questo QR non è più disponibile per il tuo personaggio.'}</p>
           </div>
+        );
+
+      case 'pilot_sottosistema':
+        return (
+          <PilotSottosistemaView
+            data={data}
+            qrId={qrId}
+            onPilotRipara={onPilotRipara}
+            repairing={pilotRepairing}
+          />
         );
 
       case 'errore':

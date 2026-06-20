@@ -668,7 +668,7 @@ export const getPersonaggioGameState = (id, onLogout) => {
   return fetchAuthenticated(`/api/personaggi/api/personaggi/${cleanId}/game_state/`, { method: 'GET' }, onLogout);
 };
 
-export const getQrCodeData = (qrId, onLogout, personaggioId = null, minigiocoSessionId = null) => {
+export const getQrCodeData = (qrId, onLogout, personaggioId = null, minigiocoSessionId = null, opts = {}) => {
   const cleanId = normalizeScannedQrId(qrId);
   const params = new URLSearchParams();
   if (personaggioId != null && personaggioId !== '') {
@@ -677,9 +677,26 @@ export const getQrCodeData = (qrId, onLogout, personaggioId = null, minigiocoSes
   if (minigiocoSessionId) {
     params.set('minigioco_session_id', String(minigiocoSessionId));
   }
+  if (opts.pilotRipara) {
+    params.set('pilot_ripara', '1');
+  }
   const q = params.toString() ? `?${params.toString()}` : '';
   return fetchAuthenticated(`/api/personaggi/api/qrcode/${cleanId}/${q}`, { method: 'GET' }, onLogout);
 };
+
+export const pilotSubsystemRepair = (qrId, personaggioId, onLogout, minigiocoSessionId = null) =>
+  fetchAuthenticated(
+    '/api/pilot/subsystems/qr-repair/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        qr_id: normalizeScannedQrId(qrId),
+        personaggio_id: personaggioId,
+        ...(minigiocoSessionId ? { minigioco_session_id: minigiocoSessionId } : {}),
+      }),
+    },
+    onLogout,
+  );
 
 export const minigiocoComplete = (sessionId, personaggioId, stato, onLogout) =>
   fetchAuthenticated(

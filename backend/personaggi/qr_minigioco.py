@@ -504,6 +504,19 @@ def _config_attiva(config) -> bool:
     return True
 
 
+def _sezione_minigioco_attiva(config) -> bool:
+    return bool(config and getattr(config, "sezione_attiva", False))
+
+
+def verifica_accesso_qr_minigioco(personaggio, config) -> Tuple[bool, str]:
+    """Con sezione attiva: (ok, messaggio) per i requisiti di accesso al QR."""
+    ok, detail = personaggio_soddisfa_requisiti(personaggio, config.requisiti_attivazione or [])
+    if ok:
+        return True, ""
+    custom = (getattr(config, "messaggio_accesso_negato", None) or "").strip()
+    return False, custom or detail or "Non possiedi i requisiti per usare questo QR."
+
+
 def personaggio_bloccato_su_qr(personaggio, qr_code) -> bool:
     from .models import MinigiocoQrBlocco
 
@@ -586,11 +599,6 @@ def session_allows_bypass(session_id, personaggio, qr_code) -> bool:
             return False
         return timezone.now() < sess.completato_at + timedelta(seconds=BYPASS_TRANSITO_SECONDI)
     return _sblocco_sessione_ancora_valido(config, sess)
-
-
-def requisiti_minigioco_soddisfatti(personaggio, config) -> bool:
-    ok, _ = personaggio_soddisfa_requisiti(personaggio, config.requisiti_attivazione or [])
-    return ok
 
 
 def immagine_url_per_config(config, request=None) -> str:
@@ -707,7 +715,9 @@ def check_gate_minigioco(
     bypass_session_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
-    Ritorna payload minigioco se il giocatore deve risolverlo, altrimenti None.
+    Se la sezione minigiochi è attiva: verifica requisiti di accesso al QR.
+    Se il minigioco è attivo: ritorna payload minigioco da risolvere, altrimenti None
+    (effetto QR normale dopo i controlli).
     """
     from .models import MinigiocoQrConfig, MinigiocoQrSession
 
@@ -719,13 +729,32 @@ def check_gate_minigioco(
     except MinigiocoQrConfig.DoesNotExist:
         return None
 
+    if not _sezione_minigioco_attiva(config):
+        return None
+
+    richiede_personaggio = bool(config.requisiti_attivazione) or _config_attiva(config)
+    if richiede_personaggio and not personaggio:
+        return {
+            "blocked": True,
+            "error": "Parametro personaggio_id richiesto per questo QR con sezione minigiochi attiva.",
+        }
+
+    if personaggio and config.requisiti_attivazione:
+        ok, msg = verifica_accesso_qr_minigioco(personaggio, config)
+        if not ok:
+            return {
+                "tipo_modello": "minigioco_bloccato",
+                "messaggio": msg,
+                "qrcode_id": qr_code.id,
+            }
+
     if not _config_attiva(config):
         return None
 
     if not personaggio:
         return {
             "blocked": True,
-            "error": "Parametro personaggio_id richiesto per questo QR con minigioco.",
+            "error": "Parametro personaggio_id richiesto per questo QR con minigioco attivo.",
         }
 
     if personaggio_bloccato_su_qr(personaggio, qr_code):
@@ -739,9 +768,6 @@ def check_gate_minigioco(
         return None
 
     if deve_saltare_minigioco(personaggio, config):
-        return None
-
-    if not requisiti_minigioco_soddisfatti(personaggio, config):
         return None
 
     if not tipi_pool_giocabili(config):

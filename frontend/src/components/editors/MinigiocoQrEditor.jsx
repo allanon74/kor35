@@ -35,10 +35,12 @@ const SBLOCCO_OPTS = [
 const ALL_TIPI = TIPO_OPTS.map((o) => o.id);
 
 export const emptyMinigiocoConfig = () => ({
+  sezione_attiva: false,
   attivo: false,
   tipi_abilitati: [...ALL_TIPI],
   difficolta: 4,
   requisiti_attivazione: [],
+  messaggio_accesso_negato: '',
   esclusioni_minigioco: [],
   regole_difficolta: [],
   messaggio_pre: '',
@@ -153,6 +155,7 @@ const MinigiocoQrEditor = ({
     setMsg('');
     try {
       const fd = new FormData();
+      fd.append('sezione_attiva', config.sezione_attiva ? 'true' : 'false');
       fd.append('attivo', config.attivo ? 'true' : 'false');
       fd.append('usa_biblioteca_se_vuota', config.usa_biblioteca_se_vuota ? 'true' : 'false');
       fd.append('tipi_abilitati', JSON.stringify(config.tipi_abilitati));
@@ -167,6 +170,7 @@ const MinigiocoQrEditor = ({
         fd.append('sblocco_secondi', '');
       }
       fd.append('requisiti_attivazione', JSON.stringify(config.requisiti_attivazione || []));
+      fd.append('messaggio_accesso_negato', config.messaggio_accesso_negato || '');
       fd.append('esclusioni_minigioco', JSON.stringify(config.esclusioni_minigioco || []));
       fd.append('regole_difficolta', JSON.stringify(config.regole_difficolta || []));
       if (config.timer_secondi !== '' && config.timer_secondi != null) {
@@ -212,12 +216,53 @@ const MinigiocoQrEditor = ({
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
-              checked={!!config.attivo}
-              onChange={(e) => setConfig((c) => ({ ...c, attivo: e.target.checked }))}
+              checked={!!config.sezione_attiva}
+              onChange={(e) => setConfig((c) => ({ ...c, sezione_attiva: e.target.checked }))}
             />
-            <span>Attivo (puzzle/memory/rotate richiedono immagine o libreria)</span>
+            <span>Sezione minigiochi attiva (controlla accesso al QR e minigioco opzionale)</span>
           </label>
 
+          {!config.sezione_attiva ? (
+            <p className="text-xs text-gray-500 bg-gray-900/40 border border-gray-700 rounded p-2">
+              Con la sezione disattivata, la scansione applica l&apos;effetto QR normale (manifesto, nodo, timer, …).
+            </p>
+          ) : (
+            <>
+              <div>
+                <span className="text-gray-500 text-xs">
+                  Requisiti per accedere al QR (vuoto = accesso libero; se non soddisfatti, nessun effetto)
+                </span>
+                <RequisitiListaEditor
+                  requisiti={config.requisiti_attivazione || []}
+                  onChange={(requisiti_attivazione) => setConfig((c) => ({ ...c, requisiti_attivazione }))}
+                  lookup={lookup}
+                  lookupLoading={lookupLoading}
+                />
+              </div>
+
+              <label className="block">
+                <span className="text-gray-500 text-xs">Messaggio se requisiti non soddisfatti</span>
+                <textarea
+                  className="w-full mt-0.5 bg-gray-900 border border-gray-600 rounded px-2 py-1 min-h-[56px]"
+                  value={config.messaggio_accesso_negato || ''}
+                  onChange={(e) => setConfig((c) => ({ ...c, messaggio_accesso_negato: e.target.value }))}
+                  placeholder="Es.: Serve la carriera Ingegnere per interagire con questo pannello."
+                />
+              </label>
+
+              <label className="flex items-center gap-2 border-t border-gray-700/60 pt-3">
+                <input
+                  type="checkbox"
+                  checked={!!config.attivo}
+                  onChange={(e) => setConfig((c) => ({ ...c, attivo: e.target.checked }))}
+                />
+                <span>Minigioco attivo (puzzle/memory/… richiedono immagine o libreria)</span>
+              </label>
+            </>
+          )}
+
+          {config.sezione_attiva ? (
+            <>
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -427,15 +472,8 @@ const MinigiocoQrEditor = ({
             </label>
           </div>
 
-          <div>
-            <span className="text-gray-500 text-xs">Richiedi minigioco solo se (vuoto = sempre)</span>
-            <RequisitiListaEditor
-              requisiti={config.requisiti_attivazione || []}
-              onChange={(requisiti_attivazione) => setConfig((c) => ({ ...c, requisiti_attivazione }))}
-              lookup={lookup}
-              lookupLoading={lookupLoading}
-            />
-          </div>
+            </>
+          ) : null}
 
           {!templateMode ? (
             <button

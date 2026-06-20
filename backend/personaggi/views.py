@@ -1600,6 +1600,47 @@ class QrCodeDetailView(APIView):
             if pid is not None:
                 scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
 
+        from pilotaggio.qr_sottosistema import (
+            build_scan_payload,
+            minigioco_richiesto_per_ripara,
+            sottosistema_per_qr,
+        )
+
+        sottosistema = sottosistema_per_qr(qr_code)
+        if sottosistema is not None:
+            pilot_ripara = request.query_params.get("pilot_ripara", "").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            if pilot_ripara and minigioco_richiesto_per_ripara(qr_code):
+                from personaggi import qr_minigioco
+
+                gate = qr_minigioco.check_gate_minigioco(
+                    qr_code=qr_code,
+                    personaggio=scanner_pg,
+                    request=request,
+                    bypass_session_id=None,
+                )
+                if gate:
+                    if gate.get("tipo_modello") == "minigioco_bloccato":
+                        return Response(gate, status=status.HTTP_200_OK)
+                    if gate.get("blocked"):
+                        return Response(
+                            {"error": gate.get("error", "Accesso negato.")},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    return Response(gate, status=status.HTTP_200_OK)
+            return Response(
+                build_scan_payload(
+                    qr_code=qr_code,
+                    sottosistema=sottosistema,
+                    scanner_pg=scanner_pg,
+                ),
+                status=status.HTTP_200_OK,
+            )
+
         from personaggi import qr_minigioco
 
         bypass_sid = request.query_params.get("minigioco_session_id")

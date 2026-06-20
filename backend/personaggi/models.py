@@ -3790,7 +3790,14 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
         on_delete=models.CASCADE,
         related_name="configurazione_minigioco",
     )
-    attivo = models.BooleanField(default=False)
+    sezione_attiva = models.BooleanField(
+        default=False,
+        help_text="Se True, la sezione minigiochi governa l'accesso al QR (requisiti + minigioco opzionale).",
+    )
+    attivo = models.BooleanField(
+        default=False,
+        help_text="Se True (con sezione attiva), richiede il minigioco prima dell'effetto QR.",
+    )
     tipo = models.CharField(
         max_length=32,
         choices=TIPO_CHOICES,
@@ -3820,7 +3827,12 @@ class MinigiocoQrConfig(SyncableModel, models.Model):
     requisiti_attivazione = models.JSONField(
         default=list,
         blank=True,
-        help_text="Mostra minigioco solo se il PG soddisfa questi requisiti (vuoto = sempre).",
+        help_text="Con sezione attiva: blocca il QR se il PG non soddisfa questi requisiti (vuoto = accesso libero).",
+    )
+    messaggio_accesso_negato = models.TextField(
+        blank=True,
+        default="",
+        help_text="Testo mostrato se si scansiona senza i requisiti (se vuoto, messaggio automatico).",
     )
     esclusioni_minigioco = models.JSONField(
         default=list,
