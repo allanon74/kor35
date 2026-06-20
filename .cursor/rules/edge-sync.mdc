@@ -56,7 +56,7 @@ Checklist:
 
 ```bash
 # Regressione MTI LWW
-docker compose ... exec -T backend python manage.py test kor35.tests_edge_sync_integrity.EdgeSyncMtiChildLwwTests
+docker compose ... exec -T backend python manage.py test kor35.tests_edge_sync_integrity.EdgeSyncMtiChildLwwTests --keepdb
 
 # Pull replica (es. dev-office)
 make sync-db ENV=dev-office

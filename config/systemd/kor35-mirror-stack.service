@@ -1,0 +1,26 @@
+[Unit]
+Description=KOR35 Mirror - Avvio stack Docker (offline-safe)
+# NON usare network-online.target: in bosco senza internet il boot resterebbe bloccato minuti.
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=pi
+Group=pi
+
+# Adatta se il path repo sul Pi e' diverso
+WorkingDirectory=/home/pi/kor35-replica
+Environment=COMPOSE_PROJECT_NAME=kor35-replica
+Environment=KOR35_BACKEND_ENV_FILE=/home/pi/kor35-replica/backend/.env.mirror
+Environment=KOR35_REPO_PATH=/home/pi/kor35-replica
+
+ExecStart=/home/pi/kor35-replica/scripts/mirror_boot_stack.sh
+TimeoutStartSec=600
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

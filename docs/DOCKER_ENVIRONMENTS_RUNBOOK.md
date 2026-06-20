@@ -272,6 +272,7 @@ Path consigliato:
 
 Solo mirror:
 - servizio `omada-controller` attivo tramite `compose.mirror.yml`
+- topologia WiFi (emergenza `Pi_emergenza` / `10.42.0.1` vs rete evento Omada): vedi **`docs/MIRROR_PI_NETWORK.md`**
 
 ### 6.3 Local dev (home/office)
 

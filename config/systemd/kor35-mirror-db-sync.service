@@ -1,7 +1,7 @@
 [Unit]
 Description=KOR35 Mirror - Sync DB bidirezionale (Docker)
-Wants=network-online.target
-After=network-online.target docker.service
+# Sync verso master: fallisce offline ma non deve bloccare il boot locale.
+After=network.target docker.service kor35-mirror-stack.service
 
 [Service]
 Type=oneshot

@@ -1,6 +1,15 @@
 # KOR35 Pilotaggio Kiosk Dual Screen (Raspberry Pi)
 
-Obiettivo:
+## Architettura (due Raspberry)
+
+| Macchina | Ruolo |
+|----------|--------|
+| **Pi mirror** (`kor35-replica`) | Stack Docker (web app + API + `/pilot/`) + Omada WiFi |
+| **Pi kiosk** (questo setup) | Solo Chromium su due HDMI; **non** esegue Docker |
+
+Il kiosk deve raggiungere il mirror sulla **rete evento Omada** (IP LAN del Pi su `eth0`/`en*`, **non** `10.42.0.1`). Vedi `docs/MIRROR_PI_NETWORK.md`.
+
+Obiettivo display:
 - Schermo 1 (HDMI principale): solo stato nave/eventi (`/pilot/?screen=status`)
 - Schermo 2 touchscreen 1920x440: plancia comandi (`/pilot/?screen=control`)
 
@@ -15,31 +24,29 @@ Obiettivo:
 - Pi Zero: sconsigliato per dual-screen HDMI + UI web reattiva.
 - Pi 4B e adatto al carico previsto.
 
-## 1) Setup base (host Raspberry)
+## 1) Installazione rapida (sul Pi kiosk, da clone repo o copia cartella)
+
 ```bash
-sudo apt update
-sudo apt install -y xserver-xorg x11-xserver-utils xinit openbox chromium-browser unclutter
+cd /path/to/kor35-replica   # oppure scp della cartella deploy/raspberry-pilot-kiosk
+sudo ./deploy/raspberry-pilot-kiosk/install-kiosk-pi.sh --pilot-base-url http://<IP_LAN_EVENTO>
 ```
 
-## 2) Copia script kiosk
+## 2) URL mirror (offline evento)
+
+- **Pi kiosk → Pi mirror**: `PILOT_BASE_URL=http://<IP_LAN_EVENTO>` in `/etc/kor35/kiosk.env` (rete Omada/EAP)
+- **Smartphone giocatori**: WiFi **`kor35-larp`**, poi `http://<IP_LAN_EVENTO>/` — **non** `Pi_emergenza` / `10.42.0.1`
+- **Solo staff/debug**: `Pi_emergenza` → `10.42.0.1` (wlan0 on-board, accesso emergenza al Pi)
+- **Non usare offline**: `https://kor35.ddns.net` (DNS assente)
+
+Dopo modifica env:
+
 ```bash
-sudo mkdir -p /opt/kor35-kiosk
-sudo cp deploy/raspberry-pilot-kiosk/start-kiosk.sh /opt/kor35-kiosk/start-kiosk.sh
-sudo chmod +x /opt/kor35-kiosk/start-kiosk.sh
+sudo systemctl restart kor35-kiosk.service
 ```
 
-## 3) Service systemd
-```bash
-sudo cp deploy/raspberry-pilot-kiosk/kor35-kiosk.service /etc/systemd/system/kor35-kiosk.service
-sudo systemctl daemon-reload
-sudo systemctl enable kor35-kiosk.service
-sudo systemctl start kor35-kiosk.service
-```
+## 3) Display
 
-## 4) URL e display
-Modifica in `/opt/kor35-kiosk/start-kiosk.sh`:
-- `PILOT_BASE_URL` con URL locale raggiungibile (es. `http://10.42.0.1`)
-- mapping output display (`HDMI-1` e `HDMI-2`) secondo `xrandr`.
+Adatta in `/opt/kor35-kiosk/start-kiosk.sh` gli output `HDMI-1` / `HDMI-2` secondo `xrandr`.
 
 ## 5) Test rapido
 - URL per profilo Docker WSL:

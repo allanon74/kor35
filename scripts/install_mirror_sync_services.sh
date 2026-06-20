@@ -79,6 +79,7 @@ fi
 
 SYSTEMD_DIR="/etc/systemd/system"
 UNITS=(
+  "kor35-mirror-stack.service"
   "kor35-mirror-db-sync.service"
   "kor35-mirror-db-sync.timer"
   "kor35-mirror-resync.service"
@@ -112,6 +113,7 @@ sed -i "s|^Environment=KOR35_DB_BACKUP_MONTHLY_ARCHIVE_DIR=.*$|Environment=KOR35
 systemctl daemon-reload
 
 if [ "$ENABLE_NOW" = "1" ]; then
+  systemctl enable --now kor35-mirror-stack.service
   systemctl enable --now kor35-mirror-db-sync.timer
   systemctl enable --now kor35-mirror-media-sync.timer
   systemctl enable --now kor35-mirror-db-backup.timer
@@ -127,6 +129,7 @@ echo "Backup dir: $BACKUP_DIR"
 echo "Backup retention days: $BACKUP_RETENTION_DAYS"
 echo ""
 echo "Verifica:"
+echo "  systemctl status kor35-mirror-stack.service --no-pager"
 echo "  systemctl status kor35-mirror-db-sync.timer --no-pager"
 echo "  systemctl status kor35-mirror-media-sync.timer --no-pager"
 echo "  systemctl status kor35-mirror-db-backup.timer --no-pager"

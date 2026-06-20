@@ -1,0 +1,58 @@
+---
+description: Test Django in Docker — sempre --keepdb e exec -T (evita prompt interattivo DB test)
+alwaysApply: true
+---
+
+# Test Django (Docker)
+
+## Problema da evitare
+
+Senza `--keepdb`, se il database di test `test_kor35_dev` esiste già, Django chiede:
+
+```text
+Type 'yes' if you would like to try deleting the test database ...
+```
+
+In `docker compose exec -T` **non c'è stdin interattivo**: il comando resta in attesa e i test sembrano bloccati.
+
+## Regola obbligatoria per gli agenti
+
+1. Esegui i test **sempre** nel container backend (`docker compose exec -T`, mai `manage.py` sull'host).
+2. Aggiungi **sempre** `--keepdb` a `python manage.py test` (salvo richiesta esplicita di ricreare il DB test).
+3. Usa **`-T`** (no TTY) su `exec` — coerente con automazione e CI.
+4. Lancia compose dalla directory `config/docker` con i file del profilo (`compose.base.yml` + `compose.dev-home.yml`, ecc.).
+
+## Comando canonico (dev-home)
+
+```bash
+cd /home/django/progetti/kor35/config/docker
+docker compose -f compose.base.yml -f compose.dev-home.yml exec -T backend \
+  python manage.py test <modulo_o_classe> -v 2 --keepdb
+```
+
+Esempi:
+
+```bash
+# Suite pilotaggio QR sottosistema
+python manage.py test pilotaggio.tests.test_qr_sottosistema -v 2 --keepdb
+
+# Regressione sync MTI
+python manage.py test kor35.tests_edge_sync_integrity.EdgeSyncMtiChildLwwTests --keepdb
+```
+
+## Se serve ricreare il DB test
+
+Solo quando l'utente lo chiede o le migrazioni test falliscono in modo inspiegabile:
+
+```bash
+docker compose -f compose.base.yml -f compose.dev-home.yml exec -T backend \
+  python manage.py test <modulo> -v 2 --noinput
+```
+
+Oppure elimina manualmente `test_kor35_dev` nel container Postgres, poi test senza `--keepdb`.
+
+## Non fare
+
+- `python manage.py test` senza `--keepdb` in automazione
+- `docker compose exec backend ...` **senza** `-T` negli script degli agenti
+- Ignorare un comando test “appeso” — controllare subito se manca `--keepdb`

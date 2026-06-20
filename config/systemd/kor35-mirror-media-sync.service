@@ -1,7 +1,6 @@
 [Unit]
 Description=KOR35 Mirror - Sync media serale (push+pull)
-Wants=network-online.target
-After=network-online.target docker.service
+After=network.target docker.service kor35-mirror-stack.service
 
 [Service]
 Type=oneshot

@@ -9,6 +9,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 | `.cursorrules` | Regole globali: UUID/sync, API, Docker, staff dashboard |
 | `.cursor/rules/edge-sync.mdc` | Sync LWW, MTI, tombstone, checklist implementazione |
 | `.cursor/rules/prod-docker-ops.mdc` | SSH prod (`kor35-prod` + proxy corkscrew), compose, log, sync |
+| `.cursor/rules/django-tests-docker.mdc` | Test Django in Docker: **sempre `--keepdb`** + `exec -T` |
 | `config/docker/SYNC.md` | Runbook Docker: ruoli nodo, `make sync-db`, media rsync |
 
 ## Checklist rapida (feature che tocca il DB)
@@ -19,6 +20,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 4. MTI (Tessitura, Infusione, …)? → non sovrascrivere figlio se `remote_updated_at < local.updated_at`.
 5. Media? → solo path in JSON; file con `make sync-media` / rsync.
 6. Comandi → Docker-first (`make … ENV=…`), vedi `Makefile` help.
+7. Test backend → container + `exec -T` + **`--keepdb`** (vedi `.cursor/rules/django-tests-docker.mdc`); senza `--keepdb` Django chiede `yes/no` e il comando si blocca.
 
 ## Profili ambiente
 
