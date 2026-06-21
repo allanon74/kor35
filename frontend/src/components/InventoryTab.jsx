@@ -102,14 +102,23 @@ const inferPhysicalSlots = (item) => {
     return ['vest'];
 };
 
+const SLOT_BTN_SIZE = 'w-[4.5rem] h-[4.5rem] sm:w-20 sm:h-20 md:w-[5.25rem] md:h-[5.25rem]';
+const SLOT_BTN_TEXT = 'text-[11px] sm:text-xs';
+
+const jewelryCellLabel = (slotKey, index) => {
+    if (slotKey === 'fingers') return `Dito ${index + 1}`;
+    if (slotKey === 'arms') return index === 0 ? 'Braccio Sx' : 'Braccio Dx';
+    return null;
+};
+
 const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotDrop, onSlotDragOver, dragHintBySlot, isDragging, onTouchSlotSelect, runtimeBySlot = {} }) => {
-    const CANVAS_W = 520;
-    const CANVAS_H = 430;
     const bodySlots = slots.filter((s) => !['melee', 'ranged', 'focus', 'shield'].includes(s.key));
     const weaponSlots = slots.filter((s) => ['melee', 'ranged', 'focus', 'shield'].includes(s.key));
-    const bodyCellSlots = bodySlots.filter((s) => ['arms', 'fingers'].includes(s.key));
-    const bodySingleSlots = bodySlots.filter((s) => !['arms', 'fingers'].includes(s.key));
-    const bodyCells = bodyCellSlots.flatMap((slot) => {
+    const slotByKey = Object.fromEntries(bodySlots.map((s) => [s.key, s]));
+
+    const bodyCells = ['arms', 'fingers'].flatMap((slotKey) => {
+        const slot = slotByKey[slotKey];
+        if (!slot) return [];
         const total = Math.max(1, Number(slot.capacity || 1));
         return Array.from({ length: total }, (_, idx) => ({
             slot,
@@ -118,6 +127,7 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
             item: slot.equippedInSlot[idx] || null,
         }));
     });
+
     const weaponCells = weaponSlots.flatMap((slot) => {
         const total = Math.max(1, Number(slot.capacity || 1));
         return Array.from({ length: total }, (_, idx) => ({
@@ -128,162 +138,132 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
         }));
     });
 
-    // Coordinate centro slot nel canvas virtuale 520x430
-    const slotCoords = {
-        head: { x: 260, y: 40 },
-        neck: { x: 338, y: 94 },
-        shoulders: { x: 338, y: 168 },
-        vest: { x: 338, y: 240 },
-        armor: { x: 182, y: 240 },
-        belt: { x: 182, y: 312 },
-        arms: { x: 98, y: 160 }, // non usato direttamente nelle celle multi
-        fingers: { x: 418, y: 286 }, // non usato direttamente nelle celle multi
-        feet: { x: 260, y: 382 },
-    };
-    const bodyCellCoords = {
-        arms: [
-            { x: 78, y: 136 },
-            { x: 78, y: 208 },
-            { x: 78, y: 280 },
-            { x: 78, y: 352 },
-        ],
-        fingers: [
-            { x: 442, y: 136 },
-            { x: 442, y: 208 },
-            { x: 442, y: 280 },
-            { x: 442, y: 352 },
-        ],
+    const getBodyCell = (slotKey, index) => bodyCells.find((c) => c.slot.key === slotKey && c.index === index);
+
+    const renderSingleSlot = (slotKey, labelOverride = null) => {
+        const slot = slotByKey[slotKey];
+        if (!slot) return null;
+        const occupied = slot.equippedInSlot.length;
+        const runtimeOccupied = (runtimeBySlot[slot.key] || []).length;
+        const occupiedTotal = occupied + runtimeOccupied;
+        const isSelected = selectedSlotKey === slot.key;
+        const isFull = occupiedTotal >= slot.capacity;
+        const hasRuntime = runtimeOccupied > 0;
+        const dragHint = dragHintBySlot?.[slot.key] || null;
+        const canDrop = dragHint?.canDrop === true;
+        const isBlockedByDrag = dragHint && !dragHint.canDrop;
+        const label = labelOverride || (slot.key === 'neck' ? 'Collana' : (slot.shortLabel || slot.label));
+
+        return (
+            <button
+                key={slot.key}
+                type="button"
+                onClick={() => {
+                    if (onTouchSlotSelect && onTouchSlotSelect(slot) === true) return;
+                    onSelectSlot(slot);
+                }}
+                onDrop={(e) => onSlotDrop(e, slot)}
+                onDragOver={(e) => onSlotDragOver(e, slot)}
+                className={`${SLOT_BTN_SIZE} px-1 py-1 rounded-xl border text-center ${SLOT_BTN_TEXT} font-bold transition-colors shrink-0 ${
+                    canDrop ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
+                    isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
+                    isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                    hasRuntime ? 'border-sky-500/80 bg-sky-900/35 text-sky-100 shadow-[0_0_10px_rgba(56,189,248,0.25)]' :
+                    occupied > 0 ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
+                    'border-gray-700 bg-gray-900/80 text-gray-300'
+                }`}
+                title={dragHint?.reason || 'Clicca o trascina un oggetto compatibile'}
+            >
+                <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
+                    <span className="text-base sm:text-lg">{SLOT_ICON[slot.key] || '◻'}</span>
+                    <span>{label}</span>
+                </div>
+                <div className={`font-mono ${isFull ? (hasRuntime ? 'text-sky-200' : 'text-emerald-300') : 'text-gray-500'}`}>
+                    {occupiedTotal}/{slot.capacity}
+                </div>
+            </button>
+        );
     };
 
-    // Punto anatomico target per le linee
-    const anchorCoords = {
-        head: { x: 260, y: 74 },
-        neck: { x: 274, y: 116 },
-        shoulders: { x: 300, y: 148 },
-        vest: { x: 280, y: 196 },
-        armor: { x: 240, y: 222 },
-        belt: { x: 258, y: 252 },
-        arms: { x: 214, y: 190 },
-        fingers: { x: 308, y: 236 },
-        feet: { x: 260, y: 332 },
+    const renderMultiCell = (slotKey, index) => {
+        const cell = getBodyCell(slotKey, index);
+        if (!cell) return null;
+        const { slot, key, item } = cell;
+        const occupied = slot.equippedInSlot.length;
+        const runtimeOccupied = (runtimeBySlot[slot.key] || []).length;
+        const occupiedTotal = occupied + runtimeOccupied;
+        const isSelected = selectedSlotKey === slot.key;
+        const dragHint = dragHintBySlot?.[slot.key] || null;
+        const canDropInSlot = dragHint?.canDrop === true;
+        const cellIsFilled = !!item;
+        const runtimeCellFilled = !cellIsFilled && index < occupiedTotal;
+        const canDropInThisCell = canDropInSlot && !cellIsFilled && index >= occupied;
+        const isBlockedByDrag = dragHint && !canDropInThisCell;
+
+        return (
+            <button
+                key={key}
+                type="button"
+                onClick={() => onSelectSlot(slot)}
+                onDrop={(e) => onSlotDrop(e, slot)}
+                onDragOver={(e) => {
+                    if (canDropInThisCell) onSlotDragOver(e, slot);
+                }}
+                className={`${SLOT_BTN_SIZE} px-1 py-1 rounded-xl border text-center ${SLOT_BTN_TEXT} font-bold transition-colors shrink-0 ${
+                    canDropInThisCell ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
+                    isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
+                    isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
+                    runtimeCellFilled ? 'border-sky-500/80 bg-sky-900/35 text-sky-100 shadow-[0_0_10px_rgba(56,189,248,0.25)]' :
+                    cellIsFilled ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
+                    'border-gray-700 bg-gray-900/80 text-gray-300'
+                }`}
+                title={dragHint?.reason || 'Clicca o trascina un oggetto compatibile'}
+            >
+                <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
+                    <span className="text-base sm:text-lg">{SLOT_ICON[slot.key] || '◻'}</span>
+                    <span>{jewelryCellLabel(slot.key, index) || `${slot.shortLabel || slot.label} #${index + 1}`}</span>
+                </div>
+                <div className={`font-mono ${runtimeCellFilled ? 'text-sky-200' : cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
+                    {runtimeCellFilled ? 'AZZ' : cellIsFilled ? 'OK' : 'VUOTO'}
+                </div>
+            </button>
+        );
     };
 
     return (
-        <div className="mx-auto w-full max-w-[560px] rounded-xl border border-gray-700 bg-gray-950/60 overflow-hidden p-2">
-            <div className="relative w-full h-[430px]">
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <User size={210} className="text-gray-800" />
+        <div className="mx-auto w-full max-w-[620px] rounded-xl border border-gray-700 bg-gray-950/60 overflow-hidden p-3">
+            <div className="flex gap-3 sm:gap-4 items-stretch">
+                <div className="flex-1 min-w-0 relative">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <User size={190} className="text-gray-800" />
+                    </div>
+                    <div className="relative flex flex-col items-center gap-2.5 py-2">
+                        {renderSingleSlot('head')}
+                        {renderSingleSlot('shoulders')}
+                        <div className="flex items-center justify-center gap-2 sm:gap-2.5">
+                            {renderMultiCell('arms', 0)}
+                            <div className="flex gap-2 sm:gap-2.5">
+                                {renderSingleSlot('armor')}
+                                {renderSingleSlot('vest')}
+                            </div>
+                            {renderMultiCell('arms', 1)}
+                        </div>
+                        {renderSingleSlot('belt')}
+                        {renderSingleSlot('feet')}
+                    </div>
                 </div>
 
-                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`} preserveAspectRatio="xMidYMid meet">
-                    {bodySingleSlots.map((slot) => {
-                        const s = slotCoords[slot.key];
-                        const a = anchorCoords[slot.key];
-                        if (!s || !a) return null;
-                        return (
-                            <line
-                                key={`line-${slot.key}`}
-                                x1={s.x}
-                                y1={s.y}
-                                x2={a.x}
-                                y2={a.y}
-                                stroke="rgba(148,163,184,0.55)"
-                                strokeWidth="1.5"
-                                strokeDasharray="4 3"
-                            />
-                        );
-                    })}
-                </svg>
-
-                {bodySingleSlots.map((slot) => {
-                    const occupied = slot.equippedInSlot.length;
-                    const runtimeOccupied = (runtimeBySlot[slot.key] || []).length;
-                    const occupiedTotal = occupied + runtimeOccupied;
-                    const isSelected = selectedSlotKey === slot.key;
-                    const isFull = occupiedTotal >= slot.capacity;
-                    const hasRuntime = runtimeOccupied > 0;
-                    const dragHint = dragHintBySlot?.[slot.key] || null;
-                    const canDrop = dragHint?.canDrop === true;
-                    const isBlockedByDrag = dragHint && !dragHint.canDrop;
-                    const coords = slotCoords[slot.key] || { x: 228, y: 180 };
-                    return (
-                        <button
-                            key={slot.key}
-                            type="button"
-                            onClick={() => {
-                                if (onTouchSlotSelect && onTouchSlotSelect(slot) === true) return;
-                                onSelectSlot(slot);
-                            }}
-                            onDrop={(e) => onSlotDrop(e, slot)}
-                            onDragOver={(e) => onSlotDragOver(e, slot)}
-                            className={`absolute -translate-x-1/2 -translate-y-1/2 w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 px-1 py-1 rounded-lg border text-center text-[10px] font-bold transition-colors ${
-                                canDrop ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
-                                isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
-                                isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
-                                hasRuntime ? 'border-sky-500/80 bg-sky-900/35 text-sky-100 shadow-[0_0_10px_rgba(56,189,248,0.25)]' :
-                                occupied > 0 ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
-                                'border-gray-700 bg-gray-900/80 text-gray-300'
-                            }`}
-                            style={{ left: `${(coords.x / CANVAS_W) * 100}%`, top: `${(coords.y / CANVAS_H) * 100}%` }}
-                            title={dragHint?.reason || "Clicca o trascina un oggetto compatibile"}
-                        >
-                            <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
-                                <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
-                                <span>{slot.shortLabel || slot.label}</span>
-                            </div>
-                            <div className={`font-mono ${isFull ? (hasRuntime ? 'text-sky-200' : 'text-emerald-300') : 'text-gray-500'}`}>{occupiedTotal}/{slot.capacity}</div>
-                        </button>
-                    );
-                })}
-
-                {bodyCells.map((cell) => {
-                    const { slot, index, key, item } = cell;
-                    const coords = (bodyCellCoords[slot.key] || [])[index] || { x: 72, y: 120 + (index * 68) };
-                    const occupied = slot.equippedInSlot.length;
-                    const runtimeOccupied = (runtimeBySlot[slot.key] || []).length;
-                    const occupiedTotal = occupied + runtimeOccupied;
-                    const isSelected = selectedSlotKey === slot.key;
-                    const dragHint = dragHintBySlot?.[slot.key] || null;
-                    const canDropInSlot = dragHint?.canDrop === true;
-                    const cellIsFilled = !!item;
-                    const runtimeCellFilled = !cellIsFilled && index < occupiedTotal;
-                    const canDropInThisCell = canDropInSlot && !cellIsFilled && index >= occupied;
-                    const isBlockedByDrag = dragHint && !canDropInThisCell;
-                    return (
-                        <button
-                            key={key}
-                            type="button"
-                            onClick={() => onSelectSlot(slot)}
-                            onDrop={(e) => onSlotDrop(e, slot)}
-                            onDragOver={(e) => {
-                                if (canDropInThisCell) onSlotDragOver(e, slot);
-                            }}
-                            className={`absolute -translate-x-1/2 -translate-y-1/2 w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 px-1 py-1 rounded-lg border text-center text-[10px] font-bold transition-colors ${
-                                canDropInThisCell ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
-                                isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
-                                isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
-                                runtimeCellFilled ? 'border-sky-500/80 bg-sky-900/35 text-sky-100 shadow-[0_0_10px_rgba(56,189,248,0.25)]' :
-                                cellIsFilled ? 'border-emerald-700 bg-emerald-900/25 text-emerald-200' :
-                                'border-gray-700 bg-gray-900/80 text-gray-300'
-                            }`}
-                            style={{ left: `${(coords.x / CANVAS_W) * 100}%`, top: `${(coords.y / CANVAS_H) * 100}%` }}
-                            title={dragHint?.reason || "Clicca o trascina un oggetto compatibile"}
-                        >
-                            <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
-                                <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
-                                <span>{slot.shortLabel || slot.label} #{index + 1}</span>
-                            </div>
-                            <div className={`font-mono ${runtimeCellFilled ? 'text-sky-200' : cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
-                                {runtimeCellFilled ? 'AZZ' : cellIsFilled ? 'OK' : 'VUOTO'}
-                            </div>
-                        </button>
-                    );
-                })}
+                <div className="flex flex-col items-center gap-2.5 shrink-0 border-l border-gray-800/80 pl-3 sm:pl-4">
+                    <div className="text-[9px] uppercase tracking-wider text-gray-600 -mb-0.5">Gioielli</div>
+                    {renderSingleSlot('neck')}
+                    {renderMultiCell('fingers', 0)}
+                    {renderMultiCell('fingers', 1)}
+                </div>
             </div>
 
-            <div className="mt-2">
+            <div className="mt-3">
                 <div className="text-[10px] uppercase tracking-wider text-gray-500 mb-2 text-center">Slot armi / mano</div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
                     {weaponCells.map((cell) => {
                         const { slot, index, key, item } = cell;
                         const occupied = slot.equippedInSlot.length;
@@ -308,7 +288,7 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                 onDragOver={(e) => {
                                     if (canDropInThisCell) onSlotDragOver(e, slot);
                                 }}
-                                className={`w-full h-16 px-1 py-1 rounded-lg border text-center text-[10px] font-bold transition-colors ${
+                                className={`w-full h-[4.5rem] sm:h-20 px-1 py-1 rounded-xl border text-center ${SLOT_BTN_TEXT} font-bold transition-colors ${
                                     canDropInThisCell ? `ring-2 ring-emerald-400 border-emerald-400 bg-emerald-900/40 text-emerald-100 ${isDragging ? 'animate-pulse' : ''}` :
                                     isBlockedByDrag ? 'ring-2 ring-red-500/70 border-red-600 bg-red-900/25 text-red-100' :
                                     isSelected ? 'border-indigo-400 bg-indigo-900/40 text-indigo-100' :
@@ -319,7 +299,7 @@ const PhysicalBodySlotsWidget = ({ slots, selectedSlotKey, onSelectSlot, onSlotD
                                 title={dragHint?.reason || "Clicca o trascina un oggetto compatibile"}
                             >
                                 <div className="leading-tight flex flex-col items-center justify-center gap-0.5">
-                                    <span className="text-sm">{SLOT_ICON[slot.key] || '◻'}</span>
+                                    <span className="text-base sm:text-lg">{SLOT_ICON[slot.key] || '◻'}</span>
                                     <span>{slot.shortLabel || slot.label} #{index + 1}</span>
                                 </div>
                                 <div className={`font-mono ${runtimeCellFilled ? 'text-sky-200' : cellIsFilled ? 'text-emerald-300' : 'text-gray-500'}`}>
