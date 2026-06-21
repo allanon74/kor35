@@ -16,7 +16,7 @@ on:
         default: true
         type: boolean
       force_frontend_build:
-        description: "Forza build npm + rsync statici anche senza commit in frontend/ (recupero react_build)"
+        description: "Forza build npm + rsync statici (frontend + console pilota) anche senza commit nelle cartelle"
         required: false
         default: false
         type: boolean
@@ -26,8 +26,8 @@ concurrency:
   cancel-in-progress: false
 
 # Transizione monorepo (sostituisce i vecchi deploy: kor35 su Apache/venv + kor35-app frontend separato).
-# - Build frontend solo su GitHub; rsync della dist verso .../nginx-docker/react_build (prod e mirror).
-# - Produzione: compose.base + compose.prod; mirror: compose.base + compose.mirror (include Omada).
+# - Build frontend + frontend-pilot su GitHub; rsync verso react_build e react_build_pilot (prod e mirror).
+# - Produzione: compose.base + compose.prod (include /pilot/ via react_build_pilot).
 # - NON usare `docker compose down -v` sul Pi: i volumi sotto nginx-docker/omada_* e postgres_data sono persistenti.
 
 jobs:
@@ -116,7 +116,7 @@ jobs:
           retention-days: 3
 
   build-frontend-pilot:
-    name: Build frontend pilota (if frontend-pilot/ changed)
+    name: Build console pilota (frontend-pilot)
     runs-on: ubuntu-latest
     needs: [guard-main-ref]
     outputs:
@@ -128,39 +128,27 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Rileva modifiche in frontend-pilot/
+      - name: Decide build console pilota
         id: detect
         run: |
           set -euo pipefail
+          # Su ogni deploy: build sempre (cartella piccola; evita prod senza /pilot/ se nessun commit pilot).
+          # force_frontend_build resta utile per documentazione operativa / recovery manuale.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.force_frontend_build }}" = "true" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Pilot: build forzata (workflow_dispatch)."
             exit 0
           fi
-          if [ "${{ github.event_name }}" = "push" ]; then
-            BEFORE="${{ github.event.before }}"
-            AFTER="${{ github.sha }}"
-          else
-            REF_INPUT="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}"
-            git fetch origin "${REF_INPUT}"
-            git checkout "${REF_INPUT}"
-            AFTER="$(git rev-parse HEAD)"
-            BEFORE="$(git rev-parse HEAD~1 2>/dev/null || true)"
-          fi
-          if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if git diff --name-only "$BEFORE" "$AFTER" -- frontend-pilot/ | grep -q .; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "Pilot: build ad ogni deploy (prod + mirror)."
 
       - name: Setup Node
         if: steps.detect.outputs.changed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend-pilot/package-lock.json
 
       - name: npm install && npm run build
         if: steps.detect.outputs.changed == 'true'
@@ -173,6 +161,7 @@ jobs:
             npm install
           fi
           npm run build
+          test -f dist/index.html
 
       - name: Upload dist (pilot)
         if: steps.detect.outputs.changed == 'true'
@@ -203,7 +192,6 @@ jobs:
           path: dist-upload
 
       - name: Download frontend pilota dist
-        if: needs.build-frontend-pilot.outputs.changed == 'true'
         uses: actions/download-artifact@v4
         with:
           name: frontend-pilot-dist
@@ -250,7 +238,6 @@ jobs:
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
 
       - name: Rsync console pilota verso produzione
-        if: needs.build-frontend-pilot.outputs.changed == 'true'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
           HOST: ${{ secrets.SERVER_HOST }}
@@ -260,6 +247,10 @@ jobs:
           PROD_COMPOSE_PROJECT_NAME: ${{ secrets.PROD_COMPOSE_PROJECT_NAME }}
         run: |
           set -euo pipefail
+          if [ ! -f dist-upload-pilot/index.html ]; then
+            echo "ERRORE: artifact frontend-pilot-dist mancante (dist-upload-pilot/index.html)." >&2
+            exit 1
+          fi
           REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
           REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot"
           CPN="${PROD_COMPOSE_PROJECT_NAME:-kor35-prod}"
@@ -393,6 +384,8 @@ jobs:
               exit 1
             fi
 
+            mkdir -p "${PROJECT_PATH}/config/docker/nginx-docker/react_build_pilot"
+
             cd "${PROJECT_PATH}/config/docker"
             export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME}"
             # Guard rail: pulizia preventiva contro container orfani con nome fisso
@@ -414,6 +407,11 @@ jobs:
             docker compose -f compose.base.yml -f compose.prod.yml exec -T backend python manage.py sync_wiki_staff_ops --force
             docker compose -f compose.base.yml -f compose.prod.yml exec -T frontend nginx -s reload 2>/dev/null || true
             docker compose -f compose.base.yml -f compose.prod.yml ps
+
+            if ! docker compose -f compose.base.yml -f compose.prod.yml exec -T frontend test -f /usr/share/nginx/pilot/index.html; then
+              echo "ERRORE: /usr/share/nginx/pilot/index.html mancante nel container frontend (rsync pilot fallito?)." >&2
+              exit 1
+            fi
 
             if [ -n "${HEALTHCHECK_URL}" ]; then
               curl -fsS "${HEALTHCHECK_URL}" >/dev/null
@@ -442,7 +440,6 @@ jobs:
           path: dist-upload
 
       - name: Download frontend pilota dist
-        if: needs.build-frontend-pilot.outputs.changed == 'true'
         uses: actions/download-artifact@v4
         with:
           name: frontend-pilot-dist
@@ -503,7 +500,6 @@ jobs:
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
 
       - name: Rsync console pilota verso mirror
-        if: needs.build-frontend-pilot.outputs.changed == 'true'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
           HOST: ${{ secrets.MIRROR_SERVER_HOST }}
@@ -514,6 +510,10 @@ jobs:
           MIRROR_COMPOSE_PROJECT_NAME: ${{ secrets.MIRROR_COMPOSE_PROJECT_NAME }}
         run: |
           set -euo pipefail
+          if [ ! -f dist-upload-pilot/index.html ]; then
+            echo "ERRORE: artifact frontend-pilot-dist mancante (dist-upload-pilot/index.html)." >&2
+            exit 1
+          fi
           REMOTE_BASE="${ROOT_PATH:-${BACKEND_PATH:-/home/pi/kor35-replica}}"
           REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot"
           CPN="${MIRROR_COMPOSE_PROJECT_NAME:-kor35-replica}"

@@ -110,8 +110,9 @@ Ogni modello e' UUID PK + `created_at`/`updated_at` (LWW). I QR/A_vista riusano 
 ## Deploy
 
 - CI: il workflow `.github/workflows/deploy.yml` builda `frontend-pilot`.
-- Produzione: `react_build_pilot` montato in nginx; `PILOT_CONSOLE_ENABLED=true` in `backend/.env.prod`.
-- Mirror/evento: stessa build su `/pilot/`.
+- Produzione: `react_build_pilot` montato in nginx; rsync ad **ogni** deploy (job `build-frontend-pilot` + step rsync in CI).
+- Mirror: stesso flusso.
+- `PILOT_CONSOLE_ENABLED=true` in `backend/.env.prod` (template aggiornato).
 - Nginx: le location `/pilot/` sono disponibili ma operative solo se esiste la build pilot montata.
 
 ## Hardening Raspberry kiosk
