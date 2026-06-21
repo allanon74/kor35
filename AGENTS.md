@@ -9,7 +9,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 | `.cursorrules` | Regole globali: UUID/sync, API, Docker, staff dashboard |
 | `.cursor/rules/edge-sync.mdc` | Sync LWW, MTI, tombstone, checklist implementazione |
 | `.cursor/rules/prod-docker-ops.mdc` | SSH prod (`kor35-prod` + proxy corkscrew), compose, log, sync |
-| `.cursor/rules/mirror-pi-ops.mdc` | SSH mirror Pi (`kor35-mirror`, `kor35.ddns.net:10022`), rete router/evento, diagnostica |
+| `.cursor/rules/mirror-pi-ops.mdc` | SSH mirror Pi: **`pi@kor35.ddns.net:10022`**, chiave `~/.ssh/id_docker`, `make mirror-pi-*` |
 | `.cursor/rules/wiki-staff-ops.mdc` | Wiki staff da `docs/wiki/staff/` → `make wiki-staff-sync` |
 | `.cursor/rules/django-tests-docker.mdc` | Test Django in Docker: **sempre `--keepdb`** + `exec -T` |
 | `config/docker/SYNC.md` | Runbook Docker: ruoli nodo, `make sync-db`, media rsync |
@@ -30,7 +30,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 
 - `dev-home` — locale isolato (sync opzionale)
 - `dev-office` — replica verso prod (`:8081`)
-- `mirror` — Pi / evento offline (`ssh kor35-mirror`, vedi `.cursor/rules/mirror-pi-ops.mdc`)
+- `mirror` — Pi / evento offline (`ssh -p 10022 pi@kor35.ddns.net` o `make mirror-pi-check`, vedi `.cursor/rules/mirror-pi-ops.mdc`)
 - `prod` — master (`KOR35_SYNC_NODE_ROLE=master`)
 
 Template env: `config/env_templates/backend.<profilo>.env.example`

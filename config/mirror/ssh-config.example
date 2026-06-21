@@ -1,6 +1,10 @@
 # Esempio ~/.ssh/config — accesso mirror Pi da PC sviluppatore / Cursor.
 # Copia il blocco Host in ~/.ssh/config (non committare chiavi private nel repo).
 #
+# Gli agenti Cursor possono usare anche senza questo file:
+#   ssh -o BatchMode=yes -p 10022 -i ~/.ssh/id_docker pi@kor35.ddns.net 'hostname'
+# Gli script make mirror-pi-* usano lo stesso fallback (lib_mirror_ssh.sh).
+#
 # Prerequisito sul Pi: contenuto di id_docker.pub (e opz. kor35-actions.pub)
 # in /home/pi/.ssh/authorized_keys
 #

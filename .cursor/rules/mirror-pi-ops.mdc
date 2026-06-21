@@ -5,6 +5,47 @@ alwaysApply: true
 
 # Operazioni mirror Pi (Raspberry, ENV=mirror)
 
+## Agenti Cursor — accesso SSH obbligatorio da provare
+
+Gli agenti **possono e devono** operare sul mirror via SSH dalla macchina dev (WSL). **Non** dire «non ho accesso al Pi» senza aver provato.
+
+| Parametro | Valore |
+|-----------|--------|
+| Host | **`kor35.ddns.net`** |
+| Porta | **`10022`** (non 22) |
+| Utente | **`pi`** |
+| Chiave PC | `~/.ssh/id_docker` (default negli script `mirror-pi-*`) |
+| Repo sul Pi | `/home/pi/kor35-replica` |
+
+### Comando SSH canonico (senza alias `kor35-mirror`)
+
+Funziona anche se manca `~/.ssh/config`:
+
+```bash
+ssh -o BatchMode=yes -p 10022 -i ~/.ssh/id_docker pi@kor35.ddns.net 'hostname'
+# atteso: kor35
+```
+
+Prima connessione (known_hosts):
+
+```bash
+ssh-keyscan -p 10022 -H kor35.ddns.net >> ~/.ssh/known_hosts
+```
+
+### Make da PC dev (preferito)
+
+Usa `scripts/lib_mirror_ssh.sh` → host `pi@kor35.ddns.net:10022` + `id_docker` se non c’è alias:
+
+```bash
+make mirror-pi-check
+make mirror-pi-pull
+make mirror-pi-install-network MIRROR_NETWORK_AUTO_BOOT=0
+```
+
+Per operazioni sul Pi: **git pull sul Pi + script repo** (`mirror-install-network`, `mirror-reinstall-units`) — non patch manuali in `/etc/systemd`.
+
+---
+
 ## Accesso SSH da Cursor / PC sviluppatore
 
 Gli agenti eseguono comandi sulla **macchina locale** (WSL). Per il mirror usare SSH verso il Pi.
@@ -119,7 +160,7 @@ sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_
 ./scripts/mirror_network_check.sh
 ```
 
-**WiFi emergenza:** sul Pi attuale è gestita da NetworkManager (`Hotspot-Emergenza` su `wlan0`). Se si installa `install_mirror_network.sh`, usare `--no-auto-mode` finché non si migra da NM a `kor35-mirror-emergency-wifi.service`.
+**WiFi emergenza:** install da repo (`make mirror-install-network` / `make mirror-reinstall-units`); non editare unit systemd a mano sul Pi. Vedi `docs/wiki/staff/mirror-pi.md`.
 
 ---
 
