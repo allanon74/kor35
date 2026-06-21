@@ -30,6 +30,8 @@ import {
   staffGetPilotStatiAllerta,
   staffGetPilotStatoAllerta,
   staffGetPilotRuntimeConfig,
+  staffGetPilotSessioneLive,
+  staffAzionePilotSessioneSottosistema,
   staffUpdatePilotComandoCritico,
   staffUpdatePilotEvento,
   staffUpdatePilotIntensita,
@@ -44,6 +46,7 @@ const PILOT_TABS = [
   { id: 'eventi', label: 'Eventi' },
   { id: 'comandi_critici', label: 'Comandi critici (globali)' },
   { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
+  { id: 'sessione_live', label: 'Sessione live' },
   { id: 'runtime', label: 'Runtime Console' },
 ];
 
@@ -51,8 +54,9 @@ const defaultEvento = {
   nome: '',
   descrizione: '',
   regole_json: '{\n  "version": 3\n}',
-  durata_base_secondi: 20,
-  durata_tick: '4',
+  tick_min: '4',
+  tick_max: '8',
+  scadenza_critica: false,
   peso_random: 10,
   sottosistema: '',
   attivo: true,
@@ -94,7 +98,7 @@ const defaultColorCurve = () => ({
 });
 
 const emptyCondition = {
-  outcome: 'st',
+  outcome: 'sp',
   subsystem: '',
   op: '>',
   value: 0,
@@ -210,8 +214,38 @@ function validateRuleExpression(expression, conditions) {
   return { valid: true, message: 'Formula valida.' };
 }
 
-function isValidDurataTickSpec(value) {
-  return /^(\d+|\d+-\d+|-\d+|-)$/.test(String(value || '').trim());
+function parseDurataTickToForm(value, scadenzaCritica = false) {
+  const raw = String(value ?? '4-8').trim();
+  if (/^\d+-\d+$/.test(raw)) {
+    const [a, b] = raw.split('-');
+    return { scadenza_critica: Boolean(scadenzaCritica), tick_min: a, tick_max: b };
+  }
+  if (/^\d+$/.test(raw)) {
+    return { scadenza_critica: Boolean(scadenzaCritica), tick_min: raw, tick_max: raw };
+  }
+  return { scadenza_critica: Boolean(scadenzaCritica), tick_min: '4', tick_max: '8' };
+}
+
+function composeDurataTickFromForm(form) {
+  const lo = Math.max(1, Number(form.tick_min) || 1);
+  const hi = Math.max(lo, Number(form.tick_max) || lo);
+  return lo === hi ? String(lo) : `${lo}-${hi}`;
+}
+
+function isValidDurataTickForm(form) {
+  const lo = Number(form.tick_min);
+  const hi = Number(form.tick_max);
+  return Number.isFinite(lo) && lo >= 1 && Number.isFinite(hi) && hi >= 1;
+}
+
+function formatDurataTickLabel(value, scadenzaCritica = false) {
+  const raw = String(value ?? '').trim();
+  if (/^\d+-\d+$/.test(raw)) {
+    const [a, b] = raw.split('-');
+    return a === b ? `${a} tick` : `${a}–${b} tick`;
+  }
+  if (/^\d+$/.test(raw)) return `${raw} tick`;
+  return raw || '—';
 }
 
 /** Ricostruisce il builder UI da `regole_json` (persistenza round-trip via _conditions / _expr). */
@@ -224,7 +258,9 @@ function ruleBuilderFromRegoleJson(rj) {
         ? String(r[k]._expr).trim()
         : DEFAULT_RULE_EXPR,
   });
-  return { st: branch('st'), sp: branch('sp'), ca: branch('ca') };
+  const sp = branch('sp');
+  const st = branch('st');
+  return { st, sp, ca: branch('ca') };
 }
 
 const defaultCaEffetto = () => ({
@@ -494,6 +530,8 @@ export default function PilotaggioManager({ onLogout }) {
   const [editStatoId, setEditStatoId] = useState(null);
   const [editStato, setEditStato] = useState({});
   const [runtimeConfig, setRuntimeConfig] = useState(null);
+  const [sessioneLive, setSessioneLive] = useState(null);
+  const [sessioneLiveBusy, setSessioneLiveBusy] = useState(false);
   const [editCaEffetto, setEditCaEffetto] = useState(defaultCaEffetto);
   const [createCaEffetto, setCreateCaEffetto] = useState(defaultCaEffetto);
   const [editRuleBuilder, setEditRuleBuilder] = useState({
@@ -673,11 +711,11 @@ export default function PilotaggioManager({ onLogout }) {
     loadData();
   };
   const addEvento = async () => {
-    const durataSpec = String(nuovoEvento.durata_tick || '').trim();
-    if (!isValidDurataTickSpec(durataSpec)) {
-      setError('Durata evento non valida. Usa: N, A-B, -N oppure -');
+    if (!isValidDurataTickForm(nuovoEvento)) {
+      setError('Durata tick non valida: min e max devono essere ≥ 1.');
       return;
     }
+    const durataSpec = composeDurataTickFromForm(nuovoEvento);
     let regoleObj;
     try {
       regoleObj = JSON.parse(nuovoEvento.regole_json || '{}');
@@ -700,6 +738,7 @@ export default function PilotaggioManager({ onLogout }) {
         regole_json: merged.regole,
         sottosistema: nuovoEvento.sottosistema || null,
         durata_tick: durataSpec,
+        scadenza_critica: Boolean(nuovoEvento.scadenza_critica),
       },
       onLogout
     );
@@ -783,7 +822,6 @@ export default function PilotaggioManager({ onLogout }) {
     setEditEventoId(null);
     setEditEvento(emptyEditEventoModal());
     setEditRuleBuilder({
-      st: { conditions: [], expression: DEFAULT_RULE_EXPR },
       sp: { conditions: [], expression: DEFAULT_RULE_EXPR },
       ca: { conditions: [], expression: DEFAULT_RULE_EXPR },
     });
@@ -814,8 +852,7 @@ export default function PilotaggioManager({ onLogout }) {
           codici_soluzione_parziale_json: JSON.stringify(e.codici_soluzione_parziale || [], null, 2),
           codici_precipizio_json: JSON.stringify(e.codici_precipizio || [], null, 2),
           regole_json: JSON.stringify(rj && Object.keys(rj).length ? rj : { version: 3 }, null, 2),
-          durata_base_secondi: e.durata_base_secondi ?? 20,
-          durata_tick: e.durata_tick || '4',
+          ...parseDurataTickToForm(e.durata_tick, e.scadenza_critica),
           peso_random: e.peso_random ?? 10,
           sottosistema: e.sottosistema || '',
           attivo: e.attivo !== false,
@@ -842,11 +879,11 @@ export default function PilotaggioManager({ onLogout }) {
 
   const salvaEvento = async () => {
     setError('');
-    const durataSpec = String(editEvento.durata_tick || '').trim();
-    if (!isValidDurataTickSpec(durataSpec)) {
-      setError('Durata evento non valida. Usa: N, A-B, -N oppure -');
+    if (!isValidDurataTickForm(editEvento)) {
+      setError('Durata tick non valida: min e max devono essere ≥ 1.');
       return;
     }
+    const durataSpec = composeDurataTickFromForm(editEvento);
     let regole_json;
     try {
       regole_json = JSON.parse(editEvento.regole_json || '{}');
@@ -886,8 +923,8 @@ export default function PilotaggioManager({ onLogout }) {
       codici_soluzione_parziale,
       codici_precipizio,
       regole_json,
-      durata_base_secondi: Math.max(1, Number(editEvento.durata_base_secondi) || 20),
       durata_tick: durataSpec,
+      scadenza_critica: Boolean(editEvento.scadenza_critica),
       peso_random: Math.max(0, Number(editEvento.peso_random) || 0),
       sottosistema: editEvento.sottosistema || null,
       attivo: Boolean(editEvento.attivo),
@@ -1044,6 +1081,38 @@ export default function PilotaggioManager({ onLogout }) {
       onLogout
     );
     setRuntimeConfig(updated);
+  };
+
+  const loadSessioneLive = useCallback(async () => {
+    try {
+      const data = await staffGetPilotSessioneLive(onLogout);
+      setSessioneLive(data);
+    } catch (_) {
+      setSessioneLive(null);
+    }
+  }, [onLogout]);
+
+  useEffect(() => {
+    if (activeTab !== 'sessione_live') return undefined;
+    loadSessioneLive();
+    const timer = setInterval(loadSessioneLive, 4000);
+    return () => clearInterval(timer);
+  }, [activeTab, loadSessioneLive]);
+
+  const azioneSottosistemaLive = async (sottosistemaId, azione) => {
+    setSessioneLiveBusy(true);
+    setError('');
+    try {
+      const data = await staffAzionePilotSessioneSottosistema(
+        { sottosistema_id: sottosistemaId, azione },
+        onLogout
+      );
+      setSessioneLive(data);
+    } catch (err) {
+      setError(err?.message || 'Azione sottosistema non riuscita.');
+    } finally {
+      setSessioneLiveBusy(false);
+    }
   };
 
   if (loading) {
@@ -1334,14 +1403,18 @@ export default function PilotaggioManager({ onLogout }) {
                 </div>
                 <div className="text-xs text-gray-400 mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5">
                   <span>
-                    tick <span className="font-mono text-gray-300">{e.durata_tick || '4'}</span>
+                    durata{' '}
+                    <span className="font-mono text-gray-300">{formatDurataTickLabel(e.durata_tick)}</span>
                   </span>
+                  {e.scadenza_critica ? (
+                    <span className="text-amber-300/90">scadenza CA</span>
+                  ) : null}
                   <span>peso {e.peso_random ?? 10}</span>
                   <span>{e.attivo !== false ? 'attivo' : 'disattivato'}</span>
                   {e.sottosistema_codice ? (
                     <span className="font-mono text-indigo-300/90">{e.sottosistema_codice}</span>
                   ) : null}
-                  <span className="font-mono text-amber-200/90" title="Codice risoluzione ST">
+                  <span className="font-mono text-amber-200/90" title="Codice legacy">
                     {e.codice_soluzione_esatta || '—'}
                   </span>
                 </div>
@@ -1434,8 +1507,9 @@ export default function PilotaggioManager({ onLogout }) {
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-2">Stati di allerta (DEFCON 0–6)</h3>
         <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-          Livelli allineati al DEFCON della sessione. Imposta intervallo tra un evento e l&apos;altro (secondi) e il countdown per risolvere un evento mentre sei in quel livello.
-          Segna un solo livello come <strong className="text-gray-300">nave abbattuta</strong> (crash / DEFCON oltre il massimo).
+          Livelli allineati al DEFCON della sessione. Imposta la <strong className="text-gray-300">durata del tick durante gli eventi</strong>{' '}
+          (in secondi: sostituisce l&apos;intervallo Runtime Console finché l&apos;evento è attivo) e la probabilità di spawn per tick.
+          Segna un solo livello come <strong className="text-gray-300">nave abbattuta</strong>.
         </p>
         <div className="space-y-3 text-sm">
           {statiAllerta.map((st) => (
@@ -1454,21 +1528,32 @@ export default function PilotaggioManager({ onLogout }) {
                       <input className="bg-gray-700 rounded px-2 py-1 flex-1 font-mono text-xs" value={editStato.colore || ''} onChange={(e) => setEditStato((p) => ({ ...p, colore: e.target.value }))} />
                     </div>
                   </label>
-                  <label className="block sm:col-span-2 lg:col-span-1">
-                    <span className="text-xs text-gray-400">Freq. eventi min–max (s)</span>
-                    <div className="flex gap-2 mt-0.5">
-                      <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full" value={editStato.frequenza_evento_min_sec} onChange={(e) => setEditStato((p) => ({ ...p, frequenza_evento_min_sec: e.target.value }))} />
-                      <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full" value={editStato.frequenza_evento_max_sec} onChange={(e) => setEditStato((p) => ({ ...p, frequenza_evento_max_sec: e.target.value }))} />
-                    </div>
-                  </label>
                   <label className="block">
-                    <span className="text-xs text-gray-400">Tempo risoluzione evento (s)</span>
-                    <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full mt-0.5" value={editStato.tempo_risoluzione_secondi} onChange={(e) => setEditStato((p) => ({ ...p, tempo_risoluzione_secondi: e.target.value }))} />
+                    <span className="text-xs text-gray-400">Durata del tick durante eventi (s)</span>
+                    <input type="number" min={1} className="bg-gray-700 rounded px-2 py-1 w-full mt-0.5" value={editStato.tempo_risoluzione_secondi} onChange={(e) => setEditStato((p) => ({ ...p, tempo_risoluzione_secondi: e.target.value }))} />
+                    <span className="text-[10px] text-gray-500 mt-0.5 block">
+                      Ogni tick evento dura così (es. 20s). Durata totale evento ≈ tick catalogo × questo valore.
+                    </span>
                   </label>
                   <label className="block">
                     <span className="text-xs text-gray-400">Prob. evento per tick (0..1)</span>
                     <input type="number" min={0} max={1} step={0.01} className="bg-gray-700 rounded px-2 py-1 w-full mt-0.5" value={editStato.probabilita_evento_per_tick ?? 0} onChange={(e) => setEditStato((p) => ({ ...p, probabilita_evento_per_tick: e.target.value }))} />
+                    <span className="text-[10px] text-gray-500 mt-0.5 block">
+                      Ogni tick motore sorteggia se generare un evento (se non ce n&apos;è uno attivo).
+                    </span>
                   </label>
+                  {Number(editStato.probabilita_evento_per_tick ?? 0) <= 0 ? (
+                    <label className="block sm:col-span-2 lg:col-span-1">
+                      <span className="text-xs text-gray-400">Freq. eventi min–max (s) — solo se prob/tick = 0</span>
+                      <div className="flex gap-2 mt-0.5">
+                        <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full" value={editStato.frequenza_evento_min_sec} onChange={(e) => setEditStato((p) => ({ ...p, frequenza_evento_min_sec: e.target.value }))} />
+                        <input type="number" min={3} className="bg-gray-700 rounded px-2 py-1 w-full" value={editStato.frequenza_evento_max_sec} onChange={(e) => setEditStato((p) => ({ ...p, frequenza_evento_max_sec: e.target.value }))} />
+                      </div>
+                      <span className="text-[10px] text-gray-500 mt-0.5 block">
+                        Fallback temporizzato: prossimo evento tra min e max secondi (random). Ignorato se prob/tick &gt; 0.
+                      </span>
+                    </label>
+                  ) : null}
                   <label className="flex items-center gap-2 sm:col-span-2 lg:col-span-3 cursor-pointer">
                     <input type="checkbox" checked={Boolean(editStato.equivale_nave_abbattuta)} onChange={(e) => setEditStato((p) => ({ ...p, equivale_nave_abbattuta: e.target.checked }))} />
                     <span className="text-sm text-red-300">Equivale a nave abbattuta / precipitata</span>
@@ -1487,7 +1572,10 @@ export default function PilotaggioManager({ onLogout }) {
                     <div>
                       <div className="font-semibold">{st.nome}</div>
                       <div className="text-xs text-gray-400">
-                        Eventi ogni {st.frequenza_evento_min_sec}–{st.frequenza_evento_max_sec}s · Risoluzione {st.tempo_risoluzione_secondi}s · Prob/tick {st.probabilita_evento_per_tick}
+                        Tick evento {st.tempo_risoluzione_secondi}s · Prob/tick {st.probabilita_evento_per_tick}
+                        {Number(st.probabilita_evento_per_tick ?? 0) <= 0 ? (
+                          <span> · Eventi ogni {st.frequenza_evento_min_sec}–{st.frequenza_evento_max_sec}s</span>
+                        ) : null}
                         {st.equivale_nave_abbattuta ? <span className="text-red-400 ml-2">· Nave abbattuta</span> : null}
                       </div>
                     </div>
@@ -1527,11 +1615,139 @@ export default function PilotaggioManager({ onLogout }) {
       </section>
       ) : null}
 
+      {activeTab === 'sessione_live' ? (
+      <section className="rounded-xl border border-amber-900/50 p-4 bg-gray-900/60 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="font-semibold text-amber-200">Sessione live — guasto / riparazione</h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Azioni sul volo attivo corrente (stato <code className="text-amber-100">volo</code>).
+              Aggiornamento automatico ogni 4s.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm"
+            onClick={loadSessioneLive}
+            disabled={sessioneLiveBusy}
+          >
+            Aggiorna
+          </button>
+        </div>
+
+        {!sessioneLive?.sessione ? (
+          <p className="text-gray-400 text-sm">Nessun volo attivo in questo momento.</p>
+        ) : (
+          <>
+            <div className="grid md:grid-cols-4 gap-3 text-sm">
+              <div className="rounded-lg border border-gray-700 bg-gray-950/50 p-3">
+                <div className="text-xs text-gray-500 uppercase">Pilota</div>
+                <div className="font-medium">{sessioneLive.sessione.pilota_nome || '—'}</div>
+              </div>
+              <div className="rounded-lg border border-gray-700 bg-gray-950/50 p-3">
+                <div className="text-xs text-gray-500 uppercase">Rotta</div>
+                <div>{sessioneLive.sessione.partenza_nome || '—'} → {sessioneLive.sessione.arrivo_nome || '—'}</div>
+              </div>
+              <div className="rounded-lg border border-gray-700 bg-gray-950/50 p-3">
+                <div className="text-xs text-gray-500 uppercase">DEFCON</div>
+                <div className="text-xl font-bold">{sessioneLive.sessione.defcon}</div>
+              </div>
+              <div className="rounded-lg border border-gray-700 bg-gray-950/50 p-3">
+                <div className="text-xs text-gray-500 uppercase">Decollo</div>
+                <div className={sessioneLive.decollo_effettuato ? 'text-emerald-400' : 'text-amber-300'}>
+                  {sessioneLive.decollo_effettuato ? 'In crociera' : 'A terra (motori off)'}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Distanza {Math.round(sessioneLive.sessione.distanza_percorsa || 0)} / {Math.round(sessioneLive.sessione.distanza_target || 0)}
+                </div>
+              </div>
+            </div>
+
+            {(sessioneLive.eventi_attivi || []).length > 0 ? (
+              <div className="rounded-lg border border-red-900/40 bg-red-950/20 p-3 text-sm">
+                <div className="font-semibold text-red-200 mb-1">Eventi attivi</div>
+                {(sessioneLive.eventi_attivi || []).map((ev) => (
+                  <div key={ev.id} className="text-red-100/90">
+                    {ev.nome}
+                    {ev.ticks_rimanenti != null ? ` — ${ev.ticks_rimanenti} tick` : ''}
+                    {ev.precipita_a_scadenza ? ' (critico)' : ''}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="overflow-x-auto rounded-lg border border-gray-700">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-800/80 text-left text-xs uppercase text-gray-400">
+                  <tr>
+                    <th className="p-2">Cod</th>
+                    <th className="p-2">Nome</th>
+                    <th className="p-2">Liv</th>
+                    <th className="p-2">Stato</th>
+                    <th className="p-2 text-right">Azioni staff</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(sessioneLive.sottosistemi || []).map((st) => {
+                    const inRepair = st.recovery_at && new Date(st.recovery_at) > new Date();
+                    let statoLabel = 'Online';
+                    let statoClass = 'text-emerald-400';
+                    if (inRepair) {
+                      statoLabel = 'Ripristino auto';
+                      statoClass = 'text-amber-400';
+                    } else if (!st.online) {
+                      statoLabel = 'Guasto';
+                      statoClass = 'text-red-400';
+                    }
+                    return (
+                      <tr key={st.id} className="border-t border-gray-800">
+                        <td className="p-2 font-mono font-bold">{st.codice}</td>
+                        <td className="p-2">{st.nome}</td>
+                        <td className="p-2">{st.livello_attuale ?? 0}</td>
+                        <td className={`p-2 font-medium ${statoClass}`}>{statoLabel}</td>
+                        <td className="p-2 text-right space-x-1">
+                          <button
+                            type="button"
+                            disabled={sessioneLiveBusy || !st.online}
+                            className="px-2 py-1 rounded bg-red-800 hover:bg-red-700 disabled:opacity-40 text-xs"
+                            onClick={() => azioneSottosistemaLive(st.sottosistema_id, 'guasto')}
+                          >
+                            Guasta
+                          </button>
+                          <button
+                            type="button"
+                            disabled={sessioneLiveBusy || st.online}
+                            className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-xs"
+                            onClick={() => azioneSottosistemaLive(st.sottosistema_id, 'ripara')}
+                          >
+                            Ripara
+                          </button>
+                          <button
+                            type="button"
+                            disabled={sessioneLiveBusy || st.online}
+                            className="px-2 py-1 rounded bg-amber-800 hover:bg-amber-700 disabled:opacity-40 text-xs"
+                            onClick={() => azioneSottosistemaLive(st.sottosistema_id, 'ripristino')}
+                          >
+                            Timer
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+      ) : null}
+
       {activeTab === 'runtime' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-2">Runtime Console Pilotaggio</h3>
         <p className="text-xs text-gray-400 mb-4">
-          Login console opzionale: tienilo disattivo in dev/test; abilitalo in produzione mirror Pi.
+          Intervallo del tick motore in <strong className="text-gray-300">viaggio regolare</strong> (senza evento attivo).
+          Con evento attivo il motore usa la durata tick del DEFCON corrente.
         </p>
         {runtimeConfig ? (
           <div className="space-y-3 text-sm">
@@ -1624,32 +1840,46 @@ export default function PilotaggioManager({ onLogout }) {
               </label>
               <div className="grid sm:grid-cols-2 gap-4">
                 <label className="block">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Durata tick</span>
-                  <input
-                    className={`mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border font-mono text-sm ${
-                      isValidDurataTickSpec(editEvento.durata_tick) ? 'border-gray-600' : 'border-red-500'
-                    } focus:border-indigo-500 outline-none`}
-                    value={editEvento.durata_tick ?? '4'}
-                    onChange={(ev) => {
-                      const next = ev.target.value.replace(/[^0-9-]/g, '');
-                      setEditEvento((p) => ({ ...p, durata_tick: next }));
-                    }}
-                    placeholder="N | A-B | -N | -"
-                  />
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Durata evento (tick min–max)</span>
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
+                      value={editEvento.tick_min}
+                      onChange={(ev) => setEditEvento((p) => ({ ...p, tick_min: ev.target.value }))}
+                      placeholder="min"
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
+                      value={editEvento.tick_max}
+                      onChange={(ev) => setEditEvento((p) => ({ ...p, tick_max: ev.target.value }))}
+                      placeholder="max"
+                    />
+                  </div>
                   <p className="text-[11px] text-gray-500 mt-1">
-                    <code>N</code> durata fissa · <code>A-B</code> random · <code>-N</code> fino a ST, poi{' '}
-                    <code>ca_effetto</code> · <code>-</code> fino a ST senza limite
+                    Numero di tick dell&apos;evento (fisso se min=max, altrimenti random inclusivo).
+                    Secondi totali ≈ tick × durata tick DEFCON attuale.
                   </p>
                 </label>
-                <label className="block">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Countdown base (secondi)</span>
+                <label className="flex items-start gap-2 cursor-pointer pt-1">
                   <input
-                    type="number"
-                    min={1}
-                    className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none"
-                    value={editEvento.durata_base_secondi}
-                    onChange={(ev) => setEditEvento((p) => ({ ...p, durata_base_secondi: ev.target.value }))}
+                    type="checkbox"
+                    className="mt-1 rounded border-gray-600"
+                    checked={Boolean(editEvento.scadenza_critica)}
+                    onChange={(ev) =>
+                      setEditEvento((p) => ({
+                        ...p,
+                        scadenza_critica: ev.target.checked,
+                      }))
+                    }
                   />
+                  <span className="text-sm text-gray-300">
+                    Scadenza critica: allo scadere dei tick applica{' '}
+                    <code className="text-gray-400">ca_effetto</code>; altrimenti l&apos;evento scompare
+                  </span>
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Peso random</span>
@@ -1662,7 +1892,7 @@ export default function PilotaggioManager({ onLogout }) {
                   />
                 </label>
                 <label className="block">
-                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Codice ST (3 car.)</span>
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Codice legacy (3 car.)</span>
                   <input
                     maxLength={3}
                     className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 focus:border-indigo-500 outline-none font-mono uppercase"
@@ -1704,13 +1934,14 @@ export default function PilotaggioManager({ onLogout }) {
               <div className="rounded-xl border border-indigo-900/40 p-4 space-y-3 bg-gray-900/50">
                 <div className="text-xs font-semibold text-indigo-200/90 uppercase tracking-wide">Composer condizioni ST / SP / CA</div>
                 <p className="text-[11px] text-gray-500 leading-relaxed">
-                  Le condizioni e le formule qui sotto aggiornano il campo JSON «Regole avanzate» (anche <code className="text-gray-400">ca_effetto</code>) al salvataggio; usa «Aggiorna JSON da builder» per vedere l&apos;anteprima nel textarea.
+                  ST = soluzione totale (DEFCON −1, evento chiuso). SP = parziale (evento prosegue, DEFCON invariato).
+                  CA = effetto critico. Durata in tick; ogni tick evento dura quanto il DEFCON (Stati allerta).
                 </p>
                 <div className="grid md:grid-cols-7 gap-2 border border-gray-700 rounded-lg p-2">
                   <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.outcome} onChange={(ev) => setDraftCondition((p) => ({ ...p, outcome: ev.target.value }))}>
-                    <option value="st">ST (migliora)</option>
-                    <option value="sp">SP (stabile)</option>
-                    <option value="ca">CA</option>
+                    <option value="st">ST (soluzione totale)</option>
+                    <option value="sp">SP (parziale)</option>
+                    <option value="ca">CA (critico)</option>
                   </select>
                   <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.subsystem} onChange={(ev) => setDraftCondition((p) => ({ ...p, subsystem: ev.target.value }))}>
                     <option value="">Sottosistema…</option>
@@ -1872,7 +2103,7 @@ export default function PilotaggioManager({ onLogout }) {
             <div className="shrink-0 flex justify-between items-start gap-3 px-5 pt-4 pb-3 border-b border-gray-700/90">
               <div>
                 <h3 className="text-lg font-bold text-indigo-300">Nuovo evento viaggio</h3>
-                <p className="text-xs text-gray-400 mt-1">Nome, regole ST/SP/CA e collegamento sottosistema.</p>
+                <p className="text-xs text-gray-400 mt-1">Nome, regole SP/CA e collegamento sottosistema.</p>
               </div>
               <button type="button" className="shrink-0 px-3 py-1.5 rounded-lg text-sm text-gray-300 hover:bg-gray-700 border border-gray-600" onClick={closeCreateEventoModal}>
                 Chiudi
@@ -1890,20 +2121,47 @@ export default function PilotaggioManager({ onLogout }) {
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Descrizione</span>
                 <textarea className="mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600 min-h-[72px]" value={nuovoEvento.descrizione} onChange={(e) => setNuovoEvento((p) => ({ ...p, descrizione: e.target.value }))} />
               </label>
-              <label className="block">
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Durata tick</span>
-                <input
-                  className={`mt-1 w-full bg-gray-900 rounded-lg px-3 py-2 border font-mono text-sm ${isValidDurataTickSpec(nuovoEvento.durata_tick) ? 'border-gray-600' : 'border-red-500'}`}
-                  value={nuovoEvento.durata_tick}
-                  onChange={(e) => setNuovoEvento((p) => ({ ...p, durata_tick: e.target.value.replace(/[^0-9-]/g, '') }))}
-                  placeholder="N | A-B | -N | -"
-                />
-              </label>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <label className="block">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Durata evento (tick min–max)</span>
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600"
+                      value={nuovoEvento.tick_min}
+                      onChange={(e) => setNuovoEvento((p) => ({ ...p, tick_min: e.target.value }))}
+                    />
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full bg-gray-900 rounded-lg px-3 py-2 border border-gray-600"
+                      value={nuovoEvento.tick_max}
+                      onChange={(e) => setNuovoEvento((p) => ({ ...p, tick_max: e.target.value }))}
+                    />
+                  </div>
+                </label>
+                <label className="flex items-start gap-2 cursor-pointer pt-6">
+                  <input
+                    type="checkbox"
+                    className="mt-1 rounded border-gray-600"
+                    checked={Boolean(nuovoEvento.scadenza_critica)}
+                    onChange={(e) =>
+                      setNuovoEvento((p) => ({
+                        ...p,
+                        scadenza_critica: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span className="text-sm text-gray-300">Scadenza critica (CA a tick finiti, altrimenti scompare)</span>
+                </label>
+              </div>
               <div className="rounded-xl border border-indigo-900/40 p-4 space-y-3 bg-gray-900/50">
                 <div className="text-xs font-semibold text-indigo-200/90 uppercase tracking-wide">Composer ST / SP / CA</div>
                 <div className="grid md:grid-cols-7 gap-2 border border-gray-700 rounded-lg p-2">
                   <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.outcome} onChange={(e) => setDraftCondition((p) => ({ ...p, outcome: e.target.value }))}>
-                    <option value="st">ST</option><option value="sp">SP</option><option value="ca">CA</option>
+                    <option value="st">ST (soluzione totale)</option>
+                    <option value="sp">SP (parziale)</option><option value="ca">CA</option>
                   </select>
                   <select className="bg-gray-900 rounded px-2 py-1" value={draftCondition.subsystem} onChange={(e) => setDraftCondition((p) => ({ ...p, subsystem: e.target.value }))}>
                     <option value="">Sottosistema…</option>

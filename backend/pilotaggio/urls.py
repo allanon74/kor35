@@ -46,6 +46,7 @@ urlpatterns = [
     path("session/start/", views.PilotSessionStartView.as_view(), name="pilot-session-start"),
     path("session/command/", views.PilotSessionCommandView.as_view(), name="pilot-session-command"),
     path("session/subsystem-set/", views.PilotSubsystemSetView.as_view(), name="pilot-session-subsystem-set"),
+    path("session/reset/", views.PilotSessionResetView.as_view(), name="pilot-session-reset"),
     path("session/abort/", views.PilotSessionAbortView.as_view(), name="pilot-session-abort"),
     path("session/emergency-landing/", views.PilotSessionEmergencyLandingView.as_view(), name="pilot-session-emergency-landing"),
     path("session/history/", views.PilotSessionHistoryView.as_view(), name="pilot-session-history"),
@@ -59,6 +60,12 @@ urlpatterns = [
     path("prefetture/", views.PilotPrefettureView.as_view(), name="pilot-prefetture"),
 
     path("staff/sessioni/", views.StaffSessioneListView.as_view(), name="pilot-staff-sessioni"),
+    path("staff/sessione-live/", views.StaffSessioneLiveView.as_view(), name="pilot-staff-sessione-live"),
+    path(
+        "staff/sessione-live/sottosistema/",
+        views.StaffSessioneSottosistemaAzioneView.as_view(),
+        name="pilot-staff-sessione-sottosistema-azione",
+    ),
     path("staff/runtime-config/", views.StaffPilotRuntimeConfigView.as_view(), name="pilot-staff-runtime-config"),
     path("", include(router.urls)),
 ]

@@ -16,7 +16,7 @@ from typing import Optional
 
 from django.core.management.base import BaseCommand
 
-from pilotaggio.engine import tick_sessione
+from pilotaggio.engine import intervallo_loop_motore, tick_sessione_se_dovuto
 from django.utils import timezone
 
 from pilotaggio.models import PilotRuntimeConfig, SessioneVolo
@@ -49,9 +49,7 @@ class Command(BaseCommand):
         while True:
             iterazione += 1
             runtime = PilotRuntimeConfig.get_solo()
-            current_interval = max(
-                0.5, float(runtime.tick_interval_secondi or fallback_interval)
-            )
+            current_interval = intervallo_loop_motore()
             if loop and last_interval is not None and abs(current_interval - last_interval) > 1e-9:
                 self.stdout.write(
                     f"[pilot_tick] interval changed: {last_interval:.3f}s -> {current_interval:.3f}s"
@@ -70,7 +68,7 @@ class Command(BaseCommand):
             attive = SessioneVolo.objects.exclude(stato__in=["arrivata", "crashed"])
             for sessione in attive:
                 try:
-                    tick_sessione(sessione)
+                    tick_sessione_se_dovuto(sessione)
                 except Exception as exc:  # pragma: no cover - log informativo
                     self.stderr.write(self.style.ERROR(f"Tick errore {sessione.pk}: {exc}"))
             if not attive.exists():

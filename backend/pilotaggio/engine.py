@@ -5,7 +5,7 @@ Logica autoritativa lato backend:
 - generazione random degli eventi pesata sui pesi configurati;
 - valutazione codici in 3 caratteri (esatto/parziale/dannoso); parziali con `_` o ``XY(N-M)``;
 - aggiornamento DEFCON (gravita') e regola di crash (DEFCON > DEFCON_MAX);
-- frequenza eventi e durata countdown variabile in base a DEFCON;
+- frequenza eventi (prob/tick o intervallo fallback) e durata risoluzione in tick da DEFCON;
 - ripristino automatico sottosistemi dopo `durata_ripristino_secondi`;
 - avanzamento sequenze di decollo e atterraggio.
 
@@ -13,10 +13,11 @@ Tutte le mutazioni sui modelli pilotaggio passano da qui in `transaction.atomic`
 """
 from __future__ import annotations
 
+import math
 import random
 import re
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 from django.db import transaction
@@ -138,17 +139,186 @@ def _stato_allerta_config(livello: int):
         return None
 
 
-def secondi_evento_per_defcon(durata_base: int, defcon: int) -> int:
+def secondi_tick_durante_evento(defcon: int) -> int:
     """
-    Durata countdown evento attivo. Se esiste `StatoAllertaPilot` per questo DEFCON,
-    usa `tempo_risoluzione_secondi`; altrimenti formula storica su durata_base.
+    Durata in secondi di ogni tick motore mentre c'e' un evento attivo (DEFCON).
+    In viaggio regolare si usa invece PilotRuntimeConfig.tick_interval_secondi.
     """
     cfg = _stato_allerta_config(defcon)
     if cfg is not None:
-        return max(3, int(cfg.tempo_risoluzione_secondi))
-    base = max(3, int(durata_base or 20))
+        return max(1, int(cfg.tempo_risoluzione_secondi))
+    base = 20
     fattore = max(0.3, 1.0 - 0.14 * max(0, defcon))
-    return max(3, int(round(base * fattore)))
+    return max(1, int(round(base * fattore)))
+
+
+# Alias retrocompatibile (test / import legacy)
+secondi_evento_per_defcon = secondi_tick_durante_evento
+
+
+def intervallo_tick_sessione(sessione: SessioneVolo) -> float:
+    """Intervallo tick in viaggio regolare (Runtime Console, fallback sessione)."""
+    try:
+        from .models import PilotRuntimeConfig
+
+        cfg = PilotRuntimeConfig.get_solo()
+        if cfg and cfg.tick_interval_secondi:
+            return max(0.5, float(cfg.tick_interval_secondi))
+    except Exception:
+        pass
+    return max(0.5, float(getattr(sessione, "tick_secondi", None) or 5.0))
+
+
+def intervallo_tick_effettivo_sessione(sessione: SessioneVolo) -> float:
+    """Tick corrente: durata evento DEFCON se c'e' evento attivo, altrimenti runtime."""
+    pending = EventoAttivoSessione.objects.filter(
+        sessione=sessione, esito=EVENTO_ESITO_PENDING
+    ).exists()
+    if pending:
+        return float(secondi_tick_durante_evento(sessione.defcon))
+    return intervallo_tick_sessione(sessione)
+
+
+def secondi_fino_prossimo_tick(sessione: SessioneVolo) -> float:
+    """Secondi mancanti prima del prossimo tick motore (0 = tick consentito)."""
+    pending = eventi_attivi_correnti(sessione)
+    if pending:
+        now = timezone.now()
+        waits = []
+        for ev in pending:
+            _programma_prossimo_check_evento_se_manca(ev, sessione)
+            if ev.prossima_valutazione_at is not None:
+                waits.append(
+                    max(0.0, (ev.prossima_valutazione_at - now).total_seconds())
+                )
+        if waits:
+            return min(waits)
+
+    last = getattr(sessione, "ultimo_tick_motore_at", None)
+    if last is None:
+        return 0.0
+    interval = intervallo_tick_sessione(sessione)
+    elapsed = (timezone.now() - last).total_seconds()
+    return max(0.0, interval - elapsed)
+
+
+def _programma_prossimo_check_evento(
+    istanza: EventoAttivoSessione,
+    sessione: SessioneVolo,
+    *,
+    base: Optional[datetime] = None,
+) -> None:
+    """
+    Programma il prossimo check CA/ST/SP: adesso + tempo_risoluzione del DEFCON corrente.
+    Chiamato alla comparsa dell'evento e dopo ogni tick evento.
+    """
+    sec = secondi_tick_durante_evento(sessione.defcon)
+    when = (base or timezone.now()) + timedelta(seconds=sec)
+    istanza.prossima_valutazione_at = when
+    istanza.intervallo_reazione_secondi = sec
+    istanza.reazione_fino_at = when
+    istanza.save(
+        update_fields=[
+            "prossima_valutazione_at",
+            "intervallo_reazione_secondi",
+            "reazione_fino_at",
+            "updated_at",
+        ]
+    )
+
+
+def _programma_prossimo_check_evento_se_manca(
+    istanza: EventoAttivoSessione, sessione: SessioneVolo
+) -> None:
+    """Ripara eventi legacy senza timer (solo se prossima_valutazione_at mancante)."""
+    if istanza.prossima_valutazione_at is not None:
+        return
+    _programma_prossimo_check_evento(istanza, sessione, base=istanza.created_at)
+
+
+def _evento_pronto_per_valutazione(
+    istanza: EventoAttivoSessione, sessione: SessioneVolo
+) -> bool:
+    _programma_prossimo_check_evento_se_manca(istanza, sessione)
+    if istanza.prossima_valutazione_at is None:
+        return False
+    return timezone.now() >= istanza.prossima_valutazione_at
+
+
+def secondi_fino_valutazione_evento(sessione: SessioneVolo) -> Optional[float]:
+    """Secondi mancanti al prossimo check evento (None se nessun pending)."""
+    pending = eventi_attivi_correnti(sessione)
+    if not pending:
+        return None
+    return secondi_fino_prossimo_tick(sessione)
+
+
+def _schedula_prossima_valutazione_evento(
+    istanza: EventoAttivoSessione, sessione: SessioneVolo
+) -> None:
+    """Dopo un tick evento: prossimo check tra tempo_risoluzione DEFCON attuale."""
+    _programma_prossimo_check_evento(istanza, sessione)
+
+
+def _incrementa_valutazioni_evento(istanza: EventoAttivoSessione) -> None:
+    istanza.valutazioni_eseguite = int(istanza.valutazioni_eseguite or 0) + 1
+    istanza.save(update_fields=["valutazioni_eseguite", "updated_at"])
+
+
+def _ca_scadenza_critica_permessa(istanza: EventoAttivoSessione) -> bool:
+    """Primo tick evento = tempo di reazione: niente precipizio da CA/scadenza critica."""
+    return int(istanza.valutazioni_eseguite or 0) > 0
+
+
+def intervallo_loop_motore() -> float:
+    """
+    Intervallo sleep del worker pilot_tick: sostituito dal tick DEFCON se almeno
+    una sessione attiva ha un evento in corso.
+    """
+    try:
+        from .models import PilotRuntimeConfig, SessioneVolo
+
+        cfg = PilotRuntimeConfig.get_solo()
+        base = max(0.5, float(cfg.tick_interval_secondi or 5.0))
+        attive = SessioneVolo.objects.exclude(stato__in=["arrivata", "crashed"])
+        for sessione in attive:
+            if EventoAttivoSessione.objects.filter(
+                sessione=sessione, esito=EVENTO_ESITO_PENDING
+            ).exists():
+                return float(secondi_tick_durante_evento(sessione.defcon))
+        return base
+    except Exception:
+        return 5.0
+
+
+def ticks_durata_evento_catalogo(spec_raw: str) -> int:
+    """Durata effettiva dell'evento in numero di tick: `N` o random inclusivo `A-B`."""
+    spec = str(spec_raw or "4").strip() or "4"
+    if spec.startswith("-") and len(spec) > 1 and spec[1:].isdigit():
+        return max(1, int(spec[1:]))
+    if "-" in spec:
+        a_s, b_s = spec.split("-", 1)
+        if a_s.isdigit() and b_s.isdigit():
+            a, b = int(a_s), int(b_s)
+            if a > b:
+                a, b = b, a
+            return max(1, random.randint(max(1, a), max(1, b)))
+    if spec.isdigit():
+        return max(1, int(spec))
+    return 4
+
+
+def scadenza_critica_da_evento(evento: EventoNave) -> bool:
+    """Flag catalogo; accetta legacy `durata_tick` con prefisso `-`."""
+    if bool(getattr(evento, "scadenza_critica", False)):
+        return True
+    spec = str(evento.durata_tick or "").strip()
+    return spec == "-" or (spec.startswith("-") and len(spec) > 1 and spec[1:].isdigit())
+
+
+def secondi_durata_totale_evento(ticks: int, defcon: int) -> int:
+    """Durata reale evento in secondi = tick evento × durata tick DEFCON."""
+    return max(1, int(ticks)) * secondi_tick_durante_evento(defcon)
 
 
 def secondi_prossimo_evento_per_defcon(defcon: int) -> int:
@@ -434,6 +604,7 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
             "updated_at",
         ]
     )
+    _marca_crociera_se_spinta(sessione)
 
     for st in stati:
         if not st.online:
@@ -700,6 +871,36 @@ def _ca_guasto_codici_da_cfg(cfg: dict) -> List[str]:
     return out
 
 
+def _estrai_codici_sottosistema_da_sezione(regole: dict, key: str) -> List[str]:
+    """Estrae codici 1-char citati nelle condizioni di una sezione regole (es. ca)."""
+    section = (regole or {}).get(key) or {}
+    found: List[str] = []
+
+    def walk(node) -> None:
+        if not isinstance(node, dict):
+            return
+        raw = node.get("sottosistema")
+        if raw:
+            code = str(raw).strip().upper()[:1]
+            if code and code not in found:
+                found.append(code)
+        for item in node.get("items") or []:
+            walk(item)
+        for item in node.get("conditions") or []:
+            walk(item)
+
+    expr = section.get("expression")
+    if isinstance(expr, dict):
+        walk(expr)
+    for cond in section.get("_conditions") or []:
+        walk(cond)
+    for group in section.get("groups") or []:
+        if isinstance(group, dict):
+            for cond in group.get("conditions") or []:
+                walk(cond)
+    return found
+
+
 def _stato_sottosistema_ca_per_target(
     sessione: SessioneVolo,
     *,
@@ -714,10 +915,15 @@ def _stato_sottosistema_ca_per_target(
             .filter(sessione=sessione, sottosistema_id=sottosistema_id)
             .first()
         )
-        if stato is None:
-            sdef = SottosistemaNave.objects.filter(pk=sottosistema_id).first()
-            if sdef:
-                stato = get_o_crea_stato_sottosistema(sessione, sdef)
+        sdef = SottosistemaNave.objects.filter(pk=sottosistema_id).first()
+        if stato is None and sdef:
+            stato = get_o_crea_stato_sottosistema(sessione, sdef)
+        if stato is None and sdef is None:
+            scode = str(sottosistema_codice or "").strip().upper()[:1]
+            if scode:
+                sdef = SottosistemaNave.objects.filter(codice=scode).first()
+                if sdef:
+                    stato = get_o_crea_stato_sottosistema(sessione, sdef)
     else:
         scode = str(sottosistema_codice or "").strip().upper()[:1]
         if scode:
@@ -818,11 +1024,28 @@ def _applica_esito_ca_da_regole(
 
     if tipo in {"guasto_sottosistema", "guasto_sottosistemi"}:
         stati = _seleziona_stati_ca_guasto(sessione, cfg or {})
+        if not stati and tipo == "guasto_sottosistema":
+            codice_cfg = str((cfg or {}).get("sottosistema_codice") or "").strip().upper()[:1]
+            if codice_cfg:
+                st = _stato_sottosistema_ca_per_target(
+                    sessione, sottosistema_codice=codice_cfg
+                )
+                if st is not None:
+                    stati = [st]
+            if not stati:
+                for codice in _estrai_codici_sottosistema_da_sezione(regole, "ca"):
+                    st = _stato_sottosistema_ca_per_target(
+                        sessione, sottosistema_codice=codice
+                    )
+                    if st is not None:
+                        stati = [st]
+                        break
         if not stati:
-            istanza.esito = EVENTO_ESITO_PRECIPITAZIO
-            istanza.risolto_at = timezone.now()
+            now = timezone.now()
+            istanza.esito = EVENTO_ESITO_TIMEOUT
+            istanza.risolto_at = now
             istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-            return "ca", forza_precipizio(sessione, reason="ca_guasto_target_missing")
+            return "ca_config", applica_delta_defcon(sessione, +1)
 
         now = timezone.now()
         for stato in stati:
@@ -838,12 +1061,7 @@ def _applica_esito_ca_da_regole(
     return "ca", forza_precipizio(sessione)
 
 
-def _valuta_evento_per_regole(sessione: SessioneVolo, istanza: EventoAttivoSessione) -> Tuple[str, int]:
-    """
-    Valuta ST/SP/CA a fine tick.
-    Ordine: CA -> ST -> SP -> fallback (+1 defcon).
-    """
-    regole = istanza.evento.regole_json or {}
+def _stati_by_key_sessione(sessione: SessioneVolo) -> dict:
     stati = list(
         StatoSottosistemaSessione.objects.select_related("sottosistema").filter(sessione=sessione)
     )
@@ -851,109 +1069,106 @@ def _valuta_evento_per_regole(sessione: SessioneVolo, istanza: EventoAttivoSessi
     for st in stati:
         stati_by_key[(st.sottosistema.codice or "").strip().upper()] = st
         stati_by_key[(st.sottosistema.nome or "").strip().upper()] = st
+    return stati_by_key
 
-    def eval_outcome(key: str) -> bool:
-        section = regole.get(key) or {}
-        expr = section.get("expression")
-        if isinstance(expr, dict):
-            return _eval_expression(expr, stati_by_key, istanza.direzione_evento)
-        groups = section.get("groups") or []
-        if not groups:
-            return False
-        return any(_eval_group(g, stati_by_key, istanza.direzione_evento) for g in groups if isinstance(g, dict))
 
-    if eval_outcome("ca"):
-        return _applica_esito_ca_da_regole(sessione, istanza, regole)
-    if eval_outcome("st"):
-        istanza.esito = EVENTO_ESITO_RISOLTO
-        istanza.risolto_at = timezone.now()
+def _eval_outcome_regole(regole: dict, key: str, stati_by_key: dict, direzione_evento: str) -> bool:
+    section = (regole or {}).get(key) or {}
+    expr = section.get("expression")
+    if isinstance(expr, dict):
+        return _eval_expression(expr, stati_by_key, direzione_evento)
+    groups = section.get("groups") or []
+    if not groups:
+        return False
+    return any(
+        _eval_group(g, stati_by_key, direzione_evento)
+        for g in groups
+        if isinstance(g, dict)
+    )
+
+
+def _eval_soluzione_totale(regole: dict, stati_by_key: dict, direzione_evento: str) -> bool:
+    return _eval_outcome_regole(regole, "st", stati_by_key, direzione_evento)
+
+
+def _eval_soluzione_parziale(regole: dict, stati_by_key: dict, direzione_evento: str) -> bool:
+    return _eval_outcome_regole(regole, "sp", stati_by_key, direzione_evento)
+
+
+def _decrementa_ticks_evento(
+    sessione: SessioneVolo,
+    istanza: EventoAttivoSessione,
+    regole: dict,
+    *,
+    defcon_gia_penalizzato: bool,
+) -> Optional[Tuple[str, int]]:
+    """Decrementa i tick evento; a zero applica scadenza critica o timeout."""
+    ca_permessa = _ca_scadenza_critica_permessa(istanza)
+    if istanza.ticks_rimanenti is not None:
+        istanza.ticks_rimanenti = max(0, int(istanza.ticks_rimanenti) - 1)
+        if istanza.ticks_rimanenti <= 0:
+            if istanza.precipita_a_scadenza and ca_permessa:
+                return _applica_esito_ca_da_regole(sessione, istanza, regole)
+            istanza.esito = EVENTO_ESITO_TIMEOUT
+            istanza.risolto_at = timezone.now()
+            istanza.save(
+                update_fields=["ticks_rimanenti", "esito", "risolto_at", "updated_at"]
+            )
+            if defcon_gia_penalizzato:
+                return "timeout", sessione.defcon
+            return "timeout", applica_delta_defcon(sessione, +1)
+        istanza.save(update_fields=["ticks_rimanenti", "updated_at"])
+        return None
+
+    now = timezone.now()
+    if istanza.deadline_at and now >= istanza.deadline_at:
+        if istanza.precipita_a_scadenza and ca_permessa:
+            return _applica_esito_ca_da_regole(sessione, istanza, regole)
+        istanza.esito = EVENTO_ESITO_TIMEOUT
+        istanza.risolto_at = now
         istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-        return "st", applica_delta_defcon(sessione, -1)
-    if eval_outcome("sp"):
-        istanza.esito = EVENTO_ESITO_PARZIALE
-        istanza.risolto_at = timezone.now()
-        istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-        return "sp", sessione.defcon
-
-    istanza.esito = EVENTO_ESITO_FALLITO
-    istanza.risolto_at = timezone.now()
-    istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-    return "ko", applica_delta_defcon(sessione, +1)
-
-
-def _durata_tick_config(spec_raw: str) -> tuple[Optional[int], bool, bool]:
-    """
-    Ritorna (ticks_rimanenti, persiste_fino_st, precipita_a_scadenza).
-    - N -> (N, False, False)
-    - A-B -> (random[A,B], False, False)
-    - -N -> (N, True, True)  # a scadenza tick: ca_effetto (non ST entro N tick)
-    - - -> (None, True, False)
-    """
-    spec = str(spec_raw or "").strip()
-    if spec == "-":
-        return None, True, False
-    if spec.startswith("-") and len(spec) > 1 and spec[1:].isdigit():
-        return max(1, int(spec[1:])), True, True
-    if "-" in spec:
-        a_s, b_s = spec.split("-", 1)
-        if a_s.isdigit() and b_s.isdigit():
-            a, b = int(a_s), int(b_s)
-            if a > b:
-                a, b = b, a
-            return max(1, random.randint(max(1, a), max(1, b))), False, False
-    if spec.isdigit():
-        return max(1, int(spec)), False, False
-    return 4, False, False
+        if defcon_gia_penalizzato:
+            return "timeout", sessione.defcon
+        return "timeout", applica_delta_defcon(sessione, +1)
+    return None
 
 
 def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) -> Tuple[str, int]:
     """
-    Applica effetti evento ad ogni tick:
-    - CA: crash immediato e chiusura evento
-    - ST: chiusura evento e defcon -1
-    - SP: evento resta attivo, defcon invariato
-    - KO: evento resta attivo, defcon +1
-    Poi aggiorna durata in tick:
-    - scadenza con `precipita_a_scadenza` => effetto catastrofe (`ca_effetto`)
-    - altrimenti timeout e chiusura evento
+    Valutazione fine tick evento (ordine fisso):
+    - CA vera → effetto ca_effetto (dal secondo check in poi: tempo di reazione)
+    - ST vera → DEFCON -1, evento risolto
+    - SP vera → evento prosegue, DEFCON invariato
+    - altrimenti → DEFCON +1
+
+    Poi decrementa i tick rimanenti; a zero: scadenza_critica → ca_effetto, altrimenti timeout.
     """
+    if not _evento_pronto_per_valutazione(istanza, sessione):
+        return "wait", sessione.defcon
+
     regole = istanza.evento.regole_json or {}
-    stati = list(
-        StatoSottosistemaSessione.objects.select_related("sottosistema").filter(sessione=sessione)
-    )
-    stati_by_key = {}
-    for st in stati:
-        stati_by_key[(st.sottosistema.codice or "").strip().upper()] = st
-        stati_by_key[(st.sottosistema.nome or "").strip().upper()] = st
+    stati_by_key = _stati_by_key_sessione(sessione)
+    direzione = istanza.direzione_evento
+    ca_permessa = _ca_scadenza_critica_permessa(istanza)
 
-    def eval_outcome(key: str) -> bool:
-        section = regole.get(key) or {}
-        expr = section.get("expression")
-        if isinstance(expr, dict):
-            return _eval_expression(expr, stati_by_key, istanza.direzione_evento)
-        groups = section.get("groups") or []
-        if not groups:
-            return False
-        return any(
-            _eval_group(g, stati_by_key, istanza.direzione_evento)
-            for g in groups
-            if isinstance(g, dict)
-        )
+    try:
+        if ca_permessa and _eval_outcome_regole(regole, "ca", stati_by_key, direzione):
+            return _applica_esito_ca_da_regole(sessione, istanza, regole)
 
-    if eval_outcome("ca"):
-        return _applica_esito_ca_da_regole(sessione, istanza, regole)
+        if _eval_soluzione_totale(regole, stati_by_key, direzione):
+            istanza.esito = EVENTO_ESITO_RISOLTO
+            istanza.risolto_at = timezone.now()
+            istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
+            return "st", applica_delta_defcon(sessione, -1)
 
-    if eval_outcome("st"):
-        istanza.esito = EVENTO_ESITO_RISOLTO
-        istanza.risolto_at = timezone.now()
-        istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-        return "st", applica_delta_defcon(sessione, -1)
+        if _eval_soluzione_parziale(regole, stati_by_key, direzione):
+            scadenza = _decrementa_ticks_evento(
+                sessione, istanza, regole, defcon_gia_penalizzato=False
+            )
+            if scadenza is not None:
+                return scadenza
+            return "sp", sessione.defcon
 
-    if eval_outcome("sp"):
-        outcome = "sp"
-        defcon = sessione.defcon
-    else:
-        outcome = "ko"
         defcon = applica_delta_defcon(sessione, +1)
         if sessione.is_terminata:
             istanza.esito = EVENTO_ESITO_PRECIPITAZIO
@@ -961,20 +1176,14 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
             istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
             return "ca", defcon
 
-    if istanza.ticks_rimanenti is not None:
-        istanza.ticks_rimanenti = max(0, int(istanza.ticks_rimanenti) - 1)
-        if istanza.ticks_rimanenti <= 0:
-            if istanza.precipita_a_scadenza:
-                return _applica_esito_ca_da_regole(sessione, istanza, regole)
-            istanza.esito = EVENTO_ESITO_TIMEOUT
-            istanza.risolto_at = timezone.now()
-            istanza.save(
-                update_fields=["ticks_rimanenti", "esito", "risolto_at", "updated_at"]
-            )
-            return "timeout", defcon
-        istanza.save(update_fields=["ticks_rimanenti", "updated_at"])
-
-    return outcome, defcon
+        scadenza = _decrementa_ticks_evento(
+            sessione, istanza, regole, defcon_gia_penalizzato=True
+        )
+        if scadenza is not None:
+            return scadenza
+        return "ko", defcon
+    finally:
+        _incrementa_valutazioni_evento(istanza)
 
 
 def sottosistema_offline_per_codice(
@@ -1025,13 +1234,135 @@ def _scegli_evento_random() -> Optional[EventoNave]:
     return random.choices(eventi, weights=pesi, k=1)[0]
 
 
+def _motori_in_spinta(sessione: SessioneVolo) -> bool:
+    """True se almeno un motore online ha livello attuale > 0."""
+    return StatoSottosistemaSessione.objects.filter(
+        sessione=sessione,
+        sottosistema__tipo="motore",
+        online=True,
+        livello_attuale__gt=0,
+    ).exists()
+
+
+def _marca_crociera_se_spinta(sessione: SessioneVolo) -> None:
+    """Imposta decollo_completato_at al primo tick con motore in spinta."""
+    if sessione.decollo_completato_at is not None:
+        return
+    if not _motori_in_spinta(sessione):
+        return
+    sessione.decollo_completato_at = timezone.now()
+    sessione.save(update_fields=["decollo_completato_at", "updated_at"])
+
+
+def _sessione_ha_decollato(sessione: SessioneVolo) -> bool:
+    """
+    Crociera iniziata: almeno un motore e' stato acceso almeno una volta in questa sessione.
+    Non basta la distanza (manovra/portale) ne' lo stato sessione «volo».
+    """
+    return sessione.decollo_completato_at is not None
+
+
+def prepara_sessione_nuovo_volo(sessione: SessioneVolo) -> None:
+    """
+    Reset runtime per un nuovo decollo sullo stesso record sessione:
+    chiude eventi pending residui, azzera distanza e timer eventi.
+    """
+    now = timezone.now()
+    EventoAttivoSessione.objects.filter(
+        sessione=sessione, esito=EVENTO_ESITO_PENDING
+    ).update(esito=EVENTO_ESITO_TIMEOUT, risolto_at=now, updated_at=now)
+    sessione.next_event_at = None
+    sessione.distanza_percorsa = 0.0
+    sessione.decollo_completato_at = None
+    sessione.ultimo_tick_motore_at = None
+    sessione.save(
+        update_fields=[
+            "next_event_at",
+            "distanza_percorsa",
+            "decollo_completato_at",
+            "ultimo_tick_motore_at",
+            "updated_at",
+        ]
+    )
+
+
+def staff_azione_sottosistema_sessione(
+    sessione: SessioneVolo,
+    sottosistema: "SottosistemaNave",
+    azione: str,
+) -> Tuple[str, StatoSottosistemaSessione]:
+    """
+    Azioni staff live su sottosistema runtime:
+    - guasto: offline immediato + effetti guasto
+    - ripara: online immediato (come QR repair)
+    - ripristino: avvia timer durata_ripristino_secondi
+    """
+    from .models import SottosistemaNave
+
+    if sessione.is_terminata or not sessione.is_attiva:
+        raise ValueError("Sessione non in volo.")
+    if not isinstance(sottosistema, SottosistemaNave):
+        raise ValueError("Sottosistema non valido.")
+
+    azione = str(azione or "").strip().lower()
+    if azione not in {"guasto", "ripara", "ripristino"}:
+        raise ValueError("Azione non valida: usare guasto, ripara o ripristino.")
+
+    stato = get_o_crea_stato_sottosistema(sessione, sottosistema)
+    now = timezone.now()
+
+    if azione == "guasto":
+        if not stato.online and stato.recovery_at and stato.recovery_at > now:
+            raise ValueError("Ripristino automatico già in corso.")
+        stato.online = False
+        stato.guasto_at = now
+        stato.recovery_at = None
+        stato.save(
+            update_fields=["online", "guasto_at", "recovery_at", "updated_at"]
+        )
+        applica_effetto_guasto(sessione, stato)
+        return "guasto", stato
+
+    if azione == "ripara":
+        if stato.online:
+            raise ValueError("Il sottosistema è già online.")
+        if stato.recovery_at and stato.recovery_at > now:
+            remain = int((stato.recovery_at - now).total_seconds())
+            raise ValueError(f"Ripristino in corso ({remain}s rimanenti).")
+        stato.online = True
+        stato.guasto_at = None
+        stato.recovery_at = None
+        stato.livello_attuale = _clamp_livello(stato.livello_target)
+        stato.save(
+            update_fields=[
+                "online",
+                "guasto_at",
+                "recovery_at",
+                "livello_attuale",
+                "updated_at",
+            ]
+        )
+        return "ripara", stato
+
+    # ripristino programmato
+    if stato.online:
+        raise ValueError("Il sottosistema è già online.")
+    durata = max(1, int(sottosistema.durata_ripristino_secondi or 60))
+    stato.recovery_at = now + timedelta(seconds=durata)
+    stato.save(update_fields=["recovery_at", "updated_at"])
+    return "ripristino", stato
+
+
 def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSessione]:
     """
     Crea un nuovo EventoAttivoSessione se:
-    - sessione in volo (decollo/volo/atterraggio sono tutti contesti operativi);
+    - sessione in volo;
+    - crociera iniziata (motore acceso almeno una volta, decollo_completato_at);
     - now >= next_event_at (oppure next_event_at e' None).
     """
     if not sessione.is_attiva:
+        return None
+    if not _sessione_ha_decollato(sessione):
         return None
 
     now = timezone.now()
@@ -1055,16 +1386,16 @@ def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSess
         sessione.save(update_fields=["next_event_at", "updated_at"])
         return None
 
-    durata = secondi_evento_per_defcon(evento.durata_base_secondi, sessione.defcon)
-    ticks_rimanenti, persiste_fino_st, precipita_a_scadenza = _durata_tick_config(
-        evento.durata_tick
-    )
+    ticks_rimanenti = ticks_durata_evento_catalogo(evento.durata_tick)
+    durata_sec = secondi_durata_totale_evento(ticks_rimanenti, sessione.defcon)
+    precipita_a_scadenza = scadenza_critica_da_evento(evento)
+    tick_evento_sec = secondi_tick_durante_evento(sessione.defcon)
     istanza = EventoAttivoSessione.objects.create(
         sessione=sessione,
         evento=evento,
-        deadline_at=now + timedelta(seconds=durata),
+        deadline_at=now + timedelta(seconds=durata_sec),
         ticks_rimanenti=ticks_rimanenti,
-        persiste_fino_st=persiste_fino_st,
+        persiste_fino_st=False,
         precipita_a_scadenza=precipita_a_scadenza,
         direzione_evento=(
             random.choice(["avanti", "indietro", "su", "giu", "destra", "sinistra"])
@@ -1072,30 +1403,15 @@ def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSess
             else ""
         ),
     )
+    _programma_prossimo_check_evento(istanza, sessione, base=now)
     sessione.next_event_at = istanza.deadline_at + timedelta(
         seconds=secondi_prossimo_evento_per_defcon(sessione.defcon)
     )
-    sessione.save(update_fields=["next_event_at", "updated_at"])
+    sessione.ultimo_tick_motore_at = now
+    sessione.save(
+        update_fields=["next_event_at", "ultimo_tick_motore_at", "updated_at"]
+    )
     return istanza
-
-
-def gestisci_timeout_evento(istanza: EventoAttivoSessione) -> Tuple[bool, int]:
-    """
-    Se l'evento attivo e' scaduto senza risposta:
-    - segna esito timeout
-    - applica DEFCON +1
-    Ritorna (timeout_applicato, nuovo_defcon).
-    """
-    if istanza.esito != EVENTO_ESITO_PENDING:
-        return False, istanza.sessione.defcon
-    now = timezone.now()
-    if now < istanza.deadline_at:
-        return False, istanza.sessione.defcon
-    istanza.esito = EVENTO_ESITO_TIMEOUT
-    istanza.risolto_at = now
-    istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-    nuovo = applica_delta_defcon(istanza.sessione, +1)
-    return True, nuovo
 
 
 # ---------------------------------------------------------------------------
@@ -1111,6 +1427,18 @@ class TickResult:
     transizione_arrivata: bool
 
 
+def tick_sessione_se_dovuto(
+    sessione: SessioneVolo, *, force: bool = False
+) -> Optional[TickResult]:
+    """Esegue tick_sessione solo se e' trascorso l'intervallo tick effettivo."""
+    sessione.refresh_from_db()
+    if sessione.is_terminata:
+        return TickResult(sessione, None, False, False)
+    if not force and secondi_fino_prossimo_tick(sessione) > 0:
+        return None
+    return tick_sessione(sessione)
+
+
 @transaction.atomic
 def tick_sessione(sessione: SessioneVolo) -> TickResult:
     """
@@ -1124,19 +1452,32 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
     if sessione.is_terminata:
         return TickResult(sessione, None, False, False)
 
+    pending_list = eventi_attivi_correnti(sessione)
+    if pending_list:
+        for pending in pending_list:
+            _programma_prossimo_check_evento_se_manca(pending, sessione)
+        if not any(_evento_pronto_per_valutazione(p, sessione) for p in pending_list):
+            return TickResult(sessione, None, False, False)
+
     applica_recoveries_pendenti(sessione)
 
     timeout = False
-    pending_list = eventi_attivi_correnti(sessione)
-    for pending in pending_list:
-        esito_tick, _ = valuta_evento_tick(sessione, pending)
-        timeout = timeout or (esito_tick == "timeout")
-        if sessione.is_terminata:
-            return TickResult(sessione, None, False, False)
+    if _sessione_ha_decollato(sessione):
+        pending_list = eventi_attivi_correnti(sessione)
+        for pending in pending_list:
+            if not _evento_pronto_per_valutazione(pending, sessione):
+                continue
+            esito_tick, _ = valuta_evento_tick(sessione, pending)
+            pending.refresh_from_db()
+            if pending.esito == EVENTO_ESITO_PENDING:
+                _schedula_prossima_valutazione_evento(pending, sessione)
+            timeout = timeout or (esito_tick == "timeout")
+            if sessione.is_terminata:
+                return TickResult(sessione, None, False, False)
 
     _avanza_energia_sessione(sessione)
+    sessione.refresh_from_db()
 
-    nuovo = None
     nuovo = genera_evento_se_dovuto(sessione)
 
     transizione = False
@@ -1148,6 +1489,9 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
             sessione.ended_at = timezone.now()
             sessione.save(update_fields=["stato", "ended_at", "updated_at"])
             transizione = True
+
+    sessione.ultimo_tick_motore_at = timezone.now()
+    sessione.save(update_fields=["ultimo_tick_motore_at", "updated_at"])
 
     return TickResult(sessione, nuovo, timeout, transizione)
 
@@ -1178,6 +1522,30 @@ def durata_viaggio_secondi(prefettura_partenza, prefettura_arrivo, defcon_inizia
             base = 60 * 60
     malus = 1.0 + 0.2 * max(0, int(defcon_iniziale or 0))
     return int(round(base * malus))
+
+
+# Crociera nominale: motore L5 (5×12) × portale L4 (0.15×4) = 36 unità/tick da 5 s.
+CRUISE_VELOCITY_PER_TICK = 36.0
+
+
+def calcola_distanza_target(
+    prefettura_partenza,
+    prefettura_arrivo,
+    defcon_iniziale: int = 0,
+    tick_secondi: float = 5.0,
+) -> tuple[int, int]:
+    """
+    Distanza obiettivo da durata geografica e velocità di crociera di riferimento.
+
+    Ritorna (distanza_target, durata_pianificata_secondi).
+    """
+    durata_sec = durata_viaggio_secondi(
+        prefettura_partenza, prefettura_arrivo, defcon_iniziale
+    )
+    interval = max(0.5, float(tick_secondi or 5.0))
+    num_tick = durata_sec / interval
+    distanza = max(1, int(round(num_tick * CRUISE_VELOCITY_PER_TICK)))
+    return distanza, durata_sec
 
 
 # ---------------------------------------------------------------------------

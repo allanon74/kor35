@@ -26,8 +26,12 @@ from pilotaggio.models import (
     EventoNave,
     PilotConsoleToken,
     SequenzaVolo,
+    SessioneVolo,
     SottosistemaNave,
+    StatoSottosistemaSessione,
+    SESSIONE_STATO_CRASHED,
     SESSIONE_STATO_DECOLLO,
+    SESSIONE_STATO_IDLE,
     SESSIONE_STATO_VOLO,
     SEQUENZA_DECOLLO,
 )
@@ -107,6 +111,68 @@ class SessioneEndToEndTests(TestCase):
     def test_state_iniziale(self):
         res = self.client_api.get("/api/pilot/session/state/")
         self.assertEqual(res.status_code, 200, res.content)
+
+    def test_state_espone_sessione_terminata_per_schermata_finale(self):
+        sessione = SessioneVolo.objects.create(
+            pilota=self.pg,
+            prefettura_partenza=self.partenza,
+            prefettura_arrivo=self.arrivo,
+            stato=SESSIONE_STATO_CRASHED,
+            defcon=6,
+            durata_pianificata_secondi=600,
+            crash_reason="defcon_overflow",
+            ended_at=timezone.now(),
+        )
+        res = self.client_api.get("/api/pilot/session/state/")
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertIsNotNone(body.get("sessione"))
+        self.assertEqual(body["sessione"]["id"], str(sessione.pk))
+        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_CRASHED)
+        self.assertEqual(body["sessione"]["crash_reason"], "defcon_overflow")
+
+    def test_reset_dopo_crash_torna_idle(self):
+        SessioneVolo.objects.create(
+            pilota=self.pg,
+            prefettura_partenza=self.partenza,
+            prefettura_arrivo=self.arrivo,
+            stato=SESSIONE_STATO_CRASHED,
+            defcon=6,
+            durata_pianificata_secondi=600,
+            crash_reason="catastrophic_event",
+            ended_at=timezone.now(),
+        )
+        res = self.client_api.post("/api/pilot/session/reset/", {}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_IDLE)
+
+        res_state = self.client_api.get("/api/pilot/session/state/")
+        self.assertEqual(res_state.status_code, 200, res_state.content)
+        self.assertEqual(res_state.json()["sessione"]["stato"], SESSIONE_STATO_IDLE)
+
+    def test_logout_dopo_crash_prossimo_state_idle(self):
+        SessioneVolo.objects.create(
+            pilota=self.pg,
+            prefettura_partenza=self.partenza,
+            prefettura_arrivo=self.arrivo,
+            stato=SESSIONE_STATO_CRASHED,
+            defcon=6,
+            durata_pianificata_secondi=600,
+            crash_reason="catastrophic_event",
+            ended_at=timezone.now(),
+        )
+        res = self.client_api.post("/api/pilot/auth/logout/", {}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+
+        nuovo_token = PilotConsoleToken.objects.create(
+            pilota=self.pg, token=PilotConsoleToken.genera_token()
+        )
+        client2 = APIClient()
+        client2.credentials(HTTP_AUTHORIZATION=f"PilotToken {nuovo_token.token}")
+        res_state = client2.get("/api/pilot/session/state/")
+        self.assertEqual(res_state.status_code, 200, res_state.content)
+        self.assertEqual(res_state.json()["sessione"]["stato"], SESSIONE_STATO_IDLE)
 
     def test_start_passa_a_decollo(self):
         res = self.client_api.post(
@@ -205,3 +271,63 @@ class StaffSottosistemaAssociaQrTests(TestCase):
         self.assertEqual(res.status_code, 400, res.content)
         self.sottos.refresh_from_db()
         self.assertIsNone(self.sottos.a_vista_id)
+
+
+class StaffSessioneLiveTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="staff_live", password="x", is_staff=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+        self.pilota_user, self.pilota = _crea_pilota_con_0pi(nome="PilotaLive", valore_0pi=1)
+        self.sottos = SottosistemaNave.objects.create(
+            codice="V", nome="LiveTest", attivo=True
+        )
+        self.sessione = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_VOLO,
+            defcon=0,
+            distanza_percorsa=100.0,
+            decollo_completato_at=timezone.now(),
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        StatoSottosistemaSessione.objects.create(
+            sessione=self.sessione,
+            sottosistema=self.sottos,
+            online=True,
+            livello_attuale=3,
+            livello_target=3,
+        )
+
+    def test_sessione_live_get(self):
+        res = self.client.get("/api/pilot/staff/sessione-live/")
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertTrue(body["decollo_effettuato"])
+        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_VOLO)
+        self.assertGreaterEqual(len(body["sottosistemi"]), 1)
+
+    def test_staff_guasta_e_ripara(self):
+        res = self.client.post(
+            "/api/pilot/staff/sessione-live/sottosistema/",
+            {"sottosistema_id": str(self.sottos.pk), "azione": "guasto"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        stato = StatoSottosistemaSessione.objects.get(
+            sessione=self.sessione, sottosistema=self.sottos
+        )
+        self.assertFalse(stato.online)
+
+        res2 = self.client.post(
+            "/api/pilot/staff/sessione-live/sottosistema/",
+            {"sottosistema_id": str(self.sottos.pk), "azione": "ripara"},
+            format="json",
+        )
+        self.assertEqual(res2.status_code, 200, res2.content)
+        stato.refresh_from_db()
+        self.assertTrue(stato.online)
+        self.assertEqual(stato.livello_attuale, 3)
+

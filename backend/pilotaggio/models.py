@@ -331,16 +331,12 @@ class EventoNave(SyncableModel, models.Model):
     )
     durata_base_secondi = models.PositiveIntegerField(
         default=20,
-        help_text="Tempo di countdown a DEFCON 0; ridotto man mano che la gravita' sale.",
+        help_text="Deprecato: la durata runtime deriva da StatoAllerta.tempo_risoluzione_secondi.",
     )
     durata_tick = models.CharField(
         max_length=16,
         default="4",
-        help_text=(
-            'Durata evento in tick: "N", "A-B", "-N" o "-". '
-            '-N: persiste fino a ST; se nessun ST entro N tick applica ca_effetto. '
-            '-: persiste finche non arriva ST.'
-        ),
+        help_text='Durata evento in tick: "N" fisso oppure "A-B" (random inclusivo tra A e B).',
     )
     peso_random = models.PositiveIntegerField(
         default=10,
@@ -355,6 +351,13 @@ class EventoNave(SyncableModel, models.Model):
         help_text="Se collegato, il guasto del sottosistema impatta su questo evento.",
     )
     attivo = models.BooleanField(default=True)
+    scadenza_critica = models.BooleanField(
+        default=False,
+        help_text=(
+            "Se attivo: allo scadere dei tick dell'evento applica ca_effetto. "
+            "Altrimenti l'evento termina senza fallimento critico."
+        ),
+    )
 
     class Meta:
         verbose_name = "Evento nave"
@@ -439,15 +442,25 @@ class StatoAllertaPilot(SyncableModel, models.Model):
     )
     frequenza_evento_min_sec = models.PositiveIntegerField(
         default=60,
-        help_text="Estremo inferiore dell'intervallo (secondi) prima del prossimo evento.",
+        help_text=(
+            "Solo se probabilita_evento_per_tick=0: estremo inferiore (secondi) "
+            "dell'intervallo casuale prima del prossimo evento."
+        ),
     )
     frequenza_evento_max_sec = models.PositiveIntegerField(
         default=90,
-        help_text="Estremo superiore dell'intervallo (secondi) prima del prossimo evento.",
+        help_text=(
+            "Solo se probabilita_evento_per_tick=0: estremo superiore (secondi) "
+            "dell'intervallo casuale prima del prossimo evento."
+        ),
     )
     tempo_risoluzione_secondi = models.PositiveIntegerField(
         default=20,
-        help_text="Durata countdown (secondi) per risolvere un evento mentre si e' in questo livello.",
+        help_text=(
+            "Durata in secondi di ogni tick motore mentre c'e' un evento attivo "
+            "(in viaggio regolare si usa tick_interval_secondi in Runtime Console). "
+            "Durata totale evento in secondi = tick evento × questo valore."
+        ),
     )
     probabilita_evento_per_tick = models.FloatField(
         default=0.15,
@@ -589,6 +602,11 @@ class SessioneVolo(SyncableModel, models.Model):
         default="",
         help_text="Motivo tecnico della precipitazione (es. defcon_overflow, end_of_energy, manual_abort).",
     )
+    ultimo_tick_motore_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp dell'ultimo tick motore applicato (throttle poll API / worker).",
+    )
 
     class Meta:
         verbose_name = "Sessione di volo"
@@ -673,6 +691,34 @@ class EventoAttivoSessione(SyncableModel, models.Model):
             ("destra", "Destra"),
             ("sinistra", "Sinistra"),
         ],
+    )
+    prossima_valutazione_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Prossimo check CA/ST/SP programmato (dopo il primo intervallo di reazione, "
+            "usa intervallo DEFCON corrente)."
+        ),
+    )
+    reazione_fino_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Fine del tempo di reazione pilota: congelato alla comparsa dell'evento "
+            "(DEFCON al momento dello spawn). Nessuna valutazione CA/ST/SP prima di questo istante."
+        ),
+    )
+    intervallo_reazione_secondi = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Secondi di reazione fissati alla comparsa (tempo_risoluzione DEFCON allo spawn).",
+    )
+    valutazioni_eseguite = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Numero di tick evento gia' valutati. La CA e la scadenza critica precipizio "
+            "non si applicano al primo check (tempo di reazione pilota)."
+        ),
     )
 
     class Meta:

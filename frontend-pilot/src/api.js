@@ -64,6 +64,7 @@ export const api = {
     method: 'POST', body: { qr_id: qrId }, auth: false,
   }),
   logout: () => request('/api/pilot/auth/logout/', { method: 'POST' }),
+  resetSession: () => request('/api/pilot/session/reset/', { method: 'POST' }),
   state: () => request('/api/pilot/session/state/'),
   catalog: () => request('/api/pilot/catalog/'),
   prefetture: () => request('/api/pilot/prefetture/'),

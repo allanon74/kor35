@@ -2461,6 +2461,13 @@ export const staffGetPilotCatalog = (onLogout) =>
 
 export const staffGetPilotRuntimeConfig = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/runtime-config/', { method: 'GET' }, onLogout);
+export const staffGetPilotSessioneLive = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/sessione-live/', { method: 'GET' }, onLogout);
+export const staffAzionePilotSessioneSottosistema = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/sessione-live/sottosistema/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, onLogout);
 export const staffUpdatePilotRuntimeConfig = (data, onLogout) =>
   fetchAuthenticated('/api/pilot/staff/runtime-config/', {
     method: 'PATCH',

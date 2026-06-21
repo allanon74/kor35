@@ -128,6 +128,18 @@ export default function App() {
     clearCachedState();
   }, []);
 
+  const handleResetSession = useCallback(async () => {
+    setError('');
+    try {
+      const res = await api.resetSession();
+      setState(res);
+      saveCachedState(res);
+      setCommandStatus('');
+    } catch (e) {
+      setError(e.message || 'Errore reset sessione.');
+    }
+  }, []);
+
   const handleLogout = useCallback(async () => {
     try { await api.logout(); } catch (_) { /* offline ok */ }
     setToken('');
@@ -279,6 +291,7 @@ export default function App() {
                 onAbort={handleAbort}
                 onEmergencyLanding={handleEmergencyLanding}
                 onLogout={handleLogout}
+                onResetSession={handleResetSession}
                 tentativi={tentativi}
                 mode={SCREEN_MODE}
                 onSubsystemSet={handleSubsystemSet}

@@ -222,6 +222,7 @@ class EventoNaveSerializer(serializers.ModelSerializer):
             "regole_json",
             "durata_base_secondi",
             "durata_tick",
+            "scadenza_critica",
             "peso_random",
             "sottosistema",
             "sottosistema_codice",
@@ -230,22 +231,18 @@ class EventoNaveSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "sottosistema_codice"]
 
     def validate_durata_tick(self, value):
-        raw = str(value or "").strip()
-        if not raw:
-            raise serializers.ValidationError("Inserisci una durata in tick.")
+        raw = str(value or "4").strip() or "4"
         import re
-        if not re.fullmatch(r"(\d+|\d+-\d+|-\d+|-)", raw):
-            raise serializers.ValidationError('Formato valido: N, A-B, -N oppure -')
-        if "-" in raw and raw not in ("-",) and raw.startswith("-"):
-            if int(raw[1:]) <= 0:
-                raise serializers.ValidationError("Nel formato -N, N deve essere > 0.")
-        if "-" in raw and not raw.startswith("-"):
-            a, b = raw.split("-", 1)
-            if int(a) <= 0 or int(b) <= 0 or int(a) > int(b):
-                raise serializers.ValidationError("Nel formato A-B servono A,B > 0 e A <= B.")
-        if raw.isdigit() and int(raw) <= 0:
-            raise serializers.ValidationError("La durata numerica deve essere > 0.")
-        return raw
+
+        if re.fullmatch(r"\d+", raw) and int(raw) > 0:
+            return raw
+        if re.fullmatch(r"\d+-\d+", raw):
+            a_s, b_s = raw.split("-", 1)
+            if int(a_s) > 0 and int(b_s) > 0:
+                return raw
+        raise serializers.ValidationError(
+            'Usa "N" (tick fissi) oppure "A-B" (random inclusivo tra A e B).'
+        )
 
 
 class SequenzaVoloSerializer(serializers.ModelSerializer):

@@ -110,7 +110,7 @@ class PilotConsoleLoginTicketAdmin(admin.ModelAdmin):
 
 @admin.register(EventoNave)
 class EventoNaveAdmin(admin.ModelAdmin):
-    list_display = ("nome", "durata_tick", "peso_random", "attivo")
+    list_display = ("nome", "durata_tick", "scadenza_critica", "peso_random", "attivo")
     search_fields = ("nome", "codice_soluzione_esatta")
     list_filter = ("attivo", "sottosistema")
 

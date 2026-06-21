@@ -9,7 +9,6 @@ Gruppi di endpoint:
 """
 from __future__ import annotations
 
-import random
 from datetime import timedelta
 from typing import Optional
 
@@ -39,16 +38,22 @@ from .engine import (
     applica_effetto_espulsione,
     applica_effetto_guasto,
     applica_effetto_inversione,
+    calcola_distanza_target,
     evento_attivo_corrente,
     eventi_attivi_correnti,
     get_o_crea_stato_sottosistema,
-    tick_sessione,
+    prepara_sessione_nuovo_volo,
+    staff_azione_sottosistema_sessione,
+    intervallo_tick_effettivo_sessione,
+    secondi_fino_valutazione_evento,
+    tick_sessione_se_dovuto,
 )
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
     DEFCON_MAX,
     EVENTO_ESITO_PENDING,
+    EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
     PilotConsoleToken,
@@ -120,6 +125,52 @@ def _sessione_attiva_corrente() -> Optional[SessioneVolo]:
     )
 
 
+def _sessione_pilota_per_console(pilota) -> Optional[SessioneVolo]:
+    """
+    Ultima sessione del pilota per GET /state/.
+    Include arrivata/crashed cosi' la UI mostra schermata finale invece di tornare
+    al precontrollo con sessione null. Dopo logout/reset esiste una sessione idle
+    piu' recente della terminata: si torna al precontrollo.
+    """
+    latest = (
+        SessioneVolo.objects.filter(pilota=pilota)
+        .order_by("-created_at")
+        .first()
+    )
+    if latest is None:
+        return None
+    if latest.stato in (SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED):
+        idle_dopo = (
+            SessioneVolo.objects.filter(
+                pilota=pilota,
+                stato=SESSIONE_STATO_IDLE,
+                created_at__gt=latest.created_at,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if idle_dopo is not None:
+            return idle_dopo
+    return latest
+
+
+def _ensure_sessione_idle_pilota(pilota) -> SessioneVolo:
+    """Nuova sessione a terra dopo logout o reset da schermata crash/arrivo."""
+    ultima = (
+        SessioneVolo.objects.filter(pilota=pilota)
+        .order_by("-created_at")
+        .first()
+    )
+    if ultima is not None and ultima.stato == SESSIONE_STATO_IDLE:
+        return ultima
+    return SessioneVolo.objects.create(
+        pilota=pilota,
+        stato=SESSIONE_STATO_IDLE,
+        defcon=0,
+        durata_pianificata_secondi=600,
+    )
+
+
 def _request_prefers_html(request) -> bool:
     accept = str(request.headers.get("Accept", "")).lower()
     if "application/json" in accept:
@@ -154,16 +205,26 @@ def _ensure_runtime_subsystems(sessione: SessioneVolo) -> None:
         StatoSottosistemaSessione.objects.bulk_create(to_create)
 
 
-def _tick_runtime_payload() -> dict:
+def _tick_runtime_payload(sessione: Optional[SessioneVolo] = None) -> dict:
     cfg = PilotRuntimeConfig.get_solo()
     heartbeat = cfg.tick_last_heartbeat
+    base_interval = float(cfg.tick_interval_secondi or 5.0)
+    effective_interval = base_interval
+    evento_attivo = False
+    if sessione is not None and sessione.is_attiva:
+        effective_interval = float(intervallo_tick_effettivo_sessione(sessione))
+        evento_attivo = EventoAttivoSessione.objects.filter(
+            sessione=sessione, esito=EVENTO_ESITO_PENDING
+        ).exists()
     alive = False
     if heartbeat is not None:
         delta = (timezone.now() - heartbeat).total_seconds()
-        alive = delta <= max(8.0, float(cfg.tick_interval_secondi or 5.0) * 2.5)
+        alive = delta <= max(8.0, effective_interval * 2.5)
     return {
         "enabled": bool(cfg.tick_enabled),
-        "interval": float(cfg.tick_interval_secondi or 5.0),
+        "interval": effective_interval,
+        "interval_base": base_interval,
+        "evento_attivo": evento_attivo,
         "last_heartbeat": heartbeat.isoformat() if heartbeat else None,
         "alive": alive,
         "login_required_console": bool(cfg.login_required_console),
@@ -524,10 +585,29 @@ class PilotLogoutView(APIView):
 
     def post(self, request):
         token: PilotConsoleToken = request.auth
+        pilota = token.pilota
         PilotConsoleToken.objects.filter(pk=token.pk).update(
             revocato_at=timezone.now()
         )
+        _ensure_sessione_idle_pilota(pilota)
+        _disable_tick_if_no_active_sessions()
         return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
+
+class PilotSessionResetView(APIView):
+    """
+    POST /api/pilot/session/reset/
+    Torna al precontrollo dopo crash/arrivo senza revocare il token console.
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        pilota = get_pilot_from_request(request)
+        sessione = _ensure_sessione_idle_pilota(pilota)
+        _disable_tick_if_no_active_sessions()
+        return Response(_build_state_payload(sessione, pilota), status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------
@@ -537,10 +617,13 @@ class PilotLogoutView(APIView):
 
 def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
     """Stato runtime completo per la console pilota."""
+    from .engine import _sessione_ha_decollato
+
     if sessione is not None:
         _ensure_runtime_subsystems(sessione)
-    pending = evento_attivo_corrente(sessione) if sessione else None
-    pending_list = eventi_attivi_correnti(sessione) if sessione else []
+    decollo = sessione is not None and _sessione_ha_decollato(sessione)
+    pending = evento_attivo_corrente(sessione) if sessione and decollo else None
+    pending_list = eventi_attivi_correnti(sessione) if sessione and decollo else []
 
     sub_serializer = StatoSottosistemaRuntimeSerializer(
         StatoSottosistemaSessione.objects.filter(sessione=sessione)
@@ -590,17 +673,35 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
         key=lambda g: (gruppo_ordine_min.get(g, 0), g.lower()),
     )
     sistemi = {g: sistemi_buckets[g] for g in gruppi_ordinati}
+    attesa_valutazione = (
+        secondi_fino_valutazione_evento(sessione)
+        if sessione is not None and sessione.is_attiva
+        else None
+    )
     evento_data = EventoAttivoSerializer(pending).data if pending else None
     if evento_data and evento_data.get("direzione_evento"):
         evento_data["descrizione"] = str(evento_data.get("descrizione") or "").replace(
             "<direzione>", str(evento_data["direzione_evento"])
         )
+    if evento_data is not None and attesa_valutazione is not None:
+        evento_data["secondi_fino_valutazione"] = round(attesa_valutazione, 1)
+    if evento_data is not None and pending is not None and pending.reazione_fino_at:
+        evento_data["reazione_fino_at"] = pending.reazione_fino_at.isoformat()
+        evento_data["intervallo_reazione_secondi"] = pending.intervallo_reazione_secondi
     eventi_data = EventoAttivoSerializer(pending_list, many=True).data if pending_list else []
     for row in eventi_data:
         if row.get("direzione_evento"):
             row["descrizione"] = str(row.get("descrizione") or "").replace(
                 "<direzione>", str(row["direzione_evento"])
             )
+        if attesa_valutazione is not None:
+            row["secondi_fino_valutazione"] = round(attesa_valutazione, 1)
+
+    tick_effettivo = (
+        float(intervallo_tick_effettivo_sessione(sessione))
+        if sessione is not None and sessione.is_attiva
+        else float(getattr(sessione, "tick_secondi", 5) if sessione else 5)
+    )
 
     payload = {
         "pilota": {
@@ -623,9 +724,10 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
             "storage_massimo": getattr(sessione, "storage_energia_massimo", 0.0) if sessione else 0.0,
             "distanza_percorsa": getattr(sessione, "distanza_percorsa", 0.0) if sessione else 0.0,
             "distanza_target": getattr(sessione, "distanza_target", 0.0) if sessione else 0.0,
-            "tick_secondi": getattr(sessione, "tick_secondi", 5) if sessione else 5,
+            "tick_secondi": tick_effettivo,
+            "tick_secondi_base": float(getattr(sessione, "tick_secondi", 5) if sessione else 5),
         },
-        "tick_runtime": _tick_runtime_payload(),
+        "tick_runtime": _tick_runtime_payload(sessione),
         "server_time": timezone.now().isoformat(),
     }
     return payload
@@ -642,17 +744,12 @@ class PilotStateView(APIView):
 
     def get(self, request):
         pilota = get_pilot_from_request(request)
-        sessione = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato__in=["arrivata", "crashed"])
-            .order_by("-created_at")
-            .first()
-        )
-        if sessione is not None:
+        sessione = _sessione_pilota_per_console(pilota)
+        if sessione is not None and sessione.is_attiva:
             _ensure_runtime_subsystems(sessione)
-            tick_sessione(sessione)
+            tick_sessione_se_dovuto(sessione)
             sessione.refresh_from_db()
-            if sessione.stato in ("arrivata", "crashed"):
+            if sessione.is_terminata:
                 _disable_tick_if_no_active_sessions()
         return Response(_build_state_payload(sessione, pilota))
 
@@ -663,7 +760,7 @@ class PilotSessionStartView(APIView):
     Body: {"prefettura_partenza_id": int, "prefettura_arrivo_id": int}
 
     A nave ferma (stato 0 disattiva). Premi decollo e la sessione entra in volo.
-    La distanza target e' temporaneamente randomica [1000..10000].
+    Distanza e durata derivano dal tragitto (prefettura/regione) e crociera nominale.
     """
 
     authentication_classes = [PilotConsoleTokenAuthentication]
@@ -693,7 +790,9 @@ class PilotSessionStartView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        distanza_target = random.randint(1000, 10000)
+        distanza_target, durata_pianificata = calcola_distanza_target(
+            partenza, arrivo, defcon_iniziale=0
+        )
         now = timezone.now()
         capacita_serbatoi = float(
             SottosistemaNave.objects.filter(attivo=True, tipo="serbatoio").aggregate(
@@ -735,7 +834,7 @@ class PilotSessionStartView(APIView):
                     prefettura_partenza=partenza,
                     prefettura_arrivo=arrivo,
                     stato=SESSIONE_STATO_VOLO,
-                    durata_pianificata_secondi=0,
+                    durata_pianificata_secondi=durata_pianificata,
                     defcon=0,
                     distanza_target=float(distanza_target),
                     distanza_percorsa=0.0,
@@ -749,7 +848,7 @@ class PilotSessionStartView(APIView):
                 attiva.prefettura_partenza = partenza
                 attiva.prefettura_arrivo = arrivo
                 attiva.stato = SESSIONE_STATO_VOLO
-                attiva.durata_pianificata_secondi = 0
+                attiva.durata_pianificata_secondi = durata_pianificata
                 attiva.defcon = 0
                 attiva.distanza_target = float(distanza_target)
                 attiva.distanza_percorsa = 0.0
@@ -775,6 +874,7 @@ class PilotSessionStartView(APIView):
                 attiva.save()
             attiva.started_at = now
             attiva.save(update_fields=["started_at", "crash_reason", "updated_at"])
+            prepara_sessione_nuovo_volo(attiva)
             _ensure_runtime_subsystems(attiva)
             _ensure_tick_enabled()
 
@@ -861,7 +961,7 @@ class PilotSubsystemSetView(APIView):
             applica_effetto_espulsione(sessione, stato)
         if not stato.online:
             applica_effetto_guasto(sessione, stato)
-        tick_sessione(sessione)
+        tick_sessione_se_dovuto(sessione)
         sessione.refresh_from_db()
         return Response(_build_state_payload(sessione, pilota), status=status.HTTP_200_OK)
 
@@ -1395,6 +1495,101 @@ class StaffSessioneListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsStaffUser]
     serializer_class = SessioneVoloSerializer
     queryset = SessioneVolo.objects.all().order_by("-created_at")
+
+
+def _build_staff_sessione_live_payload(sessione: Optional[SessioneVolo]) -> dict:
+    if sessione is None:
+        return {
+            "sessione": None,
+            "decollo_effettuato": False,
+            "eventi_attivi": [],
+            "sottosistemi": [],
+        }
+    from .engine import _sessione_ha_decollato
+
+    _ensure_runtime_subsystems(sessione)
+    stati_qs = (
+        StatoSottosistemaSessione.objects.filter(sessione=sessione)
+        .select_related("sottosistema")
+        .order_by(
+            "sottosistema__ordine_gruppo",
+            "sottosistema__gruppo",
+            "sottosistema__ordine",
+            "sottosistema__nome",
+        )
+    )
+    pending = eventi_attivi_correnti(sessione)
+    if not _sessione_ha_decollato(sessione):
+        pending = []
+    return {
+        "sessione": SessioneVoloSerializer(sessione).data,
+        "decollo_effettuato": _sessione_ha_decollato(sessione),
+        "eventi_attivi": EventoAttivoSerializer(pending, many=True).data,
+        "sottosistemi": StatoSottosistemaRuntimeSerializer(stati_qs, many=True).data,
+    }
+
+
+class StaffSessioneLiveView(APIView):
+    """
+    GET /api/pilot/staff/sessione-live/
+    Stato runtime della sessione attiva (volo) per pannello staff.
+    """
+
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get(self, request):
+        sessione = _sessione_attiva_corrente()
+        if sessione is not None and sessione.stato != SESSIONE_STATO_VOLO:
+            sessione = None
+        return Response(_build_staff_sessione_live_payload(sessione))
+
+
+class StaffSessioneSottosistemaAzioneView(APIView):
+    """
+    POST /api/pilot/staff/sessione-live/sottosistema/
+    Body: { sottosistema_id, azione: guasto|ripara|ripristino }
+    """
+
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def post(self, request):
+        sessione = _sessione_attiva_corrente()
+        if sessione is None or sessione.stato != SESSIONE_STATO_VOLO:
+            return Response(
+                {"error": "Nessuna sessione di volo attiva."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        sottosistema_id = request.data.get("sottosistema_id")
+        azione = request.data.get("azione")
+        if not sottosistema_id:
+            return Response(
+                {"error": "sottosistema_id mancante."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sottosistema = SottosistemaNave.objects.filter(
+            pk=sottosistema_id, attivo=True
+        ).first()
+        if sottosistema is None:
+            return Response(
+                {"error": "Sottosistema non trovato."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            with transaction.atomic():
+                esito, stato = staff_azione_sottosistema_sessione(
+                    sessione, sottosistema, str(azione or "")
+                )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        sessione.refresh_from_db()
+        payload = _build_staff_sessione_live_payload(sessione)
+        payload["azione"] = esito
+        payload["stato_aggiornato"] = StatoSottosistemaRuntimeSerializer(stato).data
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class StaffPilotRuntimeConfigView(APIView):

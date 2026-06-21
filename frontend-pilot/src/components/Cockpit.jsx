@@ -1,4 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import {
+  announceDefconChange,
+  playCriticalEventAlarmTick,
+  playCriticalEventBurst,
+  playMinorEventAlert,
+} from '../pilotAlerts.js';
 
 function defconClass(defcon, defconMax) {
   if (defcon > defconMax) return 'defcon-crash';
@@ -177,8 +183,6 @@ function statusIcon(subsystem) {
 function eventUrgencyScore(ev) {
   let score = 0;
   if (ev?.precipita_a_scadenza) score += 1000;
-  const ticks = Number(ev?.ticks_rimanenti);
-  if (Number.isFinite(ticks)) score += Math.max(0, 200 - ticks);
   const deadlineMs = ev?.deadline_at ? new Date(ev.deadline_at).getTime() : NaN;
   if (Number.isFinite(deadlineMs)) {
     const sec = Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
@@ -243,7 +247,7 @@ function Subsystems({ sottosistemi, energia }) {
  */
 export default function Cockpit({
   state, online,
-  onAbort, onEmergencyLanding, onLogout, mode = 'both', onSubsystemSet,
+  onAbort, onEmergencyLanding, onLogout, onResetSession, mode = 'both', onSubsystemSet,
   error, commandStatus,
 }) {
   const sessione = state.sessione || {};
@@ -271,9 +275,14 @@ export default function Cockpit({
   const [editingExpel, setEditingExpel] = useState(false);
   const audioCtxRef = useRef(null);
   const beepTimerRef = useRef(null);
-
+  const criticalEventAlarmRef = useRef(null);
+  const criticalAlarmPhaseRef = useRef(false);
+  const prevDefconRef = useRef(null);
+  const prevEventIdsRef = useRef(new Set());
+  const eventAlertsReadyRef = useRef(false);
   const sottosistemiOffline = (state.sottosistemi || []).filter((s) => !s.online);
   const groupedSystems = state.sistemi || {};
+  const hasCriticalEvent = eventiOrdinati.some((ev) => Boolean(ev.precipita_a_scadenza));
   const energia = state.energia || {};
   const distanzaPercorsa = Number(energia.distanza_percorsa || 0);
   const distanzaTarget = Number(energia.distanza_target || 0);
@@ -323,6 +332,59 @@ export default function Cockpit({
     };
   }, [tickAlive, alarmAudioEnabled, hasCriticalSubsystem]);
 
+  useEffect(() => {
+    if (prevDefconRef.current === null) {
+      prevDefconRef.current = defcon;
+      return;
+    }
+    if (prevDefconRef.current === defcon) return;
+    if (alarmAudioEnabled) {
+      announceDefconChange(defcon);
+    }
+    prevDefconRef.current = defcon;
+  }, [defcon, alarmAudioEnabled]);
+
+  useEffect(() => {
+    const currentIds = new Set(eventiOrdinati.map((ev) => String(ev.id)));
+    if (!eventAlertsReadyRef.current) {
+      prevEventIdsRef.current = currentIds;
+      eventAlertsReadyRef.current = true;
+      return;
+    }
+    const prevIds = prevEventIdsRef.current;
+    const newEvents = eventiOrdinati.filter((ev) => !prevIds.has(String(ev.id)));
+    if (newEvents.length && alarmAudioEnabled) {
+      const hasNewCritical = newEvents.some((ev) => Boolean(ev.precipita_a_scadenza));
+      if (hasNewCritical) {
+        playCriticalEventBurst();
+      } else {
+        playMinorEventAlert();
+      }
+    }
+    prevEventIdsRef.current = currentIds;
+  }, [eventiOrdinati, alarmAudioEnabled]);
+
+  useEffect(() => {
+    const shouldAlarm = alarmAudioEnabled && hasCriticalEvent;
+    if (!shouldAlarm) {
+      if (criticalEventAlarmRef.current) {
+        clearInterval(criticalEventAlarmRef.current);
+        criticalEventAlarmRef.current = null;
+      }
+      return undefined;
+    }
+    criticalEventAlarmRef.current = setInterval(() => {
+      criticalAlarmPhaseRef.current = !criticalAlarmPhaseRef.current;
+      playCriticalEventAlarmTick(criticalAlarmPhaseRef.current);
+    }, 850);
+    return () => {
+      if (criticalEventAlarmRef.current) {
+        clearInterval(criticalEventAlarmRef.current);
+        criticalEventAlarmRef.current = null;
+      }
+    };
+  }, [alarmAudioEnabled, hasCriticalEvent]);
+
   const openSubsystem = (sub) => {
     setSelectedSubsystem(sub);
     setEditingLevel(Number(sub.livello_target ?? 0));
@@ -362,7 +424,8 @@ export default function Cockpit({
       >
         <h1>// {statoAbbattuta?.nome?.toUpperCase() || 'CRASH'} //</h1>
         <p>{crashMessage}</p>
-        <div className="row" style={{ marginTop: '2rem' }}>
+        <div className="row" style={{ marginTop: '2rem', gap: '0.75rem', justifyContent: 'center' }}>
+          <button type="button" className="btn primary" onClick={onResetSession}>Nuovo volo</button>
           <button type="button" className="btn" onClick={onLogout}>Logout pilota</button>
         </div>
       </div>
@@ -374,8 +437,9 @@ export default function Cockpit({
       <div className="center-screen">
         <h1>// ARRIVO //</h1>
         <p>Destinazione raggiunta. Buon viaggio.</p>
-        <div className="row" style={{ marginTop: '2rem' }}>
-          <button type="button" className="btn primary" onClick={onLogout}>Logout pilota</button>
+        <div className="row" style={{ marginTop: '2rem', gap: '0.75rem', justifyContent: 'center' }}>
+          <button type="button" className="btn primary" onClick={onResetSession}>Nuovo volo</button>
+          <button type="button" className="btn" onClick={onLogout}>Logout pilota</button>
         </div>
       </div>
     );
@@ -422,6 +486,12 @@ export default function Cockpit({
         <div className="lcars-corner right" />
       </div> : null}
 
+      {showStatus && hasCriticalEvent ? (
+        <div className="alert-bar alert-bar-critical-event" role="alert" aria-live="assertive">
+          ⚠ Evento Critico ⚠
+        </div>
+      ) : null}
+
       {showStatus && sottosistemiOffline.map((s) => (
         <div key={s.id} className="alert-bar">
           ⚠ Sottosistema {s.nome} GUASTO
@@ -451,10 +521,7 @@ export default function Cockpit({
                   <CountdownBox deadlineISO={ev.deadline_at} />
                   <div className="descr">{ev.descrizione}</div>
                   <div className="event-meta">
-                    {Number.isFinite(Number(ev.ticks_rimanenti))
-                      ? `Tick residui: ${ev.ticks_rimanenti}`
-                      : 'Durata persistente'}
-                    {ev.precipita_a_scadenza ? ' - Esito critico a scadenza' : ''}
+                    {ev.precipita_a_scadenza ? 'Scadenza critica — esito CA se non risolto' : 'Risolvi entro il countdown'}
                   </div>
                 </div>
               ))}
@@ -470,8 +537,10 @@ export default function Cockpit({
             <Gauge label="Produzione" value={energia.produzione} max={Math.max(1, energia.consumo || 1)} color="#ffd06b" />
             <Gauge label="Consumo" value={energia.consumo} max={Math.max(1, energia.produzione || 1)} color="#ff8f70" />
             <div className="radar-box">
-              <div className={`radar-ping ${evento ? 'alert' : ''}`} />
-              <div className="radar-text">{evento ? 'Evento in corso' : 'Spazio stabile'}</div>
+              <div className={`radar-ping ${hasCriticalEvent ? 'alert critical' : evento ? 'alert' : ''}`} />
+              <div className="radar-text">
+                {hasCriticalEvent ? 'Evento critico' : evento ? 'Evento in corso' : 'Spazio stabile'}
+              </div>
             </div>
             <div className="distance-box">
               <div className="distance-label">Rotta</div>
