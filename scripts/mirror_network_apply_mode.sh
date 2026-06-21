@@ -83,7 +83,14 @@ apply_event_lan_ip() {
     fi
     nmcli con down kor35-mirror-router 2>/dev/null || true
     nmcli con down netplan-eth0 2>/dev/null || true
-    nmcli con up kor35-mirror-event
+    if ! nmcli --wait 45 con up kor35-mirror-event 2>/dev/null; then
+      mirror_pi_warn "nmcli con up kor35-mirror-event timeout — fallback ip statico su ${LAN_IFACE}"
+      nmcli con down kor35-mirror-event 2>/dev/null || true
+      dhclient -r "$LAN_IFACE" 2>/dev/null || true
+      ip addr flush dev "$LAN_IFACE" 2>/dev/null || true
+      ip link set "$LAN_IFACE" up
+      ip addr add "${EVENT_LAN_IP}/${EVENT_LAN_CIDR}" dev "$LAN_IFACE" 2>/dev/null || true
+    fi
   else
     dhclient -r "$LAN_IFACE" 2>/dev/null || true
     ip addr flush dev "$LAN_IFACE"
@@ -106,7 +113,7 @@ apply_router_dhcp() {
         connection.interface-name "$LAN_IFACE" \
         connection.autoconnect yes
       nmcli con down kor35-mirror-router 2>/dev/null || true
-      nmcli con up netplan-eth0
+      nmcli --wait 45 con up netplan-eth0 || mirror_pi_warn "nmcli up netplan-eth0 lento o fallito"
       return 0
     fi
     if ! nmcli -t -f NAME con show | grep -qx 'kor35-mirror-router'; then
@@ -115,7 +122,7 @@ apply_router_dhcp() {
     else
       nmcli con modify kor35-mirror-router ipv4.method auto connection.interface-name "$LAN_IFACE"
     fi
-    nmcli con up kor35-mirror-router
+    nmcli --wait 45 con up kor35-mirror-router || mirror_pi_warn "nmcli up kor35-mirror-router lento o fallito"
   else
     ip addr flush dev "$LAN_IFACE" 2>/dev/null || true
     ip link set "$LAN_IFACE" up

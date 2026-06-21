@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -65,6 +65,8 @@ help:
 	@echo "  make sync-db-full-diagnose   # full pull + diagnostica conflitti SegnoZodiacale"
 	@echo "  make sync-media              # pull-only media via rsync (vedi scripts/sync_media_pull_wsl_pi_like.sh e .env.sync-media)"
 	@echo "  make sync-media-push         # push-only media verso master (senza delete)"
+	@echo "  make sync-certs-to-mirror ENV=prod        # su prod: certs locali → mirror Pi"
+	@echo "  make sync-certs-prod-to-mirror            # da dev: SSH prod → mirror (relay)"
 	@echo "  make mirror-resync-after-event # full DB diagnose + media push + media pull"
 	@echo ""
 	@echo "Mirror Pi — rete (vedi docs/MIRROR_PI_NETWORK.md):"
@@ -212,6 +214,13 @@ sync-media:
 
 sync-media-push:
 	./scripts/sync_media_push_wsl_pi_like.sh
+
+sync-certs-to-mirror:
+	./scripts/sync_tls_certs_to_mirror.sh $(if $(filter 1,$(WITH_DDNS)),--with-ddns,) $(if $(filter 1,$(DRY_RUN)),--dry-run,)
+
+# Da postazione dev: pull certs da prod + push mirror (SSH a entrambi)
+sync-certs-prod-to-mirror:
+	./scripts/sync_tls_certs_to_mirror.sh --from-prod $(if $(filter 1,$(WITH_DDNS)),--with-ddns,) $(if $(filter 1,$(DRY_RUN)),--dry-run,)
 
 mirror-resync-after-event:
 	./scripts/mirror_resync_after_event.sh --env "$(ENV)"

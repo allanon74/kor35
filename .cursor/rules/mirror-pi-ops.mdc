@@ -44,6 +44,8 @@ make mirror-pi-install-network MIRROR_NETWORK_AUTO_BOOT=0
 
 Per operazioni sul Pi: **git pull sul Pi + script repo** (`mirror-install-network`, `mirror-reinstall-units`) — non patch manuali in `/etc/systemd`.
 
+**Certificati TLS prod → mirror** da postazione dev: `make sync-certs-prod-to-mirror` (vedi `scripts/sync_tls_certs_to_mirror.sh`).
+
 ---
 
 ## Accesso SSH da Cursor / PC sviluppatore

@@ -76,6 +76,27 @@ systemctl is-enabled kor35-mirror-ensure-emergency-wifi.service   # enabled
 make mirror-network-check ENV=mirror
 ```
 
+### Certificati TLS (prod → mirror)
+
+**Da questa postazione dev** (SSH a `www.kor35.it` e `kor35.ddns.net`):
+
+```bash
+cp config/env_templates/sync-mirror-certs.env.example .env.sync-mirror-certs
+
+make sync-certs-prod-to-mirror
+make sync-certs-prod-to-mirror DRY_RUN=1    # anteprima
+```
+
+**Sul server prod** (cert già in `config/docker/nginx-docker/certs/`):
+
+```bash
+make sync-certs-to-mirror ENV=prod
+```
+
+Script: `scripts/sync_tls_certs_to_mirror.sh` — reload nginx sul mirror al termine.
+
+In **modalità evento** offline: `http://www.kor35.it` (HTTP). HTTPS richiede cert aggiornati sul Pi.
+
 **Come funziona:** a ogni boot il Pi prova prima **NetworkManager** (`Hotspot-Emergenza`); se fallisce, **hostapd** da repo se la PSK è configurata. `MIRROR_NETWORK_AUTO_BOOT=0` riguarda solo router/event automatico, non la WiFi emergenza.
 
 ---

@@ -119,6 +119,22 @@ make migrate ENV=prod
 - Modifiche a `syncing.py` / apply LWW: vedi `.cursor/rules/edge-sync.mdc` e test `kor35.tests_edge_sync_integrity`.
 - Sintomo «campi che si azzerano dopo il sync» su MTI (es. runtime tessiture): payload replica più vecchio del master — non patchare campi figlio se `remote_updated_at < local.updated_at`.
 
+## Certificati TLS prod → mirror Pi
+
+**Sul server prod** (`/srv/kor35`):
+
+```bash
+make sync-certs-to-mirror ENV=prod
+```
+
+**Da postazione dev** (SSH a prod e mirror — relay):
+
+```bash
+make sync-certs-prod-to-mirror
+```
+
+Script: `scripts/sync_tls_certs_to_mirror.sh` (`--from-prod` per relay). Host: **prod** `deploy@www.kor35.it:22`, **mirror** `pi@kor35.ddns.net:10022`. Env: `.env.sync-mirror-certs`.
+
 ## Log: distinguere admin vs edge sync
 
 - **Edge sync** (Pi/mirror → master): `Edge sync failed`, `edge_sync.py`, `SottosistemaNave`, `duplicate key ... codice_key` — non è il salvataggio QR in admin.

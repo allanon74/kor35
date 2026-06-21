@@ -109,6 +109,8 @@ sudo make mirror-network-mode ENV=mirror MIRROR_NETWORK_MODE=event
 make mirror-network-check ENV=mirror
 ```
 
+Il comando può **restare fermo 30–90 secondi** mentre NetworkManager applica `192.168.100.1` su `eth0`: non chiudere il terminale. Se supera ~2 minuti, `Ctrl+C` e lancia `make mirror-network-check ENV=mirror` (lo switch può essere già avvenuto).
+
 **Atteso dopo il check:**
 
 | Controllo | Risultato |
