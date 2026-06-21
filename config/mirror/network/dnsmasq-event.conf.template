@@ -1,0 +1,25 @@
+# Generato da install_mirror_network.sh → /etc/kor35/dnsmasq-event.conf
+# Attivo solo in modalità evento (systemd kor35-mirror-dhcp-event.service).
+
+interface=@EVENT_LAN_INTERFACE@
+bind-interfaces
+except-interface=lo
+except-interface=@EMERGENCY_WIFI_INTERFACE@
+
+# Gateway/DNS per client evento (smartphone, kiosk pilota)
+dhcp-range=@EVENT_DHCP_RANGE_START@,@EVENT_DHCP_RANGE_END@,12h
+dhcp-option=option:router,@EVENT_LAN_IP@
+dhcp-option=option:dns-server,@EVENT_LAN_IP@
+
+# Risolve i domini KOR35 verso il Pi (nginx Docker in ascolto su tutte le interfacce)
+address=/www.kor35.it/@EVENT_LAN_IP@
+address=/kor35.it/@EVENT_LAN_IP@
+address=/kor35.ddns.net/@EVENT_LAN_IP@
+
+# Evita conflitto con resolv.conf di sistema quando dnsmasq è attivo solo su LAN evento
+no-resolv
+server=1.1.1.1
+server=8.8.8.8
+
+log-queries
+log-dhcp

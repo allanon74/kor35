@@ -1,0 +1,17 @@
+[Unit]
+Description=KOR35 Mirror - DHCP/DNS LAN evento (192.168.100.0/24)
+After=network.target
+Conflicts=dnsmasq.service
+ConditionPathExists=/etc/kor35/dnsmasq-event.conf
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dnsmasq --keep-in-foreground --conf-file=/etc/kor35/dnsmasq-event.conf
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

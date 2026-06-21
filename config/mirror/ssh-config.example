@@ -1,0 +1,15 @@
+# Esempio ~/.ssh/config per accesso mirror Pi da PC sviluppatore / Cursor.
+# Copia il blocco Host in ~/.ssh/config e adatta IdentityFile.
+#
+# Test:
+#   ssh kor35-mirror 'hostname'
+#   ./scripts/mirror_ssh_check.sh
+
+Host kor35-mirror
+  HostName kor35.ddns.net
+  User pi
+  Port 10022
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+  ServerAliveInterval 60
+  ServerAliveCountMax 3

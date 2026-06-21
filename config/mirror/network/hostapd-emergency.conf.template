@@ -1,0 +1,16 @@
+# Generato da install_mirror_network.sh → /etc/kor35/hostapd-emergency.conf
+# Hotspot staff sempre attivo (non usare per giocatori).
+
+interface=@EMERGENCY_WIFI_INTERFACE@
+driver=nl80211
+ssid=@EMERGENCY_WIFI_SSID@
+hw_mode=g
+channel=6
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=@EMERGENCY_WIFI_PASSPHRASE@
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP

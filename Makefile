@@ -12,7 +12,7 @@ ALLOW_DB_REINIT ?= 0
 MAKEMIGRATIONS_APP ?=
 COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor35-replica,$(if $(filter prod,$(ENV)),COMPOSE_PROJECT_NAME=kor35-prod,))
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-ssh-check cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -63,6 +63,14 @@ help:
 	@echo "  make sync-media              # pull-only media via rsync (vedi scripts/sync_media_pull_wsl_pi_like.sh e .env.sync-media)"
 	@echo "  make sync-media-push         # push-only media verso master (senza delete)"
 	@echo "  make mirror-resync-after-event # full DB diagnose + media push + media pull"
+	@echo ""
+	@echo "Mirror Pi — rete (eseguire sul Pi con sudo dove indicato; vedi docs/MIRROR_PI_NETWORK.md):"
+	@echo "  make mirror-network-check ENV=mirror     # diagnostica locale (sul Pi)"
+	@echo "  make mirror-network-mode MODE=router     # DHCP router, spegne DHCP 192.168.100.0/24"
+	@echo "  make mirror-network-mode MODE=event      # LAN evento + DHCP + www.kor35.it locale"
+	@echo "  make mirror-network-mode MODE=auto       # sceglie in base a internet"
+	@echo "  make mirror-install-network              # installa unit/config rete (sudo sul Pi)"
+	@echo "  make mirror-ssh-check                    # diagnostica remota via SSH (PC dev)"
 	@echo ""
 	@echo "Backup:"
 	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
@@ -192,6 +200,19 @@ sync-media-push:
 
 mirror-resync-after-event:
 	./scripts/mirror_resync_after_event.sh --env "$(ENV)"
+
+mirror-network-check:
+	./scripts/mirror_network_check.sh
+
+MIRROR_NETWORK_MODE ?= auto
+mirror-network-mode:
+	sudo ./scripts/mirror_network_apply_mode.sh --mode "$(MIRROR_NETWORK_MODE)"
+
+mirror-install-network:
+	sudo ./scripts/install_mirror_network.sh
+
+mirror-ssh-check:
+	./scripts/mirror_ssh_check.sh
 
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh

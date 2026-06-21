@@ -1,0 +1,14 @@
+[Unit]
+Description=KOR35 Mirror - Selezione automatica modalità rete (router vs evento)
+# NON usare network-online.target: in bosco senza WAN il boot resterebbe bloccato.
+After=docker.service kor35-mirror-stack.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/pi/kor35-replica/scripts/mirror_network_apply_mode.sh --mode auto
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

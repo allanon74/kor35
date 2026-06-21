@@ -1,0 +1,18 @@
+# Solo modalità evento/offline sul mirror Pi.
+# In bosco i client non hanno TLS valido per www.kor35.it: serviamo HTTP senza redirect.
+#
+# Abilitazione:
+#   scripts/mirror_network_apply_mode.sh --mode event
+# Disabilitazione (router):
+#   scripts/mirror_network_apply_mode.sh --mode router
+#
+# Copia manuale:
+#   cp mirror-event-local.conf.example mirror-event-local.conf
+#   docker compose ... exec -T frontend nginx -s reload
+
+server {
+    listen 80;
+    server_name www.kor35.it kor35.it kor35.ddns.net;
+
+    include /etc/nginx/conf.d/common_locations.snippets;
+}
