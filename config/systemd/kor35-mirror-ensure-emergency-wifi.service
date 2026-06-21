@@ -1,0 +1,13 @@
+[Unit]
+Description=KOR35 Mirror - WiFi emergenza staff sempre attiva (Pi_Emergenza)
+After=network.target NetworkManager.service
+Wants=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/home/pi/kor35-replica/scripts/mirror_ensure_emergency_wifi.sh
+TimeoutStartSec=60
+
+[Install]
+WantedBy=multi-user.target

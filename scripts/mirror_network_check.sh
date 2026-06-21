@@ -54,6 +54,7 @@ fi
 
 mirror_pi_service_active kor35-mirror-dhcp-event.service && DHCP_EVENT_ACTIVE=1 || true
 mirror_pi_service_active kor35-mirror-emergency-wifi.service && EMERGENCY_WIFI_ACTIVE=1 || true
+mirror_pi_emergency_wifi_up && EMERGENCY_WIFI_ACTIVE=1 || true
 
 if [ -f "${KOR35_REPO_PATH}/config/docker/nginx-docker/nginx_conf/mirror-event-local.conf" ]; then
   NGINX_EVENT_VHOST=1

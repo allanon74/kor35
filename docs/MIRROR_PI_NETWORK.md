@@ -120,9 +120,12 @@ sudo nano /etc/kor35/mirror-network.env   # EMERGENCY_WIFI_PASSPHRASE se usi hos
 
 Unit systemd installate da `install_mirror_network.sh`:
 
-- `kor35-mirror-emergency-wifi.service` — hotspot `Pi_emergenza` (alternativa a NM `Hotspot-Emergenza`)
+- `kor35-mirror-ensure-emergency-wifi.service` — **sempre** al boot: riaccende hotspot staff (`Pi_Emergenza` / `10.42.0.1`)
+- `kor35-mirror-emergency-wifi.service` — hostapd (se NM `Hotspot-Emergenza` assente e PSK in `/etc/kor35/mirror-network.env`)
 - `kor35-mirror-dhcp-event.service` — dnsmasq solo in modalità event
 - `kor35-mirror-network-mode.service` — `--mode auto` al boot (opzionale; skip con `--no-auto-mode`)
+
+Riaccensione manuale: `sudo make mirror-ensure-emergency-wifi ENV=mirror` sul Pi.
 
 ## Due reti distinte (non confonderle)
 
@@ -195,6 +198,8 @@ sudo systemctl start kor35-mirror-resync.service
 ```
 
 ## Test disconnessione (router → evento)
+
+**Wiki staff (passi numerati per operatori):** `docs/wiki/staff/test-offline-omada.md` → pagina `staff-test-offline-omada`.
 
 ### Stato atteso in modalità router (a casa)
 

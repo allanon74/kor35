@@ -17,6 +17,12 @@
       "titolo": "Mirror Pi — procedure",
       "source": "mirror-pi.md",
       "ordine": 20
+    },
+    {
+      "slug": "staff-test-offline-omada",
+      "titolo": "Test offline — mesh Omada",
+      "source": "test-offline-omada.md",
+      "ordine": 25
     }
   ]
 }

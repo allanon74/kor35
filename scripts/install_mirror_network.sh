@@ -93,7 +93,7 @@ EOF
 fi
 systemctl disable --now dnsmasq 2>/dev/null || true
 
-for unit in kor35-mirror-dhcp-event.service kor35-mirror-emergency-wifi.service kor35-mirror-network-mode.service; do
+for unit in kor35-mirror-dhcp-event.service kor35-mirror-emergency-wifi.service kor35-mirror-network-mode.service kor35-mirror-ensure-emergency-wifi.service; do
   src="$ROOT_DIR/config/systemd/$unit"
   dst="/etc/systemd/system/$unit"
   if [ ! -f "$src" ]; then
@@ -110,6 +110,9 @@ if [ -f /etc/systemd/system/kor35-mirror-emergency-wifi.service ]; then
 fi
 
 systemctl daemon-reload
+
+# Sempre al boot: riaccende hotspot staff (NM Hotspot-Emergenza o hostapd).
+systemctl enable --now kor35-mirror-ensure-emergency-wifi.service
 
 if [ "$INSTALL_AUTO_MODE" = "1" ]; then
   systemctl enable --now kor35-mirror-emergency-wifi.service

@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -72,6 +72,7 @@ help:
 	@echo "    make mirror-network-check ENV=mirror"
 	@echo "    sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router"
 	@echo "    sudo make mirror-install-network MIRROR_NETWORK_AUTO_BOOT=0"
+	@echo "    sudo make mirror-ensure-emergency-wifi ENV=mirror   # riaccende Pi_Emergenza"
 	@echo "    sudo make mirror-network-mode MIRROR_NETWORK_MODE=event"
 	@echo "  Da PC dev (SSH → kor35-mirror, porta 10022):"
 	@echo "    make mirror-pi-check"
@@ -225,6 +226,9 @@ mirror-install-network:
 	sudo ./scripts/install_mirror_network.sh \
 	  $(if $(filter 0,$(MIRROR_NETWORK_AUTO_BOOT)),--no-auto-mode,) \
 	  $(if $(filter 1,$(MIRROR_NETWORK_AUTO_BOOT)),--auto-mode,)
+
+mirror-ensure-emergency-wifi:
+	sudo ./scripts/mirror_ensure_emergency_wifi.sh
 
 mirror-configure:
 	sudo MIRROR_NETWORK_MODE="$(MIRROR_NETWORK_MODE)" MIRROR_NETWORK_AUTO_BOOT="$(MIRROR_NETWORK_AUTO_BOOT)" \

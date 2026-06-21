@@ -159,28 +159,7 @@ disable_nginx_event_vhost() {
 }
 
 ensure_emergency_wifi() {
-  if command -v nmcli >/dev/null 2>&1; then
-    if nmcli -t -f NAME con show 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
-      nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed yes 2>/dev/null || true
-      if ! nmcli -t -f NAME con show --active 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
-        nmcli con up Hotspot-Emergenza 2>/dev/null || mirror_pi_warn "riavvio Hotspot-Emergenza NM fallito"
-      fi
-      mirror_pi_log "WiFi emergenza: NetworkManager Hotspot-Emergenza"
-      return 0
-    fi
-  fi
-  if ! mirror_pi_service_active kor35-mirror-emergency-wifi.service; then
-    if systemctl is-enabled kor35-mirror-emergency-wifi.service 2>/dev/null | grep -q enabled; then
-      systemctl start kor35-mirror-emergency-wifi.service || mirror_pi_warn "avvio WiFi emergenza (hostapd) fallito"
-    fi
-  fi
-  if command -v nmcli >/dev/null 2>&1; then
-    nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed no 2>/dev/null || true
-  fi
-  if ! ip -4 addr show dev "$EMERGENCY_WIFI_INTERFACE" 2>/dev/null | grep -q "${EMERGENCY_WIFI_IP}/"; then
-    ip link set "$EMERGENCY_WIFI_INTERFACE" up 2>/dev/null || true
-    ip addr add "${EMERGENCY_WIFI_IP}/${EMERGENCY_WIFI_CIDR}" dev "$EMERGENCY_WIFI_INTERFACE" 2>/dev/null || true
-  fi
+  mirror_pi_ensure_emergency_wifi
 }
 
 ensure_stack() {

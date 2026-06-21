@@ -22,6 +22,7 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertIn("staff-operativita-tecnica", slugs)
         self.assertIn("staff-make-comandi", slugs)
         self.assertIn("staff-mirror-pi", slugs)
+        self.assertIn("staff-test-offline-omada", slugs)
 
         parent = PaginaRegolamento.objects.get(slug="staff-operativita-tecnica")
         self.assertTrue(parent.visibile_solo_staff)

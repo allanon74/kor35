@@ -2,6 +2,8 @@
 
 Il **mirror** (`ENV=mirror`) è un Raspberry Pi replica del master (`prod`): sync DB ~ogni 2 min, stack Docker + controller **Omada**, due modalità rete.
 
+**Test offline con mesh Omada (passi numerati):** vedi pagina Wiki [Test sistema disconnesso](/regolamento/staff-test-offline-omada).
+
 Path repo sul Pi: `/home/pi/kor35-replica`  
 SSH pubblico: `kor35.ddns.net:10022` (alias `kor35-mirror`)
 
@@ -14,8 +16,58 @@ SSH pubblico: `kor35.ddns.net:10022` (alias `kor35-mirror`)
 | **router** | Pi collegato al router di casa | DHCP router (es. `192.168.1.200`) | **Spento** |
 | **event** | Bosco / offline | Statico `192.168.100.1/24` | **Attivo** (dnsmasq) |
 
-WiFi staff **sempre**: SSID `Pi_Emergenza` / `10.42.0.1` (NetworkManager `Hotspot-Emergenza`).  
+WiFi staff **sempre**: SSID `Pi_Emergenza` / `Pi_emergenza` → `10.42.0.1` (NetworkManager `Hotspot-Emergenza` **oppure** `hostapd` systemd).  
 WiFi **giocatori**: `kor35-larp` via antenne Omada — **non** usare `10.42.0.1` per l'app.
+
+---
+
+## WiFi emergenza sempre attiva
+
+L'hotspot staff **non** resta su da solo dopo un reboot se non è stato installato il servizio dedicato.
+
+### Subito (hotspot giù adesso)
+
+Da SSH (`kor35-mirror` o LAN):
+
+```bash
+cd /home/pi/kor35-replica
+sudo make mirror-ensure-emergency-wifi ENV=mirror
+make mirror-network-check ENV=mirror
+```
+
+**Atteso:** riga WiFi emergenza con IP `10.42.0.1/24` e stato **ATTIVO**; sul laptop compare SSID `Pi_Emergenza` o `Pi_emergenza`.
+
+Alternativa (riapplica anche modalità router/event):
+
+```bash
+sudo make mirror-network-mode ENV=mirror MIRROR_NETWORK_MODE=router
+```
+
+### Always-on al boot (una tantum)
+
+1. Password hotspot in `/etc/kor35/mirror-network.env` → `EMERGENCY_WIFI_PASSPHRASE=...` (non lasciare `CHANGE_ME_EMERGENCY_PSK`).
+2. Install/aggiorna unit rete (abilita `kor35-mirror-ensure-emergency-wifi.service` al boot):
+
+```bash
+sudo make mirror-install-network ENV=mirror MIRROR_NETWORK_AUTO_BOOT=0
+```
+
+Da PC dev (dopo deploy):
+
+```bash
+make mirror-pi-install-network MIRROR_NETWORK_AUTO_BOOT=0
+```
+
+3. Verifica servizio boot:
+
+```bash
+systemctl is-enabled kor35-mirror-ensure-emergency-wifi.service   # enabled
+systemctl status kor35-mirror-ensure-emergency-wifi.service
+```
+
+**Come funziona:** a ogni boot il Pi prova prima **NetworkManager** (`Hotspot-Emergenza` con autoconnect); se il profilo NM non c'è, usa **hostapd** (`kor35-mirror-emergency-wifi.service`) se la PSK è configurata.
+
+> `MIRROR_NETWORK_AUTO_BOOT=0` disabilita solo la **scelta automatica router/event** al boot, **non** la WiFi emergenza.
 
 ---
 
@@ -44,6 +96,8 @@ make mirror-pi-check
 ## Caso 2 — Prima dell'evento (offline / bosco)
 
 **Obiettivo:** LAN `192.168.100.1`, DHCP+DNS locale, `www.kor35.it` → Pi, Omada + `kor35-larp`.
+
+**Procedura completa con checklist:** [Test sistema disconnesso](/regolamento/staff-test-offline-omada) (passi 1–11).
 
 ⚠️ La SSH via DDNS può cadere. Tieni aperta una sessione su **`Pi_Emergenza`** (`ssh pi@10.42.0.1`).
 
