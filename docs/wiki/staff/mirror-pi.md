@@ -45,29 +45,38 @@ sudo make mirror-network-mode ENV=mirror MIRROR_NETWORK_MODE=router
 
 ### Always-on al boot (una tantum)
 
+**Non modificare a mano** `/etc/systemd/system/kor35-mirror-*.service` sul Pi: le unit vengono copiate dal repo.
+
 1. Password hotspot in `/etc/kor35/mirror-network.env` → `EMERGENCY_WIFI_PASSPHRASE=...` (non lasciare `CHANGE_ME_EMERGENCY_PSK`).
-2. Install/aggiorna unit rete (abilita `kor35-mirror-ensure-emergency-wifi.service` al boot):
+2. Aggiorna codice e reinstalla da repo:
 
 ```bash
+cd /home/pi/kor35-replica
+git pull
 sudo make mirror-install-network ENV=mirror MIRROR_NETWORK_AUTO_BOOT=0
 ```
 
-Da PC dev (dopo deploy):
+Solo unit systemd (dopo `git pull`, senza apt):
 
 ```bash
+sudo make mirror-reinstall-units ENV=mirror
+```
+
+Da PC dev (SSH):
+
+```bash
+make mirror-pi-pull
 make mirror-pi-install-network MIRROR_NETWORK_AUTO_BOOT=0
 ```
 
-3. Verifica servizio boot:
+3. Verifica:
 
 ```bash
 systemctl is-enabled kor35-mirror-ensure-emergency-wifi.service   # enabled
-systemctl status kor35-mirror-ensure-emergency-wifi.service
+make mirror-network-check ENV=mirror
 ```
 
-**Come funziona:** a ogni boot il Pi prova prima **NetworkManager** (`Hotspot-Emergenza` con autoconnect); se il profilo NM non c'è, usa **hostapd** (`kor35-mirror-emergency-wifi.service`) se la PSK è configurata.
-
-> `MIRROR_NETWORK_AUTO_BOOT=0` disabilita solo la **scelta automatica router/event** al boot, **non** la WiFi emergenza.
+**Come funziona:** a ogni boot il Pi prova prima **NetworkManager** (`Hotspot-Emergenza`); se fallisce, **hostapd** da repo se la PSK è configurata. `MIRROR_NETWORK_AUTO_BOOT=0` riguarda solo router/event automatico, non la WiFi emergenza.
 
 ---
 
