@@ -24,6 +24,12 @@ mirror_pi_ensure_emergency_wifi
 if mirror_pi_emergency_wifi_up; then
   mirror_pi_log "WiFi emergenza attiva (${EMERGENCY_WIFI_SSID} / ${EMERGENCY_WIFI_IP})"
 else
-  mirror_pi_warn "WiFi emergenza ancora non attiva — vedi docs/MIRROR_PI_NETWORK.md (sezione WiFi emergenza)"
+  mirror_pi_warn "WiFi emergenza ancora non attiva"
+  mirror_pi_diagnose_emergency_wifi
+  echo ""
+  echo "Prossimi passi:"
+  echo "  1. sudo nano /etc/kor35/mirror-network.env   # EMERGENCY_WIFI_PASSPHRASE"
+  echo "  2. sudo make mirror-install-network ENV=mirror MIRROR_NETWORK_AUTO_BOOT=0"
+  echo "  3. sudo make mirror-ensure-emergency-wifi ENV=mirror"
   exit 1
 fi

@@ -116,36 +116,119 @@ mirror_pi_render_template() {
 }
 
 # Hotspot staff su wlan0 (10.42.0.1): NM Hotspot-Emergenza oppure hostapd systemd.
-mirror_pi_ensure_emergency_wifi() {
-  if command -v nmcli >/dev/null 2>&1; then
-    if nmcli -t -f NAME con show 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
-      nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed yes 2>/dev/null || true
-      if ! nmcli -t -f NAME con show --active 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
-        nmcli con modify Hotspot-Emergenza connection.autoconnect yes 2>/dev/null || true
-        nmcli con up Hotspot-Emergenza 2>/dev/null || mirror_pi_warn "riavvio Hotspot-Emergenza NM fallito"
-      fi
-      mirror_pi_log "WiFi emergenza: NetworkManager Hotspot-Emergenza"
-      return 0
-    fi
+mirror_pi_try_nm_hotspot() {
+  if ! command -v nmcli >/dev/null 2>&1; then
+    return 1
   fi
-  if [ -f /etc/kor35/hostapd-emergency.conf ] \
-    && [ -n "${EMERGENCY_WIFI_PASSPHRASE:-}" ] \
-    && [ "${EMERGENCY_WIFI_PASSPHRASE}" != "CHANGE_ME_EMERGENCY_PSK" ]; then
-    systemctl enable kor35-mirror-emergency-wifi.service 2>/dev/null || true
-    if ! mirror_pi_service_active kor35-mirror-emergency-wifi.service; then
-      systemctl start kor35-mirror-emergency-wifi.service || mirror_pi_warn "avvio WiFi emergenza (hostapd) fallito"
-    fi
-    if command -v nmcli >/dev/null 2>&1; then
-      nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed no 2>/dev/null || true
-    fi
+  if ! nmcli -t -f NAME con show 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
+    return 1
+  fi
+
+  if command -v rfkill >/dev/null 2>&1 && rfkill list wifi 2>/dev/null | grep -q 'Soft blocked: yes'; then
+    rfkill unblock wifi 2>/dev/null || true
+  fi
+  nmcli radio wifi on 2>/dev/null || true
+  nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed yes 2>/dev/null || true
+
+  local active_on_wifi
+  active_on_wifi="$(
+    nmcli -t -f NAME,DEVICE con show --active 2>/dev/null \
+      | awk -F: -v dev="$EMERGENCY_WIFI_INTERFACE" '$2 == dev {print $1}' \
+      | grep -vx 'Hotspot-Emergenza' || true
+  )"
+  for con in $active_on_wifi; do
+    nmcli con down "$con" 2>/dev/null || true
+  done
+
+  nmcli con modify Hotspot-Emergenza \
+    connection.interface-name "$EMERGENCY_WIFI_INTERFACE" \
+    connection.autoconnect yes 2>/dev/null || true
+
+  if ! nmcli -t -f NAME con show --active 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
+    local nm_err=""
+    nm_err="$(nmcli con up Hotspot-Emergenza 2>&1)" || mirror_pi_warn "nmcli con up Hotspot-Emergenza: ${nm_err}"
+  fi
+
+  if mirror_pi_emergency_wifi_up; then
+    return 0
+  fi
+  return 1
+}
+
+mirror_pi_recreate_nm_hotspot() {
+  local psk="${EMERGENCY_WIFI_PASSPHRASE:-}"
+  if [ -z "$psk" ] || [ "$psk" = "CHANGE_ME_EMERGENCY_PSK" ]; then
+    return 1
+  fi
+  if ! command -v nmcli >/dev/null 2>&1; then
+    return 1
+  fi
+
+  mirror_pi_log "Ricreo profilo NM Hotspot-Emergenza (${EMERGENCY_WIFI_SSID})"
+  nmcli con down Hotspot-Emergenza 2>/dev/null || true
+  nmcli con delete Hotspot-Emergenza 2>/dev/null || true
+  nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed yes 2>/dev/null || true
+
+  local nm_err=""
+  nm_err="$(
+    nmcli device wifi hotspot \
+      ifname "$EMERGENCY_WIFI_INTERFACE" \
+      con-name Hotspot-Emergenza \
+      ssid "$EMERGENCY_WIFI_SSID" \
+      password "$psk" \
+      ipv4.method shared \
+      connection.autoconnect yes 2>&1
+  )" || {
+    mirror_pi_warn "nmcli device wifi hotspot fallito: ${nm_err}"
+    return 1
+  }
+
+  mirror_pi_emergency_wifi_up
+}
+
+mirror_pi_try_hostapd_hotspot() {
+  if [ ! -f /etc/kor35/hostapd-emergency.conf ]; then
+    mirror_pi_warn "manca /etc/kor35/hostapd-emergency.conf — esegui install_mirror_network.sh"
+    return 1
+  fi
+  if [ -z "${EMERGENCY_WIFI_PASSPHRASE:-}" ] || [ "${EMERGENCY_WIFI_PASSPHRASE}" = "CHANGE_ME_EMERGENCY_PSK" ]; then
+    mirror_pi_warn "EMERGENCY_WIFI_PASSPHRASE non configurata in /etc/kor35/mirror-network.env"
+    return 1
+  fi
+
+  if command -v nmcli >/dev/null 2>&1; then
+    nmcli con down Hotspot-Emergenza 2>/dev/null || true
+    nmcli dev disconnect "$EMERGENCY_WIFI_INTERFACE" 2>/dev/null || true
+    nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed no 2>/dev/null || true
+  fi
+
+  systemctl enable kor35-mirror-emergency-wifi.service 2>/dev/null || true
+  if mirror_pi_service_active kor35-mirror-emergency-wifi.service; then
+    systemctl restart kor35-mirror-emergency-wifi.service || return 1
+  else
+    systemctl start kor35-mirror-emergency-wifi.service || return 1
+  fi
+
+  sleep 1
+  mirror_pi_emergency_wifi_up
+}
+
+mirror_pi_ensure_emergency_wifi() {
+  if mirror_pi_try_nm_hotspot; then
+    mirror_pi_log "WiFi emergenza: NetworkManager Hotspot-Emergenza"
+    return 0
+  fi
+
+  if mirror_pi_recreate_nm_hotspot; then
+    mirror_pi_log "WiFi emergenza: NetworkManager Hotspot-Emergenza (ricreato)"
+    return 0
+  fi
+
+  if mirror_pi_try_hostapd_hotspot; then
     mirror_pi_log "WiFi emergenza: hostapd (kor35-mirror-emergency-wifi.service)"
     return 0
   fi
-  if ! mirror_pi_service_active kor35-mirror-emergency-wifi.service; then
-    if systemctl is-enabled kor35-mirror-emergency-wifi.service 2>/dev/null | grep -q enabled; then
-      systemctl start kor35-mirror-emergency-wifi.service || mirror_pi_warn "avvio WiFi emergenza (hostapd) fallito"
-    fi
-  fi
+
   if command -v nmcli >/dev/null 2>&1; then
     nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed no 2>/dev/null || true
   fi
@@ -153,6 +236,29 @@ mirror_pi_ensure_emergency_wifi() {
     ip link set "$EMERGENCY_WIFI_INTERFACE" up 2>/dev/null || true
     ip addr add "${EMERGENCY_WIFI_IP}/${EMERGENCY_WIFI_CIDR}" dev "$EMERGENCY_WIFI_INTERFACE" 2>/dev/null || true
   fi
+  return 1
+}
+
+mirror_pi_diagnose_emergency_wifi() {
+  echo ""
+  mirror_pi_log "=== Diagnostica WiFi emergenza ==="
+  echo "Interfaccia attesa: ${EMERGENCY_WIFI_INTERFACE:-wlan0} SSID=${EMERGENCY_WIFI_SSID:-?} IP=${EMERGENCY_WIFI_IP:-10.42.0.1}"
+  if command -v rfkill >/dev/null 2>&1; then
+    echo "--- rfkill ---"
+    rfkill list 2>/dev/null || true
+  fi
+  if command -v nmcli >/dev/null 2>&1; then
+    echo "--- nmcli device ---"
+    nmcli -f DEVICE,TYPE,STATE,CONNECTION device 2>/dev/null || true
+    echo "--- nmcli Hotspot-Emergenza ---"
+    nmcli con show Hotspot-Emergenza 2>/dev/null | head -40 || echo "(profilo assente)"
+  fi
+  echo "--- ip wlan ---"
+  ip -4 addr show dev "${EMERGENCY_WIFI_INTERFACE:-wlan0}" 2>/dev/null || true
+  echo "--- hostapd unit ---"
+  systemctl is-enabled kor35-mirror-emergency-wifi.service 2>/dev/null || true
+  systemctl is-active kor35-mirror-emergency-wifi.service 2>/dev/null || true
+  journalctl -u kor35-mirror-emergency-wifi.service -n 15 --no-pager 2>/dev/null || true
 }
 
 mirror_pi_emergency_wifi_up() {
