@@ -347,11 +347,12 @@ jobs:
             PREVIOUS_SHA="$(git rev-parse HEAD)"
             echo "PREVIOUS_SHA=${PREVIOUS_SHA}"
             if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
-              git checkout -B "${REF}" "origin/${REF}"
+              # reset prima del checkout: scarta modifiche locali senza git checkout -f
               git reset --hard "origin/${REF}"
+              git checkout -B "${REF}" "origin/${REF}"
             else
-              git checkout "${REF}"
               git reset --hard "${REF}"
+              git checkout -B "${REF}" "${REF}"
             fi
             DEPLOYED_SHA="$(git rev-parse HEAD)"
             # Cartelle firmware/app locali utili in repo (GitHub) ma non da tenere sul server.
@@ -444,7 +445,7 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-22}"
+          P="${PORT:-10022}"
           SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh $SSH_OPTS "${USER}@${HOST}" "test -f '${REMOTE_BASE}/config/docker/compose.base.yml'" || {
@@ -493,7 +494,7 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-22}"
+          P="${PORT:-10022}"
           SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
@@ -531,7 +532,7 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-22}"
+          P="${PORT:-10022}"
           SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
@@ -557,7 +558,7 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          P="${PORT:-22}"
+          P="${PORT:-10022}"
           SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh $SSH_OPTS "${USER}@${HOST}" "mkdir -p '${REMOTE_DIR}'"
@@ -597,11 +598,12 @@ jobs:
             cd "${MIRROR_REPO_PATH}"
             git fetch --all --tags
             if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
-              git checkout -B "${REF}" "origin/${REF}"
+              # reset prima del checkout: scarta modifiche locali (es. script copiati a mano sul Pi)
               git reset --hard "origin/${REF}"
+              git checkout -B "${REF}" "origin/${REF}"
             else
-              git checkout "${REF}"
               git reset --hard "${REF}"
+              git checkout -B "${REF}" "${REF}"
             fi
             MIRROR_BACKEND_DEPLOYED_SHA="$(git rev-parse HEAD)"
             # Cartelle firmware/app locali utili in repo (GitHub) ma non da tenere sul mirror.

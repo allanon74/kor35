@@ -1,0 +1,22 @@
+{
+  "section": {
+    "slug": "staff-operativita-tecnica",
+    "titolo": "Operatività tecnica",
+    "ordine": 900,
+    "intro": "Runbook per staff con permessi tecnici: comandi `make`, mirror Raspberry, sync e deploy.\n\nLe pagine sono generate dal repository (`docs/wiki/staff/`)."
+  },
+  "pages": [
+    {
+      "slug": "staff-make-comandi",
+      "titolo": "Comandi Make KOR35",
+      "source": "make-comandi.md",
+      "ordine": 10
+    },
+    {
+      "slug": "staff-mirror-pi",
+      "titolo": "Mirror Pi — procedure",
+      "source": "mirror-pi.md",
+      "ordine": 20
+    }
+  ]
+}

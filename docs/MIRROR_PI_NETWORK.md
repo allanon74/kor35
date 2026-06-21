@@ -36,7 +36,7 @@ make mirror-pi-check
 
 ### Aggiornare / configurare il Pi dal PC dev (Make)
 
-Dopo commit su `main`, dal PC con SSH configurato (`kor35-mirror`, porta **10022**):
+Dopo modifiche a `Makefile`, `docs/MIRROR_PI_NETWORK.md`, target mirror o runbook Docker/sync, aggiorna anche `docs/wiki/staff/*.md` e lancia `make wiki-staff-sync WIKI_STAFF_FORCE=1` (vedi `.cursor/rules/wiki-staff-ops.mdc`).
 
 ```bash
 # Diagnostica
@@ -58,6 +58,8 @@ make mirror-pi-configure MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0
 # Solo pull + install (senza cambiare modalità)
 make mirror-pi-update MIRROR_NETWORK_AUTO_BOOT=0
 ```
+
+Wiki staff: `make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1`
 
 Sul **Pi** (locale):
 

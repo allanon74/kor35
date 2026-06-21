@@ -16,6 +16,7 @@ services:
       EDGE_SYNC_STATE_FILE: /app/runtime-state/edge_sync_dev-office.json
     volumes:
       - ../../backend:/app
+      - ../../docs/wiki/staff:/app/wiki_staff_content:ro
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 
@@ -23,6 +24,7 @@ services:
     container_name: kor35_devoffice_daphne
     volumes:
       - ../../backend:/app
+      - ../../docs/wiki/staff:/app/wiki_staff_content:ro
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 
@@ -30,6 +32,7 @@ services:
     container_name: kor35_devoffice_pilot_tick
     volumes:
       - ../../backend:/app
+      - ../../docs/wiki/staff:/app/wiki_staff_content:ro
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 

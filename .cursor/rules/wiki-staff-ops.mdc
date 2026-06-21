@@ -1,0 +1,52 @@
+---
+description: Wiki staff operatività — sorgenti docs/wiki/staff e sync_wiki_staff_ops
+alwaysApply: true
+---
+
+# Wiki staff — Operatività tecnica
+
+Pagine Wiki **solo staff** generate da sorgenti versionate in `docs/wiki/staff/`.
+
+## Struttura
+
+| File | Contenuto Wiki |
+|------|----------------|
+| `manifest.json` | Sezione parent + elenco pagine (slug, titolo, ordine) |
+| `make-comandi.md` | Pagina «Comandi Make KOR35» (`staff-make-comandi`) |
+| `mirror-pi.md` | Pagina «Mirror Pi — procedure» (`staff-mirror-pi`) |
+
+Parent menu: slug `staff-operativita-tecnica`, titolo **Operatività tecnica**.
+
+## Quando aggiornare le sorgenti Wiki
+
+Dopo modifiche a uno o più di:
+
+- `Makefile` (target, help, variabili)
+- `docs/MIRROR_PI_NETWORK.md`
+- `docs/DOCKER_ENVIRONMENTS_RUNBOOK.md` (sezione mirror/make)
+- `scripts/mirror_*.sh`, `scripts/install_mirror_network.sh`
+- `.cursor/rules/mirror-pi-ops.mdc`, `config/docker/SYNC.md` (procedure staff)
+
+→ aggiorna i `.md` corrispondenti in `docs/wiki/staff/` nello **stesso commit/PR**.
+
+## Sync verso database
+
+```bash
+make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1
+```
+
+Comando Django: `python manage.py sync_wiki_staff_ops --force`
+
+- Senza `--force`: crea solo pagine mancanti; non sovrascrive contenuti già in DB.
+- Con `--force`: sovrascrive titolo/contenuto da repo (uso dopo edit dei `.md`).
+
+## Non fare
+
+- Non editare manualmente in admin il contenuto se la pagina è gestita da sync (viene sovrascritta al prossimo `--force`).
+- Non duplicare runbook lunghi solo in Wiki: la fonte di verità è `docs/wiki/staff/*.md` + `docs/*.md`.
+
+## Test
+
+```bash
+docker compose ... exec -T backend python manage.py test gestione_plot.tests_wiki_staff_ops --keepdb
+```

@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -83,6 +83,10 @@ help:
 	@echo ""
 	@echo "Backup:"
 	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
+	@echo ""
+	@echo "Wiki staff (sorgenti docs/wiki/staff/):"
+	@echo "  make wiki-staff-sync ENV=dev-home              # sync pagine staff nel DB"
+	@echo "  make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1  # sovrascrive contenuto esistente"
 
 setup:
 	./scripts/setup_wsl_pi_like.sh
@@ -260,6 +264,11 @@ mirror-pi-update:
 	  ./scripts/mirror_pi_remote.sh update \
 	  $(if $(filter 0,$(MIRROR_NETWORK_AUTO_BOOT)),--no-auto-mode,) \
 	  $(if $(filter 1,$(MIRROR_NETWORK_AUTO_BOOT)),--auto-mode,)
+
+WIKI_STAFF_FORCE ?= 0
+wiki-staff-sync:
+	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py sync_wiki_staff_ops $(if $(filter 1,$(WIKI_STAFF_FORCE)),--force,)
 
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh

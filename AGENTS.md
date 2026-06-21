@@ -10,6 +10,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 | `.cursor/rules/edge-sync.mdc` | Sync LWW, MTI, tombstone, checklist implementazione |
 | `.cursor/rules/prod-docker-ops.mdc` | SSH prod (`kor35-prod` + proxy corkscrew), compose, log, sync |
 | `.cursor/rules/mirror-pi-ops.mdc` | SSH mirror Pi (`kor35-mirror`, `kor35.ddns.net:10022`), rete router/evento, diagnostica |
+| `.cursor/rules/wiki-staff-ops.mdc` | Wiki staff da `docs/wiki/staff/` → `make wiki-staff-sync` |
 | `.cursor/rules/django-tests-docker.mdc` | Test Django in Docker: **sempre `--keepdb`** + `exec -T` |
 | `config/docker/SYNC.md` | Runbook Docker: ruoli nodo, `make sync-db`, media rsync |
 
@@ -22,7 +23,8 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 5. Media? → solo path in JSON; file con `make sync-media` / rsync.
 6. Comandi → Docker-first (`make … ENV=…`), vedi `Makefile` help.
 7. Mirror Pi rete/SSH da PC dev → `make mirror-pi-configure`, `make mirror-pi-check` (`.cursor/rules/mirror-pi-ops.mdc`).
-8. Test backend → container + `exec -T` + **`--keepdb`** (vedi `.cursor/rules/django-tests-docker.mdc`); senza `--keepdb` Django chiede `yes/no` e il comando si blocca.
+8. Wiki staff (make / mirror) → `docs/wiki/staff/` + `make wiki-staff-sync` (`.cursor/rules/wiki-staff-ops.mdc`).
+9. Test backend → container + `exec -T` + **`--keepdb`** (vedi `.cursor/rules/django-tests-docker.mdc`); senza `--keepdb` Django chiede `yes/no` e il comando si blocca.
 
 ## Profili ambiente
 
