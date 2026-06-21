@@ -18,7 +18,8 @@ make wiki-staff-sync ENV=dev-home
 make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1
 ```
 
-In produzione (dopo deploy):
+In produzione il deploy CI esegue già `sync_wiki_staff_ops --force` dopo migrate/collectstatic.
+Per un aggiornamento manuale:
 
 ```bash
 make wiki-staff-sync ENV=prod WIKI_STAFF_FORCE=1
@@ -26,6 +27,6 @@ make wiki-staff-sync ENV=prod WIKI_STAFF_FORCE=1
 
 ## Regola per modifiche
 
-Quando modifichi `Makefile`, `docs/MIRROR_PI_NETWORK.md`, target mirror o runbook Docker/sync, aggiorna anche i `.md` in questa cartella e lancia `make wiki-staff-sync`.
+Quando modifichi `Makefile`, `docs/MIRROR_PI_NETWORK.md`, target mirror o runbook Docker/sync, aggiorna anche i `.md` in questa cartella (il deploy CI sincronizza prod automaticamente).
 
 Vedi `.cursor/rules/wiki-staff-ops.mdc`.

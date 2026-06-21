@@ -7,6 +7,15 @@ from gestione_plot.wiki_staff_ops import sync_wiki_staff_ops
 
 
 class WikiStaffOpsSyncTests(TestCase):
+    def test_markdown_tables_convert_to_styled_html(self):
+        from gestione_plot.wiki_staff_ops import _markdown_to_html
+
+        md = "| Comando | Descrizione |\n|---------|-------------|\n| `make up` | Avvia |"
+        html = _markdown_to_html(md)
+        self.assertIn('<div class="wiki-table-scroll"><table data-table-style="grid">', html)
+        self.assertIn("<th>Comando</th>", html)
+        self.assertIn("<code>make up</code>", html)
+
     def test_sync_creates_staff_section_and_pages(self):
         results = sync_wiki_staff_ops(force=True)
         slugs = {r["slug"] for r in results}
@@ -22,6 +31,8 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertEqual(make_page.parent_id, parent.id)
         self.assertTrue(make_page.visibile_solo_staff)
         self.assertIn("make mirror-pi-check", make_page.contenuto)
+        self.assertIn('<table data-table-style="grid">', make_page.contenuto)
+        self.assertIn("<th>Comando</th>", make_page.contenuto)
 
         mirror_page = PaginaRegolamento.objects.get(slug="staff-mirror-pi")
         self.assertEqual(mirror_page.parent_id, parent.id)

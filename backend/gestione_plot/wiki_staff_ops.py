@@ -12,6 +12,7 @@ from pathlib import Path
 
 import mistune
 from django.conf import settings
+from mistune.plugins.table import table
 
 from gestione_plot.models import PaginaRegolamento
 
@@ -33,11 +34,19 @@ WIKI_STAFF_DIR = _resolve_wiki_staff_dir()
 MANIFEST_FILE = WIKI_STAFF_DIR / "manifest.json"
 
 
-_markdown = mistune.create_markdown()
+_markdown = mistune.create_markdown(plugins=[table])
+
+
+def _enrich_wiki_staff_html(html: str) -> str:
+    """Applica classi/stili coerenti con l'editor Wiki (tabelle grid, scroll mobile)."""
+    if "<table>" not in html:
+        return html
+    html = html.replace("<table>", '<div class="wiki-table-scroll"><table data-table-style="grid">')
+    return html.replace("</table>", "</table></div>")
 
 
 def _markdown_to_html(md_text: str) -> str:
-    return _markdown(md_text.strip())
+    return _enrich_wiki_staff_html(_markdown(md_text.strip()))
 
 
 def _load_manifest() -> dict:

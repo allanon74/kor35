@@ -31,6 +31,10 @@ Dopo modifiche a uno o più di:
 
 ## Sync verso database
 
+**Produzione:** il workflow `.github/workflows/deploy.yml` lancia `sync_wiki_staff_ops --force` a ogni deploy su master (dopo migrate/collectstatic). Il mirror riceve le pagine via edge sync — non serve `wiki-staff-sync` sul Pi.
+
+**Locale / manuale:**
+
 ```bash
 make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1
 ```

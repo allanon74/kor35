@@ -108,6 +108,14 @@ export const RICH_TEXT_SHARED_STYLES = `
   }
 
   /* Tabelle: preset griglia (header + celle + righe alternate) */
+  .wiki-content .wiki-table-scroll {
+    overflow-x: auto;
+    margin: 1em 0;
+    -webkit-overflow-scrolling: touch;
+  }
+  .wiki-content .wiki-table-scroll table[data-table-style="grid"] {
+    margin: 0;
+  }
   .ql-editor-view table[data-table-style="grid"],
   .wiki-content table[data-table-style="grid"] {
     width: 100%;
