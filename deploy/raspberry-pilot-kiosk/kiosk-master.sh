@@ -25,6 +25,9 @@ KIOSK_STATUS_MODE="${KIOSK_STATUS_MODE:-1920x1200}"
 KIOSK_CONTROL_MODE="${KIOSK_CONTROL_MODE:-1920x440}"
 KIOSK_SWAP_SCREENS="${KIOSK_SWAP_SCREENS:-0}"
 KIOSK_TOUCH_DEVICE="${KIOSK_TOUCH_DEVICE:-ILITEK ILITEK-TOUCH}"
+# Output X11 del touchscreen (barra control). Vuoto = stesso di CONTROL_XRANDR_OUT.
+KIOSK_TOUCH_OUTPUT="${KIOSK_TOUCH_OUTPUT:-}"
+KIOSK_TOUCH_XINPUT_ID="${KIOSK_TOUCH_XINPUT_ID:-}"
 
 STATUS_PROFILE="${KIOSK_STATUS_PROFILE:-${HOME}/.config/kiosk-status}"
 CONTROL_PROFILE="${KIOSK_CONTROL_PROFILE:-${HOME}/.config/kiosk-control}"
@@ -133,6 +136,9 @@ persist_base_url() {
     echo "KIOSK_CONTROL_MODE=${KIOSK_CONTROL_MODE}"
     echo "KIOSK_DETECT_OUTPUTS=${KIOSK_DETECT_OUTPUTS}"
     echo "KIOSK_SWAP_SCREENS=${KIOSK_SWAP_SCREENS}"
+    echo "KIOSK_TOUCH_DEVICE=${KIOSK_TOUCH_DEVICE}"
+    [ -n "${KIOSK_TOUCH_OUTPUT:-}" ] && echo "KIOSK_TOUCH_OUTPUT=${KIOSK_TOUCH_OUTPUT}"
+    [ -n "${KIOSK_TOUCH_XINPUT_ID:-}" ] && echo "KIOSK_TOUCH_XINPUT_ID=${KIOSK_TOUCH_XINPUT_ID}"
     [ -n "${PILOT_FALLBACK_BASE_URL:-}" ] && echo "PILOT_FALLBACK_BASE_URL=${PILOT_FALLBACK_BASE_URL}"
   } >"$KIOSK_ENV"
   chmod 644 "$KIOSK_ENV"
@@ -299,6 +305,8 @@ configure_displays_side_by_side() {
 
   if [ "$KIOSK_DETECT_OUTPUTS" = "auto" ]; then
     detect_outputs_by_resolution || true
+  elif [ "$KIOSK_DETECT_OUTPUTS" = "fixed" ]; then
+    log "Output fissi da config: STATUS=${KIOSK_STATUS_OUTPUT} CONTROL=${KIOSK_CONTROL_OUTPUT}"
   fi
   apply_screen_swap_if_requested
 
@@ -364,15 +372,68 @@ configure_displays() {
 }
 
 map_touch_to_control() {
-  local dev_id=""
+  local target_out dev_id pattern
   if ! command -v xinput >/dev/null 2>&1; then
+    warn "xinput non installato: touch non mappato."
     return 0
   fi
-  dev_id="$(xinput list --id-only "$KIOSK_TOUCH_DEVICE" 2>/dev/null || true)"
-  if [ -n "$dev_id" ] && [ -n "${CONTROL_XRANDR_OUT:-}" ]; then
-    xinput map-to-output "$dev_id" "$CONTROL_XRANDR_OUT" 2>/dev/null || true
-    log "Touch ${KIOSK_TOUCH_DEVICE} (id ${dev_id}) → ${CONTROL_XRANDR_OUT}"
+
+  target_out="${KIOSK_TOUCH_OUTPUT:-${CONTROL_XRANDR_OUT:-${KIOSK_CONTROL_OUTPUT:-}}}"
+  if [ -z "$target_out" ]; then
+    warn "Output touch non determinato (CONTROL_XRANDR_OUT vuoto)."
+    return 0
   fi
+
+  map_one_touch() {
+    local id="$1"
+    [ -z "$id" ] && return 0
+    xinput enable "$id" 2>/dev/null || true
+    if xinput map-to-output "$id" "$target_out" 2>/dev/null; then
+      log "Touch id ${id} → ${target_out}"
+      return 0
+    fi
+    warn "xinput map-to-output fallito per id ${id} → ${target_out}"
+    return 1
+  }
+
+  if [ -n "${KIOSK_TOUCH_XINPUT_ID:-}" ]; then
+    map_one_touch "$KIOSK_TOUCH_XINPUT_ID"
+    return 0
+  fi
+
+  # Nome esatto (es. "ILITEK ILITEK-TOUCH")
+  dev_id="$(xinput list --id-only "$KIOSK_TOUCH_DEVICE" 2>/dev/null || true)"
+  if [ -n "$dev_id" ]; then
+    map_one_touch "$dev_id"
+    return 0
+  fi
+
+  # Ricerca fuzzy: ILITEK, Touchscreen, pen/touch pointer
+  while IFS= read -r dev_id; do
+    [ -n "$dev_id" ] && map_one_touch "$dev_id"
+  done < <(
+    xinput list | awk -F'id=' '
+      /[Ii][Ll]itek|[Tt]ouch|[Pp]en/ && !/[Kk]eyboard/ {
+        gsub(/[^0-9].*/, "", $2)
+        if ($2 != "") print $2
+      }
+    '
+  )
+
+  if [ -z "${dev_id:-}" ] && ! xinput list | grep -qiE 'ilitek|touch'; then
+    warn "Nessun dispositivo touch trovato (KIOSK_TOUCH_DEVICE=${KIOSK_TOUCH_DEVICE})."
+    warn "Elenco: xinput list | grep -i touch"
+  fi
+}
+
+touch_mapping_daemon() {
+  # xrandr/Chromium possono resettare la mappa touch al boot.
+  (
+    while true; do
+      sleep 45
+      map_touch_to_control
+    done
+  ) &
 }
 
 disable_power_management() {
@@ -461,7 +522,11 @@ main() {
   launch_chromium status "$status_url" "$sx" "$sy" "$sw" "$sh" "$STATUS_PROFILE"
   sleep 3
   launch_chromium control "$control_url" "$cx" "$cy" "$cw" "$ch" "$CONTROL_PROFILE"
+
   map_touch_to_control
+  sleep 2
+  map_touch_to_control
+  touch_mapping_daemon
 
   wait
 }

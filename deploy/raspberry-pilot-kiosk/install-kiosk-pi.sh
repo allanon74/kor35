@@ -37,8 +37,8 @@ done
 
 apt-get update
 apt-get install -y \
-  xserver-xorg x11-xserver-utils xinit openbox \
-  chromium-browser curl unclutter zenity wmctrl xinput
+  xserver-xorg x11-xserver-utils xinit openbox xinput \
+  chromium-browser curl unclutter zenity wmctrl
 
 install -d /etc/kor35 /var/lib/kor35 /usr/local/bin
 install -m 0755 "${SCRIPT_DIR}/kiosk-master.sh" /usr/local/bin/kiosk-master.sh
