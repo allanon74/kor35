@@ -1038,9 +1038,11 @@ def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSess
     cfg = _stato_allerta_config(sessione.defcon)
     if cfg is not None:
         chance = float(cfg.probabilita_evento_per_tick or 0.0)
-        if chance <= 0:
-            return None
-        if random.random() > chance:
+        if chance > 0:
+            if random.random() > chance:
+                return None
+        elif sessione.next_event_at and now < sessione.next_event_at:
+            # prob=0: niente sorteggio per tick, rispetta l'intervallo programmato
             return None
     elif sessione.next_event_at and now < sessione.next_event_at:
         return None

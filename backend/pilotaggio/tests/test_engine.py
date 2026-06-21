@@ -11,9 +11,12 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
+from unittest.mock import patch
+
 from pilotaggio.engine import (
     codice_valido_3char,
     durata_viaggio_secondi,
+    genera_evento_se_dovuto,
     matcha_pattern,
     processa_codice,
     secondi_evento_per_defcon,
@@ -38,6 +41,7 @@ from pilotaggio.models import (
     SequenzaVolo,
     SessioneVolo,
     SottosistemaNave,
+    StatoAllertaPilot,
     StatoSottosistemaSessione,
 )
 
@@ -331,6 +335,34 @@ class ComandoCriticoGlobaleTests(TestCase):
         self.assertEqual(ris.esito, "no_evento")
         s.refresh_from_db()
         self.assertNotEqual(s.stato, SESSIONE_STATO_CRASHED)
+
+
+class GenerazioneEventiTests(TestCase):
+    def test_defcon0_puo_generare_evento(self):
+        """A DEFCON 0 la probabilità per tick deve essere > 0 (non deadlock silenzioso)."""
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_VOLO,
+            defcon=0,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        EventoNave.objects.create(
+            nome="Test spawn",
+            descrizione="Evento di test",
+            codice_soluzione_esatta="A12",
+            durata_base_secondi=20,
+            attivo=True,
+        )
+        row = StatoAllertaPilot.objects.filter(livello=0).first()
+        self.assertIsNotNone(row)
+        self.assertGreater(float(row.probabilita_evento_per_tick or 0.0), 0.0)
+
+        with patch("pilotaggio.engine.random.random", return_value=0.0):
+            istanza = genera_evento_se_dovuto(sessione)
+        self.assertIsNotNone(istanza)
+        self.assertEqual(istanza.esito, EVENTO_ESITO_PENDING)
 
 
 class TimeoutEventoTests(TestCase):
