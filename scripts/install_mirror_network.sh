@@ -94,17 +94,29 @@ fi
 systemctl disable --now dnsmasq 2>/dev/null || true
 
 for unit in kor35-mirror-dhcp-event.service kor35-mirror-emergency-wifi.service kor35-mirror-network-mode.service; do
-  cp "$ROOT_DIR/config/systemd/$unit" "/etc/systemd/system/$unit"
-  sed -i "s|/home/pi/kor35-replica|${KOR35_REPO_PATH}|g" "/etc/systemd/system/$unit"
-  sed -i "s|wlan0|${EMERGENCY_WIFI_INTERFACE}|g" "/etc/systemd/system/kor35-mirror-emergency-wifi.service"
-  sed -i "s|10.42.0.1/24|${EMERGENCY_WIFI_IP}/${EMERGENCY_WIFI_CIDR}|g" "/etc/systemd/system/kor35-mirror-emergency-wifi.service"
+  src="$ROOT_DIR/config/systemd/$unit"
+  dst="/etc/systemd/system/$unit"
+  if [ ! -f "$src" ]; then
+    mirror_pi_err "unit mancante nel repo: $src"
+    exit 1
+  fi
+  cp "$src" "$dst"
+  sed -i "s|/home/pi/kor35-replica|${KOR35_REPO_PATH}|g" "$dst"
 done
 
+if [ -f /etc/systemd/system/kor35-mirror-emergency-wifi.service ]; then
+  sed -i "s|wlan0|${EMERGENCY_WIFI_INTERFACE}|g" /etc/systemd/system/kor35-mirror-emergency-wifi.service
+  sed -i "s|10.42.0.1/24|${EMERGENCY_WIFI_IP}/${EMERGENCY_WIFI_CIDR}|g" /etc/systemd/system/kor35-mirror-emergency-wifi.service
+fi
+
 systemctl daemon-reload
-systemctl enable --now kor35-mirror-emergency-wifi.service
 
 if [ "$INSTALL_AUTO_MODE" = "1" ]; then
+  systemctl enable --now kor35-mirror-emergency-wifi.service
   systemctl enable kor35-mirror-network-mode.service
+else
+  systemctl disable --now kor35-mirror-emergency-wifi.service 2>/dev/null || true
+  mirror_pi_log "WiFi emergenza: lasciata a NetworkManager (Hotspot-Emergenza). Boot auto modalità rete disabilitato."
 fi
 
 # ddns.conf per kor35.ddns.net (HTTPS a casa) se mancante

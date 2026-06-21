@@ -1,15 +1,33 @@
-# Esempio ~/.ssh/config per accesso mirror Pi da PC sviluppatore / Cursor.
-# Copia il blocco Host in ~/.ssh/config e adatta IdentityFile.
+# Esempio ~/.ssh/config — accesso mirror Pi da PC sviluppatore / Cursor.
+# Copia il blocco Host in ~/.ssh/config (non committare chiavi private nel repo).
 #
-# Test:
-#   ssh kor35-mirror 'hostname'
-#   ./scripts/mirror_ssh_check.sh
+# Prerequisito sul Pi: contenuto di id_docker.pub (e opz. kor35-actions.pub)
+# in /home/pi/.ssh/authorized_keys
+#
+# Setup:
+#   ssh-keyscan -p 10022 -H kor35.ddns.net >> ~/.ssh/known_hosts
+#   ssh kor35-mirror 'hostname'          # atteso: kor35
+#   make mirror-ssh-check                # dalla root repo
 
 Host kor35-mirror
   HostName kor35.ddns.net
   User pi
   Port 10022
-  IdentityFile ~/.ssh/id_ed25519
+  IdentityFile ~/.ssh/id_docker
   IdentitiesOnly yes
   ServerAliveInterval 60
   ServerAliveCountMax 3
+
+# LAN di casa (porta 22 locale, senza NAT):
+# Host kor35-mirror-lan
+#   HostName 192.168.1.200
+#   User pi
+#   Port 22
+#   IdentityFile ~/.ssh/id_docker
+
+# WiFi emergenza (solo staff, in campo):
+# Host kor35-mirror-emergency
+#   HostName 10.42.0.1
+#   User pi
+#   Port 22
+#   IdentityFile ~/.ssh/id_docker

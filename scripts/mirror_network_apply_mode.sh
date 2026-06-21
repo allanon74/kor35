@@ -82,6 +82,7 @@ apply_event_lan_ip() {
         connection.interface-name "$LAN_IFACE"
     fi
     nmcli con down kor35-mirror-router 2>/dev/null || true
+    nmcli con down netplan-eth0 2>/dev/null || true
     nmcli con up kor35-mirror-event
   else
     dhclient -r "$LAN_IFACE" 2>/dev/null || true
@@ -97,13 +98,23 @@ apply_router_dhcp() {
 
   if command -v nmcli >/dev/null 2>&1; then
     nmcli dev set "$LAN_IFACE" managed yes 2>/dev/null || true
+    nmcli con down kor35-mirror-event 2>/dev/null || true
+    # Pi con netplan: rimuovi IP statico evento (es. 192.168.100.10) e usa solo DHCP router.
+    if nmcli -t -f NAME con show | grep -qx 'netplan-eth0'; then
+      nmcli con modify netplan-eth0 \
+        ipv4.method auto ipv4.addresses "" \
+        connection.interface-name "$LAN_IFACE" \
+        connection.autoconnect yes
+      nmcli con down kor35-mirror-router 2>/dev/null || true
+      nmcli con up netplan-eth0
+      return 0
+    fi
     if ! nmcli -t -f NAME con show | grep -qx 'kor35-mirror-router'; then
       nmcli con add type ethernet ifname "$LAN_IFACE" con-name kor35-mirror-router \
         ipv4.method auto ipv6.method ignore autoconnect yes
     else
       nmcli con modify kor35-mirror-router ipv4.method auto connection.interface-name "$LAN_IFACE"
     fi
-    nmcli con down kor35-mirror-event 2>/dev/null || true
     nmcli con up kor35-mirror-router
   else
     ip addr flush dev "$LAN_IFACE" 2>/dev/null || true
@@ -148,8 +159,20 @@ disable_nginx_event_vhost() {
 }
 
 ensure_emergency_wifi() {
+  if command -v nmcli >/dev/null 2>&1; then
+    if nmcli -t -f NAME con show 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
+      nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed yes 2>/dev/null || true
+      if ! nmcli -t -f NAME con show --active 2>/dev/null | grep -qx 'Hotspot-Emergenza'; then
+        nmcli con up Hotspot-Emergenza 2>/dev/null || mirror_pi_warn "riavvio Hotspot-Emergenza NM fallito"
+      fi
+      mirror_pi_log "WiFi emergenza: NetworkManager Hotspot-Emergenza"
+      return 0
+    fi
+  fi
   if ! mirror_pi_service_active kor35-mirror-emergency-wifi.service; then
-    systemctl start kor35-mirror-emergency-wifi.service || mirror_pi_warn "avvio WiFi emergenza fallito"
+    if systemctl is-enabled kor35-mirror-emergency-wifi.service 2>/dev/null | grep -q enabled; then
+      systemctl start kor35-mirror-emergency-wifi.service || mirror_pi_warn "avvio WiFi emergenza (hostapd) fallito"
+    fi
   fi
   if command -v nmcli >/dev/null 2>&1; then
     nmcli dev set "$EMERGENCY_WIFI_INTERFACE" managed no 2>/dev/null || true

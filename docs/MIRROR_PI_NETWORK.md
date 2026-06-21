@@ -2,6 +2,79 @@
 
 Documentazione topologia rete sul Raspberry **mirror** (`ENV=mirror`, `compose.mirror.yml` + `omada-controller`).
 
+Runbook SSH e comandi per agenti Cursor: **`.cursor/rules/mirror-pi-ops.mdc`**.
+
+## Accesso SSH (Cursor / PC dev / CI)
+
+| | Produzione (master) | Mirror (Pi) |
+|---|---------------------|-------------|
+| Alias tipico | `kor35-prod` | `kor35-mirror` |
+| Host | `www.kor35.it` | `kor35.ddns.net` |
+| Porta SSH | `22` (+ proxy corkscrew in ufficio) | **`10022`** (NAT → Pi:22) |
+| Utente | `deploy` | `pi` |
+| Path repo | `/srv/kor35` | `/home/pi/kor35-replica` |
+| Chiave PC tipica | `~/.ssh/id_docker` | `~/.ssh/id_docker` |
+
+### Setup una tantum
+
+1. Sul Pi, in `/home/pi/.ssh/authorized_keys`, aggiungi la pubkey del PC (`~/.ssh/id_docker.pub`).
+2. Sul PC, copia `config/mirror/ssh-config.example` in `~/.ssh/config`.
+3. Verifica:
+
+```bash
+ssh-keyscan -p 10022 -H kor35.ddns.net >> ~/.ssh/known_hosts
+ssh kor35-mirror 'hostname'                    # → kor35
+cd /path/to/kor35 && make mirror-ssh-check     # diagnostica remota
+```
+
+### Diagnostica remota (da PC, senza essere sulla LAN)
+
+```bash
+make mirror-pi-check
+# equivalente: make mirror-ssh-check
+```
+
+### Aggiornare / configurare il Pi dal PC dev (Make)
+
+Dopo commit su `main`, dal PC con SSH configurato (`kor35-mirror`, porta **10022**):
+
+```bash
+# Diagnostica
+make mirror-pi-check
+
+# Solo git pull sul Pi
+make mirror-pi-pull
+
+# Installa/aggiorna unit e template rete (preserva hotspot NetworkManager)
+make mirror-pi-install-network MIRROR_NETWORK_AUTO_BOOT=0
+
+# Cambia modalità rete
+make mirror-pi-network-mode MIRROR_NETWORK_MODE=router
+make mirror-pi-network-mode MIRROR_NETWORK_MODE=event
+
+# Flusso completo: pull + install + applica modalità + check
+make mirror-pi-configure MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0
+
+# Solo pull + install (senza cambiare modalità)
+make mirror-pi-update MIRROR_NETWORK_AUTO_BOOT=0
+```
+
+Sul **Pi** (locale):
+
+```bash
+make mirror-network-check ENV=mirror
+sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0
+```
+
+### Accesso senza internet / senza NAT
+
+| Via | Endpoint |
+|-----|----------|
+| WiFi emergenza | SSID `Pi_Emergenza` (NM: `Hotspot-Emergenza`) → `ssh pi@10.42.0.1` |
+| LAN router | `ssh pi@192.168.1.200` (porta 22) |
+
+**Non** committare chiavi private nel repo. Template SSH: `config/mirror/ssh-config.example`.
+
 ## Due modalità operative
 
 | Modalità | Quando | LAN `eth0` | DHCP `192.168.100.0/24` | `www.kor35.it` |
@@ -16,77 +89,44 @@ In entrambe le modalità resta attiva la WiFi **`Pi_emergenza`** (`wlan0`, `10.4
 ```bash
 cd /home/pi/kor35-replica
 
-# Prima installazione (una tantum)
-sudo cp config/mirror/network/mirror-network.env.example /etc/kor35/mirror-network.env
-sudo nano /etc/kor35/mirror-network.env   # EMERGENCY_WIFI_PASSPHRASE
-sudo ./scripts/install_mirror_network.sh
+# Configurazione completa (install + modalità)
+sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0
 
-# Stato attuale
-./scripts/mirror_network_check.sh
-
-# Switch manuale (ora: collegato al router)
-sudo ./scripts/mirror_network_apply_mode.sh --mode router
-
-# Prima dell'evento offline
-sudo ./scripts/mirror_network_apply_mode.sh --mode event
-
-# Boot automatico: internet OK → router, altrimenti event
-sudo ./scripts/mirror_network_apply_mode.sh --mode auto
+# Oppure passi separati:
+sudo make mirror-install-network MIRROR_NETWORK_AUTO_BOOT=0
+make mirror-network-check ENV=mirror
+sudo make mirror-network-mode MIRROR_NETWORK_MODE=router
+sudo make mirror-network-mode MIRROR_NETWORK_MODE=event
+sudo make mirror-network-mode MIRROR_NETWORK_MODE=auto
 ```
 
-Equivalenti Make (sul Pi, dalla root repo):
+Equivalenti script diretti:
 
 ```bash
-make mirror-network-check ENV=mirror
-sudo make mirror-network-mode MODE=router
-sudo make mirror-network-mode MODE=event
-sudo make mirror-install-network
+sudo ./scripts/mirror_configure_network.sh --mode router --no-auto-mode
+```
+
+Da **PC dev** (SSH): vedi sezione «Aggiornare / configurare il Pi» sopra (`make mirror-pi-configure`, ecc.).
+
+Prima installazione manuale env (una tantum sul Pi):
+
+```bash
+sudo mkdir -p /etc/kor35
+sudo cp config/mirror/network/mirror-network.env.example /etc/kor35/mirror-network.env
+sudo nano /etc/kor35/mirror-network.env   # EMERGENCY_WIFI_PASSPHRASE se usi hostapd systemd
 ```
 
 Unit systemd installate da `install_mirror_network.sh`:
 
-- `kor35-mirror-emergency-wifi.service` — hotspot `Pi_emergenza` (sempre)
+- `kor35-mirror-emergency-wifi.service` — hotspot `Pi_emergenza` (alternativa a NM `Hotspot-Emergenza`)
 - `kor35-mirror-dhcp-event.service` — dnsmasq solo in modalità event
-- `kor35-mirror-network-mode.service` — `--mode auto` al boot
-
-## Accesso SSH per diagnostica remota (Cursor / PC dev)
-
-Gli agenti Cursor **non** raggiungono il Pi senza SSH configurato sul PC. SSH pubblico mirror: **`kor35.ddns.net:10022`** (NAT router → Pi:22).
-
-1. Autorizza la chiave pubblica del PC su `~/.ssh/authorized_keys` dell’utente `pi`.
-2. Aggiungi in `~/.ssh/config` del PC (template: `config/mirror/ssh-config.example`):
-
-```sshconfig
-Host kor35-mirror
-  HostName kor35.ddns.net
-  User pi
-  Port 10022
-  IdentityFile ~/.ssh/id_ed25519
-  ServerAliveInterval 60
-```
-
-In alternativa sulla LAN di casa: SSH diretto all’IP locale del Pi (porta 22).
-
-3. Dal PC (o da Cursor):
-
-```bash
-cd /path/to/kor35
-./scripts/mirror_ssh_check.sh
-# oppure
-make mirror-ssh-check
-```
-
-In alternativa, connesso a `Pi_emergenza` (`10.42.0.1`):
-
-```bash
-ssh pi@10.42.0.1 'cd /home/pi/kor35-replica && ./scripts/mirror_network_check.sh'
-```
+- `kor35-mirror-network-mode.service` — `--mode auto` al boot (opzionale; skip con `--no-auto-mode`)
 
 ## Due reti distinte (non confonderle)
 
 | Rete | Interfaccia tipica | SSID | IP gateway | Uso |
 |------|-------------------|------|------------|-----|
-| **Emergenza** (on-board Pi) | `wlan0` | `Pi_emergenza` | `10.42.0.1/24` | Accesso staff al Pi **senza** infrastruttura evento (SSH, Omada UI, debug). **Non** per giocatori né console pilota. |
+| **Emergenza** (on-board Pi) | `wlan0` | `Pi_Emergenza` / `Pi_emergenza` | `10.42.0.1/24` | Accesso staff al Pi **senza** infrastruttura evento (SSH, Omada UI, debug). **Non** per giocatori né console pilota. |
 | **Evento** (Omada + antenne EAP) | LAN cablata Pi ↔ switch/PoE EAP; SSID broadcast dalle EAP | **`kor35-larp`** (Site Omada) | Gateway/DHCP del **Site** Omada (IP LAN del Pi su `eth0` / `en*`, **non** `10.42.0.1`) | Smartphone giocatori, Pi kiosk pilota, smartwatch. |
 
 Stack KOR35 (nginx `:80`/`:443`) risponde su **tutte** le interfacce del Pi; i client evento devono usare l’**IP della LAN Omada**, non `10.42.0.1`.
@@ -151,6 +191,85 @@ Dopo l'evento, tornato online:
 sudo ./scripts/mirror_network_apply_mode.sh --mode router
 sudo systemctl start kor35-mirror-resync.service
 ```
+
+## Test disconnessione (router → evento)
+
+### Stato atteso in modalità router (a casa)
+
+- `eth0`: solo IP DHCP router (es. `192.168.1.200/24`)
+- `kor35-mirror-dhcp-event.service`: **spento**
+- Sync verso master: **OK**
+- WiFi staff: `Pi_Emergenza` su `10.42.0.1` (NetworkManager `Hotspot-Emergenza`)
+
+Verifica rapida:
+
+```bash
+cd /home/pi/kor35-replica
+./scripts/mirror_network_check.sh
+# oppure da PC: make mirror-ssh-check
+```
+
+### Procedura di test offline (consigliata)
+
+**Attenzione:** passando a `event`, `eth0` diventa `192.168.100.1` — la sessione SSH via `kor35.ddns.net` può cadere. Per il test tieni aperta una seconda sessione su **`Pi_Emergenza`** (`ssh pi@10.42.0.1`) o usa monitor/tastiera sul Pi.
+
+1. **Prepara** (da SSH o locale):
+
+```bash
+cd /home/pi/kor35-replica
+./scripts/mirror_network_check.sh    # modalità router, internet OK
+```
+
+2. **Simula la disconnessione WAN** (scegli una opzione):
+   - **Reale:** stacca il cavo `eth0` dal router (resta collegato solo allo switch PoE Omada per le EAP), oppure
+   - **A casa (lab):** lascia il cavo ma applica comunque `event` solo se `eth0` va verso switch isolato senza DHCP router sulla stessa VLAN.
+
+3. **Attiva modalità evento:**
+
+```bash
+sudo ./scripts/mirror_network_apply_mode.sh --mode event
+./scripts/mirror_network_check.sh
+```
+
+Atteso:
+
+| Controllo | Risultato |
+|-----------|-----------|
+| Modalità registrata | `event` |
+| `eth0` | `192.168.100.1/24` |
+| DHCP evento | **ATTIVO** (`kor35-mirror-dhcp-event.service`) |
+| Nginx vhost evento | attivo (`mirror-event-local.conf`) |
+| Internet master | NON RAGGIUNGIBILE (normale) |
+| Stack Docker + Omada | OK |
+
+4. **Test client** (telefono o laptop sulla rete evento / `kor35-larp`):
+
+```bash
+# Sul client: DNS e HTTP (dopo associazione WiFi kor35-larp)
+ping -c 2 192.168.100.1
+curl -fsS http://www.kor35.it/api/healthz/
+```
+
+Se `www.kor35.it` non risolve, verifica che il client usi DNS `192.168.100.1` (dhcp da dnsmasq).
+
+5. **Omada:** UI su `http://192.168.100.1:8088` — Controller IP = `192.168.100.1`, EAP Connected, WLAN `kor35-larp` enabled.
+
+6. **Ripristino router** (cavo WAN/router riattaccato):
+
+```bash
+sudo ./scripts/mirror_network_apply_mode.sh --mode router
+./scripts/mirror_network_check.sh
+sudo systemctl start kor35-mirror-resync.service   # opzionale: riallinea DB/media post-evento
+```
+
+### Test automatico al boot (opzionale, dopo test manuale OK)
+
+```bash
+sudo ./scripts/install_mirror_network.sh --no-auto-mode   # già fatto se NM gestisce hotspot
+sudo systemctl enable kor35-mirror-network-mode.service # --mode auto a ogni boot
+```
+
+Con `auto`: internet raggiungibile → `router`; altrimenti → `event`.
 
 ## Troubleshooting: `kor35-larp` visibile ma non associa
 

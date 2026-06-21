@@ -1,0 +1,144 @@
+---
+description: SSH mirror Raspberry Pi (kor35.ddns.net:10022), diagnostica rete e comandi remoti per agenti Cursor
+alwaysApply: true
+---
+
+# Operazioni mirror Pi (Raspberry, ENV=mirror)
+
+## Accesso SSH da Cursor / PC sviluppatore
+
+Gli agenti eseguono comandi sulla **macchina locale** (WSL). Per il mirror usare SSH verso il Pi.
+
+| Parametro | Valore |
+|-----------|--------|
+| Host pubblico | `kor35.ddns.net` |
+| Porta SSH pubblica | **`10022`** (NAT router → Pi:22) |
+| Utente | `pi` |
+| Repo sul Pi | `/home/pi/kor35-replica` |
+| Compose project | `kor35-replica` |
+| Env backend | `/home/pi/kor35-replica/backend/.env.mirror` |
+
+### Setup chiavi (una tantum sul PC dev)
+
+1. Chiave privata sul PC: `~/.ssh/id_docker` (o altra; **mai** nel repo git).
+2. Chiave pubblica in `/home/pi/.ssh/authorized_keys` sul Pi (`id_docker.pub`, eventualmente anche `kor35-actions.pub` per CI).
+3. Alias in `~/.ssh/config` (template: `config/mirror/ssh-config.example`):
+
+```sshconfig
+Host kor35-mirror
+  HostName kor35.ddns.net
+  User pi
+  Port 10022
+  IdentityFile ~/.ssh/id_docker
+  IdentitiesOnly yes
+  ServerAliveInterval 60
+  ServerAliveCountMax 3
+```
+
+```bash
+ssh-keyscan -p 10022 -H kor35.ddns.net >> ~/.ssh/known_hosts
+ssh kor35-mirror 'hostname'   # atteso: kor35
+```
+
+### Diagnostica e configurazione via Make (preferita per agenti)
+
+Dal PC dev, nella root del repo (dopo commit su `main`):
+
+```bash
+make mirror-pi-check                                              # diagnostica
+make mirror-pi-pull                                               # git pull sul Pi
+make mirror-pi-install-network MIRROR_NETWORK_AUTO_BOOT=0         # install/aggiorna unit
+make mirror-pi-network-mode MIRROR_NETWORK_MODE=router            # solo cambio modalità
+make mirror-pi-configure MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0  # pull+install+mode+check
+make mirror-pi-update MIRROR_NETWORK_AUTO_BOOT=0                  # pull+install
+```
+
+Sul Pi (locale): `sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0`
+
+Script sottostante remoto: `scripts/mirror_pi_remote.sh`. Variabili: `MIRROR_SSH_IDENTITY`, `MIRROR_PI_GIT_REF` (default `main`).
+
+### Comandi remoti SSH manuali (se serve)
+
+Preferire `-o BatchMode=yes` (non interattivo):
+
+```bash
+ssh -o BatchMode=yes kor35-mirror 'cd /home/pi/kor35-replica && make status ENV=mirror'
+```
+
+```bash
+ssh -o BatchMode=yes kor35-mirror 'cd /home/pi/kor35-replica/config/docker && \
+  COMPOSE_PROJECT_NAME=kor35-replica \
+  KOR35_BACKEND_ENV_FILE=/home/pi/kor35-replica/backend/.env.mirror \
+  docker compose -f compose.base.yml -f compose.mirror.yml ps'
+```
+
+```bash
+ssh -o BatchMode=yes kor35-mirror 'cd /home/pi/kor35-replica && ./scripts/mirror_network_check.sh'
+```
+
+Sync / log systemd sul Pi:
+
+```bash
+ssh -o BatchMode=yes kor35-mirror 'systemctl list-timers | grep kor35-mirror'
+ssh -o BatchMode=yes kor35-mirror 'journalctl -u kor35-mirror-db-sync.service -n 80 --no-pager'
+```
+
+### Accesso alternativi
+
+| Via | Comando | Note |
+|-----|---------|------|
+| LAN casa | `ssh pi@192.168.1.200` | IP router; porta 22 locale |
+| WiFi emergenza | `ssh pi@10.42.0.1` | SSID `Pi_Emergenza` / NM `Hotspot-Emergenza` |
+
+### Diagnostica se SSH non parte
+
+| Sintomo | Causa probabile |
+|--------|------------------|
+| Timeout porta 22 | Usare porta **10022**, non 22 |
+| `Permission denied (publickey)` | Pubkey non in `authorized_keys` del Pi |
+| `Host key verification failed` | `ssh-keyscan -p 10022 kor35.ddns.net >> ~/.ssh/known_hosts` |
+| HTTP ok, SSH no | Port forwarding router su 10022 |
+
+---
+
+## Rete mirror: router vs evento
+
+Documentazione completa: **`docs/MIRROR_PI_NETWORK.md`**.
+
+| Modalità | Quando | DHCP `192.168.100.0/24` |
+|----------|--------|---------------------------|
+| `router` | Pi collegato al router, sync verso master | **Spento** |
+| `event` | Bosco / offline, mesh Omada | **Attivo** (dnsmasq) |
+| `auto` | Boot | internet OK → router, altrimenti event |
+
+Sul Pi:
+
+```bash
+sudo make mirror-network-mode MIRROR_NETWORK_MODE=router
+sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0
+./scripts/mirror_network_check.sh
+```
+
+**WiFi emergenza:** sul Pi attuale è gestita da NetworkManager (`Hotspot-Emergenza` su `wlan0`). Se si installa `install_mirror_network.sh`, usare `--no-auto-mode` finché non si migra da NM a `kor35-mirror-emergency-wifi.service`.
+
+---
+
+## Path e nomi fissi (mirror)
+
+- Monorepo: `/home/pi/kor35-replica`
+- Compose: `/home/pi/kor35-replica/config/docker`
+- File: `compose.base.yml` + `compose.mirror.yml`
+- `COMPOSE_PROJECT_NAME=kor35-replica`
+- `KOR35_BACKEND_ENV_FILE=/home/pi/kor35-replica/backend/.env.mirror`
+- Container esempi: `kor35_mirror_backend`, `kor35_mirror_frontend`, `omada_controller`
+
+## Sync mirror → master
+
+- Ruolo: `replica`; endpoint master: `https://www.kor35.it/api/sync/edge/`
+- Timer: `kor35-mirror-db-sync.timer` (~2 min)
+- Runbook: `config/docker/SYNC.md`
+
+## Non confondere con produzione
+
+- **Prod** (`kor35-prod`, `www.kor35.it:22`, utente `deploy`, path `/srv/kor35`) → vedi `.cursor/rules/prod-docker-ops.mdc`
+- **Mirror** (`kor35-mirror`, `kor35.ddns.net:10022`, utente `pi`) → questa regola

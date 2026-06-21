@@ -124,7 +124,7 @@ Mirror Raspberry (obbligatori):
 - `MIRROR_SERVER_SSH_KEY`
 
 Mirror Raspberry (opzionali):
-- `MIRROR_SERVER_SSH_PORT` (default `22`)
+- `MIRROR_SERVER_SSH_PORT` (default **`10022`** — NAT pubblico verso Pi:22)
 - `MIRROR_ROOT_PATH` (default `/home/pi/kor35-replica`)
 - `MIRROR_BACKEND_PATH` (fallback path monorepo, default `/home/pi/kor35-replica`)
 - `MIRROR_BACKEND_REPO_URL` (usato solo bootstrap se il path non esiste)
@@ -411,7 +411,7 @@ Usa **Settings → Secrets and variables → Actions**. Valori da adattare ai tu
 | `MIRROR_SERVER_HOST` | Sì | Hostname/IP del Pi (es. `kor35.ddns.net`) |
 | `MIRROR_SERVER_USER` | Sì | Es. `pi` |
 | `MIRROR_SERVER_SSH_KEY` | Sì | Chiave privata CI per il Pi |
-| `MIRROR_SERVER_SSH_PORT` | No | `22` |
+| `MIRROR_SERVER_SSH_PORT` | No | **`10022`** (NAT pubblico → Pi:22) |
 | `MIRROR_ROOT_PATH` | Forte consiglio | `/home/pi/kor35-replica` (root monorepo) |
 | `MIRROR_BACKEND_PATH` | No | Stesso valore di `MIRROR_ROOT_PATH` se usi solo un path |
 | `MIRROR_COMPOSE_PROJECT_NAME` | No | `kor35-replica` (come `docker compose ls` sul Pi) |
@@ -516,7 +516,7 @@ Repository GitHub -> **Settings -> Secrets and variables -> Actions -> New repos
 | `MIRROR_SERVER_HOST` | Mirror | Sì | `kor35.ddns.net` | Host/IP Raspberry |
 | `MIRROR_SERVER_USER` | Mirror | Sì | `pi` | Utente SSH mirror |
 | `MIRROR_SERVER_SSH_KEY` | Mirror | Sì | `-----BEGIN OPENSSH PRIVATE KEY-----...` | Chiave privata CI |
-| `MIRROR_SERVER_SSH_PORT` | Mirror | No | `22` | Se custom |
+| `MIRROR_SERVER_SSH_PORT` | Mirror | No | **`10022`** | NAT router → Pi:22 |
 | `MIRROR_ROOT_PATH` | Mirror | No | `/home/pi/kor35-replica` | Root progetto mirror |
 | `MIRROR_BACKEND_PATH` | Mirror | No | `/home/pi/kor35-replica` | Fallback path repo se `MIRROR_ROOT_PATH` non esiste |
 | `MIRROR_HEALTHCHECK_URL` | Mirror | No (forte consigliato) | `https://kor35.ddns.net/api/healthz/` | Validazione fine deploy |
@@ -725,6 +725,22 @@ make mirror-resync-after-event ENV=mirror
 - `duplicate key value ... sync_id`: esegui diagnostica con `make sync-db-diagnose ENV=<profilo>` (o `sync-db-full-diagnose`) e risolvi i duplicati `SegnoZodiacale` seguendo l'output.
 - Sync completa ma con warning `catalog.segnozodiacale: salto ...`: è un conflitto storico non bloccante; pianifica bonifica dati e rilancia `sync-db-full-diagnose`.
 - Errori di rete/HTTP verso master: controlla `EDGE_SYNC_URL`, token e raggiungibilità (`curl` verso endpoint `/api/sync/edge/` dal nodo locale).
+
+### Mirror Pi: SSH e rete (Cursor / PC dev)
+
+- **SSH pubblico:** `kor35.ddns.net:10022`, utente `pi`, alias consigliato `kor35-mirror`
+- **Template:** `config/mirror/ssh-config.example` → `~/.ssh/config`
+- **Regola agenti Cursor:** `.cursor/rules/mirror-pi-ops.mdc`
+- **Runbook rete:** `docs/MIRROR_PI_NETWORK.md` (modalità `router` / `event`, Omada, `Pi_Emergenza`)
+
+```bash
+# Dal PC dev (chiave ~/.ssh/id_docker in authorized_keys sul Pi)
+make mirror-pi-check
+make mirror-pi-configure MIRROR_NETWORK_MODE=router MIRROR_NETWORK_AUTO_BOOT=0
+ssh kor35-mirror 'cd /home/pi/kor35-replica && ./scripts/mirror_network_check.sh'
+```
+
+Script rete: `scripts/mirror_pi_remote.sh`, `scripts/mirror_configure_network.sh`, `install_mirror_network.sh`, `mirror_network_apply_mode.sh`.
 
 ### Mirror Pi: automazione sync (DB + media)
 

@@ -569,7 +569,7 @@ jobs:
           host: ${{ secrets.MIRROR_SERVER_HOST }}
           username: ${{ secrets.MIRROR_SERVER_USER }}
           key: ${{ secrets.MIRROR_SERVER_SSH_KEY }}
-          port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 22 }}
+          port: ${{ secrets.MIRROR_SERVER_SSH_PORT || 10022 }}
           script: |
             set -euo pipefail
             REF="main"

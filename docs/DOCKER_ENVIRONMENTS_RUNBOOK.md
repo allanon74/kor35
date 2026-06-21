@@ -272,7 +272,9 @@ Path consigliato:
 
 Solo mirror:
 - servizio `omada-controller` attivo tramite `compose.mirror.yml`
-- topologia WiFi (emergenza `Pi_emergenza` / `10.42.0.1` vs rete evento Omada): vedi **`docs/MIRROR_PI_NETWORK.md`**
+- topologia WiFi e modalità rete router/evento: **`docs/MIRROR_PI_NETWORK.md`**
+- SSH da PC dev / Cursor: alias `kor35-mirror`, `kor35.ddns.net:10022`, utente `pi` — **`.cursor/rules/mirror-pi-ops.mdc`**
+- diagnostica remota: `make mirror-ssh-check`
 
 ### 6.3 Local dev (home/office)
 

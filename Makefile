@@ -12,7 +12,10 @@ ALLOW_DB_REINIT ?= 0
 MAKEMIGRATIONS_APP ?=
 COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor35-replica,$(if $(filter prod,$(ENV)),COMPOSE_PROJECT_NAME=kor35-prod,))
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-ssh-check cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+MIRROR_NETWORK_AUTO_BOOT ?= 0
+MIRROR_PI_GIT_REF ?= main
+
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -64,13 +67,19 @@ help:
 	@echo "  make sync-media-push         # push-only media verso master (senza delete)"
 	@echo "  make mirror-resync-after-event # full DB diagnose + media push + media pull"
 	@echo ""
-	@echo "Mirror Pi — rete (eseguire sul Pi con sudo dove indicato; vedi docs/MIRROR_PI_NETWORK.md):"
-	@echo "  make mirror-network-check ENV=mirror     # diagnostica locale (sul Pi)"
-	@echo "  make mirror-network-mode MODE=router     # DHCP router, spegne DHCP 192.168.100.0/24"
-	@echo "  make mirror-network-mode MODE=event      # LAN evento + DHCP + www.kor35.it locale"
-	@echo "  make mirror-network-mode MODE=auto       # sceglie in base a internet"
-	@echo "  make mirror-install-network              # installa unit/config rete (sudo sul Pi)"
-	@echo "  make mirror-ssh-check                    # diagnostica remota via SSH (PC dev)"
+	@echo "Mirror Pi — rete (vedi docs/MIRROR_PI_NETWORK.md):"
+	@echo "  Sul Pi (locale):"
+	@echo "    make mirror-network-check ENV=mirror"
+	@echo "    sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router"
+	@echo "    sudo make mirror-install-network MIRROR_NETWORK_AUTO_BOOT=0"
+	@echo "    sudo make mirror-network-mode MIRROR_NETWORK_MODE=event"
+	@echo "  Da PC dev (SSH → kor35-mirror, porta 10022):"
+	@echo "    make mirror-pi-check"
+	@echo "    make mirror-pi-pull"
+	@echo "    make mirror-pi-install-network MIRROR_NETWORK_AUTO_BOOT=0"
+	@echo "    make mirror-pi-network-mode MIRROR_NETWORK_MODE=router"
+	@echo "    make mirror-pi-configure MIRROR_NETWORK_MODE=router   # pull + install + mode + check"
+	@echo "    make mirror-pi-update                                 # pull + install (senza cambio mode)"
 	@echo ""
 	@echo "Backup:"
 	@echo "  make backup-db ENV=prod      # dump DB su file + rotazione (vedi scripts/backup_db_daily.sh)"
@@ -204,15 +213,53 @@ mirror-resync-after-event:
 mirror-network-check:
 	./scripts/mirror_network_check.sh
 
-MIRROR_NETWORK_MODE ?= auto
+MIRROR_NETWORK_MODE ?= router
 mirror-network-mode:
 	sudo ./scripts/mirror_network_apply_mode.sh --mode "$(MIRROR_NETWORK_MODE)"
 
 mirror-install-network:
-	sudo ./scripts/install_mirror_network.sh
+	sudo ./scripts/install_mirror_network.sh \
+	  $(if $(filter 0,$(MIRROR_NETWORK_AUTO_BOOT)),--no-auto-mode,) \
+	  $(if $(filter 1,$(MIRROR_NETWORK_AUTO_BOOT)),--auto-mode,)
 
-mirror-ssh-check:
+mirror-configure:
+	sudo MIRROR_NETWORK_MODE="$(MIRROR_NETWORK_MODE)" MIRROR_NETWORK_AUTO_BOOT="$(MIRROR_NETWORK_AUTO_BOOT)" \
+	  ./scripts/mirror_configure_network.sh \
+	  --mode "$(MIRROR_NETWORK_MODE)" \
+	  $(if $(filter 0,$(MIRROR_NETWORK_AUTO_BOOT)),--no-auto-mode,) \
+	  $(if $(filter 1,$(MIRROR_NETWORK_AUTO_BOOT)),--auto-mode,)
+
+mirror-ssh-check mirror-pi-check:
 	./scripts/mirror_ssh_check.sh
+
+mirror-pi-pull:
+	MIRROR_PI_GIT_REF="$(MIRROR_PI_GIT_REF)" ./scripts/mirror_pi_remote.sh pull
+
+mirror-pi-install-network:
+	MIRROR_NETWORK_AUTO_BOOT="$(MIRROR_NETWORK_AUTO_BOOT)" \
+	  ./scripts/mirror_pi_remote.sh install-network \
+	  $(if $(filter 0,$(MIRROR_NETWORK_AUTO_BOOT)),--no-auto-mode,) \
+	  $(if $(filter 1,$(MIRROR_NETWORK_AUTO_BOOT)),--auto-mode,)
+
+mirror-pi-network-mode:
+	MIRROR_NETWORK_MODE="$(MIRROR_NETWORK_MODE)" \
+	  ./scripts/mirror_pi_remote.sh network-mode --mode "$(MIRROR_NETWORK_MODE)"
+
+mirror-pi-configure:
+	MIRROR_NETWORK_MODE="$(MIRROR_NETWORK_MODE)" \
+	MIRROR_PI_GIT_REF="$(MIRROR_PI_GIT_REF)" \
+	MIRROR_NETWORK_AUTO_BOOT="$(MIRROR_NETWORK_AUTO_BOOT)" \
+	  ./scripts/mirror_pi_remote.sh configure \
+	  --mode "$(MIRROR_NETWORK_MODE)" \
+	  $(if $(filter 0,$(MIRROR_NETWORK_AUTO_BOOT)),--no-auto-mode,) \
+	  $(if $(filter 1,$(MIRROR_NETWORK_AUTO_BOOT)),--auto-mode,)
+
+mirror-pi-update:
+	MIRROR_PI_GIT_REF="$(MIRROR_PI_GIT_REF)" \
+	MIRROR_NETWORK_AUTO_BOOT="$(MIRROR_NETWORK_AUTO_BOOT)" \
+	  ./scripts/mirror_pi_remote.sh update \
+	  $(if $(filter 0,$(MIRROR_NETWORK_AUTO_BOOT)),--no-auto-mode,) \
+	  $(if $(filter 1,$(MIRROR_NETWORK_AUTO_BOOT)),--auto-mode,)
 
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh

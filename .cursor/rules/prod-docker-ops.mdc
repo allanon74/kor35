@@ -67,7 +67,9 @@ ssh -o BatchMode=yes kor35-prod 'cd /srv/kor35/config/docker && \
   python manage.py shell -c "..."'
 ```
 
-**Nota:** il workflow CI (`.github/workflows/test-ssh.yml`) può usare porta **2222** dai runner GitHub; dall’ufficio con proxy si usa invece **porta 22** verso `www.kor35.it`.
+**Nota:** il workflow CI usa `MIRROR_SERVER_SSH_PORT` (valorizzare **`10022`** in GitHub Secrets). Dall’ufficio verso prod si usa porta **22** + proxy corkscrew — vedi `.cursor/rules/prod-docker-ops.mdc`.
+
+Per il **mirror Pi** (Raspberry): porta **`10022`**, alias `kor35-mirror`, utente `pi` — vedi **`.cursor/rules/mirror-pi-ops.mdc`**.
 
 ### Diagnostica se SSH non parte
 
