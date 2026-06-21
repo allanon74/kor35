@@ -164,11 +164,33 @@ fi
 verify_certs_dir() {
   local dir="$1"
   local label="$2"
+  if [ "$DRY_RUN" = "1" ]; then
+    return 0
+  fi
   if [ ! -f "${dir}/fullchain.pem" ] || [ ! -f "${dir}/privkey.pem" ]; then
     echo "Certificati mancanti in ${dir}/ (${label})." >&2
     return 1
   fi
   return 0
+}
+
+rsync_or_hint_host_key() {
+  local label="$1"
+  shift
+  local err_file
+  err_file="$(mktemp)"
+  if ! "$@" 2>"$err_file"; then
+    if grep -qE 'REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed' "$err_file"; then
+      echo "SSH: chiave host cambiata per ${label}." >&2
+      echo "  ssh-keygen -f \"\${HOME}/.ssh/known_hosts\" -R '<hostname>'" >&2
+      echo "  ssh-keyscan -p <porta> -H <hostname> >> \"\${HOME}/.ssh/known_hosts\"" >&2
+      echo "  (prod: www.kor35.it:22 — mirror: kor35.ddns.net:10022)" >&2
+    fi
+    cat "$err_file" >&2
+    rm -f "$err_file"
+    return 1
+  fi
+  rm -f "$err_file"
 }
 
 pull_certs_from_prod() {
@@ -179,7 +201,8 @@ pull_certs_from_prod() {
   rsync_ssh="$(build_ssh_cmd "$PROD_TARGET" "$PROD_SSH_PORT" "$PROD_SSH_IDENTITY")"
 
   mkdir -p "${STAGING_DIR}/certs"
-  rsync -avz "${RSYNC_EXTRA[@]}" \
+  rsync_or_hint_host_key "prod (${PROD_SSH_HOST})" \
+    rsync -avz "${RSYNC_EXTRA[@]}" \
     -e "$rsync_ssh" \
     "${PROD_TARGET}:${PROD_CERTS}/" \
     "${STAGING_DIR}/certs/"
@@ -217,6 +240,14 @@ resolve_local_source() {
 
 push_certs_to_mirror() {
   echo "=== Push certificati → mirror ==="
+  if [ "$DRY_RUN" = "1" ] && [ "$FROM_PROD" = "1" ] \
+    && { [ ! -f "${SOURCE_CERTS}/fullchain.pem" ] || [ ! -f "${SOURCE_CERTS}/privkey.pem" ]; }; then
+    echo "  (dry-run) sorgente: ${PROD_TARGET}:${PROD_CERTS}/"
+    echo "  (dry-run) mirror:   ${MIRROR_TARGET}:${REMOTE_CERTS}/"
+    echo "  (dry-run) push saltato: rsync non scrive in staging con --dry-run; esegui senza DRY_RUN=1 per applicare."
+    return 0
+  fi
+
   echo "  sorgente:  ${SOURCE_CERTS}/"
   echo "  mirror:    ${MIRROR_TARGET}:${REMOTE_CERTS}/"
 
@@ -224,9 +255,12 @@ push_certs_to_mirror() {
   local rsync_ssh
   rsync_ssh="$(build_ssh_cmd "$MIRROR_TARGET" "$MIRROR_SSH_PORT" "$MIRROR_SSH_IDENTITY")"
 
-  "${SSH_ARR[@]}" "$MIRROR_TARGET" "mkdir -p '${REMOTE_CERTS}'"
+  if [ "$DRY_RUN" != "1" ]; then
+    "${SSH_ARR[@]}" "$MIRROR_TARGET" "mkdir -p '${REMOTE_CERTS}'"
+  fi
 
-  rsync -avz "${RSYNC_EXTRA[@]}" \
+  rsync_or_hint_host_key "mirror (${MIRROR_SSH_HOST})" \
+    rsync -avz "${RSYNC_EXTRA[@]}" \
     -e "$rsync_ssh" \
     "${SOURCE_CERTS}/" \
     "${MIRROR_TARGET}:${REMOTE_CERTS}/"

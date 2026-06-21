@@ -110,8 +110,8 @@ Ogni modello e' UUID PK + `created_at`/`updated_at` (LWW). I QR/A_vista riusano 
 ## Deploy
 
 - CI: il workflow `.github/workflows/deploy.yml` builda `frontend-pilot`.
-- Produzione: il deploy rimuove `react_build_pilot` e il compose prod non monta `/usr/share/nginx/pilot`.
-- Mirror/evento: la build pilota viene rsyncata in `react_build_pilot` ed esposta su `/pilot/`.
+- Produzione: `react_build_pilot` montato in nginx; `PILOT_CONSOLE_ENABLED=true` in `backend/.env.prod`.
+- Mirror/evento: stessa build su `/pilot/`.
 - Nginx: le location `/pilot/` sono disponibili ma operative solo se esiste la build pilot montata.
 
 ## Hardening Raspberry kiosk
@@ -126,6 +126,6 @@ Sul Raspberry dedicato:
 ## Troubleshooting
 
 - 403 su creazione ticket: verificare `PILOT_CONSOLE_ENABLED=true` nel file env dell'ambiente evento/mirror.
-- 404 su `/pilot/`: su mirror verificare che la build sia stata rsyncata in `react_build_pilot`; su produzione e' comportamento atteso.
+- 404 su `/pilot/`: verificare `react_build_pilot` sul server e `make restart-fe-pilot ENV=prod|mirror`.
 - Token console scaduto: l'app rileva 401 e riporta al login QR.
 - Backend offline: la console mostra `[OFFLINE LOCALE]` e accumula i comandi in `localStorage` (`kor35_pilot_offline_queue`); al ritorno online tenta automaticamente la sincronizzazione.

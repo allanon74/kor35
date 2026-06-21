@@ -173,14 +173,16 @@ curl -fsS http://www.kor35.it/api/healthz/
 
 ### Passo 9 — Test kiosk pilota (opzionale)
 
-Sul Pi kiosk sulla rete Omada, `PILOT_BASE_URL` deve puntare all’IP LAN evento, **non** `10.42.0.1`:
+Sul Pi kiosk (solo browser, **nessun** codice app):
 
 ```bash
-# Su kiosk: /etc/kor35/kiosk.env
-PILOT_BASE_URL=http://192.168.100.1
+# Copia deploy/raspberry-pilot-kiosk/ sul kiosk e:
+sudo ./install-kiosk-pi.sh
 ```
 
-Riavvia servizio kiosk e verifica console su `http://192.168.100.1/pilot/`.
+Default: `https://www.kor35.it` — schermo grande = `status`, piccolo = `control`.
+
+Verifica: `systemctl status kiosk-master.service`
 
 ### Passo 10 — Checklist finale offline
 

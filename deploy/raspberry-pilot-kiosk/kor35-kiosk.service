@@ -9,13 +9,12 @@ Type=simple
 User=pi
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/pi/.Xauthority
-# IP del Pi mirror (gateway WiFi evento / stack Docker). Adattare se diverso da 10.42.0.1
-Environment=PILOT_BASE_URL=http://10.42.0.1
 EnvironmentFile=-/etc/kor35/kiosk.env
-ExecStartPre=/bin/bash -lc 'base="${PILOT_BASE_URL%/}"; for _ in $(seq 1 150); do curl -fsS "${base}/api/healthz/" >/dev/null && exit 0; sleep 2; done; echo "Mirror non raggiungibile: ${base}/api/healthz/" >&2; exit 1'
-ExecStart=/opt/kor35-kiosk/start-kiosk.sh
+ExecStart=/usr/local/bin/kiosk-master.sh
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=graphical.target
+
+# Deprecato: usare kiosk-master.service. Mantenuto per compatibilità installazioni vecchie.

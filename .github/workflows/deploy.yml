@@ -202,6 +202,13 @@ jobs:
           name: frontend-dist
           path: dist-upload
 
+      - name: Download frontend pilota dist
+        if: needs.build-frontend-pilot.outputs.changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-pilot-dist
+          path: dist-upload-pilot
+
       # PRIMA la dist Vite con --delete (altrimenti cancella watch-apps/ e watch-ota/ caricati prima).
       - name: Rsync frontend verso produzione
         if: needs.build-frontend.outputs.changed == 'true'
@@ -242,23 +249,41 @@ jobs:
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist-upload/ "${USER}@${HOST}:${REMOTE}/"
 
-      - name: Rimuovi build console pilota da produzione
+      - name: Rsync console pilota verso produzione
+        if: needs.build-frontend-pilot.outputs.changed == 'true'
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
           HOST: ${{ secrets.SERVER_HOST }}
           USER: ${{ secrets.SERVER_USER }}
           PORT: ${{ secrets.SERVER_SSH_PORT }}
           PROJECT_PATH: ${{ secrets.SERVER_PROJECT_PATH }}
+          PROD_COMPOSE_PROJECT_NAME: ${{ secrets.PROD_COMPOSE_PROJECT_NAME }}
         run: |
           set -euo pipefail
           REMOTE_BASE="${PROJECT_PATH:-/srv/kor35}"
+          REMOTE="${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot"
+          CPN="${PROD_COMPOSE_PROJECT_NAME:-kor35-prod}"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           P="${PORT:-22}"
           SSH_OPTS="-p $P -o StrictHostKeyChecking=accept-new -i ~/.ssh/id_rsa"
           ssh-keyscan -p "$P" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-          ssh $SSH_OPTS "${USER}@${HOST}" "rm -rf '${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot'"
+          ssh $SSH_OPTS "${USER}@${HOST}" "bash -s" -- "$REMOTE_BASE" "$CPN" <<'REMOTE_PREP'
+          set -euo pipefail
+          REMOTE_BASE="${1:?}"
+          CPN="${2:?}"
+          RB="${REMOTE_BASE}/config/docker/nginx-docker/react_build_pilot"
+          mkdir -p "$RB"
+          cd "${REMOTE_BASE}/config/docker"
+          export COMPOSE_PROJECT_NAME="${CPN}"
+          docker compose -f compose.base.yml -f compose.prod.yml stop frontend 2>/dev/null || true
+          if ! docker run --rm -v "${RB}:/mnt:rw" alpine:3.20 chown -R "$(id -u):$(id -g)" /mnt; then
+            echo "WARN: chown react_build_pilot via docker fallito; continuo." >&2
+          fi
+          REMOTE_PREP
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            dist-upload-pilot/ "${USER}@${HOST}:${REMOTE}/"
 
       - name: Rsync firmware OTA verso produzione
         env:
