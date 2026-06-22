@@ -12,6 +12,8 @@ import {
 
 const POLL_INTERVAL_MS = 3000;
 const SCREEN_MODE = new URLSearchParams(window.location.search).get('screen') || 'both';
+const IS_CONTROL_ONLY = SCREEN_MODE === 'control';
+const IS_COMBINED = SCREEN_MODE === 'combined';
 
 export default function App() {
   const [authToken, setAuthToken] = useState(getToken());
@@ -255,8 +257,8 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${SCREEN_MODE === 'control' ? 'app-shell-control' : ''}`}>
-      {SCREEN_MODE !== 'control' ? (
+    <div className={`app-shell ${IS_CONTROL_ONLY ? 'app-shell-control' : ''} ${IS_COMBINED ? 'app-shell-combined' : ''}`}>
+      {!IS_CONTROL_ONLY ? (
         <div className="banner">
           <div className="ident">
             KOR-35 // PILOT // {state?.pilota?.nome || '...'}
@@ -275,8 +277,8 @@ export default function App() {
         </div>
       ) : null}
       <main>
-        <div className={`console-viewport-wrap ${SCREEN_MODE === 'control' ? 'is-fixed' : ''}`}>
-          <div className={`console-viewport-fixed ${SCREEN_MODE === 'control' ? 'is-fixed' : ''}`}>
+        <div className={`console-viewport-wrap ${IS_CONTROL_ONLY ? 'is-fixed' : ''} ${IS_COMBINED ? 'is-combined' : ''}`}>
+          <div className={`console-viewport-fixed ${IS_CONTROL_ONLY ? 'is-fixed' : ''} ${IS_COMBINED ? 'is-combined' : ''}`}>
             {(!state || !state.sessione || state.sessione.stato === 'idle') ? (
               <IdleScreen
                 prefetture={prefetture}

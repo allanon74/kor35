@@ -50,6 +50,8 @@ urlpatterns = [
     path("session/abort/", views.PilotSessionAbortView.as_view(), name="pilot-session-abort"),
     path("session/emergency-landing/", views.PilotSessionEmergencyLandingView.as_view(), name="pilot-session-emergency-landing"),
     path("session/history/", views.PilotSessionHistoryView.as_view(), name="pilot-session-history"),
+    path("session/diario/", views.PilotSessionDiarioView.as_view(), name="pilot-session-diario"),
+    path("session/voli/", views.PilotSessionVoliView.as_view(), name="pilot-session-voli"),
     path("runtime/tick-status/", views.PilotTickRuntimeStatusView.as_view(), name="pilot-runtime-tick-status"),
     path("runtime/tick-control/", views.PilotTickRuntimeControlView.as_view(), name="pilot-runtime-tick-control"),
 

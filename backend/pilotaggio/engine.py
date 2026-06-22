@@ -184,15 +184,23 @@ def secondi_fino_prossimo_tick(sessione: SessioneVolo) -> float:
     pending = eventi_attivi_correnti(sessione)
     if pending:
         now = timezone.now()
+        interval = float(secondi_tick_durante_evento(sessione.defcon))
         waits = []
         for ev in pending:
-            _programma_prossimo_check_evento_se_manca(ev, sessione)
-            if ev.prossima_valutazione_at is not None:
-                waits.append(
-                    max(0.0, (ev.prossima_valutazione_at - now).total_seconds())
+            ev.refresh_from_db(
+                fields=["prossima_valutazione_at", "created_at", "valutazioni_eseguite"]
+            )
+            if ev.prossima_valutazione_at is None:
+                _programma_prossimo_check_evento(
+                    ev, sessione, base=ev.created_at or now
                 )
-        if waits:
-            return min(waits)
+                ev.refresh_from_db(fields=["prossima_valutazione_at"])
+            target = ev.prossima_valutazione_at
+            if target is None:
+                target = now + timedelta(seconds=interval)
+            waits.append(max(0.0, (target - now).total_seconds()))
+        # Con evento attivo: MAI usare il tick da 5s del volo regolare.
+        return min(waits) if waits else interval
 
     last = getattr(sessione, "ultimo_tick_motore_at", None)
     if last is None:
@@ -239,6 +247,11 @@ def _programma_prossimo_check_evento_se_manca(
 def _evento_pronto_per_valutazione(
     istanza: EventoAttivoSessione, sessione: SessioneVolo
 ) -> bool:
+    istanza.refresh_from_db(
+        fields=["prossima_valutazione_at", "created_at", "valutazioni_eseguite", "esito"]
+    )
+    if istanza.esito != EVENTO_ESITO_PENDING:
+        return False
     _programma_prossimo_check_evento_se_manca(istanza, sessione)
     if istanza.prossima_valutazione_at is None:
         return False
@@ -361,13 +374,21 @@ def applica_delta_defcon(sessione: SessioneVolo, delta: int) -> int:
         sessione.save(
             update_fields=["stato", "ended_at", "defcon", "crash_reason", "updated_at"]
         )
+        from .flight_log import log_precipizio
+
+        log_precipizio(sessione, "defcon_overflow")
         return sessione.defcon
     sessione.defcon = nuovo
     sessione.save(update_fields=["defcon", "updated_at"])
     return nuovo
 
 
-def forza_precipizio(sessione: SessioneVolo, reason: str = "catastrophic_event") -> int:
+def forza_precipizio(
+    sessione: SessioneVolo,
+    reason: str = "catastrophic_event",
+    *,
+    evento_attivo=None,
+) -> int:
     """
     Precipitazione immediata: stato crashed e DEFCON a DEFCON_MAX+1 (es. 6 se MAX=5).
     """
@@ -378,6 +399,9 @@ def forza_precipizio(sessione: SessioneVolo, reason: str = "catastrophic_event")
     sessione.save(
         update_fields=["stato", "ended_at", "defcon", "crash_reason", "updated_at"]
     )
+    from .flight_log import log_precipizio
+
+    log_precipizio(sessione, sessione.crash_reason, evento_attivo=evento_attivo)
     return sessione.defcon
 
 
@@ -626,6 +650,9 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
                     "updated_at",
                 ]
             )
+            from .flight_log import log_guasto_sottosistema
+
+            log_guasto_sottosistema(sessione, st, causa="random")
             applica_effetto_guasto(sessione, st)
 
 
@@ -934,7 +961,11 @@ def _stato_sottosistema_ca_per_target(
 
 
 def _forza_guasto_stato_sottosistema(
-    sessione: SessioneVolo, stato: StatoSottosistemaSessione, *, now=None
+    sessione: SessioneVolo,
+    stato: StatoSottosistemaSessione,
+    *,
+    now=None,
+    causa: str = "ca",
 ) -> None:
     """Segna offline un sottosistema e applica gli effetti guasto configurati."""
     ts = now or timezone.now()
@@ -951,6 +982,9 @@ def _forza_guasto_stato_sottosistema(
         ]
     )
     applica_effetto_guasto(sessione, stato)
+    from .flight_log import log_guasto_sottosistema
+
+    log_guasto_sottosistema(sessione, stato, causa=causa)
 
 
 def _candidati_stati_ca_guasto(
@@ -1022,6 +1056,19 @@ def _applica_esito_ca_da_regole(
     cfg = (regole or {}).get("ca_effetto") if isinstance(regole, dict) else None
     tipo = str((cfg or {}).get("tipo") or "precipizio").strip().lower()
 
+    # Doppia rete di sicurezza: mai precipizio CA al primo check evento.
+    if (
+        tipo == "precipizio"
+        and int(istanza.valutazioni_eseguite or 0) == 0
+    ):
+        defcon = applica_delta_defcon(sessione, +1)
+        if sessione.is_terminata:
+            istanza.esito = EVENTO_ESITO_PRECIPITAZIO
+            istanza.risolto_at = timezone.now()
+            istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
+            return "ca", defcon
+        return "ca_grace", defcon
+
     if tipo in {"guasto_sottosistema", "guasto_sottosistemi"}:
         stati = _seleziona_stati_ca_guasto(sessione, cfg or {})
         if not stati and tipo == "guasto_sottosistema":
@@ -1058,7 +1105,7 @@ def _applica_esito_ca_da_regole(
     istanza.esito = EVENTO_ESITO_PRECIPITAZIO
     istanza.risolto_at = timezone.now()
     istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
-    return "ca", forza_precipizio(sessione)
+    return "ca", forza_precipizio(sessione, evento_attivo=istanza)
 
 
 def _stati_by_key_sessione(sessione: SessioneVolo) -> dict:
@@ -1150,15 +1197,19 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
     stati_by_key = _stati_by_key_sessione(sessione)
     direzione = istanza.direzione_evento
     ca_permessa = _ca_scadenza_critica_permessa(istanza)
+    esito_diario = None
+    defcon_pre = int(sessione.defcon or 0)
 
     try:
         if ca_permessa and _eval_outcome_regole(regole, "ca", stati_by_key, direzione):
-            return _applica_esito_ca_da_regole(sessione, istanza, regole)
+            esito_diario, defcon_out = _applica_esito_ca_da_regole(sessione, istanza, regole)
+            return esito_diario, defcon_out
 
         if _eval_soluzione_totale(regole, stati_by_key, direzione):
             istanza.esito = EVENTO_ESITO_RISOLTO
             istanza.risolto_at = timezone.now()
             istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
+            esito_diario = "st"
             return "st", applica_delta_defcon(sessione, -1)
 
         if _eval_soluzione_parziale(regole, stati_by_key, direzione):
@@ -1166,7 +1217,9 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
                 sessione, istanza, regole, defcon_gia_penalizzato=False
             )
             if scadenza is not None:
+                esito_diario = scadenza[0]
                 return scadenza
+            esito_diario = "sp"
             return "sp", sessione.defcon
 
         defcon = applica_delta_defcon(sessione, +1)
@@ -1174,16 +1227,34 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
             istanza.esito = EVENTO_ESITO_PRECIPITAZIO
             istanza.risolto_at = timezone.now()
             istanza.save(update_fields=["esito", "risolto_at", "updated_at"])
+            esito_diario = "ca"
             return "ca", defcon
 
         scadenza = _decrementa_ticks_evento(
             sessione, istanza, regole, defcon_gia_penalizzato=True
         )
         if scadenza is not None:
+            esito_diario = scadenza[0]
             return scadenza
+        esito_diario = "ko"
         return "ko", defcon
     finally:
-        _incrementa_valutazioni_evento(istanza)
+        if esito_diario is not None:
+            _incrementa_valutazioni_evento(istanza)
+            try:
+                sessione.refresh_from_db()
+                istanza.refresh_from_db()
+                from .flight_log import log_valutazione_evento
+
+                log_valutazione_evento(
+                    sessione,
+                    istanza,
+                    esito_diario,
+                    defcon_pre,
+                    int(sessione.defcon or 0),
+                )
+            except Exception:
+                pass
 
 
 def sottosistema_offline_per_codice(
@@ -1252,6 +1323,9 @@ def _marca_crociera_se_spinta(sessione: SessioneVolo) -> None:
         return
     sessione.decollo_completato_at = timezone.now()
     sessione.save(update_fields=["decollo_completato_at", "updated_at"])
+    from .flight_log import log_decollo
+
+    log_decollo(sessione)
 
 
 def _sessione_ha_decollato(sessione: SessioneVolo) -> bool:
@@ -1321,6 +1395,9 @@ def staff_azione_sottosistema_sessione(
             update_fields=["online", "guasto_at", "recovery_at", "updated_at"]
         )
         applica_effetto_guasto(sessione, stato)
+        from .flight_log import log_guasto_sottosistema
+
+        log_guasto_sottosistema(sessione, stato, causa="staff")
         return "guasto", stato
 
     if azione == "ripara":
@@ -1390,6 +1467,7 @@ def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSess
     durata_sec = secondi_durata_totale_evento(ticks_rimanenti, sessione.defcon)
     precipita_a_scadenza = scadenza_critica_da_evento(evento)
     tick_evento_sec = secondi_tick_durante_evento(sessione.defcon)
+    prossima = now + timedelta(seconds=tick_evento_sec)
     istanza = EventoAttivoSessione.objects.create(
         sessione=sessione,
         evento=evento,
@@ -1397,13 +1475,19 @@ def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSess
         ticks_rimanenti=ticks_rimanenti,
         persiste_fino_st=False,
         precipita_a_scadenza=precipita_a_scadenza,
+        prossima_valutazione_at=prossima,
+        intervallo_reazione_secondi=tick_evento_sec,
+        reazione_fino_at=prossima,
         direzione_evento=(
             random.choice(["avanti", "indietro", "su", "giu", "destra", "sinistra"])
             if (evento.regole_json or {}).get("usa_direzione_evento")
             else ""
         ),
     )
-    _programma_prossimo_check_evento(istanza, sessione, base=now)
+    istanza.refresh_from_db()
+    from .flight_log import log_evento_comparso
+
+    log_evento_comparso(sessione, istanza)
     sessione.next_event_at = istanza.deadline_at + timedelta(
         seconds=secondi_prossimo_evento_per_defcon(sessione.defcon)
     )
@@ -1452,7 +1536,11 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
     if sessione.is_terminata:
         return TickResult(sessione, None, False, False)
 
-    pending_list = eventi_attivi_correnti(sessione)
+    pending_list = list(
+        EventoAttivoSessione.objects.filter(
+            sessione=sessione, esito=EVENTO_ESITO_PENDING
+        ).order_by("-created_at")
+    )
     if pending_list:
         for pending in pending_list:
             _programma_prossimo_check_evento_se_manca(pending, sessione)
@@ -1463,7 +1551,11 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
 
     timeout = False
     if _sessione_ha_decollato(sessione):
-        pending_list = eventi_attivi_correnti(sessione)
+        pending_list = list(
+            EventoAttivoSessione.objects.filter(
+                sessione=sessione, esito=EVENTO_ESITO_PENDING
+            ).order_by("-created_at")
+        )
         for pending in pending_list:
             if not _evento_pronto_per_valutazione(pending, sessione):
                 continue
@@ -1488,6 +1580,9 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
             sessione.stato = SESSIONE_STATO_ARRIVATA
             sessione.ended_at = timezone.now()
             sessione.save(update_fields=["stato", "ended_at", "updated_at"])
+            from .flight_log import log_arrivo
+
+            log_arrivo(sessione)
             transizione = True
 
     sessione.ultimo_tick_motore_at = timezone.now()

@@ -760,6 +760,43 @@ class TentativoCodice(SyncableModel, models.Model):
         ordering = ["-created_at"]
 
 
+class VoceDiarioVolo(SyncableModel, models.Model):
+    """
+    Cronologia leggibile di una sessione di volo (eventi, DEFCON, precipizi).
+    Append-only: per analisi post-partita da parte del pilota.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    sessione = models.ForeignKey(
+        SessioneVolo, on_delete=models.CASCADE, related_name="diario_voci"
+    )
+    categoria = models.CharField(max_length=32, db_index=True)
+    messaggio = models.TextField()
+    defcon_pre = models.SmallIntegerField(null=True, blank=True)
+    defcon_post = models.SmallIntegerField(null=True, blank=True)
+    evento_attivo = models.ForeignKey(
+        EventoAttivoSessione,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="voci_diario",
+    )
+    dati_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Voce diario volo"
+        verbose_name_plural = "Voci diario volo"
+        ordering = ["created_at"]
+        indexes = [
+            models.Index(fields=["sessione", "created_at"]),
+            models.Index(fields=["sessione", "categoria"]),
+        ]
+
+    def __str__(self):
+        return f"{self.categoria}: {self.messaggio[:60]}"
+
+
 class StatoSottosistemaSessione(SyncableModel, models.Model):
     """
     Stato runtime di un sottosistema in una specifica sessione.

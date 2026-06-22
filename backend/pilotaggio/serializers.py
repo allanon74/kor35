@@ -22,6 +22,7 @@ from .models import (
     StatoAllertaPilot,
     StatoSottosistemaSessione,
     TentativoCodice,
+    VoceDiarioVolo,
 )
 
 
@@ -391,6 +392,20 @@ class TentativoCodiceSerializer(serializers.ModelSerializer):
             "defcon_post",
             "note",
             "created_at",
+        ]
+
+
+class VoceDiarioVoloSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VoceDiarioVolo
+        fields = [
+            "id",
+            "created_at",
+            "categoria",
+            "messaggio",
+            "defcon_pre",
+            "defcon_post",
+            "dati_json",
         ]
 
 

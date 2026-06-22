@@ -1134,6 +1134,72 @@ class TickIntervalEventoTests(TestCase):
             self.assertEqual(sessione.defcon, 5)
         self.assertIsNone(tick_sessione_se_dovuto(sessione))
 
+    def test_poll_e_pilot_tick_5s_non_alzano_defcon_prima_22s(self):
+        """Simula console (poll) + worker pilot_tick ogni 5s: niente valutazione anticipata."""
+        from pilotaggio.engine import (
+            genera_evento_se_dovuto,
+            tick_sessione,
+            tick_sessione_se_dovuto,
+        )
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_VOLO,
+            defcon=0,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+            decollo_completato_at=timezone.now(),
+            distanza_percorsa=50.0,
+            next_event_at=timezone.now(),
+        )
+        evento = EventoNave.objects.filter(nome="Ammutinamento").first()
+        if evento is None:
+            evento = EventoNave.objects.create(
+                nome="Ammutinamento test",
+                descrizione="Test",
+                codice_soluzione_esatta="A12",
+                durata_tick="7",
+                attivo=True,
+                regole_json={
+                    "version": 3,
+                    "ca": {
+                        "expression": {
+                            "op": ">",
+                            "value": 2,
+                            "sottosistema": "S",
+                        }
+                    },
+                    "ca_effetto": {"tipo": "precipizio"},
+                },
+            )
+        with patch("pilotaggio.engine._scegli_evento_random", return_value=evento):
+            with patch("pilotaggio.engine.random.random", return_value=0.0):
+                istanza = genera_evento_se_dovuto(sessione)
+        self.assertIsNotNone(istanza)
+        sessione.refresh_from_db()
+        defcon0 = sessione.defcon
+        tris = int(
+            StatoAllertaPilot.objects.filter(livello=0)
+            .values_list("tempo_risoluzione_secondi", flat=True)
+            .first()
+            or 22
+        )
+        self.assertGreaterEqual(
+            (istanza.prossima_valutazione_at - istanza.created_at).total_seconds(),
+            tris - 1,
+        )
+        # 6 cicli: poll console + pilot_tick (entrambi chiamano tick_sessione_se_dovuto)
+        for _ in range(6):
+            tick_sessione_se_dovuto(sessione)  # poll ~3s
+            tick_sessione(sessione)  # pilot_tick legacy senza throttle (non deve valutare)
+            sessione.refresh_from_db()
+            istanza.refresh_from_db()
+            self.assertEqual(sessione.defcon, defcon0)
+            self.assertEqual(istanza.valutazioni_eseguite, 0)
+            self.assertEqual(istanza.esito, EVENTO_ESITO_PENDING)
+            self.assertNotEqual(sessione.stato, SESSIONE_STATO_CRASHED)
+
     def test_primo_check_ca_non_precipita_meteore_like(self):
         from pilotaggio.engine import valuta_evento_tick
 
@@ -1179,7 +1245,7 @@ class TickIntervalEventoTests(TestCase):
         esito, _ = valuta_evento_tick(sessione, istanza)
         sessione.refresh_from_db()
         self.assertNotEqual(sessione.stato, SESSIONE_STATO_CRASHED)
-        self.assertIn(esito, {"ko", "sp", "st", "timeout"})
+        self.assertIn(esito, {"ko", "sp", "st", "timeout", "ca_grace"})
 
 
 class TickThrottleTests(TestCase):

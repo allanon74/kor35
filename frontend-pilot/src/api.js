@@ -81,6 +81,11 @@ export const api = {
   emergencyLanding: () => request('/api/pilot/session/emergency-landing/', { method: 'POST' }),
   abort: () => request('/api/pilot/session/abort/', { method: 'POST' }),
   history: () => request('/api/pilot/session/history/'),
+  diario: (sessioneId) => {
+    const q = sessioneId ? `?sessione_id=${encodeURIComponent(sessioneId)}` : '';
+    return request(`/api/pilot/session/diario/${q}`);
+  },
+  voli: () => request('/api/pilot/session/voli/'),
   tickStatus: () => request('/api/pilot/runtime/tick-status/'),
   tickControl: (action) => request('/api/pilot/runtime/tick-control/', {
     method: 'POST',

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { api } from '../api.js';
 import {
   announceDefconChange,
   playCriticalEventAlarmTick,
@@ -26,6 +27,86 @@ function ratio(value, max) {
   const safeMax = Number(max || 0);
   if (safeMax <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((Number(value || 0) / safeMax) * 100)));
+}
+
+function formatDiaryTime(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleTimeString('it-IT', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch (_) {
+    return '';
+  }
+}
+
+function categoriaDiarioLabel(cat) {
+  const map = {
+    volo_iniziato: 'Inizio',
+    decollo: 'Decollo',
+    evento_comparso: 'Evento',
+    evento_valutato: 'Valutazione',
+    precipizio: 'Precipizio',
+    guasto: 'Guasto',
+    arrivo: 'Arrivo',
+    arrivo_emergenza: 'Emergenza',
+  };
+  return map[cat] || cat;
+}
+
+function FlightDiary({ sessioneId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.diario(sessioneId)
+      .then((res) => {
+        if (!cancelled) setData(res);
+      })
+      .catch(() => {
+        if (!cancelled) setData({ sessione: null, voci: [] });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [sessioneId]);
+
+  const voci = data?.voci || [];
+  const riepilogo = data?.sessione;
+
+  return (
+    <div className="flight-diary">
+      <h2>Diario di volo</h2>
+      {riepilogo?.crash_spiegazione ? (
+        <p className="flight-diary-summary">{riepilogo.crash_spiegazione}</p>
+      ) : null}
+      {loading ? <p className="flight-diary-muted">Caricamento cronologia…</p> : null}
+      {!loading && voci.length === 0 ? (
+        <p className="flight-diary-muted">Nessuna voce registrata per questo volo.</p>
+      ) : null}
+      {!loading && voci.length > 0 ? (
+        <ol className="flight-diary-list">
+          {voci.map((v) => (
+            <li key={v.id} className={`flight-diary-item cat-${v.categoria}`}>
+              <span className="flight-diary-time">{formatDiaryTime(v.created_at)}</span>
+              <span className="flight-diary-cat">{categoriaDiarioLabel(v.categoria)}</span>
+              <span className="flight-diary-msg">{v.messaggio}</span>
+              {v.defcon_pre != null && v.defcon_post != null && v.defcon_pre !== v.defcon_post ? (
+                <span className="flight-diary-defcon">
+                  DEFCON {v.defcon_pre} → {v.defcon_post}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
+  );
 }
 
 function Gauge({ label, value, max, color = '#00e5ff', unit = '' }) {
@@ -407,6 +488,7 @@ export default function Cockpit({
 
   const showStatus = mode !== 'control';
   const showControl = mode !== 'status';
+  const isCombinedLayout = mode === 'combined';
   const crashReason = String(sessione.crash_reason || '');
   const crashMessage = crashReason === 'end_of_energy'
     ? "Energia esaurita: carburante e batterie a zero, produzione nulla."
@@ -424,6 +506,7 @@ export default function Cockpit({
       >
         <h1>// {statoAbbattuta?.nome?.toUpperCase() || 'CRASH'} //</h1>
         <p>{crashMessage}</p>
+        <FlightDiary sessioneId={sessione.id} />
         <div className="row" style={{ marginTop: '2rem', gap: '0.75rem', justifyContent: 'center' }}>
           <button type="button" className="btn primary" onClick={onResetSession}>Nuovo volo</button>
           <button type="button" className="btn" onClick={onLogout}>Logout pilota</button>
@@ -437,6 +520,7 @@ export default function Cockpit({
       <div className="center-screen">
         <h1>// ARRIVO //</h1>
         <p>Destinazione raggiunta. Buon viaggio.</p>
+        <FlightDiary sessioneId={sessione.id} />
         <div className="row" style={{ marginTop: '2rem', gap: '0.75rem', justifyContent: 'center' }}>
           <button type="button" className="btn primary" onClick={onResetSession}>Nuovo volo</button>
           <button type="button" className="btn" onClick={onLogout}>Logout pilota</button>
@@ -446,7 +530,236 @@ export default function Cockpit({
   }
 
   return (
-    <div className={`cockpit cockpit-lcars ${mode === 'control' ? 'cockpit-control' : ''}`}>
+    <div
+      className={[
+        'cockpit',
+        'cockpit-lcars',
+        mode === 'control' ? 'cockpit-control' : '',
+        isCombinedLayout ? 'cockpit-combined' : '',
+      ].filter(Boolean).join(' ')}
+    >
+      {isCombinedLayout ? (
+        <>
+          <div className="cockpit-combined-status">
+            {showStatus ? (
+              <>
+                <div className="defcon-strip">
+                  <div className="lcars-corner left" />
+                  <div>
+                    <div className="label">DEFCON</div>
+                    <div
+                      className={`value ${statoCorrente ? '' : defconClass(defcon, defconMax)}`}
+                      style={
+                        statoCorrente
+                          ? {
+                              backgroundColor: statoCorrente.colore || '#444',
+                              color: '#fff',
+                            }
+                          : undefined
+                      }
+                      title={statoCorrente?.nome || ''}
+                    >
+                      {defcon > defconMax ? 'CRASH' : defcon}
+                      {statoCorrente ? (
+                        <span style={{ display: 'block', fontSize: '0.65rem', fontWeight: 500, marginTop: '0.15rem', opacity: 0.95 }}>
+                          {statoCorrente.nome}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div className="label">Stato</div>
+                    <div style={{ fontSize: '1.3rem', letterSpacing: '0.2em' }}>
+                      {sessione.stato?.toUpperCase()}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="label">Volo</div>
+                    <div>
+                      {sessione.partenza_nome || '—'} {' → '} {sessione.arrivo_nome || '—'}
+                    </div>
+                  </div>
+                  <div className="lcars-corner right" />
+                </div>
+
+                {hasCriticalEvent ? (
+                  <div className="alert-bar alert-bar-critical-event" role="alert" aria-live="assertive">
+                    ⚠ Evento Critico ⚠
+                  </div>
+                ) : null}
+
+                {sottosistemiOffline.map((s) => (
+                  <div key={s.id} className="alert-bar">
+                    ⚠ Sottosistema {s.nome} GUASTO
+                  </div>
+                ))}
+
+                <div className="middle-grid">
+                  <div className="panel lcars-panel">
+                    <h3>Eventi Attivi ({eventiOrdinati.length})</h3>
+                    {eventiOrdinati.length ? (
+                      <div className="event-summary">
+                        <span className="event-summary-critical">Critici: {eventiCriticiCount}</span>
+                        <span className="event-summary-normal">Normali: {eventiNormaliCount}</span>
+                      </div>
+                    ) : null}
+                    {eventiOrdinati.length ? (
+                      <div className="event-list">
+                        {eventiOrdinati.map((ev) => (
+                          <div
+                            key={ev.id}
+                            className={`event-box pending lcars-event-box ${
+                              ev.precipita_a_scadenza ? 'event-critical' : 'event-normal'
+                            }`}
+                          >
+                            <h2>{ev.nome}</h2>
+                            <CountdownBox deadlineISO={ev.deadline_at} />
+                            <div className="descr">{ev.descrizione}</div>
+                            <div className="event-meta">
+                              {ev.precipita_a_scadenza ? 'Scadenza critica — esito CA se non risolto' : 'Risolvi entro il countdown'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="note">Nessun evento attivo. Mantieni la rotta.</p>
+                    )}
+                  </div>
+                  <div className="panel lcars-panel">
+                    <div className="hud-strip lcars-hud">
+                      <Gauge label="Carburante" value={energia.carburante_attuale} max={energia.carburante_massimo} color="#66f5a4" />
+                      <Gauge label="Batterie" value={energia.storage_attuale} max={energia.storage_massimo} color="#76c7ff" />
+                      <Gauge label="Produzione" value={energia.produzione} max={Math.max(1, energia.consumo || 1)} color="#ffd06b" />
+                      <Gauge label="Consumo" value={energia.consumo} max={Math.max(1, energia.produzione || 1)} color="#ff8f70" />
+                      <div className="radar-box">
+                        <div className={`radar-ping ${hasCriticalEvent ? 'alert critical' : evento ? 'alert' : ''}`} />
+                        <div className="radar-text">
+                          {hasCriticalEvent ? 'Evento critico' : evento ? 'Evento in corso' : 'Spazio stabile'}
+                        </div>
+                      </div>
+                      <div className="distance-box">
+                        <div className="distance-label">Rotta</div>
+                        <div className="distance-values">{Math.round(distanzaPercorsa)} / {Math.round(distanzaTarget || 0)}</div>
+                        <div className="distance-track">
+                          <div className="distance-fill" style={{ width: `${distanzaPct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="status-legend" aria-label="Legenda livelli sottosistemi">
+                      <span><i style={{ background: '#ffffff' }} />OFF</span>
+                      <span><i style={{ background: '#8a2be2' }} />L1</span>
+                      <span><i style={{ background: '#2f8cff' }} />L3</span>
+                      <span><i style={{ background: '#9ccc65' }} />L5</span>
+                      <span><i style={{ background: '#ffb74d' }} />L7</span>
+                      <span><i style={{ background: '#ff3b30' }} />L9</span>
+                    </div>
+                    <h3>Stato Sottosistemi</h3>
+                    <Subsystems sottosistemi={state.sottosistemi} energia={energia} />
+                  </div>
+                </div>
+
+                <div className="input-strip">
+                  <div className="label">COMANDI DI SICUREZZA</div>
+                  <div className="feedback">
+                    {!online && '[OFFLINE LOCALE] '}
+                    Regola i sottosistemi dalla plancia touch per mantenere la nave stabile.
+                  </div>
+                  <button type="button" className="btn danger" onClick={onAbort}>Abort</button>
+                </div>
+              </>
+            ) : null}
+          </div>
+          <div className="cockpit-combined-control cockpit-control">
+            {showControl ? (
+              <div className="panel control-deck lcars-panel">
+                <div className="command-clusters">
+                  {Object.entries(groupedSystems).map(([groupName, subs]) => {
+                    const clickableSubs = (subs || [])
+                      .filter(
+                        (s) => !['batteria', 'serbatoio'].includes(String(s.tipo || '').toLowerCase())
+                      )
+                      .sort((a, b) => {
+                        const oa = Number(a.ordine ?? 0);
+                        const ob = Number(b.ordine ?? 0);
+                        if (oa !== ob) return oa - ob;
+                        return String(a.nome || '').localeCompare(String(b.nome || ''), 'it', {
+                          sensitivity: 'base',
+                        });
+                      });
+                    if (!clickableSubs.length) return null;
+                    return (
+                      <div key={groupName} className={`system-column station-card ${groupTheme(groupName).theme}`}>
+                        <div className="system-title">
+                          <span className="system-icon">{groupTheme(groupName).icon}</span>
+                          <span className="system-name">{groupName}</span>
+                        </div>
+                        <div className="hex-cloud">
+                          {clickableSubs.map((s) => (
+                            (() => {
+                              const lvl = Number(s.livello_target || 0);
+                              const inRepair = Boolean(!s.online && s.recovery_at);
+                              const iconData = statusIcon(s);
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  className={`subsystem-tile lcars-button ${s.online ? 'online' : 'offline'} ${tileLevelClass(lvl)} ${lvl >= 8 ? 'danger-pulse' : ''} ${inRepair ? 'repairing' : ''} ${(lvl >= 8 && tickAlive) ? 'tick-danger-ring' : ''}`}
+                                  onClick={() => openSubsystem(s)}
+                                  disabled={!s.online}
+                                >
+                                  <div className="tile-head-row">
+                                    <span className="tile-name">{s.nome}</span>
+                                    <div className="tile-indicators" title={iconData.title}>
+                                      <PowerDial level={lvl} colorOverride={s.colore_livello_attuale || undefined} />
+                                      <span className="tile-mode-icon">{iconData.icon}</span>
+                                    </div>
+                                  </div>
+                                  <div className="tile-meta" />
+                                  <div className="tile-badges">
+                                    {s.invertito ? <span className="badge warn">INV</span> : null}
+                                    {s.espulso ? <span className="badge danger">ESP</span> : null}
+                                    {inRepair ? <span className="badge repair">RIP</span> : null}
+                                    {!s.online ? <span className="badge danger">GUASTO</span> : null}
+                                  </div>
+                                </button>
+                              );
+                            })()
+                          ))}
+                        </div>
+                        <div className="system-footer">
+                          <div className="system-summary-row">
+                            <span>Attivi {clickableSubs.filter((s) => s.online).length}/{clickableSubs.length}</span>
+                            <span>
+                              Potenza media {clickableSubs.length ? Math.round(clickableSubs.reduce((acc, s) => acc + Number(s.livello_target || 0), 0) / clickableSubs.length) : 0}
+                            </span>
+                          </div>
+                          <div className="system-power-track">
+                            <div
+                              className="system-power-fill"
+                              style={{
+                                width: `${clickableSubs.length ? Math.round((clickableSubs.reduce((acc, s) => acc + Number(s.livello_target || 0), 0) / (clickableSubs.length * 9)) * 100) : 0}%`,
+                              }}
+                            />
+                          </div>
+                          <div className="system-lcars-strips">
+                            <span />
+                            <span />
+                            <span />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!Object.keys(groupedSystems).length ? (
+                    <div className="note">Nessun sottosistema disponibile in sessione. Prova un nuovo Decollo.</div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <>
       {showStatus ? <div className="defcon-strip">
         <div className="lcars-corner left" />
         <div>
@@ -659,6 +972,8 @@ export default function Cockpit({
         </div>
         <button type="button" className="btn danger" onClick={onAbort}>Abort</button>
       </div> : null}
+        </>
+      )}
 
       {selectedSubsystem ? (
         <>

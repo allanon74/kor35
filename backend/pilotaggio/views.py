@@ -69,6 +69,7 @@ from .models import (
     StatoAllertaPilot,
     StatoSottosistemaSessione,
     TentativoCodice,
+    VoceDiarioVolo,
 )
 from .permissions import IsPilotConsole, IsStaffUser
 from .serializers import (
@@ -91,6 +92,7 @@ from .serializers import (
     StatoAllertaPilotSerializer,
     StatoSottosistemaRuntimeSerializer,
     TentativoCodiceSerializer,
+    VoceDiarioVoloSerializer,
 )
 
 
@@ -877,6 +879,13 @@ class PilotSessionStartView(APIView):
             prepara_sessione_nuovo_volo(attiva)
             _ensure_runtime_subsystems(attiva)
             _ensure_tick_enabled()
+            from .flight_log import log_volo_iniziato
+
+            log_volo_iniziato(
+                attiva,
+                partenza=getattr(partenza, "nome", "?"),
+                arrivo=getattr(arrivo, "nome", "?"),
+            )
 
         return Response(_build_state_payload(attiva, pilota))
 
@@ -959,6 +968,9 @@ class PilotSubsystemSetView(APIView):
             applica_effetto_inversione(sessione, stato)
         if bool(stato.espulso) and not espulso_pre:
             applica_effetto_espulsione(sessione, stato)
+            from .flight_log import log_guasto_sottosistema
+
+            log_guasto_sottosistema(sessione, stato, causa="pilota")
         if not stato.online:
             applica_effetto_guasto(sessione, stato)
         tick_sessione_se_dovuto(sessione)
@@ -990,6 +1002,9 @@ class PilotSessionAbortView(APIView):
         sessione.ended_at = timezone.now()
         sessione.crash_reason = "manual_abort"
         sessione.save(update_fields=["stato", "ended_at", "crash_reason", "updated_at"])
+        from .flight_log import log_precipizio
+
+        log_precipizio(sessione, "manual_abort")
         _disable_tick_if_no_active_sessions()
         return Response(_build_state_payload(sessione, pilota))
 
@@ -1032,6 +1047,9 @@ class PilotSessionEmergencyLandingView(APIView):
         sessione.ended_at = timezone.now()
         sessione.distanza_percorsa = float(sessione.distanza_target or sessione.distanza_percorsa or 0.0)
         sessione.save(update_fields=["stato", "ended_at", "distanza_percorsa", "updated_at"])
+        from .flight_log import log_arrivo
+
+        log_arrivo(sessione, emergenza=True)
         _disable_tick_if_no_active_sessions()
         return Response(_build_state_payload(sessione, pilota))
 
@@ -1075,6 +1093,55 @@ class PilotSessionHistoryView(generics.ListAPIView):
         if sessione is None:
             return TentativoCodice.objects.none()
         return TentativoCodice.objects.filter(sessione=sessione).order_by("-created_at")[:30]
+
+
+class PilotSessionDiarioView(APIView):
+    """GET /api/pilot/session/diario/ — cronologia leggibile del volo (o sessione passata)."""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def get(self, request):
+        pilota = get_pilot_from_request(request)
+        sessione_id = request.query_params.get("sessione_id")
+        if sessione_id:
+            sessione = SessioneVolo.objects.filter(pk=sessione_id, pilota=pilota).first()
+        else:
+            sessione = (
+                SessioneVolo.objects.filter(pilota=pilota)
+                .order_by("-ended_at", "-created_at")
+                .first()
+            )
+        if sessione is None:
+            return Response({"sessione": None, "voci": []})
+        from .flight_log import riepilogo_sessione_per_pilota
+
+        voci = VoceDiarioVolo.objects.filter(sessione=sessione).order_by("created_at")
+        return Response(
+            {
+                "sessione": riepilogo_sessione_per_pilota(sessione),
+                "voci": VoceDiarioVoloSerializer(voci, many=True).data,
+            }
+        )
+
+
+class PilotSessionVoliView(APIView):
+    """GET /api/pilot/session/voli/ — elenco voli recenti del pilota con sintesi."""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def get(self, request):
+        pilota = get_pilot_from_request(request)
+        from .flight_log import riepilogo_sessione_per_pilota
+
+        qs = (
+            SessioneVolo.objects.filter(pilota=pilota)
+            .exclude(stato=SESSIONE_STATO_IDLE)
+            .select_related("prefettura_partenza", "prefettura_arrivo")
+            .order_by("-ended_at", "-created_at")[:25]
+        )
+        return Response({"voli": [riepilogo_sessione_per_pilota(s) for s in qs]})
 
 
 # ---------------------------------------------------------------------------
@@ -1168,6 +1235,9 @@ class PilotSubsystemQrActionView(APIView):
                     update_fields=["online", "guasto_at", "recovery_at", "updated_at"]
                 )
                 applica_effetto_guasto(sessione, stato)
+                from .flight_log import log_guasto_sottosistema
+
+                log_guasto_sottosistema(sessione, stato, causa="qr")
             else:
                 stato.recovery_at = now + timedelta(
                     seconds=int(sottosistema.durata_ripristino_secondi or 60)
