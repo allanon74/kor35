@@ -1008,6 +1008,60 @@ def applica_modificatori_stat_links_a_eval_context(eval_context, stat_links, per
         eval_context[param] = (val_base + mod_data['add']) * mod_data['mol']
 
 
+def calcola_metatalenti(personaggio, context, mods_attivi):
+    """
+    Metatalenti da ModelloAura (mattoni proibiti): modificatori statistici + testo addizionale.
+    Aggiorna mods_attivi in place; ritorna HTML da appendere alla descrizione.
+    """
+    if not personaggio or not context:
+        return ""
+    aura_riferimento = context.get('aura')
+    if not aura_riferimento:
+        return ""
+    livello_item = context.get('livello', 0)
+    modello = personaggio.modelli_aura.filter(aura=aura_riferimento).first()
+    if not modello:
+        return ""
+
+    testo_parts = []
+    caratteristiche_pg = personaggio.caratteristiche_base
+    for mattone in modello.mattoni_proibiti.select_related('caratteristica_associata').prefetch_related(
+        'mattonestatistica_set__statistica'
+    ).all():
+        funz = mattone.funzionamento_metatalento
+        if funz == META_NESSUN_EFFETTO:
+            continue
+        caratt_assoc = mattone.caratteristica_associata
+        if not caratt_assoc:
+            continue
+        val_caratt = caratteristiche_pg.get(caratt_assoc.nome, 0)
+        applica = (
+            funz in (META_VALORE_PUNTEGGIO, META_SOLO_TESTO)
+            or (funz == META_LIVELLO_INFERIORE and livello_item <= val_caratt)
+        )
+        if not applica:
+            continue
+        if funz in (META_VALORE_PUNTEGGIO, META_LIVELLO_INFERIORE):
+            for stat_m in mattone.mattonestatistica_set.all():
+                p = stat_m.statistica.parametro
+                if not p:
+                    continue
+                b = stat_m.valore * val_caratt
+                if p not in mods_attivi:
+                    mods_attivi[p] = {'add': 0.0, 'mol': 1.0}
+                if stat_m.tipo_modificatore == MODIFICATORE_ADDITIVO:
+                    mods_attivi[p]['add'] += b
+                elif stat_m.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO:
+                    mods_attivi[p]['mol'] *= float(b)
+        if mattone.testo_addizionale:
+            def repl(m, vc=val_caratt):
+                mult = int(m.group(1)) if m.group(1) else 1
+                return str(vc * mult)
+            parsed = re.sub(r'\{(?:(\d+)\*)?caratt\}', repl, mattone.testo_addizionale)
+            testo_parts.append(f"<br><em>Metatalento ({mattone.nome}):</em> {parsed}")
+    return "".join(testo_parts)
+
+
 # 4. FUNZIONE PRINCIPALE
 def formatta_testo_generico(testo, formula=None, statistiche_base=None, personaggio=None, context=None, solo_formula=False):
     testo_out = testo or ""
@@ -1041,6 +1095,7 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
 
     # 2. Calcolo Modificatori (dal Personaggio)
     mods_attivi = {}
+    testo_metatalenti = ""
     if personaggio:
         # Copia i modificatori globali
         mods_attivi = copy.deepcopy(personaggio.modificatori_calcolati)
@@ -1052,6 +1107,8 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
                 if param not in mods_attivi: mods_attivi[param] = {'add': 0.0, 'mol': 1.0}
                 mods_attivi[param]['add'] += valori['add']
                 mods_attivi[param]['mol'] *= valori['mol']
+            if not solo_formula:
+                testo_metatalenti = calcola_metatalenti(personaggio, context, mods_attivi)
 
         # IMPORTANTE: Aggiungi i valori base intrinseci del personaggio (statistiche_base_dict)
         # Questi rappresentano i valori "naturali" del personaggio prima delle abilità
@@ -1170,15 +1227,6 @@ def formatta_testo_generico(testo, formula=None, statistiche_base=None, personag
     exclusive_groups_config = EXCLUSIVE_FORMAT_GROUPS
     if context and isinstance(context.get('exclusive_groups'), dict):
         exclusive_groups_config = context['exclusive_groups']
-
-    # 4. Calcolo Metatalenti (Logica Aura/Modelli)
-    testo_metatalenti = ""
-    if personaggio and context and not solo_formula:
-        # ... (Logica esistente per i Metatalenti) ...
-        # (Riporta qui il blocco di codice dei metatalenti dalla tua funzione originale)
-        # Per brevità nel prompt non lo ripeto tutto, ma va mantenuto identico.
-        # Se vuoi, posso incollarlo esplicitamente.
-        pass 
 
     # 5. RISOLUZIONE DEI PLACEHOLDER {espressione|FORMATO}
     def resolve_placeholder(match):
@@ -2629,8 +2677,25 @@ class Attivata(A_vista):
     def livello(self): return self.elementi.count()
     @property
     def costo_crediti(self): return self.livello * COSTO_PER_MATTONE_TESSITURA
+
     @property
-    def TestoFormattato(self): return formatta_testo_generico(self.testo, statistiche_base=self.attivatastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all())
+    def aura(self):
+        """Aura derivata dal primo mattone (elemento) dell'attivata."""
+        link = self.attivataelemento_set.select_related('elemento').order_by('id').first()
+        if not link:
+            return None
+        try:
+            return Mattone.objects.select_related('aura').get(pk=link.elemento_id).aura
+        except Mattone.DoesNotExist:
+            return None
+
+    @property
+    def TestoFormattato(self):
+        stats = self.attivatastatisticabase_set.select_related('statistica').order_by(
+            '-statistica__formula', 'statistica__ordine', 'statistica__nome'
+        ).all()
+        ctx = {'livello': self.livello, 'aura': self.aura}
+        return formatta_testo_generico(self.testo, statistiche_base=stats, context=ctx)
 
 class AttivataElemento(SyncableModel, models.Model):
     attivata = models.ForeignKey('Attivata', on_delete=models.CASCADE)
@@ -6282,7 +6347,10 @@ class Personaggio(Inventario):
             
         elif isinstance(item, Attivata):
             stats = item.attivatastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
-            testo_finale = formatta_testo_generico(item.testo, statistiche_base=stats, personaggio=self)
+            ctx = {'livello': item.livello, 'aura': item.aura}
+            testo_finale = formatta_testo_generico(
+                item.testo, statistiche_base=stats, personaggio=self, context=ctx
+            )
         
         elif isinstance(item, Tessitura):
             stats = item.tessiturastatisticabase_set.select_related('statistica').order_by('-statistica__formula', 'statistica__ordine', 'statistica__nome').all()
