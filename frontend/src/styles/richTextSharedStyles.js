@@ -5,6 +5,21 @@
  * Un solo posto per evitare duplicazione e mantenere coerenza.
  */
 export const RICH_TEXT_SHARED_STYLES = `
+  /* Testo su sfondo chiaro (es. pagina informazioni logistiche evento) */
+  .ql-editor-view--light,
+  .ql-editor-view--light p,
+  .ql-editor-view--light li,
+  .ql-editor-view--light span,
+  .ql-editor-view--light div {
+    color: inherit;
+  }
+  .ql-editor-view--light a.wiki-link {
+    color: #6366f1;
+  }
+  .ql-editor-view--light a.wiki-link:hover {
+    color: #4f46e5;
+  }
+
   .ql-editor-view ul, .wiki-content ul {
     list-style-type: disc;
     margin: 0.5em 0;

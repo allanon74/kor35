@@ -101,7 +101,7 @@ export default function EventoLogisticaPage() {
                 Indicazioni logistiche
               </h2>
               <div className="wiki-content prose prose-sm max-w-none text-gray-700 leading-relaxed">
-                <RichTextViewer content={evento.logistiche_pubbliche} />
+                <RichTextViewer content={evento.logistiche_pubbliche} textTone="onLight" />
               </div>
             </section>
           )}
@@ -159,7 +159,7 @@ export default function EventoLogisticaPage() {
                 Sinossi
               </h2>
               <div className="wiki-content prose prose-sm max-w-none text-gray-600">
-                <RichTextViewer content={evento.sinossi} />
+                <RichTextViewer content={evento.sinossi} textTone="onLight" />
               </div>
             </section>
           )}

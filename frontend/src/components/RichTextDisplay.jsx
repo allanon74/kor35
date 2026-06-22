@@ -3,7 +3,7 @@ import { sanitizeHtml } from '../utils/htmlSanitizer';
 import { activateUser, deleteUser, staffKillPersonaggio, staffRevivePersonaggio } from '../api';
 import { RICH_TEXT_SHARED_STYLES } from '../styles/richTextSharedStyles';
 
-const RichTextDisplay = ({ content, onUpdate, onLogout }) => {
+const RichTextDisplay = ({ content, onUpdate, onLogout, textTone = 'onDark' }) => {
     // 1. Sanitizzazione base dell'HTML
     const cleanContent = useMemo(() => sanitizeHtml(content), [content]);
 
@@ -67,11 +67,11 @@ const RichTextDisplay = ({ content, onUpdate, onLogout }) => {
         <>
             <style>{RICH_TEXT_SHARED_STYLES}</style>
             <div 
-                className="ql-editor-view w-full"
+                className={`ql-editor-view w-full${textTone === 'onLight' ? ' ql-editor-view--light' : ''}`}
                 style={{
                     fontSize: '0.875rem',
                     lineHeight: '1.6',
-                    color: '#d1d5db', 
+                    color: textTone === 'onLight' ? 'inherit' : '#d1d5db',
                     whiteSpace: 'normal',       
                     overflowWrap: 'anywhere',   
                     wordBreak: 'normal',        
