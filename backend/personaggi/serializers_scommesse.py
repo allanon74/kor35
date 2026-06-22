@@ -277,17 +277,45 @@ class SelezionePuntataSerializer(serializers.ModelSerializer):
 class PuntataScommessaSerializer(serializers.ModelSerializer):
     selezioni = SelezionePuntataSerializer(many=True, read_only=True)
     calendario_titolo = serializers.SerializerMethodField()
+    data_risoluzione = serializers.SerializerMethodField()
+    risultati_visibili = serializers.SerializerMethodField()
+    puo_riscuotere = serializers.SerializerMethodField()
 
     class Meta:
         model = PuntataScommessa
         fields = [
-            "id", "sync_id", "calendario", "calendario_titolo", "importo", "tipo",
-            "quota_totale", "stato", "vincita", "codice", "selezioni",
+            "id", "sync_id", "calendario", "calendario_titolo", "data_risoluzione",
+            "importo", "tipo", "quota_totale", "stato", "vincita", "vincita_riscossa",
+            "riscossa_at", "risultati_visibili", "puo_riscuotere", "codice", "selezioni",
             "created_at", "liquidata_at",
         ]
 
     def get_calendario_titolo(self, obj):
         return obj.calendario.titolo or obj.calendario.sport.nome
+
+    def get_data_risoluzione(self, obj):
+        return obj.calendario.data_risoluzione
+
+    def get_risultati_visibili(self, obj):
+        return risultati_pubblicati(obj.calendario.data_risoluzione)
+
+    def get_puo_riscuotere(self, obj):
+        if not risultati_pubblicati(obj.calendario.data_risoluzione):
+            return False
+        return (
+            obj.stato == PuntataScommessa.STATO_WON
+            and not obj.vincita_riscossa
+            and (obj.vincita or 0) > 0
+        )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not risultati_pubblicati(instance.calendario.data_risoluzione):
+            data["stato"] = PuntataScommessa.STATO_PENDING
+            data["vincita"] = None
+            data["vincita_riscossa"] = False
+            data["riscossa_at"] = None
+        return data
 
 
 class PiazzamentoPuntataSerializer(serializers.Serializer):

@@ -277,6 +277,11 @@ class PuntataScommessa(SyncableModel, models.Model):
     stato = models.CharField(max_length=10, choices=STATO_CHOICES, default=STATO_PENDING)
     vincita = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     liquidata_at = models.DateTimeField(null=True, blank=True)
+    vincita_riscossa = models.BooleanField(
+        default=False,
+        help_text="True se il giocatore ha già incassato la vincita (riscossione manuale).",
+    )
+    riscossa_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = "Puntata scommessa"

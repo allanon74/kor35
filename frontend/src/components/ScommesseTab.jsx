@@ -9,10 +9,18 @@ import {
   scommesseGetMieiCodici,
   scommesseGetSquadraStorico,
   scommessePiazzaPuntata,
+  scommesseRiscuotiVincita,
 } from '../api';
 import { esitiScommessa, formattaRisultato, labelTipoRisultato, pareggioConsentito } from '../scommesse/risultatiSport';
 
 const ESITO_LABEL = { V: 'Vittoria', S: 'Sconfitta', P: 'Pareggio' };
+const ESITO_SCOMMESSA_LABEL = { '1': '1', X: 'X', '2': '2' };
+const STATO_PUNTATA_LABEL = {
+  PENDING: 'In attesa',
+  WON: 'Vinta',
+  LOST: 'Persa',
+};
+const PUNTATE_PAGE_SIZE = 10;
 const ESITO_CLASS = {
   V: 'bg-emerald-900/50 text-emerald-300',
   S: 'bg-red-900/50 text-red-300',
@@ -112,10 +120,17 @@ function getValoreAllFromChar(char) {
 
 const ScommesseTab = ({ onLogout }) => {
   const { selectedCharacterData: char, selectedCharacterId, refreshCharacterData } = useCharacter();
+  const [section, setSection] = useState('play');
   const [view, setView] = useState('list');
   const [calendari, setCalendari] = useState([]);
   const [calendarioDetail, setCalendarioDetail] = useState(null);
   const [puntate, setPuntate] = useState([]);
+  const [puntatePage, setPuntatePage] = useState(1);
+  const [puntateTotal, setPuntateTotal] = useState(0);
+  const [puntateHasMore, setPuntateHasMore] = useState(false);
+  const [puntateLoading, setPuntateLoading] = useState(false);
+  const [puntateLoadingMore, setPuntateLoadingMore] = useState(false);
+  const [riscuotendoId, setRiscuotendoId] = useState(null);
   const [codici, setCodici] = useState([]);
   const [valoreAll, setValoreAll] = useState(0);
   const [config, setConfig] = useState(null);
@@ -135,6 +150,43 @@ const ScommesseTab = ({ onLogout }) => {
 
   const pgId = char?.id ?? selectedCharacterId;
 
+  const normalizePuntateResponse = (res) => {
+    if (Array.isArray(res)) {
+      return { results: res, count: res.length, next: null };
+    }
+    return {
+      results: Array.isArray(res?.results) ? res.results : [],
+      count: Number(res?.count ?? 0),
+      next: res?.next || null,
+    };
+  };
+
+  const loadPuntate = useCallback(async ({ page = 1, append = false } = {}) => {
+    if (!pgId) {
+      setPuntate([]);
+      setPuntatePage(1);
+      setPuntateTotal(0);
+      setPuntateHasMore(false);
+      return;
+    }
+    if (append) setPuntateLoadingMore(true);
+    else setPuntateLoading(true);
+    try {
+      const res = await scommesseGetMiePuntate(pgId, onLogout, page, PUNTATE_PAGE_SIZE);
+      const normalized = normalizePuntateResponse(res);
+      setPuntate((prev) => (append ? [...prev, ...normalized.results] : normalized.results));
+      setPuntatePage(page);
+      setPuntateTotal(normalized.count);
+      setPuntateHasMore(Boolean(normalized.next));
+    } catch (e) {
+      if (!append) setPuntate([]);
+      setStatus(e.message);
+    } finally {
+      if (append) setPuntateLoadingMore(false);
+      else setPuntateLoading(false);
+    }
+  }, [onLogout, pgId]);
+
   const loadList = useCallback(async ({ silent = false } = {}) => {
     if (silent) setListRefreshing(true);
     else {
@@ -148,15 +200,14 @@ const ScommesseTab = ({ onLogout }) => {
       setConfig(calRes?.config || null);
 
       if (pgId) {
-        const [pun, codRes] = await Promise.all([
-          scommesseGetMiePuntate(pgId, onLogout),
-          scommesseGetMieiCodici(pgId, onLogout),
-        ]);
-        setPuntate(Array.isArray(pun) ? pun : []);
+        const codRes = await scommesseGetMieiCodici(pgId, onLogout);
         setCodici(Array.isArray(codRes?.codici) ? codRes.codici : (Array.isArray(codRes) ? codRes : []));
         setValoreAll(Number(codRes?.valore_all ?? getValoreAllFromChar(char)) || 0);
       } else {
         setPuntate([]);
+        setPuntatePage(1);
+        setPuntateTotal(0);
+        setPuntateHasMore(false);
         setCodici([]);
         setValoreAll(0);
       }
@@ -166,9 +217,15 @@ const ScommesseTab = ({ onLogout }) => {
       if (silent) setListRefreshing(false);
       else setInitialLoading(false);
     }
-  }, [onLogout, pgId]);
+  }, [onLogout, pgId, char]);
 
   useEffect(() => { loadList(); }, [loadList]);
+
+  useEffect(() => {
+    if (section === 'mie' && view === 'list' && pgId) {
+      loadPuntate({ page: 1, append: false });
+    }
+  }, [section, view, pgId, loadPuntate]);
 
   const apriStoricoSquadra = async (squadraId, squadraNome) => {
     setSquadraModal({ id: squadraId, nome: squadraNome });
@@ -269,7 +326,9 @@ const ScommesseTab = ({ onLogout }) => {
         onLogout,
       );
       await refreshCharacterData();
-      await loadList({ silent: true });
+      setSection('mie');
+      setView('list');
+      await loadPuntate({ page: 1, append: false });
       setSelezioni({});
       setCodiceInput('');
       setStatus('Scommessa registrata!');
@@ -277,6 +336,24 @@ const ScommesseTab = ({ onLogout }) => {
       setStatus(e.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRiscuoti = async (puntataId, e) => {
+    e?.stopPropagation?.();
+    const idPg = char?.id ?? selectedCharacterId;
+    if (!idPg || !puntataId || riscuotendoId) return;
+    setRiscuotendoId(puntataId);
+    setStatus('');
+    try {
+      const updated = await scommesseRiscuotiVincita(idPg, puntataId, onLogout);
+      setPuntate((prev) => prev.map((p) => (p.id === puntataId ? { ...p, ...updated } : p)));
+      await refreshCharacterData();
+      setStatus(`Vincita di ${updated.vincita} CR riscossa!`);
+    } catch (err) {
+      setStatus(err.message);
+    } finally {
+      setRiscuotendoId(null);
     }
   };
 
@@ -296,7 +373,7 @@ const ScommesseTab = ({ onLogout }) => {
     }
   };
 
-  if (initialLoading && view === 'list') {
+  if (initialLoading && view === 'list' && section === 'play') {
     return (
       <div className="flex h-full items-center justify-center text-gray-400">
         <Loader2 className="animate-spin" size={32} />
@@ -445,6 +522,135 @@ const ScommesseTab = ({ onLogout }) => {
     );
   }
 
+  const renderPuntataCard = (p) => {
+    const risultatiOk = !!p.risultati_visibili;
+    const statoLabel = risultatiOk
+      ? (STATO_PUNTATA_LABEL[p.stato] || p.stato)
+      : 'In attesa risultati';
+    return (
+      <div
+        key={p.id}
+        className={`rounded border p-3 text-sm ${
+          risultatiOk ? 'border-gray-700 bg-gray-800' : 'border-amber-800/40 bg-amber-950/20'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-2">
+          <button
+            type="button"
+            disabled={!p.calendario}
+            onClick={() => p.calendario && openCalendario(String(p.calendario))}
+            className="min-w-0 flex-1 text-left disabled:opacity-60"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-gray-100">{p.calendario_titolo}</span>
+              {risultatiOk && p.stato === 'WON' && <CheckCircle2 className="shrink-0 text-emerald-400" size={18} />}
+              {risultatiOk && p.stato === 'LOST' && <XCircle className="shrink-0 text-red-400" size={18} />}
+              {(!risultatiOk || p.stato === 'PENDING') && <Clock className="shrink-0 text-amber-400" size={18} />}
+            </div>
+            <div className="mt-1 text-xs text-gray-400">
+              Piazzata il {new Date(p.created_at).toLocaleString('it-IT')}
+              {' · '}{p.importo} CR · quota {p.quota_totale} · {p.tipo}
+              {' · '}{statoLabel}
+              {risultatiOk && p.stato === 'WON' && p.vincita_riscossa ? ' (riscossa)' : ''}
+            </div>
+            {!risultatiOk && p.data_risoluzione && (
+              <p className="mt-1 text-xs text-amber-200/80">
+                Risultati previsti: {new Date(p.data_risoluzione).toLocaleString('it-IT')}
+              </p>
+            )}
+            {risultatiOk && p.stato === 'WON' && p.vincita != null && (
+              <p className="mt-1 text-xs text-emerald-300">Vincita: {p.vincita} CR</p>
+            )}
+          </button>
+          {p.puo_riscuotere && (
+            <button
+              type="button"
+              disabled={riscuotendoId === p.id}
+              onClick={(e) => handleRiscuoti(p.id, e)}
+              className="shrink-0 rounded bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
+            >
+              {riscuotendoId === p.id ? '…' : `Riscuoti ${p.vincita} CR`}
+            </button>
+          )}
+        </div>
+        {p.selezioni?.length > 0 && (
+          <ul className="mt-2 space-y-1 border-t border-gray-700/80 pt-2 text-xs text-gray-300">
+            {p.selezioni.map((sel) => {
+              const esitoReale = risultatiOk ? sel.esito_reale : null;
+              const indovinato = esitoReale != null && sel.esito_scelto === esitoReale;
+              const sbagliato = esitoReale != null && sel.esito_scelto !== esitoReale;
+              return (
+                <li key={sel.id} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-gray-400">{sel.incontro_label}</span>
+                  <span className={`shrink-0 font-mono font-bold ${
+                    indovinato ? 'text-emerald-400' : sbagliato ? 'text-red-400' : 'text-amber-300'
+                  }`}>
+                    {ESITO_SCOMMESSA_LABEL[sel.esito_scelto] || sel.esito_scelto}
+                    {esitoReale != null ? ` / ${ESITO_SCOMMESSA_LABEL[esitoReale] || esitoReale}` : ''}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {p.calendario && (
+          <button
+            type="button"
+            onClick={() => openCalendario(String(p.calendario))}
+            className="mt-2 text-[11px] text-indigo-400 hover:underline"
+          >
+            Apri calendario
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderMiePuntate = () => {
+    if (puntateLoading && puntate.length === 0) {
+      return (
+        <div className="flex justify-center py-12 text-gray-400">
+          <Loader2 className="animate-spin" size={28} />
+        </div>
+      );
+    }
+    return (
+      <>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-400">
+            Le puntate in attesa mostrano cosa hai giocato; esito e riscossione compaiono dopo la pubblicazione dei risultati.
+          </p>
+          {puntateTotal > 0 && (
+            <span className="shrink-0 text-[11px] text-gray-500">
+              {puntate.length} di {puntateTotal}
+            </span>
+          )}
+        </div>
+        {puntate.length === 0 && (
+          <p className="text-sm text-gray-500">Nessuna scommessa piazzata.</p>
+        )}
+        <div className="space-y-2">
+          {puntate.map((p) => renderPuntataCard(p))}
+        </div>
+        {puntateHasMore && (
+          <button
+            type="button"
+            disabled={puntateLoadingMore}
+            onClick={() => loadPuntate({ page: puntatePage + 1, append: true })}
+            className="mt-3 w-full rounded border border-gray-600 py-2 text-xs text-gray-300 hover:bg-gray-800 disabled:opacity-50"
+          >
+            {puntateLoadingMore ? 'Caricamento…' : 'Carica scommesse precedenti'}
+          </button>
+        )}
+        {puntate.some((x) => x.puo_riscuotere) && (
+          <p className="mt-2 text-xs text-emerald-300">
+            Hai {puntate.filter((x) => x.puo_riscuotere).length} vincita/e da riscuotere in questa pagina.
+          </p>
+        )}
+      </>
+    );
+  };
+
   const scommettiOra = calendari.filter((c) => c.scommesse_aperte);
   const inArrivo = calendari.filter((c) => !c.scommesse_aperte && !c.risultati_visibili);
   const conclusi = calendari.filter((c) => c.risultati_visibili);
@@ -505,6 +711,33 @@ const ScommesseTab = ({ onLogout }) => {
             <> · Max senza codice: {config.importo_max_senza_codice_default} CR</>
           )}
         </p>
+        {view === 'list' && (
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSection('play')}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
+                section === 'play'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              Calendari
+            </button>
+            <button
+              type="button"
+              onClick={() => setSection('mie')}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
+                section === 'mie'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              <Ticket size={15} />
+              Le mie scommesse
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -514,6 +747,10 @@ const ScommesseTab = ({ onLogout }) => {
           </div>
         )}
 
+        {section === 'mie' && renderMiePuntate()}
+
+        {section === 'play' && (
+          <>
         {isAllibratore && (
           <section className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -563,34 +800,8 @@ const ScommesseTab = ({ onLogout }) => {
             {conclusi.map((cal) => renderCalendarioCard(cal, { variant: 'done' }))}
           </div>
         </section>
-
-        <section>
-          <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase text-gray-400"><Ticket size={14} /> Le mie scommesse</h3>
-          {puntate.length === 0 && <p className="text-sm text-gray-500">Nessuna puntata.</p>}
-          <div className="space-y-2">
-            {puntate.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                disabled={!p.calendario}
-                onClick={() => p.calendario && openCalendario(String(p.calendario))}
-                className="w-full rounded border border-gray-700 bg-gray-800 p-3 text-left text-sm hover:border-indigo-500 disabled:opacity-60"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold">{p.calendario_titolo}</span>
-                  {p.stato === 'WON' && <CheckCircle2 className="text-emerald-400" size={18} />}
-                  {p.stato === 'LOST' && <XCircle className="text-red-400" size={18} />}
-                  {p.stato === 'PENDING' && <Clock className="text-amber-400" size={18} />}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {p.importo} CR · quota {p.quota_totale} · {p.tipo}
-                  {p.vincita != null && p.stato === 'WON' ? ` · vincita ${p.vincita} CR` : ''}
-                  {p.calendario ? ' · Tocca per dettagli' : ''}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
+          </>
+        )}
       </div>
     </div>
   );

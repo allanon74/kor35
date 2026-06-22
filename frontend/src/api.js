@@ -3685,10 +3685,25 @@ export const scommessePiazzaPuntata = (personaggioId, payload, onLogout) =>
         body: JSON.stringify({ ...payload, personaggio_id: personaggioId }),
     }, onLogout);
 
-export const scommesseGetMiePuntate = (personaggioId, onLogout) =>
-    fetchAuthenticated(
-        `/api/personaggi/api/scommesse/mie-puntate/?personaggio_id=${encodeURIComponent(personaggioId)}`,
+export const scommesseGetMiePuntate = (personaggioId, onLogout, page = 1, pageSize = 10) => {
+    const params = new URLSearchParams();
+    params.set('personaggio_id', String(personaggioId));
+    params.set('page', String(page));
+    params.set('page_size', String(pageSize));
+    return fetchAuthenticated(
+        `/api/personaggi/api/scommesse/mie-puntate/?${params.toString()}`,
         { method: 'GET' },
+        onLogout,
+    );
+};
+
+export const scommesseRiscuotiVincita = (personaggioId, puntataId, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/scommesse/puntate/${encodeURIComponent(puntataId)}/riscuoti/`,
+        {
+            method: 'POST',
+            body: JSON.stringify({ personaggio_id: personaggioId }),
+        },
         onLogout,
     );
 

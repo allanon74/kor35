@@ -60,10 +60,6 @@ def _liquida_calendario(calendario: CalendarioScommesse):
         )
         if vinta:
             vincita = _decimal2(puntata.importo * puntata.quota_totale)
-            puntata.personaggio.modifica_crediti(
-                float(vincita),
-                f"Scommessa vinta ({calendario.titolo or calendario.sport.nome})",
-            )
             puntata.stato = PuntataScommessa.STATO_WON
             puntata.vincita = vincita
         else:
@@ -206,6 +202,39 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
             esito_scelto=sel["esito"].upper(),
         )
 
+    return puntata
+
+
+@transaction.atomic
+def riscuoti_vincita(personaggio, puntata_id):
+    """Accredita la vincita al giocatore dopo liquidazione calendario."""
+    try:
+        puntata = (
+            PuntataScommessa.objects.select_for_update()
+            .select_related("calendario__sport", "personaggio")
+            .get(pk=puntata_id, personaggio=personaggio)
+        )
+    except PuntataScommessa.DoesNotExist:
+        raise ValidationError("Puntata non trovata.")
+
+    if not risultati_pubblicati(puntata.calendario.data_risoluzione):
+        raise ValidationError("I risultati non sono ancora stati pubblicati.")
+
+    if puntata.stato != PuntataScommessa.STATO_WON:
+        raise ValidationError("Questa puntata non ha una vincita da riscuotere.")
+    if puntata.vincita_riscossa:
+        raise ValidationError("Vincita già riscossa.")
+    vincita = puntata.vincita or Decimal("0.00")
+    if vincita <= 0:
+        raise ValidationError("Importo vincita non valido.")
+
+    personaggio.modifica_crediti(
+        float(vincita),
+        f"Riscossione scommessa ({puntata.calendario.titolo or puntata.calendario.sport.nome})",
+    )
+    puntata.vincita_riscossa = True
+    puntata.riscossa_at = timezone.now()
+    puntata.save(update_fields=["vincita_riscossa", "riscossa_at", "updated_at"])
     return puntata
 
 

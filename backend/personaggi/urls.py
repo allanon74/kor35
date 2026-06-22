@@ -310,6 +310,7 @@ urlpatterns = [
     path('api/scommesse/calendari/<uuid:calendario_id>/', views_scommesse.ScommesseCalendarioDetailPlayerView.as_view(), name='scommesse-calendario-detail'),
     path('api/scommesse/puntate/', views_scommesse.ScommessePuntataCreateView.as_view(), name='scommesse-puntate-create'),
     path('api/scommesse/mie-puntate/', views_scommesse.ScommesseMiePuntateView.as_view(), name='scommesse-mie-puntate'),
+    path('api/scommesse/puntate/<uuid:puntata_id>/riscuoti/', views_scommesse.ScommesseRiscuotiVincitaView.as_view(), name='scommesse-riscuoti-vincita'),
     path('api/scommesse/codici/genera/', views_scommesse.ScommesseGeneraCodiceView.as_view(), name='scommesse-codici-genera'),
     path('api/scommesse/miei-codici/', views_scommesse.ScommesseMieiCodiciView.as_view(), name='scommesse-miei-codici'),
     path('api/scommesse/config/', views_scommesse.ScommesseConfigPlayerView.as_view(), name='scommesse-config'),
