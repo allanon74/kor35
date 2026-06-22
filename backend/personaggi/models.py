@@ -6820,6 +6820,10 @@ class Messaggio(SyncableModel, models.Model):
     crediti_allegati = models.IntegerField(default=0)
     oggetti_allegati_snapshot = models.JSONField(default=list, blank=True)
     is_staff_message = models.BooleanField(default=False)
+    mostra_proprietario_giocatore = models.BooleanField(
+        default=True,
+        help_text="Se attivo, il destinatario vede anche l'identità del giocatore proprietario del personaggio mittente.",
+    )
     letto_staff = models.BooleanField(default=False)  # Per messaggi staff
     cancellato_staff = models.BooleanField(default=False)  # Per messaggi staff
     in_risposta_a = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='risposte')  # Thread conversazione

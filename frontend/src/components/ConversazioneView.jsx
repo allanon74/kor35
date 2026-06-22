@@ -74,6 +74,11 @@ const ConversazioneView = ({ conversazione, onRispondi, onClose, currentPersonag
                                     {showAvatar && (
                                         <span className={`text-xs font-bold ${isStaff ? 'text-red-400' : isMine ? 'text-indigo-400' : 'text-gray-400'} px-2`}>
                                             {msg.mittente_personaggio_nome || msg.mittente_nome || 'Staff'}
+                                            {msg.mostra_proprietario_giocatore && msg.mittente_proprietario_nome ? (
+                                                <span className="font-normal text-gray-500 ml-1">
+                                                    ({msg.mittente_proprietario_nome})
+                                                </span>
+                                            ) : null}
                                         </span>
                                     )}
                                     

@@ -11,6 +11,8 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
         userMessages, 
         fetchUserMessages, 
         selectedCharacterId,
+        personaggiList,
+        isCampaignStaffer,
         handleToggleRead,
         handleDeleteMessage: contextDeleteMessage
     } = useCharacter();
@@ -23,6 +25,14 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
     const transferableItems = (char?.oggetti || []).filter(
         (item) => item && item.id && item.tipo_oggetto === 'FIS' && !item.is_equipaggiato
     );
+
+    const messageSenderName = (msg) =>
+        msg.mittente_personaggio_nome || msg.mittente_nome || (msg.mittente_is_staff ? 'Staff' : 'Sistema');
+
+    const messageSenderSubtitle = (msg) => {
+        if (!msg.mostra_proprietario_giocatore || !msg.mittente_proprietario_nome) return null;
+        return `Giocatore: ${msg.mittente_proprietario_nome}`;
+    };
 
     const firstUnreadId = useMemo(() => {
         const m = (userMessages || []).find((x) => x && x.letto === false);
@@ -64,7 +74,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
             // Altrimenti rispondi al mittente (usa mittente_personaggio_id dal serializer)
             setReplyToRecipient({ 
                 id: msg.mittente_personaggio_id, 
-                nome: msg.mittente_nome,
+                nome: messageSenderName(msg),
                 isStaff: false 
             });
         } else {
@@ -90,7 +100,7 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                         const isOutgoing = Number(msg.mittente_personaggio_id) === Number(selectedCharacterId);
                         const transferCounterpartName = isOutgoing
                             ? (msg.destinatario_personaggio || 'destinatario sconosciuto')
-                            : (msg.mittente_personaggio_nome || msg.mittente_nome || 'mittente sconosciuto');
+                            : messageSenderName(msg);
 
                         return (
                             <div 
@@ -112,8 +122,13 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                                         <div className="flex items-center gap-2">
                                             {isRead ? <Mail size={14} className="opacity-50"/> : <Mail size={14} className="text-yellow-400 animate-pulse"/>}
                                             <span className={`text-xs font-bold uppercase tracking-wider ${isStaff ? 'text-red-300' : 'text-indigo-200'}`}>
-                                                {msg.mittente_nome || 'Sistema'}
+                                                {messageSenderName(msg)}
                                             </span>
+                                            {messageSenderSubtitle(msg) && (
+                                                <span className="text-[10px] text-gray-400 normal-case font-normal">
+                                                    {messageSenderSubtitle(msg)}
+                                                </span>
+                                            )}
                                             {!isRead && (
                                                 <span className="text-[9px] bg-yellow-600 text-white px-1.5 py-0.5 rounded-full font-bold uppercase">
                                                     Nuovo
@@ -249,6 +264,8 @@ const PlayerMessageTab = ({ onLogout, composeTarget, onComposeTargetConsumed, sc
                     setReplyToRecipient(null);
                 }}
                 currentCharacterId={selectedCharacterId}
+                availableCharacters={personaggiList}
+                isCampaignStaffer={isCampaignStaffer}
                 replyToRecipient={replyToRecipient}
                 onMessageSent={() => {
                     fetchUserMessages(selectedCharacterId);

@@ -117,10 +117,10 @@ const AdminMessageTab = ({ onLogout }) => {
         if (msg.mittente_personaggio_id) {
             setSingleRecipient({ 
                 id: msg.mittente_personaggio_id, 
-                nome: msg.mittente_nome 
+                nome: msg.mittente_personaggio_nome || msg.mittente_nome 
             });
             setTargetType('single');
-            setSearchQuery(msg.mittente_nome || '');
+            setSearchQuery(msg.mittente_personaggio_nome || msg.mittente_nome || '');
             // Cambia alla tab "Nuovo Msg" (index 1)
             setSelectedTab(1);
         } else {
@@ -313,6 +313,14 @@ const AdminMessageTab = ({ onLogout }) => {
                                                 <span className="font-bold text-green-300 block text-sm">
                                                     Da: {msg.mittente_personaggio_nome || msg.mittente_nome || 'Utente Sconosciuto / Sistema'}
                                                 </span>
+                                                {msg.mittente_proprietario_nome && (
+                                                    <span className="text-[11px] text-gray-400 block">
+                                                        Giocatore: {msg.mittente_proprietario_nome}
+                                                        {!msg.mostra_proprietario_giocatore && (
+                                                            <span className="ml-1 text-amber-400/90">(nascosto al destinatario)</span>
+                                                        )}
+                                                    </span>
+                                                )}
                                                 {!isRead && <span className="bg-green-600 text-white text-[9px] font-bold px-2 py-0.5 rounded shadow-sm uppercase tracking-wide animate-pulse">Nuovo</span>}
                                             </div>
                                             <span className="text-[10px] text-gray-500 uppercase tracking-wider">

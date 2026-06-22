@@ -3173,6 +3173,8 @@ class MessaggioSerializer(serializers.ModelSerializer):
     destinatario_gruppo = GruppoSerializer(read_only=True)
     letto = serializers.SerializerMethodField()
     mittente_is_staff = serializers.SerializerMethodField()
+    mittente_proprietario_nome = serializers.SerializerMethodField()
+    mostra_proprietario_giocatore = serializers.BooleanField(read_only=True)
     data_creazione = serializers.DateTimeField(source='data_invio', read_only=True)
     in_risposta_a_id = serializers.IntegerField(source='in_risposta_a.id', read_only=True, allow_null=True)
     risposte_count = serializers.SerializerMethodField()
@@ -3181,6 +3183,7 @@ class MessaggioSerializer(serializers.ModelSerializer):
         model = Messaggio
         fields = (
             'id', 'mittente', 'mittente_nome', 'mittente_personaggio_id', 'mittente_personaggio_nome',
+            'mittente_proprietario_nome', 'mostra_proprietario_giocatore',
             'mittente_is_staff', 'tipo_messaggio', 'titolo', 'testo', 
             'data_invio', 'data_creazione', 'destinatario_personaggio', 'destinatario_personaggio_id',
             'destinatario_gruppo', 'salva_in_cronologia', 'letto', 'is_staff_message',
@@ -3212,17 +3215,48 @@ class MessaggioSerializer(serializers.ModelSerializer):
         return social_display_name(obj.mittente_personaggio)
 
     def get_mittente_nome(self, obj):
-        if obj.mittente:
-            return obj.mittente.username
         if obj.mittente_personaggio:
             from social.display_names import social_display_name
             return social_display_name(obj.mittente_personaggio)
+        if obj.mittente:
+            if obj.mittente.is_staff:
+                return "Staff"
+            return obj.mittente.username
         return None
     
     def get_mittente_is_staff(self, obj):
         if obj.mittente:
             return obj.mittente.is_staff
         return False
+
+    def _viewer_may_see_proprietario(self, obj):
+        if obj.mostra_proprietario_giocatore:
+            return True
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser or user.is_staff:
+            return True
+        from personaggi.views import _is_campaign_staffer
+        return _is_campaign_staffer(user, obj.campagna)
+
+    def _proprietario_display_name(self, obj):
+        user = None
+        if obj.mittente_personaggio_id:
+            prop = getattr(obj.mittente_personaggio, 'proprietario', None)
+            user = prop
+        if not user and obj.mittente_id:
+            user = obj.mittente
+        if not user:
+            return None
+        full = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        return full or user.username
+
+    def get_mittente_proprietario_nome(self, obj):
+        if not self._viewer_may_see_proprietario(obj):
+            return None
+        return self._proprietario_display_name(obj)
     
     def get_risposte_count(self, obj):
         return obj.risposte.count()
@@ -3305,6 +3339,7 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         queryset=Personaggio.objects.all(), source='mittente_personaggio', write_only=True, required=False, allow_null=True
     )
     crediti_da_inviare = serializers.IntegerField(required=False, min_value=0, default=0)
+    mostra_proprietario_giocatore = serializers.BooleanField(required=False, allow_null=True, default=None)
     oggetti_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         required=False,
@@ -3320,6 +3355,7 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
             'testo',
             'is_staff_message',
             'mittente_personaggio_id',
+            'mostra_proprietario_giocatore',
             'crediti_da_inviare',
             'oggetti_ids',
         )

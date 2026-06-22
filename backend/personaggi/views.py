@@ -176,6 +176,19 @@ def _user_campaign_role(user, campagna):
     return row.ruolo if row else None
 
 
+def _is_campaign_staffer(user, campagna):
+    if not user:
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    role = _user_campaign_role(user, campagna)
+    return role in (CAMPAGNA_ROLE_STAFFER, CAMPAGNA_ROLE_MASTER, CAMPAGNA_ROLE_HEAD_MASTER)
+
+
+def _default_mostra_proprietario_giocatore(user, campagna):
+    return not _is_campaign_staffer(user, campagna)
+
+
 def _can_operate_in_campaign(user, campagna, *, needs_master=False):
     if not user or not campagna:
         return False
@@ -2582,6 +2595,7 @@ class MessaggioListView(generics.ListAPIView):
                 "mittente",
                 "mittente_personaggio",
                 "mittente_personaggio__social_profile",
+                "mittente_personaggio__proprietario",
                 "destinatario_personaggio",
                 "destinatario_personaggio__social_profile",
             )
@@ -3182,6 +3196,11 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
         if not is_staff_message and not validated.get('destinatario_personaggio'):
             raise serializers.ValidationError({"destinatario_id": "Destinatario obbligatorio."})
 
+        campagna = personaggio_mittente.campagna
+        mostra_proprietario = validated.get('mostra_proprietario_giocatore')
+        if mostra_proprietario is None:
+            mostra_proprietario = _default_mostra_proprietario_giocatore(self.request.user, campagna)
+
         with transaction.atomic():
             # Lock pessimista su mittente (e destinatario, se presente) prima dei check economici.
             personaggio_mittente = Personaggio.objects.select_for_update().get(id=personaggio_mittente.id)
@@ -3224,6 +3243,7 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                     tipo_messaggio=Messaggio.TIPO_STAFF,
                     is_staff_message=True,
                     destinatario_personaggio=None,
+                    mostra_proprietario_giocatore=mostra_proprietario,
                     crediti_allegati=0,
                     oggetti_allegati_snapshot=[],
                 )
@@ -3241,6 +3261,7 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                     mittente=self.request.user,
                     mittente_personaggio=personaggio_mittente,
                     destinatario_personaggio=destinatario,
+                    mostra_proprietario_giocatore=mostra_proprietario,
                     crediti_allegati=crediti_da_inviare,
                     oggetti_allegati_snapshot=oggetti_snapshot,
                 )
@@ -5347,6 +5368,12 @@ class StaffMessageListView(generics.ListAPIView):
         return Messaggio.objects.filter(
             is_staff_message=True, 
             cancellato_staff=False
+        ).select_related(
+            'mittente',
+            'mittente_personaggio',
+            'mittente_personaggio__proprietario',
+            'mittente_personaggio__social_profile',
+            'destinatario_personaggio',
         ).order_by('-data_invio')
 
 class StaffMessageMarkReadView(APIView):
