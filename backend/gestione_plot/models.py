@@ -84,7 +84,26 @@ class Evento(SyncableModel, models.Model):
     data_fine = models.DateTimeField()
     sinossi = models.TextField(blank=True)
     luogo = models.CharField(max_length=255, blank=True)
-    
+    logistiche_pubbliche = models.TextField(
+        blank=True,
+        verbose_name="Logistiche pubbliche",
+        help_text="Indicazioni logistiche visibili ai giocatori (HTML).",
+    )
+    latitudine = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Latitudine",
+    )
+    longitudine = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Longitudine",
+    )
+
     partecipanti = models.ManyToManyField(
         Personaggio, 
         related_name='eventi_partecipati',

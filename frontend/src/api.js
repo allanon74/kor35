@@ -3340,6 +3340,17 @@ export const getEventiPubblici = () => {
   return fetchPublic('/api/plot/api/public/eventi/');
 };
 
+export const getEventoPubblicoDettaglio = (id) => {
+  return fetchPublic(`/api/plot/api/public/eventi/${id}/`);
+};
+
+export const geocodeEventoLuogo = (query, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/eventi/geocode/?q=${encodeURIComponent(query)}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
 // --- CONFIGURAZIONE SITO ---
 export const getConfigurazioneSito = () => {
   return fetchPublic('/api/plot/api/public/configurazione-sito/1/');

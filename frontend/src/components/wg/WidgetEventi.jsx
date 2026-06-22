@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Calendar, MapPin, Clock, AlertCircle } from 'lucide-react';
 import { getEventiPubblici } from '../../api';
 import { sanitizeHtml } from '../../utils/htmlSanitizer';
@@ -127,6 +128,17 @@ export default function WidgetEventi() {
                       </div>
                     )}
                   </div>
+
+                  {evento.ha_info_logistiche && (
+                    <p className="mt-3 text-sm">
+                      <Link
+                        to={`/eventi/${evento.id}`}
+                        className="font-semibold text-red-800 hover:text-red-950 underline underline-offset-2"
+                      >
+                        Per maggiori informazioni clicca qui…
+                      </Link>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

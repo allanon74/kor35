@@ -11,6 +11,7 @@ import PublicLayout from './layouts/PublicLayout';
 // Pages
 import WikiPage from './pages/WikiPage';
 import SocialPublicPostPage from './pages/SocialPublicPostPage';
+import EventoLogisticaPage from './pages/EventoLogisticaPage';
 import SocialPage from './pages/SocialPage';
 import MaintenanceConsolePage from './pages/MaintenanceConsolePage';
 import { API_BASE_URL, getConfigurazioneSito, setApiMaintenanceMode, isApiMaintenanceMode } from './api';
@@ -158,6 +159,7 @@ export default function App() {
           <Route path="/" element={<PublicLayout token={token} />}>
             <Route index element={<WikiPage slug="home" />} />
             <Route path="regolamento/:slug" element={<WikiPage />} />
+            <Route path="eventi/:id" element={<EventoLogisticaPage />} />
             <Route path="social/post/:slug" element={<SocialPublicPostPage />} />
             <Route 
               path="login" 

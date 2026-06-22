@@ -61,7 +61,7 @@ from .models import (
     ConfigurazioneSito, LinkSocial, ManualePdf, ManualePdfBatchJob, ManualePdfGenerazione,
 )
 from .serializers import (
-    EventoSerializer, EventoPubblicoSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer, 
+    EventoSerializer, EventoPubblicoSerializer, EventoPubblicoDettaglioSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer,
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiTierCollectionWidgetSerializer, WikiButtonWidgetSerializer,
     ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer, UserShortSerializer
@@ -186,6 +186,31 @@ class EventoViewSet(viewsets.ModelViewSet):
         context["plot_staffer_limited"] = bool(is_staffer_only)
         context["plot_staff_user_id"] = self.request.user.id if is_staffer_only else None
         return context
+
+    @action(detail=False, methods=["get"], url_path="geocode")
+    def geocode(self, request):
+        from .evento_coordinate import geocode_address
+
+        query = (request.query_params.get("q") or "").strip()
+        if not query:
+            return Response({"detail": "Parametro q obbligatorio."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = geocode_address(query)
+        except Exception:
+            logging.exception("Geocoding evento fallito per q=%r", query)
+            return Response(
+                {"detail": "Servizio mappe temporaneamente non disponibile."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        if not result:
+            return Response({"detail": "Nessun risultato per questo indirizzo."}, status=status.HTTP_404_NOT_FOUND)
+        lat, lng = result
+        return Response(
+            {
+                "latitudine": format(lat, "f"),
+                "longitudine": format(lng, "f"),
+            }
+        )
 
     @action(detail=True, methods=["post"])
     def inizia(self, request, pk=None):
@@ -811,21 +836,42 @@ class PublicEventiViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = EventoPubblicoSerializer
     permission_classes = [permissions.AllowAny]
-    
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return EventoPubblicoDettaglioSerializer
+        return EventoPubblicoSerializer
+
     def get_queryset(self):
         from django.utils import timezone
         from datetime import timedelta
-        
+
         # Data di oggi e data limite per eventi passati (30 giorni fa)
         oggi = timezone.now()
         trenta_giorni_fa = oggi - timedelta(days=30)
-        
+
         # Restituisce eventi che:
         # - Sono nel futuro (data_inizio >= oggi), O
         # - Sono finiti da meno di 30 giorni (data_fine >= 30 giorni fa)
         return Evento.objects.filter(
             data_fine__gte=trenta_giorni_fa
         ).order_by('data_inizio')
+
+    def retrieve(self, request, *args, **kwargs):
+        from .evento_coordinate import evento_ha_info_logistiche
+
+        instance = self.get_object()
+        if not evento_ha_info_logistiche(
+            instance.logistiche_pubbliche,
+            instance.latitudine,
+            instance.longitudine,
+        ):
+            return Response(
+                {"detail": "Nessuna informazione logistica disponibile per questo evento."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
 class PublicConfigurazioneSitoViewSet(viewsets.ReadOnlyModelViewSet):
     """

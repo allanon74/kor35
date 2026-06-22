@@ -18,6 +18,8 @@ import EventoSection from './EventoSection';
 import GiornoSection from './GiornoSection';
 import QrTab from './QrTab'; 
 import RichTextEditor from './RichTextEditor';
+import EventoCoordinatePicker from './editors/EventoCoordinatePicker';
+import { normalizeCoordinatesForSave } from '../utils/eventoCoordinates';
 import ConfirmDialog from './editors/ConfirmDialog';
 import QrAssociationConflictBody from './editors/QrAssociationConflictBody';
 import useStaffMinigiocoQr from '../hooks/useStaffMinigiocoQr';
@@ -216,6 +218,14 @@ const PlotTab = ({ onLogout }) => {
                 const pcEv = parseInt(String(raw.pc_guadagnati ?? '1'), 10);
                 raw.pc_guadagnati = Number.isFinite(pcEv) && pcEv >= 0 ? pcEv : 1;
                 raw.iscrizione_test_attiva = !!raw.iscrizione_test_attiva;
+                try {
+                    const coords = normalizeCoordinatesForSave(raw.latitudine, raw.longitudine);
+                    raw.latitudine = coords.latitudine;
+                    raw.longitudine = coords.longitudine;
+                } catch (coordErr) {
+                    alert(coordErr.message || 'Coordinate non valide.');
+                    return;
+                }
                 raw.iscrizione_opzioni = Array.isArray(raw.iscrizione_opzioni)
                     ? raw.iscrizione_opzioni.map((op, idx) => ({
                           sync_id: op.sync_id || undefined,
@@ -662,6 +672,30 @@ const PlotTab = ({ onLogout }) => {
                                     </div>
                                     <div className="md:col-span-2">
                                         <RichTextEditor label="Sinossi" value={formData.sinossi} onChange={val => setFormData({...formData, sinossi: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
+                                    </div>
+                                    <div className="md:col-span-2 rounded-lg border border-amber-800/50 bg-amber-950/20 p-4 space-y-4">
+                                        <p className="text-[10px] font-black uppercase text-amber-300 tracking-widest">
+                                            Informazioni logistiche (pubblico)
+                                        </p>
+                                        <p className="text-[11px] text-gray-400 leading-relaxed">
+                                            Visibili ai giocatori dalla homepage: link «per maggiori informazioni» e pagina dedicata.
+                                        </p>
+                                        <RichTextEditor
+                                            label="Indicazioni logistiche"
+                                            value={formData.logistiche_pubbliche || ''}
+                                            onChange={(val) => setFormData({ ...formData, logistiche_pubbliche: val })}
+                                            stickyToolbar
+                                            editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]"
+                                        />
+                                        <EventoCoordinatePicker
+                                            latitudine={formData.latitudine}
+                                            longitudine={formData.longitudine}
+                                            luogo={formData.luogo}
+                                            onLogout={onLogout}
+                                            onChange={({ latitudine, longitudine }) =>
+                                                setFormData((prev) => ({ ...prev, latitudine, longitudine }))
+                                            }
+                                        />
                                     </div>
                                     <div className="md:col-span-2 rounded-lg border border-indigo-800/60 bg-indigo-950/30 p-4 space-y-3">
                                         <p className="text-[10px] font-black uppercase text-indigo-300 tracking-widest">

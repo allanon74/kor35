@@ -295,12 +295,30 @@ class EventoSerializer(serializers.ModelSerializer):
         model = Evento
         fields = [
             'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine',
-            'luogo', 'pc_guadagnati', 'crediti_guadagnati', 'crediti_base_inizio_evento',
+            'luogo', 'logistiche_pubbliche', 'latitudine', 'longitudine',
+            'pc_guadagnati', 'crediti_guadagnati', 'crediti_base_inizio_evento',
             'started_at', 'ended_at', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
             'iscrizione_test_attiva', 'iscrizione_opzioni',
         ]
+
+    def validate(self, attrs):
+        from .evento_coordinate import normalize_evento_coordinates
+
+        lat_key = 'latitudine'
+        lng_key = 'longitudine'
+        lat = attrs.get(lat_key, getattr(self.instance, lat_key, None) if self.instance else None)
+        lng = attrs.get(lng_key, getattr(self.instance, lng_key, None) if self.instance else None)
+        if lat_key not in attrs and lng_key not in attrs:
+            return attrs
+        try:
+            lat_norm, lng_norm = normalize_evento_coordinates(lat, lng)
+        except ValueError as exc:
+            raise serializers.ValidationError({'latitudine': str(exc)}) from exc
+        attrs[lat_key] = lat_norm
+        attrs[lng_key] = lng_norm
+        return attrs
 
     def get_giorni(self, obj):
         giorni_data = GiornoEventoSerializer(obj.giorni.all(), many=True, context=self.context).data
@@ -325,10 +343,47 @@ class EventoPubblicoSerializer(serializers.ModelSerializer):
     Serializer semplificato per gli eventi pubblici (homepage).
     Mostra solo le informazioni essenziali senza dati sensibili.
     """
+    ha_info_logistiche = serializers.SerializerMethodField()
+
     class Meta:
         model = Evento
-        fields = ['id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 'luogo']
-        
+        fields = [
+            'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine', 'luogo',
+            'ha_info_logistiche',
+        ]
+
+    def get_ha_info_logistiche(self, obj):
+        from .evento_coordinate import evento_ha_info_logistiche
+        return evento_ha_info_logistiche(
+            obj.logistiche_pubbliche,
+            obj.latitudine,
+            obj.longitudine,
+        )
+
+
+class EventoPubblicoDettaglioSerializer(EventoPubblicoSerializer):
+    """Dettaglio logistico pubblico di un singolo evento."""
+    link_navigatore = serializers.SerializerMethodField()
+
+    class Meta(EventoPubblicoSerializer.Meta):
+        fields = EventoPubblicoSerializer.Meta.fields + [
+            'logistiche_pubbliche',
+            'latitudine',
+            'longitudine',
+            'link_navigatore',
+        ]
+
+    def get_link_navigatore(self, obj):
+        from .evento_coordinate import build_navigatore_links, normalize_evento_coordinates
+
+        try:
+            lat, lng = normalize_evento_coordinates(obj.latitudine, obj.longitudine)
+        except ValueError:
+            return None
+        if lat is None or lng is None:
+            return None
+        return build_navigatore_links(lat, lng)
+
 class PaginaRegolamentoSerializer(serializers.ModelSerializer):
     manuali_pdf = serializers.SerializerMethodField()
     manuali_pdf_config = serializers.SerializerMethodField()
