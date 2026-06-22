@@ -58,6 +58,7 @@ import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
 import { isStoryActive, storyExpiresAtMs } from '../utils/story';
 import { HASHTAG_INLINE_REGEX, normalizeHashtagFilter } from '../utils/hashtags';
+import { findActiveMention, replaceActiveMention } from '../utils/instafameMentions';
 import { prepareProfileImageForUpload } from '../utils/profileImage';
 
 const formatProfilePrefettura = (profileData) => {
@@ -247,6 +248,20 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const editMediaCameraInputRef = useRef(null);
   const groupPostMediaCameraInputRef = useRef(null);
   const editGroupPostMediaCameraInputRef = useRef(null);
+  const postMentionCursorRef = useRef(null);
+  const postPendingSelectionRef = useRef(null);
+  const storyMentionCursorRef = useRef(null);
+  const storyPendingSelectionRef = useRef(null);
+  const commentMentionCursorRef = useRef({});
+  const commentPendingSelectionRefByPost = useRef({});
+
+  const commentPendingSelectionRefFor = (postId) => {
+    const key = String(postId);
+    if (!commentPendingSelectionRefByPost.current[key]) {
+      commentPendingSelectionRefByPost.current[key] = { current: null };
+    }
+    return commentPendingSelectionRefByPost.current[key];
+  };
 
   const [postForm, setPostForm] = useState({
     titolo: '',
@@ -472,24 +487,30 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     }
   };
 
-  const updateStoryTextWithMentions = async (nextText) => {
+  const updateStoryTextWithMentions = async (nextText, cursorPos) => {
+    const cursor = cursorPos ?? String(nextText || '').length;
+    storyMentionCursorRef.current = cursor;
     setStoryForm((p) => ({ ...p, testo: nextText }));
-    const match = nextText.match(/@([A-Za-z0-9_]{1,30})$/);
-    if (!match) {
+    const active = findActiveMention(nextText, cursor);
+    if (!active?.query) {
       setStoryMentionSuggestions([]);
       return;
     }
-    const q = match[1];
-    if (!q) return;
-    const res = await searchPersonaggi(q, selectedCharacterId);
+    const res = await searchPersonaggi(active.query, selectedCharacterId);
     setStoryMentionSuggestions(Array.isArray(res) ? res : []);
   };
 
   const insertMentionInStory = (personaggio) => {
-    setStoryForm((p) => ({
-      ...p,
-      testo: `${String(p.testo || '').replace(/@([A-Za-z0-9_]{1,30})$/, '')}@${personaggio.id} `,
-    }));
+    setStoryForm((p) => {
+      const { text, cursorPos } = replaceActiveMention(
+        p.testo,
+        storyMentionCursorRef.current ?? String(p.testo || '').length,
+        `@${personaggio.id} `
+      );
+      storyPendingSelectionRef.current = cursorPos;
+      storyMentionCursorRef.current = cursorPos;
+      return { ...p, testo: text };
+    });
     setStoryMentionSuggestions([]);
   };
 
@@ -680,16 +701,16 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     }
   };
 
-  const updatePostTextWithMentions = async (nextText) => {
+  const updatePostTextWithMentions = async (nextText, cursorPos) => {
+    const cursor = cursorPos ?? String(nextText || '').length;
+    postMentionCursorRef.current = cursor;
     setPostForm((p) => ({ ...p, testo: nextText }));
-    const match = nextText.match(/@([A-Za-z0-9_]{1,30})$/);
-    if (!match) {
+    const active = findActiveMention(nextText, cursor);
+    if (!active?.query) {
       setMentionSuggestions([]);
       return;
     }
-    const q = match[1];
-    if (!q) return;
-    const res = await searchPersonaggi(q, selectedCharacterId);
+    const res = await searchPersonaggi(active.query, selectedCharacterId);
     setMentionSuggestions(Array.isArray(res) ? res : []);
   };
 
@@ -700,29 +721,44 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   };
 
   const insertMention = (personaggio) => {
-    setPostForm((p) => ({
-      ...p,
-      testo: `${p.testo.replace(/@([A-Za-z0-9_]{1,30})$/, '')}@${personaggio.id} `,
-    }));
+    setPostForm((p) => {
+      const { text, cursorPos } = replaceActiveMention(
+        p.testo,
+        postMentionCursorRef.current ?? String(p.testo || '').length,
+        `@${personaggio.id} `
+      );
+      postPendingSelectionRef.current = cursorPos;
+      postMentionCursorRef.current = cursorPos;
+      return { ...p, testo: text };
+    });
     setMentionSuggestions([]);
   };
 
-  const updateCommentWithMentions = async (postId, nextText) => {
+  const updateCommentWithMentions = async (postId, nextText, cursorPos) => {
+    const cursor = cursorPos ?? String(nextText || '').length;
+    commentMentionCursorRef.current[postId] = cursor;
     setNewCommentByPost((prev) => ({ ...prev, [postId]: nextText }));
-    const match = nextText.match(/@([A-Za-z0-9_]{1,30})$/);
-    if (!match) {
+    const active = findActiveMention(nextText, cursor);
+    if (!active?.query) {
       setCommentMentionSuggestions((prev) => ({ ...prev, [postId]: [] }));
       return;
     }
-    const suggestions = await loadMentionSuggestions(match[1]);
+    const suggestions = await loadMentionSuggestions(active.query);
     setCommentMentionSuggestions((prev) => ({ ...prev, [postId]: suggestions }));
   };
 
   const insertMentionInComment = (postId, personaggio) => {
-    setNewCommentByPost((prev) => ({
-      ...prev,
-      [postId]: `${(prev[postId] || '').replace(/@([A-Za-z0-9_]{1,30})$/, '')}@${personaggio.id} `,
-    }));
+    setNewCommentByPost((prev) => {
+      const current = prev[postId] || '';
+      const { text, cursorPos } = replaceActiveMention(
+        current,
+        commentMentionCursorRef.current[postId] ?? current.length,
+        `@${personaggio.id} `
+      );
+      commentPendingSelectionRefFor(postId).current = cursorPos;
+      commentMentionCursorRef.current[postId] = cursorPos;
+      return { ...prev, [postId]: text };
+    });
     setCommentMentionSuggestions((prev) => ({ ...prev, [postId]: [] }));
   };
 
@@ -1685,6 +1721,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             placeholder="Testo del post..."
             value={postForm.testo}
             onChange={updatePostTextWithMentions}
+            onCursorActivity={updatePostTextWithMentions}
+            pendingSelectionRef={postPendingSelectionRef}
           />
           {mentionSuggestions.length > 0 && (
             <div className="bg-gray-800 border border-gray-700 rounded p-2 text-sm">
@@ -1872,6 +1910,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 placeholder="Testo story (puoi usare @ e #)..."
                 value={storyForm.testo}
                 onChange={updateStoryTextWithMentions}
+                onCursorActivity={updateStoryTextWithMentions}
+                pendingSelectionRef={storyPendingSelectionRef}
               />
               {storyMentionSuggestions.length > 0 && (
                 <div className="bg-gray-800 border border-gray-700 rounded p-2 text-sm">
@@ -2349,7 +2389,9 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                   placeholder="Scrivi un commento..."
                   value={newCommentByPost[post.id] || ''}
                   onFocus={() => ensureCommentsLoaded(post.id)}
-                  onChange={(text) => updateCommentWithMentions(post.id, text)}
+                  onChange={(text, cursorPos) => updateCommentWithMentions(post.id, text, cursorPos)}
+                  onCursorActivity={(text, cursorPos) => updateCommentWithMentions(post.id, text, cursorPos)}
+                  pendingSelectionRef={commentPendingSelectionRefFor(post.id)}
                 />
                 <button
                   onClick={() => submitComment(post.id)}

@@ -11,7 +11,7 @@ export const INSTAFAME_EMOJIS = [
   '⚔️', '🛡️', '🗡️', '🏹', '🔮', '🐉', '🦚', '👑', '💍', '🎖️', '🏆',
 ];
 
-export function insertEmojiAtCursor(textarea, emoji, value, onChange) {
+export function insertEmojiAtCursor(textarea, emoji, value, onChange, pendingSelectionRef) {
   const current = value ?? '';
   if (!textarea) {
     onChange(current + emoji);
@@ -20,10 +20,11 @@ export function insertEmojiAtCursor(textarea, emoji, value, onChange) {
   const start = textarea.selectionStart ?? current.length;
   const end = textarea.selectionEnd ?? start;
   const next = current.slice(0, start) + emoji + current.slice(end);
-  onChange(next);
+  const pos = start + emoji.length;
+  if (pendingSelectionRef) pendingSelectionRef.current = pos;
+  onChange(next, pos);
   requestAnimationFrame(() => {
     textarea.focus();
-    const pos = start + emoji.length;
     textarea.setSelectionRange(pos, pos);
   });
 }
@@ -34,6 +35,8 @@ export function insertEmojiAtCursor(textarea, emoji, value, onChange) {
 export default function InstafameTextArea({
   value,
   onChange,
+  onCursorActivity,
+  pendingSelectionRef,
   className = '',
   textareaClassName = '',
   placeholder,
@@ -45,6 +48,19 @@ export default function InstafameTextArea({
   const containerRef = useRef(null);
   const textareaRef = useRef(null);
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (pendingSelectionRef?.current == null) return undefined;
+    const pos = pendingSelectionRef.current;
+    pendingSelectionRef.current = null;
+    const frame = requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [value, pendingSelectionRef]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -61,7 +77,11 @@ export default function InstafameTextArea({
   }, [open]);
 
   const handleInsert = (emoji) => {
-    insertEmojiAtCursor(textareaRef.current, emoji, value, onChange);
+    insertEmojiAtCursor(textareaRef.current, emoji, value, onChange, pendingSelectionRef);
+  };
+
+  const notifyCursor = (event) => {
+    onCursorActivity?.(event.target.value, event.target.selectionStart);
   };
 
   const resolvedRows = compact ? 1 : rows;
@@ -79,7 +99,9 @@ export default function InstafameTextArea({
         placeholder={placeholder}
         rows={resolvedRows}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
+        onSelect={notifyCursor}
+        onClick={notifyCursor}
         {...rest}
       />
       <div
