@@ -1651,7 +1651,7 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
 
     permission_classes = [IsStaffOrMaster]
     pagination_class = PersonaggioStaffPagination
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'patch', 'post', 'head', 'options']
 
     def _staff_personaggi_queryset(self):
         from personaggi.views import _can_operate_in_campaign, _get_default_campaign
