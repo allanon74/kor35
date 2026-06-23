@@ -2863,6 +2863,27 @@ export const staffCreaOggettoDaBasePerPersonaggio = (personaggioId, oggettoBaseI
     body: JSON.stringify({ oggetto_base_id: oggettoBaseId, motivo }),
   }, onLogout);
 
+export const staffPersonaggioAggiungiOggetto = (personaggioId, oggettoId, motivo, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/aggiungi-oggetto/`, {
+    method: 'POST',
+    body: JSON.stringify({ oggetto_id: oggettoId, motivo }),
+  }, onLogout);
+
+export const staffPersonaggioRimuoviOggetto = (personaggioId, oggettoId, motivo, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/rimuovi-oggetto/`, {
+    method: 'POST',
+    body: JSON.stringify({ oggetto_id: oggettoId, motivo }),
+  }, onLogout);
+
+export const staffPersonaggioDistruggiOggetto = (personaggioId, oggettoId, motivo, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/distruggi-oggetto/`, {
+    method: 'POST',
+    body: JSON.stringify({ oggetto_id: oggettoId, motivo }),
+  }, onLogout);
+
+export const staffGetOggettoStaff = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/oggetti/${id}/`, { method: 'GET' }, onLogout);
+
 export const staffGetPersonaggioLogs = (id, page = 1, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/personaggi/${id}/logs/?page=${page}`,

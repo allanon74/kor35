@@ -13,6 +13,11 @@ import {
   staffPatchPersonaggio,
   staffAddResourcesToPersonaggio,
   staffCreaOggettoDaBasePerPersonaggio,
+  staffPersonaggioAggiungiOggetto,
+  staffPersonaggioRimuoviOggetto,
+  staffPersonaggioDistruggiOggetto,
+  staffGetOggettiSenzaPosizione,
+  staffGetOggettoStaff,
   staffGetOggettiBase,
   staffGetPersonaggioLogs,
   staffRigeneraLikePersonaggio,
@@ -77,6 +82,23 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   const [creazioneProposte, setCreazioneProposte] = useState(null);
   const [oggettiBase, setOggettiBase] = useState([]);
   const [oggettoBaseDraft, setOggettoBaseDraft] = useState({ id: '', motivo: 'Assegnazione staff' });
+  const [oggettiSenzaPosizione, setOggettiSenzaPosizione] = useState([]);
+  const [oggettoEsistenteDraft, setOggettoEsistenteDraft] = useState({ id: '', motivo: 'Assegnazione staff' });
+  const [manualOggettoId, setManualOggettoId] = useState('');
+  const [inventarioMotivo, setInventarioMotivo] = useState('Intervento staff inventario');
+
+  const loadOggettiSenzaPosizione = useCallback(async () => {
+    try {
+      const data = await staffGetOggettiSenzaPosizione(onLogout);
+      const list = Array.isArray(data) ? data : [];
+      setOggettiSenzaPosizione(list.map((o) => ({
+        id: o.id,
+        nome: `${o.nome} (#${o.id}, ${o.tipo_oggetto || '?'})`,
+      })));
+    } catch {
+      setOggettiSenzaPosizione([]);
+    }
+  }, [onLogout]);
 
   const loadLogs = useCallback(async (id) => {
     if (!id) return;
@@ -166,6 +188,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
     setShowQrScan(false);
     setLogs([]);
     setCreazioneProposte(null);
+    loadOggettiSenzaPosizione();
     await reloadDetail(row.id);
   };
 
@@ -704,14 +727,137 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           Crea istanza in inventario
                         </button>
                       </div>
+                      <div className="bg-gray-800/80 border border-indigo-900/50 rounded-lg p-3 space-y-2">
+                        <p className="text-xs text-gray-400">
+                          Associa un&apos;istanza <strong>oggetto</strong> già esistente (es. senza posizione o da altro inventario).
+                        </p>
+                        <SearchableSelect
+                          options={oggettiSenzaPosizione}
+                          value={oggettoEsistenteDraft.id}
+                          onChange={(v) => setOggettoEsistenteDraft((f) => ({ ...f, id: v }))}
+                          placeholder="Oggetti senza inventario…"
+                        />
+                        <div className="flex gap-2">
+                          <input
+                            className="flex-1 bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm font-mono"
+                            placeholder="Oppure ID oggetto"
+                            value={manualOggettoId}
+                            onChange={(e) => setManualOggettoId(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="px-2 py-1 bg-gray-700 rounded text-xs"
+                            onClick={async () => {
+                              const id = parseInt(manualOggettoId.trim(), 10);
+                              if (Number.isNaN(id)) {
+                                setMessage('ID oggetto non valido.');
+                                return;
+                              }
+                              try {
+                                const o = await staffGetOggettoStaff(id, onLogout);
+                                setOggettiSenzaPosizione((prev) => {
+                                  if (prev.some((x) => String(x.id) === String(id))) return prev;
+                                  return [...prev, { id: o.id, nome: `${o.nome} (#${o.id}, ${o.tipo_oggetto || '?'})` }];
+                                });
+                                setOggettoEsistenteDraft((f) => ({ ...f, id: o.id }));
+                                setManualOggettoId('');
+                              } catch (e) {
+                                setMessage(e.message || 'Oggetto non trovato');
+                              }
+                            }}
+                          >
+                            Cerca ID
+                          </button>
+                        </div>
+                        <input
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm"
+                          placeholder="Motivo (log PG)"
+                          value={oggettoEsistenteDraft.motivo}
+                          onChange={(e) => setOggettoEsistenteDraft((f) => ({ ...f, motivo: e.target.value }))}
+                        />
+                        <button
+                          type="button"
+                          disabled={!oggettoEsistenteDraft.id}
+                          onClick={async () => {
+                            try {
+                              const res = await staffPersonaggioAggiungiOggetto(
+                                detail.id,
+                                oggettoEsistenteDraft.id,
+                                oggettoEsistenteDraft.motivo,
+                                onLogout,
+                              );
+                              setMessage(res.detail || 'Oggetto associato.');
+                              setOggettoEsistenteDraft({ id: '', motivo: 'Assegnazione staff' });
+                              await reloadDetail(detail.id);
+                              await loadOggettiSenzaPosizione();
+                            } catch (e) {
+                              setMessage(e.message || 'Errore associazione oggetto');
+                            }
+                          }}
+                          className="px-4 py-2 bg-indigo-700 rounded font-bold text-sm disabled:opacity-40"
+                        >
+                          Associa oggetto esistente
+                        </button>
+                        <button type="button" onClick={loadOggettiSenzaPosizione} className="text-xs text-gray-500 underline">
+                          Aggiorna elenco senza posizione
+                        </button>
+                      </div>
                       <p className="text-xs text-gray-500">
-                        Anteprima inventario ({detail.oggetti_inventario?.length || 0} oggetti, max 80).
+                        Inventario ({detail.oggetti_inventario?.length || 0} oggetti, max 80).
                       </p>
+                      <input
+                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs"
+                        placeholder="Motivo predefinito rimuovi/distruggi"
+                        value={inventarioMotivo}
+                        onChange={(e) => setInventarioMotivo(e.target.value)}
+                      />
                       <ul className="space-y-1 max-h-[50vh] overflow-y-auto text-sm">
                         {(detail.oggetti_inventario || []).map((o) => (
-                          <li key={o.id} className="bg-gray-800 border border-gray-700 rounded px-2 py-1 flex justify-between">
-                            <span>{o.nome}</span>
-                            <span className="text-gray-500 font-mono text-xs">{o.tipo_oggetto}</span>
+                          <li key={o.id} className="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 flex flex-wrap items-center justify-between gap-2">
+                            <span>
+                              {o.nome}
+                              <span className="text-gray-500 font-mono text-xs ml-2">#{o.id} · {o.tipo_oggetto}</span>
+                            </span>
+                            <span className="flex gap-1">
+                              <button
+                                type="button"
+                                className="px-2 py-0.5 bg-gray-700 rounded text-xs"
+                                onClick={async () => {
+                                  if (!window.confirm(`Rimuovere «${o.nome}» dall'inventario (l'oggetto resta nel DB)?`)) return;
+                                  try {
+                                    const res = await staffPersonaggioRimuoviOggetto(
+                                      detail.id, o.id, inventarioMotivo, onLogout,
+                                    );
+                                    setMessage(res.detail || 'Oggetto rimosso.');
+                                    await reloadDetail(detail.id);
+                                    await loadOggettiSenzaPosizione();
+                                  } catch (e) {
+                                    setMessage(e.message || 'Errore rimozione');
+                                  }
+                                }}
+                              >
+                                Rimuovi
+                              </button>
+                              <button
+                                type="button"
+                                className="px-2 py-0.5 bg-red-900/60 border border-red-800 rounded text-xs"
+                                onClick={async () => {
+                                  if (!window.confirm(`Distruggere definitivamente «${o.nome}»?`)) return;
+                                  try {
+                                    const res = await staffPersonaggioDistruggiOggetto(
+                                      detail.id, o.id, inventarioMotivo, onLogout,
+                                    );
+                                    setMessage(res.detail || 'Oggetto distrutto.');
+                                    await reloadDetail(detail.id);
+                                    await loadOggettiSenzaPosizione();
+                                  } catch (e) {
+                                    setMessage(e.message || 'Errore distruzione');
+                                  }
+                                }}
+                              >
+                                Distruggi
+                              </button>
+                            </span>
                           </li>
                         ))}
                         {!detail.oggetti_inventario?.length && (

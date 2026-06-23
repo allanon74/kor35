@@ -1853,6 +1853,81 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             'detail': f'Istanza «{nuovo.nome}» creata nell\'inventario di {personaggio.nome}.',
         }, status=status.HTTP_201_CREATED)
 
+    def _oggetto_in_inventario_personaggio(self, personaggio, oggetto):
+        inv = oggetto.inventario_corrente
+        return inv is not None and inv.pk == personaggio.inventario_ptr_id
+
+    @action(detail=True, methods=['post'], url_path='aggiungi-oggetto')
+    def aggiungi_oggetto(self, request, pk=None):
+        """Sposta un'istanza Oggetto esistente nell'inventario del personaggio."""
+        personaggio = self.get_object()
+        oggetto_id = request.data.get('oggetto_id')
+        motivo = (request.data.get('motivo') or 'Assegnazione staff').strip()
+        if not oggetto_id:
+            return Response({'detail': 'oggetto_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            oggetto = Oggetto.objects.get(pk=oggetto_id)
+        except Oggetto.DoesNotExist:
+            return Response({'detail': 'Oggetto non trovato.'}, status=status.HTTP_404_NOT_FOUND)
+        with transaction.atomic():
+            oggetto.sposta_in_inventario(personaggio)
+            personaggio.aggiungi_log(f"Ricevuto oggetto «{oggetto.nome}» ({motivo}).")
+        return Response({
+            'id': oggetto.id,
+            'nome': oggetto.nome,
+            'detail': f'«{oggetto.nome}» aggiunto all\'inventario di {personaggio.nome}.',
+        })
+
+    @action(detail=True, methods=['post'], url_path='rimuovi-oggetto')
+    def rimuovi_oggetto(self, request, pk=None):
+        """Toglie l'oggetto dall'inventario del personaggio (senza cancellarlo)."""
+        personaggio = self.get_object()
+        oggetto_id = request.data.get('oggetto_id')
+        motivo = (request.data.get('motivo') or 'Rimozione staff').strip()
+        if not oggetto_id:
+            return Response({'detail': 'oggetto_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            oggetto = Oggetto.objects.get(pk=oggetto_id)
+        except Oggetto.DoesNotExist:
+            return Response({'detail': 'Oggetto non trovato.'}, status=status.HTTP_404_NOT_FOUND)
+        if not self._oggetto_in_inventario_personaggio(personaggio, oggetto):
+            return Response(
+                {'detail': 'L\'oggetto non è nell\'inventario di questo personaggio.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        with transaction.atomic():
+            oggetto.sposta_in_inventario(None)
+            personaggio.aggiungi_log(f"Oggetto «{oggetto.nome}» rimosso dall'inventario ({motivo}).")
+        return Response({'detail': f'«{oggetto.nome}» rimosso dall\'inventario (oggetto conservato).'})
+
+    @action(detail=True, methods=['post'], url_path='distruggi-oggetto')
+    def distruggi_oggetto(self, request, pk=None):
+        """Elimina definitivamente un'istanza Oggetto dall'inventario del personaggio."""
+        personaggio = self.get_object()
+        oggetto_id = request.data.get('oggetto_id')
+        motivo = (request.data.get('motivo') or 'Distruzione staff').strip()
+        if not oggetto_id:
+            return Response({'detail': 'oggetto_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            oggetto = Oggetto.objects.get(pk=oggetto_id)
+        except Oggetto.DoesNotExist:
+            return Response({'detail': 'Oggetto non trovato.'}, status=status.HTTP_404_NOT_FOUND)
+        if not self._oggetto_in_inventario_personaggio(personaggio, oggetto):
+            return Response(
+                {'detail': 'L\'oggetto non è nell\'inventario di questo personaggio.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        nome = oggetto.nome
+        with transaction.atomic():
+            if oggetto.is_equipaggiato:
+                oggetto.is_equipaggiato = False
+                oggetto.slot_equip = None
+                oggetto.save(update_fields=['is_equipaggiato', 'slot_equip', 'updated_at'])
+            oggetto.sposta_in_inventario(None)
+            oggetto.delete()
+            personaggio.aggiungi_log(f"Oggetto «{nome}» distrutto ({motivo}).")
+        return Response({'detail': f'«{nome}» eliminato definitivamente.'})
+
     @action(detail=True, methods=['get'], url_path='logs')
     def logs(self, request, pk=None):
         personaggio = self.get_object()
