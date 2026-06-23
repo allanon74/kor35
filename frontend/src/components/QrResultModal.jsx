@@ -613,6 +613,7 @@ const PilotSottosistemaView = ({
   const puoSabotare = d.puo_sabotare;
   const minigiocoRiparazione = d.minigioco_riparazione;
   const sessioneAttiva = d.sessione_attiva;
+  const espulso = d.espulso;
   const riparato = data?.azione === 'riparato';
   const sabotato = data?.azione === 'sabotato';
   const colore = stato.colore_livello_attuale || '#6366f1';
@@ -679,9 +680,9 @@ const PilotSottosistemaView = ({
         </div>
       )}
 
-      {!sessioneAttiva && (
+      {!sessioneAttiva && !d.bus_telemetria_attivo && (
         <p className="text-amber-200/90 text-sm text-center border border-amber-800/40 rounded-md p-2 bg-amber-950/30">
-          Bus telemetria assente: nessuna sessione di volo attiva sulla console.
+          Nessuna sessione console attiva: telemetria da registro nave se disponibile.
         </p>
       )}
 
@@ -724,12 +725,28 @@ const PilotSottosistemaView = ({
         )}
       </div>
 
-      {sessioneAttiva && guasto && !puoRiparare && !inRipristino && (
+      {sessioneAttiva && guasto && !puoRiparare && !inRipristino && !espulso && (
         <p className="text-gray-500 text-xs text-center">
           Riparazione disponibile con competenza <span className="font-mono text-gray-400">0RI</span>.
         </p>
       )}
-      {sessioneAttiva && !guasto && !puoSabotare && stato.online && (
+      {espulso && (
+        <p className="text-amber-200/90 text-xs text-center border border-amber-800/40 rounded-md p-2 bg-amber-950/30">
+          Modulo espulso: reintegrazione solo dalla console di pilotaggio master.
+        </p>
+      )}
+      {!sessioneAttiva && d.bus_telemetria_attivo && (
+        <p className="text-gray-500 text-xs text-center">
+          Telemetria da registro nave (nessuna sessione console collegata).
+        </p>
+      )}
+      {d.fase_operativa === 'riposo' && sessioneAttiva && (
+        <p className="text-indigo-300/80 text-xs text-center">
+          Nave in riposo — sabotaggio e riparazione disponibili.
+        </p>
+      )}
+
+      {sessioneAttiva && !guasto && !puoSabotare && !espulso && (
         <p className="text-gray-500 text-xs text-center">
           Sabotaggio disponibile con competenza <span className="font-mono text-gray-400">0SA</span>.
         </p>

@@ -13,6 +13,7 @@ from .models import (
     SessioneVolo,
     SottosistemaNave,
     StatoAllertaPilot,
+    StatoSottosistemaNave,
     StatoSottosistemaSessione,
     TentativoCodice,
 )
@@ -147,6 +148,12 @@ class EventoAttivoSessioneAdmin(admin.ModelAdmin):
 class StatoSottosistemaSessioneAdmin(admin.ModelAdmin):
     list_display = ("sessione", "sottosistema", "online", "guasto_at", "recovery_at")
     list_filter = ("online",)
+
+
+@admin.register(StatoSottosistemaNave)
+class StatoSottosistemaNaveAdmin(admin.ModelAdmin):
+    list_display = ("sottosistema", "online", "espulso", "livello_attuale", "livello_target", "updated_at")
+    list_filter = ("online", "espulso")
 
 
 @admin.register(TentativoCodice)

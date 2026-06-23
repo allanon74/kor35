@@ -842,6 +842,65 @@ class StatoSottosistemaSessione(SyncableModel, models.Model):
             models.Index(fields=["sessione", "online"]),
         ]
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        from pilotaggio.stato_nave import sync_stato_sessione_a_nave
+
+        sync_stato_sessione_a_nave(self)
+
+
+class StatoSottosistemaNave(SyncableModel, models.Model):
+    """
+    Stato persistente del sottosistema sulla nave (sopravvive a fine volo / nuova sessione idle).
+
+    Fonte di verità per guasti, espulsioni e livelli tra una sessione e l'altra.
+    La sessione runtime (idle o volo) viene allineata a questo record.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sottosistema = models.OneToOneField(
+        SottosistemaNave,
+        on_delete=models.PROTECT,
+        related_name="stato_nave",
+    )
+    online = models.BooleanField(default=True)
+    guasto_at = models.DateTimeField(null=True, blank=True)
+    recovery_at = models.DateTimeField(null=True, blank=True)
+    livello_target = models.PositiveSmallIntegerField(default=0)
+    livello_attuale = models.PositiveSmallIntegerField(default=0)
+    invertito = models.BooleanField(default=False)
+    espulso = models.BooleanField(default=False)
+    direzione = models.CharField(
+        max_length=16,
+        default="avanti",
+        choices=[
+            ("avanti", "Avanti"),
+            ("indietro", "Indietro"),
+            ("su", "Su"),
+            ("giu", "Giu"),
+            ("destra", "Destra"),
+            ("sinistra", "Sinistra"),
+        ],
+    )
+
+    class Meta:
+        verbose_name = "Stato sottosistema nave (persistente)"
+        verbose_name_plural = "Stati sottosistemi nave (persistenti)"
+        indexes = [
+            models.Index(fields=["online"]),
+            models.Index(fields=["espulso"]),
+        ]
+
+    def __str__(self):
+        return f"Nave {self.sottosistema_id} online={self.online}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        from pilotaggio.stato_nave import sync_nave_a_sessione_corrente
+
+        sync_nave_a_sessione_corrente(self)
+
 
 # ---------------------------------------------------------------------------
 # Token sessione console (login QR pilota)

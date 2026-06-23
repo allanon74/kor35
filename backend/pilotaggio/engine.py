@@ -414,14 +414,25 @@ def forza_precipizio(
 def get_o_crea_stato_sottosistema(
     sessione: SessioneVolo, sottosistema: SottosistemaNave
 ) -> StatoSottosistemaSessione:
-    stato, _ = StatoSottosistemaSessione.objects.get_or_create(
-        sessione=sessione, sottosistema=sottosistema, defaults={"online": True}
+    from pilotaggio.stato_nave import defaults_stato_da_nave, get_o_crea_stato_nave
+
+    nave = get_o_crea_stato_nave(sottosistema)
+    stato, created = StatoSottosistemaSessione.objects.get_or_create(
+        sessione=sessione,
+        sottosistema=sottosistema,
+        defaults=defaults_stato_da_nave(sottosistema),
     )
+    if not created and nave.updated_at > stato.updated_at:
+        from pilotaggio.stato_nave import CAMPI_STATO_SINCRONI
+
+        for k in CAMPI_STATO_SINCRONI:
+            setattr(stato, k, getattr(nave, k))
+        stato.save(update_fields=[*CAMPI_STATO_SINCRONI, "updated_at"])
     return stato
 
 
 def applica_recoveries_pendenti(sessione: SessioneVolo) -> None:
-    """Riporta online i sottosistemi il cui recovery_at e' scaduto."""
+    """Riporta online i sottosistemi il cui recovery_at programmato (staff) e' scaduto."""
     now = timezone.now()
     qs = StatoSottosistemaSessione.objects.filter(
         sessione=sessione, online=False, recovery_at__isnull=False, recovery_at__lte=now
@@ -431,25 +442,6 @@ def applica_recoveries_pendenti(sessione: SessioneVolo) -> None:
         st.recovery_at = None
         st.guasto_at = None
         st.save(update_fields=["online", "recovery_at", "guasto_at", "updated_at"])
-
-    auto_qs = StatoSottosistemaSessione.objects.select_related("sottosistema").filter(
-        sessione=sessione, online=False, recovery_at__isnull=True
-    )
-    for st in auto_qs:
-        if st.espulso:
-            continue
-        if random.random() < _prob_ripristino_per_livello(st):
-            st.online = True
-            st.guasto_at = None
-            st.livello_attuale = _clamp_livello(st.livello_target)
-            st.save(
-                update_fields=[
-                    "online",
-                    "guasto_at",
-                    "livello_attuale",
-                    "updated_at",
-                ]
-            )
 
 
 def _clamp_livello(val: int) -> int:
@@ -1399,8 +1391,8 @@ def staff_azione_sottosistema_sessione(
     """
     from .models import SottosistemaNave
 
-    if sessione.is_terminata or not sessione.is_attiva:
-        raise ValueError("Sessione non in volo.")
+    if sessione.is_terminata:
+        raise ValueError("Sessione terminata.")
     if not isinstance(sottosistema, SottosistemaNave):
         raise ValueError("Sottosistema non valido.")
 

@@ -166,13 +166,20 @@ def _ensure_sessione_idle_pilota(pilota) -> SessioneVolo:
         .first()
     )
     if ultima is not None and ultima.stato == SESSIONE_STATO_IDLE:
+        from pilotaggio.stato_nave import propaga_stati_nave_a_sessione
+
+        propaga_stati_nave_a_sessione(ultima)
         return ultima
-    return SessioneVolo.objects.create(
+    sessione = SessioneVolo.objects.create(
         pilota=pilota,
         stato=SESSIONE_STATO_IDLE,
         defcon=0,
         durata_pianificata_secondi=600,
     )
+    from pilotaggio.stato_nave import propaga_stati_nave_a_sessione
+
+    propaga_stati_nave_a_sessione(sessione)
+    return sessione
 
 
 def _request_prefers_html(request) -> bool:
@@ -192,17 +199,17 @@ def _ensure_runtime_subsystems(sessione: SessioneVolo) -> None:
         )
     )
     to_create = []
+    from pilotaggio.stato_nave import defaults_stato_da_nave
+
     for s in SottosistemaNave.objects.filter(attivo=True).order_by("ordine", "codice"):
         if s.pk in presenti:
             continue
+        defaults = defaults_stato_da_nave(s)
         to_create.append(
             StatoSottosistemaSessione(
                 sessione=sessione,
                 sottosistema=s,
-                online=True,
-                livello_target=0,
-                livello_attuale=0,
-                direzione="avanti",
+                **defaults,
             )
         )
     if to_create:

@@ -12,9 +12,11 @@ from rest_framework.test import APIClient
 
 from personaggi.models import Manifesto, MinigiocoQrConfig, Personaggio, PersonaggioStatisticaBase, QrCode, Statistica
 from pilotaggio.models import (
+    SESSIONE_STATO_IDLE,
     SESSIONE_STATO_VOLO,
     SessioneVolo,
     SottosistemaNave,
+    StatoSottosistemaNave,
     StatoSottosistemaSessione,
 )
 from pilotaggio.tests.test_views import _crea_pilota_con_0pi
@@ -143,6 +145,76 @@ class QrSottosistemaScanTests(TestCase):
             format="json",
         )
         self.assertEqual(res.status_code, 403, res.content)
+
+    def test_scan_senza_sessione_console_mostra_stato_nave(self):
+        self.sessione.stato = "arrivata"
+        self.sessione.save()
+        res = self._scan(personaggio_id=self.pg.id)
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertFalse(body["dati"]["sessione_attiva"])
+        self.assertTrue(body["dati"]["bus_telemetria_attivo"])
+        self.assertTrue(body["dati"]["guasto"])
+        nave = StatoSottosistemaNave.objects.get(sottosistema=self.sottos)
+        self.assertFalse(nave.online)
+
+    def test_sabota_e_ripara_in_riposo(self):
+        self.sessione.stato = SESSIONE_STATO_IDLE
+        self.sessione.save()
+        _crea_stat_per_pg(self.pg, "0SA", 1, "Sabotaggio")
+        StatoSottosistemaSessione.objects.filter(sessione=self.sessione, sottosistema=self.sottos).update(
+            online=True, guasto_at=None, recovery_at=None
+        )
+        StatoSottosistemaNave.objects.filter(sottosistema=self.sottos).update(online=True)
+        res = self.client.post(
+            "/api/pilot/subsystems/qr-action/",
+            {"qr_id": self.qr.id, "personaggio_id": self.pg.id, "azione": "sabota"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        nave = StatoSottosistemaNave.objects.get(sottosistema=self.sottos)
+        self.assertFalse(nave.online)
+        _crea_stat_per_pg(self.pg, "0RI", 1, "Riparazione")
+        res2 = self.client.post(
+            "/api/pilot/subsystems/qr-repair/",
+            {"qr_id": self.qr.id, "personaggio_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(res2.status_code, 200, res2.content)
+        nave.refresh_from_db()
+        self.assertTrue(nave.online)
+
+    def test_guasto_persiste_nuova_sessione_idle(self):
+        nave = StatoSottosistemaNave.objects.get(sottosistema=self.sottos)
+        nave.online = False
+        nave.guasto_at = timezone.now()
+        nave.save()
+        self.sessione.stato = "crashed"
+        self.sessione.ended_at = timezone.now()
+        self.sessione.save()
+        nuova = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_IDLE,
+        )
+        from pilotaggio.stato_nave import propaga_stati_nave_a_sessione
+
+        propaga_stati_nave_a_sessione(nuova)
+        stato = StatoSottosistemaSessione.objects.get(sessione=nuova, sottosistema=self.sottos)
+        self.assertFalse(stato.online)
+
+    def test_ripara_espulso_bloccato(self):
+        nave = StatoSottosistemaNave.objects.get(sottosistema=self.sottos)
+        nave.online = False
+        nave.espulso = True
+        nave.save()
+        _crea_stat_per_pg(self.pg, "0RI", 1, "Riparazione")
+        res = self.client.post(
+            "/api/pilot/subsystems/qr-repair/",
+            {"qr_id": self.qr.id, "personaggio_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 403, res.content)
+        self.assertIn("espuls", res.json().get("error", "").lower())
 
     def test_scan_senza_personaggio_mostra_solo_telemetria(self):
         res = self._scan()

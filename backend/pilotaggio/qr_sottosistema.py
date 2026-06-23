@@ -1,5 +1,7 @@
 """
 Scansione QR collegati a SottosistemaNave: telemetria runtime, sabotaggio e riparazione.
+
+Stato persistente sulla nave (riposo o volo): guasti e livelli sopravvivono al cambio sessione.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ def sottosistema_per_qr(qr_code: QrCode):
     return SottosistemaNave.objects.filter(a_vista_id=qr_code.vista_id).first()
 
 
-def sessione_attiva_corrente():
+def sessione_console_corrente():
     from .views import _sessione_attiva_corrente
 
     return _sessione_attiva_corrente()
@@ -63,35 +65,50 @@ def _stato_runtime_payload(stato) -> Optional[dict]:
     data["in_ripristino"] = bool(
         not stato.online and recovery_at and recovery_at > timezone.now()
     )
+    data["espulso"] = bool(getattr(stato, "espulso", False))
     return data
 
 
-def stato_immersivo_payload(stato, stato_data: Optional[dict], sessione_attiva: bool) -> dict:
+def stato_immersivo_payload(
+    stato,
+    stato_data: Optional[dict],
+    *,
+    fase_operativa: str,
+) -> dict:
     """Etichette telemetria per la UI scanner (terminologia di bordo)."""
-    if not sessione_attiva or stato is None or not stato_data:
+    if stato is None or not stato_data:
         return {
             "codice": "no_bus",
-            "etichetta": "Bus telemetria assente",
-            "descrizione": "Nessuna sessione di volo attiva — dati di catalogo soltanto.",
+            "etichetta": "Telemetria non disponibile",
+            "descrizione": "Stato subsistema non ancora inizializzato.",
             "classe": "muted",
             "livello_potenza": None,
         }
+
+    if fase_operativa == "riposo":
+        base_desc = "Nave in riposo — bus di bordo attivo."
+    elif fase_operativa == "volo":
+        base_desc = "Sessione di volo attiva."
+    else:
+        base_desc = "Telemetria da registro nave persistente."
 
     if stato_data.get("in_ripristino"):
         sec = stato_data.get("recovery_remaining_seconds") or 0
         return {
             "codice": "ricalibrazione",
             "etichetta": "Ricalibrazione in corso",
-            "descrizione": f"Matrice sottosistema in ripristino automatico — ETA {sec}s.",
+            "descrizione": f"Matrice in ripristino programmato — ETA {sec}s. {base_desc}",
             "classe": "warning",
             "livello_potenza": 0,
         }
 
-    if getattr(stato, "espulso", False):
+    if stato_data.get("espulso"):
         return {
             "codice": "espulso",
             "etichetta": "Modulo espulso",
-            "descrizione": "Subsistema isolato dal bus primario — intervento plancia richiesto.",
+            "descrizione": (
+                "Subsistema isolato dal bus primario — reintegrazione solo da plancia master."
+            ),
             "classe": "danger",
             "livello_potenza": 0,
         }
@@ -100,7 +117,10 @@ def stato_immersivo_payload(stato, stato_data: Optional[dict], sessione_attiva: 
         return {
             "codice": "fault",
             "etichetta": "Fault critico",
-            "descrizione": "Anomalia strutturale — erogazione interrotta, linea fuori servizio.",
+            "descrizione": (
+                "Anomalia strutturale — erogazione interrotta fino a riparazione manuale. "
+                + base_desc
+            ),
             "classe": "danger",
             "livello_potenza": 0,
         }
@@ -111,7 +131,7 @@ def stato_immersivo_payload(stato, stato_data: Optional[dict], sessione_attiva: 
         return {
             "codice": "standby",
             "etichetta": "Standby",
-            "descrizione": "Subsistema in risparmio energetico — erogazione nulla.",
+            "descrizione": f"Subsistema in risparmio energetico. {base_desc}",
             "classe": "muted",
             "livello_potenza": 0,
             "livello_target": target,
@@ -121,7 +141,7 @@ def stato_immersivo_payload(stato, stato_data: Optional[dict], sessione_attiva: 
     desc = (
         f"Flusso operativo — erogazione {livello}/9"
         + (f" (rampa verso {target})" if rampa else "")
-        + "."
+        + f". {base_desc}"
     )
     return {
         "codice": "operativo",
@@ -139,39 +159,42 @@ def build_scan_payload(
     sottosistema,
     scanner_pg=None,
 ) -> Dict[str, Any]:
-    from .engine import applica_recoveries_pendenti, get_o_crea_stato_sottosistema
+    from .engine import applica_recoveries_pendenti
     from .serializers import SottosistemaNaveSerializer
+    from .stato_nave import fase_operativa_sessione, stato_operativo_sottosistema
 
-    sessione = sessione_attiva_corrente()
-    stato = None
+    sessione = sessione_console_corrente()
     if sessione is not None:
         applica_recoveries_pendenti(sessione)
-        stato = get_o_crea_stato_sottosistema(sessione, sottosistema)
+    stato = stato_operativo_sottosistema(sottosistema, sessione)
 
     stato_data = _stato_runtime_payload(stato)
     guasto = bool(stato_data and stato_data.get("guasto"))
     in_ripristino = bool(stato_data and stato_data.get("in_ripristino"))
-    sessione_attiva = sessione is not None
+    espulso = bool(stato_data and stato_data.get("espulso"))
+    fase = fase_operativa_sessione(sessione)
+    bus_attivo = stato is not None
 
     v_sa = _valore_statistica_pg(scanner_pg, SIGLA_SABOTAGGIO)
     v_ri = _valore_statistica_pg(scanner_pg, SIGLA_RIPARAZIONE)
     minigioco_riparazione = minigioco_richiesto_per_ripara(qr_code)
 
     puo_sabotare = bool(
-        sessione_attiva
+        bus_attivo
         and scanner_pg is not None
         and v_sa > 0
         and stato is not None
         and stato.online
         and not in_ripristino
-        and not getattr(stato, "espulso", False)
+        and not espulso
     )
     puo_riparare = bool(
-        sessione_attiva
+        bus_attivo
         and scanner_pg is not None
         and v_ri > 0
         and guasto
         and not in_ripristino
+        and not espulso
     )
 
     manifesto_testo = ""
@@ -185,7 +208,7 @@ def build_scan_payload(
         except Exception:
             pass
 
-    telemetria = stato_immersivo_payload(stato, stato_data, sessione_attiva)
+    telemetria = stato_immersivo_payload(stato, stato_data, fase_operativa=fase)
 
     return {
         "tipo_modello": "pilot_sottosistema",
@@ -195,10 +218,13 @@ def build_scan_payload(
             "sottosistema": SottosistemaNaveSerializer(sottosistema).data,
             "stato": stato_data,
             "telemetria": telemetria,
-            "sessione_attiva": sessione_attiva,
+            "fase_operativa": fase,
+            "sessione_attiva": sessione is not None,
+            "bus_telemetria_attivo": bus_attivo,
             "sessione_id": str(sessione.pk) if sessione else None,
             "guasto": guasto,
             "in_ripristino": in_ripristino,
+            "espulso": espulso,
             "puo_sabotare": puo_sabotare,
             "puo_riparare": puo_riparare,
             "statistiche_scanner": {
@@ -224,11 +250,24 @@ def _verifica_minigioco_completato(personaggio, qr_code, minigioco_session_id: O
     return True, ""
 
 
+def _applica_guasto_stato(stato, sessione) -> None:
+    from .engine import applica_effetto_guasto
+    from .flight_log import log_guasto_sottosistema
+
+    now = timezone.now()
+    stato.online = False
+    stato.guasto_at = now
+    stato.recovery_at = None
+    stato.save(update_fields=["online", "guasto_at", "recovery_at", "updated_at"])
+    if sessione is not None:
+        applica_effetto_guasto(sessione, stato)
+        log_guasto_sottosistema(sessione, stato, causa="qr")
+
+
 @transaction.atomic
 def sabota_sottosistema_da_qr(*, qr_code: QrCode, personaggio) -> Dict[str, Any]:
-    """Guasto immediato sul sottosistema (richiede 0SA > 0 sul PG scanner)."""
-    from .engine import applica_effetto_guasto, get_o_crea_stato_sottosistema
-    from .flight_log import log_guasto_sottosistema
+    """Guasto immediato (0SA > 0); persiste sulla nave e sulla sessione idle/volo se presente."""
+    from .stato_nave import stato_operativo_sottosistema
     from .views import _ensure_runtime_subsystems
 
     if _valore_statistica_pg(personaggio, SIGLA_SABOTAGGIO) <= 0:
@@ -241,12 +280,13 @@ def sabota_sottosistema_da_qr(*, qr_code: QrCode, personaggio) -> Dict[str, Any]
     if sottosistema is None:
         return {"ok": False, "error": "QR non collegato a un sottosistema nave."}
 
-    sessione = sessione_attiva_corrente()
-    if sessione is None:
-        return {"ok": False, "error": "Nessuna sessione di volo attiva."}
+    sessione = sessione_console_corrente()
+    if sessione is not None:
+        _ensure_runtime_subsystems(sessione)
+    stato = stato_operativo_sottosistema(sottosistema, sessione)
 
-    _ensure_runtime_subsystems(sessione)
-    stato = get_o_crea_stato_sottosistema(sessione, sottosistema)
+    if getattr(stato, "espulso", False):
+        return {"ok": False, "error": "Il modulo è espulso: non sabotabile da QR."}
 
     if not stato.online:
         return {"ok": False, "error": "Il subsistema è già in fault."}
@@ -258,13 +298,7 @@ def sabota_sottosistema_da_qr(*, qr_code: QrCode, personaggio) -> Dict[str, Any]
             "error": f"Ricalibrazione in corso ({remain}s rimanenti).",
         }
 
-    now = timezone.now()
-    stato.online = False
-    stato.guasto_at = now
-    stato.recovery_at = None
-    stato.save(update_fields=["online", "guasto_at", "recovery_at", "updated_at"])
-    applica_effetto_guasto(sessione, stato)
-    log_guasto_sottosistema(sessione, stato, causa="qr")
+    _applica_guasto_stato(stato, sessione)
 
     payload = build_scan_payload(
         qr_code=qr_code,
@@ -286,11 +320,13 @@ def ripristina_sottosistema_da_qr(
     minigioco_session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Ripara un sottosistema guasto dopo (eventuale) minigioco (richiede 0RI > 0).
+    Ripara un subsistema in fault (0RI > 0, minigioco se configurato).
+    Non reintegra moduli espulsi (solo plancia master).
     """
     from personaggi.qr_minigioco import verifica_accesso_qr_minigioco
 
-    from .engine import get_o_crea_stato_sottosistema
+    from .engine import _clamp_livello
+    from .stato_nave import stato_operativo_sottosistema
     from .views import _ensure_runtime_subsystems
 
     if _valore_statistica_pg(personaggio, SIGLA_RIPARAZIONE) <= 0:
@@ -302,10 +338,6 @@ def ripristina_sottosistema_da_qr(
     sottosistema = sottosistema_per_qr(qr_code)
     if sottosistema is None:
         return {"ok": False, "error": "QR non collegato a un sottosistema nave."}
-
-    sessione = sessione_attiva_corrente()
-    if sessione is None:
-        return {"ok": False, "error": "Nessuna sessione di volo attiva."}
 
     try:
         config = qr_code.configurazione_minigioco
@@ -321,8 +353,16 @@ def ripristina_sottosistema_da_qr(
     if not ok_mg:
         return {"ok": False, "error": err_mg}
 
-    _ensure_runtime_subsystems(sessione)
-    stato = get_o_crea_stato_sottosistema(sessione, sottosistema)
+    sessione = sessione_console_corrente()
+    if sessione is not None:
+        _ensure_runtime_subsystems(sessione)
+    stato = stato_operativo_sottosistema(sottosistema, sessione)
+
+    if getattr(stato, "espulso", False):
+        return {
+            "ok": False,
+            "error": "Modulo espulso: reintegrazione solo dalla console di pilotaggio.",
+        }
 
     if stato.online:
         return {"ok": False, "error": "Il subsistema è già operativo."}
@@ -333,8 +373,6 @@ def ripristina_sottosistema_da_qr(
             "ok": False,
             "error": f"Ricalibrazione già in corso ({remain}s rimanenti).",
         }
-
-    from .engine import _clamp_livello
 
     stato.online = True
     stato.guasto_at = None
