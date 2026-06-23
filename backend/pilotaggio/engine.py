@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Tuple
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 
 from .models import (
@@ -1358,6 +1359,31 @@ def prepara_sessione_nuovo_volo(sessione: SessioneVolo) -> None:
             "updated_at",
         ]
     )
+
+
+def capacita_carburante_serbatoi() -> float:
+    """Somma capacita' dei serbatoi attivi; fallback 1000 se nessun serbatoio configurato."""
+    total = float(
+        SottosistemaNave.objects.filter(attivo=True, tipo="serbatoio").aggregate(
+            total=Sum("capacita_carburante")
+        )["total"]
+        or 0.0
+    )
+    return max(0.0, total) or 1000.0
+
+
+@transaction.atomic
+def staff_imposta_carburante_sessione(
+    sessione: SessioneVolo, carburante_attuale: float
+) -> SessioneVolo:
+    """Imposta il carico attuale del serbatoio sulla sessione console (clamp al massimo)."""
+    sessione = SessioneVolo.objects.select_for_update().get(pk=sessione.pk)
+    massimo = capacita_carburante_serbatoi()
+    nuovo = max(0.0, min(float(massimo), float(carburante_attuale)))
+    sessione.carburante_massimo = massimo
+    sessione.carburante_attuale = nuovo
+    sessione.save(update_fields=["carburante_massimo", "carburante_attuale", "updated_at"])
+    return sessione
 
 
 def staff_azione_sottosistema_sessione(

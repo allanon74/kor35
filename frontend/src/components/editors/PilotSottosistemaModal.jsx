@@ -34,6 +34,13 @@ const PilotSottosistemaModal = ({
   onSave,
   onClose,
   saving = false,
+  serbatoioFuel = null,
+  serbatoioFuelDraft = '',
+  setSerbatoioFuelDraft,
+  serbatoioFuelBusy = false,
+  onApplySerbatoioFuel,
+  onFillSerbatoioFuel,
+  onRefreshSerbatoioFuel,
 }) => {
   if (!open) return null;
 
@@ -207,6 +214,81 @@ const PilotSottosistemaModal = ({
               />
             </label>
           </div>
+
+          {mode === 'edit' && String(draft.tipo || '').toLowerCase() === 'serbatoio' ? (
+            <div className="mt-4 rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-amber-200/90 uppercase tracking-wide">
+                  Carico attuale — sessione console
+                </div>
+                {onRefreshSerbatoioFuel ? (
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-300 hover:bg-gray-800"
+                    onClick={onRefreshSerbatoioFuel}
+                    disabled={serbatoioFuelBusy}
+                  >
+                    Aggiorna
+                  </button>
+                ) : null}
+              </div>
+              {serbatoioFuel?.loading ? (
+                <p className="text-xs text-gray-400">Lettura carburante sessione…</p>
+              ) : serbatoioFuel?.error ? (
+                <p className="text-xs text-red-300">{serbatoioFuel.error}</p>
+              ) : !serbatoioFuel?.sessione_attiva ? (
+                <p className="text-xs text-gray-400">
+                  Nessuna sessione attiva sulla console (idle o in volo). Avvia o ripristina una sessione pilota.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-400">
+                    Pilota: <span className="text-gray-200">{serbatoioFuel.pilota_nome || '—'}</span>
+                    {' · '}
+                    Stato: <span className="font-mono text-gray-200">{serbatoioFuel.sessione_stato}</span>
+                    {' · '}
+                    Attuale:{' '}
+                    <span className="font-mono text-amber-200">
+                      {Math.round(Number(serbatoioFuel.carburante_attuale || 0))}
+                    </span>
+                    {' / '}
+                    <span className="font-mono text-gray-300">
+                      {Math.round(Number(serbatoioFuel.carburante_massimo || 0))}
+                    </span>
+                  </p>
+                  <label className="block">
+                    <span className="text-xs text-gray-400">Imposta carico attuale</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="bg-gray-900 rounded px-2 py-1.5 mt-1 w-full border border-gray-600 font-mono"
+                      value={serbatoioFuelDraft}
+                      onChange={(e) => setSerbatoioFuelDraft?.(e.target.value)}
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-sm text-white disabled:opacity-50"
+                      disabled={serbatoioFuelBusy}
+                      onClick={onApplySerbatoioFuel}
+                    >
+                      Applica carico
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm text-white disabled:opacity-50"
+                      disabled={serbatoioFuelBusy}
+                      onClick={onFillSerbatoioFuel}
+                    >
+                      Riempi al massimo
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
 
           <label className="block mt-4 text-sm">
             <span className="text-xs text-gray-400">Effetto su guasto sottosistema (JSON)</span>

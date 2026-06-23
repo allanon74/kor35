@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap } from 'lucide-react';
 import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
@@ -588,35 +588,50 @@ const AcquisizioneView = ({ qrId, data, tipo, onLogout, onClose }) => {
 //##################################################################
 // ## VISTA QR: SOTTOSSISTEMA PILOTAGGIO (runtime + riparazione) ##
 //##################################################################
-const PilotSottosistemaView = ({ data, qrId, onPilotRipara, repairing }) => {
+const TELEMETRIA_CLASSI = {
+  ok: 'text-emerald-400',
+  warning: 'text-amber-400',
+  danger: 'text-red-400',
+  muted: 'text-gray-400',
+};
+
+const PilotSottosistemaView = ({
+  data,
+  qrId,
+  onPilotRipara,
+  onPilotSabota,
+  repairing,
+  sabotaging,
+}) => {
   const d = data?.dati || {};
   const sottos = d.sottosistema || {};
   const stato = d.stato || {};
+  const telemetria = d.telemetria || {};
   const guasto = d.guasto;
   const inRipristino = d.in_ripristino;
   const puoRiparare = d.puo_riparare;
+  const puoSabotare = d.puo_sabotare;
   const minigiocoRiparazione = d.minigioco_riparazione;
   const sessioneAttiva = d.sessione_attiva;
   const riparato = data?.azione === 'riparato';
+  const sabotato = data?.azione === 'sabotato';
   const colore = stato.colore_livello_attuale || '#6366f1';
   const livello = stato.livello_attuale ?? '—';
-
-  let statusLabel = 'Online';
-  let statusClass = 'text-emerald-400';
-  if (inRipristino) {
-    statusLabel = `Ripristino (${stato.recovery_remaining_seconds ?? 0}s)`;
-    statusClass = 'text-amber-400';
-  } else if (guasto) {
-    statusLabel = 'Guasto';
-    statusClass = 'text-red-400';
-  }
+  const statusLabel = telemetria.etichetta || (guasto ? 'Fault critico' : 'Operativo');
+  const statusClass = TELEMETRIA_CLASSI[telemetria.classe] || 'text-gray-300';
 
   return (
     <div className="space-y-5">
       {riparato && (
         <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-950/50 border border-emerald-700/50">
           <CheckCircle2 className="text-emerald-400 shrink-0" size={28} />
-          <p className="text-emerald-200 text-sm">{data.messaggio || 'Sottosistema riparato.'}</p>
+          <p className="text-emerald-200 text-sm">{data.messaggio || 'Subsistema riparato.'}</p>
+        </div>
+      )}
+      {sabotato && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-red-950/50 border border-red-700/50">
+          <Zap className="text-red-400 shrink-0" size={28} />
+          <p className="text-red-200 text-sm">{data.messaggio || 'Subsistema sabotato.'}</p>
         </div>
       )}
 
@@ -627,26 +642,46 @@ const PilotSottosistemaView = ({ data, qrId, onPilotRipara, repairing }) => {
         >
           {sottos.codice || '?'}
         </span>
-        <h3 className="text-xl font-bold text-white mt-3">{sottos.nome || 'Sottosistema'}</h3>
+        <h3 className="text-xl font-bold text-white mt-3">{sottos.nome || 'Subsistema'}</h3>
+        {sottos.gruppo ? (
+          <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">{sottos.gruppo}</p>
+        ) : null}
         {sottos.tipo && (
-          <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">{sottos.tipo}</p>
+          <p className="text-[10px] text-indigo-400/80 uppercase tracking-widest mt-0.5">{sottos.tipo}</p>
         )}
+      </div>
+
+      <div className="rounded-lg border border-indigo-900/50 bg-indigo-950/20 p-3 text-center">
+        <div className={`text-lg font-bold tracking-wide ${statusClass}`}>{statusLabel}</div>
+        {telemetria.descrizione ? (
+          <p className="text-xs text-gray-400 mt-1 leading-relaxed">{telemetria.descrizione}</p>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div className="bg-gray-900/60 rounded-lg p-3 border border-gray-700">
-          <div className="text-gray-500 text-xs uppercase mb-1">Livello</div>
-          <div className="text-2xl font-bold" style={{ color: colore }}>{livello}</div>
+          <div className="text-gray-500 text-xs uppercase mb-1">Erogazione attuale</div>
+          <div className="text-2xl font-bold font-mono" style={{ color: colore }}>
+            {sessioneAttiva ? livello : '—'}
+          </div>
         </div>
         <div className="bg-gray-900/60 rounded-lg p-3 border border-gray-700">
-          <div className="text-gray-500 text-xs uppercase mb-1">Stato</div>
-          <div className={`text-lg font-bold ${statusClass}`}>{statusLabel}</div>
+          <div className="text-gray-500 text-xs uppercase mb-1">Setpoint plancia</div>
+          <div className="text-2xl font-bold font-mono text-gray-300">
+            {sessioneAttiva && stato.livello_target != null ? stato.livello_target : '—'}
+          </div>
         </div>
       </div>
 
+      {inRipristino && (
+        <div className="text-amber-300/90 text-xs text-center border border-amber-800/40 rounded-md p-2 bg-amber-950/30">
+          Ricalibrazione automatica — {stato.recovery_remaining_seconds ?? 0}s rimanenti
+        </div>
+      )}
+
       {!sessioneAttiva && (
         <p className="text-amber-200/90 text-sm text-center border border-amber-800/40 rounded-md p-2 bg-amber-950/30">
-          Nessuna sessione di volo attiva: stato di catalogo.
+          Bus telemetria assente: nessuna sessione di volo attiva sulla console.
         </p>
       )}
 
@@ -656,7 +691,7 @@ const PilotSottosistemaView = ({ data, qrId, onPilotRipara, repairing }) => {
 
       {d.manifesto_testo && (
         <details className="bg-gray-900/40 rounded-lg border border-gray-700">
-          <summary className="cursor-pointer p-3 text-sm text-gray-400">Informazioni aggiuntive</summary>
+          <summary className="cursor-pointer p-3 text-sm text-gray-400">Scheda tecnica</summary>
           <div
             className="px-3 pb-3 text-sm text-gray-300 prose prose-invert max-w-none"
             dangerouslySetInnerHTML={{ __html: d.manifesto_testo }}
@@ -664,26 +699,39 @@ const PilotSottosistemaView = ({ data, qrId, onPilotRipara, repairing }) => {
         </details>
       )}
 
-      {puoRiparare && onPilotRipara && !riparato && (
-        <button
-          type="button"
-          disabled={repairing}
-          onClick={() => onPilotRipara(qrId, minigiocoRiparazione)}
-          className="w-full flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {repairing ? (
-            <Loader className="animate-spin" size={20} />
-          ) : (
-            <Wrench size={20} />
-          )}
-          {minigiocoRiparazione ? 'Ripara (minigioco)' : 'Ripara'}
-        </button>
-      )}
+      <div className="flex flex-col gap-2">
+        {puoSabotare && onPilotSabota && !sabotato && (
+          <button
+            type="button"
+            disabled={sabotaging || repairing}
+            onClick={() => onPilotSabota(qrId)}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-red-700 rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sabotaging ? <Loader className="animate-spin" size={20} /> : <Zap size={20} />}
+            Sabota
+          </button>
+        )}
+        {puoRiparare && onPilotRipara && !riparato && (
+          <button
+            type="button"
+            disabled={repairing || sabotaging}
+            onClick={() => onPilotRipara(qrId, minigiocoRiparazione)}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {repairing ? <Loader className="animate-spin" size={20} /> : <Wrench size={20} />}
+            {minigiocoRiparazione ? 'Ripara (minigioco)' : 'Ripara'}
+          </button>
+        )}
+      </div>
 
-      {guasto && !puoRiparare && !inRipristino && sessioneAttiva && (
-        <p className="text-gray-400 text-sm text-center flex items-center justify-center gap-2">
-          <AlertTriangle size={16} className="text-amber-500" />
-          Seleziona il personaggio corretto per avviare la riparazione.
+      {sessioneAttiva && guasto && !puoRiparare && !inRipristino && (
+        <p className="text-gray-500 text-xs text-center">
+          Riparazione disponibile con competenza <span className="font-mono text-gray-400">0RI</span>.
+        </p>
+      )}
+      {sessioneAttiva && !guasto && !puoSabotare && stato.online && (
+        <p className="text-gray-500 text-xs text-center">
+          Sabotaggio disponibile con competenza <span className="font-mono text-gray-400">0SA</span>.
         </p>
       )}
     </div>
@@ -694,7 +742,7 @@ const PilotSottosistemaView = ({ data, qrId, onPilotRipara, repairing }) => {
 //##################################################################
 // ## COMPONENTE MODALE PRINCIPALE (EXPORT) ##
 //##################################################################
-const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara, pilotRepairing }) => {
+const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara, onPilotSabota, pilotRepairing, pilotSaboting }) => {
   
   const { addTimer } = useTimers(); // <--- Accediamo alla logica dei timer
   const lastProcessedQr = useRef(null); // Per evitare che il timer scatti multipli in caso di re-render
@@ -878,7 +926,9 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             data={data}
             qrId={qrId}
             onPilotRipara={onPilotRipara}
+            onPilotSabota={onPilotSabota}
             repairing={pilotRepairing}
+            sabotaging={pilotSaboting}
           />
         );
 

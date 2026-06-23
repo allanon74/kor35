@@ -331,3 +331,58 @@ class StaffSessioneLiveTests(TestCase):
         self.assertTrue(stato.online)
         self.assertEqual(stato.livello_attuale, 3)
 
+
+class StaffSerbatoioCarburanteTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="staff_fuel", password="x", is_staff=True
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+        _, self.pilota = _crea_pilota_con_0pi(nome="PilotaFuel", valore_0pi=1)
+        self.serbatoio = SottosistemaNave.objects.create(
+            codice="U",
+            nome="Serbatoio Test",
+            tipo="serbatoio",
+            capacita_carburante=50000.0,
+            attivo=True,
+        )
+        self.altro = SottosistemaNave.objects.create(
+            codice="Z", nome="Non serbatoio", tipo="standard", attivo=True
+        )
+        self.sessione = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_IDLE,
+            carburante_attuale=1200.0,
+            carburante_massimo=1000.0,
+        )
+
+    def test_get_carburante_sessione(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.serbatoio.pk}/carburante-sessione/"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertTrue(body["sessione_attiva"])
+        self.assertEqual(body["carburante_attuale"], 1200.0)
+        self.assertEqual(body["carburante_massimo"], 50000.0)
+
+    def test_post_imposta_carburante(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.serbatoio.pk}/carburante-sessione/"
+        res = self.client.post(url, {"carburante_attuale": 42000}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.sessione.refresh_from_db()
+        self.assertEqual(self.sessione.carburante_attuale, 42000.0)
+        self.assertEqual(self.sessione.carburante_massimo, 50000.0)
+
+    def test_post_riempi(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.serbatoio.pk}/carburante-sessione/"
+        res = self.client.post(url, {"riempi": True}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.sessione.refresh_from_db()
+        self.assertEqual(self.sessione.carburante_attuale, 50000.0)
+
+    def test_rifiuta_non_serbatoio(self):
+        url = f"/api/pilot/staff/sottosistemi/{self.altro.pk}/carburante-sessione/"
+        res = self.client.post(url, {"riempi": True}, format="json")
+        self.assertEqual(res.status_code, 400, res.content)
+

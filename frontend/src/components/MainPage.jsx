@@ -8,7 +8,7 @@ import QrResultModal from './QrResultModal.jsx';
 import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
+import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemSabota } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 
@@ -121,6 +121,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [qrResultData, setQrResultData] = useState(null);
   const [minigiocoPayload, setMinigiocoPayload] = useState(null);
   const [pilotRepairing, setPilotRepairing] = useState(false);
+  const [pilotSaboting, setPilotSaboting] = useState(false);
   const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -538,6 +539,31 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
         });
       } finally {
         setPilotRepairing(false);
+      }
+    },
+    [onLogout, selectedCharacterId]
+  );
+
+  const handlePilotSabota = useCallback(
+    async (qrId) => {
+      if (!selectedCharacterId) {
+        setQrResultData({
+          tipo_modello: 'errore',
+          messaggio: 'Seleziona un personaggio per sabotare il subsistema.',
+        });
+        return;
+      }
+      setPilotSaboting(true);
+      try {
+        const result = await pilotSubsystemSabota(qrId, selectedCharacterId, onLogout);
+        setQrResultData(result);
+      } catch (e) {
+        setQrResultData({
+          tipo_modello: 'errore',
+          messaggio: e.message || 'Sabotaggio non riuscito.',
+        });
+      } finally {
+        setPilotSaboting(false);
       }
     },
     [onLogout, selectedCharacterId]
@@ -1333,7 +1359,9 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
           onLogout={onLogout}
           onStealSuccess={handleStealSuccess}
           onPilotRipara={handlePilotRipara}
+          onPilotSabota={handlePilotSabota}
           pilotRepairing={pilotRepairing}
+          pilotSaboting={pilotSaboting}
         />
       )}
 

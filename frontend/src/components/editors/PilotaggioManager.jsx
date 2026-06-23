@@ -27,6 +27,8 @@ import {
   staffGetPilotIntensitaById,
   staffGetPilotSottosistema,
   staffGetPilotSottosistemi,
+  staffGetPilotSerbatoioCarburante,
+  staffSetPilotSerbatoioCarburante,
   staffGetPilotStatiAllerta,
   staffGetPilotStatoAllerta,
   staffGetPilotRuntimeConfig,
@@ -514,6 +516,9 @@ export default function PilotaggioManager({ onLogout }) {
   const [editCritico, setEditCritico] = useState({ pattern: '', nome: '', attivo: true });
   const [nuovoEffettoGuastoBuilder, setNuovoEffettoGuastoBuilder] = useState(defaultEffettoGuastoBuilder());
   const [editEffettoGuastoBuilder, setEditEffettoGuastoBuilder] = useState(defaultEffettoGuastoBuilder());
+  const [serbatoioFuel, setSerbatoioFuel] = useState(null);
+  const [serbatoioFuelDraft, setSerbatoioFuelDraft] = useState('');
+  const [serbatoioFuelBusy, setSerbatoioFuelBusy] = useState(false);
   const nuovoEffettoValidation = useMemo(
     () => validateEffettoGuastoBuilder(nuovoEffettoGuastoBuilder),
     [nuovoEffettoGuastoBuilder]
@@ -650,6 +655,42 @@ export default function PilotaggioManager({ onLogout }) {
   const closeSottoModal = () => {
     setSottoModalMode(null);
     setEditSottoId(null);
+    setSerbatoioFuel(null);
+    setSerbatoioFuelDraft('');
+    setSerbatoioFuelBusy(false);
+  };
+
+  const loadSerbatoioFuel = useCallback(async (sottosistemaId) => {
+    if (!sottosistemaId) return;
+    setSerbatoioFuel({ loading: true });
+    try {
+      const data = await staffGetPilotSerbatoioCarburante(sottosistemaId, onLogout);
+      setSerbatoioFuel(data);
+      if (data?.sessione_attiva && data.carburante_attuale != null) {
+        setSerbatoioFuelDraft(String(Math.round(Number(data.carburante_attuale))));
+      } else {
+        setSerbatoioFuelDraft(String(Math.round(Number(data?.carburante_massimo || 0))));
+      }
+    } catch (err) {
+      setSerbatoioFuel({ loading: false, error: err?.message || 'Errore lettura carburante.' });
+    }
+  }, [onLogout]);
+
+  const applicaSerbatoioFuel = async (payload) => {
+    if (!editSottoId) return;
+    setSerbatoioFuelBusy(true);
+    setError('');
+    try {
+      const data = await staffSetPilotSerbatoioCarburante(editSottoId, payload, onLogout);
+      setSerbatoioFuel(data);
+      if (data?.carburante_attuale != null) {
+        setSerbatoioFuelDraft(String(Math.round(Number(data.carburante_attuale))));
+      }
+    } catch (err) {
+      setError(err?.message || 'Impossibile aggiornare il carburante.');
+    } finally {
+      setSerbatoioFuelBusy(false);
+    }
   };
 
   const closeCreateEventoModal = useCallback(() => {
@@ -1259,6 +1300,11 @@ export default function PilotaggioManager({ onLogout }) {
                         target_codice: String((full.effetti_guasto_json || {}).target_codice || ''),
                       });
                       setSottoModalMode('edit');
+                      if (String(full.tipo || '').toLowerCase() === 'serbatoio') {
+                        loadSerbatoioFuel(full.id);
+                      } else {
+                        setSerbatoioFuel(null);
+                      }
                     } catch (err) {
                       setError(err?.message || 'Impossibile caricare il sottosistema.');
                     }
@@ -2086,6 +2132,13 @@ export default function PilotaggioManager({ onLogout }) {
         generaEffettoGuastoJson={generaEffettoGuastoJson}
         onSave={sottoModalMode === 'edit' ? salvaSottosistema : addSottosistema}
         onClose={closeSottoModal}
+        serbatoioFuel={sottoModalMode === 'edit' && String(editSotto.tipo || '').toLowerCase() === 'serbatoio' ? serbatoioFuel : null}
+        serbatoioFuelDraft={serbatoioFuelDraft}
+        setSerbatoioFuelDraft={setSerbatoioFuelDraft}
+        serbatoioFuelBusy={serbatoioFuelBusy}
+        onApplySerbatoioFuel={() => applicaSerbatoioFuel({ carburante_attuale: Number(serbatoioFuelDraft) })}
+        onFillSerbatoioFuel={() => applicaSerbatoioFuel({ riempi: true })}
+        onRefreshSerbatoioFuel={() => loadSerbatoioFuel(editSottoId)}
       />
 
       {createEventoModalOpen ? (

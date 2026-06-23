@@ -698,6 +698,20 @@ export const pilotSubsystemRepair = (qrId, personaggioId, onLogout, minigiocoSes
     onLogout,
   );
 
+export const pilotSubsystemSabota = (qrId, personaggioId, onLogout) =>
+  fetchAuthenticated(
+    '/api/pilot/subsystems/qr-action/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        qr_id: normalizeScannedQrId(qrId),
+        personaggio_id: personaggioId,
+        azione: 'sabota',
+      }),
+    },
+    onLogout,
+  );
+
 export const minigiocoComplete = (sessionId, personaggioId, stato, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/minigioco/${sessionId}/complete/`,
@@ -2391,6 +2405,20 @@ export const staffAssociaPilotSottosistemaQr = (sottosistemaId, qrId, onLogout) 
   fetchAuthenticated(
     `/api/pilot/staff/sottosistemi/${sottosistemaId}/associa-qr/`,
     { method: 'POST', body: JSON.stringify({ qr_id: qrId }) },
+    onLogout
+  );
+
+export const staffGetPilotSerbatoioCarburante = (sottosistemaId, onLogout) =>
+  fetchAuthenticated(
+    `/api/pilot/staff/sottosistemi/${sottosistemaId}/carburante-sessione/`,
+    { method: 'GET' },
+    onLogout
+  );
+
+export const staffSetPilotSerbatoioCarburante = (sottosistemaId, data, onLogout) =>
+  fetchAuthenticated(
+    `/api/pilot/staff/sottosistemi/${sottosistemaId}/carburante-sessione/`,
+    { method: 'POST', body: JSON.stringify(data) },
     onLogout
   );
 

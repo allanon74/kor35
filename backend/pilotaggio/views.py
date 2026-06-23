@@ -44,6 +44,8 @@ from .engine import (
     get_o_crea_stato_sottosistema,
     prepara_sessione_nuovo_volo,
     staff_azione_sottosistema_sessione,
+    staff_imposta_carburante_sessione,
+    capacita_carburante_serbatoi,
     intervallo_tick_effettivo_sessione,
     secondi_fino_valutazione_evento,
     tick_sessione_se_dovuto,
@@ -1152,27 +1154,31 @@ class PilotSessionVoliView(APIView):
 class PilotSubsystemQrActionView(APIView):
     """
     POST /api/pilot/subsystems/qr-action/
-    Body: {"qr_id": "...", "personaggio_id": int}
+    Body: {"qr_id": "...", "personaggio_id": int, "azione": "sabota"}
 
-    Risolve il QR -> Sottosistema. Verifica statistiche del PG che scansiona:
-    - 0SA >= 1  -> guasto immediato (online=False).
-    - 0RI >= 1  -> ripristino programmato dopo `durata_ripristino_secondi`.
-    Nessuna delle due -> 403.
-
-    Si applica alla sessione attiva piu' recente; se non c'e' alcuna sessione
-    in corso restituisce 409.
+    Sabotaggio esplicito (pulsante in app): richiede 0SA > 0, guasto immediato.
+    La scansione QR da sola mostra solo telemetria; non applica effetti.
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        from pilotaggio.qr_sottosistema import sabota_sottosistema_da_qr
+
         qr_id = (request.data.get("qr_id") or "").strip()
         personaggio_id = request.data.get("personaggio_id")
+        azione = str(request.data.get("azione") or "").strip().lower()
+
         if not qr_id:
             return Response({"error": "qr_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
         if not personaggio_id:
             return Response(
                 {"error": "personaggio_id mancante."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if azione != "sabota":
+            return Response(
+                {"error": "Azione non valida: usare azione=sabota."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1189,70 +1195,16 @@ class PilotSubsystemQrActionView(APIView):
             return Response(
                 {"error": "QR non trovato."}, status=status.HTTP_404_NOT_FOUND
             )
-        sottosistema = _sottosistema_da_qr(qr)
-        if not sottosistema:
-            return Response(
-                {"error": "QR non collegato a un sottosistema nave."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
-        sessione = _sessione_attiva_corrente()
-        if sessione is None:
+        result = sabota_sottosistema_da_qr(qr_code=qr, personaggio=pg)
+        if not result.get("ok"):
             return Response(
-                {
-                    "error": "Nessuna sessione di volo attiva.",
-                    "sottosistema": SottosistemaNaveSerializer(sottosistema).data,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        v_sa = int(pg.get_valore_statistica(SIGLA_SABOTAGGIO) or 0)
-        v_ri = int(pg.get_valore_statistica(SIGLA_RIPARAZIONE) or 0)
-
-        if v_sa >= 1:
-            azione = "guasto"
-        elif v_ri >= 1:
-            azione = "ripristino"
-        else:
-            return Response(
-                {
-                    "error": (
-                        f"Servono {SIGLA_SABOTAGGIO} >= 1 (guasto) o "
-                        f"{SIGLA_RIPARAZIONE} >= 1 (ripristino)."
-                    )
-                },
+                {"error": result.get("error", "Sabotaggio non riuscito.")},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        with transaction.atomic():
-            stato = get_o_crea_stato_sottosistema(sessione, sottosistema)
-            now = timezone.now()
-            if azione == "guasto":
-                stato.online = False
-                stato.guasto_at = now
-                stato.recovery_at = None
-                stato.save(
-                    update_fields=["online", "guasto_at", "recovery_at", "updated_at"]
-                )
-                applica_effetto_guasto(sessione, stato)
-                from .flight_log import log_guasto_sottosistema
-
-                log_guasto_sottosistema(sessione, stato, causa="qr")
-            else:
-                stato.recovery_at = now + timedelta(
-                    seconds=int(sottosistema.durata_ripristino_secondi or 60)
-                )
-                stato.save(update_fields=["recovery_at", "updated_at"])
-
-        return Response(
-            {
-                "azione": azione,
-                "sottosistema": SottosistemaNaveSerializer(sottosistema).data,
-                "stato": StatoSottosistemaRuntimeSerializer(stato).data,
-                "sessione_id": str(sessione.pk),
-            },
-            status=status.HTTP_200_OK,
-        )
+        out = {k: v for k, v in result.items() if k != "ok"}
+        return Response(out, status=status.HTTP_200_OK)
 
 
 class PilotSubsystemQrRepairView(APIView):
@@ -1497,6 +1449,79 @@ class StaffSottosistemaViewSet(viewsets.ModelViewSet):
             sottos.save(update_fields=["a_vista", "updated_at"])
 
         return Response(self.get_serializer(sottos).data)
+
+    @action(detail=True, methods=["get", "post"], url_path="carburante-sessione")
+    def carburante_sessione(self, request, pk=None):
+        """
+        GET/POST carburante sulla sessione console attiva (solo sottosistema tipo serbatoio).
+
+        POST body: { "carburante_attuale": <float> } oppure { "riempi": true }
+        """
+        sottos = self.get_object()
+        if str(sottos.tipo or "").strip().lower() != "serbatoio":
+            return Response(
+                {"error": "Operazione consentita solo su sottosistemi tipo serbatoio."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        sessione = _sessione_attiva_corrente()
+        massimo = capacita_carburante_serbatoi()
+
+        def _payload(sess: Optional[SessioneVolo]) -> dict:
+            if sess is None:
+                return {
+                    "sessione_attiva": False,
+                    "carburante_attuale": None,
+                    "carburante_massimo": massimo,
+                    "sessione_stato": None,
+                    "pilota_nome": None,
+                    "sessione_id": None,
+                }
+            pilota = getattr(sess, "pilota", None)
+            return {
+                "sessione_attiva": True,
+                "carburante_attuale": float(sess.carburante_attuale or 0.0),
+                "carburante_massimo": massimo,
+                "sessione_stato": sess.stato,
+                "pilota_nome": getattr(pilota, "nome", str(pilota)) if pilota else "",
+                "sessione_id": str(sess.pk),
+            }
+
+        if request.method == "GET":
+            return Response(_payload(sessione))
+
+        if sessione is None:
+            return Response(
+                {"error": "Nessuna sessione console attiva (idle o in volo)."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        if request.data.get("riempi") in (True, "true", "1", 1):
+            target = massimo
+        else:
+            raw = request.data.get("carburante_attuale")
+            if raw is None:
+                return Response(
+                    {"error": "Specificare carburante_attuale o riempi=true."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                target = float(raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "carburante_attuale non valido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        try:
+            with transaction.atomic():
+                sessione = staff_imposta_carburante_sessione(sessione, target)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        out = _payload(sessione)
+        out["applicato"] = True
+        return Response(out, status=status.HTTP_200_OK)
 
 
 class StaffComandoViewSet(viewsets.ModelViewSet):
