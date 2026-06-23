@@ -4517,6 +4517,12 @@ class Personaggio(Inventario):
         help_text="Se valorizzato, il personaggio è archiviato e non compare nell'app.",
     )
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
+    note_master = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Note master (interne)",
+        help_text="Annotazioni visibili solo allo staff; non mostrate al giocatore.",
+    )
     
     abilita_possedute = models.ManyToManyField(Abilita, through='PersonaggioAbilita', blank=True)
     attivate_possedute = models.ManyToManyField(Attivata, through='PersonaggioAttivata', blank=True)
@@ -6777,21 +6783,15 @@ class TransazioneSospesa(SyncableModel, models.Model):
         with db_transaction.atomic():
             # Esegui scambi crediti
             if self.ultima_proposta_iniziatore.crediti_da_dare > 0:
-                self.destinatario.crediti += float(self.ultima_proposta_iniziatore.crediti_da_dare)
-                self.destinatario.save()
-                CreditoMovimento.objects.create(
-                    personaggio=self.destinatario,
-                    importo=self.ultima_proposta_iniziatore.crediti_da_dare,
-                    descrizione=f"Ricevuto da transazione #{self.id}"
+                self.destinatario.modifica_crediti(
+                    self.ultima_proposta_iniziatore.crediti_da_dare,
+                    f"Ricevuto da transazione #{self.id}",
                 )
             
             if self.ultima_proposta_destinatario.crediti_da_dare > 0:
-                self.iniziatore.crediti += float(self.ultima_proposta_destinatario.crediti_da_dare)
-                self.iniziatore.save()
-                CreditoMovimento.objects.create(
-                    personaggio=self.iniziatore,
-                    importo=self.ultima_proposta_destinatario.crediti_da_dare,
-                    descrizione=f"Ricevuto da transazione #{self.id}"
+                self.iniziatore.modifica_crediti(
+                    self.ultima_proposta_destinatario.crediti_da_dare,
+                    f"Ricevuto da transazione #{self.id}",
                 )
             
             # Esegui scambi oggetti
@@ -6800,6 +6800,14 @@ class TransazioneSospesa(SyncableModel, models.Model):
             
             for oggetto in self.ultima_proposta_destinatario.oggetti_da_dare.all():
                 oggetto.sposta_in_inventario(self.iniziatore)
+
+            for consumabile in self.ultima_proposta_iniziatore.consumabili_da_dare.all():
+                consumabile.personaggio = self.destinatario
+                consumabile.save(update_fields=['personaggio', 'updated_at'])
+
+            for consumabile in self.ultima_proposta_destinatario.consumabili_da_dare.all():
+                consumabile.personaggio = self.iniziatore
+                consumabile.save(update_fields=['personaggio', 'updated_at'])
             
             self.stato = STATO_TRANSAZIONE_ACCETTATA
             self.data_chiusura = timezone.now()
@@ -6829,10 +6837,16 @@ class PropostaTransazione(SyncableModel, models.Model):
     # Cosa l'autore DÀ
     crediti_da_dare = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     oggetti_da_dare = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_dati', blank=True)
+    consumabili_da_dare = models.ManyToManyField(
+        'ConsumabilePersonaggio', related_name='proposte_consumabili_dati', blank=True
+    )
     
     # Cosa l'autore RICEVE
     crediti_da_ricevere = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     oggetti_da_ricevere = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_ricevuti', blank=True)
+    consumabili_da_ricevere = models.ManyToManyField(
+        'ConsumabilePersonaggio', related_name='proposte_consumabili_ricevuti', blank=True
+    )
     
     # Messaggio
     messaggio = models.TextField(blank=True)
@@ -6868,6 +6882,77 @@ class PropostaTransazione(SyncableModel, models.Model):
             elif self.autore == self.transazione.destinatario:
                 self.transazione.ultima_proposta_destinatario = self
             self.transazione.save()
+
+REGOLA_TX_CODICE_CREDITI = 'crediti'
+REGOLA_TX_CODICE_OGGETTI = 'oggetti'
+REGOLA_TX_CODICE_MATERIA = 'materia'
+REGOLA_TX_CODICE_MOD = 'mod'
+REGOLA_TX_CODICE_CONSUMABILI = 'consumabili'
+REGOLA_TX_CODICE_INNESTI = 'innesti'
+REGOLA_TX_CODICE_MUTAZIONI = 'mutazioni'
+REGOLA_TX_CODICE_INFUSIONI = 'infusioni'
+REGOLA_TX_CODICE_TESSITURE = 'tessiture'
+REGOLA_TX_CODICE_CERIMONIALI = 'cerimoniali'
+
+REGOLA_TX_CODICE_CHOICES = [
+    (REGOLA_TX_CODICE_CREDITI, 'Crediti'),
+    (REGOLA_TX_CODICE_OGGETTI, 'Oggetti'),
+    (REGOLA_TX_CODICE_MATERIA, 'Materia'),
+    (REGOLA_TX_CODICE_MOD, 'Mod'),
+    (REGOLA_TX_CODICE_CONSUMABILI, 'Consumabili'),
+    (REGOLA_TX_CODICE_INNESTI, 'Innesti'),
+    (REGOLA_TX_CODICE_MUTAZIONI, 'Mutazioni'),
+    (REGOLA_TX_CODICE_INFUSIONI, 'Infusioni'),
+    (REGOLA_TX_CODICE_TESSITURE, 'Tessiture'),
+    (REGOLA_TX_CODICE_CERIMONIALI, 'Cerimoniali'),
+]
+
+REGOLA_TX_CODICI_DEFAULT = [c[0] for c in REGOLA_TX_CODICE_CHOICES]
+
+
+class RegolaTransazioneCategoria(SyncableModel, models.Model):
+    """Regole staff per scambi tra giocatori, per categoria di bene e campagna."""
+
+    campagna = models.ForeignKey(
+        'Campagna', on_delete=models.CASCADE, related_name='regole_transazione_categorie'
+    )
+    codice = models.CharField(max_length=32, choices=REGOLA_TX_CODICE_CHOICES)
+    nome = models.CharField(max_length=80)
+    vendibile_giocatori = models.BooleanField(
+        default=True,
+        verbose_name='Scambiabile tra giocatori',
+        help_text='Se disattivo, la categoria non può comparire nelle proposte di scambio.',
+    )
+    requisiti_gruppo = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='{"operator":"AND|OR","requisiti":[...]} — vuoto = sempre consentito (se vendibile).',
+    )
+    solo_posseduti = models.BooleanField(
+        default=False,
+        help_text='Solo beni già in inventario del personaggio (es. tecniche non dal tab Nuove Accademia).',
+    )
+    trasferimento_copia = models.BooleanField(
+        default=False,
+        help_text='Per tecniche: il destinatario riceve una copia; il mittente conserva l\'originale.',
+    )
+    rispetta_non_insegnabile = models.BooleanField(
+        default=True,
+        help_text='Blocca il trasferimento se la tecnica è marcata non acquistabile/insegnabile.',
+    )
+    ordine = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Regola transazione (categoria)'
+        verbose_name_plural = 'Regole transazione (categorie)'
+        ordering = ['campagna', 'ordine', 'codice']
+        constraints = [
+            models.UniqueConstraint(fields=['campagna', 'codice'], name='uniq_regola_tx_campagna_codice'),
+        ]
+
+    def __str__(self):
+        return f"{self.campagna} · {self.nome}"
+
 
 class Gruppo(SyncableModel, models.Model):
     nome = models.CharField(max_length=100, unique=True); membri = models.ManyToManyField('Personaggio', related_name="gruppi_appartenenza", blank=True)

@@ -337,7 +337,7 @@ const PersonaggioView = ({ data, onLogout, onStealSuccess }) => {
   const [showScambioModal, setShowScambioModal] = useState(false);
   const [selectedOggetto, setSelectedOggetto] = useState(null);
 
-  const { selectedCharacterData } = useCharacter();
+  const { selectedCharacterData, selectedCharacterId } = useCharacter();
   
   const handleRuba = async (oggettoId, oggettoNome) => {
      if (isLoading) return;

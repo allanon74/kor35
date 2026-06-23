@@ -2824,6 +2824,74 @@ export const watchWearManifest = (charId, onLogout) =>
 export const staffGetRisorsePool = (onLogout) =>
     fetchAuthenticated('/api/personaggi/api/staff/risorse-pool/', { method: 'GET' }, onLogout);
 
+/** Staff: lista personaggi (serializer leggero) con filtri. */
+export const staffGetPersonaggi = (params = {}, onLogout) => {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && String(v).trim() !== '') qs.set(k, v);
+  });
+  const query = qs.toString();
+  return fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${query ? `?${query}` : ''}`,
+    { method: 'GET' },
+    onLogout,
+  );
+};
+
+/** Staff: dettaglio completo personaggio per modale. */
+export const staffGetPersonaggioDetail = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/`, { method: 'GET' }, onLogout);
+
+/** Staff: patch campi personaggio (note master, BG, …). */
+export const staffPatchPersonaggio = (id, payload, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, onLogout);
+
+/** Staff: aggiungi crediti o PC a un personaggio. */
+export const staffAddResourcesToPersonaggio = (id, tipo, amount, reason, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/add-resources/`, {
+    method: 'POST',
+    body: JSON.stringify({ tipo, amount, reason }),
+  }, onLogout);
+
+export const staffGetPersonaggioLogs = (id, page = 1, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${id}/logs/?page=${page}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffRigeneraLikePersonaggio = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${id}/rigenera-like-influencer/`,
+    { method: 'POST' },
+    onLogout,
+  );
+
+export const staffSendMessageToPersonaggio = (id, titolo, testo, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/send-message/`, {
+    method: 'POST',
+    body: JSON.stringify({ titolo, testo }),
+  }, onLogout);
+
+export const staffGetPersonaggioCreazioneGuidataProposte = (id, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/personaggi/${id}/creazione-guidata/proposte/`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const staffGetRegoleTransazioni = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/staff/regole-transazioni/', { method: 'GET' }, onLogout);
+
+export const staffPatchRegolaTransazione = (id, payload, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/regole-transazioni/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, onLogout);
+
 /** Staff: +1 al pool corrente (non oltre il massimo). */
 /** delta: positivo aggiunge, negativo toglie (clamp 0…max scheda). Default 1. */
 export const staffIncrementaRisorsaPool = (personaggioId, statSigla, motivo, onLogout, delta = 1) =>

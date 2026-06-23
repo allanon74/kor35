@@ -2146,7 +2146,10 @@ class TransazioneDetailView(APIView):
                 Q(richiedente=personaggio) |
                 Q(destinatario=personaggio) |
                 Q(iniziatore=personaggio)
-            ).prefetch_related('proposte__oggetti_da_dare', 'proposte__oggetti_da_ricevere', 'proposte__autore').first()
+            ).prefetch_related(
+                'proposte__oggetti_da_dare', 'proposte__oggetti_da_ricevere', 'proposte__autore',
+                'proposte__consumabili_da_dare', 'proposte__consumabili_da_ricevere',
+            ).first()
             
             if not transazione:
                 return Response({"error": "Transazione non trovata o non autorizzata."}, status=status.HTTP_404_NOT_FOUND)

@@ -7,7 +7,7 @@ from gestione_plot.permissions import IsStaffOrMaster
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.utils import timezone
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q, Sum, Prefetch, OuterRef, Subquery
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import re
@@ -26,6 +26,8 @@ from .models import (
     PersonaggioCarrieraMembership, CarrieraTierSblocco,
     Dichiarazione,
     Campagna, CampagnaFeaturePolicy,
+    RegolaTransazioneCategoria,
+    PersonaggioLog,
     FEATURE_ABILITA, FEATURE_TESSITURE, FEATURE_INFUSIONI, FEATURE_OGGETTI_BASE, FEATURE_CERIMONIALI,
     FEATURE_MODE_SHARED,
 )
@@ -76,6 +78,11 @@ from .serializers import (
     AttivataSerializer,
     PersonaggioPublicSerializer,
     PersonaggioEliminatoStaffSerializer,
+    PersonaggioStaffListSerializer,
+    PersonaggioStaffDetailSerializer,
+    RegolaTransazioneCategoriaStaffSerializer,
+    CreditoMovimentoSerializer,
+    PuntiCaratteristicaMovimentoListSerializer,
 )
 
 
@@ -1629,6 +1636,285 @@ class StaffMinigiocoBibliotecaAggiornaView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response(result, status=status.HTTP_200_OK)
+
+
+class PersonaggioStaffPagination(PageNumberPagination):
+    page_size = 40
+    page_size_query_param = 'page_size'
+    max_page_size = 200
+
+
+class PersonaggioStaffViewSet(viewsets.ModelViewSet):
+    """
+    Hub staff per personaggi: lista leggera con filtri, dettaglio completo in modale.
+    """
+
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = PersonaggioStaffPagination
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def _staff_personaggi_queryset(self):
+        from personaggi.views import _can_operate_in_campaign, _get_default_campaign
+
+        user = self.request.user
+        active_campaign = _get_active_campaign(self.request)
+        default_campaign = _get_default_campaign()
+
+        membership_qs = PersonaggioCarrieraMembership.objects.filter(
+            data_a__isnull=True
+        ).select_related('carriera', 'carica', 'tipo_carriera')
+
+        qr_sub = QrCode.objects.filter(vista_id=OuterRef('pk')).values('id')[:1]
+
+        qs = (
+            Personaggio.objects.select_related(
+                'tipologia', 'proprietario', 'era', 'prefettura', 'campagna', 'social_profile'
+            )
+            .prefetch_related(
+                Prefetch('carriere_membership', queryset=membership_qs, to_attr='_prefetched_membership'),
+            )
+            .annotate(qrcode_id_ann=Subquery(qr_sub))
+        )
+
+        if active_campaign and default_campaign and active_campaign.id != default_campaign.id:
+            qs = qs.filter(
+                Q(campagna=active_campaign) | Q(campagna=default_campaign, tipologia__giocante=False)
+            )
+        elif active_campaign:
+            qs = qs.filter(campagna=active_campaign)
+
+        if not user.is_superuser and not _can_operate_in_campaign(
+            user, active_campaign, needs_master=True
+        ):
+            return Personaggio.objects.none()
+
+        params = self.request.query_params
+        tipo = (params.get('tipo') or 'all').lower()
+        if tipo == 'pg':
+            qs = qs.filter(tipologia__giocante=True)
+        elif tipo == 'png':
+            qs = qs.filter(tipologia__giocante=False)
+
+        q = (params.get('q') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(nome__icontains=q)
+                | Q(proprietario__username__icontains=q)
+                | Q(proprietario__first_name__icontains=q)
+                | Q(proprietario__last_name__icontains=q)
+                | Q(costume__icontains=q)
+            )
+
+        era_id = params.get('era')
+        if era_id:
+            qs = qs.filter(era_id=era_id)
+
+        carriera_id = params.get('carriera') or params.get('korp')
+        if carriera_id:
+            qs = qs.filter(
+                carriere_membership__carriera_id=carriera_id,
+                carriere_membership__data_a__isnull=True,
+            )
+
+        morto = (params.get('morto') or 'vivo').lower()
+        if morto == 'vivo':
+            qs = qs.filter(data_morte__isnull=True)
+        elif morto == 'morto':
+            qs = qs.filter(data_morte__isnull=False)
+
+        return qs.distinct().order_by('nome')
+
+    def get_queryset(self):
+        return self._staff_personaggi_queryset()
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return PersonaggioStaffDetailSerializer
+        return PersonaggioStaffListSerializer
+
+    def get_object(self):
+        obj = super().get_object()
+        obj.carriere_membership_active = list(
+            PersonaggioCarrieraMembership.objects.filter(
+                personaggio=obj, data_a__isnull=True
+            ).select_related('carriera', 'carica', 'tipo_carriera').order_by('-data_da')
+        )
+        obj._prefetched_qrcode = list(QrCode.objects.filter(vista_id=obj.pk)[:1])
+        obj.sync_recuperi_automatici()
+        obj._staff_movimenti_credito = list(obj.movimenti_credito.order_by('-data')[:20])
+        obj._staff_movimenti_pc = list(obj.movimenti_pc.order_by('-data')[:20])
+        return obj
+
+    def _serialize_detail(self, instance, request):
+        serializer = PersonaggioStaffDetailSerializer(instance, context={'request': request})
+        data = serializer.data
+        data['movimenti_credito'] = CreditoMovimentoSerializer(
+            instance._staff_movimenti_credito, many=True
+        ).data
+        data['movimenti_pc'] = PuntiCaratteristicaMovimentoListSerializer(
+            instance._staff_movimenti_pc, many=True
+        ).data
+        return data
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        return Response(self._serialize_detail(instance, request))
+
+    def partial_update(self, request, *args, **kwargs):
+        personaggio = self.get_object()
+        allowed = {
+            'nome', 'testo', 'costume', 'note_master', 'watch_enabled',
+            'peso_influencer', 'badge_instafame', 'era', 'prefettura',
+            'prefettura_esterna', 'tipologia', 'impostazioni_ui',
+        }
+        payload = {k: v for k, v in request.data.items() if k in allowed}
+        if not payload:
+            return Response({'detail': 'Nessun campo aggiornabile.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = PersonaggioStaffDetailSerializer(
+            personaggio, data=payload, partial=True, context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        from personaggi.views import _is_master_in_campaign
+        user = request.user
+        changing_era = any(k in payload for k in ('era', 'prefettura', 'prefettura_esterna'))
+        if changing_era and not (user.is_superuser or _is_master_in_campaign(user, personaggio.campagna)):
+            return Response(
+                {'detail': 'Solo i master possono modificare Era/Prefettura.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if changing_era and not personaggio.can_edit_era_prefettura():
+            if not (user.is_superuser or _is_master_in_campaign(user, personaggio.campagna)):
+                return Response(
+                    {'detail': 'Era/Prefettura bloccate dopo l\'inizio del primo evento.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        with transaction.atomic():
+            personaggio = serializer.save()
+            if changing_era:
+                try:
+                    personaggio.assegna_era_e_prefettura(
+                        era=personaggio.era,
+                        prefettura=personaggio.prefettura,
+                        prefettura_esterna=personaggio.prefettura_esterna,
+                        force=bool(user.is_superuser or _is_master_in_campaign(user, personaggio.campagna)),
+                    )
+                except Exception as exc:
+                    return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return self.retrieve(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'], url_path='add-resources')
+    def add_resources(self, request, pk=None):
+        personaggio = self.get_object()
+        tipo = request.data.get('tipo')
+        reason = request.data.get('reason', 'Intervento Staff')
+        try:
+            amount = int(request.data.get('amount', 0))
+        except (ValueError, TypeError):
+            return Response({'error': 'Importo non valido'}, status=status.HTTP_400_BAD_REQUEST)
+        if amount == 0:
+            return Response({'error': "L'importo non può essere zero"}, status=status.HTTP_400_BAD_REQUEST)
+        if tipo == 'crediti':
+            personaggio.modifica_crediti(amount, reason)
+            val = personaggio.crediti
+        elif tipo == 'pc':
+            personaggio.modifica_pc(amount, reason)
+            val = personaggio.punti_caratteristica
+        else:
+            return Response({'error': 'Tipo risorsa non valido'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'status': 'success', 'new_val': val, 'msg': 'Risorse aggiornate'})
+
+    @action(detail=True, methods=['get'], url_path='logs')
+    def logs(self, request, pk=None):
+        personaggio = self.get_object()
+        from personaggi.serializers import PersonaggioLogSerializer
+        qs = PersonaggioLog.objects.filter(personaggio=personaggio).order_by('-data')
+        page = self.paginate_queryset(qs)
+        ser = PersonaggioLogSerializer(page or qs, many=True)
+        if page is not None:
+            return self.get_paginated_response(ser.data)
+        return Response(ser.data)
+
+    @action(detail=True, methods=['post'], url_path='rigenera-like-influencer')
+    def rigenera_like_influencer(self, request, pk=None):
+        from social.influencer import RigeneraLikeInfluencerError, rigenera_like_personaggio
+        personaggio = self.get_object()
+        try:
+            post_n, comment_n = rigenera_like_personaggio(personaggio)
+        except RigeneraLikeInfluencerError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'detail': f'Like InstaFame rigenerati: {post_n} post, {comment_n} commenti.',
+            'post_likes': post_n,
+            'comment_likes': comment_n,
+        })
+
+    @action(detail=True, methods=['get'], url_path='creazione-guidata/riepilogo')
+    def creazione_guidata_riepilogo(self, request, pk=None):
+        from gestione_plot.creazione_guidata_helpers import _parse_effetti_param
+        from personaggi.creazione_guidata_riepilogo import build_wizard_riepilogo
+        personaggio = self.get_object()
+        effetti = _parse_effetti_param(request.query_params.get('effetti'))
+        return Response(build_wizard_riepilogo(personaggio, effetti))
+
+    @action(detail=True, methods=['get'], url_path='creazione-guidata/proposte')
+    def creazione_guidata_proposte(self, request, pk=None):
+        from personaggi.creazione_guidata_proposte import load_wizard_proposte
+        personaggio = self.get_object()
+        effetti, trail = load_wizard_proposte(personaggio)
+        return Response({'effetti': effetti, 'trail': trail})
+
+    @action(detail=True, methods=['post'], url_path='send-message')
+    def send_message(self, request, pk=None):
+        personaggio = self.get_object()
+        titolo = (request.data.get('titolo') or '').strip()
+        testo = (request.data.get('testo') or '').strip()
+        if not titolo or not testo:
+            return Response({'detail': 'Titolo e testo obbligatori.'}, status=status.HTTP_400_BAD_REQUEST)
+        msg = Messaggio.objects.create(
+            mittente=request.user,
+            tipo_messaggio=Messaggio.TIPO_INDIVIDUALE,
+            destinatario_personaggio=personaggio,
+            titolo=titolo,
+            testo=testo,
+            campagna=personaggio.campagna,
+            mostra_proprietario_giocatore=False,
+        )
+        return Response({'id': msg.id, 'detail': 'Messaggio inviato.'})
+
+
+class RegolaTransazioneCategoriaStaffViewSet(viewsets.ModelViewSet):
+    """Regole globali per scambi tra giocatori, per categoria e campagna attiva."""
+
+    serializer_class = RegolaTransazioneCategoriaStaffSerializer
+    permission_classes = [IsStaffOrMaster]
+    pagination_class = None
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        from personaggi.regole_transazione import ensure_regole_transazione_campagna
+        campagna = _get_active_campaign(self.request)
+        if not campagna:
+            return RegolaTransazioneCategoria.objects.none()
+        ensure_regole_transazione_campagna(campagna)
+        return RegolaTransazioneCategoria.objects.filter(campagna=campagna).order_by('ordine', 'codice')
+
+    def partial_update(self, request, *args, **kwargs):
+        allowed = {
+            'vendibile_giocatori', 'requisiti_gruppo',
+            'solo_posseduti', 'trasferimento_copia', 'rispetta_non_insegnabile',
+        }
+        payload = {k: v for k, v in request.data.items() if k in allowed}
+        if not payload:
+            return Response({'detail': 'Nessun campo aggiornabile.'}, status=status.HTTP_400_BAD_REQUEST)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=payload, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 class PersonaggioEliminatiStaffViewSet(viewsets.ReadOnlyModelViewSet):

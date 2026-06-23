@@ -61,6 +61,7 @@ from .models import (
     CampagnaFeaturePolicy,
     CAMPAGNA_ROLE_HEAD_MASTER,
     WatchDeviceBinding,
+    RegolaTransazioneCategoria,
 )
 
 # -----------------------------------------------------------------------------
@@ -2149,21 +2150,41 @@ class PropostaTransazioneSerializer(serializers.ModelSerializer):
     autore_nome = serializers.CharField(source='autore.nome', read_only=True)
     oggetti_da_dare = serializers.SerializerMethodField()
     oggetti_da_ricevere = serializers.SerializerMethodField()
+    consumabili_da_dare = serializers.SerializerMethodField()
+    consumabili_da_ricevere = serializers.SerializerMethodField()
     
     class Meta:
         model = PropostaTransazione
         fields = (
             'id', 'autore', 'autore_nome', 'crediti_da_dare', 'crediti_da_ricevere',
-            'oggetti_da_dare', 'oggetti_da_ricevere', 'messaggio', 
+            'oggetti_da_dare', 'oggetti_da_ricevere',
+            'consumabili_da_dare', 'consumabili_da_ricevere',
+            'messaggio', 
             'data_creazione', 'is_attiva'
         )
-        read_only_fields = ('id', 'data_creazione', 'is_attiva', 'oggetti_da_dare', 'oggetti_da_ricevere')
+        read_only_fields = (
+            'id', 'data_creazione', 'is_attiva',
+            'oggetti_da_dare', 'oggetti_da_ricevere',
+            'consumabili_da_dare', 'consumabili_da_ricevere',
+        )
     
     def get_oggetti_da_dare(self, obj):
-        return [oggetto.id for oggetto in obj.oggetti_da_dare.all()]
+        return [{'id': oggetto.id, 'nome': oggetto.nome} for oggetto in obj.oggetti_da_dare.all()]
     
     def get_oggetti_da_ricevere(self, obj):
-        return [oggetto.id for oggetto in obj.oggetti_da_ricevere.all()]
+        return [{'id': oggetto.id, 'nome': oggetto.nome} for oggetto in obj.oggetti_da_ricevere.all()]
+
+    def get_consumabili_da_dare(self, obj):
+        return [
+            {'id': c.id, 'nome': c.nome, 'utilizzi_rimanenti': c.utilizzi_rimanenti}
+            for c in obj.consumabili_da_dare.all()
+        ]
+
+    def get_consumabili_da_ricevere(self, obj):
+        return [
+            {'id': c.id, 'nome': c.nome, 'utilizzi_rimanenti': c.utilizzi_rimanenti}
+            for c in obj.consumabili_da_ricevere.all()
+        ]
 
 class TransazioneSospesaSerializer(serializers.ModelSerializer):
     oggetto = serializers.StringRelatedField(read_only=True)
@@ -2910,6 +2931,24 @@ class TransazioneConfermaSerializer(serializers.Serializer):
             transazione.rifiuta()
         return transazione
 
+def _valida_consumabili_proprieta(consumabile_ids, personaggio, campo_label):
+    if not consumabile_ids:
+        return
+    ids = list(consumabile_ids)
+    trovati = ConsumabilePersonaggio.objects.filter(id__in=ids, personaggio=personaggio).count()
+    if trovati != len(ids):
+        raise serializers.ValidationError(
+            {campo_label: "Uno o più consumabili non appartengono al personaggio autore della proposta."}
+        )
+
+
+def _applica_consumabili_proposta(proposta, proposta_data):
+    if proposta_data.get('consumabili_da_dare'):
+        proposta.consumabili_da_dare.set(proposta_data['consumabili_da_dare'])
+    if proposta_data.get('consumabili_da_ricevere'):
+        proposta.consumabili_da_ricevere.set(proposta_data['consumabili_da_ricevere'])
+
+
 class TransazioneAvanzataCreateSerializer(serializers.Serializer):
     """Serializer per creare una nuova transazione avanzata con proposta iniziale"""
     destinatario_id = serializers.PrimaryKeyRelatedField(queryset=Personaggio.objects.all())
@@ -2920,6 +2959,17 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
         for field in required_fields:
             if field not in value:
                 raise serializers.ValidationError(f"Campo '{field}' mancante nella proposta")
+        iniziatore = self.context.get('iniziatore')
+        if iniziatore:
+            _valida_consumabili_proprieta(
+                value.get('consumabili_da_dare') or [],
+                iniziatore,
+                'consumabili_da_dare',
+            )
+            from personaggi.regole_transazione import valida_proposta_transazione
+            ok, msg = valida_proposta_transazione(iniziatore, value)
+            if not ok:
+                raise serializers.ValidationError(msg)
         return value
     
     def create(self, validated_data):
@@ -2952,6 +3002,7 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
                 proposta.oggetti_da_dare.set(proposta_data['oggetti_da_dare'])
             if proposta_data.get('oggetti_da_ricevere'):
                 proposta.oggetti_da_ricevere.set(proposta_data['oggetti_da_ricevere'])
+            _applica_consumabili_proposta(proposta, proposta_data)
             
             transazione.ultima_proposta_iniziatore = proposta
             transazione.save()
@@ -2964,7 +3015,29 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
     crediti_da_ricevere = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
     oggetti_da_dare = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
     oggetti_da_ricevere = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
+    consumabili_da_dare = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=ConsumabilePersonaggio.objects.all(), required=False
+    )
+    consumabili_da_ricevere = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=ConsumabilePersonaggio.objects.all(), required=False
+    )
     messaggio = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, data):
+        autore = self.context.get('autore')
+        if autore:
+            dare_ids = [c.id for c in data.get('consumabili_da_dare', [])]
+            _valida_consumabili_proprieta(dare_ids, autore, 'consumabili_da_dare')
+            from personaggi.regole_transazione import valida_proposta_transazione
+            payload = {
+                'crediti_da_dare': data.get('crediti_da_dare', 0),
+                'oggetti_da_dare': [o.id for o in data.get('oggetti_da_dare', [])],
+                'consumabili_da_dare': dare_ids,
+            }
+            ok, msg = valida_proposta_transazione(autore, payload)
+            if not ok:
+                raise serializers.ValidationError(msg)
+        return data
     
     def create(self, validated_data):
         transazione = self.context['transazione']
@@ -2972,6 +3045,8 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
         
         oggetti_da_dare = validated_data.pop('oggetti_da_dare', [])
         oggetti_da_ricevere = validated_data.pop('oggetti_da_ricevere', [])
+        consumabili_da_dare = validated_data.pop('consumabili_da_dare', [])
+        consumabili_da_ricevere = validated_data.pop('consumabili_da_ricevere', [])
         
         proposta = PropostaTransazione.objects.create(
             transazione=transazione,
@@ -2984,6 +3059,10 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
             proposta.oggetti_da_dare.set(oggetti_da_dare)
         if oggetti_da_ricevere:
             proposta.oggetti_da_ricevere.set(oggetti_da_ricevere)
+        if consumabili_da_dare:
+            proposta.consumabili_da_dare.set(consumabili_da_dare)
+        if consumabili_da_ricevere:
+            proposta.consumabili_da_ricevere.set(consumabili_da_ricevere)
         
         return proposta
 
@@ -3043,6 +3122,214 @@ class PersonaggioListSerializer(serializers.ModelSerializer):
         if not user:
             return "Nessun Proprietario"
         return f"{user.first_name} {user.last_name}".strip() or user.username
+
+
+class PuntiCaratteristicaMovimentoListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PuntiCaratteristicaMovimento
+        fields = ('id', 'importo', 'descrizione', 'data')
+
+
+class PersonaggioStaffListSerializer(serializers.ModelSerializer):
+    tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
+    giocante = serializers.BooleanField(source='tipologia.giocante', read_only=True)
+    proprietario_nome = serializers.SerializerMethodField()
+    proprietario_username = serializers.CharField(source='proprietario.username', read_only=True)
+    era_nome = serializers.CharField(source='era.nome', read_only=True)
+    prefettura_nome = serializers.CharField(source='prefettura.nome', read_only=True)
+    campagna_nome = serializers.CharField(source='campagna.nome', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+    korp_attivi = serializers.SerializerMethodField()
+    qrcode_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Personaggio
+        fields = (
+            'id', 'nome', 'tipologia_nome', 'giocante',
+            'proprietario_nome', 'proprietario_username',
+            'era', 'era_nome', 'prefettura_nome', 'campagna_nome',
+            'crediti', 'punti_caratteristica', 'data_morte',
+            'qrcode_id', 'korp_attivi', 'avatar_url',
+        )
+        read_only_fields = fields
+
+    def get_proprietario_nome(self, obj):
+        user = obj.proprietario
+        if not user:
+            return '—'
+        return f"{user.first_name} {user.last_name}".strip() or user.username
+
+    def get_avatar_url(self, obj):
+        return _personaggio_avatar_url(obj, self.context.get('request'))
+
+    def get_korp_attivi(self, obj):
+        names = []
+        for m in getattr(obj, '_prefetched_membership', None) or obj.carriere_membership.filter(data_a__isnull=True):
+            label = m.carriera.nome if m.carriera_id else ''
+            if m.carica_id:
+                label = f"{label} ({m.carica.nome})" if label else m.carica.nome
+            if label:
+                names.append(label)
+        return names
+
+    def get_qrcode_id(self, obj):
+        if hasattr(obj, 'qrcode_id_ann'):
+            return obj.qrcode_id_ann
+        from .models import QrCode
+        return QrCode.objects.filter(vista_id=obj.pk).values_list('id', flat=True).first()
+
+
+class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
+    tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
+    giocante = serializers.BooleanField(source='tipologia.giocante', read_only=True)
+    proprietario_nome = serializers.SerializerMethodField()
+    proprietario_username = serializers.CharField(source='proprietario.username', read_only=True)
+    era_nome = serializers.CharField(source='era.nome', read_only=True)
+    prefettura_nome = serializers.CharField(source='prefettura.nome', read_only=True)
+    campagna_nome = serializers.CharField(source='campagna.nome', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+    qrcode_id = serializers.SerializerMethodField()
+    qrcode_testo = serializers.SerializerMethodField()
+    carriere_membership = serializers.SerializerMethodField()
+    risorse_pool_ui = serializers.SerializerMethodField()
+    movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
+    movimenti_pc = PuntiCaratteristicaMovimentoListSerializer(many=True, read_only=True)
+    tipologia = serializers.PrimaryKeyRelatedField(
+        queryset=TipologiaPersonaggio.objects.all(), required=False
+    )
+    era = serializers.PrimaryKeyRelatedField(
+        queryset=Era.objects.filter(attiva=True), allow_null=True, required=False
+    )
+    prefettura = serializers.PrimaryKeyRelatedField(
+        queryset=Prefettura.objects.all(), allow_null=True, required=False
+    )
+    prefettura_esterna = serializers.BooleanField(required=False)
+    peso_influencer = serializers.IntegerField(required=False, min_value=1)
+    badge_instafame = serializers.ChoiceField(
+        choices=[("", "Nessuno"), ("GOLD", "Gold"), ("DIAMOND", "Diamond"), ("PREMIUM", "Premium")],
+        required=False,
+        allow_blank=True,
+    )
+
+    class Meta:
+        model = Personaggio
+        fields = (
+            'id', 'nome', 'testo', 'costume', 'note_master',
+            'tipologia', 'tipologia_nome', 'giocante',
+            'proprietario', 'proprietario_nome', 'proprietario_username',
+            'data_nascita', 'data_morte',
+            'crediti', 'punti_caratteristica',
+            'campagna', 'campagna_nome',
+            'era', 'prefettura', 'prefettura_esterna',
+            'era_nome', 'prefettura_nome',
+            'watch_enabled', 'peso_influencer', 'badge_instafame',
+            'avatar_url', 'qrcode_id', 'qrcode_testo',
+            'carriere_membership', 'risorse_pool_ui',
+            'movimenti_credito', 'movimenti_pc',
+            'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
+        )
+        read_only_fields = (
+            'proprietario', 'proprietario_nome', 'proprietario_username',
+            'crediti', 'punti_caratteristica', 'data_nascita',
+            'tipologia_nome', 'giocante', 'campagna_nome',
+            'era_nome', 'prefettura_nome', 'avatar_url',
+            'qrcode_id', 'qrcode_testo', 'carriere_membership',
+            'risorse_pool_ui', 'movimenti_credito', 'movimenti_pc',
+        )
+
+    def get_proprietario_nome(self, obj):
+        user = obj.proprietario
+        if not user:
+            return '—'
+        return f"{user.first_name} {user.last_name}".strip() or user.username
+
+    def get_avatar_url(self, obj):
+        return _personaggio_avatar_url(obj, self.context.get('request'))
+
+    def get_qrcode_id(self, obj):
+        qr = getattr(obj, '_prefetched_qrcode', None)
+        if qr is not None:
+            return qr[0].id if qr else None
+        from .models import QrCode
+        return QrCode.objects.filter(vista_id=obj.pk).values_list('id', flat=True).first()
+
+    def get_qrcode_testo(self, obj):
+        qr = getattr(obj, '_prefetched_qrcode', None)
+        if qr is not None:
+            return qr[0].testo if qr else None
+        from .models import QrCode
+        return QrCode.objects.filter(vista_id=obj.pk).values_list('testo', flat=True).first()
+
+    def get_carriere_membership(self, obj):
+        qs = getattr(obj, 'carriere_membership_active', None)
+        if qs is None:
+            qs = obj.carriere_membership.filter(data_a__isnull=True).select_related(
+                'carriera', 'carica', 'tipo_carriera'
+            )
+        return PersonaggioCarrieraMembershipStaffSerializer(qs, many=True, context=self.context).data
+
+    def get_risorse_pool_ui(self, obj):
+        obj.sync_recuperi_automatici()
+        detail = PersonaggioDetailSerializer(obj, context=self.context)
+        return detail.get_risorse_pool_ui(obj)
+
+    oggetti_inventario = serializers.SerializerMethodField()
+    eventi_partecipati = serializers.SerializerMethodField()
+    watch_binding = serializers.SerializerMethodField()
+    impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
+
+    def get_oggetti_inventario(self, obj):
+        rows = []
+        for oggetto in obj.get_oggetti().order_by('nome')[:80]:
+            rows.append({
+                'id': oggetto.id,
+                'nome': oggetto.nome,
+                'tipo_oggetto': oggetto.tipo_oggetto,
+            })
+        return rows
+
+    def get_eventi_partecipati(self, obj):
+        from gestione_plot.models import Evento
+        eventi = obj.eventi_partecipati.all().order_by('-data_inizio')[:30]
+        return [
+            {
+                'id': ev.id,
+                'nome': ev.nome,
+                'data_inizio': ev.data_inizio.isoformat() if ev.data_inizio else None,
+                'data_fine': ev.data_fine.isoformat() if ev.data_fine else None,
+            }
+            for ev in eventi
+        ]
+
+    def get_watch_binding(self, obj):
+        from personaggi.models import WatchDeviceBinding
+        binding = (
+            WatchDeviceBinding.objects.filter(personaggio=obj, is_active=True)
+            .order_by('-updated_at')
+            .first()
+        )
+        if not binding:
+            return None
+        return {
+            'id': str(binding.id),
+            'device_id': binding.device_id,
+            'transport_mode': binding.transport_mode,
+            'firmware_version': binding.firmware_version,
+            'last_seen_at': binding.last_seen_at.isoformat() if binding.last_seen_at else None,
+            'is_active': bool(binding.is_active),
+        }
+
+
+class RegolaTransazioneCategoriaStaffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RegolaTransazioneCategoria
+        fields = (
+            'id', 'sync_id', 'campagna', 'codice', 'nome', 'ordine',
+            'vendibile_giocatori', 'requisiti_gruppo',
+            'solo_posseduti', 'trasferimento_copia', 'rispetta_non_insegnabile',
+            'updated_at',
+        )
+        read_only_fields = ('id', 'sync_id', 'campagna', 'codice', 'nome', 'ordine', 'updated_at')
 
 
 class PersonaggioEliminatoStaffSerializer(serializers.ModelSerializer):

@@ -5,6 +5,32 @@ import { getTransazioneDetail, confermaTransazione, addPropostaTransazione } fro
 import { useCharacter } from './CharacterContext';
 import PropostaEditorModal from './PropostaEditorModal';
 
+const PropostaBeniList = ({ label, oggetti = [], consumabili = [] }) => {
+  if ((!oggetti || oggetti.length === 0) && (!consumabili || consumabili.length === 0)) {
+    return null;
+  }
+  const renderNome = (item) => (typeof item === 'object' ? item.nome : `#${item}`);
+  const renderId = (item) => (typeof item === 'object' ? item.id : item);
+  return (
+    <div>
+      <span className="text-gray-400">{label}: </span>
+      <ul className="list-disc list-inside text-white mt-1">
+        {oggetti?.map((o) => (
+          <li key={`o-${renderId(o)}`}>{renderNome(o)}</li>
+        ))}
+        {consumabili?.map((c) => (
+          <li key={`c-${renderId(c)}`}>
+            {renderNome(c)}
+            {typeof c === 'object' && c.utilizzi_rimanenti != null && (
+              <span className="text-gray-500 text-xs"> (x{c.utilizzi_rimanenti})</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
 const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) => {
   const { selectedCharacterData, selectedCharacterId } = useCharacter();
   const [transazione, setTransazione] = useState(null);
@@ -180,6 +206,16 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                           </span>
                         </div>
                       )}
+                      <PropostaBeniList
+                        label="Oggetti / consumabili che dà"
+                        oggetti={transazione.ultima_proposta_iniziatore.oggetti_da_dare}
+                        consumabili={transazione.ultima_proposta_iniziatore.consumabili_da_dare}
+                      />
+                      <PropostaBeniList
+                        label="Oggetti / consumabili che riceve"
+                        oggetti={transazione.ultima_proposta_iniziatore.oggetti_da_ricevere}
+                        consumabili={transazione.ultima_proposta_iniziatore.consumabili_da_ricevere}
+                      />
                       {transazione.ultima_proposta_iniziatore.messaggio && (
                         <div className="mt-3 pt-3 border-t border-indigo-700/30">
                           <p className="text-gray-300 italic">{transazione.ultima_proposta_iniziatore.messaggio}</p>
@@ -212,6 +248,16 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                           </span>
                         </div>
                       )}
+                      <PropostaBeniList
+                        label="Oggetti / consumabili che dà"
+                        oggetti={transazione.ultima_proposta_destinatario.oggetti_da_dare}
+                        consumabili={transazione.ultima_proposta_destinatario.consumabili_da_dare}
+                      />
+                      <PropostaBeniList
+                        label="Oggetti / consumabili che riceve"
+                        oggetti={transazione.ultima_proposta_destinatario.oggetti_da_ricevere}
+                        consumabili={transazione.ultima_proposta_destinatario.consumabili_da_ricevere}
+                      />
                       {transazione.ultima_proposta_destinatario.messaggio && (
                         <div className="mt-3 pt-3 border-t border-cyan-700/30">
                           <p className="text-gray-300 italic">{transazione.ultima_proposta_destinatario.messaggio}</p>

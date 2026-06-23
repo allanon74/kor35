@@ -44,6 +44,8 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "manuali-pdf",
     "negozi-mercante",
     "personaggi-eliminati",
+    "personaggi",
+    "regole-transazioni",
 })
 
 DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
@@ -97,6 +99,8 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
             "order": 2,
             "collapsed_default": True,
             "tool_ids": [
+                "personaggi",
+                "regole-transazioni",
                 "creazione-guidata",
                 "inventari",
                 "proposte",

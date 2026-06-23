@@ -10,16 +10,21 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   const [loadingOggetti, setLoadingOggetti] = useState({});
   const [oggettiAltroPersonaggio, setOggettiAltroPersonaggio] = useState([]);
   const [manualOggettoId, setManualOggettoId] = useState('');
+  const [manualConsumabileId, setManualConsumabileId] = useState('');
+  const [consumabiliAltroPersonaggio, setConsumabiliAltroPersonaggio] = useState([]);
   const [formData, setFormData] = useState({
     crediti_da_dare: 0,
     crediti_da_ricevere: 0,
     oggetti_da_dare: [],
     oggetti_da_ricevere: [],
+    consumabili_da_dare: [],
+    consumabili_da_ricevere: [],
     messaggio: ''
   });
 
-  // Ottieni oggetti disponibili dall'inventario
+  // Ottieni oggetti e consumabili disponibili dall'inventario
   const oggettiDisponibili = selectedCharacterData?.oggetti || [];
+  const consumabiliDisponibili = selectedCharacterData?.consumabili || [];
 
   // Determina chi è l'altro personaggio
   const altroPersonaggioId = transazione?.iniziatore === selectedCharacterId 
@@ -70,6 +75,13 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
         
         setOggettiAltroPersonaggio(nuoviOggetti);
       }
+
+      if (altraProposta?.consumabili_da_dare && altraProposta.consumabili_da_dare.length > 0) {
+        const nuoviConsumabili = altraProposta.consumabili_da_dare.map((c) =>
+          typeof c === 'object' ? c : { id: c, nome: `Consumabile #${c}` }
+        );
+        setConsumabiliAltroPersonaggio(nuoviConsumabili);
+      }
     };
     
     loadOggettiAltro();
@@ -116,6 +128,21 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
     fetchOggettoById(manualOggettoId.trim());
   };
 
+  const handleAddConsumabileManuale = () => {
+    const id = parseInt(manualConsumabileId, 10);
+    if (Number.isNaN(id)) {
+      alert('ID consumabile non valido!');
+      return;
+    }
+    if (consumabiliAltroPersonaggio.find((c) => (typeof c === 'object' ? c.id : c) === id)) {
+      alert('Questo consumabile è già nella lista!');
+      setManualConsumabileId('');
+      return;
+    }
+    setConsumabiliAltroPersonaggio((prev) => [...prev, { id, nome: `Consumabile #${id}` }]);
+    setManualConsumabileId('');
+  };
+
   const handleSave = async () => {
     if (formData.crediti_da_dare < 0 || formData.crediti_da_ricevere < 0) {
       alert("I crediti non possono essere negativi!");
@@ -138,15 +165,23 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
     }
   };
 
-  const toggleOggetto = (oggettoId, tipo) => {
-    const field = tipo === 'dare' ? 'oggetti_da_dare' : 'oggetti_da_ricevere';
+  const toggleItem = (itemId, tipo, categoria) => {
+    const field = categoria === 'consumabile'
+      ? (tipo === 'dare' ? 'consumabili_da_dare' : 'consumabili_da_ricevere')
+      : (tipo === 'dare' ? 'oggetti_da_dare' : 'oggetti_da_ricevere');
     setFormData(prev => ({
       ...prev,
-      [field]: prev[field].includes(oggettoId)
-        ? prev[field].filter(id => id !== oggettoId)
-        : [...prev[field], oggettoId]
+      [field]: prev[field].includes(itemId)
+        ? prev[field].filter(id => id !== itemId)
+        : [...prev[field], itemId]
     }));
   };
+
+  const titoloModal = !transazione
+    ? 'Proponi Scambio'
+    : (transazione?.ultima_proposta_iniziatore && transazione?.ultima_proposta_destinatario
+      ? 'Rilancio Proposta'
+      : 'Controproposta');
 
   return (
     <Dialog open={true} onClose={onClose} className="relative z-50">
@@ -157,9 +192,7 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
           {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-gray-700 bg-gray-800/50 rounded-t-xl">
             <Dialog.Title className="text-xl font-bold text-white">
-              {transazione?.ultima_proposta_iniziatore && transazione?.ultima_proposta_destinatario
-                ? 'Rilancio Proposta'
-                : 'Controproposta'}
+              {titoloModal}
             </Dialog.Title>
             <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
               <X size={24} />
@@ -217,10 +250,37 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
                       <input
                         type="checkbox"
                         checked={formData.oggetti_da_dare.includes(oggetto.id)}
-                        onChange={() => toggleOggetto(oggetto.id, 'dare')}
+                        onChange={() => toggleItem(oggetto.id, 'dare', 'oggetto')}
                         className="rounded"
                       />
                       <span className="text-sm text-white">{oggetto.nome}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Consumabili da Dare */}
+            <div>
+              <label className="block text-sm font-bold text-gray-400 mb-2">
+                Consumabili che DAI
+              </label>
+              <div className="bg-gray-800 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                {consumabiliDisponibili.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic">Nessun consumabile disponibile</p>
+                ) : (
+                  consumabiliDisponibili.map((consumabile) => (
+                    <label key={consumabile.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded">
+                      <input
+                        type="checkbox"
+                        checked={formData.consumabili_da_dare.includes(consumabile.id)}
+                        onChange={() => toggleItem(consumabile.id, 'dare', 'consumabile')}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-white">
+                        {consumabile.nome}
+                        <span className="text-xs text-gray-500 ml-1">(x{consumabile.utilizzi_rimanenti})</span>
+                      </span>
                     </label>
                   ))
                 )}
@@ -274,13 +334,63 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
                         <input
                           type="checkbox"
                           checked={formData.oggetti_da_ricevere.includes(oggettoId)}
-                          onChange={() => toggleOggetto(oggettoId, 'ricevere')}
+                          onChange={() => toggleItem(oggettoId, 'ricevere', 'oggetto')}
                           className="rounded"
                         />
                         <span className="text-sm text-white">{oggettoNome}</span>
                         {typeof oggetto === 'object' && oggetto.descrizione && (
                           <span className="text-xs text-gray-500 ml-auto">({oggetto.descrizione.substring(0, 30)}...)</span>
                         )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Consumabili da Ricevere */}
+            <div>
+              <label className="block text-sm font-bold text-gray-400 mb-2">
+                Consumabili che RICEVI
+              </label>
+              <div className="mb-2 flex gap-2">
+                <input
+                  type="number"
+                  value={manualConsumabileId}
+                  onChange={e => setManualConsumabileId(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleAddConsumabileManuale()}
+                  placeholder="Inserisci ID consumabile..."
+                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                />
+                <button
+                  onClick={handleAddConsumabileManuale}
+                  disabled={!manualConsumabileId.trim()}
+                  className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white text-sm font-bold disabled:opacity-50 flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  Aggiungi
+                </button>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                {consumabiliAltroPersonaggio.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic">
+                    Inserisci gli ID dei consumabili che vuoi ricevere, oppure seleziona da quelli proposti dall&apos;altro.
+                  </p>
+                ) : (
+                  consumabiliAltroPersonaggio.map((consumabile) => {
+                    const consumabileId = typeof consumabile === 'object' ? consumabile.id : consumabile;
+                    const consumabileNome = typeof consumabile === 'object'
+                      ? consumabile.nome
+                      : `Consumabile #${consumabileId}`;
+                    return (
+                      <label key={consumabileId} className="flex items-center gap-2 cursor-pointer hover:bg-gray-700 p-2 rounded">
+                        <input
+                          type="checkbox"
+                          checked={formData.consumabili_da_ricevere.includes(consumabileId)}
+                          onChange={() => toggleItem(consumabileId, 'ricevere', 'consumabile')}
+                          className="rounded"
+                        />
+                        <span className="text-sm text-white">{consumabileNome}</span>
                       </label>
                     );
                   })
