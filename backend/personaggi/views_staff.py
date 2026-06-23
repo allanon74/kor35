@@ -1913,7 +1913,11 @@ class RegolaTransazioneCategoriaStaffViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        instance = serializer.save()
+        from personaggi.regole_transazione import REGOLA_TX_CODICI_CATALOGO_OBBLIGATORIO
+        if instance.codice in REGOLA_TX_CODICI_CATALOGO_OBBLIGATORIO and not instance.solo_posseduti:
+            instance.solo_posseduti = True
+            instance.save(update_fields=['solo_posseduti', 'updated_at'])
         return Response(serializer.data)
 
 

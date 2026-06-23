@@ -6,6 +6,10 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Dict, Optional, Tuple
 
+from personaggi.accademia_catalogo import (
+    oggetto_in_catalogo_accademia_ufficiale,
+    tecnica_in_catalogo_accademia_ufficiale,
+)
 from personaggi.requisiti_accesso import personaggio_soddisfa_requisiti_gruppo
 
 from .models import (
@@ -46,6 +50,13 @@ TIPO_OGGETTO_A_CATEGORIA = {
 }
 
 NOMI_CATEGORIA = dict(REGOLA_TX_CODICE_CHOICES)
+
+# Tessiture / infusioni / cerimoniali: blocco catalogo Accademia sempre attivo (copyright).
+REGOLA_TX_CODICI_CATALOGO_OBBLIGATORIO = frozenset({
+    REGOLA_TX_CODICE_INFUSIONI,
+    REGOLA_TX_CODICE_TESSITURE,
+    REGOLA_TX_CODICE_CERIMONIALI,
+})
 
 
 def ensure_regole_transazione_campagna(campagna) -> None:
@@ -101,13 +112,6 @@ def personaggio_puo_trasferire_categoria(personaggio: Personaggio, codice: str) 
     return True, ''
 
 
-def _oggetto_in_accademia_nuove(oggetto: Oggetto) -> bool:
-    ob = getattr(oggetto, 'oggetto_base', None)
-    if ob and getattr(ob, 'in_vendita', False) and not getattr(ob, 'escluso_negozio_ufficiale', False):
-        return True
-    return bool(getattr(oggetto, 'in_vendita', False))
-
-
 def _valida_oggetto(personaggio: Personaggio, oggetto: Oggetto, regola: RegolaTransazioneCategoria) -> Tuple[bool, str]:
     if oggetto.inventario_corrente_id != personaggio.inventario_ptr_id:
         return False, f"L'oggetto «{oggetto.nome}» non è nel tuo inventario."
@@ -115,8 +119,48 @@ def _valida_oggetto(personaggio: Personaggio, oggetto: Oggetto, regola: RegolaTr
     ok, msg = personaggio_puo_trasferire_categoria(personaggio, codice)
     if not ok:
         return False, msg
-    if regola.solo_posseduti and _oggetto_in_accademia_nuove(oggetto):
-        return False, f"«{oggetto.nome}» è disponibile in Accademia: non scambiabile secondo le regole attuali."
+    if _deve_bloccare_catalogo_accademia(regola) and oggetto_in_catalogo_accademia_ufficiale(oggetto):
+        return False, (
+            f"«{oggetto.nome}» è nel catalogo ufficiale Accademia: "
+            "non può essere scambiata tra giocatori."
+        )
+    return True, ''
+
+
+def _deve_bloccare_catalogo_accademia(regola: RegolaTransazioneCategoria) -> bool:
+    if regola.codice in REGOLA_TX_CODICI_CATALOGO_OBBLIGATORIO:
+        return True
+    return bool(regola.solo_posseduti)
+
+
+def _personaggio_possiede_tecnica(personaggio: Personaggio, tecnica, codice: str) -> bool:
+    if codice == REGOLA_TX_CODICE_INFUSIONI:
+        return personaggio.infusioni_possedute.filter(pk=tecnica.pk).exists()
+    if codice == REGOLA_TX_CODICE_TESSITURE:
+        return personaggio.tessiture_possedute.filter(pk=tecnica.pk).exists()
+    if codice == REGOLA_TX_CODICE_CERIMONIALI:
+        return personaggio.cerimoniali_posseduti.filter(pk=tecnica.pk).exists()
+    return False
+
+
+def _valida_tecnica(
+    personaggio: Personaggio,
+    tecnica,
+    codice: str,
+    regola: RegolaTransazioneCategoria,
+) -> Tuple[bool, str]:
+    if not _personaggio_possiede_tecnica(personaggio, tecnica, codice):
+        return False, f"La tecnica «{tecnica.nome}» non è nel tuo elenco."
+    ok, msg = personaggio_puo_trasferire_categoria(personaggio, codice)
+    if not ok:
+        return False, msg
+    if _deve_bloccare_catalogo_accademia(regola) and tecnica_in_catalogo_accademia_ufficiale(tecnica):
+        return False, (
+            f"«{tecnica.nome}» è nel catalogo ufficiale Accademia (tab Nuove): "
+            "non può essere scambiata tra giocatori."
+        )
+    if regola.rispetta_non_insegnabile and getattr(tecnica, 'non_acquistabile', False):
+        return False, f"«{tecnica.nome}» non è trasferibile (non acquistabile / insegnabile)."
     return True, ''
 
 
@@ -152,6 +196,26 @@ def valida_proposta_transazione(personaggio: Personaggio, proposta_data: dict) -
     if consumabili_ids:
         for cons in ConsumabilePersonaggio.objects.filter(pk__in=consumabili_ids):
             ok, msg = _valida_consumabile(personaggio, cons)
+            if not ok:
+                return False, msg
+
+    from personaggi.models import Cerimoniale, Infusione, Tessitura
+
+    tecniche_map = (
+        (REGOLA_TX_CODICE_INFUSIONI, 'infusioni_da_dare', Infusione),
+        (REGOLA_TX_CODICE_TESSITURE, 'tessiture_da_dare', Tessitura),
+        (REGOLA_TX_CODICE_CERIMONIALI, 'cerimoniali_da_dare', Cerimoniale),
+    )
+    regole = get_regole_map(campagna)
+    for codice, field, model_cls in tecniche_map:
+        ids = proposta_data.get(field) or []
+        if not ids:
+            continue
+        regola = regole.get(codice)
+        if not regola:
+            continue
+        for tecnica in model_cls.objects.filter(pk__in=ids):
+            ok, msg = _valida_tecnica(personaggio, tecnica, codice, regola)
             if not ok:
                 return False, msg
 

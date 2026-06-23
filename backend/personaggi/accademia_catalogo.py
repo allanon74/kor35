@@ -31,6 +31,7 @@ def abilita_accademia_filter(qs: QuerySet | None = None) -> QuerySet:
 
 
 def tecnica_visibile_in_accademia(tecnica) -> bool:
+    """True se la tecnica può comparire nel catalogo Accademia (tab Nuove / acquisti)."""
     if getattr(tecnica, "non_vendibile", False):
         return False
     if getattr(tecnica, "escluso_negozio_ufficiale", False):
@@ -38,6 +39,23 @@ def tecnica_visibile_in_accademia(tecnica) -> bool:
     if getattr(tecnica, "non_acquistabile", False):
         return False
     return True
+
+
+def tecnica_in_catalogo_accademia_ufficiale(tecnica) -> bool:
+    """Alias esplicito per regole scambio: tecnica ancora vendibile dall'Accademia ufficiale."""
+    return tecnica_visibile_in_accademia(tecnica)
+
+
+def oggetto_in_catalogo_accademia_ufficiale(oggetto) -> bool:
+    """True se l'oggetto (o il suo template) è nel catalogo Accademia ufficiale."""
+    ob = getattr(oggetto, "oggetto_base", None)
+    if ob is not None:
+        return oggetto_base_accademia_qs().filter(pk=ob.pk).exists()
+    return bool(
+        getattr(oggetto, "in_vendita", False)
+        and not getattr(oggetto, "escluso_negozio_ufficiale", False)
+        and not getattr(oggetto, "non_vendibile", False)
+    )
 
 
 def verifica_oggetto_base_accademia(template) -> None:

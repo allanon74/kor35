@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from personaggi.models import (
     REGOLA_TX_CODICE_CREDITI,
+    REGOLA_TX_CODICE_INFUSIONI,
     Campagna,
     RegolaTransazioneCategoria,
     Personaggio,
@@ -41,6 +42,35 @@ class RegoleTransazioneTests(TestCase):
         ok, msg = personaggio_puo_trasferire_categoria(self.personaggio, REGOLA_TX_CODICE_CREDITI)
         self.assertFalse(ok)
         self.assertIn('Crediti', msg)
+
+    def test_tecnica_in_catalogo_bloccata_sempre_per_infusioni(self):
+        from personaggi.models import Infusione, Punteggio, AURA
+        from personaggi.regole_transazione import _valida_tecnica
+
+        aura = Punteggio.objects.filter(tipo=AURA).first()
+        if not aura:
+            aura = Punteggio.objects.create(nome='Aura TX', tipo=AURA, sigla='ATX', colore='#000')
+        inf = Infusione.objects.create(nome='Inf catalogo', aura_richiesta=aura, campagna=self.campagna)
+        self.personaggio.infusioni_possedute.add(inf)
+        regola = RegolaTransazioneCategoria.objects.get(
+            campagna=self.campagna, codice=REGOLA_TX_CODICE_INFUSIONI
+        )
+        regola.solo_posseduti = False
+        regola.save()
+        ok, msg = _valida_tecnica(
+            self.personaggio, inf, REGOLA_TX_CODICE_INFUSIONI, regola
+        )
+        self.assertFalse(ok)
+        self.assertIn('catalogo ufficiale', msg)
+
+        inf.escluso_negozio_ufficiale = True
+        inf.save()
+        regola.rispetta_non_insegnabile = False
+        regola.save()
+        ok2, _ = _valida_tecnica(
+            self.personaggio, inf, REGOLA_TX_CODICE_INFUSIONI, regola
+        )
+        self.assertTrue(ok2)
 
     def test_valida_proposta_crediti_ok(self):
         ok, msg = valida_proposta_transazione(

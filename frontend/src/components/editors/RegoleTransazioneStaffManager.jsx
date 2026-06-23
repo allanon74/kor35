@@ -10,10 +10,24 @@ import {
   staffGetAbilitaListAll,
 } from '../../api';
 
+const CATALOGO_OBBLIGATORIO = new Set(['infusioni', 'tessiture', 'cerimoniali']);
+
 const FLAG_FIELDS = [
-  { key: 'solo_posseduti', label: 'Solo beni già posseduti' },
-  { key: 'trasferimento_copia', label: 'Trasferimento a copia (tecniche)' },
-  { key: 'rispetta_non_insegnabile', label: 'Rispetta flag non insegnabile/acquistabile' },
+  {
+    key: 'solo_posseduti',
+    label: 'Escludi catalogo Accademia (tab Nuove)',
+    hint: 'Blocca scambi di beni ancora acquistabili dall\'Accademia ufficiale.',
+  },
+  {
+    key: 'trasferimento_copia',
+    label: 'Trasferimento a copia (tecniche)',
+    hint: 'Il destinatario riceve una copia; il mittente conserva l\'originale.',
+  },
+  {
+    key: 'rispetta_non_insegnabile',
+    label: 'Rispetta flag non acquistabile',
+    hint: 'Blocca tecniche marcate non acquistabile / escluse catalogo.',
+  },
 ];
 
 const RegoleTransazioneStaffManager = ({ onLogout }) => {
@@ -128,16 +142,32 @@ const RegoleTransazioneStaffManager = ({ onLogout }) => {
                   Scambiabile tra giocatori
                 </label>
               </div>
-              {FLAG_FIELDS.map(({ key, label }) => (
-                <label key={key} className="flex items-center gap-2 text-sm text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={!!row[key]}
-                    onChange={(e) => updateDraft(r.id, { [key]: e.target.checked })}
-                  />
-                  {label}
-                </label>
-              ))}
+              {CATALOGO_OBBLIGATORIO.has(row.codice) && (
+                <p className="text-xs text-amber-400/90 bg-amber-950/30 border border-amber-900/50 rounded px-2 py-1">
+                  Protezione copyright: le tecniche nel catalogo Accademia (tab Nuove) non sono mai scambiabili tra giocatori.
+                </p>
+              )}
+              {FLAG_FIELDS.map(({ key, label, hint }) => {
+                const catalogoLocked = key === 'solo_posseduti' && CATALOGO_OBBLIGATORIO.has(row.codice);
+                const checked = catalogoLocked ? true : !!row[key];
+                return (
+                  <label key={key} className="flex flex-col gap-0.5 text-sm text-gray-300">
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={catalogoLocked}
+                        onChange={(e) => updateDraft(r.id, { [key]: e.target.checked })}
+                      />
+                      {label}
+                      {catalogoLocked && (
+                        <span className="text-[10px] uppercase text-amber-500 font-semibold">Sempre attivo</span>
+                      )}
+                    </span>
+                    {hint && <span className="text-xs text-gray-500 ml-6">{hint}</span>}
+                  </label>
+                );
+              })}
               <div>
                 <p className="text-xs text-gray-500 mb-2 uppercase font-semibold">Requisiti mittente (vuoto = sempre)</p>
                 <RegoleVisibilitaEditor
