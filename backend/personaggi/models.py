@@ -6,6 +6,7 @@ import hashlib
 import secrets
 import string
 import copy
+from decimal import Decimal
 from io import BytesIO
 from django.db import models, IntegrityError, transaction
 from django.db.models import Q
@@ -4543,6 +4544,13 @@ class Personaggio(Inventario):
     # --- CAMPO CERIMONIALI ---
     cerimoniali_posseduti = models.ManyToManyField(Cerimoniale, through='PersonaggioCerimoniale', blank=True)
     impostazioni_ui = models.JSONField(default=dict, blank=True, verbose_name="Impostazioni UI")
+    riserva = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name="Riserva scommesse",
+        help_text="CR da vincite scommesse: spendibili solo per puntate; ritiro in contanti solo in evento attivo.",
+    )
     # -------------------
     
     class Meta: 

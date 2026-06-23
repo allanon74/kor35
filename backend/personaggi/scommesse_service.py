@@ -5,9 +5,11 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 
 from personaggi.scommesse_config import get_config_scommesse
+from personaggi.scommesse_evento import personaggio_in_evento_attivo
 from personaggi.scommesse_logic import (
     ALLIBRATORE_SIGLA,
     ESITI_VALIDI,
@@ -31,6 +33,49 @@ from personaggi.scommesse_models import (
 def _decimal2(value):
     from personaggi.scommesse_logic import _decimal2 as fn
     return fn(value)
+
+
+def calcola_ritiro_contanti_da_riserva(personaggio, puntata: PuntataScommessa, cfg=None) -> tuple[Decimal, Decimal]:
+    """
+    Quanto della vincita già in riserva può passare ai crediti liberi (ritiro, residuo_riserva).
+    Applica soglia per puntata e tetto per calendario.
+    """
+    if not puntata.vincita_riscossa:
+        return Decimal("0.00"), Decimal("0.00")
+
+    vincita = _decimal2(puntata.vincita or Decimal("0.00"))
+    if vincita <= 0:
+        return Decimal("0.00"), Decimal("0.00")
+
+    gia_ritirato_puntata = _decimal2(puntata.vincita_ritirata or Decimal("0.00"))
+    residuo_puntata = vincita - gia_ritirato_puntata
+    if residuo_puntata <= 0:
+        return Decimal("0.00"), Decimal("0.00")
+
+    cfg = cfg or get_config_scommesse(puntata.calendario.sport.campagna_id)
+    soglia = _decimal2(cfg.soglia_vincita_rilevante)
+    max_calendario = _decimal2(cfg.max_ritiro_vincita_calendario)
+
+    gia_ritirato_cal = PuntataScommessa.objects.filter(
+        personaggio=personaggio,
+        calendario_id=puntata.calendario_id,
+        vincita_riscossa=True,
+    ).exclude(pk=puntata.pk).aggregate(tot=Sum("vincita_ritirata"))["tot"]
+    gia_ritirato_cal = _decimal2(gia_ritirato_cal or Decimal("0.00"))
+    cap_residuo_cal = max(Decimal("0.00"), max_calendario - gia_ritirato_cal)
+
+    if vincita > soglia:
+        limite_puntata = min(vincita, soglia)
+    else:
+        limite_puntata = vincita
+    max_ancora_puntata = limite_puntata - gia_ritirato_puntata
+    if max_ancora_puntata <= 0:
+        ritiro = Decimal("0.00")
+    else:
+        ritiro = min(residuo_puntata, max_ancora_puntata, cap_residuo_cal)
+
+    residuo_riserva = residuo_puntata - ritiro
+    return _decimal2(ritiro), _decimal2(residuo_riserva)
 
 
 def liquidare_calendari_scaduti():
@@ -90,9 +135,10 @@ def _quota_selezione(incontro: IncontroScommesse, esito: str, margine_bonus=None
 
 
 @transaction.atomic
-def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_str=None):
+def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_str=None, usa_riserva=False):
     """
     selezioni: lista di dict {"incontro_id": uuid, "esito": "1"|"X"|"2"}
+    usa_riserva: se True, l'importo è scalato dalla riserva (non dai crediti liberi).
     """
     liquidare_calendari_scaduti()
 
@@ -122,6 +168,8 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
     codice_obj = None
     margine_bonus = None
     if codice_str:
+        if usa_riserva:
+            raise ValidationError("Il codice allibratore non è utilizzabile con la riserva.")
         codice_str = codice_str.strip().upper()
         codice_obj = CodiceScommessa.objects.select_related("allibratore").filter(
             codice=codice_str, usato=False
@@ -131,15 +179,24 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         valore_all = codice_obj.allibratore.get_valore_statistica(ALLIBRATORE_SIGLA)
         margine_bonus = margine_allibratore(valore_all, cfg)
     else:
-        if importo > calendario.importo_max_senza_codice:
+        if not usa_riserva and importo > calendario.importo_max_senza_codice:
             raise ValidationError(
                 f"Senza codice allibratore il massimo è {calendario.importo_max_senza_codice} CR."
             )
 
-    if personaggio.crediti < float(importo):
-        raise ValidationError(
-            f"Crediti insufficienti. Posseduti: {personaggio.crediti}, richiesti: {importo}."
-        )
+    importo_riserva = Decimal("0.00")
+    if usa_riserva:
+        riserva_disp = _decimal2(personaggio.riserva)
+        if riserva_disp < importo:
+            raise ValidationError(
+                f"Riserva insufficiente. Disponibile: {riserva_disp} CR, richiesti: {importo} CR."
+            )
+        importo_riserva = importo
+    else:
+        if personaggio.crediti < float(importo):
+            raise ValidationError(
+                f"Crediti insufficienti. Posseduti: {personaggio.crediti}, richiesti: {importo}."
+            )
 
     incontro_ids = [s["incontro_id"] for s in selezioni]
     incontri = {
@@ -170,10 +227,14 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
 
     quota_totale = _decimal2(quota_totale)
 
-    personaggio.modifica_crediti(
-        float(-importo),
-        f"Scommessa {tipo.lower()} ({calendario.titolo or calendario.sport.nome})",
-    )
+    if usa_riserva:
+        personaggio.riserva = _decimal2(personaggio.riserva - importo_riserva)
+        personaggio.save(update_fields=["riserva", "updated_at"])
+    else:
+        personaggio.modifica_crediti(
+            float(-importo),
+            f"Scommessa {tipo.lower()} ({calendario.titolo or calendario.sport.nome})",
+        )
 
     if codice_obj:
         codice_obj.usato = True
@@ -191,6 +252,7 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         calendario=calendario,
         codice=codice_obj,
         importo=importo,
+        importo_riserva=importo_riserva,
         tipo=tipo,
         quota_totale=quota_totale,
     )
@@ -207,7 +269,7 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
 
 @transaction.atomic
 def riscuoti_vincita(personaggio, puntata_id):
-    """Accredita la vincita al giocatore dopo liquidazione calendario."""
+    """Versa l'intera vincita nella riserva del giocatore."""
     try:
         puntata = (
             PuntataScommessa.objects.select_for_update()
@@ -223,18 +285,63 @@ def riscuoti_vincita(personaggio, puntata_id):
     if puntata.stato != PuntataScommessa.STATO_WON:
         raise ValidationError("Questa puntata non ha una vincita da riscuotere.")
     if puntata.vincita_riscossa:
-        raise ValidationError("Vincita già riscossa.")
+        raise ValidationError("Vincita già versata in riserva.")
     vincita = puntata.vincita or Decimal("0.00")
     if vincita <= 0:
         raise ValidationError("Importo vincita non valido.")
 
-    personaggio.modifica_crediti(
-        float(vincita),
-        f"Riscossione scommessa ({puntata.calendario.titolo or puntata.calendario.sport.nome})",
-    )
+    versato = _decimal2(vincita)
+    personaggio.riserva = _decimal2(personaggio.riserva + versato)
+    personaggio.save(update_fields=["riserva", "updated_at"])
+
     puntata.vincita_riscossa = True
+    puntata.vincita_versata_riserva = versato
+    puntata.vincita_ritirata = Decimal("0.00")
     puntata.riscossa_at = timezone.now()
-    puntata.save(update_fields=["vincita_riscossa", "riscossa_at", "updated_at"])
+    puntata.save(update_fields=[
+        "vincita_riscossa", "vincita_versata_riserva", "vincita_ritirata", "riscossa_at", "updated_at",
+    ])
+    return puntata
+
+
+@transaction.atomic
+def ritira_da_riserva(personaggio, puntata_id):
+    """Preleva dalla riserva e accredita ai crediti liberi (solo durante evento attivo)."""
+    if not personaggio_in_evento_attivo(personaggio):
+        raise ValidationError(
+            "Il ritiro in contanti dalla riserva è consentito solo durante un evento attivo a cui partecipi."
+        )
+
+    try:
+        puntata = (
+            PuntataScommessa.objects.select_for_update()
+            .select_related("calendario__sport", "personaggio")
+            .get(pk=puntata_id, personaggio=personaggio)
+        )
+    except PuntataScommessa.DoesNotExist:
+        raise ValidationError("Puntata non trovata.")
+
+    if not puntata.vincita_riscossa:
+        raise ValidationError("Versa prima la vincita in riserva.")
+
+    cfg = get_config_scommesse(puntata.calendario.sport.campagna_id)
+    ritiro, _ = calcola_ritiro_contanti_da_riserva(personaggio, puntata, cfg)
+    if ritiro <= 0:
+        raise ValidationError("Nessun importo ritirabile in contanti per questa puntata.")
+
+    riserva_disp = _decimal2(personaggio.riserva)
+    if riserva_disp < ritiro:
+        raise ValidationError("Saldo riserva insufficiente.")
+
+    personaggio.riserva = _decimal2(riserva_disp - ritiro)
+    personaggio.save(update_fields=["riserva", "updated_at"])
+    personaggio.modifica_crediti(
+        float(ritiro),
+        f"Ritiro riserva scommesse ({puntata.calendario.titolo or puntata.calendario.sport.nome})",
+    )
+
+    puntata.vincita_ritirata = _decimal2((puntata.vincita_ritirata or Decimal("0.00")) + ritiro)
+    puntata.save(update_fields=["vincita_ritirata", "updated_at"])
     return puntata
 
 

@@ -272,6 +272,12 @@ class PuntataScommessa(SyncableModel, models.Model):
         related_name="puntate",
     )
     importo = models.DecimalField(max_digits=12, decimal_places=2)
+    importo_riserva = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        help_text="Quota puntata pagata dalla riserva scommesse.",
+    )
     tipo = models.CharField(max_length=12, choices=TIPO_CHOICES, default=TIPO_SINGOLA)
     quota_totale = models.DecimalField(max_digits=12, decimal_places=2)
     stato = models.CharField(max_length=10, choices=STATO_CHOICES, default=STATO_PENDING)
@@ -282,6 +288,20 @@ class PuntataScommessa(SyncableModel, models.Model):
         help_text="True se il giocatore ha già incassato la vincita (riscossione manuale).",
     )
     riscossa_at = models.DateTimeField(null=True, blank=True)
+    vincita_ritirata = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="CR prelevati dalla riserva e accreditati in contanti (solo in evento attivo).",
+    )
+    vincita_versata_riserva = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="CR versati in riserva alla riscossione della vincita.",
+    )
 
     class Meta:
         verbose_name = "Puntata scommessa"
@@ -377,6 +397,18 @@ class ConfigurazioneScommesse(SyncableModel, models.Model):
     potenza_delta_sconfitta = models.PositiveSmallIntegerField(
         default=DEFAULT_SCOMMESSE_CONFIG.potenza_delta_sconfitta,
         help_text="Decremento potenza squadra perdente dopo ogni incontro risolto.",
+    )
+    soglia_vincita_rilevante = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=DEFAULT_SCOMMESSE_CONFIG.soglia_vincita_rilevante,
+        help_text="Oltre questa soglia, per puntata si ritira al massimo questo importo in contanti (resto resta in riserva).",
+    )
+    max_ritiro_vincita_calendario = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=DEFAULT_SCOMMESSE_CONFIG.max_ritiro_vincita_calendario,
+        help_text="Massimo CR ritirabili in contanti per calendario/evento.",
     )
     attiva = models.BooleanField(default=True)
 

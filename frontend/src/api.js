@@ -2856,6 +2856,13 @@ export const staffAddResourcesToPersonaggio = (id, tipo, amount, reason, onLogou
     body: JSON.stringify({ tipo, amount, reason }),
   }, onLogout);
 
+/** Staff: crea istanza Oggetto da OggettoBase nell'inventario del personaggio. */
+export const staffCreaOggettoDaBasePerPersonaggio = (personaggioId, oggettoBaseId, motivo, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/crea-oggetto-da-base/`, {
+    method: 'POST',
+    body: JSON.stringify({ oggetto_base_id: oggettoBaseId, motivo }),
+  }, onLogout);
+
 export const staffGetPersonaggioLogs = (id, page = 1, onLogout) =>
   fetchAuthenticated(
     `/api/personaggi/api/staff/personaggi/${id}/logs/?page=${page}`,
@@ -3735,8 +3742,10 @@ export const rispondiMessaggio = async (messaggioId, personaggioId, testo, titol
 
 // --- Scommesse in-game ---
 
-export const scommesseGetCalendari = (onLogout) =>
-    fetchAuthenticated('/api/personaggi/api/scommesse/calendari/', { method: 'GET' }, onLogout);
+export const scommesseGetCalendari = (personaggioId, onLogout) => {
+    const params = personaggioId ? `?personaggio_id=${encodeURIComponent(personaggioId)}` : '';
+    return fetchAuthenticated(`/api/personaggi/api/scommesse/calendari/${params}`, { method: 'GET' }, onLogout);
+};
 
 export const scommesseGetConfig = (onLogout) =>
     fetchAuthenticated('/api/personaggi/api/scommesse/config/', { method: 'GET' }, onLogout);
@@ -3768,6 +3777,16 @@ export const scommesseGetMiePuntate = (personaggioId, onLogout, page = 1, pageSi
 export const scommesseRiscuotiVincita = (personaggioId, puntataId, onLogout) =>
     fetchAuthenticated(
         `/api/personaggi/api/scommesse/puntate/${encodeURIComponent(puntataId)}/riscuoti/`,
+        {
+            method: 'POST',
+            body: JSON.stringify({ personaggio_id: personaggioId }),
+        },
+        onLogout,
+    );
+
+export const scommesseRitiraRiserva = (personaggioId, puntataId, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/scommesse/puntate/${encodeURIComponent(puntataId)}/ritira-riserva/`,
         {
             method: 'POST',
             body: JSON.stringify({ personaggio_id: personaggioId }),

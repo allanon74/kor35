@@ -358,6 +358,8 @@ const ScommesseManager = ({ onBack, onLogout }) => {
               { key: 'max_selezioni_combinata', label: 'Max eventi scommessa combinata', step: '1' },
               { key: 'potenza_delta_vittoria', label: 'Delta potenza base vincitrice (× fattore incontro)', step: '1' },
               { key: 'potenza_delta_sconfitta', label: 'Delta potenza base perdente (× fattore incontro)', step: '1' },
+              { key: 'soglia_vincita_rilevante', label: 'Soglia vincita rilevante (CR)', step: '0.01' },
+              { key: 'max_ritiro_vincita_calendario', label: 'Max ritiro contanti per calendario (CR)', step: '0.01' },
             ].map(({ key, label, step }) => (
               <label key={key} className="block text-sm">
                 <span className="mb-1 block text-gray-300">{label}</span>

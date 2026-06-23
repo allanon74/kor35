@@ -1,6 +1,11 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
+from personaggi.scommesse_config import get_config_scommesse
 from personaggi.scommesse_logic import calendario_ancora_visibile, calendario_visibile_fino, risultati_pubblicati
+from personaggi.scommesse_service import calcola_ritiro_contanti_da_riserva
+from personaggi.scommesse_evento import personaggio_in_evento_attivo
 from personaggi.scommesse_risultati import (
     formatta_risultato,
     meta_tipo_risultato,
@@ -244,6 +249,7 @@ class ConfigurazioneScommesseSerializer(serializers.ModelSerializer):
             "commissione_allibratore_pct", "margine_book_default", "margine_book_min",
             "riduzione_margine_per_punto_all", "variabilita_potenza_pct",
             "max_selezioni_combinata", "potenza_delta_vittoria", "potenza_delta_sconfitta",
+            "soglia_vincita_rilevante", "max_ritiro_vincita_calendario",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "sync_id", "created_at", "updated_at"]
@@ -280,15 +286,51 @@ class PuntataScommessaSerializer(serializers.ModelSerializer):
     data_risoluzione = serializers.SerializerMethodField()
     risultati_visibili = serializers.SerializerMethodField()
     puo_riscuotere = serializers.SerializerMethodField()
+    puo_ritirare_da_riserva = serializers.SerializerMethodField()
+    vincita_ritirabile = serializers.SerializerMethodField()
+    vincita_residua_riserva = serializers.SerializerMethodField()
 
     class Meta:
         model = PuntataScommessa
         fields = [
             "id", "sync_id", "calendario", "calendario_titolo", "data_risoluzione",
-            "importo", "tipo", "quota_totale", "stato", "vincita", "vincita_riscossa",
-            "riscossa_at", "risultati_visibili", "puo_riscuotere", "codice", "selezioni",
-            "created_at", "liquidata_at",
+            "importo", "importo_riserva", "tipo", "quota_totale", "stato", "vincita",
+            "vincita_riscossa", "vincita_ritirata", "vincita_versata_riserva",
+            "vincita_ritirabile", "vincita_residua_riserva",
+            "riscossa_at", "risultati_visibili", "puo_riscuotere", "puo_ritirare_da_riserva",
+            "codice", "selezioni", "created_at", "liquidata_at",
         ]
+
+    def _personaggio_ctx(self, obj):
+        return self.context.get("personaggio") or obj.personaggio
+
+    def _ritiro_contanti_preview(self, obj):
+        if not obj.vincita_riscossa:
+            return None, None
+        if not personaggio_in_evento_attivo(self._personaggio_ctx(obj)):
+            return Decimal("0.00"), None
+        cfg = get_config_scommesse(obj.calendario.sport.campagna_id)
+        return calcola_ritiro_contanti_da_riserva(self._personaggio_ctx(obj), obj, cfg)
+
+    def get_vincita_ritirabile(self, obj):
+        ritiro, _ = self._ritiro_contanti_preview(obj)
+        if ritiro is None:
+            return None
+        return str(ritiro)
+
+    def get_vincita_residua_riserva(self, obj):
+        if not obj.vincita_riscossa:
+            return None
+        vincita = Decimal(str(obj.vincita or 0))
+        ritirato = Decimal(str(obj.vincita_ritirata or 0))
+        ritiro, _ = self._ritiro_contanti_preview(obj)
+        if ritiro is not None and ritiro > 0:
+            return str(vincita - ritirato - ritiro)
+        return str(vincita - ritirato)
+
+    def get_puo_ritirare_da_riserva(self, obj):
+        ritiro, _ = self._ritiro_contanti_preview(obj)
+        return ritiro is not None and ritiro > 0
 
     def get_calendario_titolo(self, obj):
         return obj.calendario.titolo or obj.calendario.sport.nome
@@ -322,8 +364,15 @@ class PiazzamentoPuntataSerializer(serializers.Serializer):
     calendario_id = serializers.UUIDField()
     importo = serializers.DecimalField(max_digits=12, decimal_places=2)
     codice = serializers.CharField(required=False, allow_blank=True, max_length=5)
+    usa_riserva = serializers.BooleanField(required=False, default=False)
+    usa_bonus_scommesse = serializers.BooleanField(required=False, default=False)
     selezioni = serializers.ListField(
         child=serializers.DictField(),
         min_length=1,
         max_length=10,
     )
+
+    def validate(self, attrs):
+        if attrs.get("usa_bonus_scommesse") and not attrs.get("usa_riserva"):
+            attrs["usa_riserva"] = True
+        return attrs

@@ -1827,6 +1827,32 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Tipo risorsa non valido'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'status': 'success', 'new_val': val, 'msg': 'Risorse aggiornate'})
 
+    @action(detail=True, methods=['post'], url_path='crea-oggetto-da-base')
+    def crea_oggetto_da_base(self, request, pk=None):
+        """Crea un'istanza Oggetto da OggettoBase e la mette nell'inventario del personaggio."""
+        personaggio = self.get_object()
+        oggetto_base_id = request.data.get('oggetto_base_id')
+        motivo = (request.data.get('motivo') or 'Assegnazione staff').strip()
+        if not oggetto_base_id:
+            return Response({'detail': 'oggetto_base_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            template = OggettoBase.objects.get(pk=oggetto_base_id)
+        except OggettoBase.DoesNotExist:
+            return Response({'detail': 'Oggetto base non trovato.'}, status=status.HTTP_404_NOT_FOUND)
+        if not _campaign_feature_filter(
+            request, OggettoBase.objects.filter(pk=template.pk), FEATURE_OGGETTI_BASE
+        ).exists():
+            return Response({'detail': 'Template non disponibile per la campagna attiva.'}, status=status.HTTP_403_FORBIDDEN)
+        with transaction.atomic():
+            nuovo = GestioneCraftingService.crea_istanza_da_oggetto_base(template, personaggio)
+            personaggio.aggiungi_log(f"Ricevuto oggetto «{nuovo.nome}» ({motivo}).")
+        return Response({
+            'id': nuovo.id,
+            'nome': nuovo.nome,
+            'tipo_oggetto': nuovo.tipo_oggetto,
+            'detail': f'Istanza «{nuovo.nome}» creata nell\'inventario di {personaggio.nome}.',
+        }, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=['get'], url_path='logs')
     def logs(self, request, pk=None):
         personaggio = self.get_object()

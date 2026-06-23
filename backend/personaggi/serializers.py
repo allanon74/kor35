@@ -2312,7 +2312,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         model = Personaggio
         fields = (
             'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte', 'costume',
-            'tipologia', 'crediti', 'punti_caratteristica',
+            'tipologia', 'crediti', 'riserva', 'punti_caratteristica',
             'punteggi_base', 'statistiche_base_dict', 'modificatori_calcolati',
             'abilita_possedute', 'oggetti',
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',

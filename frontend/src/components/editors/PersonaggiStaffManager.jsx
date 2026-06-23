@@ -12,6 +12,8 @@ import {
   staffGetPersonaggioDetail,
   staffPatchPersonaggio,
   staffAddResourcesToPersonaggio,
+  staffCreaOggettoDaBasePerPersonaggio,
+  staffGetOggettiBase,
   staffGetPersonaggioLogs,
   staffRigeneraLikePersonaggio,
   staffSendMessageToPersonaggio,
@@ -73,6 +75,8 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   const [logsLoading, setLogsLoading] = useState(false);
   const [msgForm, setMsgForm] = useState({ titolo: '', testo: '' });
   const [creazioneProposte, setCreazioneProposte] = useState(null);
+  const [oggettiBase, setOggettiBase] = useState([]);
+  const [oggettoBaseDraft, setOggettoBaseDraft] = useState({ id: '', motivo: 'Assegnazione staff' });
 
   const loadLogs = useCallback(async (id) => {
     if (!id) return;
@@ -147,6 +151,13 @@ const PersonaggiStaffManager = ({ onLogout }) => {
     staffGetCarriere(onLogout).then((d) => setCarriere(Array.isArray(d) ? d : d?.results || []));
     staffGetTipiCarriera(onLogout).then((d) => setTipiCarriera(Array.isArray(d) ? d : d?.results || []));
     staffGetCariche(onLogout).then((d) => setCariche(Array.isArray(d) ? d : d?.results || []));
+    staffGetOggettiBase(onLogout).then((d) => {
+      const list = Array.isArray(d) ? d : d?.results || [];
+      setOggettiBase(list.map((ob) => ({
+        id: ob.id,
+        nome: `${ob.nome} (${ob.tipo_oggetto || 'FIS'})${ob.in_vendita ? '' : ' · non in vendita'}`,
+      })));
+    });
   }, [onLogout]);
 
   const openPersonaggio = async (row) => {
@@ -653,7 +664,46 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                   )}
 
                   {modalTab === 'inventario' && (
-                    <div className="space-y-2">
+                    <div className="space-y-4">
+                      <div className="bg-gray-800/80 border border-teal-900/50 rounded-lg p-3 space-y-2">
+                        <p className="text-xs text-gray-400">
+                          Crea un&apos;istanza da <strong>oggetto base</strong> (template) e mettila nell&apos;inventario.
+                          Funziona anche se il template è <em>non acquistabile</em> in Accademia.
+                        </p>
+                        <SearchableSelect
+                          options={oggettiBase}
+                          value={oggettoBaseDraft.id}
+                          onChange={(v) => setOggettoBaseDraft((f) => ({ ...f, id: v }))}
+                          placeholder="Seleziona oggetto base…"
+                        />
+                        <input
+                          className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm"
+                          placeholder="Motivo (log PG)"
+                          value={oggettoBaseDraft.motivo}
+                          onChange={(e) => setOggettoBaseDraft((f) => ({ ...f, motivo: e.target.value }))}
+                        />
+                        <button
+                          type="button"
+                          disabled={!oggettoBaseDraft.id}
+                          onClick={async () => {
+                            try {
+                              const res = await staffCreaOggettoDaBasePerPersonaggio(
+                                detail.id,
+                                oggettoBaseDraft.id,
+                                oggettoBaseDraft.motivo,
+                                onLogout,
+                              );
+                              setMessage(res.detail || 'Oggetto creato.');
+                              await reloadDetail(detail.id);
+                            } catch (e) {
+                              setMessage(e.message || 'Errore creazione oggetto');
+                            }
+                          }}
+                          className="px-4 py-2 bg-teal-700 rounded font-bold text-sm disabled:opacity-40"
+                        >
+                          Crea istanza in inventario
+                        </button>
+                      </div>
                       <p className="text-xs text-gray-500">
                         Anteprima inventario ({detail.oggetti_inventario?.length || 0} oggetti, max 80).
                       </p>

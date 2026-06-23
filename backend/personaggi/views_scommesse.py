@@ -20,7 +20,13 @@ from personaggi.scommesse_models import (
     SportScommesse,
     SquadraScommesse,
 )
-from personaggi.scommesse_service import liquidare_calendari_scaduti, piazza_puntata, riscuoti_vincita, storico_risultati_squadra
+from personaggi.scommesse_service import (
+    liquidare_calendari_scaduti,
+    piazza_puntata,
+    riscuoti_vincita,
+    ritira_da_riserva,
+    storico_risultati_squadra,
+)
 from personaggi.serializers_scommesse import (
     CalendarioScommesseDetailSerializer,
     CalendarioScommesseListSerializer,
@@ -156,9 +162,10 @@ class ScommesseCalendariPlayerView(APIView):
                 continue
             visibili.append(cal.id)
         calendari = CalendarioScommesse.objects.filter(id__in=visibili).select_related("sport").order_by("-data_risoluzione")
+        personaggio, _ = _personaggio_or_error(request, required=False)
         cfg = get_config_scommesse()
         return Response({
-            "config": config_to_public_dict(cfg),
+            "config": config_to_public_dict(cfg, personaggio=personaggio),
             "calendari": CalendarioScommesseListSerializer(calendari, many=True).data,
         })
 
@@ -197,6 +204,7 @@ class ScommessePuntataCreateView(APIView):
                 data["selezioni"],
                 data["importo"],
                 codice_str=data.get("codice") or None,
+                usa_riserva=bool(data.get("usa_riserva")),
             )
         except DjangoValidationError as exc:
             msg = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
@@ -227,7 +235,7 @@ class ScommesseMiePuntateView(APIView):
         ).order_by("-created_at")
         paginator = ScommessePuntatePagination()
         page = paginator.paginate_queryset(qs, request, view=self)
-        ser = PuntataScommessaSerializer(page, many=True)
+        ser = PuntataScommessaSerializer(page, many=True, context={"personaggio": personaggio})
         return paginator.get_paginated_response(ser.data)
 
 
@@ -249,7 +257,28 @@ class ScommesseRiscuotiVincitaView(APIView):
         ).prefetch_related(
             "selezioni__incontro__squadra_casa", "selezioni__incontro__squadra_trasferta"
         ).first()
-        return Response(PuntataScommessaSerializer(puntata).data)
+        return Response(PuntataScommessaSerializer(puntata, context={"personaggio": personaggio}).data)
+
+
+class ScommesseRitiraRiservaView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, puntata_id):
+        liquidare_calendari_scaduti()
+        personaggio, err = _personaggio_or_error(request)
+        if err:
+            return err
+        try:
+            puntata = ritira_da_riserva(personaggio, puntata_id)
+        except DjangoValidationError as exc:
+            msg = exc.messages[0] if hasattr(exc, "messages") and exc.messages else str(exc)
+            return Response({"error": msg}, status=400)
+        puntata = PuntataScommessa.objects.filter(pk=puntata.pk).select_related(
+            "calendario__sport", "codice"
+        ).prefetch_related(
+            "selezioni__incontro__squadra_casa", "selezioni__incontro__squadra_trasferta"
+        ).first()
+        return Response(PuntataScommessaSerializer(puntata, context={"personaggio": personaggio}).data)
 
 
 class ScommesseGeneraCodiceView(APIView):

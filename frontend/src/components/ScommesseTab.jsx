@@ -10,6 +10,7 @@ import {
   scommesseGetSquadraStorico,
   scommessePiazzaPuntata,
   scommesseRiscuotiVincita,
+  scommesseRitiraRiserva,
 } from '../api';
 import { esitiScommessa, formattaRisultato, labelTipoRisultato, pareggioConsentito } from '../scommesse/risultatiSport';
 
@@ -131,6 +132,7 @@ const ScommesseTab = ({ onLogout }) => {
   const [puntateLoading, setPuntateLoading] = useState(false);
   const [puntateLoadingMore, setPuntateLoadingMore] = useState(false);
   const [riscuotendoId, setRiscuotendoId] = useState(null);
+  const [ritirandoId, setRitirandoId] = useState(null);
   const [codici, setCodici] = useState([]);
   const [valoreAll, setValoreAll] = useState(0);
   const [config, setConfig] = useState(null);
@@ -142,6 +144,7 @@ const ScommesseTab = ({ onLogout }) => {
   const [selezioni, setSelezioni] = useState({});
   const [importo, setImporto] = useState('5');
   const [codiceInput, setCodiceInput] = useState('');
+  const [usaRiserva, setUsaRiserva] = useState(false);
   const [squadraModal, setSquadraModal] = useState(null);
   const [squadraStorico, setSquadraStorico] = useState(null);
   const [storicoLoading, setStoricoLoading] = useState(false);
@@ -194,7 +197,7 @@ const ScommesseTab = ({ onLogout }) => {
       setStatus('');
     }
     try {
-      const calRes = await scommesseGetCalendari(onLogout);
+      const calRes = await scommesseGetCalendari(pgId, onLogout);
       const calList = Array.isArray(calRes?.calendari) ? calRes.calendari : (Array.isArray(calRes) ? calRes : []);
       setCalendari(calList);
       setConfig(calRes?.config || null);
@@ -305,6 +308,9 @@ const ScommesseTab = ({ onLogout }) => {
     return tot.toFixed(2);
   })();
 
+  const riserva = Number(char?.riserva ?? 0);
+  const eventoAttivoRitiro = Boolean(config?.evento_attivo_ritiro_riserva);
+
   const handlePuntata = async () => {
     if (!selectedCharacterId || !calendarioDetail) return;
     const selezioniList = Object.entries(selezioni).map(([incontro_id, esito]) => ({ incontro_id, esito }));
@@ -320,7 +326,8 @@ const ScommesseTab = ({ onLogout }) => {
         {
           calendario_id: calendarioDetail.id,
           importo,
-          codice: codiceInput.trim() || undefined,
+          codice: usaRiserva ? undefined : (codiceInput.trim() || undefined),
+          usa_riserva: usaRiserva,
           selezioni: selezioniList,
         },
         onLogout,
@@ -331,6 +338,7 @@ const ScommesseTab = ({ onLogout }) => {
       await loadPuntate({ page: 1, append: false });
       setSelezioni({});
       setCodiceInput('');
+      setUsaRiserva(false);
       setStatus('Scommessa registrata!');
     } catch (e) {
       setStatus(e.message);
@@ -349,11 +357,29 @@ const ScommesseTab = ({ onLogout }) => {
       const updated = await scommesseRiscuotiVincita(idPg, puntataId, onLogout);
       setPuntate((prev) => prev.map((p) => (p.id === puntataId ? { ...p, ...updated } : p)));
       await refreshCharacterData();
-      setStatus(`Vincita di ${updated.vincita} CR riscossa!`);
+      setStatus(`Versati ${updated.vincita ?? updated.vincita_versata_riserva} CR in riserva!`);
     } catch (err) {
       setStatus(err.message);
     } finally {
       setRiscuotendoId(null);
+    }
+  };
+
+  const handleRitiraRiserva = async (puntataId, e) => {
+    e?.stopPropagation?.();
+    const idPg = char?.id ?? selectedCharacterId;
+    if (!idPg || !puntataId || ritirandoId) return;
+    setRitirandoId(puntataId);
+    setStatus('');
+    try {
+      const updated = await scommesseRitiraRiserva(idPg, puntataId, onLogout);
+      setPuntate((prev) => prev.map((p) => (p.id === puntataId ? { ...p, ...updated } : p)));
+      await refreshCharacterData();
+      setStatus(`Ritirati ${updated.vincita_ritirabile ?? updated.vincita_ritirata} CR in contanti dalla riserva!`);
+    } catch (err) {
+      setStatus(err.message);
+    } finally {
+      setRitirandoId(null);
     }
   };
 
@@ -485,6 +511,19 @@ const ScommesseTab = ({ onLogout }) => {
 
         {puoScommettere && (
           <div className="border-t border-gray-700 bg-gray-800 p-4 space-y-2">
+            {riserva > 0 && (
+              <label className="flex items-center gap-2 text-sm text-amber-200">
+                <input
+                  type="checkbox"
+                  checked={usaRiserva}
+                  onChange={(e) => {
+                    setUsaRiserva(e.target.checked);
+                    if (e.target.checked) setCodiceInput('');
+                  }}
+                />
+                Paga con riserva ({riserva} CR disponibili)
+              </label>
+            )}
             <div className="flex gap-2">
               <input
                 type="number"
@@ -495,17 +534,22 @@ const ScommesseTab = ({ onLogout }) => {
                 className="flex-1 rounded border border-gray-600 bg-gray-900 px-3 py-2 text-sm"
                 placeholder="Importo CR"
               />
-              <input
-                type="text"
-                maxLength={5}
-                value={codiceInput}
-                onChange={(e) => setCodiceInput(e.target.value.toUpperCase())}
-                className="w-24 rounded border border-gray-600 bg-gray-900 px-2 py-2 text-sm uppercase"
-                placeholder="Codice"
-              />
+              {!usaRiserva && (
+                <input
+                  type="text"
+                  maxLength={5}
+                  value={codiceInput}
+                  onChange={(e) => setCodiceInput(e.target.value.toUpperCase())}
+                  className="w-24 rounded border border-gray-600 bg-gray-900 px-2 py-2 text-sm uppercase"
+                  placeholder="Codice"
+                />
+              )}
             </div>
             <p className="text-xs text-gray-400">
-              Quota combinata stimata: {quotaPreview}x · Max senza codice: {calendarioDetail.importo_max_senza_codice} CR
+              Quota combinata stimata: {quotaPreview}x
+              {!usaRiserva && (
+                <> · Max senza codice: {calendarioDetail.importo_max_senza_codice} CR</>
+              )}
             </p>
             {status && <p className="text-xs text-amber-300">{status}</p>}
             <button
@@ -558,20 +602,40 @@ const ScommesseTab = ({ onLogout }) => {
                 Risultati previsti: {new Date(p.data_risoluzione).toLocaleString('it-IT')}
               </p>
             )}
-            {risultatiOk && p.stato === 'WON' && p.vincita != null && (
-              <p className="mt-1 text-xs text-emerald-300">Vincita: {p.vincita} CR</p>
+              {risultatiOk && p.stato === 'WON' && p.vincita != null && (
+              <p className="mt-1 text-xs text-emerald-300">
+                Vincita: {p.vincita} CR
+                {p.vincita_riscossa ? (
+                  <>
+                    {' · in riserva'}
+                    {Number(p.vincita_ritirata) > 0 ? ` · ritirati ${p.vincita_ritirata} CR` : ''}
+                  </>
+                ) : null}
+              </p>
             )}
           </button>
+          <div className="flex shrink-0 flex-col gap-1">
           {p.puo_riscuotere && (
             <button
               type="button"
               disabled={riscuotendoId === p.id}
               onClick={(e) => handleRiscuoti(p.id, e)}
-              className="shrink-0 rounded bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50"
+              className="rounded bg-emerald-800 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-              {riscuotendoId === p.id ? '…' : `Riscuoti ${p.vincita} CR`}
+              {riscuotendoId === p.id ? '…' : `Versa ${p.vincita} CR`}
             </button>
           )}
+          {p.puo_ritirare_da_riserva && (
+            <button
+              type="button"
+              disabled={ritirandoId === p.id}
+              onClick={(e) => handleRitiraRiserva(p.id, e)}
+              className="rounded bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-600 disabled:opacity-50"
+            >
+              {ritirandoId === p.id ? '…' : `Ritira ${p.vincita_ritirabile} CR`}
+            </button>
+          )}
+          </div>
         </div>
         {p.selezioni?.length > 0 && (
           <ul className="mt-2 space-y-1 border-t border-gray-700/80 pt-2 text-xs text-gray-300">
@@ -644,7 +708,12 @@ const ScommesseTab = ({ onLogout }) => {
         )}
         {puntate.some((x) => x.puo_riscuotere) && (
           <p className="mt-2 text-xs text-emerald-300">
-            Hai {puntate.filter((x) => x.puo_riscuotere).length} vincita/e da riscuotere in questa pagina.
+            Hai {puntate.filter((x) => x.puo_riscuotere).length} vincita/e da versare in riserva in questa pagina.
+          </p>
+        )}
+        {puntate.some((x) => x.puo_ritirare_da_riserva) && eventoAttivoRitiro && (
+          <p className="mt-1 text-xs text-indigo-300">
+            Evento attivo: puoi ritirare in contanti dalla riserva (tetto per calendario).
           </p>
         )}
       </>
@@ -706,11 +775,20 @@ const ScommesseTab = ({ onLogout }) => {
         </div>
         <p className="mt-1 text-xs text-gray-400">
           Crediti: {char?.crediti ?? '—'} CR
+          {riserva > 0 ? ` · Riserva: ${riserva} CR` : ''}
           {listRefreshing ? ' · aggiornamento…' : ''}
           {config?.importo_max_senza_codice_default && (
             <> · Max senza codice: {config.importo_max_senza_codice_default} CR</>
           )}
         </p>
+        {config?.max_ritiro_vincita_calendario && (
+          <p className="mt-0.5 text-[11px] text-gray-500">
+            Le vincite vanno in riserva; in evento attivo puoi ritirare al massimo {config.max_ritiro_vincita_calendario} CR per calendario
+            {config.soglia_vincita_rilevante ? ` (vincite oltre ${config.soglia_vincita_rilevante} CR: max ${config.soglia_vincita_rilevante} CR per puntata)` : ''}.
+            {!eventoAttivoRitiro && ' Il ritiro in contanti è disponibile solo durante un evento a cui partecipi.'}
+            {eventoAttivoRitiro && config.evento_attivo_titolo ? ` Evento: ${config.evento_attivo_titolo}.` : ''}
+          </p>
+        )}
         {view === 'list' && (
           <div className="mt-3 flex gap-2">
             <button

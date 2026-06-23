@@ -17,6 +17,8 @@ class ScommesseConfig:
     max_selezioni_combinata: int
     potenza_delta_vittoria: int
     potenza_delta_sconfitta: int
+    soglia_vincita_rilevante: Decimal
+    max_ritiro_vincita_calendario: Decimal
 
 
 POTENZA_SQUADRA_MIN = 1
@@ -34,6 +36,8 @@ DEFAULT_SCOMMESSE_CONFIG = ScommesseConfig(
     max_selezioni_combinata=8,
     potenza_delta_vittoria=2,
     potenza_delta_sconfitta=2,
+    soglia_vincita_rilevante=Decimal("500.00"),
+    max_ritiro_vincita_calendario=Decimal("500.00"),
 )
 
 
@@ -49,6 +53,8 @@ def _from_model(obj) -> ScommesseConfig:
         max_selezioni_combinata=obj.max_selezioni_combinata,
         potenza_delta_vittoria=obj.potenza_delta_vittoria,
         potenza_delta_sconfitta=obj.potenza_delta_sconfitta,
+        soglia_vincita_rilevante=obj.soglia_vincita_rilevante,
+        max_ritiro_vincita_calendario=obj.max_ritiro_vincita_calendario,
     )
 
 
@@ -68,12 +74,21 @@ def get_config_scommesse(campagna=None) -> ScommesseConfig:
     return DEFAULT_SCOMMESSE_CONFIG
 
 
-def config_to_public_dict(cfg: ScommesseConfig) -> dict:
-    return {
+def config_to_public_dict(cfg: ScommesseConfig, personaggio=None) -> dict:
+    data = {
         "importo_max_senza_codice_default": str(cfg.importo_max_senza_codice_default),
         "scadenza_calendario_ore": cfg.scadenza_calendario_ore,
         "commissione_allibratore_pct": str(cfg.commissione_allibratore_pct),
         "margine_book_default": str(cfg.margine_book_default),
         "max_selezioni_combinata": cfg.max_selezioni_combinata,
         "variabilita_potenza_pct": cfg.variabilita_potenza_pct,
+        "soglia_vincita_rilevante": str(cfg.soglia_vincita_rilevante),
+        "max_ritiro_vincita_calendario": str(cfg.max_ritiro_vincita_calendario),
     }
+    if personaggio is not None:
+        from personaggi.scommesse_evento import personaggio_in_evento_attivo
+        evento = personaggio_in_evento_attivo(personaggio)
+        data["evento_attivo_ritiro_riserva"] = evento is not None
+        if evento:
+            data["evento_attivo_titolo"] = evento.titolo
+    return data
