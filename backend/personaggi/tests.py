@@ -1140,3 +1140,31 @@ class SoloOggettoOspitanteTests(TestCase):
         ser = OggettoSerializer(self.spada, context={"personaggio": self.pg})
         attacco = ser.get_attacco_formattato(self.spada)
         self.assertIn("3", attacco)
+
+
+class PersonaggioStaffRetrieveTests(APITestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="staff_pg_hub", password="x", is_staff=True, is_superuser=True
+        )
+        self.client.force_authenticate(user=self.staff)
+        self.tipo = TipologiaPersonaggio.objects.create(nome="PG", giocante=True)
+        self.pg = Personaggio.objects.create(nome="PG Eventi", tipologia=self.tipo)
+
+    def test_retrieve_con_eventi_partecipati(self):
+        from gestione_plot.models import Evento
+
+        now = timezone.now()
+        ev = Evento.objects.create(
+            titolo="Raduno bosco",
+            data_inizio=now,
+            data_fine=now + timezone.timedelta(hours=8),
+        )
+        ev.partecipanti.add(self.pg)
+
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        eventi = res.json().get("eventi_partecipati") or []
+        self.assertEqual(len(eventi), 1)
+        self.assertEqual(eventi[0]["titolo"], "Raduno bosco")

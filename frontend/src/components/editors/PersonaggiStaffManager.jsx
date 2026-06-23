@@ -975,7 +975,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                     <ul className="space-y-2 text-sm max-h-[50vh] overflow-y-auto">
                       {(detail.eventi_partecipati || []).map((ev) => (
                         <li key={ev.id} className="bg-gray-800 border border-gray-700 rounded p-2">
-                          <strong>{ev.nome}</strong>
+                          <strong>{ev.titolo || ev.nome}</strong>
                           <p className="text-xs text-gray-500">
                             {ev.data_inizio}{ev.data_fine ? ` → ${ev.data_fine}` : ''}
                           </p>

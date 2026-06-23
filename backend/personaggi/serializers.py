@@ -3289,12 +3289,11 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
         return rows
 
     def get_eventi_partecipati(self, obj):
-        from gestione_plot.models import Evento
         eventi = obj.eventi_partecipati.all().order_by('-data_inizio')[:30]
         return [
             {
                 'id': ev.id,
-                'nome': ev.nome,
+                'titolo': ev.titolo,
                 'data_inizio': ev.data_inizio.isoformat() if ev.data_inizio else None,
                 'data_fine': ev.data_fine.isoformat() if ev.data_fine else None,
             }
