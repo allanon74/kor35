@@ -2870,11 +2870,11 @@ export const staffGetPersonaggi = (params = {}, onLogout) => {
 export const staffGetPersonaggioDetail = (id, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/`, { method: 'GET' }, onLogout);
 
-/** Staff: patch campi personaggio (note master, BG, …). */
+/** Staff: patch campi personaggio (note master, BG, foto costume, …). Accetta JSON o FormData. */
 export const staffPatchPersonaggio = (id, payload, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/`, {
     method: 'PATCH',
-    body: JSON.stringify(payload),
+    body: payload instanceof FormData ? payload : JSON.stringify(payload),
   }, onLogout);
 
 /** Staff: aggiungi crediti o PC a un personaggio. */

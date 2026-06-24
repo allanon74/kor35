@@ -5020,6 +5020,8 @@ class PersonaggioManageViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             personaggio = serializer.save()
+            from personaggi.serializers import _apply_personaggio_costume_photo_clears
+            _apply_personaggio_costume_photo_clears(personaggio, self.request)
             if changing_era_data:
                 try:
                     personaggio.assegna_era_e_prefettura(

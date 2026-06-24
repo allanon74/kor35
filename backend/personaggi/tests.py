@@ -1168,3 +1168,25 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         eventi = res.json().get("eventi_partecipati") or []
         self.assertEqual(len(eventi), 1)
         self.assertEqual(eventi[0]["titolo"], "Raduno bosco")
+
+    def test_patch_foto_costume_staff(self):
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/"
+        buf = BytesIO()
+        Image.new("RGB", (32, 48), color=(180, 120, 90)).save(buf, format="JPEG")
+        upload = SimpleUploadedFile("trucco.jpg", buf.getvalue(), content_type="image/jpeg")
+        res = self.client.patch(url, {"foto_trucco": upload}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        self.assertTrue(res.json().get("foto_trucco_url"))
+
+        res_clear = self.client.patch(
+            url,
+            {"clear_foto_trucco": "1"},
+            format="multipart",
+        )
+        self.assertEqual(res_clear.status_code, status.HTTP_200_OK, res_clear.content)
+        self.assertFalse(res_clear.json().get("foto_trucco_url"))

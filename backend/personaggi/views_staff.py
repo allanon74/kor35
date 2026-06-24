@@ -1766,10 +1766,19 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             'nome', 'testo', 'costume', 'note_master', 'watch_enabled',
             'peso_influencer', 'badge_instafame', 'era', 'prefettura',
             'prefettura_esterna', 'tipologia', 'impostazioni_ui',
+            'foto_trucco', 'foto_outfit', 'clear_foto_trucco', 'clear_foto_outfit',
         }
         payload = {k: v for k, v in request.data.items() if k in allowed}
-        if not payload:
-            return Response({'detail': 'Nessun campo aggiornabile.'}, status=status.HTTP_400_BAD_REQUEST)
+        for key in ('foto_trucco', 'foto_outfit'):
+            if key in request.FILES:
+                payload[key] = request.FILES[key]
+        if not payload and not any(k in request.FILES for k in ('foto_trucco', 'foto_outfit')):
+            clear_flags = (
+                str(request.data.get('clear_foto_trucco', '')).lower() in ('1', 'true', 'yes')
+                or str(request.data.get('clear_foto_outfit', '')).lower() in ('1', 'true', 'yes')
+            )
+            if not clear_flags:
+                return Response({'detail': 'Nessun campo aggiornabile.'}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = PersonaggioStaffDetailSerializer(
             personaggio, data=payload, partial=True, context={'request': request}
@@ -1793,6 +1802,8 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             personaggio = serializer.save()
+            from personaggi.serializers import _apply_personaggio_costume_photo_clears
+            _apply_personaggio_costume_photo_clears(personaggio, request)
             if changing_era:
                 try:
                     personaggio.assegna_era_e_prefettura(

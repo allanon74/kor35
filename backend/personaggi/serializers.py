@@ -22,6 +22,53 @@ def _personaggio_avatar_url(personaggio, request):
         return url
     return None
 
+
+def _personaggio_image_field_url(personaggio, field_name, request):
+    image_field = getattr(personaggio, field_name, None)
+    if not image_field:
+        return None
+    try:
+        url = image_field.url
+    except (ValueError, AttributeError):
+        return None
+    if request:
+        return request.build_absolute_uri(url)
+    return url
+
+
+def _user_can_edit_personaggio_staff_fields(request, personaggio=None):
+    """Campi interni staff (costume foto, note master, …)."""
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_staff or user.is_superuser:
+        return True
+    from personaggi.views import _can_operate_in_campaign, _get_active_campaign
+
+    active_campaign = _get_active_campaign(request)
+    if personaggio is not None and getattr(personaggio, "campagna_id", None):
+        return _can_operate_in_campaign(user, personaggio.campagna, needs_master=False)
+    return _can_operate_in_campaign(user, active_campaign, needs_master=False)
+
+
+def _apply_personaggio_costume_photo_clears(personaggio, request):
+    """Rimuove foto trucco/outfit se richiesto (clear_* nel payload)."""
+    update_fields = []
+    for field_name, flag_name in (
+        ("foto_trucco", "clear_foto_trucco"),
+        ("foto_outfit", "clear_foto_outfit"),
+    ):
+        raw = request.data.get(flag_name)
+        if str(raw or "").lower() not in ("1", "true", "yes"):
+            continue
+        if field_name in request.FILES:
+            continue
+        setattr(personaggio, field_name, None)
+        update_fields.append(field_name)
+    if update_fields:
+        update_fields.append("updated_at")
+        personaggio.save(update_fields=update_fields)
+
 from .models import ConfigurazioneLivelloAura, formatta_testo_generico, ConsumabilePersonaggio
 from . import qr_logic
 # Importa i modelli e le funzioni helper
@@ -2847,6 +2894,10 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
     )
+    foto_trucco_url = serializers.SerializerMethodField()
+    foto_outfit_url = serializers.SerializerMethodField()
+    foto_trucco = serializers.ImageField(required=False, allow_null=True, write_only=True)
+    foto_outfit = serializers.ImageField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = Personaggio
@@ -2865,8 +2916,30 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             'peso_influencer',
             'peso_influencer_effettivo',
             'badge_instafame',
+            'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
         )
         read_only_fields = ('crediti', 'punti_caratteristica', 'proprietario', 'peso_influencer_effettivo')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        personaggio = self.instance
+        if not _user_can_edit_personaggio_staff_fields(request, personaggio):
+            for key in ("foto_trucco_url", "foto_outfit_url", "foto_trucco", "foto_outfit"):
+                self.fields.pop(key, None)
+
+    def get_foto_trucco_url(self, obj):
+        return _personaggio_image_field_url(obj, "foto_trucco", self.context.get("request"))
+
+    def get_foto_outfit_url(self, obj):
+        return _personaggio_image_field_url(obj, "foto_outfit", self.context.get("request"))
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if any(k in attrs for k in ("foto_trucco", "foto_outfit")):
+            if not _user_can_edit_personaggio_staff_fields(request, self.instance):
+                raise serializers.ValidationError("Permessi insufficienti per le foto costume.")
+        return attrs
 
     def get_peso_influencer_effettivo(self, obj):
         from social.influencer import get_effective_peso_influencer
@@ -3210,6 +3283,10 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
     )
+    foto_trucco_url = serializers.SerializerMethodField()
+    foto_outfit_url = serializers.SerializerMethodField()
+    foto_trucco = serializers.ImageField(required=False, allow_null=True, write_only=True)
+    foto_outfit = serializers.ImageField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = Personaggio
@@ -3227,6 +3304,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'carriere_membership', 'risorse_pool_ui',
             'movimenti_credito', 'movimenti_pc',
             'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
+            'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
         )
         read_only_fields = (
             'proprietario', 'proprietario_nome', 'proprietario_username',
@@ -3245,6 +3323,12 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         return _personaggio_avatar_url(obj, self.context.get('request'))
+
+    def get_foto_trucco_url(self, obj):
+        return _personaggio_image_field_url(obj, "foto_trucco", self.context.get("request"))
+
+    def get_foto_outfit_url(self, obj):
+        return _personaggio_image_field_url(obj, "foto_outfit", self.context.get("request"))
 
     def get_qrcode_id(self, obj):
         qr = getattr(obj, '_prefetched_qrcode', None)

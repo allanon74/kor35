@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import BuildVersions from './BuildVersions';
+import StaffCostumePhotosSection from './StaffCostumePhotosSection';
 
 const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const navigate = useNavigate();
@@ -157,6 +158,8 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         let peso = Number(char.peso_influencer);
         let pesoEffettivo = Number(char.peso_influencer_effettivo);
         let badgeInstafame = char.badge_instafame || '';
+        let fotoTruccoUrl = char.foto_trucco_url || null;
+        let fotoOutfitUrl = char.foto_outfit_url || null;
         if (isCampaignStaffer) {
             try {
                 const fresh = await getGestionePersonaggio(char.id, onLogout);
@@ -169,6 +172,8 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                 if (fresh?.badge_instafame != null) {
                     badgeInstafame = fresh.badge_instafame;
                 }
+                fotoTruccoUrl = fresh?.foto_trucco_url || null;
+                fotoOutfitUrl = fresh?.foto_outfit_url || null;
             } catch {
                 // fallback su lista in cache
             }
@@ -189,6 +194,8 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             era: typeof char.era === 'object' ? (char.era?.id || '') : (char.era || ''),
             prefettura: typeof char.prefettura === 'object' ? (char.prefettura?.id || '') : (char.prefettura || ''),
             prefettura_esterna: !!char.prefettura_esterna,
+            foto_trucco_url: fotoTruccoUrl,
+            foto_outfit_url: fotoOutfitUrl,
         });
         setOriginalPesoInfluencer(peso);
         setPesoInfluencerEffettivo(pesoEffettivo);
@@ -210,6 +217,8 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         }
         const charId = payload.id;
         delete payload.id;
+        delete payload.foto_trucco_url;
+        delete payload.foto_outfit_url;
         
         // Pulizia e validazione ID Tipologia per il backend
         if (payload.tipologia !== undefined) {
@@ -928,6 +937,13 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         label="Note Costume" 
                                         value={formData.costume} 
                                         onChange={val => setFormData({...formData, costume: val})}
+                                    />
+                                    <StaffCostumePhotosSection
+                                        personaggioId={formData.id}
+                                        fotoTruccoUrl={formData.foto_trucco_url}
+                                        fotoOutfitUrl={formData.foto_outfit_url}
+                                        onLogout={onLogout}
+                                        onUpdated={(urls) => setFormData((prev) => ({ ...prev, ...urls }))}
                                     />
                                     <label className="flex items-center gap-2 text-sm text-gray-200">
                                         <input

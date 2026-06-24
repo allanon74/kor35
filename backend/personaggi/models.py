@@ -4518,6 +4518,18 @@ class Personaggio(Inventario):
         help_text="Se valorizzato, il personaggio è archiviato e non compare nell'app.",
     )
     costume = models.TextField(blank=True, null=True, verbose_name="Appunti Costume")
+    foto_trucco = models.ImageField(
+        upload_to="personaggi/costume/trucco/%Y/%m/",
+        null=True,
+        blank=True,
+        verbose_name="Foto trucco (staff)",
+    )
+    foto_outfit = models.ImageField(
+        upload_to="personaggi/costume/outfit/%Y/%m/",
+        null=True,
+        blank=True,
+        verbose_name="Foto outfit (staff)",
+    )
     note_master = models.TextField(
         blank=True,
         null=True,
@@ -4559,6 +4571,15 @@ class Personaggio(Inventario):
         
     def __str__(self): 
         return self.nome
+
+    def save(self, *args, **kwargs):
+        from personaggi.costume_images import optimize_costume_image_field
+
+        if self.foto_trucco:
+            self.foto_trucco = optimize_costume_image_field(self.foto_trucco)
+        if self.foto_outfit:
+            self.foto_outfit = optimize_costume_image_field(self.foto_outfit)
+        super().save(*args, **kwargs)
     
     def aggiungi_log(self, t): 
         PersonaggioLog.objects.create(personaggio=self, testo_log=t)

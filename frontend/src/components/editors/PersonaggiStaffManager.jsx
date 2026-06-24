@@ -4,6 +4,7 @@ import {
   Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive,
 } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
+import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
 import StaffQrTab from '../StaffQrTab';
 import SearchableSelect from './SearchableSelect';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
@@ -487,6 +488,14 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           onChange={(e) => setDetail((d) => ({ ...d, costume: e.target.value }))}
                         />
                       </div>
+                      <StaffCostumePhotosSection
+                        personaggioId={detail.id}
+                        fotoTruccoUrl={detail.foto_trucco_url}
+                        fotoOutfitUrl={detail.foto_outfit_url}
+                        onLogout={onLogout}
+                        disabled={saving}
+                        onUpdated={(urls) => setDetail((d) => ({ ...d, ...urls }))}
+                      />
                       {detail.avatar_url && (
                         <img src={resolveMediaUrl(detail.avatar_url)} alt="" className="w-20 h-20 rounded-full object-cover border border-gray-600" />
                       )}

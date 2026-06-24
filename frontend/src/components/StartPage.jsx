@@ -8,6 +8,7 @@ import {
   getEre,
   getTipologiePersonaggio,
   getPersonaggiEditList,
+  getGestionePersonaggio,
   updatePersonaggio,
   deletePersonaggio,
   fetchAuthenticated,
@@ -22,6 +23,7 @@ import EventSubscriptionStartPanel from './EventSubscriptionStartPanel';
 import CreazioneGuidataModal from './CreazioneGuidataModal';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
+import StaffCostumePhotosSection from './StaffCostumePhotosSection';
 import { prepareProfileImageForUpload } from '../utils/profileImage';
 
 export default function StartPage({ onLogout, onSwitchToMaster }) {
@@ -202,11 +204,22 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     setEditPermissions({ can_edit_era: true, can_edit_razza: true });
   };
 
-  const openEdit = (char) => {
+  const openEdit = async (char) => {
     setIsCreateMode(false);
     setAvatarFile(null);
     setAvatarRotation(0);
     setAvatarRemoteUrl(char.avatar_url || null);
+    let fotoTruccoUrl = char.foto_trucco_url || null;
+    let fotoOutfitUrl = char.foto_outfit_url || null;
+    if (isCampaignStaffer && char.id) {
+      try {
+        const fresh = await getGestionePersonaggio(char.id, onLogout);
+        fotoTruccoUrl = fresh?.foto_trucco_url || null;
+        fotoOutfitUrl = fresh?.foto_outfit_url || null;
+      } catch {
+        // fallback su dati lista
+      }
+    }
     setFormData({
       id: char.id,
       nome: char.nome || '',
@@ -218,6 +231,8 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
       costume: char.costume || '',
       watch_enabled: !!char.watch_enabled,
       campagna: char.campagna || '',
+      foto_trucco_url: fotoTruccoUrl,
+      foto_outfit_url: fotoOutfitUrl,
     });
     setImpostazioniUi(char.impostazioni_ui && typeof char.impostazioni_ui === 'object' ? char.impostazioni_ui : {});
     setShowEditor(true);
@@ -259,6 +274,8 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
     if (Object.keys(impostazioniUi).length > 0) {
       payload.impostazioni_ui = impostazioniUi;
     }
+    delete payload.foto_trucco_url;
+    delete payload.foto_outfit_url;
     return payload;
   };
 
@@ -797,6 +814,13 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                       onChange={(e) => setFormData({ ...formData, costume: e.target.value })}
                     />
                   </div>
+                  <StaffCostumePhotosSection
+                    personaggioId={formData.id}
+                    fotoTruccoUrl={formData.foto_trucco_url}
+                    fotoOutfitUrl={formData.foto_outfit_url}
+                    onLogout={onLogout}
+                    onUpdated={(urls) => setFormData((prev) => ({ ...prev, ...urls }))}
+                  />
                   <label className="flex items-center gap-2 text-sm text-gray-200">
                     <input
                       type="checkbox"
