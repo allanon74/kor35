@@ -24,6 +24,7 @@ from .models import (
     FALLBACK_STAT_COSTO_CONSUMABILI, FALLBACK_STAT_NUMERO_CONSUMABILI,
     FALLBACK_STAT_TEMPO_CREAZIONE_CONSUMABILI, FALLBACK_STAT_DURATA_CONSUMABILI,
     TessituraEffettoRuntime, TessituraOggettoRuntime, AbilitaStatistica,
+    Statistica,
 )
 
 
@@ -150,15 +151,24 @@ class GestioneOggettiService:
         return out or ['vest']
 
     @staticmethod
+    def _get_slot_limit_stat(slot_key: str):
+        sigla = GestioneOggettiService.PHYSICAL_SLOT_STAT_SIGLE.get(slot_key)
+        if not sigla:
+            return None
+        return Statistica.objects.filter(sigla=sigla).first()
+
+    @staticmethod
+    def _get_slot_stat_effective_value(personaggio: Personaggio, stat: Statistica) -> int:
+        """Valore effettivo slot: punteggi_base (include valore_base_predefinito) + modificatori."""
+        return max(0, int(personaggio.get_valore_statistica(stat.sigla)))
+
+    @staticmethod
     def _get_slot_capacity(personaggio: Personaggio, slot_key: str):
         default_value = GestioneOggettiService.PHYSICAL_SLOT_DEFAULTS.get(slot_key, 1)
-        stat_sigla = GestioneOggettiService.PHYSICAL_SLOT_STAT_SIGLE.get(slot_key)
-        if not stat_sigla:
+        stat = GestioneOggettiService._get_slot_limit_stat(slot_key)
+        if stat is None:
             return default_value
-        dyn_value = personaggio.get_valore_statistica(stat_sigla)
-        if dyn_value and dyn_value > 0:
-            return dyn_value
-        return default_value
+        return GestioneOggettiService._get_slot_stat_effective_value(personaggio, stat)
 
     @staticmethod
     def build_physical_slot_capacities(personaggio: Personaggio):
@@ -255,9 +265,15 @@ class GestioneOggettiService:
                 raise ValidationError(f"Limite Carico Pesante raggiunto ({ogp_used}/{ogp_max}). Non puoi equipaggiare altri oggetti pesanti.")
 
         candidate_slots = GestioneOggettiService._infer_physical_slots(oggetto)
+        candidate_slots = [
+            sk for sk in candidate_slots
+            if GestioneOggettiService._get_slot_capacity(personaggio, sk) > 0
+        ]
         if slot_key:
-            if slot_key not in candidate_slots:
+            if slot_key not in GestioneOggettiService._infer_physical_slots(oggetto):
                 raise ValidationError("Slot selezionato non compatibile con questo oggetto.")
+            if GestioneOggettiService._get_slot_capacity(personaggio, slot_key) <= 0:
+                raise ValidationError("Lo slot selezionato non è disponibile per questo personaggio.")
             selected_slot = slot_key
         else:
             selected_slot = None

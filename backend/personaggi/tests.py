@@ -1287,3 +1287,76 @@ class PhysicalSlotCapacityTests(TestCase):
     def test_detail_serializer_exposes_slot_capacities(self):
         data = PersonaggioDetailSerializer(self.pg).data
         self.assertEqual(data["slot_capacities"]["melee"], 2)
+
+    def test_slot_without_catalog_stat_keeps_default(self):
+        caps = GestioneOggettiService.build_physical_slot_capacities(self.pg)
+        self.assertEqual(caps["armor"], 1)
+
+    def test_explicit_zero_disables_slot(self):
+        Statistica.objects.create(
+            nome="Slot Armatura",
+            sigla="SAM",
+            parametro="slot_arm",
+            is_primaria=False,
+            valore_base_predefinito=0,
+        )
+        caps = GestioneOggettiService.build_physical_slot_capacities(self.pg)
+        self.assertEqual(caps["armor"], 0)
+
+    def test_valore_base_predefinito_gives_default_slot(self):
+        Statistica.objects.create(
+            nome="Slot Armatura",
+            sigla="SAM",
+            parametro="slot_arm",
+            is_primaria=False,
+            valore_base_predefinito=1,
+        )
+        caps = GestioneOggettiService.build_physical_slot_capacities(self.pg)
+        self.assertEqual(caps["armor"], 1)
+
+    def test_explicit_value_above_default_adds_capacity(self):
+        stat_sam = Statistica.objects.create(
+            nome="Slot Armatura",
+            sigla="SAM",
+            parametro="slot_arm",
+            is_primaria=False,
+            valore_base_predefinito=1,
+        )
+        abilita = Abilita.objects.create(
+            nome="Doppia armatura",
+            caratteristica=self.caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        AbilitaStatistica.objects.create(
+            abilita=abilita,
+            statistica=stat_sam,
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+            valore=1,
+        )
+        from .models import PersonaggioAbilita
+
+        PersonaggioAbilita.objects.create(personaggio=self.pg, abilita=abilita)
+        caps = GestioneOggettiService.build_physical_slot_capacities(self.pg)
+        self.assertEqual(caps["armor"], 2)
+
+    def test_equip_blocked_when_slot_capacity_zero(self):
+        Statistica.objects.create(
+            nome="Slot Armatura",
+            sigla="SAM",
+            parametro="slot_arm",
+            is_primaria=False,
+            valore_base_predefinito=0,
+        )
+        oggetto = Oggetto.objects.create(
+            nome="Corazza test",
+            tipo_oggetto=TIPO_OGGETTO_FISICO,
+            slot_fisici_possibili="armor",
+            oggetto_base_generatore=OggettoBase.objects.create(
+                nome="Template corazza",
+                tipo_oggetto=TIPO_OGGETTO_FISICO,
+            ),
+        )
+        oggetto.sposta_in_inventario(self.pg)
+        with self.assertRaises(Exception):
+            GestioneOggettiService.equipaggia_oggetto(self.pg, oggetto, slot_key="armor")
