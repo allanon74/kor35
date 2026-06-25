@@ -547,6 +547,8 @@ export default function PilotaggioManager({ onLogout }) {
   const [editStatoId, setEditStatoId] = useState(null);
   const [editStato, setEditStato] = useState({});
   const [runtimeConfig, setRuntimeConfig] = useState(null);
+  const [runtimeSaving, setRuntimeSaving] = useState(false);
+  const [runtimeSaveFeedback, setRuntimeSaveFeedback] = useState(null);
   const [stivaData, setStivaData] = useState(null);
   const [stivaBusy, setStivaBusy] = useState(false);
   const [eventiCodiciBusy, setEventiCodiciBusy] = useState(false);
@@ -1150,23 +1152,44 @@ export default function PilotaggioManager({ onLogout }) {
   };
 
   const salvaRuntimeConfig = async () => {
-    if (!runtimeConfig) return;
-    const updated = await staffUpdatePilotRuntimeConfig(
-      {
-        login_required_console: Boolean(runtimeConfig.login_required_console),
-        tick_interval_secondi: Number(runtimeConfig.tick_interval_secondi || 5),
-        alarm_audio_enabled: Boolean(runtimeConfig.alarm_audio_enabled),
-        riparazione_componenti_abilitata: Boolean(runtimeConfig.riparazione_componenti_abilitata),
-        annichilamento_opposti_abilitato: Boolean(runtimeConfig.annichilamento_opposti_abilitato),
-        compattatore_console_abilitata: Boolean(runtimeConfig.compattatore_console_abilitata),
-        compattatore_login_richiesto: Boolean(runtimeConfig.compattatore_login_richiesto),
-        compattatore_stat_accesso_sigla: String(runtimeConfig.compattatore_stat_accesso_sigla || '0IN').trim(),
-        compattatore_quantico_abilitato: Boolean(runtimeConfig.compattatore_quantico_abilitato),
-      },
-      onLogout
-    );
-    setRuntimeConfig(updated);
+    if (!runtimeConfig || runtimeSaving) return;
+    setRuntimeSaving(true);
+    setRuntimeSaveFeedback(null);
+    try {
+      const updated = await staffUpdatePilotRuntimeConfig(
+        {
+          login_required_console: Boolean(runtimeConfig.login_required_console),
+          tick_interval_secondi: Number(runtimeConfig.tick_interval_secondi || 5),
+          alarm_audio_enabled: Boolean(runtimeConfig.alarm_audio_enabled),
+          riparazione_componenti_abilitata: Boolean(runtimeConfig.riparazione_componenti_abilitata),
+          annichilamento_opposti_abilitato: Boolean(runtimeConfig.annichilamento_opposti_abilitato),
+          compattatore_console_abilitata: Boolean(runtimeConfig.compattatore_console_abilitata),
+          compattatore_login_richiesto: Boolean(runtimeConfig.compattatore_login_richiesto),
+          compattatore_stat_accesso_sigla: String(runtimeConfig.compattatore_stat_accesso_sigla || '0IN').trim(),
+          compattatore_quantico_abilitato: Boolean(runtimeConfig.compattatore_quantico_abilitato),
+        },
+        onLogout,
+      );
+      setRuntimeConfig(updated);
+      setRuntimeSaveFeedback({
+        type: 'success',
+        text: 'Runtime salvato — le modifiche sono attive sul server.',
+      });
+    } catch (err) {
+      setRuntimeSaveFeedback({
+        type: 'error',
+        text: err?.message || 'Salvataggio runtime non riuscito.',
+      });
+    } finally {
+      setRuntimeSaving(false);
+    }
   };
+
+  useEffect(() => {
+    if (runtimeSaveFeedback?.type !== 'success') return undefined;
+    const t = setTimeout(() => setRuntimeSaveFeedback(null), 5000);
+    return () => clearTimeout(t);
+  }, [runtimeSaveFeedback]);
 
   const loadSessioneLive = useCallback(async () => {
     try {
@@ -1977,6 +2000,7 @@ export default function PilotaggioManager({ onLogout }) {
         <p className="text-xs text-gray-400 mb-4">
           Intervallo del tick motore in <strong className="text-gray-300">viaggio regolare</strong> (senza evento attivo).
           Con evento attivo il motore usa la durata tick del DEFCON corrente.
+          {' '}Le checkbox hanno effetto sul server solo dopo <strong className="text-gray-300">Salva runtime</strong>.
         </p>
         {runtimeConfig ? (
           <div className="space-y-3 text-sm">
@@ -2056,7 +2080,27 @@ export default function PilotaggioManager({ onLogout }) {
                 onChange={(e) => setRuntimeConfig((p) => ({ ...p, tick_interval_secondi: e.target.value }))}
               />
             </label>
-            <button className="px-3 py-1 rounded bg-indigo-600" onClick={salvaRuntimeConfig}>Salva runtime</button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={salvaRuntimeConfig}
+              disabled={runtimeSaving}
+            >
+              {runtimeSaving ? 'Salvataggio…' : 'Salva runtime'}
+            </button>
+            {runtimeSaveFeedback ? (
+              <p
+                className={`text-xs rounded-md px-3 py-2 border ${
+                  runtimeSaveFeedback.type === 'success'
+                    ? 'text-emerald-200 bg-emerald-950/40 border-emerald-700/50'
+                    : 'text-red-200 bg-red-950/40 border-red-700/50'
+                }`}
+                role="status"
+                aria-live="polite"
+              >
+                {runtimeSaveFeedback.text}
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="text-gray-400 text-sm">Runtime config non disponibile.</div>
