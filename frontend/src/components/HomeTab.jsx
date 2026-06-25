@@ -275,6 +275,7 @@ const CharacterSheet = memo(({ data, onLogout }) => {
       if (cfg?.nascondi_se_negativa && value < 0) return true;
       if (cfg?.nascondi_se_zero && value === 0) return true;
       if (cfg?.nascondi_se_uno && value === 1) return true;
+      if (cfg?.nascondi_se_due && value === 2) return true;
       return false;
     };
 

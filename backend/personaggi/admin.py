@@ -748,6 +748,7 @@ class StatisticaContainerItemInline(admin.TabularInline):
         "nascondi_se_negativa",
         "nascondi_se_zero",
         "nascondi_se_uno",
+        "nascondi_se_due",
     )
     ordering = ("ordine",)
 

@@ -2240,6 +2240,10 @@ class StatisticaContainerItem(SyncableModel, models.Model):
         default=False,
         help_text="Se attivo, non renderizza la statistica quando il valore e 1.",
     )
+    nascondi_se_due = models.BooleanField(
+        default=False,
+        help_text="Se attivo, non renderizza la statistica quando il valore e 2.",
+    )
     is_dipendente = models.BooleanField(
         default=False,
         verbose_name="Dipendente",

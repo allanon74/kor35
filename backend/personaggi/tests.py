@@ -1250,3 +1250,40 @@ class MetatalentiDecimalValoreTests(TestCase):
         rows = PersonaggioDetailSerializer(pg).get_tessiture_possedute(pg)
         self.assertEqual(len(rows), 1)
         self.assertIn("testo_formattato_personaggio", rows[0])
+
+
+class PhysicalSlotCapacityTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="slot-cap-user", password="x")
+        self.pg = Personaggio.objects.create(nome="PG Slot Cap", proprietario=self.user)
+        self.caratt = Punteggio.objects.create(nome="Car Slot Cap", sigla="CSC", tipo=CARATTERISTICA)
+        self.stat_slm = Statistica.objects.create(
+            nome="Slot Armi Mischia",
+            sigla="SLM",
+            parametro="slot_mel",
+            is_primaria=False,
+        )
+        self.abilita = Abilita.objects.create(
+            nome="Dual wield",
+            caratteristica=self.caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        AbilitaStatistica.objects.create(
+            abilita=self.abilita,
+            statistica=self.stat_slm,
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+            valore=2,
+        )
+        from .models import PersonaggioAbilita
+
+        PersonaggioAbilita.objects.create(personaggio=self.pg, abilita=self.abilita)
+
+    def test_slot_capacity_uses_non_primary_stat(self):
+        caps = GestioneOggettiService.build_physical_slot_capacities(self.pg)
+        self.assertEqual(caps["melee"], 2)
+        self.assertEqual(caps["fingers"], 2)
+
+    def test_detail_serializer_exposes_slot_capacities(self):
+        data = PersonaggioDetailSerializer(self.pg).data
+        self.assertEqual(data["slot_capacities"]["melee"], 2)

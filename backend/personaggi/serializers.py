@@ -661,6 +661,7 @@ class StatisticaContainerItemSerializer(serializers.ModelSerializer):
             "nascondi_se_negativa",
             "nascondi_se_zero",
             "nascondi_se_uno",
+            "nascondi_se_due",
             "statistica_id",
         )
 
@@ -2444,7 +2445,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
     tessiture_attive_runtime = serializers.SerializerMethodField()
     tessiture_runtime_slots_occupati = serializers.SerializerMethodField()
     rigenerazioni_auto_ui = serializers.SerializerMethodField()
-    
+    slot_capacities = serializers.SerializerMethodField()
+
     impostazioni_ui = serializers.JSONField(required=False, allow_null=True)
     can_edit_razza = serializers.SerializerMethodField()
     can_edit_era = serializers.SerializerMethodField()
@@ -2472,7 +2474,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'is_staff', 'modelli_aura',
             'lavori_pendenti_count', 'messaggi_non_letti_count', 'statistiche_primarie',
             'statistiche_temporanee',
-            'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi', 'tessiture_attive_runtime', 'tessiture_runtime_slots_occupati', 'rigenerazioni_auto_ui',
+            'risorse_consumabili', 'risorse_pool_ui', 'effetti_risorsa_attivi', 'tessiture_attive_runtime', 'tessiture_runtime_slots_occupati', 'rigenerazioni_auto_ui', 'slot_capacities',
             'impostazioni_ui',
             'can_edit_razza',
             'can_edit_era',
@@ -2864,6 +2866,11 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             })
         return sorted(out, key=lambda x: x['sigla'])
 
+    def get_slot_capacities(self, obj):
+        from .services import GestioneOggettiService
+
+        return GestioneOggettiService.build_physical_slot_capacities(obj)
+
 
 # Chiavi estratte da PersonaggioDetailSerializer per cache offline (IndexedDB / mesh instabile).
 # Mantenerle allineate a GameTab e alle esigenze di consultazione in campo.
@@ -2890,6 +2897,7 @@ OFFLINE_GAME_STATE_KEYS = (
     "creazioni_consumabili_pronte",
     "lavori_pendenti_count",
     "impostazioni_ui",
+    "slot_capacities",
 )
 
 

@@ -908,6 +908,8 @@ const InventoryTab = ({ onLogout }) => {
   const heavyUsed = heavyConsumers.length;
 
   const getSlotCapacity = (slotKey, defaultCap) => {
+      const fromApi = characterData?.slot_capacities?.[slotKey];
+      if (fromApi && fromApi > 0) return fromApi;
       const statSigla = SLOT_STAT_SIGLE[slotKey];
       if (!statSigla) return defaultCap;
       const stat = characterData?.statistiche_primarie?.find((s) => s.sigla === statSigla);

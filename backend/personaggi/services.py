@@ -159,7 +159,15 @@ class GestioneOggettiService:
         if dyn_value and dyn_value > 0:
             return dyn_value
         return default_value
-    
+
+    @staticmethod
+    def build_physical_slot_capacities(personaggio: Personaggio):
+        """Capienze slot fisici (anche stat non primarie, es. SLM per dual wield)."""
+        return {
+            slot_key: GestioneOggettiService._get_slot_capacity(personaggio, slot_key)
+            for slot_key in GestioneOggettiService.PHYSICAL_SLOT_DEFAULTS
+        }
+
     @staticmethod
     def calcola_cog_utilizzata(pg: Personaggio):
         """Calcola la Capacità Oggetti (COG) occupata.
