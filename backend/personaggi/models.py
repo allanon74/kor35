@@ -1047,13 +1047,13 @@ def calcola_metatalenti(personaggio, context, mods_attivi):
                 p = stat_m.statistica.parametro
                 if not p:
                     continue
-                b = stat_m.valore * val_caratt
+                b = float(stat_m.valore) * float(val_caratt)
                 if p not in mods_attivi:
                     mods_attivi[p] = {'add': 0.0, 'mol': 1.0}
                 if stat_m.tipo_modificatore == MODIFICATORE_ADDITIVO:
                     mods_attivi[p]['add'] += b
                 elif stat_m.tipo_modificatore == MODIFICATORE_MOLTIPLICATIVO:
-                    mods_attivi[p]['mol'] *= float(b)
+                    mods_attivi[p]['mol'] *= b
         if mattone.testo_addizionale:
             def repl(m, vc=val_caratt):
                 mult = int(m.group(1)) if m.group(1) else 1

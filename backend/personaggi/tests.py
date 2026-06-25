@@ -1190,3 +1190,63 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         )
         self.assertEqual(res_clear.status_code, status.HTTP_200_OK, res_clear.content)
         self.assertFalse(res_clear.json().get("foto_trucco_url"))
+
+
+class MetatalentiDecimalValoreTests(TestCase):
+    """Regression: MattoneStatistica.valore è Decimal dopo migrazione 0220."""
+
+    def test_tessitura_con_metatalento_decimal_non_esplode_in_detail_serializer(self):
+        from decimal import Decimal
+
+        from .models import (
+            META_VALORE_PUNTEGGIO,
+            Mattone,
+            MattoneStatistica,
+            ModelloAura,
+            PersonaggioModelloAura,
+        )
+
+        user = User.objects.create_user(username="meta-dec-user", password="x")
+        pg = Personaggio.objects.create(nome="PG Meta Dec", proprietario=user)
+
+        aura = Punteggio.objects.create(nome="Aura Meta Test", sigla="AMT", tipo=AURA)
+        caratt = Punteggio.objects.create(nome="Car Meta", sigla="CMT", tipo=CARATTERISTICA)
+        stat = Statistica.objects.create(nome="Stat Meta", sigla="SMT", parametro="smt_meta")
+
+        abilita = Abilita.objects.create(
+            nome="Ab Meta",
+            caratteristica=caratt,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        abilita_punteggio.objects.create(abilita=abilita, punteggio=caratt, valore=3)
+        pg.abilita_possedute.add(abilita)
+
+        mattone = Mattone.objects.create(
+            nome="Mattone Meta Dec",
+            aura=aura,
+            caratteristica_associata=caratt,
+            funzionamento_metatalento=META_VALORE_PUNTEGGIO,
+        )
+        MattoneStatistica.objects.create(
+            mattone=mattone,
+            statistica=stat,
+            valore=Decimal("1.50"),
+            tipo_modificatore=MODIFICATORE_ADDITIVO,
+        )
+
+        modello = ModelloAura.objects.create(aura=aura, nome="Modello Meta Dec")
+        modello.mattoni_proibiti.add(mattone)
+        PersonaggioModelloAura.objects.create(personaggio=pg, modello_aura=modello)
+
+        tessitura = Tessitura.objects.create(
+            nome="Tess Meta Dec",
+            aura_richiesta=aura,
+            testo="Testo metatalento",
+            formula="1",
+        )
+        pg.tessiture_possedute.add(tessitura)
+
+        rows = PersonaggioDetailSerializer(pg).get_tessiture_possedute(pg)
+        self.assertEqual(len(rows), 1)
+        self.assertIn("testo_formattato_personaggio", rows[0])
