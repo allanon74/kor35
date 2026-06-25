@@ -1279,6 +1279,62 @@ class PilotSubsystemQrRepairView(APIView):
         return Response(out, status=status.HTTP_200_OK)
 
 
+class PilotSubsystemQrRechargeView(APIView):
+    """
+    POST /api/pilot/subsystems/qr-recharge/
+    Body: {qr_id, personaggio_id, componenti_scelti[]}
+
+    Ricarica batteria (storage) o serbatoio (carburante) consumando componenti da stiva.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from pilotaggio.qr_sottosistema import ricarica_sottosistema_da_qr
+
+        qr_id = (request.data.get("qr_id") or "").strip()
+        personaggio_id = request.data.get("personaggio_id")
+        if not qr_id:
+            return Response({"error": "qr_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
+        if not personaggio_id:
+            return Response(
+                {"error": "personaggio_id mancante."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pg = Personaggio.objects.filter(pk=personaggio_id, proprietario=request.user).first()
+        if not pg:
+            return Response(
+                {"error": "Personaggio non valido per questo utente."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        qr = QrCode.objects.select_related("vista").filter(id=qr_id).first()
+        if not qr:
+            return Response({"error": "QR non trovato."}, status=status.HTTP_404_NOT_FOUND)
+
+        componenti_scelti = request.data.get("componenti_scelti")
+        if componenti_scelti is not None and not isinstance(componenti_scelti, list):
+            return Response(
+                {"error": "componenti_scelti deve essere una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = ricarica_sottosistema_da_qr(
+            qr_code=qr,
+            personaggio=pg,
+            componenti_scelti=componenti_scelti,
+        )
+        if not result.get("ok"):
+            return Response(
+                {"error": result.get("error", "Ricarica non riuscita.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        out = {k: v for k, v in result.items() if k != "ok"}
+        return Response(out, status=status.HTTP_200_OK)
+
+
 # ---------------------------------------------------------------------------
 # 4) Cataloghi pubblici (per la console pilota e per dropdown frontend)
 # ---------------------------------------------------------------------------

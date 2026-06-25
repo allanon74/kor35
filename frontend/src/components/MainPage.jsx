@@ -8,7 +8,7 @@ import QrResultModal from './QrResultModal.jsx';
 import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemSabota } from '../api'; // <-- [MODIFICA] Import fetchStaffMessages
+import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 
@@ -125,6 +125,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [qrResultData, setQrResultData] = useState(null);
   const [minigiocoPayload, setMinigiocoPayload] = useState(null);
   const [pilotRepairing, setPilotRepairing] = useState(false);
+  const [pilotRecharging, setPilotRecharging] = useState(false);
   const [pilotSaboting, setPilotSaboting] = useState(false);
   const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -572,6 +573,36 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       }
     },
     [onLogout, selectedCharacterId]
+  );
+
+  const handlePilotRicarica = useCallback(
+    async (qrId, componentiScelti = null) => {
+      if (!selectedCharacterId) {
+        setQrResultData({
+          tipo_modello: 'errore',
+          messaggio: 'Seleziona un personaggio per ricaricare il sottosistema.',
+        });
+        return;
+      }
+      setPilotRecharging(true);
+      try {
+        const result = await pilotSubsystemRecharge(
+          qrId,
+          selectedCharacterId,
+          onLogout,
+          componentiScelti,
+        );
+        setQrResultData(result);
+      } catch (e) {
+        setQrResultData({
+          tipo_modello: 'errore',
+          messaggio: e.message || 'Ricarica non riuscita.',
+        });
+      } finally {
+        setPilotRecharging(false);
+      }
+    },
+    [onLogout, selectedCharacterId],
   );
 
   const handlePilotSabota = useCallback(
@@ -1403,8 +1434,10 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
           onLogout={onLogout}
           onStealSuccess={handleStealSuccess}
           onPilotRipara={handlePilotRipara}
+          onPilotRicarica={handlePilotRicarica}
           onPilotSabota={handlePilotSabota}
           pilotRepairing={pilotRepairing}
+          pilotRecharging={pilotRecharging}
           pilotSaboting={pilotSaboting}
         />
       )}

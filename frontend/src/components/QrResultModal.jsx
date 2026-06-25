@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap } from 'lucide-react';
+import { X, Loader, Scan, Eye, Grab, Sparkles, User, FileText, Bot, Timer, ArrowRightLeft, Wrench, CheckCircle2, AlertTriangle, Zap, BatteryCharging } from 'lucide-react';
 import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvanzata } from '../api'; 
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
@@ -603,14 +603,18 @@ const PilotSottosistemaView = ({
   data,
   qrId,
   onPilotRipara,
+  onPilotRicarica,
   onPilotSabota,
   repairing,
+  recharging,
   sabotaging,
 }) => {
   const [componentiSelection, setComponentiSelection] = useState({});
+  const [ricaricaSelection, setRicaricaSelection] = useState({});
 
   useEffect(() => {
     setComponentiSelection({});
+    setRicaricaSelection({});
   }, [qrId, data?.qrcode_id]);
 
   const d = data?.dati || {};
@@ -626,11 +630,19 @@ const PilotSottosistemaView = ({
   const richiedeComponenti = Boolean(reqComponenti?.richiede_componenti);
   const vincoliComponenti = reqComponenti?.vincoli || [];
   const stivaComponenti = reqComponenti?.stiva;
+  const reqRicarica = d.requisiti_ricarica_componenti;
+  const richiedeRicarica = Boolean(reqRicarica?.richiede_componenti);
+  const vincoliRicarica = reqRicarica?.vincoli || [];
+  const stivaRicarica = reqRicarica?.stiva || stivaComponenti;
+  const puoRicaricare = Boolean(d.puo_ricaricare);
   const selezioneValida = !richiedeComponenti
     || validateSelezioneComponenti(vincoliComponenti, componentiSelection, stivaComponenti?.righe).ok;
+  const selezioneRicaricaValida = !richiedeRicarica
+    || validateSelezioneComponenti(vincoliRicarica, ricaricaSelection, stivaRicarica?.righe).ok;
   const sessioneAttiva = d.sessione_attiva;
   const espulso = d.espulso;
   const riparato = data?.azione === 'riparato';
+  const ricaricato = data?.azione === 'ricaricato';
   const sabotato = data?.azione === 'sabotato';
   const colore = stato.colore_livello_attuale || '#6366f1';
   const livello = stato.livello_attuale ?? '—';
@@ -643,6 +655,12 @@ const PilotSottosistemaView = ({
         <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-950/50 border border-emerald-700/50">
           <CheckCircle2 className="text-emerald-400 shrink-0" size={28} />
           <p className="text-emerald-200 text-sm">{data.messaggio || 'Subsistema riparato.'}</p>
+        </div>
+      )}
+      {ricaricato && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-cyan-950/50 border border-cyan-700/50">
+          <BatteryCharging className="text-cyan-400 shrink-0" size={28} />
+          <p className="text-cyan-200 text-sm">{data.messaggio || 'Ricarica completata.'}</p>
         </div>
       )}
       {sabotato && (
@@ -712,6 +730,19 @@ const PilotSottosistemaView = ({
           stiva={stivaComponenti}
           selection={componentiSelection}
           onSelectionChange={setComponentiSelection}
+          title="Componenti per riparazione"
+          hintOk="Selezione completa — puoi riparare."
+        />
+      ) : null}
+
+      {richiedeRicarica && puoRicaricare && !ricaricato ? (
+        <ComponentiRiparazionePicker
+          vincoli={vincoliRicarica}
+          stiva={stivaRicarica}
+          selection={ricaricaSelection}
+          onSelectionChange={setRicaricaSelection}
+          title={`Componenti per ricarica (${reqRicarica?.unita_label || 'energia'})`}
+          hintOk={`Selezione completa — ricarica totale +${reqRicarica?.ricarica_totale_configurata ?? '?'}.`}
         />
       ) : null}
 
@@ -729,7 +760,7 @@ const PilotSottosistemaView = ({
         {puoSabotare && onPilotSabota && !sabotato && (
           <button
             type="button"
-            disabled={sabotaging || repairing}
+            disabled={sabotaging || repairing || recharging}
             onClick={() => onPilotSabota(qrId)}
             className="w-full flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-red-700 rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -740,7 +771,7 @@ const PilotSottosistemaView = ({
         {puoRiparare && onPilotRipara && !riparato && (
           <button
             type="button"
-            disabled={repairing || sabotaging || !selezioneValida}
+            disabled={repairing || recharging || sabotaging || !selezioneValida}
             onClick={() => onPilotRipara(
               qrId,
               minigiocoRiparazione,
@@ -750,6 +781,20 @@ const PilotSottosistemaView = ({
           >
             {repairing ? <Loader className="animate-spin" size={20} /> : <Wrench size={20} />}
             {minigiocoRiparazione ? 'Ripara (minigioco)' : 'Ripara'}
+          </button>
+        )}
+        {puoRicaricare && onPilotRicarica && !ricaricato && (
+          <button
+            type="button"
+            disabled={recharging || repairing || sabotaging || !selezioneRicaricaValida}
+            onClick={() => onPilotRicarica(
+              qrId,
+              richiedeRicarica ? selezioneToArray(ricaricaSelection) : null,
+            )}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-cyan-700 rounded-lg hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {recharging ? <Loader className="animate-spin" size={20} /> : <BatteryCharging size={20} />}
+            Ricarica a componenti
           </button>
         )}
       </div>
@@ -788,7 +833,7 @@ const PilotSottosistemaView = ({
 //##################################################################
 // ## COMPONENTE MODALE PRINCIPALE (EXPORT) ##
 //##################################################################
-const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara, onPilotSabota, pilotRepairing, pilotSaboting }) => {
+const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara, onPilotRicarica, onPilotSabota, pilotRepairing, pilotRecharging, pilotSaboting }) => {
   
   const { addTimer } = useTimers(); // <--- Accediamo alla logica dei timer
   const lastProcessedQr = useRef(null); // Per evitare che il timer scatti multipli in caso di re-render
@@ -972,8 +1017,10 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
             data={data}
             qrId={qrId}
             onPilotRipara={onPilotRipara}
+            onPilotRicarica={onPilotRicarica}
             onPilotSabota={onPilotSabota}
             repairing={pilotRepairing}
+            recharging={pilotRecharging}
             sabotaging={pilotSaboting}
           />
         );

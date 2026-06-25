@@ -22,7 +22,7 @@ export function validateSelezioneComponenti(vincoli, selection, stivaRighe = [])
     if (mid && q > 0) alloc[mid] = (alloc[mid] || 0) + q;
   }
   if (!Object.keys(alloc).length) {
-    return { ok: false, message: 'Seleziona i componenti necessari per la riparazione.' };
+    return { ok: false, message: 'Seleziona i componenti necessari.' };
   }
 
   const disponibile = {};
@@ -69,17 +69,26 @@ export function validateSelezioneComponenti(vincoli, selection, stivaRighe = [])
 }
 
 function labelVincolo(req) {
+  const ric = req.ricarica != null ? ` → +${req.ricarica}` : '';
   if (req.tipo === 'specifico') {
     const nome = req.mattone_nome || req.mattone_id;
     const col = req.colore_nome ? ` (${req.colore_nome})` : '';
-    return `${req.quantita}× ${nome}${col}`;
+    return `${req.quantita}× ${nome}${col}${ric}`;
   }
   const nomi = (req.opzioni || []).map((o) => o.colore_nome || o.mattone_nome).filter(Boolean);
   const alt = nomi.length ? nomi.join(' / ') : 'opzioni configurate';
-  return `${req.quantita}× a scelta tra ${alt}`;
+  return `${req.quantita}× a scelta tra ${alt}${ric}`;
 }
 
-export default function ComponentiRiparazionePicker({ vincoli, stiva, selection, onSelectionChange }) {
+export default function ComponentiRiparazionePicker({
+  vincoli,
+  stiva,
+  selection,
+  onSelectionChange,
+  title = 'Componenti da stiva nave',
+  hintOk = 'Selezione completa — puoi procedere.',
+  hintEmpty = 'Seleziona i componenti necessari.',
+}) {
   const righe = stiva?.righe || [];
 
   const mattoneIdsRilevanti = useMemo(() => {
@@ -138,7 +147,7 @@ export default function ComponentiRiparazionePicker({ vincoli, stiva, selection,
     <div className="rounded-lg border border-emerald-900/50 bg-emerald-950/20 p-3 space-y-3">
       <div className="flex items-center gap-2 text-emerald-300 text-sm font-semibold">
         <Package size={18} />
-        Componenti da stiva nave
+        {title}
       </div>
 
       <ul className="text-xs text-gray-400 space-y-1">
@@ -192,7 +201,7 @@ export default function ComponentiRiparazionePicker({ vincoli, stiva, selection,
       </div>
 
       {validation.ok ? (
-        <p className="text-emerald-400/90 text-xs">Selezione completa — puoi riparare.</p>
+        <p className="text-emerald-400/90 text-xs">{hintOk}</p>
       ) : (
         <p className="text-amber-200/90 text-xs">{validation.message}</p>
       )}

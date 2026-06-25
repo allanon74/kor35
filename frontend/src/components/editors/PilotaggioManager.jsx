@@ -497,6 +497,8 @@ export default function PilotaggioManager({ onLogout }) {
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
     richiede_componenti_riparazione: false,
     requisiti_riparazione_json: '[]',
+    richiede_componenti_ricarica: false,
+    requisiti_ricarica_json: '[]',
   });
   const [nuovoEvento, setNuovoEvento] = useState(defaultEvento);
   const [nuovoCritico, setNuovoCritico] = useState({ pattern: '', nome: '', attivo: true });
@@ -514,6 +516,8 @@ export default function PilotaggioManager({ onLogout }) {
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
     richiede_componenti_riparazione: false,
     requisiti_riparazione_json: '[]',
+    richiede_componenti_ricarica: false,
+    requisiti_ricarica_json: '[]',
   });
   const [editIntensita, setEditIntensita] = useState({ valore: 0, nome: '' });
   const [editIntensitaId, setEditIntensitaId] = useState(null);
@@ -657,12 +661,17 @@ export default function PilotaggioManager({ onLogout }) {
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
     richiede_componenti_riparazione: false,
     requisiti_riparazione_json: '[]',
+    richiede_componenti_ricarica: false,
+    requisiti_ricarica_json: '[]',
   });
 
   const openCreateSottoModal = () => {
     setNuovoSotto(resetNuovoSotto());
     setNuovoEffettoGuastoBuilder(defaultEffettoGuastoBuilder());
     setSottoModalMode('create');
+    if (!stivaData?.mattoni_catalogo?.length) {
+      staffGetPilotStiva(onLogout).then((data) => setStivaData(data)).catch(() => {});
+    }
   };
 
   const closeSottoModal = () => {
@@ -750,6 +759,14 @@ export default function PilotaggioManager({ onLogout }) {
         })(),
         colori_per_livello: (() => {
           try { return JSON.parse(nuovoSotto.colori_per_livello_json || '{}'); } catch { return defaultColorCurve(); }
+        })(),
+        richiede_componenti_riparazione: Boolean(nuovoSotto.richiede_componenti_riparazione),
+        requisiti_riparazione_json: (() => {
+          try { return JSON.parse(nuovoSotto.requisiti_riparazione_json || '[]'); } catch { return []; }
+        })(),
+        richiede_componenti_ricarica: Boolean(nuovoSotto.richiede_componenti_ricarica),
+        requisiti_ricarica_json: (() => {
+          try { return JSON.parse(nuovoSotto.requisiti_ricarica_json || '[]'); } catch { return []; }
         })(),
       },
       onLogout
@@ -863,6 +880,10 @@ export default function PilotaggioManager({ onLogout }) {
         richiede_componenti_riparazione: Boolean(editSotto.richiede_componenti_riparazione),
         requisiti_riparazione_json: (() => {
           try { return JSON.parse(editSotto.requisiti_riparazione_json || '[]'); } catch { return []; }
+        })(),
+        richiede_componenti_ricarica: Boolean(editSotto.richiede_componenti_ricarica),
+        requisiti_ricarica_json: (() => {
+          try { return JSON.parse(editSotto.requisiti_ricarica_json || '[]'); } catch { return []; }
         })(),
       },
       onLogout
@@ -1367,6 +1388,8 @@ export default function PilotaggioManager({ onLogout }) {
                         colori_per_livello_json: JSON.stringify(full.colori_per_livello || defaultColorCurve(), null, 2),
                         richiede_componenti_riparazione: Boolean(full.richiede_componenti_riparazione),
                         requisiti_riparazione_json: JSON.stringify(full.requisiti_riparazione_json || [], null, 2),
+                        richiede_componenti_ricarica: Boolean(full.richiede_componenti_ricarica),
+                        requisiti_ricarica_json: JSON.stringify(full.requisiti_ricarica_json || [], null, 2),
                       });
                       setEditEffettoGuastoBuilder({
                         tipo: String((full.effetti_guasto_json || {}).tipo || 'none'),
@@ -1374,6 +1397,9 @@ export default function PilotaggioManager({ onLogout }) {
                         target_codice: String((full.effetti_guasto_json || {}).target_codice || ''),
                       });
                       setSottoModalMode('edit');
+                      if (!stivaData?.mattoni_catalogo?.length) {
+                        staffGetPilotStiva(onLogout).then((data) => setStivaData(data)).catch(() => {});
+                      }
                       if (String(full.tipo || '').toLowerCase() === 'serbatoio') {
                         loadSerbatoioFuel(full.id);
                       } else {
@@ -2345,6 +2371,7 @@ export default function PilotaggioManager({ onLogout }) {
         onApplySerbatoioFuel={() => applicaSerbatoioFuel({ carburante_attuale: Number(serbatoioFuelDraft) })}
         onFillSerbatoioFuel={() => applicaSerbatoioFuel({ riempi: true })}
         onRefreshSerbatoioFuel={() => loadSerbatoioFuel(editSottoId)}
+        mattoniCatalogo={stivaData?.mattoni_catalogo || []}
       />
 
       {createEventoModalOpen ? (

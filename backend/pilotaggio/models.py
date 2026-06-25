@@ -149,6 +149,15 @@ class SottosistemaNave(SyncableModel, models.Model):
         blank=True,
         help_text="Lista vincoli: specifico (mattone_id+quantita) o scelta (mattone_ids+quantita).",
     )
+    richiede_componenti_ricarica = models.BooleanField(
+        default=False,
+        help_text="Se attivo (e toggle componenti ON), QR su batteria/serbatoio operativo consuma componenti e ricarica storage/carburante.",
+    )
+    requisiti_ricarica_json = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Vincoli ricarica: come riparazione + campo ricarica (energia storage o carburante).",
+    )
     coeff_produzione = models.FloatField(
         default=0.0,
         help_text="Energia prodotta per tick = livello * coeff_produzione.",

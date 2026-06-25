@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import RequisitiComponentiWizard from './RequisitiComponentiWizard.jsx';
 
 const TIPO_OPTS = [
   'standard',
@@ -42,10 +43,14 @@ const PilotSottosistemaModal = ({
   onApplySerbatoioFuel,
   onFillSerbatoioFuel,
   onRefreshSerbatoioFuel,
+  mattoniCatalogo = [],
 }) => {
   if (!open) return null;
 
   const title = mode === 'edit' ? 'Modifica sottosistema' : 'Nuovo sottosistema';
+  const tipoSs = String(draft.tipo || '').toLowerCase();
+  const isEnergia = tipoSs === 'batteria' || tipoSs === 'serbatoio';
+  const unitaRicarica = tipoSs === 'batteria' ? 'energia storage' : 'carburante';
 
   return createPortal(
     <div
@@ -412,16 +417,42 @@ const PilotSottosistemaModal = ({
               />
               <span className="text-sm">Riparazione QR richiede componenti da stiva</span>
             </label>
-            <label className="block text-sm sm:col-span-2">
-              <span className="text-xs text-gray-400">Requisiti riparazione (JSON)</span>
-              <textarea
-                rows={6}
-                className="bg-gray-900 rounded px-2 py-1.5 mt-1 w-full font-mono text-xs border border-gray-600"
-                value={draft.requisiti_riparazione_json}
-                onChange={(e) => setDraft((p) => ({ ...p, requisiti_riparazione_json: e.target.value }))}
-                placeholder={'[{"tipo":"specifico","mattone_id":"...","quantita":1}]'}
+            <div className="sm:col-span-2 space-y-2">
+              <span className="text-xs text-gray-400 block">Requisiti riparazione (componenti stiva)</span>
+              <RequisitiComponentiWizard
+                mode="riparazione"
+                jsonValue={draft.requisiti_riparazione_json || '[]'}
+                onJsonChange={(text) => setDraft((p) => ({ ...p, requisiti_riparazione_json: text }))}
+                mattoniCatalogo={mattoniCatalogo}
               />
-            </label>
+            </div>
+
+            {isEnergia ? (
+              <>
+                <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(draft.richiede_componenti_ricarica)}
+                    onChange={(e) => setDraft((p) => ({ ...p, richiede_componenti_ricarica: e.target.checked }))}
+                  />
+                  <span className="text-sm">
+                    Ricarica QR a componenti ({tipoSs === 'batteria' ? 'storage' : 'carburante'})
+                  </span>
+                </label>
+                <div className="sm:col-span-2 space-y-2">
+                  <span className="text-xs text-gray-400 block">
+                    Requisiti ricarica — separati dalla riparazione; ogni vincolo indica quanto ricarica
+                  </span>
+                  <RequisitiComponentiWizard
+                    mode="ricarica"
+                    jsonValue={draft.requisiti_ricarica_json || '[]'}
+                    onJsonChange={(text) => setDraft((p) => ({ ...p, requisiti_ricarica_json: text }))}
+                    mattoniCatalogo={mattoniCatalogo}
+                    unitaLabel={unitaRicarica}
+                  />
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
 

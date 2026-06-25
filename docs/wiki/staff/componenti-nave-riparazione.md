@@ -113,7 +113,7 @@ Tab **Runtime Console** → Gestione Pilotaggio:
 Nel modal **Modifica sottosistema**:
 
 - **Riparazione QR richiede componenti** — solo se il toggle globale è attivo
-- **Requisiti riparazione (JSON)** — esempio:
+- **Requisiti riparazione** — wizard nel modal sottosistema (o JSON avanzato):
 
 ```json
 [
@@ -121,6 +121,19 @@ Nel modal **Modifica sottosistema**:
   {"tipo": "scelta", "mattone_ids": ["<uuid-giallo>", "<uuid-verde>"], "quantita": 3}
 ]
 ```
+
+- **Batteria / serbatoio** — JSON **separato** per la ricarica (subsistema operativo, non in fault):
+
+```json
+[
+  {"tipo": "specifico", "mattone_id": "<uuid>", "quantita": 1, "ricarica": 50},
+  {"tipo": "scelta", "mattone_ids": ["<uuid-a>", "<uuid-b>"], "quantita": 2, "ricarica": 30}
+]
+```
+
+Campo **`ricarica`**: unità aggiunte a **storage energia** (batteria) o **carburante** (serbatoio) quando il vincolo è soddisfatto. Totale = somma dei vincoli.
+
+- Checkbox **Ricarica QR a componenti** (solo batteria/serbatoio) + wizard dedicato
 
 - Tipo sottosistema **compattatore** — lettera `Z` (o altro codice scelto)
 
@@ -264,6 +277,7 @@ Hook: fine `tick_sessione` → `applica_stiva_tick_se_dovuto()`.
 | `GET /api/pilot/stiva/` | Inventario (autenticato) |
 | `GET/POST /api/pilot/staff/stiva/` | Staff: lettura / `POST {mattone_id, delta}` |
 | `POST /api/pilot/subsystems/qr-repair/` | Esteso con `componenti_scelti[]` |
+| `POST /api/pilot/subsystems/qr-recharge/` | Ricarica batteria/serbatoio con `componenti_scelti[]` |
 | `POST /api/pilot/staff/eventi/aggiorna-codici-da-stato/` | Rigenera codici evento |
 | `GET /api/pilot/compattatore/state/` | Stato compattatore (console) |
 | `POST /api/pilot/compattatore/compressione/` | Compressione 2:1 |

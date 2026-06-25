@@ -197,6 +197,20 @@ def build_scan_payload(
         and not espulso
     )
 
+    from .componenti_ricarica import build_requisiti_ricarica_payload, ricarica_componenti_attiva_per
+
+    requisiti_ricarica = build_requisiti_ricarica_payload(sottosistema)
+    puo_ricaricare = bool(
+        bus_attivo
+        and sessione is not None
+        and scanner_pg is not None
+        and v_ri > 0
+        and not guasto
+        and not in_ripristino
+        and not espulso
+        and ricarica_componenti_attiva_per(sottosistema)
+    )
+
     from .componenti_riparazione import build_requisiti_riparazione_payload
 
     requisiti_componenti = build_requisiti_riparazione_payload(sottosistema)
@@ -237,6 +251,8 @@ def build_scan_payload(
             },
             "minigioco_riparazione": minigioco_riparazione,
             "requisiti_componenti": requisiti_componenti,
+            "puo_ricaricare": puo_ricaricare,
+            "requisiti_ricarica_componenti": requisiti_ricarica,
             "manifesto_testo": manifesto_testo,
         },
     }
@@ -421,4 +437,99 @@ def ripristina_sottosistema_da_qr(
         f"{stato.livello_attuale}/9."
     )
     payload["azione"] = "riparato"
+    return {"ok": True, **payload}
+
+
+@transaction.atomic
+def ricarica_sottosistema_da_qr(
+    *,
+    qr_code: QrCode,
+    personaggio,
+    componenti_scelti: Optional[list] = None,
+) -> Dict[str, Any]:
+    """Ricarica storage (batteria) o carburante (serbatoio) consumando componenti da stiva."""
+    from .componenti_ricarica import valida_selezione_ricarica
+    from .componenti_stiva import consuma_mattoni_stiva
+    from .models import SessioneVolo
+    from .stato_nave import stato_operativo_sottosistema
+    from .views import _ensure_runtime_subsystems
+
+    if _valore_statistica_pg(personaggio, SIGLA_RIPARAZIONE) <= 0:
+        return {
+            "ok": False,
+            "error": f"Servono punti {SIGLA_RIPARAZIONE} per operare sui subsistemi.",
+        }
+
+    sottosistema = sottosistema_per_qr(qr_code)
+    if sottosistema is None:
+        return {"ok": False, "error": "QR non collegato a un sottosistema nave."}
+
+    tipo = str(sottosistema.tipo or "").strip().lower()
+    if tipo not in {"batteria", "serbatoio"}:
+        return {"ok": False, "error": "Ricarica a componenti solo su batterie o serbatoi."}
+
+    from .componenti_ricarica import ricarica_componenti_attiva_per
+
+    if not ricarica_componenti_attiva_per(sottosistema):
+        return {"ok": False, "error": "Ricarica a componenti non abilitata per questo nodo."}
+
+    sessione = sessione_console_corrente()
+    if sessione is None:
+        return {"ok": False, "error": "Serve una sessione console attiva per ricaricare."}
+
+    _ensure_runtime_subsystems(sessione)
+    stato = stato_operativo_sottosistema(sottosistema, sessione)
+
+    if getattr(stato, "espulso", False):
+        return {"ok": False, "error": "Modulo espulso: ricarica non disponibile."}
+    if not stato.online:
+        return {"ok": False, "error": "Subsistema in fault: ripara prima di ricaricare."}
+    if stato.recovery_at and stato.recovery_at > timezone.now():
+        remain = int((stato.recovery_at - timezone.now()).total_seconds())
+        return {"ok": False, "error": f"Ricalibrazione in corso ({remain}s rimanenti)."}
+
+    ok_sel, err_sel, allocazioni, importo = valida_selezione_ricarica(
+        sottosistema, componenti_scelti or []
+    )
+    if not ok_sel:
+        return {"ok": False, "error": err_sel}
+    try:
+        consuma_mattoni_stiva(allocazioni)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
+    sessione = SessioneVolo.objects.select_for_update().get(pk=sessione.pk)
+    if tipo == "batteria":
+        sessione.storage_energia_attuale = min(
+            float(sessione.storage_energia_massimo or 0),
+            float(sessione.storage_energia_attuale or 0) + importo,
+        )
+        sessione.save(update_fields=["storage_energia_attuale", "updated_at"])
+        unita = "energia storage"
+    else:
+        sessione.carburante_attuale = min(
+            float(sessione.carburante_massimo or 0),
+            float(sessione.carburante_attuale or 0) + importo,
+        )
+        sessione.save(update_fields=["carburante_attuale", "updated_at"])
+        unita = "carburante"
+
+    payload = build_scan_payload(
+        qr_code=qr_code,
+        sottosistema=sottosistema,
+        scanner_pg=personaggio,
+    )
+    payload["messaggio"] = (
+        f"Ricarica completata — +{importo:g} {unita} "
+        f"(storage {round(float(sessione.storage_energia_attuale or 0))}/{round(float(sessione.storage_energia_massimo or 0))} · "
+        f"carburante {round(float(sessione.carburante_attuale or 0))}/{round(float(sessione.carburante_massimo or 0))})."
+    )
+    payload["azione"] = "ricaricato"
+    payload["ricarica"] = {
+        "importo": importo,
+        "unita": unita,
+        "tipo_sottosistema": tipo,
+        "storage_energia_attuale": float(sessione.storage_energia_attuale or 0),
+        "carburante_attuale": float(sessione.carburante_attuale or 0),
+    }
     return {"ok": True, **payload}

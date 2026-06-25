@@ -64,6 +64,7 @@ urlpatterns = [
 
     path("subsystems/qr-action/", views.PilotSubsystemQrActionView.as_view(), name="pilot-subsystem-qr"),
     path("subsystems/qr-repair/", views.PilotSubsystemQrRepairView.as_view(), name="pilot-subsystem-qr-repair"),
+    path("subsystems/qr-recharge/", views.PilotSubsystemQrRechargeView.as_view(), name="pilot-subsystem-qr-recharge"),
 
     path("catalog/", views.PilotCatalogView.as_view(), name="pilot-catalog"),
     path("prefetture/", views.PilotPrefettureView.as_view(), name="pilot-prefetture"),

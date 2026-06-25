@@ -707,6 +707,22 @@ export const pilotSubsystemRepair = (
     onLogout,
   );
 
+export const pilotSubsystemRecharge = (qrId, personaggioId, onLogout, componentiScelti = null) =>
+  fetchAuthenticated(
+    '/api/pilot/subsystems/qr-recharge/',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        qr_id: normalizeScannedQrId(qrId),
+        personaggio_id: personaggioId,
+        ...(Array.isArray(componentiScelti) && componentiScelti.length
+          ? { componenti_scelti: componentiScelti }
+          : {}),
+      }),
+    },
+    onLogout,
+  );
+
 export const pilotSubsystemSabota = (qrId, personaggioId, onLogout) =>
   fetchAuthenticated(
     '/api/pilot/subsystems/qr-action/',

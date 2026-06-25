@@ -72,6 +72,8 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
             "supporta_direzioni",
             "richiede_componenti_riparazione",
             "requisiti_riparazione_json",
+            "richiede_componenti_ricarica",
+            "requisiti_ricarica_json",
             "stato_qr",
             "qrcode_id",
             "minigioco_usa_default",
