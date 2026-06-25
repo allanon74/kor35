@@ -40,6 +40,8 @@ Dopo modifiche a uno o più di:
 make wiki-staff-sync ENV=dev-home WIKI_STAFF_FORCE=1
 ```
 
+**Dashboard staff:** Manuali PDF Wiki → pannello «Wiki operatività tecnica» → *Sincronizza wiki operativa* (richiede Master+).
+
 Comando Django: `python manage.py sync_wiki_staff_ops --force`
 
 - Senza `--force`: crea solo pagine mancanti; non sovrascrive contenuti già in DB.

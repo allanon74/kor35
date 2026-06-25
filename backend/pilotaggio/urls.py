@@ -33,6 +33,13 @@ router.register(
 )
 
 
+router.register(
+    r"staff/coppie-colori-componente",
+    views.StaffCoppiaColoriComponenteViewSet,
+    basename="pilot-staff-coppie-colori",
+)
+
+
 urlpatterns = [
     path("console-enabled/", views.PilotConsoleEnabledView.as_view(), name="pilot-console-enabled"),
     path("auth/auto-login/", views.PilotConsoleAutoLoginView.as_view(), name="pilot-auto-login"),
@@ -69,5 +76,33 @@ urlpatterns = [
         name="pilot-staff-sessione-sottosistema-azione",
     ),
     path("staff/runtime-config/", views.StaffPilotRuntimeConfigView.as_view(), name="pilot-staff-runtime-config"),
+    path("staff/stiva/", views.StaffPilotStivaView.as_view(), name="pilot-staff-stiva"),
+    path(
+        "staff/eventi/aggiorna-codici-da-stato/",
+        views.StaffAggiornaCodiciEventiView.as_view(),
+        name="pilot-staff-eventi-aggiorna-codici",
+    ),
+    path("stiva/", views.PilotStivaView.as_view(), name="pilot-stiva"),
+    path("compattatore/state/", views.PilotCompattatoreStateView.as_view(), name="pilot-compattatore-state"),
+    path(
+        "compattatore/compressione/",
+        views.PilotCompattatoreCompressioneView.as_view(),
+        name="pilot-compattatore-compressione",
+    ),
+    path(
+        "compattatore/decompressione/",
+        views.PilotCompattatoreDecompressioneView.as_view(),
+        name="pilot-compattatore-decompressione",
+    ),
+    path(
+        "compattatore/risonanza/",
+        views.PilotCompattatoreRisonanzaView.as_view(),
+        name="pilot-compattatore-risonanza",
+    ),
+    path(
+        "compattatore/quantico/",
+        views.PilotCompattatoreQuanticoView.as_view(),
+        name="pilot-compattatore-quantico",
+    ),
     path("", include(router.urls)),
 ]

@@ -86,6 +86,13 @@ Master = `ENV=prod`. Replica = `dev-office`, `mirror`.
 | `make pilot-tick-restart ENV=<profilo>` | Restart servizio `pilot_tick` |
 | `make pilot-tick-loop ENV=<profilo>` | Worker foreground (debug) |
 | `make pilot-tick-stop ENV=<profilo>` | Disabilita tick runtime |
+| `make seed-componenti-nave ENV=<profilo>` | Placeholder catalogo 10 componenti nave (once per nodo; vedi `componenti-nave-riparazione`) |
+
+Opzioni `seed-componenti-nave`:
+
+- `COMPONENTI_NAVE_SKIP_IF_COMPLETE=1` (default) — nessuna azione se i 10 mattoni esistono
+- `COMPONENTI_NAVE_SKIP_IF_COMPLETE=0` — integra record mancanti
+- `COMPONENTI_NAVE_FORCE_COPPIE=1` — ricrea coppie opposte
 
 ---
 
@@ -124,6 +131,7 @@ SSH: `kor35-mirror` → `kor35.ddns.net:10022`, utente `pi`.
 |---------|-------------|
 | `make backup-db ENV=prod` | Dump DB + rotazione |
 | `make wiki-staff-sync ENV=dev-home` | Aggiorna pagine Wiki staff da `docs/wiki/staff/` |
+| Dashboard staff → Manuali PDF | Pannello «Wiki operatività tecnica» (stesso effetto, richiede Master+) |
 
 ---
 

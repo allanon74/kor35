@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import LoginQR from './components/LoginQR.jsx';
 import IdleScreen from './components/IdleScreen.jsx';
 import Cockpit from './components/Cockpit.jsx';
+import CompattatoreScreen from './components/CompattatoreScreen.jsx';
 import { api, getToken, setToken } from './api.js';
 import {
   flushOfflineQueue,
@@ -14,6 +15,7 @@ const POLL_INTERVAL_MS = 3000;
 const SCREEN_MODE = new URLSearchParams(window.location.search).get('screen') || 'both';
 const IS_CONTROL_ONLY = SCREEN_MODE === 'control';
 const IS_COMBINED = SCREEN_MODE === 'combined';
+const IS_COMPATTATORE = SCREEN_MODE === 'compattatore';
 
 export default function App() {
   const [authToken, setAuthToken] = useState(getToken());
@@ -277,6 +279,9 @@ export default function App() {
         </div>
       ) : null}
       <main>
+        {IS_COMPATTATORE ? (
+          <CompattatoreScreen onLogout={handleLogout} />
+        ) : (
         <div className={`console-viewport-wrap ${IS_CONTROL_ONLY ? 'is-fixed' : ''} ${IS_COMBINED ? 'is-combined' : ''}`}>
           <div className={`console-viewport-fixed ${IS_CONTROL_ONLY ? 'is-fixed' : ''} ${IS_COMBINED ? 'is-combined' : ''}`}>
             {(!state || !state.sessione || state.sessione.stato === 'idle') ? (
@@ -308,6 +313,7 @@ export default function App() {
             ) : null}
           </div>
         </div>
+        )}
       </main>
     </div>
   );

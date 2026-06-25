@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, memo } from 'react';
-import { ArrowLeft, BookOpen, Download, RefreshCw, Save, Eye, AlertTriangle, History, Package, ListOrdered } from 'lucide-react';
+import { ArrowLeft, BookOpen, Download, RefreshCw, Save, Eye, AlertTriangle, History, Package, ListOrdered, ServerCog } from 'lucide-react';
 import ManualePdfPagineModal from './ManualePdfPagineModal';
 import {
   getStaffManualePdfList,
@@ -13,6 +13,8 @@ import {
   getWikiManualeStorico,
   startWikiManualeBatchJob,
   getWikiManualeBatchJob,
+  getStaffWikiStaffOpsInfo,
+  syncStaffWikiStaffOps,
 } from '../../api';
 import {
   MANUALE_PDF_PRESET_OPTIONS,
@@ -44,6 +46,10 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
   const [batchJob, setBatchJob] = useState(null);
   const [batchPolling, setBatchPolling] = useState(false);
   const [pagineModalSlug, setPagineModalSlug] = useState(null);
+  const [wikiStaffOpsInfo, setWikiStaffOpsInfo] = useState(null);
+  const [wikiStaffOpsSyncing, setWikiStaffOpsSyncing] = useState(false);
+  const [wikiStaffOpsForce, setWikiStaffOpsForce] = useState(true);
+  const [wikiStaffOpsLastSync, setWikiStaffOpsLastSync] = useState(null);
 
   const loadManuali = useCallback(async () => {
     setLoading(true);
@@ -74,6 +80,39 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
   useEffect(() => {
     loadDiagnostica();
   }, [loadDiagnostica]);
+
+  const loadWikiStaffOpsInfo = useCallback(async () => {
+    try {
+      const data = await getStaffWikiStaffOpsInfo(onLogout);
+      setWikiStaffOpsInfo(data);
+    } catch (e) {
+      console.error(e);
+      setWikiStaffOpsInfo({ manifest_ok: false, error: true });
+    }
+  }, [onLogout]);
+
+  useEffect(() => {
+    loadWikiStaffOpsInfo();
+  }, [loadWikiStaffOpsInfo]);
+
+  const handleWikiStaffOpsSync = async () => {
+    setWikiStaffOpsSyncing(true);
+    setMessage('');
+    try {
+      const data = await syncStaffWikiStaffOps(onLogout, { force: wikiStaffOpsForce });
+      setWikiStaffOpsLastSync(data);
+      const s = data.summary || {};
+      setMessage(
+        `Wiki operativa sincronizzata: ${s.created ?? 0} create, ${s.updated ?? 0} aggiornate, ${s.skipped ?? 0} saltate.`,
+      );
+      await loadWikiStaffOpsInfo();
+    } catch (e) {
+      console.error(e);
+      setMessage(e?.message || 'Errore sincronizzazione wiki operativa.');
+    } finally {
+      setWikiStaffOpsSyncing(false);
+    }
+  };
 
   const loadStorico = useCallback(async (slug) => {
     if (!slug) {
@@ -511,6 +550,94 @@ const ManualePdfManager = ({ onBack, onLogout }) => {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
+        <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-4">
+          <h3 className="text-xs font-black uppercase text-gray-500 mb-3 flex items-center gap-2">
+            <ServerCog size={14} className="text-cyan-400" /> Wiki operatività tecnica
+          </h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Importa nel database le pagine staff da <code className="text-gray-400">docs/wiki/staff/</code>
+            {' '}(runbook make, mirror Pi, componenti nave). Equivalente a{' '}
+            <code className="text-gray-400">make wiki-staff-sync</code>.
+          </p>
+          {wikiStaffOpsInfo && (
+            <div className="text-xs text-gray-500 mb-3 space-y-1">
+              <p>
+                Sorgente:{' '}
+                <code className="text-gray-400 break-all">{wikiStaffOpsInfo.wiki_staff_dir || '—'}</code>
+              </p>
+              {wikiStaffOpsInfo.manifest_ok ? (
+                <p>
+                  Manifest OK — sezione <strong>{wikiStaffOpsInfo.section?.titolo}</strong>
+                  {' · '}
+                  {wikiStaffOpsInfo.pages?.length ?? 0} pagine
+                </p>
+              ) : (
+                <p className="text-amber-400 flex items-center gap-1">
+                  <AlertTriangle size={12} /> Manifest o sorgenti non disponibili nel container
+                </p>
+              )}
+              {wikiStaffOpsInfo.pages?.length > 0 && (
+                <ul className="text-gray-600 list-disc list-inside max-h-20 overflow-y-auto">
+                  {wikiStaffOpsInfo.pages.map((p) => (
+                    <li key={p.slug}>{p.titolo}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-xs text-gray-400 mb-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={wikiStaffOpsForce}
+              onChange={(e) => setWikiStaffOpsForce(e.target.checked)}
+              className="rounded border-gray-600"
+            />
+            Sovrascrivi contenuto esistente (force)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleWikiStaffOpsSync}
+              disabled={wikiStaffOpsSyncing || wikiStaffOpsInfo?.manifest_ok === false}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-900 hover:bg-cyan-800 text-xs font-bold disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={wikiStaffOpsSyncing ? 'animate-spin' : ''} />
+              {wikiStaffOpsSyncing ? 'Sincronizzazione…' : 'Sincronizza wiki operativa'}
+            </button>
+            <button
+              type="button"
+              onClick={loadWikiStaffOpsInfo}
+              className="px-3 py-2 rounded-lg bg-gray-800 text-xs font-bold"
+            >
+              Ricarica info
+            </button>
+          </div>
+          {wikiStaffOpsLastSync?.results?.length > 0 && (
+            <ul className="text-xs text-gray-500 mt-2 max-h-24 overflow-y-auto space-y-0.5">
+              {wikiStaffOpsLastSync.results.map((r) => (
+                <li key={r.slug}>
+                  <span className="text-gray-400">{r.slug}</span>
+                  {' — '}
+                  <span
+                    className={
+                      r.action === 'updated'
+                        ? 'text-emerald-400'
+                        : r.action === 'created'
+                          ? 'text-cyan-400'
+                          : 'text-gray-600'
+                    }
+                  >
+                    {r.action}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-gray-600 mt-2">
+            Richiede ruolo Master+. In produzione il deploy CI esegue già il sync automatico.
+          </p>
+        </div>
+
         <div className="bg-gray-900/80 border border-gray-800 rounded-xl p-4">
           <h3 className="text-xs font-black uppercase text-gray-500 mb-3 flex items-center gap-2">
             <Package size={14} /> Export e batch

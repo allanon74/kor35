@@ -23,6 +23,12 @@
       "titolo": "Test offline — mesh Omada",
       "source": "test-offline-omada.md",
       "ordine": 25
+    },
+    {
+      "slug": "staff-componenti-nave-riparazione",
+      "titolo": "Componenti nave — stiva e riparazione",
+      "source": "componenti-nave-riparazione.md",
+      "ordine": 30
     }
   ]
 }

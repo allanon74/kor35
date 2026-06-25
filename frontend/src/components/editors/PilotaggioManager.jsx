@@ -40,6 +40,9 @@ import {
   staffUpdatePilotSottosistema,
   staffUpdatePilotStatoAllerta,
   staffUpdatePilotRuntimeConfig,
+  staffGetPilotStiva,
+  staffModificaPilotStiva,
+  staffAggiornaCodiciEventiPilot,
 } from '../../api';
 
 const PILOT_TABS = [
@@ -49,6 +52,7 @@ const PILOT_TABS = [
   { id: 'comandi_critici', label: 'Comandi critici (globali)' },
   { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
   { id: 'sessione_live', label: 'Sessione live' },
+  { id: 'stiva', label: 'Stiva componenti' },
   { id: 'runtime', label: 'Runtime Console' },
 ];
 
@@ -491,6 +495,8 @@ export default function PilotaggioManager({ onLogout }) {
     guasto_percent_per_livello_json: JSON.stringify(defaultGuastoCurve(), null, 2),
     ripristino_percent_per_livello_json: JSON.stringify(defaultCurveZero(), null, 2),
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
+    richiede_componenti_riparazione: false,
+    requisiti_riparazione_json: '[]',
   });
   const [nuovoEvento, setNuovoEvento] = useState(defaultEvento);
   const [nuovoCritico, setNuovoCritico] = useState({ pattern: '', nome: '', attivo: true });
@@ -506,6 +512,8 @@ export default function PilotaggioManager({ onLogout }) {
     guasto_percent_per_livello_json: JSON.stringify(defaultGuastoCurve(), null, 2),
     ripristino_percent_per_livello_json: JSON.stringify(defaultCurveZero(), null, 2),
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
+    richiede_componenti_riparazione: false,
+    requisiti_riparazione_json: '[]',
   });
   const [editIntensita, setEditIntensita] = useState({ valore: 0, nome: '' });
   const [editIntensitaId, setEditIntensitaId] = useState(null);
@@ -535,6 +543,9 @@ export default function PilotaggioManager({ onLogout }) {
   const [editStatoId, setEditStatoId] = useState(null);
   const [editStato, setEditStato] = useState({});
   const [runtimeConfig, setRuntimeConfig] = useState(null);
+  const [stivaData, setStivaData] = useState(null);
+  const [stivaBusy, setStivaBusy] = useState(false);
+  const [eventiCodiciBusy, setEventiCodiciBusy] = useState(false);
   const [sessioneLive, setSessioneLive] = useState(null);
   const [sessioneLiveBusy, setSessioneLiveBusy] = useState(false);
   const [editCaEffetto, setEditCaEffetto] = useState(defaultCaEffetto);
@@ -644,6 +655,8 @@ export default function PilotaggioManager({ onLogout }) {
     guasto_percent_per_livello_json: JSON.stringify(defaultGuastoCurve(), null, 2),
     ripristino_percent_per_livello_json: JSON.stringify(defaultCurveZero(), null, 2),
     colori_per_livello_json: JSON.stringify(defaultColorCurve(), null, 2),
+    richiede_componenti_riparazione: false,
+    requisiti_riparazione_json: '[]',
   });
 
   const openCreateSottoModal = () => {
@@ -846,6 +859,10 @@ export default function PilotaggioManager({ onLogout }) {
         })(),
         colori_per_livello: (() => {
           try { return JSON.parse(editSotto.colori_per_livello_json || '{}'); } catch { return defaultColorCurve(); }
+        })(),
+        richiede_componenti_riparazione: Boolean(editSotto.richiede_componenti_riparazione),
+        requisiti_riparazione_json: (() => {
+          try { return JSON.parse(editSotto.requisiti_riparazione_json || '[]'); } catch { return []; }
         })(),
       },
       onLogout
@@ -1118,6 +1135,12 @@ export default function PilotaggioManager({ onLogout }) {
         login_required_console: Boolean(runtimeConfig.login_required_console),
         tick_interval_secondi: Number(runtimeConfig.tick_interval_secondi || 5),
         alarm_audio_enabled: Boolean(runtimeConfig.alarm_audio_enabled),
+        riparazione_componenti_abilitata: Boolean(runtimeConfig.riparazione_componenti_abilitata),
+        annichilamento_opposti_abilitato: Boolean(runtimeConfig.annichilamento_opposti_abilitato),
+        compattatore_console_abilitata: Boolean(runtimeConfig.compattatore_console_abilitata),
+        compattatore_login_richiesto: Boolean(runtimeConfig.compattatore_login_richiesto),
+        compattatore_stat_accesso_sigla: String(runtimeConfig.compattatore_stat_accesso_sigla || '0IN').trim(),
+        compattatore_quantico_abilitato: Boolean(runtimeConfig.compattatore_quantico_abilitato),
       },
       onLogout
     );
@@ -1139,6 +1162,55 @@ export default function PilotaggioManager({ onLogout }) {
     const timer = setInterval(loadSessioneLive, 4000);
     return () => clearInterval(timer);
   }, [activeTab, loadSessioneLive]);
+
+  const loadStiva = useCallback(async () => {
+    try {
+      const data = await staffGetPilotStiva(onLogout);
+      setStivaData(data);
+    } catch (_) {
+      setStivaData(null);
+    }
+  }, [onLogout]);
+
+  useEffect(() => {
+    if (activeTab !== 'stiva') return undefined;
+    loadStiva();
+    return undefined;
+  }, [activeTab, loadStiva]);
+
+  const modificaStiva = async (mattoneId, delta) => {
+    setStivaBusy(true);
+    setError('');
+    try {
+      const data = await staffModificaPilotStiva({ mattone_id: mattoneId, delta }, onLogout);
+      setStivaData(data);
+    } catch (err) {
+      setError(err?.message || 'Modifica stiva non riuscita.');
+    } finally {
+      setStivaBusy(false);
+    }
+  };
+
+  const aggiornaCodiciEventi = async (dryRun = false) => {
+    setEventiCodiciBusy(true);
+    setError('');
+    try {
+      const res = await staffAggiornaCodiciEventiPilot({ dry_run: dryRun, solo_attivi: true }, onLogout);
+      if (!dryRun) await loadData();
+      setError('');
+      const n = res?.conteggio ?? 0;
+      const fonte = res?.fonte_stato || 'nave';
+      window.alert(
+        dryRun
+          ? `Anteprima: ${n} eventi (${fonte}). Nessuna modifica salvata.`
+          : `Codici aggiornati per ${n} eventi (fonte: ${fonte}).`
+      );
+    } catch (err) {
+      setError(err?.message || 'Aggiornamento codici eventi non riuscito.');
+    } finally {
+      setEventiCodiciBusy(false);
+    }
+  };
 
   const azioneSottosistemaLive = async (sottosistemaId, azione) => {
     setSessioneLiveBusy(true);
@@ -1293,6 +1365,8 @@ export default function PilotaggioManager({ onLogout }) {
                         guasto_percent_per_livello_json: JSON.stringify(full.guasto_percent_per_livello || defaultGuastoCurve(), null, 2),
                         ripristino_percent_per_livello_json: JSON.stringify(full.ripristino_percent_per_livello || defaultCurveZero(), null, 2),
                         colori_per_livello_json: JSON.stringify(full.colori_per_livello || defaultColorCurve(), null, 2),
+                        richiede_componenti_riparazione: Boolean(full.richiede_componenti_riparazione),
+                        requisiti_riparazione_json: JSON.stringify(full.requisiti_riparazione_json || [], null, 2),
                       });
                       setEditEffettoGuastoBuilder({
                         tipo: String((full.effetti_guasto_json || {}).tipo || 'none'),
@@ -1421,17 +1495,39 @@ export default function PilotaggioManager({ onLogout }) {
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <h3 className="font-semibold">Eventi viaggio (randomici)</h3>
-          <button
-            type="button"
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium"
-            onClick={() => {
-              setError('');
-              setCreateEventoModalOpen(true);
-            }}
-          >
-            Nuovo evento
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={eventiCodiciBusy}
+              className="px-3 py-2 rounded-lg border border-amber-600/60 text-amber-200 hover:bg-amber-950/40 text-sm disabled:opacity-50"
+              onClick={() => aggiornaCodiciEventi(true)}
+            >
+              Anteprima codici da stato
+            </button>
+            <button
+              type="button"
+              disabled={eventiCodiciBusy}
+              className="px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-sm font-medium disabled:opacity-50"
+              onClick={() => aggiornaCodiciEventi(false)}
+            >
+              Aggiorna codici da stato nave
+            </button>
+            <button
+              type="button"
+              className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium"
+              onClick={() => {
+                setError('');
+                setCreateEventoModalOpen(true);
+              }}
+            >
+              Nuovo evento
+            </button>
+          </div>
         </div>
+        <p className="text-xs text-gray-400 mb-3">
+          I pulsanti «codici da stato» rigenerano soluzione totale, parziali e catastrofi in base ai livelli
+          attuali dei sottosistemi (sessione console attiva o registro nave).
+        </p>
         <StaffMinigiocoPageToolbar
           pageKey={MINIGIOCO_PAGE_KEYS.pilotEventi}
           pageLabel="Pilotaggio — Eventi"
@@ -1788,6 +1884,67 @@ export default function PilotaggioManager({ onLogout }) {
       </section>
       ) : null}
 
+      {activeTab === 'stiva' ? (
+      <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60 space-y-4">
+        <h3 className="font-semibold">Stiva componenti nave</h3>
+        <p className="text-xs text-gray-400">
+          Inventario globale condiviso. Coppie opposte: massimo 5 tick di coesistenza, poi annichilamento 1:1 in un colpo.
+        </p>
+        {!stivaData ? (
+          <p className="text-gray-500 text-sm">Caricamento stiva… (esegui <code className="text-gray-400">seed_componenti_nave</code> se il catalogo è vuoto)</p>
+        ) : (
+          <>
+            {stivaData.coppie_opposite?.length ? (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {stivaData.coppie_opposite.map((c) => (
+                  <div key={c.id} className="rounded border border-gray-700 bg-gray-800/50 p-2 text-xs">
+                    <div className="font-medium">{c.colore_a.nome} ↔ {c.colore_b.nome}</div>
+                    <div className="text-gray-400 mt-1">
+                      Qty: {c.colore_a.quantita} / {c.colore_b.quantita}
+                      {c.entrambi_presenti ? (
+                        <span className="text-amber-300 ml-2">Coesistenza {c.tick_coesistenza}/{c.tick_coesistenza_max}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-gray-400 border-b border-gray-700">
+                    <th className="py-2 pr-2">Indice</th>
+                    <th className="py-2 pr-2">Mattone</th>
+                    <th className="py-2 pr-2">Colore</th>
+                    <th className="py-2 pr-2">Qty</th>
+                    <th className="py-2">Azioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(stivaData.mattoni_catalogo || []).map((m) => {
+                    const row = (stivaData.righe || []).find((r) => r.mattone_id === m.id);
+                    const qty = row?.quantita ?? 0;
+                    return (
+                      <tr key={m.id} className="border-b border-gray-800/80">
+                        <td className="py-2 pr-2 font-mono">{m.indice_componente}</td>
+                        <td className="py-2 pr-2">{m.nome}</td>
+                        <td className="py-2 pr-2">{m.colore_nome}</td>
+                        <td className="py-2 pr-2 font-mono">{qty}</td>
+                        <td className="py-2 flex gap-1">
+                          <button type="button" disabled={stivaBusy} className="px-2 py-0.5 rounded bg-emerald-800 text-xs" onClick={() => modificaStiva(m.id, 1)}>+1</button>
+                          <button type="button" disabled={stivaBusy || qty <= 0} className="px-2 py-0.5 rounded bg-red-900 text-xs" onClick={() => modificaStiva(m.id, -1)}>-1</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
+      ) : null}
+
       {activeTab === 'runtime' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <h3 className="font-semibold mb-2">Runtime Console Pilotaggio</h3>
@@ -1812,6 +1969,55 @@ export default function PilotaggioManager({ onLogout }) {
                 onChange={(e) => setRuntimeConfig((p) => ({ ...p, alarm_audio_enabled: e.target.checked }))}
               />
               Abilita audio allarmi console (beep su criticita)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(runtimeConfig.riparazione_componenti_abilitata)}
+                onChange={(e) => setRuntimeConfig((p) => ({ ...p, riparazione_componenti_abilitata: e.target.checked }))}
+              />
+              Riparazione sottosistemi con componenti (stiva)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(runtimeConfig.annichilamento_opposti_abilitato)}
+                onChange={(e) => setRuntimeConfig((p) => ({ ...p, annichilamento_opposti_abilitato: e.target.checked }))}
+              />
+              Annichilamento colori opposti in stiva
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(runtimeConfig.compattatore_console_abilitata)}
+                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_console_abilitata: e.target.checked }))}
+              />
+              Console compattatore (/pilot/?screen=compattatore)
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(runtimeConfig.compattatore_login_richiesto)}
+                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_login_richiesto: e.target.checked }))}
+              />
+              Login richiesto per console compattatore
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(runtimeConfig.compattatore_quantico_abilitato)}
+                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_quantico_abilitato: e.target.checked }))}
+              />
+              Compattatore Quantico (sacrificio oggetto → componenti; disattivo fino a evento)
+            </label>
+            <label className="block">
+              <span className="text-xs text-gray-400">Statistica accesso compattatore</span>
+              <input
+                className="bg-gray-800 rounded px-2 py-1 mt-1 font-mono uppercase"
+                maxLength={3}
+                value={runtimeConfig.compattatore_stat_accesso_sigla ?? '0IN'}
+                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_stat_accesso_sigla: e.target.value }))}
+              />
             </label>
             <label className="block">
               <span className="text-xs text-gray-400">Intervallo tick (secondi)</span>

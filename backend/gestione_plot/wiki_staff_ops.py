@@ -127,7 +127,7 @@ def sync_wiki_staff_ops(*, force: bool = False) -> list[dict]:
         html = _markdown_to_html(md_text)
         footer = (
             '<hr><p><small>Fonte: <code>docs/wiki/staff/'
-            f"{source_name}</code> — aggiorna con <code>make wiki-staff-sync</code>.</small></p>"
+            f"{source_name}</code> — aggiorna da Dashboard staff (Manuali PDF) o <code>make wiki-staff-sync</code>.</small></p>"
         )
         page, action = _upsert_page(
             slug=entry["slug"],
@@ -140,3 +140,38 @@ def sync_wiki_staff_ops(*, force: bool = False) -> list[dict]:
         results.append({"slug": page.slug, "action": action, "titolo": page.titolo})
 
     return results
+
+
+def get_wiki_staff_ops_info() -> dict:
+    """Metadati sorgenti wiki staff (per GET API / diagnostica)."""
+    manifest_path = str(MANIFEST_FILE)
+    if not MANIFEST_FILE.is_file():
+        return {
+            "wiki_staff_dir": str(WIKI_STAFF_DIR),
+            "manifest_path": manifest_path,
+            "manifest_ok": False,
+            "section": None,
+            "pages": [],
+        }
+    manifest = _load_manifest()
+    section = manifest["section"]
+    pages = [
+        {
+            "slug": entry["slug"],
+            "titolo": entry["titolo"],
+            "source": entry["source"],
+            "ordine": int(entry.get("ordine", 0)),
+        }
+        for entry in manifest["pages"]
+    ]
+    return {
+        "wiki_staff_dir": str(WIKI_STAFF_DIR),
+        "manifest_path": manifest_path,
+        "manifest_ok": True,
+        "section": {
+            "slug": section["slug"],
+            "titolo": section["titolo"],
+            "ordine": int(section.get("ordine", 900)),
+        },
+        "pages": pages,
+    }

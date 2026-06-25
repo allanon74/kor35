@@ -53,6 +53,7 @@ from .engine import (
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
+    CoppiaColoriComponente,
     DEFCON_MAX,
     EVENTO_ESITO_PENDING,
     EventoAttivoSessione,
@@ -78,6 +79,7 @@ from .serializers import (
     ComandoCriticoGlobaleListSerializer,
     ComandoCriticoGlobaleSerializer,
     ComandoNaveSerializer,
+    CoppiaColoriComponenteSerializer,
     EventoAttivoSerializer,
     EventoNaveListSerializer,
     EventoNaveSerializer,
@@ -240,6 +242,10 @@ def _tick_runtime_payload(sessione: Optional[SessioneVolo] = None) -> dict:
         "alive": alive,
         "login_required_console": bool(cfg.login_required_console),
         "alarm_audio_enabled": bool(cfg.alarm_audio_enabled),
+        "riparazione_componenti_abilitata": bool(cfg.riparazione_componenti_abilitata),
+        "compattatore_console_abilitata": bool(cfg.compattatore_console_abilitata),
+        "compattatore_stat_accesso_sigla": cfg.compattatore_stat_accesso_sigla or "0IN",
+        "compattatore_quantico_abilitato": bool(cfg.compattatore_quantico_abilitato),
     }
 
 
@@ -1250,10 +1256,18 @@ class PilotSubsystemQrRepairView(APIView):
         if not qr:
             return Response({"error": "QR non trovato."}, status=status.HTTP_404_NOT_FOUND)
 
+        componenti_scelti = request.data.get("componenti_scelti")
+        if componenti_scelti is not None and not isinstance(componenti_scelti, list):
+            return Response(
+                {"error": "componenti_scelti deve essere una lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         result = ripristina_sottosistema_da_qr(
             qr_code=qr,
             personaggio=pg,
             minigioco_session_id=minigioco_session_id,
+            componenti_scelti=componenti_scelti,
         )
         if not result.get("ok"):
             return Response(
@@ -1707,3 +1721,226 @@ class StaffPilotRuntimeConfigView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class PilotStivaView(APIView):
+    """GET /api/pilot/stiva/?personaggio_id= — inventario componenti nave (read-only, richiede stat accesso)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from personaggi.models import Personaggio
+
+        from .componenti_stiva import build_stiva_payload, mattoni_componente_qs
+        from .models import PilotRuntimeConfig
+
+        cfg = PilotRuntimeConfig.get_solo()
+        sigla = (cfg.compattatore_stat_accesso_sigla or "0IN").strip()
+
+        personaggio_id = (request.query_params.get("personaggio_id") or "").strip()
+        if not request.user.is_staff:
+            if not personaggio_id:
+                return Response(
+                    {"error": "personaggio_id richiesto."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            pg = Personaggio.objects.filter(pk=personaggio_id, proprietario=request.user).first()
+            if pg is None:
+                return Response(
+                    {"error": "Personaggio non valido per questo utente."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if int(pg.get_valore_statistica(sigla) or 0) <= 0:
+                return Response(
+                    {"error": f"Accesso stiva richiede {sigla} > 0 sul personaggio."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        payload = build_stiva_payload()
+        payload["mattoni_catalogo"] = [
+            {
+                "id": str(m.pk),
+                "nome": m.nome,
+                "indice_componente": m.indice_componente,
+                "colore_id": str(m.caratteristica_associata_id),
+                "colore_nome": m.caratteristica_associata.nome if m.caratteristica_associata else "",
+            }
+            for m in mattoni_componente_qs()
+        ]
+        payload["stat_accesso_sigla"] = sigla
+        return Response(payload)
+
+
+class StaffPilotStivaView(APIView):
+    """
+    GET /api/pilot/staff/stiva/
+    POST body {mattone_id, delta} — aggiunge/toglie quantità (staff).
+    """
+
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def get(self, request):
+        from .componenti_stiva import build_stiva_payload, mattoni_componente_qs
+
+        payload = build_stiva_payload()
+        payload["mattoni_catalogo"] = [
+            {
+                "id": str(m.pk),
+                "nome": m.nome,
+                "indice_componente": m.indice_componente,
+                "colore_id": str(m.caratteristica_associata_id),
+                "colore_nome": m.caratteristica_associata.nome if m.caratteristica_associata else "",
+            }
+            for m in mattoni_componente_qs()
+        ]
+        return Response(payload)
+
+    def post(self, request):
+        from .componenti_stiva import staff_modifica_stiva
+
+        mattone_id = request.data.get("mattone_id")
+        delta = request.data.get("delta")
+        if not mattone_id:
+            return Response({"error": "mattone_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            delta_int = int(delta)
+        except (TypeError, ValueError):
+            return Response({"error": "delta non valido."}, status=status.HTTP_400_BAD_REQUEST)
+        if delta_int == 0:
+            return Response({"error": "delta non può essere zero."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = staff_modifica_stiva(mattone_id=mattone_id, delta=delta_int)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class StaffCoppiaColoriComponenteViewSet(viewsets.ModelViewSet):
+    """CRUD coppie colori opposti (staff)."""
+
+    queryset = CoppiaColoriComponente.objects.select_related("colore_a", "colore_b").order_by(
+        "ordine", "created_at"
+    )
+    serializer_class = CoppiaColoriComponenteSerializer
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+
+class StaffAggiornaCodiciEventiView(APIView):
+    """
+    POST /api/pilot/staff/eventi/aggiorna-codici-da-stato/
+    Body opzionale: { evento_id, dry_run, solo_attivi }
+    Rigenera codice esatto, parziali e precipizio da stato sottosistemi.
+    """
+
+    permission_classes = [IsAuthenticated, IsStaffUser]
+
+    def post(self, request):
+        from .evento_codici import aggiorna_codici_eventi_da_stato
+
+        evento_id = request.data.get("evento_id")
+        dry_run = bool(request.data.get("dry_run", False))
+        solo_attivi = request.data.get("solo_attivi", True)
+        if isinstance(solo_attivi, str):
+            solo_attivi = solo_attivi.lower() not in {"0", "false", "no"}
+
+        try:
+            payload = aggiorna_codici_eventi_da_stato(
+                evento_id=evento_id,
+                solo_attivi=bool(solo_attivi),
+                dry_run=dry_run,
+            )
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class PilotCompattatoreStateView(APIView):
+    """GET /api/pilot/compattatore/state/"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def get(self, request):
+        from .compattatore_engine import build_compattatore_state_payload
+
+        return Response(build_compattatore_state_payload())
+
+
+class PilotCompattatoreCompressioneView(APIView):
+    """POST /api/pilot/compattatore/compressione/ body {mattone_id}"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        from .compattatore_engine import operazione_compressione
+
+        mattone_id = request.data.get("mattone_id")
+        if not mattone_id:
+            return Response({"error": "mattone_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = operazione_compressione(mattone_id=str(mattone_id))
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotCompattatoreDecompressioneView(APIView):
+    """POST /api/pilot/compattatore/decompressione/ body {mattone_id}"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        from .compattatore_engine import operazione_decompressione
+
+        mattone_id = request.data.get("mattone_id")
+        if not mattone_id:
+            return Response({"error": "mattone_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = operazione_decompressione(mattone_id=str(mattone_id))
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotCompattatoreRisonanzaView(APIView):
+    """POST /api/pilot/compattatore/risonanza/ body {mattone_id}"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        from .compattatore_engine import operazione_risonanza
+
+        mattone_id = request.data.get("mattone_id")
+        if not mattone_id:
+            return Response({"error": "mattone_id mancante."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = operazione_risonanza(mattone_id=str(mattone_id))
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotCompattatoreQuanticoView(APIView):
+    """
+    POST /api/pilot/compattatore/quantico/
+    body { nome_oggetto? } oppure { qr_id, personaggio_id? }
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        from .compattatore_engine import operazione_compattatore_quantico
+
+        try:
+            payload = operazione_compattatore_quantico(
+                nome_oggetto=request.data.get("nome_oggetto"),
+                qr_id=request.data.get("qr_id"),
+                personaggio_id=request.data.get("personaggio_id"),
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)

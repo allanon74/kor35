@@ -17,7 +17,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy, Store
+    Key, HelpCircle, Watch, Trophy,     Store, Ship
 } from 'lucide-react';
 
 import AbilitaTab from './AbilitaTab.jsx';
@@ -36,7 +36,9 @@ import JobRequestsWidget from './JobRequestsWidget.jsx';
 import PersonaggiTab from './PersonaggiTab.jsx';
 import ScommesseTab from './ScommesseTab.jsx';
 import NegoziMercanteTab from './NegoziMercanteTab.jsx';
+import StivaNaveTab from './StivaNaveTab.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
+import { getStatValueBySigla, DEFAULT_STIVA_ACCESS_STAT_SIGLA } from '../lib/pilotStats.js';
 
 // --- [MODIFICA] Import Modale Password ---
 import PasswordChangeModal from './PasswordChangeModal.jsx';
@@ -60,6 +62,7 @@ const AVAILABLE_TABS = [
     { id: 'cerimoniali', label: 'Cerimoniali', icon: Users, component: CerimonialiTab },
     { id: 'consumabili', label: 'Consumabili', icon: Package, component: ConsumabiliTab },
     { id: 'negozi', label: 'Negozi', icon: Store, component: NegoziMercanteTab },
+    { id: 'stiva-nave', label: 'Stiva nave', icon: Ship, component: StivaNaveTab, requiresStivaAccess: true },
     { id: 'qr', label: 'Scanner', icon: QrCode, component: QrTab },
     { id: 'messaggi', label: 'Messaggi', icon: Mail, component: MessaggiTab },
     { id: 'logs', label: 'Diario', icon: ScrollText, component: LogViewer },
@@ -108,6 +111,7 @@ const TAB_TO_WIKI_SLUG = {
     'personaggi': 'gestione-personaggio',
     'social': 'social',
     'consumabili': 'consumabili',
+    'stiva-nave': 'componenti-nave-riparazione',
     'scommesse': 'scommesse',
     'home': 'gestione-personaggio',
     'game': 'navigazione-app',
@@ -261,6 +265,26 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     if (v !== undefined && v !== null) return !!v;
     return !!listWatchRowForSelected?.watch_enabled;
   }, [selectedCharacterId, selectedCharacterData, listWatchRowForSelected]);
+
+  /** Tab Stiva nave: visibile se il PG ha la statistica di accesso (default 0IN) > 0. */
+  const stivaTabEnabled = useMemo(() => {
+    if (!selectedCharacterId || !selectedCharacterData) return false;
+    return (
+      getStatValueBySigla(
+        selectedCharacterData,
+        punteggiList,
+        DEFAULT_STIVA_ACCESS_STAT_SIGLA,
+      ) > 0
+    );
+  }, [selectedCharacterId, selectedCharacterData, punteggiList]);
+
+  const isMainTabVisible = useCallback(
+    (tab) => {
+      if (tab.requiresStivaAccess) return stivaTabEnabled;
+      return true;
+    },
+    [stivaTabEnabled],
+  );
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
 
@@ -504,7 +528,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, []);
 
   const handlePilotRipara = useCallback(
-    async (qrId, needsMinigioco) => {
+    async (qrId, needsMinigioco, componentiScelti = null) => {
       if (!selectedCharacterId) {
         setQrResultData({
           tipo_modello: 'errore',
@@ -515,7 +539,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       setPilotRepairing(true);
       try {
         if (needsMinigioco) {
-          minigiocoIntentRef.current = { type: 'pilot_ripara', qrId };
+          minigiocoIntentRef.current = { type: 'pilot_ripara', qrId, componentiScelti };
           const gate = await getQrCodeData(qrId, onLogout, selectedCharacterId, null, { pilotRipara: true });
           if (gate?.tipo_modello === 'minigioco_richiesto') {
             setMinigiocoPayload(gate);
@@ -529,7 +553,13 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
           setQrResultData(gate);
           return;
         }
-        const result = await pilotSubsystemRepair(qrId, selectedCharacterId, onLogout);
+        const result = await pilotSubsystemRepair(
+          qrId,
+          selectedCharacterId,
+          onLogout,
+          null,
+          componentiScelti,
+        );
         setQrResultData(result);
       } catch (e) {
         minigiocoIntentRef.current = null;
@@ -582,7 +612,8 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
             intent.qrId || qrcodeId,
             selectedCharacterId,
             onLogout,
-            sessionId
+            sessionId,
+            intent.componentiScelti ?? null,
           );
           if (messaggio && result && !result.messaggio) {
             result._minigioco_messaggio = messaggio;
@@ -677,6 +708,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       setActiveTab('game');
     }
   }, [isComaLocked, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'stiva-nave' && !stivaTabEnabled) {
+      setActiveTab('game');
+    }
+  }, [activeTab, stivaTabEnabled]);
 
   useEffect(() => {
     if (activeTab !== 'watch') return;
@@ -797,6 +834,13 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                 </div>
             );
         }
+        if (tabDef.id === 'stiva-nave') {
+            return (
+                <div className="h-full overflow-y-auto">
+                    <Component onLogout={onLogout} personaggioId={selectedCharacterId} />
+                </div>
+            );
+        }
         return <Component onLogout={onLogout} />;
     }
     return <HomeTab onLogout={onLogout} />;
@@ -910,7 +954,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     <span className="text-[10px] font-normal normal-case opacity-70"><Pin size={10} className="inline"/> fissa in basso</span>
                 </p>
                 
-                {AVAILABLE_TABS.map(tab => {
+                {AVAILABLE_TABS.filter(isMainTabVisible).map(tab => {
                     const isPinned = userShortcuts.includes(tab.id);
                     const isActive = activeTab === tab.id;
                     let badgeCount = 0;
@@ -1309,7 +1353,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
             {userShortcuts.map(tabId => {
                 const tab = AVAILABLE_TABS.find(t => t.id === tabId);
-                if (!tab) return null;
+                if (!tab || !isMainTabVisible(tab)) return null;
                 
                 let showDot = false;
                 let dotColor = 'bg-red-500';

@@ -298,3 +298,124 @@ class QrSottosistemaMinigiocoRepairTests(TestCase):
         )
         self.assertEqual(res.status_code, 403, res.content)
         self.assertIn("minigioco", res.json().get("error", "").lower())
+
+
+class QrSottosistemaRiparazioneComponentiTests(TestCase):
+    def setUp(self):
+        from django.core.management import call_command
+
+        from pilotaggio.componenti_stiva import mattoni_componente_qs, staff_modifica_stiva
+        from pilotaggio.models import PilotRuntimeConfig
+
+        call_command("seed_componenti_nave", verbosity=0)
+        cfg = PilotRuntimeConfig.get_solo()
+        cfg.riparazione_componenti_abilitata = True
+        cfg.save()
+
+        self.user = User.objects.create_user(username="comp_user", password="x")
+        self.pg = Personaggio.objects.create(nome="CompPG", proprietario=self.user)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+        codice = _codice_sottosistema_libero()
+        self.manifesto = Manifesto.objects.create(nome="Reattori QR", testo="")
+        self.mattone = mattoni_componente_qs().first()
+        self.sottos = SottosistemaNave.objects.create(
+            codice=codice,
+            nome="Reattori",
+            a_vista=self.manifesto,
+            richiede_componenti_riparazione=True,
+            requisiti_riparazione_json=[
+                {"tipo": "specifico", "mattone_id": str(self.mattone.pk), "quantita": 1},
+            ],
+        )
+        self.qr = QrCode.objects.create(vista=self.manifesto)
+        staff_modifica_stiva(mattone_id=str(self.mattone.pk), delta=2)
+
+        self.pilota_user, self.pilota = _crea_pilota_con_0pi(nome="PilotaComp", valore_0pi=1)
+        self.sessione = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        StatoSottosistemaSessione.objects.create(
+            sessione=self.sessione,
+            sottosistema=self.sottos,
+            online=False,
+            guasto_at=timezone.now(),
+        )
+        _crea_stat_per_pg(self.pg, "0RI", 1, "Riparazione")
+
+    def test_scan_include_requisiti_componenti(self):
+        res = self.client.get(
+            f"/api/personaggi/api/qrcode/{self.qr.id}/",
+            {"personaggio_id": self.pg.id},
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        req = res.json()["dati"]["requisiti_componenti"]
+        self.assertTrue(req["richiede_componenti"])
+        self.assertEqual(len(req["vincoli"]), 1)
+
+    def test_repair_senza_componenti_rifiutato(self):
+        res = self.client.post(
+            "/api/pilot/subsystems/qr-repair/",
+            {"qr_id": self.qr.id, "personaggio_id": self.pg.id},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 403, res.content)
+        self.assertIn("componenti", res.json().get("error", "").lower())
+
+    def test_repair_con_componenti_ok(self):
+        res = self.client.post(
+            "/api/pilot/subsystems/qr-repair/",
+            {
+                "qr_id": self.qr.id,
+                "personaggio_id": self.pg.id,
+                "componenti_scelti": [
+                    {"mattone_id": str(self.mattone.pk), "quantita": 1},
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json().get("azione"), "riparato")
+
+
+class PilotStivaAccessTests(TestCase):
+    def setUp(self):
+        from django.core.management import call_command
+
+        from pilotaggio.componenti_stiva import staff_modifica_stiva
+        from pilotaggio.models import PilotRuntimeConfig
+
+        call_command("seed_componenti_nave", verbosity=0)
+        cfg = PilotRuntimeConfig.get_solo()
+        cfg.compattatore_stat_accesso_sigla = "0IN"
+        cfg.save()
+
+        self.user = User.objects.create_user(username="stiva_user", password="x")
+        self.pg = Personaggio.objects.create(nome="StivaPG", proprietario=self.user)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.mattone = __import__(
+            "pilotaggio.componenti_stiva", fromlist=["mattoni_componente_qs"]
+        ).mattoni_componente_qs().first()
+        staff_modifica_stiva(mattone_id=str(self.mattone.pk), delta=1)
+
+    def test_stiva_senza_personaggio_id_rifiutato(self):
+        res = self.client.get("/api/pilot/stiva/")
+        self.assertEqual(res.status_code, 400, res.content)
+
+    def test_stiva_senza_stat_accesso_rifiutato(self):
+        res = self.client.get("/api/pilot/stiva/", {"personaggio_id": self.pg.id})
+        self.assertEqual(res.status_code, 403, res.content)
+
+    def test_stiva_con_0in_ok(self):
+        _crea_stat_per_pg(self.pg, "0IN", 1, "Inventario nave")
+        res = self.client.get("/api/pilot/stiva/", {"personaggio_id": self.pg.id})
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertIn("righe", body)
+        self.assertIn("mattoni_catalogo", body)
+        self.assertEqual(body.get("stat_accesso_sigla"), "0IN")

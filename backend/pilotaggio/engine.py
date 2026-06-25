@@ -1606,6 +1606,14 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
     sessione.ultimo_tick_motore_at = timezone.now()
     sessione.save(update_fields=["ultimo_tick_motore_at", "updated_at"])
 
+    from .componenti_stiva import applica_stiva_tick_se_dovuto
+
+    applica_stiva_tick_se_dovuto()
+
+    from .compattatore_engine import tick_energia_compattatore
+
+    tick_energia_compattatore()
+
     return TickResult(sessione, nuovo, timeout, transizione)
 
 

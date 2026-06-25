@@ -2273,6 +2273,11 @@ MOSTRA_CLASSI_ARMA_CHOICES = [
 class Mattone(Punteggio):
     aura = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': AURA}, related_name="mattoni_aura")
     caratteristica_associata = models.ForeignKey(Punteggio, on_delete=models.CASCADE, limit_choices_to={'tipo': CARATTERISTICA}, related_name="mattoni_caratteristica")
+    indice_componente = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Indice 0-9 per mattoni-componente nave (aura Componenti). Null per mattoni tessitura.",
+    )
     descrizione_mattone = models.TextField(blank=True, null=True)
     descrizione_metatalento = models.TextField(blank=True, null=True)
     testo_addizionale = models.TextField(blank=True, null=True)
@@ -2287,7 +2292,22 @@ class Mattone(Punteggio):
         help_text="Nessuno: come ora. Materia: classi con questo castone (mattoni_materia_permessi). Mod: classi con limite mod e massimale.",
     )
     def save(self, *args, **kwargs): self.is_mattone = True; super().save(*args, **kwargs)
-    class Meta: verbose_name = "Mattone"; verbose_name_plural = "Mattoni"; unique_together = ('aura', 'caratteristica_associata'); ordering = ['tipo', 'ordine', 'nome'] 
+    class Meta:
+        verbose_name = "Mattone"
+        verbose_name_plural = "Mattoni"
+        ordering = ['tipo', 'ordine', 'nome']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['aura', 'caratteristica_associata'],
+                condition=models.Q(indice_componente__isnull=True),
+                name='uniq_mattone_aura_caratt_standard',
+            ),
+            models.UniqueConstraint(
+                fields=['aura', 'caratteristica_associata', 'indice_componente'],
+                condition=models.Q(indice_componente__isnull=False),
+                name='uniq_mattone_componente_nave',
+            ),
+        ] 
 
 class MattoneStatistica(CondizioneStatisticaMixin):
     mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)

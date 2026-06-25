@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
+    CoppiaColoriComponente,
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
@@ -15,6 +16,8 @@ from .models import (
     StatoAllertaPilot,
     StatoSottosistemaNave,
     StatoSottosistemaSessione,
+    StivaComponenteNave,
+    StivaCoppiaOppositiStato,
     TentativoCodice,
 )
 
@@ -174,8 +177,30 @@ class PilotRuntimeConfigAdmin(admin.ModelAdmin):
     list_display = (
         "login_required_console",
         "alarm_audio_enabled",
+        "riparazione_componenti_abilitata",
+        "annichilamento_opposti_abilitato",
+        "compattatore_console_abilitata",
+        "compattatore_quantico_abilitato",
+        "compattatore_stat_accesso_sigla",
         "tick_enabled",
         "tick_interval_secondi",
         "tick_last_heartbeat",
         "updated_at",
     )
+
+
+@admin.register(CoppiaColoriComponente)
+class CoppiaColoriComponenteAdmin(admin.ModelAdmin):
+    list_display = ("colore_a", "colore_b", "ordine", "updated_at")
+    ordering = ("ordine",)
+
+
+@admin.register(StivaComponenteNave)
+class StivaComponenteNaveAdmin(admin.ModelAdmin):
+    list_display = ("mattone", "quantita", "updated_at")
+    search_fields = ("mattone__nome",)
+
+
+@admin.register(StivaCoppiaOppositiStato)
+class StivaCoppiaOppositiStatoAdmin(admin.ModelAdmin):
+    list_display = ("coppia", "tick_coesistenza", "updated_at")

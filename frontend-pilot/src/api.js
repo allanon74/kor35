@@ -91,4 +91,21 @@ export const api = {
     method: 'POST',
     body: { action },
   }),
+  compattatoreState: () => request('/api/pilot/compattatore/state/'),
+  compattatoreCompressione: (mattoneId) => request('/api/pilot/compattatore/compressione/', {
+    method: 'POST',
+    body: { mattone_id: mattoneId },
+  }),
+  compattatoreDecompressione: (mattoneId) => request('/api/pilot/compattatore/decompressione/', {
+    method: 'POST',
+    body: { mattone_id: mattoneId },
+  }),
+  compattatoreRisonanza: (mattoneId) => request('/api/pilot/compattatore/risonanza/', {
+    method: 'POST',
+    body: { mattone_id: mattoneId },
+  }),
+  compattatoreQuantico: (body) => request('/api/pilot/compattatore/quantico/', {
+    method: 'POST',
+    body,
+  }),
 };

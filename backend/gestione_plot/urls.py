@@ -34,6 +34,7 @@ from .views import(
     PublicConfigurazioneSitoViewSet, PublicLinkSocialViewSet, PublicWikiGlossarioViewSet,
     AdminMaintenanceConfigView,
     StaffDashboardLayoutView,
+    StaffWikiStaffOpsView,
     download_wiki_manual_pdf, generate_wiki_manual_snapshot, download_latest_wiki_manual_pdf,
     download_latest_manuale_pdf, list_public_wiki_manuali,
                    )
@@ -118,6 +119,7 @@ router.register(r'public/wiki-glossario', PublicWikiGlossarioViewSet, basename='
 urlpatterns = [
     path('api/admin/maintenance-config/', AdminMaintenanceConfigView.as_view(), name='admin_maintenance_config'),
     path('api/staff/dashboard-layout/', StaffDashboardLayoutView.as_view(), name='staff_dashboard_layout'),
+    path('api/staff/wiki-staff-ops/sync/', StaffWikiStaffOpsView.as_view(), name='staff_wiki_staff_ops_sync'),
     path('iscrizioni-evento/eligibility/', iscrizioni_evento_eligibility),
     path('iscrizioni-evento/crea-ordine/', iscrizioni_evento_crea_ordine),
     path('iscrizioni-evento/cattura/', iscrizioni_evento_cattura),

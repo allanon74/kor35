@@ -684,7 +684,13 @@ export const getQrCodeData = (qrId, onLogout, personaggioId = null, minigiocoSes
   return fetchAuthenticated(`/api/personaggi/api/qrcode/${cleanId}/${q}`, { method: 'GET' }, onLogout);
 };
 
-export const pilotSubsystemRepair = (qrId, personaggioId, onLogout, minigiocoSessionId = null) =>
+export const pilotSubsystemRepair = (
+  qrId,
+  personaggioId,
+  onLogout,
+  minigiocoSessionId = null,
+  componentiScelti = null,
+) =>
   fetchAuthenticated(
     '/api/pilot/subsystems/qr-repair/',
     {
@@ -693,6 +699,9 @@ export const pilotSubsystemRepair = (qrId, personaggioId, onLogout, minigiocoSes
         qr_id: normalizeScannedQrId(qrId),
         personaggio_id: personaggioId,
         ...(minigiocoSessionId ? { minigioco_session_id: minigiocoSessionId } : {}),
+        ...(Array.isArray(componentiScelti) && componentiScelti.length
+          ? { componenti_scelti: componentiScelti }
+          : {}),
       }),
     },
     onLogout,
@@ -2502,6 +2511,26 @@ export const staffUpdatePilotRuntimeConfig = (data, onLogout) =>
     body: JSON.stringify(data),
   }, onLogout);
 
+export const staffGetPilotStiva = (onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/stiva/', { method: 'GET' }, onLogout);
+
+export const staffModificaPilotStiva = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/stiva/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, onLogout);
+
+export const getPilotStiva = (personaggioId, onLogout) => {
+  const q = personaggioId ? `?personaggio_id=${encodeURIComponent(personaggioId)}` : '';
+  return fetchAuthenticated(`/api/pilot/stiva/${q}`, { method: 'GET' }, onLogout);
+};
+
+export const staffAggiornaCodiciEventiPilot = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/eventi/aggiorna-codici-da-stato/', {
+    method: 'POST',
+    body: JSON.stringify(data || {}),
+  }, onLogout);
+
 export const staffGetKorps = (onLogout) => {
     return fetchAuthenticated('/api/personaggi/api/korp/', { method: 'GET' }, onLogout);
 };
@@ -3222,6 +3251,18 @@ export const getStaffManualePdfExportZipUrl = () =>
 
 export const getWikiPdfDiagnostica = (onLogout) =>
   fetchAuthenticated('/api/plot/api/staff/manuali-pdf/diagnostica/', { method: 'GET' }, onLogout);
+
+/** Metadati sorgenti wiki staff (docs/wiki/staff). */
+export const getStaffWikiStaffOpsInfo = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/staff/wiki-staff-ops/sync/', { method: 'GET' }, onLogout);
+
+/** Sincronizza pagine Wiki «Operatività tecnica» da repo (force=true sovrascrive). */
+export const syncStaffWikiStaffOps = (onLogout, { force = true } = {}) =>
+  fetchAuthenticated(
+    '/api/plot/api/staff/wiki-staff-ops/sync/',
+    { method: 'POST', body: JSON.stringify({ force }) },
+    onLogout,
+  );
 
 export const getWikiManualeStorico = (slug, onLogout) =>
   fetchAuthenticated(

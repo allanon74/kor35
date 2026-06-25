@@ -136,8 +136,18 @@ class SottosistemaNave(SyncableModel, models.Model):
             ("motore", "Motore principale"),
             ("portale", "Portale transdimensionale"),
             ("manovra", "Propulsori di manovra"),
+            ("compattatore", "Compattatore"),
         ],
         default="standard",
+    )
+    richiede_componenti_riparazione = models.BooleanField(
+        default=False,
+        help_text="Se attivo (e riparazione componenti abilitata in runtime), la riparazione QR consuma componenti da stiva.",
+    )
+    requisiti_riparazione_json = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Lista vincoli: specifico (mattone_id+quantita) o scelta (mattone_ids+quantita).",
     )
     coeff_produzione = models.FloatField(
         default=0.0,
@@ -982,6 +992,81 @@ class PilotConsoleLoginTicket(SyncableModel, models.Model):
         return timezone.now() >= self.expires_at
 
 
+class CoppiaColoriComponente(SyncableModel, models.Model):
+    """Coppia di colori (caratteristiche) opposti nella stiva componenti nave."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    colore_a = models.ForeignKey(
+        "personaggi.Punteggio",
+        on_delete=models.PROTECT,
+        related_name="coppie_componenti_a",
+        limit_choices_to={"tipo": "CA"},
+    )
+    colore_b = models.ForeignKey(
+        "personaggi.Punteggio",
+        on_delete=models.PROTECT,
+        related_name="coppie_componenti_b",
+        limit_choices_to={"tipo": "CA"},
+    )
+    ordine = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Coppia colori componente"
+        verbose_name_plural = "Coppie colori componente"
+        ordering = ["ordine", "created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["colore_a", "colore_b"],
+                name="uniq_coppia_colori_componente",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.colore_a} ↔ {self.colore_b}"
+
+
+class StivaComponenteNave(SyncableModel, models.Model):
+    """Inventario globale componenti nave (per mattone-componente aura dedicata)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    mattone = models.OneToOneField(
+        "personaggi.Mattone",
+        on_delete=models.CASCADE,
+        related_name="stiva_nave",
+    )
+    quantita = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Stiva componente nave"
+        verbose_name_plural = "Stiva componenti nave"
+        ordering = ["mattone__indice_componente", "mattone__ordine"]
+
+    def __str__(self):
+        return f"{self.mattone} × {self.quantita}"
+
+
+class StivaCoppiaOppositiStato(SyncableModel, models.Model):
+    """Contatore tick di coesistenza per coppia opposta in stiva."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    coppia = models.OneToOneField(
+        CoppiaColoriComponente,
+        on_delete=models.CASCADE,
+        related_name="stato_coesistenza",
+    )
+    tick_coesistenza = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Stato coesistenza opposti"
+        verbose_name_plural = "Stati coesistenza opposti"
+
+    def __str__(self):
+        return f"{self.coppia} tick={self.tick_coesistenza}"
+
+
 class PilotRuntimeConfig(models.Model):
     """
     Config runtime singleton per worker tick.
@@ -991,6 +1076,11 @@ class PilotRuntimeConfig(models.Model):
     tick_enabled = models.BooleanField(default=False)
     tick_interval_secondi = models.FloatField(default=5.0)
     tick_last_heartbeat = models.DateTimeField(null=True, blank=True)
+    stiva_ultimo_tick_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Ultimo tick annichilamento opposti stiva (idempotenza tra sessioni).",
+    )
     login_required_console = models.BooleanField(
         default=False,
         help_text="Se attivo, la console richiede login ticket/QR. Default disattivo (utile in dev).",
@@ -999,11 +1089,56 @@ class PilotRuntimeConfig(models.Model):
         default=False,
         help_text="Abilita beep allarme lato console quando ci sono sottosistemi critici con tick attivo.",
     )
+    riparazione_componenti_abilitata = models.BooleanField(
+        default=False,
+        help_text="Abilita consumo componenti da stiva nelle riparazioni QR (se richiesto dal sottosistema).",
+    )
+    annichilamento_opposti_abilitato = models.BooleanField(
+        default=True,
+        help_text="Annichilamento colori opposti in stiva dopo 5 tick di coesistenza.",
+    )
+    compattatore_console_abilitata = models.BooleanField(
+        default=False,
+        help_text="Abilita console /pilot/?screen=compattatore.",
+    )
+    compattatore_login_richiesto = models.BooleanField(
+        default=True,
+        help_text="Richiede login alla console compattatore.",
+    )
+    compattatore_stat_accesso_sigla = models.CharField(
+        max_length=3,
+        default="0IN",
+        help_text="Sigla statistica per accesso console compattatore (es. 0IN>0).",
+    )
+    compattatore_quantico_abilitato = models.BooleanField(
+        default=False,
+        help_text="Abilita operazione Compattatore Quantico in console (default disattivo fino a evento).",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Runtime pilotaggio"
         verbose_name_plural = "Runtime pilotaggio"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(singleton_id=1)
+        return obj
+
+
+class CompattatoreStatoNave(SyncableModel, models.Model):
+    """Energia accumulata compattatore (singleton nave)."""
+
+    singleton_id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    energia_accumulata = models.FloatField(
+        default=0.0,
+        help_text="Energia accumulata; un'operazione consuma 9 unità.",
+    )
+
+    class Meta:
+        verbose_name = "Stato compattatore nave"
+        verbose_name_plural = "Stato compattatore nave"
 
     @classmethod
     def get_solo(cls):

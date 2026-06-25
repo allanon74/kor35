@@ -90,6 +90,7 @@ from .wiki_pdf_service import (
     esegui_generazione_manuale,
     _triggered_by_email_from_request,
 )
+from .wiki_staff_ops import get_wiki_staff_ops_info, sync_wiki_staff_ops
 
 
 from django.contrib.auth.models import AnonymousUser, User
@@ -1606,6 +1607,52 @@ def download_wiki_manual_pdf(request):
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="kor35-manuale-{manuale.slug}.pdf"'
     return response
+
+
+class StaffWikiStaffOpsView(APIView):
+    """
+    Sincronizza pagine Wiki «Operatività tecnica» da docs/wiki/staff/ (mount container).
+
+    GET: metadati manifest; POST: esegue sync (default force=true).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not _is_campaign_wiki_editor_plus(request):
+            return Response({"detail": "Permesso negato."}, status=status.HTTP_403_FORBIDDEN)
+        return Response(get_wiki_staff_ops_info())
+
+    def post(self, request):
+        if not _is_campaign_master_plus(request):
+            return Response(
+                {"detail": "Solo Master/Head Master/Admin possono sincronizzare le pagine staff."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        force_raw = request.data.get("force", True)
+        if isinstance(force_raw, str):
+            force = force_raw.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            force = bool(force_raw)
+
+        try:
+            results = sync_wiki_staff_ops(force=force)
+        except FileNotFoundError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        created = sum(1 for r in results if r["action"] == "created")
+        updated = sum(1 for r in results if r["action"] == "updated")
+        skipped = sum(1 for r in results if r["action"] == "skipped")
+        return Response(
+            {
+                "ok": True,
+                "force": force,
+                "summary": {"created": created, "updated": updated, "skipped": skipped},
+                "results": results,
+            }
+        )
 
 
 @api_view(['POST'])

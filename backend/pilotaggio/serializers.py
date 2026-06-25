@@ -11,6 +11,7 @@ from rest_framework import serializers
 from .models import (
     ComandoCriticoGlobale,
     ComandoNave,
+    CoppiaColoriComponente,
     EventoAttivoSessione,
     EventoNave,
     IntensitaComando,
@@ -21,6 +22,7 @@ from .models import (
     SottosistemaNave,
     StatoAllertaPilot,
     StatoSottosistemaSessione,
+    StivaComponenteNave,
     TentativoCodice,
     VoceDiarioVolo,
 )
@@ -68,6 +70,8 @@ class SottosistemaNaveSerializer(serializers.ModelSerializer):
             "supporta_inversione",
             "supporta_espulsione",
             "supporta_direzioni",
+            "richiede_componenti_riparazione",
+            "requisiti_riparazione_json",
             "stato_qr",
             "qrcode_id",
             "minigioco_usa_default",
@@ -467,8 +471,57 @@ class PilotRuntimeConfigSerializer(serializers.ModelSerializer):
             "tick_enabled",
             "tick_interval_secondi",
             "tick_last_heartbeat",
+            "stiva_ultimo_tick_at",
             "login_required_console",
             "alarm_audio_enabled",
+            "riparazione_componenti_abilitata",
+            "annichilamento_opposti_abilitato",
+            "compattatore_console_abilitata",
+            "compattatore_login_richiesto",
+            "compattatore_stat_accesso_sigla",
+            "compattatore_quantico_abilitato",
             "updated_at",
         ]
-        read_only_fields = ["tick_last_heartbeat", "updated_at"]
+        read_only_fields = ["tick_last_heartbeat", "stiva_ultimo_tick_at", "updated_at"]
+
+
+class CoppiaColoriComponenteSerializer(serializers.ModelSerializer):
+    colore_a_nome = serializers.CharField(source="colore_a.nome", read_only=True)
+    colore_b_nome = serializers.CharField(source="colore_b.nome", read_only=True)
+    colore_a_sigla = serializers.CharField(source="colore_a.sigla", read_only=True)
+    colore_b_sigla = serializers.CharField(source="colore_b.sigla", read_only=True)
+
+    class Meta:
+        model = CoppiaColoriComponente
+        fields = [
+            "id",
+            "colore_a",
+            "colore_b",
+            "colore_a_nome",
+            "colore_b_nome",
+            "colore_a_sigla",
+            "colore_b_sigla",
+            "ordine",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class StivaComponenteNaveSerializer(serializers.ModelSerializer):
+    mattone_nome = serializers.CharField(source="mattone.nome", read_only=True)
+    indice_componente = serializers.IntegerField(source="mattone.indice_componente", read_only=True)
+    colore_nome = serializers.CharField(source="mattone.caratteristica_associata.nome", read_only=True)
+
+    class Meta:
+        model = StivaComponenteNave
+        fields = [
+            "id",
+            "mattone",
+            "mattone_nome",
+            "indice_componente",
+            "colore_nome",
+            "quantita",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]

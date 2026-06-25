@@ -197,6 +197,10 @@ def build_scan_payload(
         and not espulso
     )
 
+    from .componenti_riparazione import build_requisiti_riparazione_payload
+
+    requisiti_componenti = build_requisiti_riparazione_payload(sottosistema)
+
     manifesto_testo = ""
     if qr_code.vista_id:
         try:
@@ -232,6 +236,7 @@ def build_scan_payload(
                 SIGLA_RIPARAZIONE: v_ri,
             },
             "minigioco_riparazione": minigioco_riparazione,
+            "requisiti_componenti": requisiti_componenti,
             "manifesto_testo": manifesto_testo,
         },
     }
@@ -318,6 +323,7 @@ def ripristina_sottosistema_da_qr(
     qr_code: QrCode,
     personaggio,
     minigioco_session_id: Optional[str] = None,
+    componenti_scelti: Optional[list] = None,
 ) -> Dict[str, Any]:
     """
     Ripara un subsistema in fault (0RI > 0, minigioco se configurato).
@@ -352,6 +358,23 @@ def ripristina_sottosistema_da_qr(
     ok_mg, err_mg = _verifica_minigioco_completato(personaggio, qr_code, minigioco_session_id)
     if not ok_mg:
         return {"ok": False, "error": err_mg}
+
+    from .componenti_riparazione import (
+        riparazione_componenti_attiva_per,
+        valida_selezione_componenti,
+    )
+    from .componenti_stiva import consuma_mattoni_stiva
+
+    if riparazione_componenti_attiva_per(sottosistema):
+        ok_sel, err_sel, allocazioni = valida_selezione_componenti(
+            sottosistema, componenti_scelti or []
+        )
+        if not ok_sel:
+            return {"ok": False, "error": err_sel}
+        try:
+            consuma_mattoni_stiva(allocazioni)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
 
     sessione = sessione_console_corrente()
     if sessione is not None:

@@ -10,6 +10,7 @@ const TIPO_OPTS = [
   'motore',
   'portale',
   'manovra',
+  'compattatore',
 ];
 
 const EFFETTO_TIPI = [
@@ -401,6 +402,24 @@ const PilotSottosistemaModal = ({
                 className="bg-gray-900 rounded px-2 py-1.5 mt-1 w-full font-mono text-xs border border-gray-600"
                 value={draft.colori_per_livello_json}
                 onChange={(e) => setDraft((p) => ({ ...p, colori_per_livello_json: e.target.value }))}
+              />
+            </label>
+            <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(draft.richiede_componenti_riparazione)}
+                onChange={(e) => setDraft((p) => ({ ...p, richiede_componenti_riparazione: e.target.checked }))}
+              />
+              <span className="text-sm">Riparazione QR richiede componenti da stiva</span>
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="text-xs text-gray-400">Requisiti riparazione (JSON)</span>
+              <textarea
+                rows={6}
+                className="bg-gray-900 rounded px-2 py-1.5 mt-1 w-full font-mono text-xs border border-gray-600"
+                value={draft.requisiti_riparazione_json}
+                onChange={(e) => setDraft((p) => ({ ...p, requisiti_riparazione_json: e.target.value }))}
+                placeholder={'[{"tipo":"specifico","mattone_id":"...","quantita":1}]'}
               />
             </label>
           </div>

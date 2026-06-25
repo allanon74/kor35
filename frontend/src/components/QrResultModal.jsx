@@ -4,6 +4,10 @@ import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvan
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
 import PropostaEditorModal from './PropostaEditorModal';
+import ComponentiRiparazionePicker, {
+  selezioneToArray,
+  validateSelezioneComponenti,
+} from './ComponentiRiparazionePicker.jsx';
 
 //##################################################################
 // ## COMPONENTE HELPER 1: MODALE "VEDI OGGETTO" ##
@@ -603,6 +607,12 @@ const PilotSottosistemaView = ({
   repairing,
   sabotaging,
 }) => {
+  const [componentiSelection, setComponentiSelection] = useState({});
+
+  useEffect(() => {
+    setComponentiSelection({});
+  }, [qrId, data?.qrcode_id]);
+
   const d = data?.dati || {};
   const sottos = d.sottosistema || {};
   const stato = d.stato || {};
@@ -612,6 +622,12 @@ const PilotSottosistemaView = ({
   const puoRiparare = d.puo_riparare;
   const puoSabotare = d.puo_sabotare;
   const minigiocoRiparazione = d.minigioco_riparazione;
+  const reqComponenti = d.requisiti_componenti;
+  const richiedeComponenti = Boolean(reqComponenti?.richiede_componenti);
+  const vincoliComponenti = reqComponenti?.vincoli || [];
+  const stivaComponenti = reqComponenti?.stiva;
+  const selezioneValida = !richiedeComponenti
+    || validateSelezioneComponenti(vincoliComponenti, componentiSelection, stivaComponenti?.righe).ok;
   const sessioneAttiva = d.sessione_attiva;
   const espulso = d.espulso;
   const riparato = data?.azione === 'riparato';
@@ -690,6 +706,15 @@ const PilotSottosistemaView = ({
         <p className="text-cyan-300/90 text-sm text-center">{data._minigioco_messaggio}</p>
       )}
 
+      {richiedeComponenti && puoRiparare && !riparato ? (
+        <ComponentiRiparazionePicker
+          vincoli={vincoliComponenti}
+          stiva={stivaComponenti}
+          selection={componentiSelection}
+          onSelectionChange={setComponentiSelection}
+        />
+      ) : null}
+
       {d.manifesto_testo && (
         <details className="bg-gray-900/40 rounded-lg border border-gray-700">
           <summary className="cursor-pointer p-3 text-sm text-gray-400">Scheda tecnica</summary>
@@ -715,8 +740,12 @@ const PilotSottosistemaView = ({
         {puoRiparare && onPilotRipara && !riparato && (
           <button
             type="button"
-            disabled={repairing || sabotaging}
-            onClick={() => onPilotRipara(qrId, minigiocoRiparazione)}
+            disabled={repairing || sabotaging || !selezioneValida}
+            onClick={() => onPilotRipara(
+              qrId,
+              minigiocoRiparazione,
+              richiedeComponenti ? selezioneToArray(componentiSelection) : null,
+            )}
             className="w-full flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {repairing ? <Loader className="animate-spin" size={20} /> : <Wrench size={20} />}
