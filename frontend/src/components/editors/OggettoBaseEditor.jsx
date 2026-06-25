@@ -104,7 +104,7 @@ const OggettoBaseEditor = ({ onBack, onLogout, initialData = null }) => {
                 const cleanItem = { statistica: statId };
                 
                 if (isMod) {
-                    cleanItem.valore = parseInt(item.valore || 0);
+                    cleanItem.valore = Number.parseFloat(item.valore) || 0;
                     cleanItem.tipo_modificatore = item.tipo_modificatore || 'ADD';
                 } else {
                     cleanItem.valore_base = parseInt(item.valore_base || 0);

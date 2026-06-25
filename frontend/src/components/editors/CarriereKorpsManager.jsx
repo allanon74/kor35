@@ -19,6 +19,7 @@ import {
   staffDeleteCarriereMembership,
   staffGetCarrieraTiersSelezionabili,
   getPersonaggiEditList,
+  staffGetAbilitaListAll,
 } from '../../api';
 
 const TABS = [
@@ -27,24 +28,79 @@ const TABS = [
   { id: 'membership', label: 'Appartenenze', icon: Users },
 ];
 
-function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabili, statusMessage, statusType }) {
+function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabili, abilitaOptions, statusMessage, statusType }) {
   const [form, setForm] = useState(value || {});
+  const [tierToAdd, setTierToAdd] = useState(null);
+  const [abilitaToAdd, setAbilitaToAdd] = useState(null);
   useEffect(() => {
     const base = value || {};
     const ids = base.tiers_sblocco_dettaglio
       ? base.tiers_sblocco_dettaglio.map((t) => t.id)
       : base.tiers_sblocco_ids || [];
-    setForm({ ...base, tiers_sblocco_ids: ids });
+    const abilitaIds = base.abilita_default_dettaglio
+      ? base.abilita_default_dettaglio.map((a) => a.id)
+      : base.abilita_default_ids || [];
+    setForm({ ...base, tiers_sblocco_ids: ids, abilita_default_ids: abilitaIds });
+    setTierToAdd(null);
+    setAbilitaToAdd(null);
   }, [value]);
   if (!isOpen) return null;
 
-  const toggleTier = (tierId) => {
+  const addTier = (tierId) => {
+    if (!tierId) return;
     const sid = String(tierId);
     const current = new Set((form.tiers_sblocco_ids || []).map(String));
-    if (current.has(sid)) current.delete(sid);
-    else current.add(sid);
-    setForm({ ...form, tiers_sblocco_ids: [...current].map((x) => Number(x)) });
+    if (!current.has(sid)) {
+      setForm({ ...form, tiers_sblocco_ids: [...current, sid].map((x) => Number(x)) });
+    }
+    setTierToAdd(null);
   };
+
+  const removeTier = (tierId) => {
+    const sid = String(tierId);
+    const current = (form.tiers_sblocco_ids || []).map(String).filter((x) => x !== sid);
+    setForm({ ...form, tiers_sblocco_ids: current.map((x) => Number(x)) });
+  };
+
+  const addAbilitaDefault = (abilitaId) => {
+    if (!abilitaId) return;
+    const sid = String(abilitaId);
+    const current = new Set((form.abilita_default_ids || []).map(String));
+    if (!current.has(sid)) {
+      setForm({ ...form, abilita_default_ids: [...current, sid].map((x) => Number(x)) });
+    }
+    setAbilitaToAdd(null);
+  };
+
+  const removeAbilitaDefault = (abilitaId) => {
+    const sid = String(abilitaId);
+    const current = (form.abilita_default_ids || []).map(String).filter((x) => x !== sid);
+    setForm({ ...form, abilita_default_ids: current.map((x) => Number(x)) });
+  };
+
+  const tiersById = useMemo(
+    () => new Map((tiersSelezionabili || []).map((t) => [String(t.id), t])),
+    [tiersSelezionabili],
+  );
+  const abilitaById = useMemo(
+    () => new Map((abilitaOptions || []).map((a) => [String(a.id), a])),
+    [abilitaOptions],
+  );
+
+  const selectedTierRows = (form.tiers_sblocco_ids || [])
+    .map((id) => tiersById.get(String(id)))
+    .filter(Boolean);
+  const selectedAbilitaRows = (form.abilita_default_ids || [])
+    .map((id) => abilitaById.get(String(id)))
+    .filter(Boolean);
+
+  const tierOptionsDisponibili = (tiersSelezionabili || []).filter(
+    (t) => !(form.tiers_sblocco_ids || []).map(String).includes(String(t.id)),
+  );
+  const abilitaOptionsDisponibili = (abilitaOptions || []).filter(
+    (a) => !(form.abilita_default_ids || []).map(String).includes(String(a.id)),
+  );
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
       <div className="w-full max-w-xl bg-gray-900 border border-gray-700 rounded-xl">
@@ -87,20 +143,77 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
           />
           <div>
             <div className="text-xs text-gray-400 mb-2">Tier abilità sbloccabili per i membri</div>
-            <div className="max-h-40 overflow-y-auto border border-gray-700 rounded p-2 space-y-1">
-              {tiersSelezionabili.length === 0 ? (
-                <p className="text-xs text-gray-500">Nessun tier disponibile</p>
+            <SearchableSelect
+              options={tierOptionsDisponibili}
+              value={tierToAdd}
+              onChange={(v) => {
+                setTierToAdd(v);
+                addTier(v);
+              }}
+              placeholder="Cerca tier da aggiungere…"
+              minOptionsForSearch={0}
+            />
+            <div className="mt-2 max-h-40 overflow-y-auto border border-gray-700 rounded p-2 flex flex-wrap gap-2">
+              {selectedTierRows.length === 0 ? (
+                <p className="text-xs text-gray-500">Nessun tier selezionato</p>
               ) : (
-                tiersSelezionabili.map((t) => (
-                  <label key={t.id} className="flex items-center gap-2 text-sm text-gray-200">
-                    <input
-                      type="checkbox"
-                      checked={(form.tiers_sblocco_ids || []).map(String).includes(String(t.id))}
-                      onChange={() => toggleTier(t.id)}
-                    />
+                selectedTierRows.map((t) => (
+                  <span
+                    key={t.id}
+                    className="inline-flex items-center gap-2 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-sm text-gray-200"
+                  >
                     <span className="text-gray-500 text-xs">{t.tipo}</span>
-                    {t.nome}
-                  </label>
+                    <span>{t.nome}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeTier(t.id)}
+                      className="text-red-400 hover:text-red-300"
+                      title="Rimuovi tier"
+                    >
+                      <X size={14} />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-400 mb-2">
+              Abilità assegnate automaticamente ai membri attivi
+            </div>
+            <p className="text-xs text-gray-500 mb-2">
+              Es. perk sconto forgiatura (CFG MOL 0.5 con limite aura ATE/AIN). All&apos;ingresso in KORP/carriera
+              vengono aggiunte senza costo; alla chiusura membership vengono rimosse.
+            </p>
+            <SearchableSelect
+              options={abilitaOptionsDisponibili}
+              value={abilitaToAdd}
+              onChange={(v) => {
+                setAbilitaToAdd(v);
+                addAbilitaDefault(v);
+              }}
+              placeholder="Cerca abilità da aggiungere…"
+              minOptionsForSearch={0}
+            />
+            <div className="mt-2 max-h-40 overflow-y-auto border border-gray-700 rounded p-2 flex flex-wrap gap-2">
+              {selectedAbilitaRows.length === 0 ? (
+                <p className="text-xs text-gray-500">Nessuna abilità selezionata</p>
+              ) : (
+                selectedAbilitaRows.map((a) => (
+                  <span
+                    key={a.id}
+                    className="inline-flex items-center gap-2 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-sm text-gray-200"
+                  >
+                    <span>{a.nome}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeAbilitaDefault(a.id)}
+                      className="text-red-400 hover:text-red-300"
+                      title="Rimuovi abilità"
+                    >
+                      <X size={14} />
+                    </button>
+                  </span>
                 ))
               )}
             </div>
@@ -344,17 +457,19 @@ export default function CarriereKorpsManager({ onLogout }) {
   const [modalMembership, setModalMembership] = useState(null);
   const [filtroTipo, setFiltroTipo] = useState('');
   const [tiersSelezionabili, setTiersSelezionabili] = useState([]);
+  const [abilitaOptions, setAbilitaOptions] = useState([]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [t, c, ch, m, p, tiers] = await Promise.all([
+      const [t, c, ch, m, p, tiers, abilita] = await Promise.all([
         staffGetTipiCarriera(onLogout),
         staffGetCarriere(onLogout),
         staffGetCariche(onLogout),
         staffGetCarriereMemberships(onLogout),
         getPersonaggiEditList(onLogout),
         staffGetCarrieraTiersSelezionabili(onLogout),
+        staffGetAbilitaListAll(onLogout),
       ]);
       setTipi(Array.isArray(t) ? t : []);
       setCarriere(Array.isArray(c) ? c : []);
@@ -362,6 +477,8 @@ export default function CarriereKorpsManager({ onLogout }) {
       setMemberships(Array.isArray(m) ? m : []);
       setPersonaggi(Array.isArray(p) ? p : []);
       setTiersSelezionabili(Array.isArray(tiers) ? tiers : []);
+      const abList = Array.isArray(abilita) ? abilita : abilita?.results || [];
+      setAbilitaOptions(abList.map((a) => ({ id: a.id, nome: a.nome })));
     } catch (e) {
       setStatusMessage(e.message || 'Errore caricamento');
       setStatusType('error');
@@ -409,6 +526,12 @@ export default function CarriereKorpsManager({ onLogout }) {
         render: (x) => (x.tiers_sblocco_dettaglio?.length ?? 0),
         align: 'center',
         width: 100,
+      },
+      {
+        header: 'Perk auto',
+        render: (x) => (x.abilita_default_dettaglio?.length ?? 0),
+        align: 'center',
+        width: 90,
       },
     ],
     [],
@@ -461,6 +584,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
         tiers_sblocco_ids: form.tiers_sblocco_ids || [],
+        abilita_default_ids: form.abilita_default_ids || [],
       };
       if (form.id) await staffUpdateCarriera(form.id, payload, onLogout);
       else await staffCreateCarriera(payload, onLogout);
@@ -661,6 +785,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         value={modalCarriera}
         tipi={tipi}
         tiersSelezionabili={tiersSelezionabili}
+        abilitaOptions={abilitaOptions}
         statusMessage={statusMessage}
         statusType={statusType}
       />

@@ -99,6 +99,18 @@ const MasterTechniqueList = ({
           {item.nome}
         </div>
       )
+    },
+    {
+      header: 'Mattoni',
+      render: (item) => {
+        const rows = Array.isArray(item.componenti) ? item.componenti : [];
+        if (!rows.length) return <span className="text-[10px] text-gray-600">—</span>;
+        return (
+          <div className="text-[10px] text-gray-300 leading-tight max-w-[260px]">
+            {rows.map((row, idx) => `${row.nome || '?'} x${row.valore ?? 1}`).join(' · ')}
+          </div>
+        );
+      },
     }
   ];
 

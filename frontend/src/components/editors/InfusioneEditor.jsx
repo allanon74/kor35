@@ -75,6 +75,7 @@ const InfusioneEditor = ({ onBack, onCancel, onSave, onLogout, initialData = nul
           modsMap.set(sId, { 
             ...mod, 
             statistica: sId,
+            valore: Number.parseFloat(mod.valore) || 0,
             id: undefined 
           });
         }

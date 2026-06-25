@@ -38,7 +38,8 @@ const PunteggioDisplay = ({
   
   let iconMode = 'cerchio_inv';
   if (iconType === 'circle') iconMode = 'cerchio';
-  if (iconType === 'raw') iconMode = 'raw'; 
+  if (iconType === 'raw') iconMode = 'raw';
+  if (iconType === 'glyph') iconMode = 'glyph';
   if (iconType === 'inv_circle') iconMode = 'cerchio_inv'; 
   if (iconType === 'none') iconMode = null;
 
@@ -61,6 +62,7 @@ const PunteggioDisplay = ({
   
   const layout = layoutConfig[size] || layoutConfig.m;
   const url = punteggio.icona_url || punteggio.icona;
+  const iconFallback = punteggio.sigla || punteggio.nome;
 
   // --- LOGICA INTERATTIVA (Disabilitata se readOnly) ---
   const isAura = punteggio.tipo === 'AU';
@@ -97,12 +99,13 @@ const PunteggioDisplay = ({
           <div className={`flex items-center ${layout.gap} min-w-0`}> 
             
             <div className="relative">
-                {iconMode && url && (
+                {iconMode && (url || iconFallback) && (
                   <IconaPunteggio 
                     url={url} 
                     color={punteggio.colore} 
                     mode={iconMode} 
-                    size={size === 'badge' ? 'xs' : size} // Badge usa icone piccole
+                    size={size === 'badge' ? 'xs' : size}
+                    fallbackText={iconFallback}
                     className="shrink-0" 
                   />
                 )}

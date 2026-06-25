@@ -493,10 +493,14 @@ class TessituraMasterViewSet(viewsets.ModelViewSet):
             qs = (
                 Tessitura.objects
                 .select_related('aura_richiesta')
+                .prefetch_related('componenti__caratteristica')
                 .annotate(livello_calc=Sum('componenti__valore'))
                 .only(
                     'id',
                     'nome',
+                    'componenti__valore',
+                    'componenti__caratteristica__id',
+                    'componenti__caratteristica__nome',
                     'aura_richiesta__id',
                     'aura_richiesta__nome',
                     'aura_richiesta__sigla',

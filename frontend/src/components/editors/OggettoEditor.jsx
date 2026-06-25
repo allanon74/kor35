@@ -92,10 +92,16 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
       setSaving(true);
       const getId = (item) => item?.id || item || null;
       
-      const cleanAndDeduplicate = (list, keyField) => {
+      const cleanAndDeduplicate = (list, keyField, options = {}) => {
         const seen = new Set();
         return list
-          .map(item => ({ ...item, [keyField]: getId(item[keyField]) }))
+          .map(item => {
+            const cleaned = { ...item, [keyField]: getId(item[keyField]) };
+            if (options.parseModifierValore && cleaned.valore != null && cleaned.valore !== '') {
+              cleaned.valore = Number.parseFloat(cleaned.valore) || 0;
+            }
+            return cleaned;
+          })
           .filter(item => {
             const id = item[keyField];
             if (!id || seen.has(id)) return false; 
@@ -112,7 +118,7 @@ const OggettoEditor = ({ onBack, onLogout, initialData = null }) => {
           slot_fisici_possibili: (formData.slot_fisici_possibili || []).join(','),
           
           statistiche_base: cleanAndDeduplicate(formData.statistiche_base, 'statistica'),
-          statistiche: cleanAndDeduplicate(formData.statistiche, 'statistica'),
+          statistiche: cleanAndDeduplicate(formData.statistiche, 'statistica', { parseModifierValore: true }),
           componenti: cleanAndDeduplicate(formData.componenti, 'caratteristica')
       };
 

@@ -305,6 +305,12 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
         required=False,
     )
     tiers_sblocco_dettaglio = serializers.SerializerMethodField()
+    abilita_default_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+    )
+    abilita_default_dettaglio = serializers.SerializerMethodField()
 
     class Meta:
         model = Carriera
@@ -320,6 +326,8 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             "tipo_carriera_codice",
             "tiers_sblocco_ids",
             "tiers_sblocco_dettaglio",
+            "abilita_default_ids",
+            "abilita_default_dettaglio",
             "sync_id",
             "updated_at",
         )
@@ -331,6 +339,18 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
         return list(
             obj.tiers_sblocco.order_by("tipo", "nome").values("id", "nome", "tipo")
         )
+
+    def get_abilita_default_dettaglio(self, obj):
+        return [
+            {
+                "id": row["abilita_id"],
+                "nome": row["abilita__nome"],
+                "ordine": row["ordine"],
+            }
+            for row in obj.carriere_abilita.filter(is_default=True)
+            .order_by("ordine", "abilita__nome")
+            .values("abilita_id", "abilita__nome", "ordine")
+        ]
 
     def _sync_tiers_sblocco(self, carriera, tier_ids):
         from personaggi.carriere_tier_sblocco import tiers_selezionabili_per_sblocco_carriera
@@ -346,20 +366,40 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             if tid not in existing:
                 CarrieraTierSblocco.objects.create(carriera=carriera, tier_id=tid)
 
+    def _sync_abilita_default(self, carriera, abilita_ids):
+        from personaggi.carriere_abilita_default import riallinea_abilita_default_carriera
+        from personaggi.models import CarrieraAbilita
+
+        if abilita_ids is None:
+            return
+        allowed = set(int(x) for x in abilita_ids)
+        CarrieraAbilita.objects.filter(carriera=carriera).exclude(abilita_id__in=allowed).delete()
+        existing = set(
+            CarrieraAbilita.objects.filter(carriera=carriera).values_list("abilita_id", flat=True)
+        )
+        for aid in allowed:
+            if aid not in existing:
+                CarrieraAbilita.objects.create(carriera=carriera, abilita_id=aid, is_default=True)
+        riallinea_abilita_default_carriera(carriera)
+
     def create(self, validated_data):
         from personaggi.models import TIER_3
 
         tier_ids = validated_data.pop("tiers_sblocco_ids", None)
+        abilita_ids = validated_data.pop("abilita_default_ids", None)
         tipo_carriera = validated_data.pop("tipo_carriera", None)
         validated_data.setdefault("tipo", TIER_3)
         carriera = Carriera.objects.create(tipo_carriera=tipo_carriera, **validated_data)
         self._sync_tiers_sblocco(carriera, tier_ids)
+        self._sync_abilita_default(carriera, abilita_ids)
         return carriera
 
     def update(self, instance, validated_data):
         tier_ids = validated_data.pop("tiers_sblocco_ids", None)
+        abilita_ids = validated_data.pop("abilita_default_ids", None)
         instance = super().update(instance, validated_data)
         self._sync_tiers_sblocco(instance, tier_ids)
+        self._sync_abilita_default(instance, abilita_ids)
         return instance
 
 
@@ -664,14 +704,25 @@ class AbilitaPunteggioSmallSerializer(serializers.ModelSerializer):
 
 class AbilitaStatisticaSmallSerializer(serializers.ModelSerializer):
     statistica = PunteggioSmallSerializer(read_only=True)
+    limit_a_aure_dettaglio = serializers.SerializerMethodField()
+    limit_a_elementi_dettaglio = serializers.SerializerMethodField()
 
     class Meta:
         model = AbilitaStatistica
         fields = (
             'statistica', 'valore', 'tipo_modificatore',
+            'usa_limitazione_aura', 'limit_a_aure', 'limit_a_aure_dettaglio',
+            'usa_limitazione_elemento', 'limit_a_elementi', 'limit_a_elementi_dettaglio',
+            'usa_condizione_text', 'condizione_text',
             'usa_bonus_slot_equip', 'slot_equip_ammessi',
             'modalita_conteggio_slot_equip', 'valore_per_unita_slot_equip',
         )
+
+    def get_limit_a_aure_dettaglio(self, obj):
+        return list(obj.limit_a_aure.values('id', 'nome', 'sigla'))
+
+    def get_limit_a_elementi_dettaglio(self, obj):
+        return list(obj.limit_a_elementi.values('id', 'nome', 'sigla'))
 
 
 class ModelloAuraSerializer(serializers.ModelSerializer):
@@ -990,6 +1041,37 @@ class ComponenteTecnicaSerializer(serializers.Serializer):
     """
     caratteristica = PunteggioSmallSerializer(read_only=True)
     valore = serializers.IntegerField()
+
+
+def _serialize_componenti_con_nome_mattone(tecnica_obj):
+    """
+    Restituisce i componenti con il nome mattone "umano" (se risolvibile da aura+caratteristica).
+    Fallback: nome caratteristica.
+    """
+    rows = list(tecnica_obj.componenti.select_related('caratteristica').all())
+    if not rows:
+        return []
+
+    by_char = {}
+    aura_id = getattr(tecnica_obj, 'aura_richiesta_id', None)
+    char_ids = [r.caratteristica_id for r in rows if r.caratteristica_id]
+    if aura_id and char_ids:
+        for mattone in (
+            Mattone.objects
+            .filter(aura_id=aura_id, caratteristica_associata_id__in=char_ids)
+            .order_by('ordine', 'nome', 'id')
+        ):
+            by_char.setdefault(mattone.caratteristica_associata_id, mattone.nome)
+
+    out = []
+    for row in rows:
+        caratteristica = row.caratteristica
+        out.append({
+            'caratteristica': PunteggioSmallSerializer(caratteristica).data if caratteristica else None,
+            'valore': row.valore,
+            'mattone_nome': by_char.get(row.caratteristica_id) or (caratteristica.nome if caratteristica else ''),
+        })
+    return out
 
 class InfusioneCaratteristicaSerializer(serializers.ModelSerializer):
     class Meta:
@@ -1502,7 +1584,7 @@ class InfusioneSerializer(serializers.ModelSerializer):
     costi_attivazione = InfusioneCostoAttivazioneSerializer(many=True, read_only=True)
     
     # MODIFICA: 'componenti' invece di 'mattoni'
-    componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
+    componenti = serializers.SerializerMethodField()
 
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     aura_infusione = PunteggioSmallSerializer(read_only=True)
@@ -1534,13 +1616,16 @@ class InfusioneSerializer(serializers.ModelSerializer):
             return personaggio.get_costo_item_scontato(obj)
         return obj.costo_crediti
 
+    def get_componenti(self, obj):
+        return _serialize_componenti_con_nome_mattone(obj)
+
 
 class TessituraSerializer(serializers.ModelSerializer):
     statistiche_base = TessituraStatisticaBaseSerializer(source='tessiturastatisticabase_set', many=True, read_only=True)
     costi_attivazione = TessituraCostoAttivazioneSerializer(many=True, read_only=True)
     
     # MODIFICA: 'componenti' invece di 'mattoni'
-    componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
+    componenti = serializers.SerializerMethodField()
 
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
     elemento_principale = PunteggioSmallSerializer(read_only=True)
@@ -1572,6 +1657,9 @@ class TessituraSerializer(serializers.ModelSerializer):
         if personaggio:
             return personaggio.get_costo_item_scontato(obj)
         return obj.costo_crediti
+
+    def get_componenti(self, obj):
+        return _serialize_componenti_con_nome_mattone(obj)
 
 
 class TessituraOggettoRuntimeSerializer(serializers.ModelSerializer):
@@ -1631,7 +1719,7 @@ class TessituraEffettoRuntimeSerializer(serializers.ModelSerializer):
 class CerimonialeSerializer(serializers.ModelSerializer):
     # Serializer per lista/dettaglio cerimoniali
     aura_richiesta = PunteggioSmallSerializer(read_only=True)
-    componenti = ComponenteTecnicaSerializer(many=True, read_only=True)
+    componenti = serializers.SerializerMethodField()
     TestoFormattato = serializers.CharField(read_only=True)
     costo_crediti = serializers.IntegerField(read_only=True)
 
@@ -1642,6 +1730,9 @@ class CerimonialeSerializer(serializers.ModelSerializer):
             'prerequisiti', 'svolgimento', 'effetto',
             'TestoFormattato', 'costo_crediti', 'componenti', 'non_acquistabile'
         )
+
+    def get_componenti(self, obj):
+        return _serialize_componenti_con_nome_mattone(obj)
 
 
 def _qr_fields_for_avista(instance):
@@ -1682,10 +1773,21 @@ class TessituraStaffListSerializer(serializers.ModelSerializer):
     has_qrcode = serializers.BooleanField(read_only=True)
     qrcode_id = serializers.CharField(read_only=True, allow_null=True)
     livello = serializers.IntegerField(source='livello_calc', read_only=True)
+    componenti = serializers.SerializerMethodField()
 
     class Meta:
         model = Tessitura
-        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'has_qrcode', 'qrcode_id', 'non_acquistabile')
+        fields = ('id', 'nome', 'livello', 'aura_richiesta', 'componenti', 'has_qrcode', 'qrcode_id', 'non_acquistabile')
+
+    def get_componenti(self, obj):
+        return [
+            {
+                'id': row.caratteristica_id,
+                'nome': row.caratteristica.nome if row.caratteristica else '',
+                'valore': row.valore,
+            }
+            for row in obj.componenti.select_related('caratteristica').all()
+        ]
 
 
 class CerimonialeStaffListSerializer(serializers.ModelSerializer):

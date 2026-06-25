@@ -23,6 +23,9 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
   const activationCosts = tecnica.costi_attivazione || [];
   const activationEval = char ? evaluateActivationCosts(char, activationCosts) : null;
   const activationLabel = ACTIVATION_COST_LABELS[type] || 'Costi attivazione';
+  const componentiRows = Array.isArray(tecnica.componenti) && tecnica.componenti.length > 0
+    ? tecnica.componenti
+    : (Array.isArray(tecnica.mattoni) ? tecnica.mattoni.map((m) => ({ caratteristica: m.mattone, valore: m.valore })) : []);
 
   return (
     <div 
@@ -30,7 +33,7 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
       onClick={onClose}
     >
       <div 
-        className="relative w-full max-w-lg p-6 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-h-[90vh] overflow-y-auto transform transition-all animate-slideIn"
+        className="relative w-full max-w-lg p-4 sm:p-6 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-h-[90vh] overflow-y-auto transform transition-all animate-slideIn"
         onClick={(e) => e.stopPropagation()} 
       >
         <button 
@@ -41,11 +44,21 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
         </button>
         
         {/* Header con Aura */}
-        <div className="flex items-start justify-between pr-10 mb-6">
+        <div className="pr-10 mb-4 sm:mb-6">
             <div>
-                <h2 className="text-2xl font-bold text-indigo-400 leading-tight mb-1">
-                {tecnica.nome}
-                </h2>
+                <div className="flex items-center gap-2 mb-1 min-w-0">
+                  {tecnica.aura_richiesta && (
+                    <PunteggioDisplay
+                      punteggio={tecnica.aura_richiesta}
+                      displayText="none"
+                      iconType="inv_circle"
+                      size="xs"
+                    />
+                  )}
+                  <h2 className="text-xl sm:text-2xl font-bold text-indigo-400 leading-tight break-words">
+                    {tecnica.nome}
+                  </h2>
+                </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-wider border border-gray-600 px-2 py-0.5 rounded">
                       {type} - Livello {tecnica.livello}
@@ -57,23 +70,41 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
                   )}
                 </div>
             </div>
-            {tecnica.aura_richiesta && (
-                <div className="shrink-0 ml-3">
-                    <PunteggioDisplay
-                        punteggio={tecnica.aura_richiesta}
-                        displayText="none"
-                        iconType="inv_circle"
-                        size="m"
-                    />
-                </div>
-            )}
         </div>
         
         {/* Corpo del testo formattato */}
-        <div className="bg-gray-900/60 p-4 rounded-lg border border-gray-700/50 mb-6 shadow-inner">
+        <div className="bg-gray-900/60 p-3 sm:p-4 rounded-lg border border-gray-700/50 mb-6 shadow-inner space-y-3">
+            {componentiRows.length > 0 && (
+              <div className="rounded-md border border-cyan-800/40 bg-cyan-950/20 p-2 sm:p-3">
+                <div className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider mb-2">
+                  Mattoni componenti
+                </div>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  {componentiRows.map((row, idx) => {
+                    const caratteristica = row.caratteristica || row.mattone;
+                    const mattoneNome = row.mattone_nome || caratteristica?.nome || '?';
+                    const badgePunteggio = caratteristica
+                      ? { ...caratteristica, nome: mattoneNome }
+                      : { nome: mattoneNome, colore: '#6b7280' };
+                    return (
+                      <PunteggioDisplay
+                        key={`${caratteristica?.id || idx}-${idx}`}
+                        punteggio={badgePunteggio}
+                        value={row.valore > 1 ? row.valore : null}
+                        displayText="name"
+                        iconType="glyph"
+                        size="xs"
+                        readOnly
+                        className="max-w-full shrink-0"
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {testoDescrizione ? (
             <div
-                className="text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed" 
+                className="text-gray-300 prose prose-invert prose-sm max-w-none leading-relaxed break-words" 
                 dangerouslySetInnerHTML={{ __html: testoDescrizione }}
             />
             ) : (
@@ -82,7 +113,7 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
         </div>
 
         {activationCosts.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-6 rounded-lg border border-amber-800/40 bg-amber-950/20 p-3">
             <h3 className="text-xs font-bold text-amber-500/90 uppercase mb-2 tracking-wider">
               {activationLabel}
             </h3>
@@ -103,30 +134,11 @@ const TecnicaDetailModal = ({ tecnica, onClose, type = 'tecnica', char = null })
           </div>
         )}
 
-        {/* Mattoni Componenti */}
-        {tecnica.mattoni && tecnica.mattoni.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 tracking-wider">Mattoni Componenti</h3>
-            <div className="flex flex-wrap gap-3">
-              {tecnica.mattoni.map((m, idx) => (
-                <div key={idx} className="scale-90 origin-top-left">
-                    <PunteggioDisplay
-                        punteggio={m.mattone}
-                        displayText="name"
-                        iconType="inv_circle"
-                        size="s"
-                    />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Footer: Info Costo e Aura Secondaria */}
         <div className="mt-2 pt-4 border-t border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-gray-400 font-mono">
             
             {/* VISUALIZZAZIONE PREZZO BARRATO */}
-            <div className="bg-gray-900 px-3 py-1.5 rounded flex items-center gap-2">
+            <div className="bg-gray-900 px-3 py-1.5 rounded flex items-center gap-2 w-full sm:w-auto">
                 <span className="text-gray-500">Costo:</span>
                 {hasDiscount && (
                     <span className="text-red-400 line-through decoration-red-500 opacity-70 mr-1">

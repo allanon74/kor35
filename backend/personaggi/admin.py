@@ -53,13 +53,13 @@ from .models import (
     TipologiaEffetto, EffettoCasuale, ConsumabilePersonaggio, CreazioneConsumabileInCorso,
     TIPO_EFFETTO_OGGETTO, TIPO_EFFETTO_TESSITURA,
     Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica,
-    PersonaggioCarrieraMembership,
+    PersonaggioCarrieraMembership, CarrieraAbilita,
     UserSocialPreference,
     Campagna,
     CampagnaUtente,
     CampagnaFeaturePolicy,
     StatisticaContainer, StatisticaContainerItem,
-    Era, Prefettura, EraAbilita, Regione, RegioneAbilita,
+    Era, Prefettura, EraAbilita, Regione, RegioneAbilita, CarrieraAbilita,
 )
 
 from icon_widget.widgets import CustomIconWidget
@@ -1105,6 +1105,12 @@ class RegioneAbilitaInline(admin.TabularInline):
     autocomplete_fields = ["abilita"]
 
 
+class CarrieraAbilitaInline(admin.TabularInline):
+    model = CarrieraAbilita
+    extra = 1
+    autocomplete_fields = ["abilita"]
+
+
 class PrefetturaInline(admin.TabularInline):
     model = Prefettura
     extra = 1
@@ -1199,6 +1205,7 @@ class KorpAdmin(TierAdmin):
     list_display = ("nome", "tipo", "tipo_carriera")
     search_fields = ("nome", "descrizione")
     list_filter = ("tipo",)
+    inlines = [CarrieraAbilitaInline]
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(tipo_carriera__codice="korp")
@@ -1209,6 +1216,7 @@ class CarrieraAdmin(TierAdmin):
     list_display = ("nome", "tipo", "tipo_carriera")
     search_fields = ("nome", "descrizione")
     list_filter = ("tipo", "tipo_carriera")
+    inlines = [CarrieraAbilitaInline]
 
 
 @admin.register(SegnoZodiacale)

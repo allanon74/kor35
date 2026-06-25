@@ -2,6 +2,7 @@
 Test anti-exploit: rimborso revoca = costo pagato, non prezzo di listino corrente.
 """
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -9,6 +10,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from personaggi.acquisto_costi import calcola_costo_tecnica_acquisto, rimborso_crediti_da_pivot
+from personaggi.services import GestioneCraftingService
 from personaggi.models import (
     Campagna,
     Personaggio,
@@ -134,3 +136,47 @@ class CreazionePropostaCostoRctTest(TestCase):
             pieno, effettivo = calcola_costo_creazione_proposta(self.personaggio, self.proposta)
         self.assertEqual(pieno, 200)
         self.assertEqual(effettivo, 100)
+
+
+class ForgiaturaCostoCondizionaleAuraTest(TestCase):
+    def test_calcola_costi_tempi_applica_modificatore_condizionale_aura(self):
+        personaggio = SimpleNamespace()
+        personaggio.get_modificatori_extra_da_contesto = lambda _ctx: {
+            "costo_forg": {"add": 0, "mol": 0.5}
+        }
+
+        stat_cfg = SimpleNamespace(parametro="costo_forg")
+        aura = SimpleNamespace(sigla="ATE", stat_costo_forgiatura=stat_cfg)
+        infusione = SimpleNamespace(
+            aura_richiesta=aura,
+            aura_infusione=None,
+            tipo_risultato="POT",
+            livello=3,
+        )
+
+        with patch.object(GestioneCraftingService, "get_valore_statistica_aura") as mock_valori:
+            mock_valori.side_effect = [100, 60]  # costo unitario, tempo unitario
+            costo, tempo = GestioneCraftingService.calcola_costi_tempi(personaggio, infusione)
+
+        self.assertEqual(costo, 150)  # (100 * 0.5) * livello 3
+        self.assertEqual(tempo, 180)  # tempo invariato
+
+    def test_calcola_costi_tempi_non_applica_modificatore_condizionale_non_match(self):
+        personaggio = SimpleNamespace()
+        personaggio.get_modificatori_extra_da_contesto = lambda _ctx: {}
+
+        stat_cfg = SimpleNamespace(parametro="costo_forg")
+        aura = SimpleNamespace(sigla="ATE", stat_costo_forgiatura=stat_cfg)
+        infusione = SimpleNamespace(
+            aura_richiesta=aura,
+            aura_infusione=None,
+            tipo_risultato="POT",
+            livello=3,
+        )
+
+        with patch.object(GestioneCraftingService, "get_valore_statistica_aura") as mock_valori:
+            mock_valori.side_effect = [100, 60]
+            costo, tempo = GestioneCraftingService.calcola_costi_tempi(personaggio, infusione)
+
+        self.assertEqual(costo, 300)
+        self.assertEqual(tempo, 180)

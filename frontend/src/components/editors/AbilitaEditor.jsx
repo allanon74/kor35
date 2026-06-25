@@ -189,7 +189,11 @@ const AbilitaEditor = ({ onBack, onLogout, initialData = null }) => {
                     to_mattone: r.to_mattone ? parseInt(r.to_mattone) : null,
                     priority: parseInt(r.priority || 100),
                 })),
-                // Statistiche è già gestito come array di oggetti da StatModInline
+                statistiche: (formData.statistiche || []).map((s) => ({
+                    ...s,
+                    statistica: s.statistica ? parseInt(s.statistica, 10) : null,
+                    valore: Number.parseFloat(s.valore) || 0,
+                })),
             };
 
             const isSaveAsNew = mode === 'save_as_new';

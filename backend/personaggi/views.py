@@ -1265,7 +1265,7 @@ class RevocaAbilitaView(APIView):
         acquired_at = pivot.data_acquisizione
         if pivot.origine != PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO:
             return Response(
-                {"error": "Questa abilità è assegnata dall'Era e non può essere revocata singolarmente."},
+                {"error": "Questa abilità è assegnata automaticamente (Era, Regione o Carriera/KORP) e non può essere revocata singolarmente."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 

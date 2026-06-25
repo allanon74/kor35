@@ -60,6 +60,24 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
       if (item.usa_bonus_slot_equip) return true;
       return item.valore !== 0;
     });
+
+  const formatCondizioni = (link) => {
+    const tags = [];
+    if (link.usa_limitazione_aura && Array.isArray(link.limit_a_aure_dettaglio) && link.limit_a_aure_dettaglio.length > 0) {
+      tags.push(`Aura: ${link.limit_a_aure_dettaglio.map((a) => a.sigla || a.nome).join(', ')}`);
+    }
+    if (
+      link.usa_limitazione_elemento &&
+      Array.isArray(link.limit_a_elementi_dettaglio) &&
+      link.limit_a_elementi_dettaglio.length > 0
+    ) {
+      tags.push(`Elemento: ${link.limit_a_elementi_dettaglio.map((e) => e.sigla || e.nome).join(', ')}`);
+    }
+    if (link.usa_condizione_text && link.condizione_text) {
+      tags.push(`Condizione: ${link.condizione_text}`);
+    }
+    return tags;
+  };
     
   const showModifiche = punteggiModificati.length > 0 || statisticheModificate.length > 0;
   // --- Fine Logica ---
@@ -135,19 +153,26 @@ const AbilitaDetailModal = ({ skill, onClose }) => {
             <div className="flex flex-wrap gap-2 mt-2">
               
               {statisticheModificate.map(link => (
-                <PunteggioDisplay
-                  key={`stat-${link.punteggio.id}`}
-                  punteggio={link.punteggio}
-                  value={
-                    link.usa_bonus_slot_equip
-                      ? formatSlotEquipBonus(link)
-                      : link.tipo_modificatore === 'ADD'
-                        ? (link.valore > 0 ? ` +${link.valore}` : ` ${link.valore}`)
-                        : ` x${link.valore}`
-                  }
-                  displayText="name"
-                  iconType="inv_circle"
-                />
+                <div key={`stat-${link.punteggio.id}`} className="max-w-full">
+                  <PunteggioDisplay
+                    punteggio={link.punteggio}
+                    value={
+                      link.usa_bonus_slot_equip
+                        ? formatSlotEquipBonus(link)
+                        : link.tipo_modificatore === 'ADD'
+                          ? (link.valore > 0 ? ` +${link.valore}` : ` ${link.valore}`)
+                          : ` x${link.valore}`
+                    }
+                    displayText="name"
+                    iconType="inv_circle"
+                    size="xs"
+                  />
+                  {formatCondizioni(link).length > 0 && (
+                    <div className="mt-1 text-[10px] text-amber-300/90 leading-tight">
+                      {formatCondizioni(link).join(' · ')}
+                    </div>
+                  )}
+                </div>
               ))}
               
               {punteggiModificati.map(link => (

@@ -1275,6 +1275,22 @@ class GestioneCraftingService:
         
         c_unit = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, 'stat_costo_forgiatura')
         t_unit = GestioneCraftingService.get_valore_statistica_aura(personaggio, aura, 'stat_tempo_forgiatura')
+        stat_costo = getattr(aura, 'stat_costo_forgiatura', None)
+        parametro_costo = getattr(stat_costo, 'parametro', None)
+
+        # Applica i modificatori condizionali (es. solo aura AIN/ATE) anche al costo forgiatura.
+        if parametro_costo:
+            aura_contesto = infusione.aura_infusione if infusione.aura_infusione else aura
+            contesto_forgia = {
+                'aura': aura_contesto,
+                'infusione': infusione,
+                'forgiatura': True,
+                'tipo_risultato_forgiatura': GestioneCraftingService._classifica_risultato_infusione(infusione),
+            }
+            mods_extra = personaggio.get_modificatori_extra_da_contesto(contesto_forgia)
+            mod_costo = mods_extra.get(parametro_costo)
+            if mod_costo:
+                c_unit = int(max(0, round((float(c_unit) + float(mod_costo.get('add', 0) or 0)) * float(mod_costo.get('mol', 1.0) or 1.0))))
         
         lvl = max(1, infusione.livello)
         return lvl * c_unit, lvl * t_unit

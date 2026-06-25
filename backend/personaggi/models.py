@@ -1487,6 +1487,20 @@ TIER_4 = "T4"
 tabelle_tipo = [(T_GENERALI, 'Tabelle Generali'), (TIER_1, 'Tier 1'), (TIER_2, 'Tier 2'), (TIER_3, 'Tier 3'), (TIER_4, 'Tier 4')]
 MODIFICATORE_ADDITIVO = 'ADD'; MODIFICATORE_MOLTIPLICATIVO = 'MOL'
 MODIFICATORE_CHOICES = [(MODIFICATORE_ADDITIVO, 'Additivo (+N)'), (MODIFICATORE_MOLTIPLICATIVO, 'Moltiplicativo (xN)')]
+
+
+def stat_modificatore_valore_field(**kwargs):
+    """Valore ADD/MOL su pivot statistiche (supporta decimali, es. MOL 0.5)."""
+    defaults = {
+        'max_digits': 7,
+        'decimal_places': 2,
+        'default': 0,
+        'help_text': 'Valore additivo (+N) o moltiplicativo (xN, es. 0.5 per -50%).',
+    }
+    defaults.update(kwargs)
+    return models.DecimalField(**defaults)
+
+
 DISPLAY_SIZE_CHOICES = [
     ("badge", "Badge"),
     ("xs", "Extra Small"),
@@ -1730,6 +1744,12 @@ class Carriera(Tier):
         verbose_name="Bonus crediti evento",
         help_text="Bonus crediti assegnato a ogni evento iniziato ai membri attivi di questa carriera/KORP.",
     )
+    abilita = models.ManyToManyField(
+        "Abilita",
+        through="CarrieraAbilita",
+        related_name="carriere_collegate",
+        blank=True,
+    )
 
     class Meta:
         verbose_name = "Carriera"
@@ -1853,6 +1873,16 @@ class PersonaggioCarrieraMembership(A_modello):
         if self.carriera_id and not self.tipo_carriera_id:
             self.tipo_carriera_id = self.carriera.tipo_carriera_id
         super().save(*args, **kwargs)
+        from personaggi.carriere_abilita_default import sync_abilita_default_carriere_for_personaggio
+
+        sync_abilita_default_carriere_for_personaggio(self.personaggio_id)
+
+    def delete(self, *args, **kwargs):
+        personaggio_id = self.personaggio_id
+        super().delete(*args, **kwargs)
+        from personaggi.carriere_abilita_default import sync_abilita_default_carriere_for_personaggio
+
+        sync_abilita_default_carriere_for_personaggio(personaggio_id)
 
     def __str__(self):
         return f"{self.personaggio.nome} -> {self.carriera.nome}"
@@ -2258,7 +2288,7 @@ class Mattone(Punteggio):
 class MattoneStatistica(CondizioneStatisticaMixin):
     mattone = models.ForeignKey(Mattone, on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
-    valore = models.IntegerField(default=0)
+    valore = stat_modificatore_valore_field()
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     class Meta: unique_together = ('mattone', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore}"
@@ -2417,10 +2447,10 @@ def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
         label = SLOT_EQUIP_CONTEGGIO_LABELS.get(modalita, count_key)
         parts.append(f"{n_units} {label}")
 
-    flat = int(stat_link.valore or 0)
+    flat = float(stat_link.valore or 0)
     if flat:
         bonus += flat
-        parts.append(f"bonus fisso {flat:+d}")
+        parts.append(f"bonus fisso {flat:+g}")
 
     if not parts:
         return 0.0, ''
@@ -2433,8 +2463,8 @@ def calcola_bonus_abilita_slot_equip(personaggio, stat_link):
 class AbilitaStatistica(CondizioneStatisticaMixin):
     abilita = models.ForeignKey('Abilita', on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore = stat_modificatore_valore_field()
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
-    valore = models.IntegerField(default=0)
     usa_bonus_slot_equip = models.BooleanField(
         default=False,
         verbose_name="Bonus per slot equipaggiati",
@@ -2729,7 +2759,7 @@ class InfusioneStatistica(CondizioneStatisticaMixin):
     """
     infusione = models.ForeignKey('Infusione', on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
-    valore = models.IntegerField(default=0)
+    valore = stat_modificatore_valore_field()
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     
     class Meta: 
@@ -3348,9 +3378,31 @@ class RegioneAbilita(SyncableModel, models.Model):
     def __str__(self):
         return f"{self.regione.nome} -> {self.abilita.nome}"
 
+
+class CarrieraAbilita(SyncableModel, models.Model):
+    carriera = models.ForeignKey("Carriera", on_delete=models.CASCADE, related_name="carriere_abilita")
+    abilita = models.ForeignKey("Abilita", on_delete=models.CASCADE, related_name="abilita_carriera")
+    is_default = models.BooleanField(
+        default=True,
+        verbose_name="Assegna in automatico ai membri",
+        help_text="Se attivo, l'abilità viene aggiunta ai personaggi con membership attiva su questa carriera/KORP.",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "Abilità Carriera"
+        verbose_name_plural = "Abilità Carriere"
+        ordering = ["ordine", "abilita__nome"]
+        unique_together = [["carriera", "abilita"]]
+
+    def __str__(self):
+        return f"{self.carriera.nome} -> {self.abilita.nome}"
+
+
 PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO = "acquisto"
 PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT = "era_default"
 PERSONAGGIO_ABILITA_ORIGINE_REGIONE_DEFAULT = "regione_default"
+PERSONAGGIO_ABILITA_ORIGINE_CARRIERA_DEFAULT = "carriera_default"
 
 
 def get_default_tipologia():
@@ -3585,7 +3637,7 @@ class OggettoCaratteristica(SyncableModel, models.Model):
 class OggettoStatistica(CondizioneStatisticaMixin):
     oggetto = models.ForeignKey('Oggetto', on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
-    valore = models.IntegerField(default=0)
+    valore = stat_modificatore_valore_field()
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     class Meta: unique_together = ('oggetto', 'statistica')
     def __str__(self): return f"{self.statistica.nome}: {self.valore}"
@@ -4256,7 +4308,7 @@ class OggettoBaseStatisticaBase(SyncableModel, models.Model):
 class OggettoBaseModificatore(SyncableModel, models.Model):
     oggetto_base = models.ForeignKey(OggettoBase, on_delete=models.CASCADE)
     statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
-    valore = models.IntegerField(default=0)
+    valore = stat_modificatore_valore_field()
     tipo_modificatore = models.CharField(max_length=3, choices=MODIFICATORE_CHOICES, default=MODIFICATORE_ADDITIVO)
     solo_oggetto_ospitante = models.BooleanField(
         "Solo oggetto ospitante",
@@ -4649,6 +4701,11 @@ class Personaggio(Inventario):
 
         if nuovi_link:
             PersonaggioAbilita.objects.bulk_create(nuovi_link, ignore_conflicts=True)
+
+    def _sync_abilita_default_carriere(self):
+        from personaggi.carriere_abilita_default import sync_abilita_default_carriere_for_personaggio
+
+        sync_abilita_default_carriere_for_personaggio(self)
 
     def assegna_era_e_prefettura(self, era=None, prefettura=None, prefettura_esterna=False, force=False):
         if not force and not self.can_edit_era_prefettura():
@@ -6623,6 +6680,7 @@ class PersonaggioAbilita(SyncableModel, models.Model):
             (PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO, "Acquisto"),
             (PERSONAGGIO_ABILITA_ORIGINE_ERA_DEFAULT, "Era (default)"),
             (PERSONAGGIO_ABILITA_ORIGINE_REGIONE_DEFAULT, "Regione (default)"),
+            (PERSONAGGIO_ABILITA_ORIGINE_CARRIERA_DEFAULT, "Carriera/KORP (default)"),
         ],
         default=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
     )
