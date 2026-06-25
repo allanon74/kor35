@@ -72,11 +72,17 @@ La **fase 2** abilita la **riparazione sottosistemi a componenti** lato staff e 
 - L’API `POST /api/pilot/subsystems/qr-repair/` valida e consuma componenti dalla stiva nave
 - Tab staff **Stiva componenti** per caricare/scaricare inventario
 
-Resta da completare in fase 5 il **tab stiva** in scheda personaggio (`0IN` > 0).
+### Cosa è la fase 5
+
+Completata la parte **giocatore** e l’operazione opzionale **Compattatore Quantico**:
+
+- Tab **Stiva nave** in app (`0IN` > 0): inventario globale in sola lettura
+- Picker componenti nella modale QR riparazione (già in fase 2)
+- **Compattatore Quantico**: sacrificio oggetto → 1–5 componenti; **spento di default** (`compattatore_quantico_abilitato=false`) — vedi sotto
 
 ### Cosa è la fase 3
 
-La **fase 3** introduce il **compattatore quantico** (sottosistema Z):
+La **fase 3** introduce la **console compattatore** (sottosistema Z):
 
 - Modello `CompattatoreStatoNave` e accumulo energia a ogni tick pilota (`livello_Z` → soglia 9 per operazione)
 - Operazioni **compressione** (2→1 indice superiore, anello 0↔9) e **decompressione** (1→2 indice inferiore)
@@ -98,6 +104,7 @@ Tab **Runtime Console** → Gestione Pilotaggio:
 | Riparazione sottosistemi con componenti | Master switch consumo stiva su QR repair |
 | Annichilamento colori opposti in stiva | Tick coesistenza + annichilamento |
 | Console compattatore | Abilita `/pilot/?screen=compattatore` |
+| **Compattatore Quantico** | **Default OFF.** Abilita sacrificio oggetto → componenti in console; lasciare spento fino all’evento live |
 | Login compattatore | Richiede autenticazione console |
 | Statistica accesso compattatore | Default `0IN` (creare stat in admin se assente) |
 
@@ -201,7 +208,14 @@ Il giocatore (o l'operatore console) **sacrifica un oggetto** — descritto a te
 
 Come le altre operazioni: **9** punti energia accumulata e sottosistema Z operativo.
 
-### Attivazione evento
+### Attivazione / disattivazione evento
+
+Il flag **`compattatore_quantico_abilitato`** è su `PilotRuntimeConfig` (default **`false`**). Con flag off:
+
+- API `POST /api/pilot/compattatore/quantico/` risponde **400** («disabilitato»)
+- In console pilota il pulsante mostra **«Compattatore Quantico — FUORI USO»**
+
+Per l’evento live:
 
 ```bash
 # Staff → Pilotaggio → Runtime Console → spunta «Compattatore Quantico»
