@@ -1013,13 +1013,14 @@ class CarrieraStaffViewSet(viewsets.ModelViewSet):
 
 
 class CaricaStaffViewSet(viewsets.ModelViewSet):
-    queryset = Carica.objects.select_related("carriera", "carriera__tipo_carriera").order_by(
-        "carriera__nome", "ordine", "nome"
-    )
+    queryset = Carica.objects.prefetch_related(
+        "carriere",
+        "carriere__tipo_carriera",
+    ).order_by("nome", "ordine", "id")
     serializer_class = CaricaStaffSerializer
     permission_classes = [IsStaffOrMaster]
-    filterset_fields = ["carriera", "carriera__tipo_carriera__codice", "attiva"]
-    search_fields = ["nome", "carriera__nome"]
+    filterset_fields = ["carriere", "carriere__tipo_carriera__codice", "attiva"]
+    search_fields = ["nome", "carriere__nome"]
 
 
 class PersonaggioCarrieraMembershipStaffViewSet(viewsets.ModelViewSet):
@@ -1033,8 +1034,60 @@ class PersonaggioCarrieraMembershipStaffViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        chiudi_korp = request.data.get("chiudi_korp_precedenti") in (True, "true", "1", 1)
-        serializer = self.get_serializer(data=request.data)
+        data = request.data.copy()
+        chiudi_korp = data.get("chiudi_korp_precedenti") in (True, "true", "1", 1)
+        espandi = data.get("espandi_tutte_carriere_carica", True)
+        if isinstance(espandi, str):
+            espandi = espandi.lower() in ("1", "true", "yes")
+
+        carriera_id = data.get("carriera")
+        carica_id = data.get("carica")
+        tipo_id = data.get("tipo_carriera")
+
+        if not carriera_id and carica_id and espandi:
+            try:
+                carica = Carica.objects.prefetch_related("carriere").get(pk=carica_id)
+            except Carica.DoesNotExist:
+                carica = None
+            if carica:
+                carriere_qs = carica.carriere.all()
+                if tipo_id:
+                    carriere_qs = carriere_qs.filter(tipo_carriera_id=tipo_id)
+                carriere_list = list(carriere_qs.order_by("nome", "id"))
+                if len(carriere_list) > 1:
+                    personaggio_id = data.get("personaggio")
+                    if not personaggio_id or not tipo_id:
+                        return Response(
+                            {"detail": "Per l'espansione automatica servono personaggio e tipo carriera."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if chiudi_korp:
+                        tipo_korp = TipoCarriera.objects.filter(codice="korp").first()
+                        if tipo_korp and str(tipo_id) == str(tipo_korp.id):
+                            now = timezone.now()
+                            PersonaggioCarrieraMembership.objects.filter(
+                                personaggio_id=personaggio_id,
+                                tipo_carriera__codice="korp",
+                                data_a__isnull=True,
+                            ).update(data_a=now)
+                    created_rows = []
+                    for carriera in carriere_list:
+                        row_data = {**data, "carriera": carriera.pk}
+                        serializer = self.get_serializer(data=row_data)
+                        serializer.is_valid(raise_exception=True)
+                        self.perform_create(serializer)
+                        created_rows.append(serializer.data)
+                    from personaggi.carriere_tier_sblocco import invalidate_acquirable_skills_cache
+
+                    invalidate_acquirable_skills_cache(personaggio_id)
+                    return Response(
+                        {"created": created_rows, "count": len(created_rows)},
+                        status=status.HTTP_201_CREATED,
+                    )
+                if len(carriere_list) == 1:
+                    data["carriera"] = carriere_list[0].pk
+
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
         tipo = serializer.validated_data.get("tipo_carriera")
         personaggio = serializer.validated_data.get("personaggio")

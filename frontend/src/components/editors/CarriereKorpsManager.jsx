@@ -234,25 +234,102 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
   );
 }
 
+function caricaIncludesCarriera(carica, carrieraId) {
+  if (!carrieraId) return true;
+  const raw = carica?.carriere_ids ?? carica?.carriere ?? [];
+  const ids = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  if (!ids.length && carica?.carriera) {
+    return String(carica.carriera) === String(carrieraId);
+  }
+  return ids.map(String).includes(String(carrieraId));
+}
+
 function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMessage, statusType }) {
   const [form, setForm] = useState(value || {});
-  useEffect(() => setForm(value || {}), [value]);
+  const [carrieraToAdd, setCarrieraToAdd] = useState(null);
+  useEffect(() => {
+    const base = value || {};
+    const ids = base.carriere_ids
+      ? base.carriere_ids
+      : Array.isArray(base.carriere)
+        ? base.carriere
+        : base.carriera || base.carriera_id
+          ? [base.carriera || base.carriera_id]
+          : [];
+    setForm({ ...base, carriere_ids: ids.map((x) => Number(x)) });
+    setCarrieraToAdd(null);
+  }, [value]);
+
+  const carriereById = useMemo(
+    () => new Map((carriereOptions || []).map((c) => [String(c.id), c])),
+    [carriereOptions],
+  );
+
   if (!isOpen) return null;
+
+  const selectedCarriereRows = (form.carriere_ids || [])
+    .map((id) => carriereById.get(String(id)))
+    .filter(Boolean);
+  const carriereDisponibili = (carriereOptions || []).filter(
+    (c) => !(form.carriere_ids || []).map(String).includes(String(c.id)),
+  );
+
+  const addCarriera = (id) => {
+    if (!id) return;
+    const sid = String(id);
+    const current = new Set((form.carriere_ids || []).map(String));
+    if (!current.has(sid)) {
+      setForm({ ...form, carriere_ids: [...current, sid].map((x) => Number(x)) });
+    }
+    setCarrieraToAdd(null);
+  };
+
+  const removeCarriera = (id) => {
+    const sid = String(id);
+    setForm({
+      ...form,
+      carriere_ids: (form.carriere_ids || []).map(String).filter((x) => x !== sid).map((x) => Number(x)),
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-xl">
+      <div className="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-xl max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-gray-700 flex justify-between">
           <h3 className="text-lg font-bold text-white">{form?.id ? 'Modifica' : 'Nuova'} carica</h3>
           <button type="button" onClick={onClose}><X className="text-gray-400" size={18} /></button>
         </div>
         <div className="p-4 space-y-3">
-          <label className="block text-xs text-gray-400 mb-1">Carriera / KORP</label>
-          <SearchableSelect
-            options={carriereOptions}
-            value={form.carriera || form.carriera_id || null}
-            onChange={(v) => setForm({ ...form, carriera: v, carriera_id: v })}
-            placeholder="Cerca carriera o KORP…"
-          />
+          <div>
+            <div className="text-xs text-gray-400 mb-2">Dipartimenti (carriere / KORP)</div>
+            <SearchableSelect
+              options={carriereDisponibili}
+              value={carrieraToAdd}
+              onChange={(v) => {
+                setCarrieraToAdd(v);
+                addCarriera(v);
+              }}
+              placeholder="Aggiungi dipartimento…"
+              minOptionsForSearch={0}
+            />
+            <div className="mt-2 max-h-36 overflow-y-auto border border-gray-700 rounded p-2 flex flex-wrap gap-2">
+              {selectedCarriereRows.length === 0 ? (
+                <p className="text-xs text-gray-500">Nessun dipartimento — seleziona almeno uno.</p>
+              ) : (
+                selectedCarriereRows.map((c) => (
+                  <span
+                    key={c.id}
+                    className="inline-flex items-center gap-2 px-2 py-1 rounded bg-gray-800 border border-gray-700 text-sm text-gray-200"
+                  >
+                    <span>{c.nome}</span>
+                    <button type="button" className="text-red-400 hover:text-red-300" onClick={() => removeCarriera(c.id)}>
+                      <X size={14} />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
           <input
             className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
             placeholder="Nome carica"
@@ -294,7 +371,12 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
           </label>
         </div>
         <div className="p-4 border-t border-gray-700">
-          <EditorSaveActions onSave={() => onSave(form, 'save_close')} onCancel={onClose} statusMessage={statusMessage} statusType={statusType} />
+          <EditorSaveActions
+            onSave={() => onSave({ ...form, espandi_tutte_carriere: espandiTutteCarriere }, 'save_close')}
+            onCancel={onClose}
+            statusMessage={statusMessage}
+            statusType={statusType}
+          />
         </div>
       </div>
     </div>
@@ -315,9 +397,11 @@ function MembershipModal({
 }) {
   const [form, setForm] = useState(value || {});
   const [chiudiKorpPrecedenti, setChiudiKorpPrecedenti] = useState(true);
+  const [espandiTutteCarriere, setEspandiTutteCarriere] = useState(true);
   useEffect(() => {
     setForm(value || {});
     setChiudiKorpPrecedenti(true);
+    setEspandiTutteCarriere(true);
   }, [value]);
 
   const tipoId = form.tipo_carriera || form.tipo_carriera_id;
@@ -335,9 +419,24 @@ function MembershipModal({
   }, [carriereOptions, tipoId]);
 
   const caricheOptions = useMemo(() => {
-    if (!carrieraId) return [];
-    return cariche.filter((c) => String(c.carriera) === String(carrieraId));
+    if (!carrieraId) return cariche;
+    return cariche.filter((c) => caricaIncludesCarriera(c, carrieraId));
   }, [carrieraId, cariche]);
+
+  const selectedCarica = useMemo(
+    () => cariche.find((c) => String(c.id) === String(form.carica || form.carica_id)),
+    [cariche, form.carica, form.carica_id],
+  );
+
+  const carriereDaCarica = useMemo(() => {
+    if (!selectedCarica) return [];
+    const raw = selectedCarica.carriere_ids ?? selectedCarica.carriere ?? [];
+    const ids = Array.isArray(raw) ? raw.map(String) : raw ? [String(raw)] : [];
+    if (!ids.length && selectedCarica.carriera) ids.push(String(selectedCarica.carriera));
+    return carriereOptions.filter((c) => ids.includes(String(c.id)));
+  }, [selectedCarica, carriereOptions]);
+
+  const espansioneAttiva = !form.id && !carrieraId && selectedCarica && carriereDaCarica.length > 1 && espandiTutteCarriere;
 
   if (!isOpen) return null;
 
@@ -363,7 +462,34 @@ function MembershipModal({
             onChange={(v) => setForm({ ...form, tipo_carriera: v, carriera: null, carica: null })}
             placeholder="KORP o Professione…"
           />
-          <label className="block text-xs text-gray-400 mb-1">Carriera / KORP</label>
+          <label className="block text-xs text-gray-400 mb-1">Carica (opzionale)</label>
+          <SearchableSelect
+            options={caricheOptions}
+            value={form.carica || form.carica_id || null}
+            onChange={(v) => setForm({ ...form, carica: v, carriera: null, carriera_id: null })}
+            placeholder="Carica militare…"
+          />
+          {selectedCarica && carriereDaCarica.length > 0 ? (
+            <p className="text-xs text-gray-500">
+              Dipartimenti di questa carica:{' '}
+              <span className="text-gray-300">{carriereDaCarica.map((c) => c.nome).join(', ')}</span>
+            </p>
+          ) : null}
+          {!form.id && selectedCarica && carriereDaCarica.length > 1 ? (
+            <label className="flex items-start gap-2 p-3 rounded-lg border border-indigo-700/50 bg-indigo-950/30 text-sm text-indigo-100">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={espandiTutteCarriere}
+                onChange={(e) => setEspandiTutteCarriere(e.target.checked)}
+              />
+              <span>
+                Crea un&apos;appartenenza per <strong>ogni</strong> dipartimento della carica ({carriereDaCarica.length}).
+                Lascia deselezionato per scegliere un solo dipartimento sotto.
+              </span>
+            </label>
+          ) : null}
+          <label className="block text-xs text-gray-400 mb-1">Carriera / KORP {espansioneAttiva ? '(opzionale — espansione automatica)' : ''}</label>
           <SearchableSelect
             options={carriereFiltrate}
             value={carrieraId || null}
@@ -373,19 +499,10 @@ function MembershipModal({
                 ...form,
                 carriera: v,
                 tipo_carriera: row?.tipo_carriera || form.tipo_carriera,
-                carica: null,
               });
             }}
-            placeholder="Cerca professione o KORP…"
-            disabled={!tipoId && carriereFiltrate.length === 0}
-          />
-          <label className="block text-xs text-gray-400 mb-1">Carica (opzionale)</label>
-          <SearchableSelect
-            options={caricheOptions}
-            value={form.carica || form.carica_id || null}
-            onChange={(v) => setForm({ ...form, carica: v })}
-            placeholder="Carica nella carriera…"
-            disabled={!carrieraId}
+            placeholder={espansioneAttiva ? 'Opzionale se espandi tutti i dipartimenti' : 'Cerca professione o KORP…'}
+            disabled={espansioneAttiva || (!tipoId && carriereFiltrate.length === 0)}
           />
           <label className="flex items-center gap-2 text-sm text-gray-200">
             <input
@@ -432,7 +549,12 @@ function MembershipModal({
         </div>
         <div className="p-4 border-t border-gray-700">
           <EditorSaveActions
-            onSave={() => onSave({ ...form, chiudi_korp_precedenti: chiudiKorpPrecedenti }, 'save_close')}
+            onSave={() =>
+              onSave(
+                { ...form, chiudi_korp_precedenti: chiudiKorpPrecedenti, espandi_tutte_carriere: espandiTutteCarriere },
+                'save_close',
+              )
+            }
             onCancel={onClose}
             statusMessage={statusMessage}
             statusType={statusType}
@@ -540,8 +662,11 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const caricaColumns = useMemo(
     () => [
-      { header: 'Carriera', render: (x) => x.carriera_nome || '—' },
       { header: 'Carica', render: (x) => <span className="font-bold">{x.nome}</span> },
+      {
+        header: 'Dipartimenti',
+        render: (x) => (x.carriere_nomi?.length ? x.carriere_nomi.join(', ') : '—'),
+      },
       { header: 'Bonus CR', render: (x) => Number(x.bonus_crediti_evento || 0).toFixed(2), align: 'center', width: 100 },
       { header: 'Ordine', render: (x) => x.ordine ?? 0, align: 'center', width: 80 },
       {
@@ -603,8 +728,13 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const saveCarica = async (form, mode) => {
     try {
+      if (!form.carriere_ids?.length) {
+        setStatusMessage('Seleziona almeno un dipartimento per la carica.');
+        setStatusType('error');
+        return;
+      }
       const payload = {
-        carriera: form.carriera || form.carriera_id,
+        carriere_ids: form.carriere_ids,
         nome: form.nome,
         bonus_stipendio_evento: form.bonus_stipendio_evento ?? 0,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
@@ -626,29 +756,42 @@ export default function CarriereKorpsManager({ onLogout }) {
 
   const saveMembership = async (form, mode) => {
     try {
-      if (!form.personaggio || !(form.carriera || form.carriera_id) || !(form.tipo_carriera || form.tipo_carriera_id)) {
-        setStatusMessage('Compila personaggio, tipo e carriera/KORP.');
+      const tipoId = form.tipo_carriera || form.tipo_carriera_id;
+      const carrieraIdLocal = form.carriera || form.carriera_id;
+      const caricaId = form.carica || form.carica_id;
+      const espandi = !form.id && !carrieraIdLocal && caricaId && form.espandi_tutte_carriere !== false;
+
+      if (!form.personaggio || !tipoId) {
+        setStatusMessage('Compila personaggio e tipo.');
+        setStatusType('error');
+        return;
+      }
+      if (!espandi && !carrieraIdLocal) {
+        setStatusMessage('Compila carriera/KORP oppure usa espansione da carica.');
         setStatusType('error');
         return;
       }
       const payload = {
         personaggio: form.personaggio,
-        carriera: form.carriera || form.carriera_id,
-        tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
-        carica: form.carica || form.carica_id || null,
+        carriera: carrieraIdLocal || undefined,
+        tipo_carriera: tipoId,
+        carica: caricaId || null,
         data_da: form.data_da || undefined,
         data_a: form.data_a || null,
         visibile_social: form.visibile_social !== false,
+        espandi_tutte_carriere_carica: espandi,
       };
       if (form.id) {
         await staffUpdateCarriereMembership(form.id, payload, onLogout);
+        setStatusMessage('Appartenenza salvata');
       } else {
-        await staffCreateCarriereMembership(
+        const res = await staffCreateCarriereMembership(
           { ...payload, chiudi_korp_precedenti: !!form.chiudi_korp_precedenti },
           onLogout,
         );
+        const n = res?.count || (res?.created?.length) || 1;
+        setStatusMessage(n > 1 ? `${n} appartenenze create` : 'Appartenenza salvata');
       }
-      setStatusMessage('Appartenenza salvata');
       setStatusType('success');
       await loadAll();
       if (mode === 'save_close') setModalMembership(null);
@@ -742,7 +885,12 @@ export default function CarriereKorpsManager({ onLogout }) {
             addLabel="Nuova carica"
             emptyMessage="Nessuna carica definita."
             onAdd={() => setModalCarica({ attiva: true, ordine: 0 })}
-            onEdit={(item) => setModalCarica({ ...item, carriera: item.carriera })}
+            onEdit={(item) =>
+              setModalCarica({
+                ...item,
+                carriere_ids: item.carriere_ids || item.carriere || (item.carriera ? [item.carriera] : []),
+              })
+            }
             onDelete={async (id) => {
               await staffDeleteCarica(id, onLogout);
               await loadAll();

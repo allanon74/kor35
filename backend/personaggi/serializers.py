@@ -270,12 +270,32 @@ class SegnoZodiacaleSerializer(serializers.ModelSerializer):
 
 
 class CaricaSerializer(serializers.ModelSerializer):
-    carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
-    tipo_carriera_codice = serializers.CharField(source="carriera.tipo_carriera.codice", read_only=True)
+    carriere_nomi = serializers.SerializerMethodField()
+    tipo_carriera_codice = serializers.SerializerMethodField()
 
     class Meta:
         model = Carica
-        fields = "__all__"
+        fields = (
+            "id",
+            "sync_id",
+            "updated_at",
+            "nome",
+            "carriere",
+            "carriere_nomi",
+            "tipo_carriera_codice",
+            "bonus_stipendio_evento",
+            "bonus_crediti_evento",
+            "bonus_peso_influencer",
+            "ordine",
+            "attiva",
+        )
+
+    def get_carriere_nomi(self, obj):
+        return list(obj.carriere.values_list("nome", flat=True))
+
+    def get_tipo_carriera_codice(self, obj):
+        codes = list(obj.carriere.values_list("tipo_carriera__codice", flat=True).distinct())
+        return codes[0] if len(codes) == 1 else None
 
 
 class PersonaggioCarrieraMembershipSerializer(serializers.ModelSerializer):
@@ -404,8 +424,23 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
 
 
 class CaricaStaffSerializer(serializers.ModelSerializer):
-    carriera = serializers.PrimaryKeyRelatedField(queryset=Carriera.objects.all())
-    carriera_nome = serializers.CharField(source="carriera.nome", read_only=True)
+    carriere = serializers.PrimaryKeyRelatedField(
+        queryset=Carriera.objects.all(),
+        many=True,
+        required=False,
+    )
+    carriere_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+    )
+    carriere_nomi = serializers.SerializerMethodField()
+    # Retrocompat: singolo dipartimento in payload legacy
+    carriera = serializers.PrimaryKeyRelatedField(
+        queryset=Carriera.objects.all(),
+        write_only=True,
+        required=False,
+    )
 
     class Meta:
         model = Carica
@@ -413,8 +448,10 @@ class CaricaStaffSerializer(serializers.ModelSerializer):
             "id",
             "sync_id",
             "updated_at",
+            "carriere",
+            "carriere_ids",
+            "carriere_nomi",
             "carriera",
-            "carriera_nome",
             "nome",
             "bonus_stipendio_evento",
             "bonus_crediti_evento",
@@ -422,7 +459,37 @@ class CaricaStaffSerializer(serializers.ModelSerializer):
             "ordine",
             "attiva",
         )
-        read_only_fields = ("id", "sync_id", "updated_at", "carriera_nome")
+        read_only_fields = ("id", "sync_id", "updated_at", "carriere_nomi")
+
+    def get_carriere_nomi(self, obj):
+        return list(obj.carriere.order_by("nome").values_list("nome", flat=True))
+
+    def _resolve_carriere(self, validated_data):
+        carriere = validated_data.pop("carriere", None)
+        carriere_ids = validated_data.pop("carriere_ids", None)
+        legacy = validated_data.pop("carriera", None)
+        if carriere is not None:
+            return list(carriere)
+        if carriere_ids is not None:
+            return list(Carriera.objects.filter(pk__in=carriere_ids))
+        if legacy is not None:
+            return [legacy]
+        return None
+
+    def create(self, validated_data):
+        carriere = self._resolve_carriere(validated_data)
+        if not carriere:
+            raise serializers.ValidationError({"carriere": "Seleziona almeno un dipartimento."})
+        instance = super().create(validated_data)
+        instance.carriere.set(carriere)
+        return instance
+
+    def update(self, instance, validated_data):
+        carriere = self._resolve_carriere(validated_data)
+        instance = super().update(instance, validated_data)
+        if carriere is not None:
+            instance.carriere.set(carriere)
+        return instance
 
 
 class PersonaggioCarrieraMembershipStaffSerializer(serializers.ModelSerializer):
@@ -480,8 +547,8 @@ class PersonaggioCarrieraMembershipStaffSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         carriera = attrs.get("carriera") or getattr(self.instance, "carriera", None)
         carica = attrs.get("carica")
-        if carica and carriera and carica.carriera_id != carriera.pk:
-            raise serializers.ValidationError("La carica non appartiene alla carriera selezionata.")
+        if carica and carriera and not carica.applies_to_carriera(carriera.pk):
+            raise serializers.ValidationError("La carica non è valida per la carriera selezionata.")
         tipo = attrs.get("tipo_carriera")
         if carriera and tipo and carriera.tipo_carriera_id != tipo.pk:
             raise serializers.ValidationError("Il tipo non coincide con la carriera.")

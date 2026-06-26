@@ -44,6 +44,16 @@ import {
   resolveMediaUrl,
 } from '../../api';
 
+function caricaIncludesCarriera(carica, carrieraId) {
+  if (!carrieraId) return true;
+  const raw = carica?.carriere_ids ?? carica?.carriere ?? [];
+  const ids = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  if (!ids.length && carica?.carriera) {
+    return String(carica.carriera) === String(carrieraId);
+  }
+  return ids.map(String).includes(String(carrieraId));
+}
+
 const TABS = [
   { id: 'bg', label: 'BG / Anagrafica', icon: FileText },
   { id: 'qr', label: 'QR', icon: QrCode },
@@ -340,7 +350,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   const caricheFiltrate = useMemo(() => {
     const cid = membershipForm?.carriera || membershipForm?.carriera_id;
     if (!cid) return cariche;
-    return cariche.filter((c) => String(c.carriera) === String(cid) || String(c.carriera_id) === String(cid));
+    return cariche.filter((c) => caricaIncludesCarriera(c, cid));
   }, [cariche, membershipForm]);
 
   const totalPages = Math.max(1, Math.ceil((listData.count || 0) / 40));

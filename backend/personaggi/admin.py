@@ -1230,10 +1230,14 @@ class SegnoZodiacaleAdmin(TierAdmin):
 
 @admin.register(Carica)
 class CaricaAdmin(admin.ModelAdmin):
-    list_display = ("nome", "carriera", "bonus_stipendio_evento", "ordine", "attiva")
-    list_filter = ("carriera__tipo_carriera", "carriera", "attiva")
-    search_fields = ("nome", "carriera__nome")
-    autocomplete_fields = ("carriera",)
+    list_display = ("nome", "carriere_list", "bonus_stipendio_evento", "ordine", "attiva")
+    list_filter = ("carriere__tipo_carriera", "carriere", "attiva")
+    search_fields = ("nome", "carriere__nome")
+    filter_horizontal = ("carriere",)
+
+    @admin.display(description="Dipartimenti")
+    def carriere_list(self, obj):
+        return ", ".join(obj.carriere.values_list("nome", flat=True)[:6])
 
 
 @admin.register(PersonaggioCarrieraMembership)

@@ -1811,7 +1811,12 @@ class SegnoZodiacale(Tier):
 
 
 class Carica(A_modello):
-    carriera = models.ForeignKey(Carriera, on_delete=models.CASCADE, related_name="cariche")
+    carriere = models.ManyToManyField(
+        Carriera,
+        related_name="cariche",
+        blank=True,
+        help_text="Dipartimenti (carriere/KORP) in cui esiste questa carica militare.",
+    )
     nome = models.CharField(max_length=120)
     bonus_stipendio_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     bonus_crediti_evento = models.DecimalField(
@@ -1830,11 +1835,19 @@ class Carica(A_modello):
     class Meta:
         verbose_name = "Carica"
         verbose_name_plural = "Cariche"
-        ordering = ["carriera__nome", "ordine", "nome"]
-        unique_together = ("carriera", "nome")
+        ordering = ["nome", "ordine", "id"]
 
     def __str__(self):
-        return f"{self.carriera.nome} - {self.nome}"
+        dept = list(self.carriere.values_list("nome", flat=True)[:4])
+        if dept:
+            extra = "…" if self.carriere.count() > 4 else ""
+            return f"{self.nome} ({', '.join(dept)}{extra})"
+        return self.nome
+
+    def applies_to_carriera(self, carriera_id) -> bool:
+        if not carriera_id:
+            return False
+        return self.carriere.filter(pk=carriera_id).exists()
 
 
 class PersonaggioCarrieraMembership(A_modello):
@@ -1863,8 +1876,8 @@ class PersonaggioCarrieraMembership(A_modello):
         ordering = ["-data_da", "-id"]
 
     def clean(self):
-        if self.carica and self.carica.carriera_id != self.carriera_id:
-            raise ValidationError("La carica selezionata non appartiene alla carriera indicata.")
+        if self.carica_id and self.carriera_id and not self.carica.applies_to_carriera(self.carriera_id):
+            raise ValidationError("La carica selezionata non è valida per la carriera indicata.")
         if self.carriera_id and self.tipo_carriera_id:
             if self.carriera.tipo_carriera_id != self.tipo_carriera_id:
                 raise ValidationError("Il tipo carriera non coincide con quello della carriera selezionata.")

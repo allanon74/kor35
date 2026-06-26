@@ -4905,8 +4905,8 @@ class RegioneViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CaricaViewSet(viewsets.ModelViewSet):
-    queryset = Carica.objects.select_related("carriera", "carriera__tipo_carriera").order_by(
-        "carriera__nome", "ordine", "nome"
+    queryset = Carica.objects.prefetch_related("carriere", "carriere__tipo_carriera").order_by(
+        "nome", "ordine", "id"
     )
     serializer_class = CaricaSerializer
     permission_classes = [permissions.IsAdminUser]
