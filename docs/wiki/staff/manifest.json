@@ -19,6 +19,12 @@
       "ordine": 15
     },
     {
+      "slug": "staff-console-pilota-kiosk",
+      "titolo": "Console pilota — kiosk dual-screen",
+      "source": "console-pilota-kiosk.md",
+      "ordine": 18
+    },
+    {
       "slug": "staff-mirror-pi",
       "titolo": "Mirror Pi — procedure",
       "source": "mirror-pi.md",

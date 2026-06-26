@@ -31,6 +31,7 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertIn("staff-operativita-tecnica", slugs)
         self.assertIn("staff-make-comandi", slugs)
         self.assertIn("staff-pilot-eventi", slugs)
+        self.assertIn("staff-console-pilota-kiosk", slugs)
         self.assertIn("staff-mirror-pi", slugs)
         self.assertIn("staff-test-offline-omada", slugs)
 
@@ -52,6 +53,12 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertTrue(pilot_page.visibile_solo_staff)
         self.assertIn("ST / SP / CA", pilot_page.contenuto)
         self.assertIn("Catalogo eventi", pilot_page.contenuto)
+
+        kiosk_page = PaginaRegolamento.objects.get(slug="staff-console-pilota-kiosk")
+        self.assertEqual(kiosk_page.parent_id, parent.id)
+        self.assertTrue(kiosk_page.visibile_solo_staff)
+        self.assertIn("KIOSK_SWAP_SCREENS", kiosk_page.contenuto)
+        self.assertIn("kor35-larp", kiosk_page.contenuto)
 
         mirror_page = PaginaRegolamento.objects.get(slug="staff-mirror-pi")
         self.assertEqual(mirror_page.parent_id, parent.id)
