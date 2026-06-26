@@ -12,6 +12,11 @@ html, body, #root {
   color: white;
 }
 
+/* Padding inferiore tab giocatore: clearance menu + safe area iOS/Android */
+.pb-safe-tab {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Assicura che l'app React prenda tutto lo spazio */
 .kor-35-app, .kor-35-app > div {
   height: 100%;

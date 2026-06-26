@@ -1191,6 +1191,36 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(res_clear.status_code, status.HTTP_200_OK, res_clear.content)
         self.assertFalse(res_clear.json().get("foto_trucco_url"))
 
+    def test_retrieve_include_social_profile(self):
+        from social.models import SocialProfile
+
+        SocialProfile.objects.create(
+            personaggio=self.pg,
+            nickname="Staff Nick",
+            professioni="Alchimista",
+            descrizione="Bio test",
+        )
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        sp = res.json().get("social_profile") or {}
+        self.assertEqual(sp.get("nickname"), "Staff Nick")
+        self.assertEqual(sp.get("professioni"), "Alchimista")
+        self.assertEqual(sp.get("descrizione"), "Bio test")
+
+    def test_patch_social_profile_staff(self):
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/social-profile/"
+        res = self.client.patch(
+            url,
+            {"nickname": "Vance Premium", "descrizione": "Nuova bio", "professioni": "Scout"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        body = res.json()
+        self.assertEqual(body.get("nickname"), "Vance Premium")
+        self.assertEqual(body.get("descrizione"), "Nuova bio")
+        self.assertEqual(body.get("professioni"), "Scout")
+
 
 class MetatalentiDecimalValoreTests(TestCase):
     """Regression: MattoneStatistica.valore è Decimal dopo migrazione 0220."""

@@ -637,6 +637,92 @@ def _apply_social_author_campaign_filter(qs, request=None):
     return qs.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
 
 
+        return obj.era_provenienza
+
+
+class SocialProfileStaffSerializer(serializers.ModelSerializer):
+    """Profilo InstaFame in hub staff personaggi: lettura completa, modifica campi social."""
+
+    personaggio_nome = serializers.CharField(source="personaggio.nome", read_only=True)
+    nome_pubblico = serializers.SerializerMethodField()
+    korp_nome = serializers.SerializerMethodField()
+    segno_zodiacale = serializers.CharField(source="personaggio.segno_zodiacale.nome", read_only=True)
+    era_nome = serializers.CharField(source="personaggio.era.nome", read_only=True, allow_null=True)
+    prefettura_nome = serializers.CharField(source="personaggio.prefettura.nome", read_only=True, allow_null=True)
+    prefettura_regione_sigla = serializers.CharField(
+        source="personaggio.prefettura.regione.sigla", read_only=True, allow_null=True
+    )
+    badge_instafame = serializers.SerializerMethodField()
+    cariche_social = serializers.SerializerMethodField()
+    regione = serializers.SerializerMethodField()
+    era_provenienza = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SocialProfile
+        fields = (
+            "id",
+            "personaggio",
+            "personaggio_nome",
+            "nome_pubblico",
+            "nickname",
+            "foto_principale",
+            "descrizione",
+            "professioni",
+            "regione",
+            "prefettura_nome",
+            "prefettura_regione_sigla",
+            "era_provenienza",
+            "era_nome",
+            "korp_nome",
+            "segno_zodiacale",
+            "badge_instafame",
+            "cariche_social",
+        )
+        read_only_fields = (
+            "id",
+            "personaggio",
+            "personaggio_nome",
+            "nome_pubblico",
+            "regione",
+            "prefettura_nome",
+            "prefettura_regione_sigla",
+            "era_provenienza",
+            "era_nome",
+            "korp_nome",
+            "segno_zodiacale",
+            "badge_instafame",
+            "cariche_social",
+        )
+
+    def get_badge_instafame(self, obj):
+        return get_personaggio_badge_instafame(obj.personaggio)
+
+    def get_cariche_social(self, obj):
+        return social_cariche_for_personaggio(obj.personaggio)
+
+    def get_nome_pubblico(self, obj):
+        return social_display_name_from_profile(obj)
+
+    def get_korp_nome(self, obj):
+        membership = get_active_korp_membership(obj.personaggio)
+        return membership.carriera.nome if membership else None
+
+    def get_regione(self, obj):
+        pref = getattr(obj.personaggio, "prefettura", None)
+        if pref and getattr(pref, "regione", None):
+            return pref.regione.sigla or pref.regione.nome
+        return obj.regione
+
+    def get_era_provenienza(self, obj):
+        era = getattr(obj.personaggio, "era", None)
+        if era:
+            return era.nome
+        return obj.era_provenienza
+
+    def validate_nickname(self, value):
+        return clean_nickname_value(value)
+
+
 def owned_personaggi_queryset_for_user(user, request=None):
     """Personaggi del giocatore nel contesto campagna attiva (allineato a PersonaggioListView)."""
     active_campaign = _get_active_campaign_from_request(request)

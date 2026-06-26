@@ -1233,7 +1233,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full text-center pointer-events-none z-10">
                 {selectedCharacterData ? (
                     <div className="flex flex-col items-center justify-center animate-fadeIn">
-                        <span className="font-bold text-white text-base tracking-wide drop-shadow-md inline-flex items-center gap-1.5">
+                        <span className="font-bold text-white text-sm sm:text-base tracking-wide drop-shadow-md inline-flex items-center gap-1.5 max-w-[42vw] sm:max-w-none truncate">
                             {selectedCharacterData.nome}
                             {String(preferredCharacterId || '') === String(selectedCharacterId) && (
                                 <Star size={14} className="text-amber-400" fill="currentColor" />

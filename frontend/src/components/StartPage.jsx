@@ -523,8 +523,8 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         {showReminder && (
           <div className="rounded-xl border border-gray-700 bg-gray-800 p-4 md:p-5">
             <h2 className="text-lg font-bold mb-3">Avvisi</h2>
-            <div className="rounded-lg border border-amber-500/60 bg-amber-950/70 p-3 text-amber-100 flex items-center justify-between gap-3">
-              <span>Password locale non configurata, per inserirla cliccare qui.</span>
+            <div className="rounded-lg border border-amber-500/60 bg-amber-950/70 p-3 text-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <span className="text-sm">Password locale non configurata, per inserirla cliccare qui.</span>
               <button
                 onClick={() => setShowPasswordModal(true)}
                 className="px-3 py-1.5 rounded bg-amber-400 text-gray-900 font-bold text-xs"
@@ -571,18 +571,18 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
         </div>
 
         <div className="rounded-xl border border-gray-700 bg-gray-800 p-4 md:p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
             <h2 className="text-lg font-bold">I tuoi personaggi</h2>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => navigate('/app/play?tab=personaggi')}
-                className="px-3 py-2 text-xs font-bold rounded bg-indigo-700 hover:bg-indigo-600"
+                className="px-3 py-2.5 text-xs font-bold rounded bg-indigo-700 hover:bg-indigo-600 touch-manipulation"
               >
                 Gestione personaggi
               </button>
               <button
                 onClick={openCreate}
-                className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold rounded bg-emerald-700 hover:bg-emerald-600"
+                className="inline-flex items-center gap-1 px-3 py-2.5 text-xs font-bold rounded bg-emerald-700 hover:bg-emerald-600 touch-manipulation"
               >
                 <Plus size={14} /> Nuovo PG
               </button>
@@ -601,10 +601,10 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                   {group.rows.map((char) => (
                 <div
                   key={char.id}
-                  className="rounded-lg border border-gray-700 bg-gray-900/40 p-3 flex items-center justify-between gap-3"
+                  className="rounded-lg border border-gray-700 bg-gray-900/40 p-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="min-w-0 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-indigo-800 text-indigo-100 font-black flex items-center justify-center shrink-0 overflow-hidden">
+                  <div className="min-w-0 flex items-start gap-3 flex-1">
+                    <div className="w-11 h-11 rounded-full bg-indigo-800 text-indigo-100 font-black flex items-center justify-center shrink-0 overflow-hidden">
                       {char.avatar_url ? (
                         <img
                           src={resolveMediaUrl(char.avatar_url)}
@@ -619,7 +619,7 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                       <div className="font-bold text-white flex items-center gap-1.5 min-w-0">
                         <span className="truncate">{char.nome}</span>
                         {char.impostazioni_ui?.creazione_guidata_in_corso ? (
-                          <span className="shrink-0 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-900/80 text-amber-200 border border-amber-700">
+                          <span className="shrink-0 text-xs font-bold uppercase px-1.5 py-0.5 rounded bg-amber-900/80 text-amber-200 border border-amber-700">
                             Bozza
                           </span>
                         ) : null}
@@ -633,49 +633,49 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                           </span>
                         ) : null}
                       </div>
-                      <div className="text-[10px] inline-flex px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-200 border border-indigo-700 mt-1">
+                      <div className="text-xs inline-flex px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-200 border border-indigo-700 mt-1">
                         Campagna: {char.campagna_nome || 'Kor35'}
                       </div>
-                      <div className="flex gap-1 mt-1">
+                      <div className="flex flex-wrap gap-1 mt-1.5">
                         {String(preferredCharacterId || '') === String(char.id) && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-900/70 text-amber-200 border border-amber-700 inline-flex items-center gap-1">
-                            <Star size={10} /> Preferito
+                          <span className="text-xs px-2 py-0.5 rounded bg-amber-900/70 text-amber-200 border border-amber-700 inline-flex items-center gap-1">
+                            <Star size={11} /> Preferito
                           </span>
                         )}
                         {String(lastCharacterId || '') === String(char.id) && (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-200 border border-indigo-700">
+                          <span className="text-xs px-2 py-0.5 rounded bg-indigo-900/70 text-indigo-200 border border-indigo-700">
                             Ultimo usato
                           </span>
                         )}
                         {char.can_edit_era ? (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-900/70 text-emerald-200 border border-emerald-700">
+                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-900/70 text-emerald-200 border border-emerald-700">
                             Dati modificabili
                           </span>
                         ) : (
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-gray-800 text-gray-300 border border-gray-600 inline-flex items-center gap-1">
-                            <Lock size={10} /> Dati bloccati da evento
+                          <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-300 border border-gray-600 inline-flex items-center gap-1">
+                            <Lock size={11} /> Dati bloccati da evento
                           </span>
                         )}
                       </div>
-                    <div className="text-xs text-gray-400 mt-1">
+                    <div className="text-sm text-gray-400 mt-1.5">
                       {char.era_nome || 'Era non impostata'}
                       {char.prefettura_nome
                         ? ` - ${char.prefettura_regione_sigla ? `${char.prefettura_regione_sigla} ` : ''}${char.prefettura_nome}`
                         : ''}
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">
+                    <div className="text-sm text-gray-400 mt-1">
                       Segno zodiacale: {char.segno_zodiacale_nome || 'Non assegnato'}
                     </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center touch-manipulation">
                     <button
                       onClick={() =>
                         setPreferredCharacter(
                           String(preferredCharacterId || '') === String(char.id) ? '' : String(char.id)
                         )
                       }
-                      className={`p-2 rounded border ${
+                      className={`p-2.5 rounded border min-h-11 min-w-11 flex items-center justify-center ${
                         String(preferredCharacterId || '') === String(char.id)
                           ? 'bg-amber-800/60 border-amber-600 text-amber-200'
                           : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
@@ -690,14 +690,14 @@ export default function StartPage({ onLogout, onSwitchToMaster }) {
                     </button>
                     <button
                       onClick={() => openEdit(char)}
-                      className="p-2 rounded bg-gray-700 hover:bg-gray-600"
+                      className="p-2.5 rounded bg-gray-700 hover:bg-gray-600 min-h-11 min-w-11 flex items-center justify-center"
                       title="Modifica dati generali"
                     >
                       <Edit3 size={16} />
                     </button>
                     <button
                       onClick={() => void enterCharacter(char)}
-                      className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold rounded bg-indigo-700 hover:bg-indigo-600"
+                      className="inline-flex items-center gap-1 px-4 py-2.5 text-sm font-bold rounded bg-indigo-700 hover:bg-indigo-600"
                     >
                       Entra <ArrowRight size={14} />
                     </button>

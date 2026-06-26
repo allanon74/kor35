@@ -3397,6 +3397,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     foto_outfit_url = serializers.SerializerMethodField()
     foto_trucco = serializers.ImageField(required=False, allow_null=True, write_only=True)
     foto_outfit = serializers.ImageField(required=False, allow_null=True, write_only=True)
+    social_profile = serializers.SerializerMethodField()
 
     class Meta:
         model = Personaggio
@@ -3415,6 +3416,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'movimenti_credito', 'movimenti_pc',
             'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
             'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
+            'social_profile',
         )
         read_only_fields = (
             'proprietario', 'proprietario_nome', 'proprietario_username',
@@ -3439,6 +3441,19 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
 
     def get_foto_outfit_url(self, obj):
         return _personaggio_image_field_url(obj, "foto_outfit", self.context.get("request"))
+
+    def get_social_profile(self, obj):
+        from social.models import SocialProfile
+        from social.serializers import SocialProfileStaffSerializer
+
+        profile, _ = SocialProfile.objects.select_related(
+            "personaggio",
+            "personaggio__era",
+            "personaggio__prefettura",
+            "personaggio__prefettura__regione",
+            "personaggio__segno_zodiacale",
+        ).get_or_create(personaggio=obj)
+        return SocialProfileStaffSerializer(profile, context=self.context).data
 
     def get_qrcode_id(self, obj):
         qr = getattr(obj, '_prefetched_qrcode', None)

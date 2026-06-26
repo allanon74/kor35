@@ -44,6 +44,16 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
     setTierToAdd(null);
     setAbilitaToAdd(null);
   }, [value]);
+
+  const tiersById = useMemo(
+    () => new Map((tiersSelezionabili || []).map((t) => [String(t.id), t])),
+    [tiersSelezionabili],
+  );
+  const abilitaById = useMemo(
+    () => new Map((abilitaOptions || []).map((a) => [String(a.id), a])),
+    [abilitaOptions],
+  );
+
   if (!isOpen) return null;
 
   const addTier = (tierId) => {
@@ -77,15 +87,6 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
     const current = (form.abilita_default_ids || []).map(String).filter((x) => x !== sid);
     setForm({ ...form, abilita_default_ids: current.map((x) => Number(x)) });
   };
-
-  const tiersById = useMemo(
-    () => new Map((tiersSelezionabili || []).map((t) => [String(t.id), t])),
-    [tiersSelezionabili],
-  );
-  const abilitaById = useMemo(
-    () => new Map((abilitaOptions || []).map((a) => [String(a.id), a])),
-    [abilitaOptions],
-  );
 
   const selectedTierRows = (form.tiers_sblocco_ids || [])
     .map((id) => tiersById.get(String(id)))

@@ -105,20 +105,20 @@ const CerimonialiTab = ({ onLogout }) => {
   );
 
   const renderItem = (item, isOwned) => (
-    <li className="flex justify-between items-center py-3 px-2 hover:bg-gray-700/30 transition-colors rounded-sm border-b border-gray-700/50 last:border-0 gap-2">
-      <div className="flex items-center gap-3 cursor-pointer grow" onClick={() => setModalItem(item)}>
+    <li className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-3 px-2 hover:bg-gray-700/30 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
+      <div className="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onClick={() => setModalItem(item)}>
           <div className="shrink-0 relative">
               <IconaPunteggio url={item.aura_richiesta?.icona_url} color={item.aura_richiesta?.colore} mode="cerchio_inv" size="xs" />
-              <span className="absolute -top-2 -right-2 bg-purple-900 text-purple-100 text-[9px] font-bold px-1 py-0.5 rounded-full border border-purple-500">
+              <span className="absolute -top-2 -right-2 bg-purple-900 text-purple-100 text-[10px] font-bold px-1 py-0.5 rounded-full border border-purple-500">
                   L{item.livello}
               </span>
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-gray-200">{item.nome}</span>
-            {!isOwned && <span className="text-[10px] text-yellow-500 font-mono">{item.costo_crediti} CR</span>}
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-gray-200 truncate">{item.nome}</span>
+            {!isOwned && <span className="text-xs text-yellow-500 font-mono">{item.costo_crediti} CR</span>}
           </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 justify-end shrink-0 touch-manipulation">
         {!isOwned && (
           <button
             onClick={(e) => handleAcquire(item, e)}
@@ -145,8 +145,30 @@ const CerimonialiTab = ({ onLogout }) => {
     </li>
   );
 
+  const possessed = char.cerimoniali_posseduti || [];
+
+  const PossessedList = (
+    <GenericGroupedList
+      items={possessed}
+      groupByKey="aura_richiesta"
+      renderItem={(i) => renderItem(i, true)}
+      renderHeader={renderGroupHeader}
+      itemSortFn={(a, b) => a.livello - b.livello}
+    />
+  );
+
+  const AcquirableList = (
+    <GenericGroupedList
+      items={filteredAcquirable}
+      groupByKey="aura_richiesta"
+      renderItem={(i) => renderItem(i, false)}
+      renderHeader={renderGroupHeader}
+      itemSortFn={(a, b) => a.livello - b.livello}
+    />
+  );
+
   return (
-    <div className="w-full p-4 max-w-6xl mx-auto pb-24">
+    <div className="w-full p-4 max-w-6xl mx-auto pb-safe-tab">
       <div className="mb-6 flex justify-between items-center bg-gray-800 p-4 rounded-xl border border-purple-500/20 shadow-lg max-w-3xl mx-auto">
           <div className="flex items-center gap-3">
             <Users className="text-purple-400" size={24}/>
@@ -167,14 +189,43 @@ const CerimonialiTab = ({ onLogout }) => {
           </button>
       </div>
 
+      <div className="md:hidden">
+        <Tab.Group>
+          <Tab.List className="flex space-x-1 rounded-xl bg-gray-800/80 p-1 mb-6 shadow-inner">
+            {['Posseduti', 'Nuovi'].map((category, idx) => (
+              <Tab as={Fragment} key={category}>
+                {({ selected }) => (
+                  <button
+                    type="button"
+                    className={classNames(
+                      'w-full rounded-lg py-2.5 text-sm font-medium leading-5 transition-all',
+                      selected ? 'bg-purple-600 text-white shadow' : 'text-gray-400 hover:bg-gray-700/50 hover:text-white',
+                    )}
+                  >
+                    {category}{' '}
+                    <span className="ml-1 opacity-60 text-xs">
+                      ({idx === 0 ? possessed.length : filteredAcquirable.length})
+                    </span>
+                  </button>
+                )}
+              </Tab>
+            ))}
+          </Tab.List>
+          <Tab.Panels>
+            <Tab.Panel className="focus:outline-none animate-fadeIn">{PossessedList}</Tab.Panel>
+            <Tab.Panel className="focus:outline-none animate-fadeIn">{AcquirableList}</Tab.Panel>
+          </Tab.Panels>
+        </Tab.Group>
+      </div>
+
       <div className="hidden md:grid grid-cols-2 gap-6">
           <div>
               <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2 px-2"><CheckCircle2 className="text-green-500" size={20}/> Posseduti</h2>
-              <GenericGroupedList items={char.cerimoniali_posseduti} groupByKey="aura_richiesta" renderItem={(i) => renderItem(i, true)} renderHeader={renderGroupHeader} itemSortFn={(a,b) => a.livello - b.livello} />
+              {PossessedList}
           </div>
           <div>
               <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2 px-2"><PlusCircle className="text-purple-500" size={20}/> Nuovi Cerimoniali</h2>
-              <GenericGroupedList items={filteredAcquirable} groupByKey="aura_richiesta" renderItem={(i) => renderItem(i, false)} renderHeader={renderGroupHeader} itemSortFn={(a,b) => a.livello - b.livello} />
+              {AcquirableList}
           </div>
       </div>
 

@@ -1821,6 +1821,57 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
 
         return self.retrieve(request, *args, **kwargs)
 
+    @action(
+        detail=True,
+        methods=['patch'],
+        url_path='social-profile',
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
+    def patch_social_profile(self, request, pk=None):
+        from social.models import SocialProfile
+        from social.serializers import SocialProfileStaffSerializer
+
+        personaggio = self.get_object()
+        profile, _ = SocialProfile.objects.select_related(
+            "personaggio",
+            "personaggio__era",
+            "personaggio__prefettura",
+            "personaggio__prefettura__regione",
+            "personaggio__segno_zodiacale",
+        ).get_or_create(personaggio=personaggio)
+
+        payload = {}
+        for key in ("nickname", "descrizione", "professioni"):
+            if key in request.data:
+                payload[key] = request.data.get(key)
+        if "foto_principale" in request.FILES:
+            payload["foto_principale"] = request.FILES["foto_principale"]
+
+        if not payload and str(request.data.get("clear_foto_principale", "")).lower() not in (
+            "1",
+            "true",
+            "yes",
+        ):
+            return Response({"detail": "Nessun campo aggiornabile."}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = SocialProfileStaffSerializer(
+            profile, data=payload, partial=True, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            serializer.save()
+            if str(request.data.get("clear_foto_principale", "")).lower() in ("1", "true", "yes"):
+                if profile.foto_principale:
+                    profile.foto_principale.delete(save=False)
+                profile.foto_principale = None
+                profile.save(update_fields=["foto_principale", "updated_at"])
+
+        profile.refresh_from_db()
+        return Response(
+            SocialProfileStaffSerializer(profile, context={"request": request}).data
+        )
+
     @action(detail=True, methods=['post'], url_path='add-resources')
     def add_resources(self, request, pk=None):
         personaggio = self.get_object()

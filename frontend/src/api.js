@@ -2922,6 +2922,13 @@ export const staffPatchPersonaggio = (id, payload, onLogout) =>
     body: payload instanceof FormData ? payload : JSON.stringify(payload),
   }, onLogout);
 
+/** Staff: patch profilo social InstaFame di un personaggio. Accetta JSON o FormData. */
+export const staffPatchPersonaggioSocialProfile = (id, payload, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/social-profile/`, {
+    method: 'PATCH',
+    body: payload instanceof FormData ? payload : JSON.stringify(payload),
+  }, onLogout);
+
 /** Staff: aggiungi crediti o PC a un personaggio. */
 export const staffAddResourcesToPersonaggio = (id, tipo, amount, reason, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/add-resources/`, {

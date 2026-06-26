@@ -7,11 +7,15 @@ import RichTextEditor from '../RichTextEditor';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
 import StaffQrTab from '../StaffQrTab';
 import SearchableSelect from './SearchableSelect';
+import InstafameNicknameInput from '../InstafameNicknameInput';
+import ProfileImageField from '../ProfileImageField';
+import { prepareProfileImageForUpload } from '../../utils/profileImage';
 import { useStaffQrAssociation } from '../../hooks/useStaffQrAssociation';
 import {
   staffGetPersonaggi,
   staffGetPersonaggioDetail,
   staffPatchPersonaggio,
+  staffPatchPersonaggioSocialProfile,
   staffAddResourcesToPersonaggio,
   staffCreaOggettoDaBasePerPersonaggio,
   staffPersonaggioAggiungiOggetto,
@@ -87,6 +91,14 @@ const PersonaggiStaffManager = ({ onLogout }) => {
   const [oggettoEsistenteDraft, setOggettoEsistenteDraft] = useState({ id: '', motivo: 'Assegnazione staff' });
   const [manualOggettoId, setManualOggettoId] = useState('');
   const [inventarioMotivo, setInventarioMotivo] = useState('Intervento staff inventario');
+  const [socialProfileForm, setSocialProfileForm] = useState({
+    nickname: '',
+    professioni: '',
+    descrizione: '',
+    foto_principale: null,
+    foto_rotazione: 0,
+  });
+  const [socialProfileSaving, setSocialProfileSaving] = useState(false);
 
   const loadOggettiSenzaPosizione = useCallback(async () => {
     try {
@@ -139,6 +151,18 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       setDetailLoading(false);
     }
   }, [onLogout]);
+
+  useEffect(() => {
+    const sp = detail?.social_profile;
+    if (!sp) return;
+    setSocialProfileForm({
+      nickname: sp.nickname || '',
+      professioni: sp.professioni || '',
+      descrizione: sp.descrizione || '',
+      foto_principale: null,
+      foto_rotazione: 0,
+    });
+  }, [detail?.id, detail?.social_profile]);
 
   const { pendingQrConflict, conflictLoading, handleQrScan, confirmConflict, cancelConflict } =
     useStaffQrAssociation({
@@ -213,6 +237,43 @@ const PersonaggiStaffManager = ({ onLogout }) => {
       setMessage(e.message || 'Errore salvataggio');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveSocialProfile = async () => {
+    if (!detail?.id) return;
+    setSocialProfileSaving(true);
+    setMessage('');
+    try {
+      const textPayload = {
+        nickname: socialProfileForm.nickname || '',
+        professioni: socialProfileForm.professioni || '',
+        descrizione: socialProfileForm.descrizione || '',
+      };
+      let updatedProfile = await staffPatchPersonaggioSocialProfile(detail.id, textPayload, onLogout);
+
+      if (socialProfileForm.foto_principale) {
+        const preparedPhoto = await prepareProfileImageForUpload({
+          file: socialProfileForm.foto_principale,
+          remoteUrl: detail.social_profile?.foto_principale || null,
+          rotationDegrees: socialProfileForm.foto_rotazione,
+        });
+        const fd = new FormData();
+        fd.append('foto_principale', preparedPhoto);
+        updatedProfile = await staffPatchPersonaggioSocialProfile(detail.id, fd, onLogout);
+      }
+
+      setDetail((prev) => (prev ? { ...prev, social_profile: updatedProfile } : prev));
+      setSocialProfileForm((prev) => ({
+        ...prev,
+        foto_principale: null,
+        foto_rotazione: 0,
+      }));
+      setMessage('Profilo social salvato.');
+    } catch (e) {
+      setMessage(e.message || 'Errore salvataggio profilo social');
+    } finally {
+      setSocialProfileSaving(false);
     }
   };
 
@@ -877,7 +938,87 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                   )}
 
                   {modalTab === 'instafame' && (
-                    <div className="space-y-4 text-sm">
+                    <div className="space-y-6 text-sm">
+                      <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-4 space-y-4">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-pink-300">Profilo social</h3>
+                        {detail.social_profile ? (
+                          <>
+                            <div className="grid gap-2 sm:grid-cols-2 text-xs text-gray-400">
+                              <div>Nome personaggio: <span className="text-gray-200">{detail.social_profile.personaggio_nome || detail.nome}</span></div>
+                              <div>Visibile come: <span className="text-amber-200">{detail.social_profile.nome_pubblico || detail.nome}</span></div>
+                              <div>KORP: <span className="text-gray-200">{detail.social_profile.korp_nome || '—'}</span></div>
+                              <div>Segno zodiacale: <span className="text-gray-200">{detail.social_profile.segno_zodiacale || '—'}</span></div>
+                              <div>Era: <span className="text-gray-200">{detail.social_profile.era_nome || detail.social_profile.era_provenienza || '—'}</span></div>
+                              <div>Prefettura: <span className="text-gray-200">{detail.social_profile.prefettura_nome || '—'}</span></div>
+                              <div>Regione: <span className="text-gray-200">{detail.social_profile.prefettura_regione_sigla || detail.social_profile.regione || '—'}</span></div>
+                              <div>Badge InstaFame: <span className="text-gray-200">{detail.social_profile.badge_instafame || detail.badge_instafame || '—'}</span></div>
+                            </div>
+                            {Array.isArray(detail.social_profile.cariche_social) && detail.social_profile.cariche_social.length > 0 && (
+                              <div className="text-xs text-gray-400">
+                                Cariche social:{' '}
+                                <span className="text-gray-200">
+                                  {detail.social_profile.cariche_social
+                                    .map((c) => [c.carriera_nome, c.carica_nome].filter(Boolean).join(' — '))
+                                    .filter(Boolean)
+                                    .join(' · ') || '—'}
+                                </span>
+                              </div>
+                            )}
+                            <div>
+                              <label className="text-xs text-gray-400">Nickname InstaFame (opzionale)</label>
+                              <InstafameNicknameInput
+                                className="mt-1"
+                                value={socialProfileForm.nickname}
+                                onChange={(nickname) => setSocialProfileForm((p) => ({ ...p, nickname }))}
+                              />
+                              <p className="text-[11px] text-gray-500 mt-1">
+                                Se impostato, sostituisce il nome personaggio in post, story e commenti.
+                              </p>
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-400">Professioni</label>
+                              <input
+                                className="mt-1 w-full bg-gray-800 border border-gray-700 rounded px-2 py-2"
+                                value={socialProfileForm.professioni}
+                                onChange={(e) => setSocialProfileForm((p) => ({ ...p, professioni: e.target.value }))}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-400">Descrizione</label>
+                              <textarea
+                                className="mt-1 w-full bg-gray-800 border border-gray-700 rounded px-2 py-2 min-h-24"
+                                value={socialProfileForm.descrizione}
+                                onChange={(e) => setSocialProfileForm((p) => ({ ...p, descrizione: e.target.value }))}
+                              />
+                            </div>
+                            <ProfileImageField
+                              label="Foto profilo social"
+                              hint="Ruota l'immagine prima di salvare se necessario."
+                              file={socialProfileForm.foto_principale}
+                              remoteUrl={detail.social_profile.foto_principale || null}
+                              rotation={socialProfileForm.foto_rotazione}
+                              fallbackLetter={detail.social_profile.personaggio_nome || detail.nome || '?'}
+                              accentClass="file:bg-pink-700"
+                              rotateButtonClass="bg-pink-900/50 hover:bg-pink-800/70 border-pink-700/50 text-pink-100"
+                              onFileChange={(nextFile) => setSocialProfileForm((p) => ({ ...p, foto_principale: nextFile }))}
+                              onRotationChange={(nextRotation) => setSocialProfileForm((p) => ({ ...p, foto_rotazione: nextRotation }))}
+                            />
+                            <button
+                              type="button"
+                              disabled={socialProfileSaving}
+                              onClick={() => void handleSaveSocialProfile()}
+                              className="px-4 py-2 bg-pink-800 hover:bg-pink-700 rounded font-bold text-sm disabled:opacity-50"
+                            >
+                              {socialProfileSaving ? 'Salvataggio…' : 'Salva profilo social'}
+                            </button>
+                          </>
+                        ) : (
+                          <p className="text-gray-500">Profilo social non disponibile.</p>
+                        )}
+                      </div>
+
+                      <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-4 space-y-4">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-violet-300">Impostazioni influencer</h3>
                       <label className="flex items-center gap-2">
                         <span className="text-gray-400 w-32">Peso influencer</span>
                         <input
@@ -923,6 +1064,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         >
                           Rigenera like storici
                         </button>
+                      </div>
                       </div>
                     </div>
                   )}

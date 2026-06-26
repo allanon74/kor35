@@ -218,22 +218,22 @@ const TessitureTab = ({ onLogout }) => {
     const canPayRuntimeCosts = !runtimeAttivo ? runtimeCostEval.affordable : true;
 
     return (
-      <li className="flex justify-between items-center py-2 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
-        <div className="flex items-center gap-3 cursor-pointer grow" onClick={() => handleOpenModal(item)}>
+      <li className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-3 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
+        <div className="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onClick={() => handleOpenModal(item)}>
             <div className="shrink-0 mt-0.5 relative">
                 <IconaPunteggio url={iconUrl} color={iconColor} mode="cerchio_inv" size="xs" />
-                <span className="absolute -top-2 -right-2 bg-gray-900 text-gray-200 text-[9px] font-bold px-1 py-0.5 rounded-full border border-gray-600 leading-none">
+                <span className="absolute -top-2 -right-2 bg-gray-900 text-gray-200 text-[10px] font-bold px-1 py-0.5 rounded-full border border-gray-600 leading-none">
                     L{item.livello}
                 </span>
             </div>
-            <span className="font-bold text-gray-200 text-base">{item.nome}</span>
+            <span className="font-bold text-gray-200 text-base truncate">{item.nome}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5 justify-end sm:shrink-0 sm:flex-nowrap touch-manipulation">
             {creazionePronta && (
               <button
                 onClick={(e) => handleCompletaConsumabile(creazionePronta.id, e)}
                 disabled={isCompletingConsumable === creazionePronta.id}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-green-700 hover:bg-green-600 text-white"
+                className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold bg-green-700 hover:bg-green-600 text-white"
                 title="Aggiungi consumabile all'inventario"
               >
                 {isCompletingConsumable === creazionePronta.id ? <Loader2 className="animate-spin" size={14} /> : <PackageCheck size={14} />}
@@ -250,15 +250,16 @@ const TessitureTab = ({ onLogout }) => {
               <button
                 onClick={(e) => handleCreaConsumabile(item, e)}
                 disabled={!!isCreatingConsumable}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-700 hover:bg-indigo-600 text-white"
+                className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold bg-indigo-700 hover:bg-indigo-600 text-white"
                 title="Crea consumabile da questa tessitura (costo e tempo dipendono dall'aura)"
               >
                 {isCreatingConsumable === item.id ? <Loader2 className="animate-spin" size={14} /> : <FlaskConical size={14} />}
-                Crea consumabile
+                <span className="sm:hidden">Crea</span>
+                <span className="hidden sm:inline">Crea consumabile</span>
               </button>
             )}
             {hasRuntimeConfig && (
-              <div className="flex flex-col items-end gap-0.5">
+              <div className="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto">
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -273,7 +274,7 @@ const TessitureTab = ({ onLogout }) => {
                     || stopRuntimeMutation.isPending
                     || (!runtimeAttivo && !canPayRuntimeCosts)
                   }
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                  className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg text-xs font-bold ${
                     runtimeAttivo
                       ? 'bg-rose-800 hover:bg-rose-700 text-white'
                       : 'bg-purple-700 hover:bg-purple-600 text-white'
@@ -290,13 +291,13 @@ const TessitureTab = ({ onLogout }) => {
                   {runtimeAttivo ? `Stop (${runtimeAttivo.secondi_rimanenti || 0}s)` : 'Attiva'}
                 </button>
                 {!runtimeAttivo && item.costi_attivazione?.length > 0 && (
-                  <ActivationCostPreview char={char} costi={item.costi_attivazione} compact className="max-w-[140px] text-right" />
+                  <ActivationCostPreview char={char} costi={item.costi_attivazione} compact className="w-full sm:max-w-[180px] text-right text-xs" />
                 )}
               </div>
             )}
             <button
                 onClick={(e) => handleToggleFavorite(item, e)}
-                className={`p-2 rounded-full transition-all ${
+                className={`p-2.5 rounded-full transition-all min-h-10 min-w-10 flex items-center justify-center ${
                     isFavorite 
                         ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-900/20' 
                         : 'text-gray-500 hover:text-yellow-400 hover:bg-gray-600'
@@ -309,7 +310,7 @@ const TessitureTab = ({ onLogout }) => {
               <button
                 onClick={(e) => handleRevoke(item, e)}
                 disabled={revokeMutation.isPending}
-                className="p-2 text-red-400 hover:text-red-200 hover:bg-red-900/20 rounded-full transition-colors"
+                className="p-2.5 text-red-400 hover:text-red-200 hover:bg-red-900/20 rounded-full transition-colors min-h-10 min-w-10 flex items-center justify-center"
                 title="Revoca acquisto"
               >
                 <Trash2 size={18} />
@@ -317,7 +318,7 @@ const TessitureTab = ({ onLogout }) => {
             )}
             <button
                 onClick={(e) => {e.stopPropagation(); handleOpenModal(item)}}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors"
+                className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors min-h-10 min-w-10 flex items-center justify-center"
             >
                 <Info size={18} />
             </button>
@@ -463,7 +464,7 @@ const TessitureTab = ({ onLogout }) => {
 
   return (
     <>
-      <div className="w-full p-4 max-w-6xl mx-auto pb-24">
+      <div className="w-full p-4 max-w-6xl mx-auto pb-safe-tab">
         {/* Riepilogo Valute */}
         <div className="mb-4 flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700 shadow-sm max-w-3xl mx-auto">
             <div className="text-sm text-gray-400">Disponibilità:</div>
@@ -483,7 +484,7 @@ const TessitureTab = ({ onLogout }) => {
             </h3>
             <ul className="space-y-2">
               {creazioniPronte.map((c) => (
-                <li key={`pronta-${c.id}`} className="flex items-center justify-between py-2 px-3 rounded bg-green-900/30 border border-green-700/50">
+                <li key={`pronta-${c.id}`} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-2 px-3 rounded bg-green-900/30 border border-green-700/50">
                   <span className="text-gray-200 font-medium">{c.tessitura_nome}</span>
                   <button
                     type="button"
@@ -499,7 +500,7 @@ const TessitureTab = ({ onLogout }) => {
               {creazioniInCorso.map((c) => {
                 const secondi = countdowns[c.id] ?? c.secondi_rimanenti ?? 0;
                 return (
-                  <li key={`corso-${c.id}`} className="flex items-center justify-between py-2 px-3 rounded bg-amber-900/20 border border-amber-700/50">
+                  <li key={`corso-${c.id}`} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between py-2 px-3 rounded bg-amber-900/20 border border-amber-700/50">
                     <span className="text-gray-200 font-medium">{c.tessitura_nome}</span>
                     <span className="flex items-center gap-2 text-amber-400 font-mono text-sm">
                       <Timer size={16} />

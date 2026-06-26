@@ -713,7 +713,7 @@ const GameTab = ({ onNavigate }) => {
     const heavyUsed = heavyConsumers.length;
 
     return (
-        <div className="pb-24 px-2 space-y-6 animate-fadeIn text-gray-100 pt-2">
+        <div className="pb-safe-tab px-2 space-y-6 animate-fadeIn text-gray-100 pt-2">
             {readOnlyGame && (
                 <div
                     className="rounded-lg border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100/95 text-center"
@@ -957,17 +957,17 @@ const GameTab = ({ onNavigate }) => {
                             const canPayRuntimeCosts = runtimeCostEval.affordable;
                             return (
                                 <div key={`tessitura-${tessitura.id}`} className="bg-linear-to-r from-purple-900/20 to-gray-900/20 border border-purple-500/30 p-3 rounded-lg shadow-sm">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div>
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-2">
+                                        <div className="min-w-0">
                                             <div className="font-bold text-purple-100 text-sm flex items-center gap-2">
-                                                <Star size={14} className="text-yellow-400" fill="currentColor" />
-                                                {tessitura.nome}
+                                                <Star size={14} className="text-yellow-400 shrink-0" fill="currentColor" />
+                                                <span className="truncate">{tessitura.nome}</span>
                                             </div>
-                                            <div className="text-[10px] text-purple-300/60 uppercase">Tessitura • Lv.{tessitura.livello}</div>
+                                            <div className="text-xs text-purple-300/60 uppercase mt-0.5">Tessitura • Lv.{tessitura.livello}</div>
                                         </div>
                                         {canActivateRuntime && (
-                                            <div className="flex flex-col items-end gap-1">
-                                                <div className="flex items-center gap-2">
+                                            <div className="flex flex-col items-stretch sm:items-end gap-1 w-full sm:w-auto shrink-0">
+                                                <div className="flex flex-wrap items-center gap-2 justify-end">
                                                     <button
                                                         type="button"
                                                         onClick={() =>
@@ -986,7 +986,7 @@ const GameTab = ({ onNavigate }) => {
                                                                 ? `Risorse insufficienti: ${runtimeCostEval.label}`
                                                                 : undefined
                                                         }
-                                                        className="px-2 py-1 rounded bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
+                                                        className="px-3 py-2 rounded bg-purple-700 hover:bg-purple-600 disabled:opacity-40 text-xs uppercase tracking-wider font-bold"
                                                     >
                                                         {runtimeAttivo ? 'Riattiva' : 'Attiva'}
                                                     </button>
@@ -1000,7 +1000,7 @@ const GameTab = ({ onNavigate }) => {
                                                                 })
                                                             }
                                                             disabled={stopRuntimeMutation.isPending || readOnlyGame}
-                                                            className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[10px] uppercase tracking-wider font-bold"
+                                                            className="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-xs uppercase tracking-wider font-bold"
                                                         >
                                                             Stop
                                                         </button>

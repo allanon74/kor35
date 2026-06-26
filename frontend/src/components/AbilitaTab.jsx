@@ -217,9 +217,9 @@ const AbilitaTab = ({ onLogout }) => {
     const iconColor = skill.caratteristica?.colore;
 
     return (
-      <li className="flex justify-between items-center py-2 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
+      <li className="flex justify-between items-center gap-2 py-2 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
         <div 
-            className="flex items-center gap-3 cursor-pointer grow" 
+            className="flex items-center gap-3 cursor-pointer min-w-0 flex-1" 
             onClick={() => handleOpenModal(skill)}
         >
             <div className="shrink-0 mt-0.5">
@@ -230,11 +230,12 @@ const AbilitaTab = ({ onLogout }) => {
                     size="xs"
                 />
             </div>
-            <span className="font-bold text-gray-200 text-base">{skill.nome}</span>
+            <span className="font-bold text-gray-200 text-base truncate">{skill.nome}</span>
         </div>
+        <div className="flex items-center gap-1 shrink-0 touch-manipulation">
         <button
             onClick={() => handleOpenModal(skill)}
-            className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors ml-2"
+            className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors min-h-10 min-w-10 flex items-center justify-center"
             title="Dettagli"
         >
             <Info size={18} />
@@ -244,12 +245,13 @@ const AbilitaTab = ({ onLogout }) => {
           <button
             onClick={(e) => handleRevoke(skill, e)}
             disabled={revokeMutation.isPending}
-            className="p-2 text-red-400 hover:text-red-200 hover:bg-red-900/20 rounded-full transition-colors ml-2"
+            className="p-2.5 text-red-400 hover:text-red-200 hover:bg-red-900/20 rounded-full transition-colors min-h-10 min-w-10 flex items-center justify-center"
             title="Revoca acquisto"
           >
             <Trash2 size={18} />
           </button>
         )}
+        </div>
       </li>
     );
   };
@@ -431,7 +433,7 @@ const AbilitaTab = ({ onLogout }) => {
 
   return (
     <>
-      <div className="w-full p-4 max-w-6xl mx-auto pb-24">
+      <div className="w-full p-4 max-w-6xl mx-auto pb-safe-tab">
         
         {/* Riepilogo Valute (Comune) */}
         <div className="mb-6 flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700 shadow-sm max-w-3xl mx-auto">

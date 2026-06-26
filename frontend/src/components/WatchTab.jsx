@@ -114,7 +114,7 @@ const WatchTab = () => {
     };
 
     return (
-        <div className="animate-fadeIn space-y-5 px-3 py-4 pb-24 text-gray-100">
+        <div className="animate-fadeIn space-y-5 px-3 py-4 pb-safe-tab text-gray-100">
             <header className="space-y-1">
                 <div className="flex items-center gap-2 text-sky-400">
                     <Watch className="h-6 w-6 shrink-0" aria-hidden />

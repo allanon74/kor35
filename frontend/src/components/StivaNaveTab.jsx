@@ -63,7 +63,7 @@ const StivaNaveTab = ({ onLogout, personaggioId }) => {
   const righeMap = Object.fromEntries((data?.righe || []).map((r) => [r.mattone_id, r]));
 
   return (
-    <div className="p-4 space-y-4 animate-fadeIn pb-24">
+    <div className="p-4 space-y-4 animate-fadeIn pb-safe-tab">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-white flex items-center gap-2">

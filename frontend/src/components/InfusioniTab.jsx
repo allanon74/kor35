@@ -130,21 +130,22 @@ const InfusioniTab = ({ onLogout }) => {
     const iconColor = item.aura_richiesta?.colore;
 
     return (
-      <li className="flex justify-between items-center py-2 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0 gap-2">
-        <div className="flex items-center gap-3 cursor-pointer grow" onClick={() => handleOpenModal(item)}>
+      <li className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between py-2 px-2 hover:bg-gray-700/50 transition-colors rounded-sm border-b border-gray-700/50 last:border-0">
+        <div className="flex items-center gap-3 cursor-pointer min-w-0 flex-1" onClick={() => handleOpenModal(item)}>
             <div className="shrink-0 mt-0.5 relative">
                 <IconaPunteggio url={iconUrl} color={iconColor} mode="cerchio_inv" size="xs" />
                 <span className="absolute -top-2 -right-2 bg-gray-900 text-gray-200 text-[9px] font-bold px-1 py-0.5 rounded-full border border-gray-600 leading-none">
                     L{item.livello}
                 </span>
             </div>
-            <span className="font-bold text-gray-200 text-base">{item.nome}</span>
+            <span className="font-bold text-gray-200 text-base truncate">{item.nome}</span>
         </div>
         
+        <div className="flex items-center gap-1.5 justify-end shrink-0 touch-manipulation">
         {/* Tasto Forgia (Apre Modale) */}
         <button
             onClick={(e) => handleForgeClick(item, e)}
-            className="flex items-center gap-1 px-3 py-1.5 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:shadow-orange-500/20 active:scale-95"
+            className="flex items-center gap-1 px-3 py-2 bg-orange-700 hover:bg-orange-600 text-white rounded text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:shadow-orange-500/20 active:scale-95"
         >
             <Hammer size={14} /> 
             <span className="hidden sm:inline">Forgia</span>
@@ -163,10 +164,11 @@ const InfusioniTab = ({ onLogout }) => {
 
         <button
             onClick={(e) => {e.stopPropagation(); handleOpenModal(item)}}
-            className="p-2 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors ml-1"
+            className="p-2.5 text-gray-400 hover:text-white hover:bg-gray-600 rounded-full transition-colors min-h-10 min-w-10 flex items-center justify-center"
         >
             <Info size={18} />
         </button>
+        </div>
       </li>
     );
   };
@@ -278,7 +280,7 @@ const InfusioniTab = ({ onLogout }) => {
 
   return (
     <>
-      <div className="w-full p-4 max-w-6xl mx-auto pb-24">
+      <div className="w-full p-4 max-w-6xl mx-auto pb-safe-tab">
         {/* Header Crediti */}
         <div className="mb-4 flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700 shadow-sm max-w-3xl mx-auto">
             <div className="text-sm text-gray-400">Disponibilità:</div>

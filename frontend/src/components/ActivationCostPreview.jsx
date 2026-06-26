@@ -11,7 +11,7 @@ const ActivationCostPreview = ({ char, costi, compact = false, className = '' })
 
   if (compact) {
     return (
-      <div className={`text-[10px] leading-snug ${className}`}>
+      <div className={`text-xs leading-snug ${className}`}>
         <span className="text-gray-500 uppercase tracking-wide font-bold">Costo: </span>
         {evalCosts.rows.map((r, i) => (
           <span key={r.sigla}>
