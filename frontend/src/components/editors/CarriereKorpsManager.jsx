@@ -372,7 +372,7 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
         </div>
         <div className="p-4 border-t border-gray-700">
           <EditorSaveActions
-            onSave={() => onSave({ ...form, espandi_tutte_carriere: espandiTutteCarriere }, 'save_close')}
+            onSave={() => onSave(form, 'save_close')}
             onCancel={onClose}
             statusMessage={statusMessage}
             statusType={statusType}
