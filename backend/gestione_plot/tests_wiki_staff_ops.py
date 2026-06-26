@@ -53,6 +53,7 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertTrue(pilot_page.visibile_solo_staff)
         self.assertIn("ST / SP / CA", pilot_page.contenuto)
         self.assertIn("Catalogo eventi", pilot_page.contenuto)
+        self.assertIn("Legenda sottosistemi", pilot_page.contenuto)
 
         kiosk_page = PaginaRegolamento.objects.get(slug="staff-console-pilota-kiosk")
         self.assertEqual(kiosk_page.parent_id, parent.id)
@@ -63,6 +64,23 @@ class WikiStaffOpsSyncTests(TestCase):
         mirror_page = PaginaRegolamento.objects.get(slug="staff-mirror-pi")
         self.assertEqual(mirror_page.parent_id, parent.id)
         self.assertIn("192.168.100.1", mirror_page.contenuto)
+
+    def test_pilot_eventi_condition_uses_sottosistema_nome(self):
+        from types import SimpleNamespace
+
+        from gestione_plot.wiki_staff_pilot_eventi import (
+            _codice_char_label,
+            _format_condition,
+        )
+
+        ss_by_codice = {"E": SimpleNamespace(codice="E", nome="Deflettori")}
+        self.assertEqual(_codice_char_label("E", ss_by_codice), "Deflettori (E)")
+        text = _format_condition(
+            {"sottosistema": "E", "op": ">", "value": 5},
+            ss_by_codice,
+        )
+        self.assertIn("Deflettori (E)", text)
+        self.assertIn("> 5", text)
 
     def test_sync_without_force_skips_existing(self):
         sync_wiki_staff_ops(force=True)
