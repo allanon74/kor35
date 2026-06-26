@@ -637,9 +637,6 @@ def _apply_social_author_campaign_filter(qs, request=None):
     return qs.filter(Q(autore__campagna=active_campaign) | png_kor35_q)
 
 
-        return obj.era_provenienza
-
-
 class SocialProfileStaffSerializer(serializers.ModelSerializer):
     """Profilo InstaFame in hub staff personaggi: lettura completa, modifica campi social."""
 
