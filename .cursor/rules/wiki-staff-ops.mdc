@@ -13,6 +13,7 @@ Pagine Wiki **solo staff** generate da sorgenti versionate in `docs/wiki/staff/`
 |------|----------------|
 | `manifest.json` | Sezione parent + elenco pagine (slug, titolo, ordine) |
 | `make-comandi.md` | Pagina «Comandi Make KOR35» (`staff-make-comandi`) |
+| `pilot-eventi.md` | Pagina «Pilotaggio — eventi ST/SP/CA» (`staff-pilot-eventi`) |
 | `mirror-pi.md` | Pagina «Mirror Pi — procedure» (`staff-mirror-pi`) |
 | `test-offline-omada.md` | Pagina «Test offline — mesh Omada» (`staff-test-offline-omada`) |
 

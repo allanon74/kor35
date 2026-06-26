@@ -125,6 +125,13 @@ def sync_wiki_staff_ops(*, force: bool = False) -> list[dict]:
 
         md_text = source_path.read_text(encoding="utf-8")
         html = _markdown_to_html(md_text)
+        if entry.get("slug") == "staff-pilot-eventi":
+            try:
+                from gestione_plot.wiki_staff_pilot_eventi import build_pilot_eventi_catalog_html
+
+                html += build_pilot_eventi_catalog_html()
+            except Exception:
+                pass
         footer = (
             '<hr><p><small>Fonte: <code>docs/wiki/staff/'
             f"{source_name}</code> — aggiorna da Dashboard staff (Manuali PDF) o <code>make wiki-staff-sync</code>.</small></p>"

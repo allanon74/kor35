@@ -78,6 +78,17 @@ Master = `ENV=prod`. Replica = `dev-office`, `mirror`.
 
 ---
 
+## Certificati TLS (prod → mirror)
+
+| Comando | Descrizione |
+|---------|-------------|
+| `make sync-certs-to-mirror ENV=prod` | Su prod: copia certificati locali sul mirror Pi |
+| `make sync-certs-prod-to-mirror` | Da PC dev: relay SSH prod → mirror |
+
+Script: `scripts/sync_tls_certs_to_mirror.sh`. Host mirror: `pi@kor35.ddns.net:10022`.
+
+---
+
 ## Pilotaggio
 
 | Comando | Descrizione |
@@ -103,6 +114,8 @@ Opzioni `seed-componenti-nave`:
 | `make mirror-network-check ENV=mirror` | Diagnostica rete + stack |
 | `sudo make mirror-configure ENV=mirror MIRROR_NETWORK_MODE=router` | Install + modalità |
 | `sudo make mirror-install-network MIRROR_NETWORK_AUTO_BOOT=0` | Solo install unit |
+| `sudo make mirror-reinstall-units ENV=mirror` | Reinstalla solo le unit systemd da repo |
+| `sudo make mirror-ensure-emergency-wifi ENV=mirror` | Riaccende hotspot `Pi_Emergenza` |
 | `sudo make mirror-network-mode MIRROR_NETWORK_MODE=event` | Switch router/event/auto |
 
 `MIRROR_NETWORK_MODE`: `router` | `event` | `auto`  

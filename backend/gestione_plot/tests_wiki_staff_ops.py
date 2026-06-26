@@ -30,6 +30,7 @@ class WikiStaffOpsSyncTests(TestCase):
         slugs = {r["slug"] for r in results}
         self.assertIn("staff-operativita-tecnica", slugs)
         self.assertIn("staff-make-comandi", slugs)
+        self.assertIn("staff-pilot-eventi", slugs)
         self.assertIn("staff-mirror-pi", slugs)
         self.assertIn("staff-test-offline-omada", slugs)
 
@@ -41,8 +42,16 @@ class WikiStaffOpsSyncTests(TestCase):
         self.assertEqual(make_page.parent_id, parent.id)
         self.assertTrue(make_page.visibile_solo_staff)
         self.assertIn("make mirror-pi-check", make_page.contenuto)
+        self.assertIn("sync-certs-to-mirror", make_page.contenuto)
+        self.assertIn("mirror-reinstall-units", make_page.contenuto)
         self.assertIn('<table data-table-style="grid">', make_page.contenuto)
         self.assertIn("<th>Comando</th>", make_page.contenuto)
+
+        pilot_page = PaginaRegolamento.objects.get(slug="staff-pilot-eventi")
+        self.assertEqual(pilot_page.parent_id, parent.id)
+        self.assertTrue(pilot_page.visibile_solo_staff)
+        self.assertIn("ST / SP / CA", pilot_page.contenuto)
+        self.assertIn("Catalogo eventi", pilot_page.contenuto)
 
         mirror_page = PaginaRegolamento.objects.get(slug="staff-mirror-pi")
         self.assertEqual(mirror_page.parent_id, parent.id)

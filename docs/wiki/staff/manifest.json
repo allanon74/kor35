@@ -13,6 +13,12 @@
       "ordine": 10
     },
     {
+      "slug": "staff-pilot-eventi",
+      "titolo": "Pilotaggio — eventi ST/SP/CA",
+      "source": "pilot-eventi.md",
+      "ordine": 15
+    },
+    {
       "slug": "staff-mirror-pi",
       "titolo": "Mirror Pi — procedure",
       "source": "mirror-pi.md",

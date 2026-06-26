@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Info } from 'lucide-react';
 import StaffQrTab from '../StaffQrTab';
 import useStaffMinigiocoQr from '../../hooks/useStaffMinigiocoQr';
 import StaffMinigiocoPageToolbar from './StaffMinigiocoPageToolbar';
 import PilotSottosistemaModal from './PilotSottosistemaModal';
+import WikiHelpModal from '../WikiHelpModal';
 import {
   applyDefaultMinigiocoToQr,
   MINIGIOCO_PAGE_KEYS,
@@ -44,6 +46,8 @@ import {
   staffModificaPilotStiva,
   staffAggiornaCodiciEventiPilot,
 } from '../../api';
+
+const PILOT_EVENTI_WIKI_SLUG = 'staff-pilot-eventi';
 
 const PILOT_TABS = [
   { id: 'sottosistemi', label: 'Sottosistemi' },
@@ -554,6 +558,7 @@ export default function PilotaggioManager({ onLogout }) {
   const [eventiCodiciBusy, setEventiCodiciBusy] = useState(false);
   const [sessioneLive, setSessioneLive] = useState(null);
   const [sessioneLiveBusy, setSessioneLiveBusy] = useState(false);
+  const [pilotEventiWikiOpen, setPilotEventiWikiOpen] = useState(false);
   const [editCaEffetto, setEditCaEffetto] = useState(defaultCaEffetto);
   const [createCaEffetto, setCreateCaEffetto] = useState(defaultCaEffetto);
   const [editRuleBuilder, setEditRuleBuilder] = useState({
@@ -1543,7 +1548,18 @@ export default function PilotaggioManager({ onLogout }) {
       {activeTab === 'eventi' ? (
       <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h3 className="font-semibold">Eventi viaggio (randomici)</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="font-semibold">Eventi viaggio (randomici)</h3>
+            <button
+              type="button"
+              className="shrink-0 p-1 rounded-full text-indigo-300 hover:bg-indigo-900/50 hover:text-indigo-100 border border-transparent hover:border-indigo-700/60"
+              title="Guida wiki: eventi ST / SP / CA e Catastrofe"
+              aria-label="Apri guida wiki eventi pilotaggio"
+              onClick={() => setPilotEventiWikiOpen(true)}
+            >
+              <Info size={18} />
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -2548,6 +2564,12 @@ export default function PilotaggioManager({ onLogout }) {
       ) : null}
 
       {minigiocoModal}
+
+      <WikiHelpModal
+        isOpen={pilotEventiWikiOpen}
+        onClose={() => setPilotEventiWikiOpen(false)}
+        wikiSlug={PILOT_EVENTI_WIKI_SLUG}
+      />
     </div>
   );
 }
