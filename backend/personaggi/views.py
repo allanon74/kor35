@@ -89,6 +89,8 @@ from django.conf import settings
 from webpush.models import PushInformation, SubscriptionInfo
 import json
 
+from gestione_plot.permissions import IsStaffOrMaster
+
 from . import api_cache_revision
 from . import qr_logic
 
@@ -5408,9 +5410,9 @@ class StaffMessageDeleteView(APIView):
 class AssociaQrAVistaView(APIView):
     """
     Associa un QR code a un elemento derivato da A_vista 
-    (Tessitura, Infusione, Cerimoniale, Oggetto, OggettoBase, Inventario, Manifesto)
+    (Tessitura, Infusione, Cerimoniale, Oggetto, OggettoBase, Inventario, Manifesto, Nodo, …)
     """
-    permission_classes = [permissions.IsAdminUser]  # Solo Staff
+    permission_classes = [IsStaffOrMaster]
     
     def post(self, request, a_vista_id):
         from .qr_logic import AssociaQrConflict, associa_qrcode_a_vista, validate_qr_id
