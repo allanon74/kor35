@@ -5,6 +5,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from gestione_plot.models import Quest, QuestVista
+from pilotaggio.models import SottosistemaNave
 from personaggi.models import (
     CAMPAGNA_ROLE_MASTER,
     Campagna,
@@ -89,6 +90,18 @@ class AssociaQrDirettoPermissionTests(TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         qr.refresh_from_db()
         self.assertEqual(qr.vista_id, nodo_b.pk)
+
+    def test_campagna_master_associa_qr_sottosistema_nave(self):
+        sottos = SottosistemaNave.objects.create(codice="PQR", nome="Reattore test QR")
+        qr = QrCode.objects.create()
+        url = f"/api/pilot/staff/sottosistemi/{sottos.pk}/associa-qr/"
+        r = self.client.post(url, {"qr_id": qr.id}, format="json", **self.headers)
+        self.assertEqual(r.status_code, 200, r.content)
+        sottos.refresh_from_db()
+        qr.refresh_from_db()
+        self.assertIsNotNone(sottos.a_vista_id)
+        self.assertEqual(qr.vista_id, sottos.a_vista_id)
+        self.assertTrue(Manifesto.objects.filter(pk=sottos.a_vista_id).exists())
 
     def test_plot_associa_qr_vista_quest_master(self):
         quest = Quest.objects.create(nome="Q test QR", descrizione="")

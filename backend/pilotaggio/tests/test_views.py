@@ -234,7 +234,7 @@ class StaffSottosistemaAssociaQrTests(TestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
-        self.sottos = SottosistemaNave.objects.create(codice="Q", nome="Propulsione")
+        self.sottos = SottosistemaNave.objects.create(codice="ZQR", nome="Propulsione test")
         self.qr = QrCode.objects.create()
 
     def test_associa_qr_senza_vista_crea_manifesto(self):
