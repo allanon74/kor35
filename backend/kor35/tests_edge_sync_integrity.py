@@ -194,6 +194,32 @@ class EdgeSyncQrCodeNaturalPkTests(TestCase):
         self.assertEqual(qr.testo, "Da master")
         self.assertTrue(qr.qr_stampato)
 
+    def test_realigns_qrcode_pk_when_sync_id_matches_but_id_wrong(self):
+        master_sync_id = uuid.uuid4()
+        mirror_qr = QrCode.objects.create(sync_id=master_sync_id, testo="Mirror auto id")
+        wrong_id = mirror_qr.id
+        physical_id = "REALIGNqr0001"
+        remote_updated = timezone.now()
+        row = {
+            "sync_id": str(master_sync_id),
+            "id": physical_id,
+            "testo": "Da master",
+            "inventario_presente": False,
+            "inventario_colore_codice": "",
+            "inventario_colore_sfondo": "",
+            "stl_creato": False,
+            "qr_stampato": False,
+            "vista": None,
+            "updated_at": remote_updated.isoformat(),
+        }
+        view = EdgeSyncView()
+        result = view._try_apply_one(QrCode, row)
+        self.assertEqual(result, "applied")
+        self.assertFalse(QrCode.objects.filter(pk=wrong_id).exists())
+        qr = QrCode.objects.get(sync_id=master_sync_id)
+        self.assertEqual(qr.id, physical_id)
+        self.assertEqual(qr.testo, "Da master")
+
 
 class EdgeSyncMtiChildLwwTests(TestCase):
     """Campi MTI figlio (es. Tessitura) non devono essere sovrascritti da payload più vecchi."""

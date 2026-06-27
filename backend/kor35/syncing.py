@@ -196,6 +196,49 @@ def natural_primary_key_field(model: type[models.Model]) -> str | None:
     return pk.name
 
 
+def _qrcode_fk_models_updating_pk():
+    """Modelli con FK/OneToOne verso QrCode.id (CharField PK)."""
+    from gestione_plot.models import QuestVista
+    from personaggi.models import MinigiocoQrConfig, QrInventarioScanSession, TimerQrCode
+    from personaggi.negozio_mercante_models import NegozioMercante
+
+    return (
+        (QuestVista, "qr_code_id"),
+        (NegozioMercante, "qr_code_id"),
+        (TimerQrCode, "qr_code_id"),
+        (MinigiocoQrConfig, "qr_code_id"),
+        (QrInventarioScanSession, "qr_code_id"),
+    )
+
+
+def realign_natural_primary_key(
+    model: type[models.Model],
+    local_obj: models.Model,
+    want_pk: str,
+    pk_name: str,
+) -> bool:
+    """
+    Allinea il PK naturale locale a quello remoto (es. id stampato sul QR fisico).
+    Aggiorna prima le FK che puntano al vecchio id.
+    """
+    from django.db import transaction
+
+    old_pk = getattr(local_obj, pk_name)
+    want_pk = str(want_pk).strip()
+    if not want_pk or str(old_pk) == want_pk:
+        return True
+
+    if model.objects.filter(**{pk_name: want_pk}).exclude(pk=local_obj.pk).exists():
+        return False
+
+    with transaction.atomic():
+        if model._meta.label_lower == QRCODE_MODEL_LABEL:
+            for related_model, field_name in _qrcode_fk_models_updating_pk():
+                related_model.objects.filter(**{field_name: old_pk}).update(**{field_name: want_pk})
+        model.objects.filter(pk=old_pk).update(**{pk_name: want_pk})
+    return True
+
+
 def apply_natural_pk_precheck(
     model: type[models.Model],
     sync_id,
@@ -216,9 +259,29 @@ def apply_natural_pk_precheck(
         return "noop", local_obj
 
     if local_obj is not None and getattr(local_obj, pk_name) != want_pk:
-        if model.objects.filter(**{pk_name: want_pk}).exists():
+        by_pk = model.objects.filter(**{pk_name: want_pk}).first()
+        if by_pk is not None and str(by_pk.sync_id) != str(sync_id):
+            if (
+                by_pk.updated_at
+                and remote_updated_at
+                and remote_updated_at <= by_pk.updated_at
+            ):
+                return "skipped", by_pk
+            # Record con id fisico corretto ma sync_id locale errato: allinea sync_id e continua apply.
+            patch = dict(update_data)
+            patch["sync_id"] = sync_id
+            if remote_updated_at:
+                patch["updated_at"] = remote_updated_at
+            model.objects.filter(pk=by_pk.pk).update(**patch)
+            if str(local_obj.pk) != str(by_pk.pk):
+                model.objects.filter(pk=local_obj.pk).delete()
+            return "applied", model.objects.filter(pk=by_pk.pk).first()
+        if by_pk is not None and str(by_pk.sync_id) == str(sync_id):
+            local_obj = by_pk
+        elif not realign_natural_primary_key(model, local_obj, want_pk, pk_name):
             return "defer", local_obj
-        return "defer", local_obj
+        else:
+            local_obj = model.objects.filter(sync_id=sync_id).first()
 
     if local_obj is None:
         by_pk = model.objects.filter(**{pk_name: want_pk}).first()
