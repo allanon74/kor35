@@ -117,6 +117,9 @@ def expand_paginaregolamento_queryset_with_ancestors(model: type[models.Model], 
 
 
 PAGINA_REGOLAMENTO_LABEL = "gestione_plot.paginaregolamento"
+QRCODE_MODEL_LABEL = "personaggi.qrcode"
+# Modelli il cui PK non è auto-increment e coincide con un identificatore esterno (es. QR stampato).
+SYNC_NATURAL_PK_LABELS = frozenset({QRCODE_MODEL_LABEL})
 SYNC_MENU_ONLY_KEY = "_sync_menu_only"
 PAGINA_REGOLAMENTO_MENU_FIELD_NAMES = frozenset(
     {
@@ -249,6 +252,8 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
 
     for field in model._meta.concrete_fields:
         if field.name == "id":
+            if model._meta.label_lower in SYNC_NATURAL_PK_LABELS:
+                data["id"] = getattr(instance, "id", None)
             continue
 
         if isinstance(field, models.ForeignKey):

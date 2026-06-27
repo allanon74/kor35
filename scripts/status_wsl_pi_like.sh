@@ -43,13 +43,14 @@ wsl_pi_compose ps "${STATUS_EXTRA[@]}"
 
 echo ""
 echo "Diagnostica pilot_tick:"
-if wsl_pi_compose ps --services --filter status=running | rg "^pilot_tick$" >/dev/null 2>&1; then
+RUNNING_SERVICES="$(wsl_pi_compose ps --services --filter status=running 2>/dev/null || true)"
+if printf '%s\n' "$RUNNING_SERVICES" | grep -qx 'pilot_tick'; then
   echo "- servizio pilot_tick: RUNNING"
 else
   echo "- servizio pilot_tick: NON RUNNING"
 fi
 
-if wsl_pi_compose ps --services --filter status=running | rg "^backend$" >/dev/null 2>&1; then
+if printf '%s\n' "$RUNNING_SERVICES" | grep -qx 'backend'; then
   runtime_json="$(wsl_pi_compose exec -T backend python manage.py shell -c "import json; from django.utils import timezone; from pilotaggio.models import PilotRuntimeConfig; c=PilotRuntimeConfig.get_solo(); hb=c.tick_last_heartbeat; alive=False; delta=None; interval=float(c.tick_interval_secondi or 5.0); 
 if hb is not None:
     delta=(timezone.now()-hb).total_seconds();
