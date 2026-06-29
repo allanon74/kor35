@@ -1329,7 +1329,3 @@ class StatoSessioneNaveSyncTests(TestCase):
         got = get_o_crea_stato_sottosistema(sessione, sottos)
         self.assertEqual(got.livello_target, 7)
         self.assertTrue(got.online)
-
-        nave.refresh_from_db()
-        self.assertEqual(nave.livello_target, 7)
-        self.assertTrue(nave.online)

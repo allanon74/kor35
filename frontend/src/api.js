@@ -2516,6 +2516,18 @@ export const staffGetPilotRuntimeConfig = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/runtime-config/', { method: 'GET' }, onLogout);
 export const staffGetPilotSessioneLive = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/sessione-live/', { method: 'GET' }, onLogout);
+export const staffGetPilotSessioniOrfane = (onLogout, pilotaId = null) => {
+  const params = new URLSearchParams();
+  if (pilotaId != null) params.set('pilota_id', String(pilotaId));
+  const q = params.toString();
+  const path = q ? `/api/pilot/staff/sessioni-orfane/?${q}` : '/api/pilot/staff/sessioni-orfane/';
+  return fetchAuthenticated(path, { method: 'GET' }, onLogout);
+};
+export const staffPulisciPilotSessioniOrfane = (data, onLogout) =>
+  fetchAuthenticated('/api/pilot/staff/sessioni-orfane/', {
+    method: 'POST',
+    body: JSON.stringify(data || {}),
+  }, onLogout);
 export const staffAzionePilotSessioneSottosistema = (data, onLogout) =>
   fetchAuthenticated('/api/pilot/staff/sessione-live/sottosistema/', {
     method: 'POST',

@@ -342,6 +342,33 @@ class StaffSessioneLiveTests(TestCase):
         self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_IDLE)
         self.assertFalse(body["decollo_effettuato"])
 
+    def test_anteprima_e_pulisci_sessioni_orfane(self):
+        orfana = SessioneVolo.objects.create(
+            pilota=self.pilota,
+            stato=SESSIONE_STATO_VOLO,
+            defcon=0,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        res_get = self.client.get("/api/pilot/staff/sessioni-orfane/")
+        self.assertEqual(res_get.status_code, 200, res_get.content)
+        self.assertEqual(res_get.json()["totale_orfane"], 1)
+
+        res_post = self.client.post(
+            "/api/pilot/staff/sessioni-orfane/",
+            {},
+            format="json",
+        )
+        self.assertEqual(res_post.status_code, 200, res_post.content)
+        body = res_post.json()
+        self.assertEqual(body["totale_chiuse"], 1)
+        self.assertEqual(body["orfane_rimanenti"], 0)
+
+        orfana.refresh_from_db()
+        self.sessione.refresh_from_db()
+        self.assertEqual(self.sessione.stato, SESSIONE_STATO_ARRIVATA)
+        self.assertEqual(orfana.stato, SESSIONE_STATO_VOLO)
+
     def test_takeoff_flow(self):
         from pilotaggio.models import PilotConsoleToken
 

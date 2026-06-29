@@ -49,12 +49,21 @@ def defaults_stato_da_nave(sottosistema: "SottosistemaNave") -> Dict[str, Any]:
 
 
 def sync_stato_sessione_a_nave(stato: "StatoSottosistemaSessione") -> None:
+    """
+    Mirror sessione → nave (UPDATE first per ridurre deadlock con poll concorrenti).
+    """
     from .models import StatoSottosistemaNave
 
-    StatoSottosistemaNave.objects.update_or_create(
+    fields = _campi_stato_dict(stato)
+    now = timezone.now()
+    updated = StatoSottosistemaNave.objects.filter(
         sottosistema_id=stato.sottosistema_id,
-        defaults=_campi_stato_dict(stato),
-    )
+    ).update(**fields, updated_at=now)
+    if updated == 0:
+        StatoSottosistemaNave.objects.create(
+            sottosistema_id=stato.sottosistema_id,
+            **fields,
+        )
 
 
 def sync_nave_a_sessione(sessione: "SessioneVolo", nave: "StatoSottosistemaNave") -> None:

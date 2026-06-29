@@ -35,6 +35,8 @@ import {
   staffGetPilotStatoAllerta,
   staffGetPilotRuntimeConfig,
   staffGetPilotSessioneLive,
+  staffGetPilotSessioniOrfane,
+  staffPulisciPilotSessioniOrfane,
   staffAzionePilotSessioneSottosistema,
   staffUpdatePilotComandoCritico,
   staffUpdatePilotEvento,
@@ -558,6 +560,8 @@ export default function PilotaggioManager({ onLogout }) {
   const [eventiCodiciBusy, setEventiCodiciBusy] = useState(false);
   const [sessioneLive, setSessioneLive] = useState(null);
   const [sessioneLiveBusy, setSessioneLiveBusy] = useState(false);
+  const [sessioniOrfane, setSessioniOrfane] = useState(null);
+  const [pulisciOrfaneFeedback, setPulisciOrfaneFeedback] = useState('');
   const [pilotEventiWikiOpen, setPilotEventiWikiOpen] = useState(false);
   const [editCaEffetto, setEditCaEffetto] = useState(defaultCaEffetto);
   const [createCaEffetto, setCreateCaEffetto] = useState(defaultCaEffetto);
@@ -1205,12 +1209,60 @@ export default function PilotaggioManager({ onLogout }) {
     }
   }, [onLogout]);
 
+  const loadSessioniOrfane = useCallback(async () => {
+    try {
+      const data = await staffGetPilotSessioniOrfane(onLogout);
+      setSessioniOrfane(data);
+    } catch (_) {
+      setSessioniOrfane(null);
+    }
+  }, [onLogout]);
+
+  const handlePulisciSessioniOrfane = async () => {
+    const n = Number(sessioniOrfane?.totale_orfane || 0);
+    if (n <= 0) {
+      setPulisciOrfaneFeedback('Nessuna sessione orfana da chiudere.');
+      return;
+    }
+    const msg = (
+      `Chiudere ${n} sessione/i orfana/e di pilotaggio?\n\n`
+      + 'Per ogni pilota resta attiva solo la sessione più recente (idle o volo). '
+      + 'Le orfane vengono marcate come arrivata senza toccare la nave persistente.'
+    );
+    if (!window.confirm(msg)) return;
+    setSessioneLiveBusy(true);
+    setPulisciOrfaneFeedback('');
+    setError('');
+    try {
+      const res = await staffPulisciPilotSessioniOrfane({}, onLogout);
+      setSessioneLive(res?.sessione_live || null);
+      setSessioniOrfane({
+        totale_orfane: res?.orfane_rimanenti ?? 0,
+        totale_attive: res?.sessioni_attive_rimanenti ?? 0,
+        sessioni_orfane: [],
+        sessioni_canoniche: sessioniOrfane?.sessioni_canoniche || [],
+      });
+      setPulisciOrfaneFeedback(
+        `Chiuse ${res?.totale_chiuse ?? 0} sessioni orfane. Attive rimaste: ${res?.sessioni_attive_rimanenti ?? '?'}.`
+      );
+      await loadSessioniOrfane();
+    } catch (e) {
+      setError(e.message || 'Errore chiusura sessioni orfane.');
+    } finally {
+      setSessioneLiveBusy(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab !== 'sessione_live') return undefined;
     loadSessioneLive();
-    const timer = setInterval(loadSessioneLive, 4000);
+    loadSessioniOrfane();
+    const timer = setInterval(() => {
+      loadSessioneLive();
+      loadSessioniOrfane();
+    }, 4000);
     return () => clearInterval(timer);
-  }, [activeTab, loadSessioneLive]);
+  }, [activeTab, loadSessioneLive, loadSessioniOrfane]);
 
   const loadStiva = useCallback(async () => {
     try {
@@ -1835,11 +1887,48 @@ export default function PilotaggioManager({ onLogout }) {
           <button
             type="button"
             className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm"
-            onClick={loadSessioneLive}
+            onClick={() => { loadSessioneLive(); loadSessioniOrfane(); }}
             disabled={sessioneLiveBusy}
           >
             Aggiorna
           </button>
+        </div>
+
+        <div className="rounded-lg border border-orange-900/50 bg-orange-950/20 p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="font-semibold text-orange-200 text-sm">Sessioni orfane</div>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Più sessioni idle/volo per lo stesso pilota possono far azzerare i comandi console.
+                Qui chiudi le duplicate e tieni solo la più recente.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded bg-orange-800 hover:bg-orange-700 text-sm text-white disabled:opacity-50"
+              onClick={handlePulisciSessioniOrfane}
+              disabled={sessioneLiveBusy || !(sessioniOrfane?.totale_orfane > 0)}
+            >
+              Chiudi orfane ({sessioniOrfane?.totale_orfane ?? '…'})
+            </button>
+          </div>
+          {pulisciOrfaneFeedback ? (
+            <p className="text-xs text-emerald-300">{pulisciOrfaneFeedback}</p>
+          ) : null}
+          {(sessioniOrfane?.sessioni_orfane || []).length > 0 ? (
+            <ul className="text-xs text-gray-300 space-y-1 max-h-28 overflow-y-auto">
+              {sessioniOrfane.sessioni_orfane.map((s) => (
+                <li key={s.id}>
+                  <span className="text-orange-200">{s.pilota_nome || `Pilota ${s.pilota_id}`}</span>
+                  {' — '}
+                  {s.stato}
+                  {s.created_at ? ` (${new Date(s.created_at).toLocaleString('it-IT')})` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-gray-500">Nessuna sessione orfana rilevata.</p>
+          )}
         </div>
 
         {!sessioneLive?.sessione ? (

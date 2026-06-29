@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { speakItalianAnnouncement } from '../pilotAlerts.js';
+import { speakAllarmeEquipaggio } from '../pilotAlerts.js';
 
 export function isAlimentazioneGroup(groupName) {
   return String(groupName || '').toLowerCase().includes('aliment');
@@ -44,7 +44,7 @@ export default function FlightOpsPanel({
     await run(async () => {
       const res = await onSetAllarme(id);
       if (res?.announcement) {
-        await speakItalianAnnouncement(res.announcement);
+        await speakAllarmeEquipaggio(res.announcement, id);
       }
     });
   };

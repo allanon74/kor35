@@ -16,7 +16,7 @@ from typing import Optional
 
 from django.core.management.base import BaseCommand
 
-from pilotaggio.engine import intervallo_loop_motore, tick_sessione_se_dovuto
+from pilotaggio.engine import intervallo_loop_motore, sessioni_per_tick_motore, tick_sessione_se_dovuto
 from django.utils import timezone
 
 from pilotaggio.models import PilotRuntimeConfig, SessioneVolo
@@ -65,17 +65,17 @@ class Command(BaseCommand):
                 time.sleep(current_interval)
                 continue
 
-            attive = SessioneVolo.objects.exclude(stato__in=["arrivata", "crashed"])
+            attive = sessioni_per_tick_motore()
             for sessione in attive:
                 try:
                     tick_sessione_se_dovuto(sessione)
                 except Exception as exc:  # pragma: no cover - log informativo
                     self.stderr.write(self.style.ERROR(f"Tick errore {sessione.pk}: {exc}"))
-            if not attive.exists():
+            if not attive:
                 runtime.tick_enabled = False
                 runtime.save(update_fields=["tick_enabled", "updated_at"])
             if not loop:
-                self.stdout.write(self.style.SUCCESS(f"Tick eseguito ({attive.count()} sessioni)."))
+                self.stdout.write(self.style.SUCCESS(f"Tick eseguito ({len(attive)} sessioni)."))
                 return
             if max_iter and iterazione >= max_iter:
                 return

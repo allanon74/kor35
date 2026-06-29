@@ -423,10 +423,8 @@ def get_o_crea_stato_sottosistema(
     sessione: SessioneVolo, sottosistema: SottosistemaNave
 ) -> StatoSottosistemaSessione:
     from pilotaggio.stato_nave import (
-        CAMPI_STATO_SINCRONI,
         defaults_stato_da_nave,
         get_o_crea_stato_nave,
-        sync_stato_sessione_a_nave,
     )
 
     nave = get_o_crea_stato_nave(sottosistema)
@@ -438,25 +436,25 @@ def get_o_crea_stato_sottosistema(
     # Sessione idle/volo: la plancia e' fonte di verita' runtime. Non sovrascrivere
     # da nave persistente (es. spegnimento fine volo o sync edge con timestamp piu'
     # recente ma valori vecchi) — causa tipica: comando applicato e azzerato al poll.
-    if not created and sessione.stato in (SESSIONE_STATO_IDLE, SESSIONE_STATO_VOLO):
-        if nave.espulso and not stato.espulso:
-            stato.espulso = True
-            stato.online = False
-            stato.livello_target = 0
-            stato.livello_attuale = 0
-            stato.save(
-                update_fields=[
-                    "espulso",
-                    "online",
-                    "livello_target",
-                    "livello_attuale",
-                    "updated_at",
-                ]
-            )
-        elif any(
-            getattr(stato, k) != getattr(nave, k) for k in CAMPI_STATO_SINCRONI
-        ):
-            sync_stato_sessione_a_nave(stato)
+    if (
+        not created
+        and sessione.stato in (SESSIONE_STATO_IDLE, SESSIONE_STATO_VOLO)
+        and nave.espulso
+        and not stato.espulso
+    ):
+        stato.espulso = True
+        stato.online = False
+        stato.livello_target = 0
+        stato.livello_attuale = 0
+        stato.save(
+            update_fields=[
+                "espulso",
+                "online",
+                "livello_target",
+                "livello_attuale",
+                "updated_at",
+            ]
+        )
     return stato
 
 
@@ -484,18 +482,21 @@ def _ha_immunita_riparazione(sessione: SessioneVolo, sottosistema_id) -> bool:
 
 def applica_recoveries_pendenti(sessione: SessioneVolo) -> None:
     """Riporta online i sottosistemi il cui recovery_at programmato (staff) e' scaduto."""
+    from pilotaggio.nave_sync_context import suppress_sessione_nave_sync
+
     if sessione.is_terminata:
         return
     now = timezone.now()
     qs = StatoSottosistemaSessione.objects.filter(
         sessione=sessione, online=False, recovery_at__isnull=False, recovery_at__lte=now
     )
-    for st in qs:
-        st.online = True
-        st.recovery_at = None
-        st.guasto_at = None
-        st.save(update_fields=["online", "recovery_at", "guasto_at", "updated_at"])
-        marca_immunita_riparazione(sessione, st.sottosistema_id)
+    with suppress_sessione_nave_sync():
+        for st in qs:
+            st.online = True
+            st.recovery_at = None
+            st.guasto_at = None
+            st.save(update_fields=["online", "recovery_at", "guasto_at", "updated_at"])
+            marca_immunita_riparazione(sessione, st.sottosistema_id)
 
 
 def _clamp_livello(val: int) -> int:
@@ -532,6 +533,9 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
     """
     Simulazione energia/carburante/distanza per tick.
     """
+    from pilotaggio.nave_sync_context import suppress_sessione_nave_sync
+    from pilotaggio.stato_nave import sync_stato_sessione_a_nave
+
     stati = list(
         StatoSottosistemaSessione.objects.select_related("sottosistema").filter(
             sessione=sessione
@@ -540,24 +544,34 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
     if not stati:
         return
 
-    for st in stati:
-        if st.espulso:
-            st.online = False
-            st.livello_attuale = 0
-            st.livello_target = 0
-            st.save(update_fields=["online", "livello_attuale", "livello_target", "updated_at"])
-            continue
-        st.livello_target = _clamp_livello(st.livello_target)
-        # Alcuni sistemi hanno inerzia: il livello attuale raggiunge il target per step.
-        if st.sottosistema.tipo == "generatore":
-            step = max(1, int(st.sottosistema.rampa_livelli_per_tick or 1))
-            if st.livello_attuale < st.livello_target:
-                st.livello_attuale = min(st.livello_target, st.livello_attuale + step)
-            elif st.livello_attuale > st.livello_target:
-                st.livello_attuale = max(st.livello_target, st.livello_attuale - step)
-        else:
-            st.livello_attuale = st.livello_target
-        st.save(update_fields=["livello_target", "livello_attuale", "updated_at"])
+    guasti_sync: list[StatoSottosistemaSessione] = []
+
+    with suppress_sessione_nave_sync():
+        for st in stati:
+            if st.espulso:
+                st.online = False
+                st.livello_attuale = 0
+                st.livello_target = 0
+                st.save(
+                    update_fields=[
+                        "online",
+                        "livello_attuale",
+                        "livello_target",
+                        "updated_at",
+                    ]
+                )
+                continue
+            st.livello_target = _clamp_livello(st.livello_target)
+            # Alcuni sistemi hanno inerzia: il livello attuale raggiunge il target per step.
+            if st.sottosistema.tipo == "generatore":
+                step = max(1, int(st.sottosistema.rampa_livelli_per_tick or 1))
+                if st.livello_attuale < st.livello_target:
+                    st.livello_attuale = min(st.livello_target, st.livello_attuale + step)
+                elif st.livello_attuale > st.livello_target:
+                    st.livello_attuale = max(st.livello_target, st.livello_attuale - step)
+            else:
+                st.livello_attuale = st.livello_target
+            st.save(update_fields=["livello_target", "livello_attuale", "updated_at"])
 
     produzione = 0.0
     consumo_energia = 0.0
@@ -681,34 +695,39 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
     if not _sessione_ha_decollato(sessione):
         return
 
-    for st in stati:
-        if not st.online:
-            continue
-        if _ha_immunita_riparazione(sessione, st.sottosistema_id):
-            continue
-        p_guasto = _prob_guasto_per_livello(st)
-        if p_guasto <= 0:
-            continue
-        if random.random() < p_guasto:
-            st.online = False
-            st.guasto_at = timezone.now()
-            st.recovery_at = None
-            st.livello_attuale = 0
-            st.livello_target = 0
-            st.save(
-                update_fields=[
-                    "online",
-                    "guasto_at",
-                    "recovery_at",
-                    "livello_attuale",
-                    "livello_target",
-                    "updated_at",
-                ]
-            )
-            from .flight_log import log_guasto_sottosistema
+    with suppress_sessione_nave_sync():
+        for st in stati:
+            if not st.online:
+                continue
+            if _ha_immunita_riparazione(sessione, st.sottosistema_id):
+                continue
+            p_guasto = _prob_guasto_per_livello(st)
+            if p_guasto <= 0:
+                continue
+            if random.random() < p_guasto:
+                st.online = False
+                st.guasto_at = timezone.now()
+                st.recovery_at = None
+                st.livello_attuale = 0
+                st.livello_target = 0
+                st.save(
+                    update_fields=[
+                        "online",
+                        "guasto_at",
+                        "recovery_at",
+                        "livello_attuale",
+                        "livello_target",
+                        "updated_at",
+                    ]
+                )
+                guasti_sync.append(st)
+                from .flight_log import log_guasto_sottosistema
 
-            log_guasto_sottosistema(sessione, st, causa="random")
-            applica_effetto_guasto(sessione, st)
+                log_guasto_sottosistema(sessione, st, causa="random")
+                applica_effetto_guasto(sessione, st)
+
+    for st in guasti_sync:
+        sync_stato_sessione_a_nave(st)
 
 
 def _opposto_direzione(d: str) -> str:
@@ -1433,7 +1452,7 @@ def build_annuncio_decollo(sessione: SessioneVolo) -> str:
     pct = percentuale_sistemi_operativi(sessione)
     return (
         "Attenzione. Allarme Blu. "
-        "Mist Gider in decollo. Portelloni in chiusura. "
+        "Mist Glider in decollo. Portelloni in chiusura. "
         f"Sistemi operativi al {pct} per cento. "
         "Propulsori di decollo attivati. "
         "Apertura del portale nei sentieri completa."
@@ -1458,7 +1477,7 @@ def completa_decollo_sessione(sessione: SessioneVolo) -> SessioneVolo:
     return sessione
 
 
-def spegni_tutti_sottosistemi(sessione: SessioneVolo) -> None:
+def spegni_tutti_sottosistemi(sessione: SessioneVolo, *, sync_nave: bool = True) -> None:
     """
     A fine volo o precipizio: tutti i sottosistemi spenti (offline, livello 0),
     nessun timer di ripristino. Sincronizza lo stato persistente sulla nave.
@@ -1480,15 +1499,15 @@ def spegni_tutti_sottosistemi(sessione: SessioneVolo) -> None:
         st.livello_target = 0
         st.recovery_at = None
         st.guasto_at = None
-        st.save(update_fields=off_fields)
+        st.save(update_fields=off_fields, sync_nave=sync_nave)
     for key in list(_repair_immunity_until.keys()):
         if key.startswith(f"{sessione.pk}:"):
             _repair_immunity_until.pop(key, None)
 
 
-def finalizza_volo_sottosistemi(sessione: SessioneVolo) -> None:
+def finalizza_volo_sottosistemi(sessione: SessioneVolo, *, sync_nave: bool = True) -> None:
     """Spegnimento completo al termine del volo (arrivo, emergenza, crash)."""
-    spegni_tutti_sottosistemi(sessione)
+    spegni_tutti_sottosistemi(sessione, sync_nave=sync_nave)
 
 
 def termina_sessione_volo(
@@ -1496,6 +1515,7 @@ def termina_sessione_volo(
     nuovo_stato: str,
     *,
     extra_update_fields: Optional[dict] = None,
+    sync_nave_sottosistemi: bool = True,
 ) -> SessioneVolo:
     """
     Chiude una sessione di volo e spegne tutti i sottosistemi (default a terra).
@@ -1509,7 +1529,7 @@ def termina_sessione_volo(
             if field not in update_fields:
                 update_fields.append(field)
     sessione.save(update_fields=update_fields)
-    finalizza_volo_sottosistemi(sessione)
+    finalizza_volo_sottosistemi(sessione, sync_nave=sync_nave_sottosistemi)
     from .allarme_equipaggio import reset_allarme_equipaggio_sessione
 
     reset_allarme_equipaggio_sessione(sessione)
@@ -1707,6 +1727,25 @@ def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSess
 # ---------------------------------------------------------------------------
 
 
+def sessioni_per_tick_motore() -> List[SessioneVolo]:
+    """Una sessione non terminata per pilota (la piu' recente), evita tick su orfane."""
+    viste: set = set()
+    sessioni: List[SessioneVolo] = []
+    for sessione in (
+        SessioneVolo.objects.exclude(
+            stato__in=[SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED]
+        )
+        .select_related("pilota")
+        .order_by("-created_at")
+    ):
+        key = sessione.pilota_id
+        if key in viste:
+            continue
+        viste.add(key)
+        sessioni.append(sessione)
+    return sessioni
+
+
 @dataclass
 class TickResult:
     sessione: SessioneVolo
@@ -1718,17 +1757,17 @@ class TickResult:
 def tick_sessione_se_dovuto(
     sessione: SessioneVolo, *, force: bool = False
 ) -> Optional[TickResult]:
-    """Esegue tick_sessione solo se e' trascorso l'intervallo tick effettivo."""
+    """Esegue tick_sessione (throttle rapido + ricontrollo sotto lock transazionale)."""
     sessione.refresh_from_db()
     if sessione.is_terminata:
         return TickResult(sessione, None, False, False)
     if not force and secondi_fino_prossimo_tick(sessione) > 0:
         return None
-    return tick_sessione(sessione)
+    return tick_sessione(sessione, force=force)
 
 
 @transaction.atomic
-def tick_sessione(sessione: SessioneVolo) -> TickResult:
+def tick_sessione(sessione: SessioneVolo, *, force: bool = False) -> TickResult:
     """
     Avanza lo stato di una sessione nel modo idempotente:
     - applica recoveries sottosistemi;
@@ -1738,6 +1777,8 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
     """
     sessione = SessioneVolo.objects.select_for_update().get(pk=sessione.pk)
     if sessione.is_terminata:
+        return TickResult(sessione, None, False, False)
+    if not force and secondi_fino_prossimo_tick(sessione) > 0:
         return TickResult(sessione, None, False, False)
 
     applica_recoveries_pendenti(sessione)
@@ -1802,11 +1843,6 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
     tick_energia_compattatore()
 
     return TickResult(sessione, nuovo, timeout, transizione)
-
-
-# ---------------------------------------------------------------------------
-# Calcolo durata viaggio
-# ---------------------------------------------------------------------------
 
 
 def durata_viaggio_secondi(prefettura_partenza, prefettura_arrivo, defcon_iniziale: int) -> int:

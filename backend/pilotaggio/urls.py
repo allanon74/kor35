@@ -81,6 +81,11 @@ urlpatterns = [
         views.StaffSessioneSottosistemaAzioneView.as_view(),
         name="pilot-staff-sessione-sottosistema-azione",
     ),
+    path(
+        "staff/sessioni-orfane/",
+        views.StaffSessioniOrfaneView.as_view(),
+        name="pilot-staff-sessioni-orfane",
+    ),
     path("staff/runtime-config/", views.StaffPilotRuntimeConfigView.as_view(), name="pilot-staff-runtime-config"),
     path("staff/stiva/", views.StaffPilotStivaView.as_view(), name="pilot-staff-stiva"),
     path(

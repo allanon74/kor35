@@ -65,7 +65,12 @@ export const api = {
   }),
   logout: () => request('/api/pilot/auth/logout/', { method: 'POST' }),
   resetSession: () => request('/api/pilot/session/reset/', { method: 'POST' }),
-  state: () => request('/api/pilot/session/state/'),
+  state: ({ advanceTick = true } = {}) => {
+    const path = advanceTick
+      ? '/api/pilot/session/state/'
+      : '/api/pilot/session/state/?tick=0';
+    return request(path);
+  },
   catalog: () => request('/api/pilot/catalog/'),
   prefetture: () => request('/api/pilot/prefetture/'),
   startSession: (partenzaId, arrivoId) => request('/api/pilot/session/start/', {

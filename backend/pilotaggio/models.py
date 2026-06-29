@@ -873,10 +873,15 @@ class StatoSottosistemaSessione(SyncableModel, models.Model):
         ]
 
     def save(self, *args, **kwargs):
+        sync_nave = kwargs.pop("sync_nave", True)
         super().save(*args, **kwargs)
+        if not sync_nave:
+            return
+        from pilotaggio.nave_sync_context import sessione_nave_sync_enabled
         from pilotaggio.stato_nave import sync_stato_sessione_a_nave
 
-        sync_stato_sessione_a_nave(self)
+        if sessione_nave_sync_enabled():
+            sync_stato_sessione_a_nave(self)
 
 
 class StatoSottosistemaNave(SyncableModel, models.Model):

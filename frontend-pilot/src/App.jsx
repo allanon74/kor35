@@ -13,6 +13,7 @@ import {
 
 const POLL_INTERVAL_MS = 3000;
 const SCREEN_MODE = new URLSearchParams(window.location.search).get('screen') || 'both';
+const POLL_ADVANCE_TICK = SCREEN_MODE !== 'status';
 const IS_CONTROL_ONLY = SCREEN_MODE === 'control';
 const IS_COMBINED = SCREEN_MODE === 'combined';
 const IS_COMPATTATORE = SCREEN_MODE === 'compattatore';
@@ -51,9 +52,18 @@ export default function App() {
     };
 
     try {
-      const data = await api.state();
+      const data = await api.state({ advanceTick: POLL_ADVANCE_TICK });
       await applyStatePayload(data);
     } catch (e) {
+      if (e.status === 500) {
+        try {
+          const data = await api.state({ advanceTick: POLL_ADVANCE_TICK });
+          await applyStatePayload(data);
+          return;
+        } catch (_) {
+          /* fallback sotto */
+        }
+      }
       if (e.network) setOnline(false);
       if (e.status === 401) {
         /* Evita il lampeggio su kiosk: il poll ogni pochi secondi può ricevere 401
@@ -66,7 +76,7 @@ export default function App() {
             if (res?.token) {
               setToken(res.token);
               setAuthToken(res.token);
-              const data = await api.state();
+              const data = await api.state({ advanceTick: POLL_ADVANCE_TICK });
               await applyStatePayload(data);
               recovered = true;
             }
@@ -198,7 +208,7 @@ export default function App() {
     try {
       const prep = await api.takeoffPrepare();
       const { speakItalianAnnouncement } = await import('./pilotAlerts.js');
-      await speakItalianAnnouncement(prep?.announcement || '');
+      await speakItalianAnnouncement(prep?.announcement || '', { allarme: 'blu' });
       const res = await api.takeoffComplete();
       setState(res);
       saveCachedState(res);

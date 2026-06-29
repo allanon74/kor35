@@ -153,6 +153,124 @@ def _sessione_pilota_operativa(pilota) -> Optional[SessioneVolo]:
     )
 
 
+def _chiudi_sessioni_orfane_pilota(pilota) -> list[dict]:
+    """
+    Chiude sessioni idle/volo duplicate dello stesso pilota.
+    Le orfane non devono ricevere tick ne' propagare spegnimento sulla nave persistente.
+    """
+    from pilotaggio.engine import termina_sessione_volo
+    from pilotaggio.nave_sync_context import suppress_sessione_nave_sync
+
+    canonica = _sessione_pilota_operativa(pilota)
+    if canonica is None:
+        return []
+    orfane = list(
+        SessioneVolo.objects.filter(pilota=pilota)
+        .exclude(stato__in=[SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED])
+        .exclude(pk=canonica.pk)
+        .order_by("created_at")
+    )
+    if not orfane:
+        return []
+
+    chiuse: list[dict] = []
+    with suppress_sessione_nave_sync():
+        for sessione in orfane:
+            chiuse.append(
+                {
+                    "id": str(sessione.pk),
+                    "stato_precedente": sessione.stato,
+                    "pilota_id": pilota.pk,
+                    "pilota_nome": getattr(pilota, "nome", str(pilota)),
+                    "created_at": (
+                        sessione.created_at.isoformat() if sessione.created_at else None
+                    ),
+                }
+            )
+            if sessione.stato == SESSIONE_STATO_VOLO:
+                termina_sessione_volo(
+                    sessione,
+                    SESSIONE_STATO_ARRIVATA,
+                    sync_nave_sottosistemi=False,
+                )
+            else:
+                sessione.stato = SESSIONE_STATO_ARRIVATA
+                sessione.ended_at = timezone.now()
+                sessione.save(update_fields=["stato", "ended_at", "updated_at"])
+    return chiuse
+
+
+def _sessioni_orfane_queryset(*, pilota_id=None):
+    qs = (
+        SessioneVolo.objects.exclude(
+            stato__in=[SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED]
+        )
+        .select_related("pilota")
+        .order_by("-created_at")
+    )
+    if pilota_id is not None:
+        qs = qs.filter(pilota_id=pilota_id)
+    return qs
+
+
+def _riepilogo_sessioni_orfane(*, pilota_id=None) -> dict:
+    """Elenco sessioni duplicate che verrebbero chiuse (anteprima staff)."""
+    viste: set = set()
+    orfane: list[dict] = []
+    canoniche: list[dict] = []
+
+    for sessione in _sessioni_orfane_queryset(pilota_id=pilota_id):
+        key = sessione.pilota_id
+        row = {
+            "id": str(sessione.pk),
+            "stato": sessione.stato,
+            "pilota_id": sessione.pilota_id,
+            "pilota_nome": getattr(sessione.pilota, "nome", None) if sessione.pilota_id else None,
+            "created_at": (
+                sessione.created_at.isoformat() if sessione.created_at else None
+            ),
+        }
+        if key in viste:
+            row["orfana"] = True
+            orfane.append(row)
+        else:
+            row["orfana"] = False
+            viste.add(key)
+            canoniche.append(row)
+
+    return {
+        "totale_orfane": len(orfane),
+        "totale_attive": len(orfane) + len(canoniche),
+        "sessioni_orfane": orfane,
+        "sessioni_canoniche": canoniche,
+    }
+
+
+def pulisci_sessioni_orfane_staff(*, pilota_id=None) -> dict:
+    """Chiude tutte le sessioni orfane (opz. filtro pilota)."""
+    pilota_ids = list(
+        _sessioni_orfane_queryset(pilota_id=pilota_id)
+        .values_list("pilota_id", flat=True)
+        .distinct()
+    )
+    chiuse: list[dict] = []
+    for pid in pilota_ids:
+        if pid is None:
+            continue
+        pilota = Personaggio.objects.filter(pk=pid).first()
+        if pilota is None:
+            continue
+        chiuse.extend(_chiudi_sessioni_orfane_pilota(pilota))
+
+    riepilogo = _riepilogo_sessioni_orfane(pilota_id=pilota_id)
+    return {
+        "totale_chiuse": len(chiuse),
+        "sessioni_chiuse": chiuse,
+        "sessioni_attive_rimanenti": riepilogo["totale_attive"],
+        "orfane_rimanenti": riepilogo["totale_orfane"],
+    }
+
+
 def _motore_livello_target(sessione: SessioneVolo) -> int:
     motore = (
         StatoSottosistemaSessione.objects.filter(
@@ -190,11 +308,12 @@ def _sessione_staff_operativa() -> Optional[SessioneVolo]:
 
 def _sessione_pilota_per_console(pilota) -> Optional[SessioneVolo]:
     """
-    Ultima sessione del pilota per GET /state/.
-    Include arrivata/crashed cosi' la UI mostra schermata finale invece di tornare
-    al precontrollo con sessione null. Dopo logout/reset esiste una sessione idle
-    piu' recente della terminata: si torna al precontrollo.
+    Sessione mostrata dalla console pilota.
+    Priorita' alla sessione operativa (idle/volo); altrimenti schermata finale arrivo/crash.
     """
+    attiva = _sessione_pilota_operativa(pilota)
+    if attiva is not None:
+        return attiva
     latest = (
         SessioneVolo.objects.filter(pilota=pilota)
         .order_by("-created_at")
@@ -825,11 +944,23 @@ class PilotStateView(APIView):
     permission_classes = [IsPilotConsole]
 
     def get(self, request):
+        from django.db import OperationalError
+
         pilota = get_pilot_from_request(request)
+        _chiudi_sessioni_orfane_pilota(pilota)
         sessione = _sessione_pilota_per_console(pilota)
         if sessione is not None and sessione.is_attiva:
             _ensure_runtime_subsystems(sessione)
-            tick_sessione_se_dovuto(sessione)
+            advance_tick = request.query_params.get("tick", "1") not in ("0", "false")
+            if advance_tick:
+                for attempt in range(2):
+                    try:
+                        tick_sessione_se_dovuto(sessione)
+                        break
+                    except OperationalError as exc:
+                        if attempt == 0 and "deadlock" in str(exc).lower():
+                            continue
+                        raise
             sessione.refresh_from_db()
             if sessione.is_terminata:
                 _disable_tick_if_no_active_sessions()
@@ -850,6 +981,7 @@ class PilotSessionStartView(APIView):
 
     def post(self, request):
         pilota = get_pilot_from_request(request)
+        _chiudi_sessioni_orfane_pilota(pilota)
         partenza_id = request.data.get("prefettura_partenza_id")
         arrivo_id = request.data.get("prefettura_arrivo_id")
         partenza = Prefettura.objects.filter(pk=partenza_id).first() if partenza_id else None
@@ -1006,12 +1138,8 @@ class PilotSubsystemSetView(APIView):
 
     def post(self, request):
         pilota = get_pilot_from_request(request)
-        sessione = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato__in=["arrivata", "crashed"])
-            .order_by("-created_at")
-            .first()
-        )
+        _chiudi_sessioni_orfane_pilota(pilota)
+        sessione = _sessione_pilota_operativa(pilota)
         if sessione is None:
             return Response({"error": "Nessuna sessione attiva."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1053,7 +1181,6 @@ class PilotSubsystemSetView(APIView):
             log_guasto_sottosistema(sessione, stato, causa="pilota")
         if not stato.online:
             applica_effetto_guasto(sessione, stato)
-        tick_sessione_se_dovuto(sessione)
         sessione.refresh_from_db()
         return Response(_build_state_payload(sessione, pilota), status=status.HTTP_200_OK)
 
@@ -1981,6 +2108,48 @@ class StaffSessioneSottosistemaAzioneView(APIView):
         payload["azione"] = esito
         payload["stato_aggiornato"] = StatoSottosistemaRuntimeSerializer(stato).data
         return Response(payload, status=status.HTTP_200_OK)
+
+
+class StaffSessioniOrfaneView(APIView):
+    """
+    GET /api/pilot/staff/sessioni-orfane/
+    Anteprima sessioni idle/volo duplicate (orfane) per pilota.
+
+    POST /api/pilot/staff/sessioni-orfane/
+    Chiude le orfane; resta una sessione attiva per pilota (la piu' recente).
+    Body opzionale: { "pilota_id": <int> }
+    """
+
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
+
+    def get(self, request):
+        pilota_id = request.query_params.get("pilota_id")
+        if pilota_id is not None:
+            try:
+                pilota_id = int(pilota_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "pilota_id non valido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        return Response(_riepilogo_sessioni_orfane(pilota_id=pilota_id))
+
+    def post(self, request):
+        pilota_id = request.data.get("pilota_id")
+        if pilota_id is not None:
+            try:
+                pilota_id = int(pilota_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "pilota_id non valido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        with transaction.atomic():
+            risultato = pulisci_sessioni_orfane_staff(pilota_id=pilota_id)
+        risultato["sessione_live"] = _build_staff_sessione_live_payload(
+            _sessione_staff_operativa()
+        )
+        return Response(risultato, status=status.HTTP_200_OK)
 
 
 class StaffPilotRuntimeConfigView(APIView):
