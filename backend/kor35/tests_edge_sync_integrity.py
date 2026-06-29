@@ -194,6 +194,47 @@ class EdgeSyncQrCodeNaturalPkTests(TestCase):
         self.assertEqual(qr.testo, "Da master")
         self.assertTrue(qr.qr_stampato)
 
+    def test_apply_rekeys_qrcode_when_sync_id_matches_but_id_differs(self):
+        """Regressione evento mirror: stesso sync_id, id locale diverso dal codice stampato."""
+        master_sync_id = uuid.uuid4()
+        master_id = "PRINTEDqr0001"
+        local_id = "LOCALauto0001"
+        local_updated = timezone.now()
+        remote_updated = local_updated
+
+        qr = QrCode.objects.create(id=local_id, sync_id=master_sync_id, testo="Locale")
+        qr.updated_at = local_updated
+        qr.save(update_fields=["updated_at"])
+
+        MinigiocoQrConfig.objects.create(
+            qr_code=qr,
+            attivo=True,
+            messaggio_pre="Ciao",
+        )
+
+        row = {
+            "sync_id": str(master_sync_id),
+            "id": master_id,
+            "testo": "Da master",
+            "inventario_presente": False,
+            "inventario_colore_codice": "",
+            "inventario_colore_sfondo": "",
+            "stl_creato": False,
+            "qr_stampato": True,
+            "vista": None,
+            "updated_at": remote_updated.isoformat(),
+        }
+        view = EdgeSyncView()
+        result = view._try_apply_one(QrCode, row)
+        self.assertEqual(result, "skipped")
+
+        qr = QrCode.objects.get(id=master_id)
+        self.assertEqual(str(qr.sync_id), str(master_sync_id))
+        self.assertFalse(QrCode.objects.filter(id=local_id).exists())
+
+        cfg = MinigiocoQrConfig.objects.get(qr_code=qr)
+        self.assertEqual(cfg.messaggio_pre, "Ciao")
+
 
 class EdgeSyncMtiChildLwwTests(TestCase):
     """Campi MTI figlio (es. Tessitura) non devono essere sovrascritti da payload più vecchi."""

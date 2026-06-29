@@ -1,10 +1,11 @@
 import uuid
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Iterator, Literal
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.files.base import File
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -193,6 +194,97 @@ def natural_primary_key_field(model: type[models.Model]) -> str | None:
     return pk.name
 
 
+def _iter_qrcode_referencing_fk_fields() -> Iterator[tuple[type[models.Model], str]]:
+    """Modelli con FK/OneToOne verso QrCode.id (codice corto stampato)."""
+    QrCode = apps.get_model("personaggi", "QrCode")
+    for rel in QrCode._meta.related_objects:
+        field = rel.field
+        if isinstance(field, (models.ForeignKey, models.OneToOneField)):
+            yield rel.related_model, field.name
+
+
+def rekey_qrcode_primary_key(
+    *,
+    old_id: str,
+    new_id: str,
+    sync_id,
+    update_data: dict[str, Any] | None = None,
+    remote_updated_at=None,
+) -> models.Model:
+    """
+    Allinea l'id corto stampato sul QR fisico quando il mirror ha lo stesso sync_id
+    ma PK locale diversa (regressione sync pre-fix natural PK).
+    """
+    from kor35.sync_tombstone import suppress_tombstone_on_delete
+
+    QrCode = apps.get_model("personaggi", "QrCode")
+    patch = dict(update_data or {})
+
+    with transaction.atomic():
+        old = QrCode.objects.select_for_update().get(pk=old_id)
+        if str(old.sync_id) != str(sync_id):
+            raise IntegrityError("sync_id non corrisponde durante rekey QrCode")
+
+        if QrCode.objects.filter(pk=new_id).exists():
+            raise IntegrityError(f"QrCode id={new_id} già esistente")
+
+        # Libera il vincolo UNIQUE su sync_id prima di creare la riga con id master.
+        temp_sync_id = uuid.uuid4()
+        QrCode.objects.filter(pk=old_id).update(sync_id=temp_sync_id)
+
+        create_data = {f.name: getattr(old, f.name) for f in QrCode._meta.concrete_fields}
+        create_data.update(patch)
+        create_data["id"] = new_id
+        create_data["sync_id"] = sync_id
+        if remote_updated_at:
+            create_data["updated_at"] = remote_updated_at
+        qr = QrCode(**create_data)
+        qr.save()
+
+        for related_model, field_name in _iter_qrcode_referencing_fk_fields():
+            related_model.objects.filter(**{field_name: old_id}).update(**{field_name: new_id})
+
+        with suppress_tombstone_on_delete():
+            QrCode.objects.filter(pk=old_id).delete()
+
+        return qr
+
+
+def ensure_qrcode_natural_pk_aligned(
+    sync_id,
+    row: dict[str, Any],
+    local_obj: models.Model | None,
+    update_data: dict[str, Any] | None = None,
+    remote_updated_at=None,
+) -> models.Model | None:
+    """
+    Se sync_id coincide ma l'id stampato differisce, riallinea subito la PK.
+    L'id fisico sul QR ha priorità su LWW scalare (altrimenti skip_scalars blocca il fix).
+    """
+    if local_obj is None:
+        return local_obj
+    want_id = row.get("id")
+    if not want_id or local_obj.pk == want_id:
+        return local_obj
+
+    QrCode = apps.get_model("personaggi", "QrCode")
+    if QrCode.objects.filter(pk=want_id).exclude(sync_id=sync_id).exists():
+        return local_obj
+    if QrCode.objects.filter(pk=want_id).exists():
+        return local_obj
+
+    try:
+        return rekey_qrcode_primary_key(
+            old_id=local_obj.pk,
+            new_id=want_id,
+            sync_id=sync_id,
+            update_data=update_data,
+            remote_updated_at=remote_updated_at,
+        )
+    except IntegrityError:
+        return local_obj
+
+
 def apply_natural_pk_precheck(
     model: type[models.Model],
     sync_id,
@@ -215,6 +307,18 @@ def apply_natural_pk_precheck(
     if local_obj is not None and getattr(local_obj, pk_name) != want_pk:
         if model.objects.filter(**{pk_name: want_pk}).exists():
             return "defer", local_obj
+        if model._meta.label_lower == "personaggi.qrcode":
+            try:
+                rekeyed = rekey_qrcode_primary_key(
+                    old_id=getattr(local_obj, pk_name),
+                    new_id=want_pk,
+                    sync_id=sync_id,
+                    update_data=update_data,
+                    remote_updated_at=remote_updated_at,
+                )
+                return "applied", rekeyed
+            except IntegrityError:
+                return "defer", local_obj
         return "defer", local_obj
 
     if local_obj is None:

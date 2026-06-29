@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from kor35.syncing import (
     apply_natural_pk_precheck,
     build_model_sync_records,
+    ensure_qrcode_natural_pk_aligned,
     pagina_regolamento_sync_field_allowed,
     touch_sync_updated_at,
     try_apply_mti_child_fields_when_skipped,
@@ -315,6 +316,10 @@ class EdgeSyncView(APIView):
         clear_stale_tombstone_before_record_apply(model_label, sync_id, remote_updated_at)
 
         local = model.objects.filter(sync_id=sync_id).first()
+        if model_label == "personaggi.qrcode":
+            local = ensure_qrcode_natural_pk_aligned(
+                sync_id, row, local, remote_updated_at=remote_updated_at
+            )
 
         m2m_raw = {}
         for m2m_field in model._meta.many_to_many:
