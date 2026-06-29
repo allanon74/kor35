@@ -6,14 +6,14 @@ export function isAlimentazioneGroup(groupName) {
 }
 
 const ALLARMI = [
-  { id: 'giallo', label: 'Allarme Giallo', className: 'alarm-giallo' },
-  { id: 'rosso', label: 'Allarme Rosso', className: 'alarm-rosso' },
-  { id: 'nero', label: 'Allarme Nero', className: 'alarm-nero' },
-  { id: 'blu', label: 'Allarme Blu', className: 'alarm-blu' },
+  { id: 'giallo', title: 'Allarme Giallo', className: 'alarm-giallo' },
+  { id: 'rosso', title: 'Allarme Rosso', className: 'alarm-rosso' },
+  { id: 'nero', title: 'Allarme Nero', className: 'alarm-nero' },
+  { id: 'blu', title: 'Allarme Blu', className: 'alarm-blu' },
 ];
 
 /**
- * Comandi volo + allarme equipaggio nella colonna Alimentazione.
+ * Comandi volo + allarme equipaggio nella colonna Alimentazione (compatto).
  */
 export default function FlightOpsPanel({
   decolloEffettuato,
@@ -27,7 +27,6 @@ export default function FlightOpsPanel({
 }) {
   const [busy, setBusy] = useState(false);
   const motoreOff = Number(motoreLivello || 0) === 0;
-  const inCrociera = allarmeEquipaggio === 'crociera';
 
   const run = async (fn) => {
     if (!fn || busy || disabled) return;
@@ -41,8 +40,9 @@ export default function FlightOpsPanel({
 
   const handleAllarme = async (id) => {
     if (!onSetAllarme) return;
+    const next = allarmeEquipaggio === id ? 'crociera' : id;
     await run(async () => {
-      const res = await onSetAllarme(id);
+      const res = await onSetAllarme(next);
       if (res?.announcement) {
         await speakItalianAnnouncement(res.announcement);
       }
@@ -51,14 +51,13 @@ export default function FlightOpsPanel({
 
   return (
     <div className="flight-ops-panel" aria-label="Comandi volo e allarme equipaggio">
-      <div className="flight-ops-section-label">Manovre</div>
       <div className="flight-ops-flight-btns">
         {!decolloEffettuato ? (
           <button
             type="button"
             className="flight-ops-btn flight-ops-decollo"
             disabled={disabled || busy || !motoreOff}
-            title={motoreOff ? 'Avvia sequenza di decollo' : 'Motore principale deve essere a 0'}
+            title={motoreOff ? 'Decollo' : 'Motore principale a 0'}
             onClick={() => run(async () => {
               if (!window.confirm('Confermi la sequenza di decollo?')) return;
               await onTakeoff?.();
@@ -72,7 +71,7 @@ export default function FlightOpsPanel({
               type="button"
               className="flight-ops-btn flight-ops-landing"
               disabled={disabled || busy || !motoreOff}
-              title={motoreOff ? 'Atterraggio programmato' : 'Motore principale deve essere a 0'}
+              title="Atterraggio"
               onClick={() => run(async () => {
                 if (!window.confirm('Confermi l\'atterraggio?')) return;
                 await onLanding?.();
@@ -84,45 +83,32 @@ export default function FlightOpsPanel({
               type="button"
               className="flight-ops-btn flight-ops-emergency"
               disabled={disabled || busy || !motoreOff}
-              title={motoreOff ? 'Atterraggio di emergenza' : 'Motore principale deve essere a 0'}
+              title="Atterraggio di emergenza"
               onClick={() => run(async () => {
                 if (!window.confirm("Confermi l'atterraggio di emergenza?")) return;
                 await onEmergencyLanding?.();
               })}
             >
-              Atterraggio di emergenza
+              Emergenza
             </button>
           </>
         )}
       </div>
 
-      <div className="flight-ops-section-label">Allarme equipaggio</div>
-      <div className="flight-ops-alarm-grid">
+      <div className="flight-ops-alarm-row" role="group" aria-label="Allarme equipaggio">
         {ALLARMI.map((a) => (
           <button
             key={a.id}
             type="button"
             className={`flight-ops-alarm-btn ${a.className} ${allarmeEquipaggio === a.id ? 'active' : ''}`}
             disabled={disabled || busy}
+            title={a.title}
+            aria-label={a.title}
+            aria-pressed={allarmeEquipaggio === a.id}
             onClick={() => handleAllarme(a.id)}
-          >
-            {a.label}
-          </button>
+          />
         ))}
       </div>
-      <button
-        type="button"
-        className={`flight-ops-btn flight-ops-crociera ${inCrociera ? 'active' : ''}`}
-        disabled={disabled || busy}
-        onClick={() => handleAllarme('crociera')}
-      >
-        Crociera — nessun allarme
-      </button>
-      {!inCrociera ? (
-        <div className="flight-ops-alarm-active" aria-live="polite">
-          Stato: <strong>{allarmeEquipaggio.toUpperCase()}</strong>
-        </div>
-      ) : null}
     </div>
   );
 }

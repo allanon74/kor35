@@ -750,7 +750,6 @@ export default function Cockpit({
                             })()
                           ))}
                         </div>
-                        {isAlimentazioneGroup(groupName) ? flightOpsPanel : null}
                         <div className="system-footer">
                           <div className="system-summary-row">
                             <span>Attivi {clickableSubs.filter((s) => s.online).length}/{clickableSubs.length}</span>
@@ -772,6 +771,7 @@ export default function Cockpit({
                             <span />
                           </div>
                         </div>
+                        {isAlimentazioneGroup(groupName) ? flightOpsPanel : null}
                       </div>
                     );
                   })}
@@ -967,7 +967,6 @@ export default function Cockpit({
                     })()
                   ))}
                 </div>
-                {isAlimentazioneGroup(groupName) ? flightOpsPanel : null}
                 <div className="system-footer">
                   <div className="system-summary-row">
                     <span>Attivi {clickableSubs.filter((s) => s.online).length}/{clickableSubs.length}</span>
@@ -989,6 +988,7 @@ export default function Cockpit({
                     <span />
                   </div>
                 </div>
+                {isAlimentazioneGroup(groupName) ? flightOpsPanel : null}
               </div>
                 );
               })}

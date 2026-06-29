@@ -2651,39 +2651,45 @@ select, input[type=text], input[type=number] {
   margin-top: 0.28rem;
 }
 
-/* Colonna Alimentazione — manovre volo + allarme equipaggio */
+/* Colonna Alimentazione — manovre volo + allarme equipaggio (compatto) */
 .flight-ops-panel {
-  margin-top: 0.55rem;
-  padding: 0.55rem 0.45rem 0.65rem;
-  border-top: 1px solid rgba(168, 255, 200, 0.22);
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.3rem 0.4rem;
+  border-top: 1px solid rgba(168, 255, 200, 0.18);
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-}
-
-.flight-ops-section-label {
-  font-size: 0.62rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgba(200, 230, 210, 0.75);
+  gap: 0.3rem;
 }
 
 .flight-ops-flight-btns {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.28rem;
 }
 
 .flight-ops-btn,
 .flight-ops-alarm-btn {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 6px;
-  padding: 0.45rem 0.5rem;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 5px;
   cursor: pointer;
-  text-align: center;
   transition: filter 0.15s, box-shadow 0.15s;
+}
+
+.flight-ops-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.32rem 0.4rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+.flight-ops-alarm-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 1.65rem;
+  padding: 0;
 }
 
 .flight-ops-btn:disabled,
@@ -2707,54 +2713,37 @@ select, input[type=text], input[type=number] {
   color: #ffe8e8;
 }
 
-.flight-ops-crociera {
-  background: linear-gradient(180deg, #2a4a38, #1a3028);
-  color: #d0f0dc;
-}
-
-.flight-ops-crociera.active {
-  box-shadow: 0 0 0 2px rgba(120, 220, 160, 0.55);
-}
-
-.flight-ops-alarm-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.35rem;
+.flight-ops-alarm-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0.28rem;
+  width: 100%;
 }
 
 .flight-ops-alarm-btn.alarm-giallo {
-  background: linear-gradient(180deg, #b89600, #6a5800);
-  color: #fff8d0;
+  background: linear-gradient(180deg, #e6c200, #9a7a00);
 }
 
 .flight-ops-alarm-btn.alarm-rosso {
-  background: linear-gradient(180deg, #b82020, #5a0808);
-  color: #ffe0e0;
+  background: linear-gradient(180deg, #e03030, #8a1010);
 }
 
 .flight-ops-alarm-btn.alarm-nero {
-  background: linear-gradient(180deg, #2a1838, #0a0510);
-  color: #d8c0e8;
-  border-color: rgba(120, 60, 160, 0.45);
+  background: linear-gradient(180deg, #3a2848, #0a0510);
+  border-color: rgba(120, 60, 160, 0.4);
 }
 
 .flight-ops-alarm-btn.alarm-blu {
-  background: linear-gradient(180deg, #1a4a9a, #0a2858);
-  color: #d8e8ff;
+  background: linear-gradient(180deg, #3080ff, #1040a0);
 }
 
 .flight-ops-alarm-btn.active {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45);
-  filter: brightness(1.15);
-}
-
-.flight-ops-alarm-active {
-  font-size: 0.68rem;
-  color: rgba(200, 230, 210, 0.85);
-  text-align: center;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+  filter: brightness(1.2);
 }
 
 .theme-alimentazione .flight-ops-panel {
-  border-top-color: rgba(120, 206, 160, 0.35);
+  border-top-color: rgba(120, 206, 160, 0.28);
 }
+
 
