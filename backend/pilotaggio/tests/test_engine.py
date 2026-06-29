@@ -1329,3 +1329,96 @@ class StatoSessioneNaveSyncTests(TestCase):
         got = get_o_crea_stato_sottosistema(sessione, sottos)
         self.assertEqual(got.livello_target, 7)
         self.assertTrue(got.online)
+
+
+class SpegnimentoFineVoloTests(TestCase):
+    """Fine volo: livello 0 senza marcare tutti i sottosistemi come guasti."""
+
+    def test_spegni_non_imposta_guasto_su_sistemi_operativi(self):
+        import string
+
+        from pilotaggio.engine import (
+            get_o_crea_stato_sottosistema,
+            ripristina_operativita_sottosistemi_attracco,
+            spegni_tutti_sottosistemi,
+        )
+
+        used = set(SottosistemaNave.objects.values_list("codice", flat=True))
+        codice = next(c for c in string.ascii_uppercase if c not in used)
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        sottos = SottosistemaNave.objects.create(codice=codice, nome="Propulsore test spegnimento")
+        stato = get_o_crea_stato_sottosistema(sessione, sottos)
+        stato.livello_target = 5
+        stato.livello_attuale = 5
+        stato.online = True
+        stato.save()
+
+        spegni_tutti_sottosistemi(sessione)
+        stato.refresh_from_db()
+        self.assertTrue(stato.online)
+        self.assertEqual(stato.livello_attuale, 0)
+        self.assertEqual(stato.livello_target, 0)
+
+    def test_ripristina_corregge_artifacto_spegnimento_precedente(self):
+        import string
+
+        from pilotaggio.engine import (
+            get_o_crea_stato_sottosistema,
+            ripristina_operativita_sottosistemi_attracco,
+        )
+
+        used = set(SottosistemaNave.objects.values_list("codice", flat=True))
+        codice = next(c for c in string.ascii_uppercase if c not in used)
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_IDLE,
+            durata_pianificata_secondi=600,
+        )
+        sottos = SottosistemaNave.objects.create(codice=codice, nome="Scudo test ripristino")
+        stato = get_o_crea_stato_sottosistema(sessione, sottos)
+        stato.online = False
+        stato.guasto_at = None
+        stato.livello_attuale = 0
+        stato.livello_target = 0
+        stato.save(sync_nave=False)
+
+        ripristina_operativita_sottosistemi_attracco(sessione)
+        stato.refresh_from_db()
+        self.assertTrue(stato.online)
+
+    def test_guasto_reale_restaura_offline_dopo_ripristino(self):
+        import string
+
+        from pilotaggio.engine import (
+            get_o_crea_stato_sottosistema,
+            ripristina_operativita_sottosistemi_attracco,
+        )
+
+        used = set(SottosistemaNave.objects.values_list("codice", flat=True))
+        codice = next(c for c in string.ascii_uppercase if c not in used)
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_IDLE,
+            durata_pianificata_secondi=600,
+        )
+        sottos = SottosistemaNave.objects.create(codice=codice, nome="Motore test guasto")
+        stato = get_o_crea_stato_sottosistema(sessione, sottos)
+        stato.online = False
+        stato.guasto_at = timezone.now()
+        stato.save(sync_nave=False)
+
+        ripristina_operativita_sottosistemi_attracco(sessione)
+        stato.refresh_from_db()
+        self.assertFalse(stato.online)
+        self.assertIsNotNone(stato.guasto_at)

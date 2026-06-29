@@ -1479,30 +1479,50 @@ def completa_decollo_sessione(sessione: SessioneVolo) -> SessioneVolo:
 
 def spegni_tutti_sottosistemi(sessione: SessioneVolo, *, sync_nave: bool = True) -> None:
     """
-    A fine volo o precipizio: tutti i sottosistemi spenti (offline, livello 0),
-    nessun timer di ripristino. Sincronizza lo stato persistente sulla nave.
+    A fine volo o precipizio: tutti i sottosistemi a livello 0, senza timer di ripristino.
+
+    Non impostare online=False: nel modello runtime indica un guasto, non uno spegnimento a terra.
+    I guasti reali (guasto_at) e le espulsioni restano invariati.
     """
     stati = StatoSottosistemaSessione.objects.filter(sessione=sessione).select_related(
         "sottosistema"
     )
     off_fields = [
-        "online",
         "livello_attuale",
         "livello_target",
         "recovery_at",
-        "guasto_at",
         "updated_at",
     ]
     for st in stati:
-        st.online = False
         st.livello_attuale = 0
         st.livello_target = 0
         st.recovery_at = None
-        st.guasto_at = None
         st.save(update_fields=off_fields, sync_nave=sync_nave)
     for key in list(_repair_immunity_until.keys()):
         if key.startswith(f"{sessione.pk}:"):
             _repair_immunity_until.pop(key, None)
+
+
+def ripristina_operativita_sottosistemi_attracco(
+    sessione: SessioneVolo, *, sync_nave: bool = True
+) -> None:
+    """
+    Corregge sottosistemi segnati guasti solo per spegnimento fine volo precedente
+    (online=False senza guasto_at). I guasti reali restano offline fino a riparazione.
+    """
+    if sessione is None or sessione.is_terminata:
+        return
+    now = timezone.now()
+    stati = StatoSottosistemaSessione.objects.filter(sessione=sessione).select_related(
+        "sottosistema"
+    )
+    for st in stati:
+        if st.espulso or st.online or st.guasto_at is not None:
+            continue
+        if st.recovery_at and st.recovery_at > now:
+            continue
+        st.online = True
+        st.save(update_fields=["online", "updated_at"], sync_nave=sync_nave)
 
 
 def finalizza_volo_sottosistemi(sessione: SessioneVolo, *, sync_nave: bool = True) -> None:
@@ -1727,23 +1747,21 @@ def genera_evento_se_dovuto(sessione: SessioneVolo) -> Optional[EventoAttivoSess
 # ---------------------------------------------------------------------------
 
 
-def sessioni_per_tick_motore() -> List[SessioneVolo]:
-    """Una sessione non terminata per pilota (la piu' recente), evita tick su orfane."""
-    viste: set = set()
-    sessioni: List[SessioneVolo] = []
-    for sessione in (
+def sessione_nave_operativa() -> Optional[SessioneVolo]:
+    """Singleton nave: unica sessione idle/volo non terminata."""
+    return (
         SessioneVolo.objects.exclude(
             stato__in=[SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED]
         )
-        .select_related("pilota")
         .order_by("-created_at")
-    ):
-        key = sessione.pilota_id
-        if key in viste:
-            continue
-        viste.add(key)
-        sessioni.append(sessione)
-    return sessioni
+        .first()
+    )
+
+
+def sessioni_per_tick_motore() -> List[SessioneVolo]:
+    """Tick solo sulla sessione nave corrente (una nave, una sessione attiva)."""
+    sessione = sessione_nave_operativa()
+    return [sessione] if sessione is not None else []
 
 
 @dataclass

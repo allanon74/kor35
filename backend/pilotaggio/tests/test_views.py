@@ -29,6 +29,7 @@ from pilotaggio.models import (
     SessioneVolo,
     SottosistemaNave,
     StatoSottosistemaSessione,
+    SESSIONE_STATO_ARRIVATA,
     SESSIONE_STATO_CRASHED,
     SESSIONE_STATO_DECOLLO,
     SESSIONE_STATO_IDLE,
@@ -197,6 +198,53 @@ class SessioneEndToEndTests(TestCase):
         self.assertEqual(res.status_code, 200, res.content)
         body = res.json()
         self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_VOLO)
+
+    def test_secondo_pilota_vede_stessa_sessione_nave(self):
+        """Una nave: il pilota B vede la missione avviata dal pilota A."""
+        _, pilota_b = _crea_pilota_con_0pi(nome="PilotaB", valore_0pi=1)
+        token_b = PilotConsoleToken.objects.create(
+            pilota=pilota_b, token=PilotConsoleToken.genera_token()
+        )
+        client_b = APIClient()
+        client_b.credentials(HTTP_AUTHORIZATION=f"PilotToken {token_b.token}")
+
+        res_a = self.client_api.post(
+            "/api/pilot/session/start/",
+            {"prefettura_partenza_id": self.partenza.pk, "prefettura_arrivo_id": self.arrivo.pk},
+            format="json",
+        )
+        self.assertEqual(res_a.status_code, 200, res_a.content)
+        sessione_id = res_a.json()["sessione"]["id"]
+
+        res_b = client_b.get("/api/pilot/session/state/")
+        self.assertEqual(res_b.status_code, 200, res_b.content)
+        self.assertEqual(res_b.json()["sessione"]["id"], sessione_id)
+        self.assertEqual(res_b.json()["sessione"]["stato"], SESSIONE_STATO_VOLO)
+
+    def test_risorse_energia_persistono_tra_voli(self):
+        """Carburante e batterie non si azzerano al nuovo volo."""
+        sessione = SessioneVolo.objects.create(
+            pilota=self.pg,
+            prefettura_partenza=self.partenza,
+            prefettura_arrivo=self.arrivo,
+            stato=SESSIONE_STATO_ARRIVATA,
+            durata_pianificata_secondi=600,
+            carburante_massimo=1000.0,
+            carburante_attuale=120.0,
+            storage_energia_massimo=500.0,
+            storage_energia_attuale=80.0,
+            ended_at=timezone.now(),
+        )
+        res = self.client_api.post(
+            "/api/pilot/session/start/",
+            {"prefettura_partenza_id": self.partenza.pk, "prefettura_arrivo_id": self.arrivo.pk},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertEqual(body["energia"]["carburante_attuale"], 120.0)
+        self.assertEqual(body["energia"]["storage_attuale"], 80.0)
+        self.assertNotEqual(body["sessione"]["id"], str(sessione.pk))
 
 
 @override_settings(PILOT_CONSOLE_ENABLED=True)

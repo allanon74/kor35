@@ -561,7 +561,7 @@ DEFCON_MAX = 5
 
 class SessioneVolo(SyncableModel, models.Model):
     """
-    Sessione di volo del pilota.
+    Sessione di volo della nave (singleton operativo: idle/volo condiviso tra i piloti).
 
     Stato runtime principale:
     - DEFCON: gravita' situazione (0..DEFCON_MAX). >DEFCON_MAX => crash.

@@ -59,6 +59,7 @@ from .engine import (
     secondi_fino_valutazione_evento,
     termina_sessione_volo,
     tick_sessione_se_dovuto,
+    sessione_nave_operativa,
 )
 from .models import (
     ComandoCriticoGlobale,
@@ -132,41 +133,63 @@ def _sottosistema_da_qr(qr: QrCode) -> Optional[SottosistemaNave]:
 
 
 def _sessione_attiva_corrente() -> Optional[SessioneVolo]:
-    """
-    Singleton logico della console: se piu' sessioni sono attive, prende quella
-    piu' recente non terminata. Per console singola Raspberry e' coerente.
-    """
-    return (
-        SessioneVolo.objects.exclude(stato__in=["arrivata", "crashed"])
-        .order_by("-created_at")
-        .first()
+    """Singleton nave: unica sessione idle/volo non terminata (condivisa da tutti i piloti)."""
+    return sessione_nave_operativa()
+
+
+def _ultima_sessione_nave() -> Optional[SessioneVolo]:
+    return SessioneVolo.objects.order_by("-created_at").first()
+
+
+def _capacita_energia_nave() -> tuple[float, float]:
+    capacita_serbatoi = float(
+        SottosistemaNave.objects.filter(attivo=True, tipo="serbatoio").aggregate(
+            total=Sum("capacita_carburante")
+        )["total"]
+        or 0.0
     )
+    capacita_batterie = float(
+        SottosistemaNave.objects.filter(attivo=True, tipo="batteria").aggregate(
+            total=Sum("capacita_storage")
+        )["total"]
+        or 0.0
+    )
+    carburante_max = max(0.0, capacita_serbatoi) or 1000.0
+    storage_max = max(0.0, capacita_batterie)
+    return carburante_max, storage_max
+
+
+def _risorse_energia_da_ultima_sessione() -> tuple[float, float, float, float]:
+    """
+    Carburante e batterie ereditati dall'ultimo volo/sessione (nessun rifornimento automatico).
+    """
+    carburante_max, storage_max = _capacita_energia_nave()
+    ultima = _ultima_sessione_nave()
+    if ultima is None:
+        return carburante_max, carburante_max, storage_max, storage_max
+    carb_att = max(0.0, min(carburante_max, float(ultima.carburante_attuale or 0.0)))
+    stor_att = max(0.0, min(storage_max, float(ultima.storage_energia_attuale or 0.0)))
+    return carb_att, carburante_max, stor_att, storage_max
 
 
 def _sessione_pilota_operativa(pilota) -> Optional[SessioneVolo]:
-    """Ultima sessione pilota non terminata (idle o volo)."""
-    return (
-        SessioneVolo.objects.filter(pilota=pilota)
-        .exclude(stato__in=["arrivata", "crashed"])
-        .order_by("-created_at")
-        .first()
-    )
+    """Compat: una nave → sessione globale, non legata al pilota connesso."""
+    return _sessione_attiva_corrente()
 
 
-def _chiudi_sessioni_orfane_pilota(pilota) -> list[dict]:
+def _chiudi_sessioni_orfane_nave() -> list[dict]:
     """
-    Chiude sessioni idle/volo duplicate dello stesso pilota.
+    Chiude sessioni idle/volo duplicate (oltre alla sessione nave canonica).
     Le orfane non devono ricevere tick ne' propagare spegnimento sulla nave persistente.
     """
     from pilotaggio.engine import termina_sessione_volo
     from pilotaggio.nave_sync_context import suppress_sessione_nave_sync
 
-    canonica = _sessione_pilota_operativa(pilota)
+    canonica = _sessione_attiva_corrente()
     if canonica is None:
         return []
     orfane = list(
-        SessioneVolo.objects.filter(pilota=pilota)
-        .exclude(stato__in=[SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED])
+        SessioneVolo.objects.exclude(stato__in=[SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED])
         .exclude(pk=canonica.pk)
         .order_by("created_at")
     )
@@ -180,8 +203,12 @@ def _chiudi_sessioni_orfane_pilota(pilota) -> list[dict]:
                 {
                     "id": str(sessione.pk),
                     "stato_precedente": sessione.stato,
-                    "pilota_id": pilota.pk,
-                    "pilota_nome": getattr(pilota, "nome", str(pilota)),
+                    "pilota_id": sessione.pilota_id,
+                    "pilota_nome": (
+                        getattr(sessione.pilota, "nome", str(sessione.pilota))
+                        if sessione.pilota_id
+                        else None
+                    ),
                     "created_at": (
                         sessione.created_at.isoformat() if sessione.created_at else None
                     ),
@@ -200,6 +227,11 @@ def _chiudi_sessioni_orfane_pilota(pilota) -> list[dict]:
     return chiuse
 
 
+def _chiudi_sessioni_orfane_pilota(pilota) -> list[dict]:
+    """Compat: una nave → chiusura orfane globale (il pilota e' ignorato)."""
+    return _chiudi_sessioni_orfane_nave()
+
+
 def _sessioni_orfane_queryset(*, pilota_id=None):
     qs = (
         SessioneVolo.objects.exclude(
@@ -214,13 +246,12 @@ def _sessioni_orfane_queryset(*, pilota_id=None):
 
 
 def _riepilogo_sessioni_orfane(*, pilota_id=None) -> dict:
-    """Elenco sessioni duplicate che verrebbero chiuse (anteprima staff)."""
-    viste: set = set()
+    """Elenco sessioni duplicate oltre alla sessione nave canonica."""
+    canonica = _sessione_attiva_corrente()
     orfane: list[dict] = []
     canoniche: list[dict] = []
 
     for sessione in _sessioni_orfane_queryset(pilota_id=pilota_id):
-        key = sessione.pilota_id
         row = {
             "id": str(sessione.pk),
             "stato": sessione.stato,
@@ -230,13 +261,12 @@ def _riepilogo_sessioni_orfane(*, pilota_id=None) -> dict:
                 sessione.created_at.isoformat() if sessione.created_at else None
             ),
         }
-        if key in viste:
+        if canonica is not None and sessione.pk == canonica.pk:
+            row["orfana"] = False
+            canoniche.append(row)
+        else:
             row["orfana"] = True
             orfane.append(row)
-        else:
-            row["orfana"] = False
-            viste.add(key)
-            canoniche.append(row)
 
     return {
         "totale_orfane": len(orfane),
@@ -247,20 +277,8 @@ def _riepilogo_sessioni_orfane(*, pilota_id=None) -> dict:
 
 
 def pulisci_sessioni_orfane_staff(*, pilota_id=None) -> dict:
-    """Chiude tutte le sessioni orfane (opz. filtro pilota)."""
-    pilota_ids = list(
-        _sessioni_orfane_queryset(pilota_id=pilota_id)
-        .values_list("pilota_id", flat=True)
-        .distinct()
-    )
-    chiuse: list[dict] = []
-    for pid in pilota_ids:
-        if pid is None:
-            continue
-        pilota = Personaggio.objects.filter(pk=pid).first()
-        if pilota is None:
-            continue
-        chiuse.extend(_chiudi_sessioni_orfane_pilota(pilota))
+    """Chiude tutte le sessioni orfane (singleton nave)."""
+    chiuse = _chiudi_sessioni_orfane_nave()
 
     riepilogo = _riepilogo_sessioni_orfane(pilota_id=pilota_id)
     return {
@@ -308,53 +326,38 @@ def _sessione_staff_operativa() -> Optional[SessioneVolo]:
 
 def _sessione_pilota_per_console(pilota) -> Optional[SessioneVolo]:
     """
-    Sessione mostrata dalla console pilota.
-    Priorita' alla sessione operativa (idle/volo); altrimenti schermata finale arrivo/crash.
+    Sessione mostrata dalla console pilota (nave unica: tutti i piloti vedono la stessa).
     """
-    attiva = _sessione_pilota_operativa(pilota)
+    attiva = _sessione_attiva_corrente()
     if attiva is not None:
         return attiva
-    latest = (
-        SessioneVolo.objects.filter(pilota=pilota)
-        .order_by("-created_at")
-        .first()
-    )
-    if latest is None:
-        return None
-    if latest.stato in (SESSIONE_STATO_ARRIVATA, SESSIONE_STATO_CRASHED):
-        idle_dopo = (
-            SessioneVolo.objects.filter(
-                pilota=pilota,
-                stato=SESSIONE_STATO_IDLE,
-                created_at__gt=latest.created_at,
-            )
-            .order_by("-created_at")
-            .first()
-        )
-        if idle_dopo is not None:
-            return idle_dopo
-    return latest
+    return _ultima_sessione_nave()
 
 
 def _ensure_sessione_idle_pilota(pilota) -> SessioneVolo:
-    """Nuova sessione a terra dopo logout o reset da schermata crash/arrivo."""
-    ultima = (
-        SessioneVolo.objects.filter(pilota=pilota)
-        .order_by("-created_at")
-        .first()
-    )
+    """Sessione a terra condivisa dopo logout/reset (stato nave persistente)."""
+    attiva = _sessione_attiva_corrente()
+    if attiva is not None:
+        if attiva.stato == SESSIONE_STATO_IDLE:
+            from pilotaggio.stato_nave import propaga_stati_nave_a_sessione
+
+            propaga_stati_nave_a_sessione(attiva)
+        return attiva
+
+    ultima = _ultima_sessione_nave()
     if ultima is not None and ultima.is_terminata:
         finalizza_volo_sottosistemi(ultima)
-    if ultima is not None and ultima.stato == SESSIONE_STATO_IDLE:
-        from pilotaggio.stato_nave import propaga_stati_nave_a_sessione
 
-        propaga_stati_nave_a_sessione(ultima)
-        return ultima
+    carb_att, carb_max, stor_att, stor_max = _risorse_energia_da_ultima_sessione()
     sessione = SessioneVolo.objects.create(
         pilota=pilota,
         stato=SESSIONE_STATO_IDLE,
         defcon=0,
         durata_pianificata_secondi=600,
+        carburante_attuale=carb_att,
+        carburante_massimo=carb_max,
+        storage_energia_attuale=stor_att,
+        storage_energia_massimo=stor_max,
     )
     from pilotaggio.stato_nave import propaga_stati_nave_a_sessione
 
@@ -992,15 +995,10 @@ class PilotSessionStartView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        attiva = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato__in=["arrivata", "crashed"])
-            .order_by("-created_at")
-            .first()
-        )
+        attiva = _sessione_attiva_corrente()
         if attiva is not None and attiva.stato != SESSIONE_STATO_IDLE:
             return Response(
-                {"error": "Esiste gia' una sessione in corso."},
+                {"error": "La nave ha gia' una missione in corso."},
                 status=status.HTTP_409_CONFLICT,
             )
 
@@ -1008,41 +1006,11 @@ class PilotSessionStartView(APIView):
             partenza, arrivo, defcon_iniziale=0
         )
         now = timezone.now()
-        capacita_serbatoi = float(
-            SottosistemaNave.objects.filter(attivo=True, tipo="serbatoio").aggregate(
-                total=Sum("capacita_carburante")
-            )["total"]
-            or 0.0
-        )
-        capacita_batterie = float(
-            SottosistemaNave.objects.filter(attivo=True, tipo="batteria").aggregate(
-                total=Sum("capacita_storage")
-            )["total"]
-            or 0.0
-        )
-        carburante_max_target = max(0.0, capacita_serbatoi or 0.0) or 1000.0
+        carburante_max_target, storage_max_target = _capacita_energia_nave()
 
         with transaction.atomic():
             if attiva is None:
-                precedente = (
-                    SessioneVolo.objects.filter(pilota=pilota).order_by("-created_at").first()
-                )
-                last_login = (
-                    PilotConsoleToken.objects.filter(pilota=pilota)
-                    .order_by("-created_at")
-                    .values_list("created_at", flat=True)
-                    .first()
-                )
-                riferimento = None
-                base_carburante = carburante_max_target
-                if precedente is not None:
-                    riferimento = precedente.ended_at or precedente.updated_at or precedente.created_at
-                    base_carburante = float(precedente.carburante_attuale or carburante_max_target)
-                if last_login is not None:
-                    riferimento = max(riferimento, last_login) if riferimento is not None else last_login
-                carburante_attuale = _calcola_carburante_con_rigenerazione(
-                    base_carburante, carburante_max_target, riferimento, now
-                )
+                carb_att, carb_max, stor_att, stor_max = _risorse_energia_da_ultima_sessione()
                 attiva = SessioneVolo.objects.create(
                     pilota=pilota,
                     prefettura_partenza=partenza,
@@ -1052,13 +1020,14 @@ class PilotSessionStartView(APIView):
                     defcon=0,
                     distanza_target=float(distanza_target),
                     distanza_percorsa=0.0,
-                    carburante_massimo=carburante_max_target,
-                    carburante_attuale=carburante_attuale,
-                    storage_energia_massimo=max(0.0, capacita_batterie),
-                    storage_energia_attuale=max(0.0, capacita_batterie),
+                    carburante_massimo=carb_max,
+                    carburante_attuale=carb_att,
+                    storage_energia_massimo=stor_max,
+                    storage_energia_attuale=stor_att,
                     crash_reason="",
                 )
             else:
+                attiva.pilota = pilota
                 attiva.prefettura_partenza = partenza
                 attiva.prefettura_arrivo = arrivo
                 attiva.stato = SESSIONE_STATO_VOLO
@@ -1066,24 +1035,16 @@ class PilotSessionStartView(APIView):
                 attiva.defcon = 0
                 attiva.distanza_target = float(distanza_target)
                 attiva.distanza_percorsa = 0.0
-                riferimento = attiva.ended_at or attiva.updated_at or attiva.created_at
-                last_login = (
-                    PilotConsoleToken.objects.filter(pilota=pilota)
-                    .order_by("-created_at")
-                    .values_list("created_at", flat=True)
-                    .first()
-                )
-                if last_login is not None:
-                    riferimento = max(riferimento, last_login) if riferimento is not None else last_login
                 attiva.carburante_massimo = carburante_max_target
-                attiva.carburante_attuale = _calcola_carburante_con_rigenerazione(
+                attiva.storage_energia_massimo = storage_max_target
+                attiva.carburante_attuale = min(
                     float(attiva.carburante_attuale or 0.0),
-                    carburante_max_target,
-                    riferimento,
-                    now,
+                    float(attiva.carburante_massimo or carburante_max_target),
                 )
-                attiva.storage_energia_massimo = max(0.0, capacita_batterie)
-                attiva.storage_energia_attuale = max(0.0, capacita_batterie)
+                attiva.storage_energia_attuale = min(
+                    float(attiva.storage_energia_attuale or 0.0),
+                    float(attiva.storage_energia_massimo or storage_max_target),
+                )
                 attiva.crash_reason = ""
                 attiva.save()
             attiva.started_at = now
@@ -1197,12 +1158,7 @@ class PilotSessionAbortView(APIView):
 
     def post(self, request):
         pilota = get_pilot_from_request(request)
-        sessione = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato__in=["arrivata", "crashed"])
-            .order_by("-created_at")
-            .first()
-        )
+        sessione = _sessione_attiva_corrente()
         if sessione is None:
             return Response({"status": "no_session"}, status=status.HTTP_200_OK)
         termina_sessione_volo(
@@ -1228,12 +1184,7 @@ class PilotSessionEmergencyLandingView(APIView):
 
     def post(self, request):
         pilota = get_pilot_from_request(request)
-        sessione = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato__in=["arrivata", "crashed"])
-            .order_by("-created_at")
-            .first()
-        )
+        sessione = _sessione_attiva_corrente()
         if sessione is None:
             return Response({"error": "Nessuna sessione attiva."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1280,12 +1231,7 @@ class PilotSessionTakeoffView(APIView):
 
     def post(self, request):
         pilota = get_pilot_from_request(request)
-        sessione = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato__in=["arrivata", "crashed"])
-            .order_by("-created_at")
-            .first()
-        )
+        sessione = _sessione_attiva_corrente()
         if sessione is None or sessione.stato != SESSIONE_STATO_VOLO:
             return Response({"error": "Nessuna missione attiva."}, status=status.HTTP_400_BAD_REQUEST)
         if _sessione_ha_decollato(sessione):
@@ -1325,12 +1271,7 @@ class PilotSessionTakeoffCompleteView(APIView):
 
     def post(self, request):
         pilota = get_pilot_from_request(request)
-        sessione = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato__in=["arrivata", "crashed"])
-            .order_by("-created_at")
-            .first()
-        )
+        sessione = _sessione_attiva_corrente()
         if sessione is None or sessione.stato != SESSIONE_STATO_VOLO:
             return Response({"error": "Nessuna missione attiva."}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -1447,11 +1388,7 @@ class PilotSessionHistoryView(generics.ListAPIView):
 
     def get_queryset(self):
         pilota = get_pilot_from_request(self.request)
-        sessione = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .order_by("-created_at")
-            .first()
-        )
+        sessione = _sessione_pilota_per_console(pilota)
         if sessione is None:
             return TentativoCodice.objects.none()
         return TentativoCodice.objects.filter(sessione=sessione).order_by("-created_at")[:30]
@@ -1467,13 +1404,9 @@ class PilotSessionDiarioView(APIView):
         pilota = get_pilot_from_request(request)
         sessione_id = request.query_params.get("sessione_id")
         if sessione_id:
-            sessione = SessioneVolo.objects.filter(pk=sessione_id, pilota=pilota).first()
+            sessione = SessioneVolo.objects.filter(pk=sessione_id).first()
         else:
-            sessione = (
-                SessioneVolo.objects.filter(pilota=pilota)
-                .order_by("-ended_at", "-created_at")
-                .first()
-            )
+            sessione = _sessione_pilota_per_console(pilota)
         if sessione is None:
             return Response({"sessione": None, "voci": []})
         from .flight_log import riepilogo_sessione_per_pilota
@@ -1494,13 +1427,12 @@ class PilotSessionVoliView(APIView):
     permission_classes = [IsPilotConsole]
 
     def get(self, request):
-        pilota = get_pilot_from_request(request)
+        get_pilot_from_request(request)
         from .flight_log import riepilogo_sessione_per_pilota
 
         qs = (
-            SessioneVolo.objects.filter(pilota=pilota)
-            .exclude(stato=SESSIONE_STATO_IDLE)
-            .select_related("prefettura_partenza", "prefettura_arrivo")
+            SessioneVolo.objects.exclude(stato=SESSIONE_STATO_IDLE)
+            .select_related("prefettura_partenza", "prefettura_arrivo", "pilota")
             .order_by("-ended_at", "-created_at")[:25]
         )
         return Response({"voli": [riepilogo_sessione_per_pilota(s) for s in qs]})
