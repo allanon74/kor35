@@ -926,10 +926,10 @@ class StatoSottosistemaNave(SyncableModel, models.Model):
         return f"Nave {self.sottosistema_id} online={self.online}"
 
     def save(self, *args, **kwargs):
+        # La nave e' mirror persistente: si aggiorna da save() sulla sessione
+        # (sync_stato_sessione_a_nave). Non riscrivere la sessione attiva qui —
+        # evita race con _sessione_attiva_corrente() e revert al poll.
         super().save(*args, **kwargs)
-        from pilotaggio.stato_nave import sync_nave_a_sessione_corrente
-
-        sync_nave_a_sessione_corrente(self)
 
 
 # ---------------------------------------------------------------------------

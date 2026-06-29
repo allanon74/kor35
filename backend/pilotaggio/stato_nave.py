@@ -57,12 +57,11 @@ def sync_stato_sessione_a_nave(stato: "StatoSottosistemaSessione") -> None:
     )
 
 
-def sync_nave_a_sessione_corrente(nave: "StatoSottosistemaNave") -> None:
+def sync_nave_a_sessione(sessione: "SessioneVolo", nave: "StatoSottosistemaNave") -> None:
+    """Allinea una riga sessione alla nave (solo chiamata esplicita, es. propaga)."""
     from .models import StatoSottosistemaSessione
-    from .views import _sessione_attiva_corrente
 
-    sessione = _sessione_attiva_corrente()
-    if sessione is None:
+    if sessione is None or sessione.is_terminata:
         return
     StatoSottosistemaSessione.objects.filter(
         sessione=sessione,

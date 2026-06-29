@@ -46,17 +46,18 @@ ANNUNCIO_VOCALE_ALLARME: Dict[str, str] = {
         "prepararsi a scompensi nel volo."
     ),
     ALLARME_EQUIPAGGIO_CROCIERA: (
-        "Ripristino condizione di crociera. Nessun allarme attivo."
+        "Allarme Verde. Ripristino condizione di crociera. Nessun allarme attivo."
     ),
 }
 
 # Schema v1 per futuri controller LED WiFi (URL locale, polling HTTP)
 LED_PROFILE_ALLARME: Dict[str, Dict[str, Any]] = {
     ALLARME_EQUIPAGGIO_CROCIERA: {
-        "hex": "#3d6b4f",
-        "rgb": [61, 107, 79],
+        "hex": "#4CAF50",
+        "rgb": [76, 175, 80],
         "modalita": "steady",
-        "luminosita": 0.35,
+        "luminosita": 0.85,
+        "nome_led": "verde",
     },
     ALLARME_EQUIPAGGIO_GIALLO: {
         "hex": "#FFD700",
@@ -111,7 +112,7 @@ def annuncio_vocale_allarme(allarme: str) -> str:
 def profilo_led_allarme(allarme: str) -> Dict[str, Any]:
     key = normalizza_allarme_equipaggio(allarme)
     profilo = dict(LED_PROFILE_ALLARME[key])
-    profilo["nome"] = key
+    profilo["nome"] = profilo.pop("nome_led", None) or key
     return profilo
 
 

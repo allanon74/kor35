@@ -10,6 +10,7 @@ const ALLARMI = [
   { id: 'rosso', title: 'Allarme Rosso', className: 'alarm-rosso' },
   { id: 'nero', title: 'Allarme Nero', className: 'alarm-nero' },
   { id: 'blu', title: 'Allarme Blu', className: 'alarm-blu' },
+  { id: 'crociera', title: 'Nessun allarme — crociera', className: 'alarm-verde' },
 ];
 
 /**
@@ -40,9 +41,8 @@ export default function FlightOpsPanel({
 
   const handleAllarme = async (id) => {
     if (!onSetAllarme) return;
-    const next = allarmeEquipaggio === id ? 'crociera' : id;
     await run(async () => {
-      const res = await onSetAllarme(next);
+      const res = await onSetAllarme(id);
       if (res?.announcement) {
         await speakItalianAnnouncement(res.announcement);
       }

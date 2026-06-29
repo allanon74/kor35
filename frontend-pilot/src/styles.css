@@ -2737,6 +2737,11 @@ select, input[type=text], input[type=number] {
   background: linear-gradient(180deg, #3080ff, #1040a0);
 }
 
+.flight-ops-alarm-btn.alarm-verde {
+  background: linear-gradient(180deg, #5ecf6a, #2e8b3a);
+  border-color: rgba(140, 230, 150, 0.45);
+}
+
 .flight-ops-alarm-btn.active {
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
   filter: brightness(1.2);

@@ -422,7 +422,12 @@ def forza_precipizio(
 def get_o_crea_stato_sottosistema(
     sessione: SessioneVolo, sottosistema: SottosistemaNave
 ) -> StatoSottosistemaSessione:
-    from pilotaggio.stato_nave import defaults_stato_da_nave, get_o_crea_stato_nave
+    from pilotaggio.stato_nave import (
+        CAMPI_STATO_SINCRONI,
+        defaults_stato_da_nave,
+        get_o_crea_stato_nave,
+        sync_stato_sessione_a_nave,
+    )
 
     nave = get_o_crea_stato_nave(sottosistema)
     stato, created = StatoSottosistemaSessione.objects.get_or_create(
@@ -430,12 +435,28 @@ def get_o_crea_stato_sottosistema(
         sottosistema=sottosistema,
         defaults=defaults_stato_da_nave(sottosistema),
     )
-    if not created and nave.updated_at > stato.updated_at:
-        from pilotaggio.stato_nave import CAMPI_STATO_SINCRONI
-
-        for k in CAMPI_STATO_SINCRONI:
-            setattr(stato, k, getattr(nave, k))
-        stato.save(update_fields=[*CAMPI_STATO_SINCRONI, "updated_at"])
+    # Sessione idle/volo: la plancia e' fonte di verita' runtime. Non sovrascrivere
+    # da nave persistente (es. spegnimento fine volo o sync edge con timestamp piu'
+    # recente ma valori vecchi) — causa tipica: comando applicato e azzerato al poll.
+    if not created and sessione.stato in (SESSIONE_STATO_IDLE, SESSIONE_STATO_VOLO):
+        if nave.espulso and not stato.espulso:
+            stato.espulso = True
+            stato.online = False
+            stato.livello_target = 0
+            stato.livello_attuale = 0
+            stato.save(
+                update_fields=[
+                    "espulso",
+                    "online",
+                    "livello_target",
+                    "livello_attuale",
+                    "updated_at",
+                ]
+            )
+        elif any(
+            getattr(stato, k) != getattr(nave, k) for k in CAMPI_STATO_SINCRONI
+        ):
+            sync_stato_sessione_a_nave(stato)
     return stato
 
 

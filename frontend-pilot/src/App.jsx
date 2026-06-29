@@ -240,7 +240,6 @@ export default function App() {
       setState(res);
       saveCachedState(res);
       setCommandStatus('Comando applicato.');
-      await refreshState();
     } catch (e) {
       setError(e.message || 'Errore aggiornamento sottosistema.');
       setCommandStatus(`Errore comando: ${e.message || 'aggiornamento non riuscito'}`);

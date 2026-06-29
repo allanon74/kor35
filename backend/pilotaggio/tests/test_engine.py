@@ -1289,3 +1289,47 @@ class TickThrottleTests(TestCase):
         sessione.refresh_from_db()
         self.assertGreater(sessione.ultimo_tick_motore_at, last_before)
         self.assertIsNone(tick_sessione_se_dovuto(sessione))
+
+
+class StatoSessioneNaveSyncTests(TestCase):
+    """La sessione attiva non deve essere sovrascritta da nave persistente stale."""
+
+    def test_comando_console_non_revertito_da_nave_stale(self):
+        import string
+
+        from pilotaggio.engine import get_o_crea_stato_sottosistema
+
+        used = set(SottosistemaNave.objects.values_list("codice", flat=True))
+        codice = next(c for c in string.ascii_uppercase if c not in used)
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            started_at=timezone.now(),
+        )
+        sottos = SottosistemaNave.objects.create(codice=codice, nome="Reattore test sync")
+        stato = get_o_crea_stato_sottosistema(sessione, sottos)
+        stato.livello_target = 7
+        stato.livello_attuale = 7
+        stato.online = True
+        stato.save()
+
+        from pilotaggio.models import StatoSottosistemaNave
+
+        nave = StatoSottosistemaNave.objects.get(sottosistema=sottos)
+        StatoSottosistemaNave.objects.filter(pk=nave.pk).update(
+            livello_target=0,
+            livello_attuale=0,
+            online=False,
+            updated_at=timezone.now() + timedelta(seconds=5),
+        )
+
+        got = get_o_crea_stato_sottosistema(sessione, sottos)
+        self.assertEqual(got.livello_target, 7)
+        self.assertTrue(got.online)
+
+        nave.refresh_from_db()
+        self.assertEqual(nave.livello_target, 7)
+        self.assertTrue(nave.online)
