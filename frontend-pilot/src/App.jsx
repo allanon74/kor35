@@ -308,7 +308,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell ${IS_CONTROL_ONLY ? 'app-shell-control' : ''} ${IS_COMBINED ? 'app-shell-combined' : ''}`}>
+    <div className={`app-shell ${IS_CONTROL_ONLY ? 'app-shell-control' : ''} ${IS_COMBINED ? 'app-shell-combined' : ''} ${IS_COMPATTATORE ? 'app-shell-compattatore' : ''}`}>
       {!IS_CONTROL_ONLY ? (
         <div className="banner">
           <div className="ident">

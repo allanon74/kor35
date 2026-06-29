@@ -1284,7 +1284,13 @@ export default function PilotaggioManager({ onLogout }) {
     setError('');
     try {
       const data = await staffModificaPilotStiva({ mattone_id: mattoneId, delta }, onLogout);
-      setStivaData(data);
+      setStivaData((prev) => ({
+        ...data,
+        mattoni_catalogo:
+          data?.mattoni_catalogo?.length
+            ? data.mattoni_catalogo
+            : prev?.mattoni_catalogo || [],
+      }));
     } catch (err) {
       setError(err?.message || 'Modifica stiva non riuscita.');
     } finally {

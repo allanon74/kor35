@@ -213,6 +213,22 @@ def build_stiva_payload() -> dict:
     return {"righe": righe, "coppie_opposite": coppie}
 
 
+def build_staff_stiva_payload() -> dict:
+    """Payload completo per staff (inventario + catalogo mattoni per la tabella)."""
+    payload = build_stiva_payload()
+    payload["mattoni_catalogo"] = [
+        {
+            "id": str(m.pk),
+            "nome": m.nome,
+            "indice_componente": m.indice_componente,
+            "colore_id": str(m.caratteristica_associata_id),
+            "colore_nome": m.caratteristica_associata.nome if m.caratteristica_associata else "",
+        }
+        for m in mattoni_componente_qs()
+    ]
+    return payload
+
+
 @transaction.atomic
 def staff_modifica_stiva(*, mattone_id, delta: int) -> dict:
     """Aggiunge (delta>0) o rimuove (delta<0) quantità in stiva."""
@@ -233,7 +249,7 @@ def staff_modifica_stiva(*, mattone_id, delta: int) -> dict:
         raise ValueError("Quantità insufficiente in stiva.")
     row.quantita = nuova
     row.save(update_fields=["quantita", "updated_at"])
-    return build_stiva_payload()
+    return build_staff_stiva_payload()
 
 
 @transaction.atomic

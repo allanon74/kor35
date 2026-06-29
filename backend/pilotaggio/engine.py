@@ -529,6 +529,183 @@ def _prob_ripristino_per_livello(stato: StatoSottosistemaSessione) -> float:
         return 0.0
 
 
+TIPI_ESCLUSI_SHEEDDING = TIPI_PRODUZIONE | {"batteria", "serbatoio"}
+
+
+def _livello_stima_energia(
+    stato: StatoSottosistemaSessione, override_livelli: Optional[dict] = None
+) -> float:
+    override_livelli = override_livelli or {}
+    if stato.pk in override_livelli:
+        return float(override_livelli[stato.pk])
+    if stato.sottosistema.tipo == "generatore":
+        return float(stato.livello_attuale or 0)
+    return float(stato.livello_target or 0)
+
+
+def _batterie_operative(stati: List[StatoSottosistemaSessione]) -> bool:
+    return any(
+        st.online and st.sottosistema.tipo == "batteria" for st in stati
+    )
+
+
+def _storage_compensabile(
+    sessione: SessioneVolo, stati: List[StatoSottosistemaSessione]
+) -> float:
+    """Energia in storage utilizzabile solo con almeno una batteria online."""
+    if not _batterie_operative(stati):
+        return 0.0
+    return max(0.0, float(sessione.storage_energia_attuale or 0.0))
+
+
+def _calcola_produzione_consumo(
+    sessione: SessioneVolo,
+    stati: List[StatoSottosistemaSessione],
+    *,
+    override_livelli: Optional[dict] = None,
+) -> Tuple[float, float, float, float, float, float, int, float]:
+    """
+    Calcola produzione, consumo energia, consumo carburante e componenti motore/manovra/portale.
+    Senza carburante i reattori non producono (output zero).
+    """
+    override_livelli = override_livelli or {}
+    carburante_ok = float(sessione.carburante_attuale or 0.0) > 0.0
+    produzione = 0.0
+    consumo_energia = 0.0
+    consumo_carburante = 0.0
+    velocita_motore_base = 0.0
+    spinta_manovra_avanti = 0.0
+    spinta_manovra_indietro = 0.0
+    livello_portale = 0
+    coeff_portale = 0.15
+
+    for st in stati:
+        ss = st.sottosistema
+        if not st.online:
+            continue
+        livello = _livello_stima_energia(st, override_livelli)
+        if ss.tipo in TIPI_PRODUZIONE:
+            if carburante_ok:
+                produzione += livello * float(ss.coeff_produzione or 0.0)
+                consumo_carburante += livello * float(ss.coeff_consumo_carburante or 0.0)
+        elif ss.tipo in ("batteria", "serbatoio"):
+            continue
+        else:
+            consumo_energia += livello * float(ss.coeff_consumo_energia or 0.0)
+        if ss.tipo == "motore":
+            velocita_motore_base += livello * float(ss.coeff_produzione or 0.0)
+        if ss.tipo == "manovra":
+            if st.direzione == "avanti":
+                spinta_manovra_avanti += livello * float(ss.coeff_produzione or 0.0)
+            elif st.direzione == "indietro":
+                spinta_manovra_indietro += livello * float(ss.coeff_produzione or 0.0)
+        if ss.tipo == "portale":
+            livello_portale = max(livello_portale, int(livello))
+            coeff_portale = float(ss.coeff_effetto_speciale or 0.15)
+
+    if not carburante_ok:
+        produzione = 0.0
+        consumo_carburante = 0.0
+
+    return (
+        produzione,
+        consumo_energia,
+        consumo_carburante,
+        velocita_motore_base,
+        spinta_manovra_avanti,
+        spinta_manovra_indietro,
+        livello_portale,
+        coeff_portale,
+    )
+
+
+def valida_livello_sottosistema_energia(
+    sessione: SessioneVolo,
+    stato: StatoSottosistemaSessione,
+    nuovo_livello: int,
+    *,
+    stati: Optional[List[StatoSottosistemaSessione]] = None,
+) -> Tuple[bool, str]:
+    """
+    Impedisce di alzare il livello se reattori + batterie operative non coprono il carico.
+    """
+    nuovo_livello = _clamp_livello(nuovo_livello)
+    if nuovo_livello <= int(stato.livello_target or 0):
+        return True, ""
+    if not stato.online:
+        return True, ""
+    if stato.sottosistema.tipo in TIPI_ESCLUSI_SHEEDDING:
+        return True, ""
+
+    if stati is None:
+        stati = list(
+            StatoSottosistemaSessione.objects.select_related("sottosistema").filter(
+                sessione=sessione
+            )
+        )
+    override = {stato.pk: nuovo_livello}
+    produzione, consumo, _, _, _, _, _, _ = _calcola_produzione_consumo(
+        sessione, stati, override_livelli=override
+    )
+    disponibile = produzione + _storage_compensabile(sessione, stati)
+    if disponibile + 1e-6 >= consumo:
+        return True, ""
+    return (
+        False,
+        "Energia insufficiente: reattori, carburante e batterie non coprono il carico richiesto.",
+    )
+
+
+def _applica_shedding_energia(
+    sessione: SessioneVolo, stati: List[StatoSottosistemaSessione]
+) -> None:
+    """Spegne a caso i carichi finché produzione + storage coprono il consumo."""
+    from pilotaggio.nave_sync_context import suppress_sessione_nave_sync
+
+    with suppress_sessione_nave_sync():
+        for _ in range(len(stati) * 3):
+            produzione, consumo, _, _, _, _, _, _ = _calcola_produzione_consumo(
+                sessione, stati
+            )
+            storage = _storage_compensabile(sessione, stati)
+            if produzione + storage + 1e-6 >= consumo:
+                break
+            candidati = [
+                st
+                for st in stati
+                if st.online
+                and not st.espulso
+                and st.sottosistema.tipo not in TIPI_ESCLUSI_SHEEDDING
+                and int(st.livello_target or 0) > 0
+            ]
+            if not candidati:
+                break
+            scelto = random.choice(candidati)
+            scelto.livello_target = 0
+            scelto.livello_attuale = 0
+            scelto.save(
+                update_fields=["livello_target", "livello_attuale", "updated_at"]
+            )
+
+
+def _assorbi_deficit_con_batterie(
+    sessione: SessioneVolo,
+    stati: List[StatoSottosistemaSessione],
+    deficit: float,
+) -> float:
+    """Scala storage se le batterie sono operative; restituisce il deficit residuo."""
+    if deficit <= 0:
+        return 0.0
+    storage = _storage_compensabile(sessione, stati)
+    if storage <= 0:
+        return deficit
+    assorbito = min(storage, deficit)
+    sessione.storage_energia_attuale = max(
+        0.0, float(sessione.storage_energia_attuale or 0.0) - assorbito
+    )
+    return deficit - assorbito
+
+
 def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
     """
     Simulazione energia/carburante/distanza per tick.
@@ -573,41 +750,27 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
                 st.livello_attuale = st.livello_target
             st.save(update_fields=["livello_target", "livello_attuale", "updated_at"])
 
-    produzione = 0.0
-    consumo_energia = 0.0
-    consumo_carburante = 0.0
-    velocita_motore_base = 0.0
-    spinta_manovra_avanti = 0.0
-    spinta_manovra_indietro = 0.0
-    livello_portale = 0
-    coeff_portale = 0.15
     capacita_storage = 0.0
     capacita_carburante = 0.0
-
     for st in stati:
         ss = st.sottosistema
         if not st.online:
             continue
-        livello = float(st.livello_attuale or 0)
-        if ss.tipo in TIPI_PRODUZIONE:
-            produzione += livello * float(ss.coeff_produzione or 0.0)
-            consumo_carburante += livello * float(ss.coeff_consumo_carburante or 0.0)
-        elif ss.tipo == "batteria":
+        if ss.tipo == "batteria":
             capacita_storage += float(ss.capacita_storage or 0.0)
         elif ss.tipo == "serbatoio":
             capacita_carburante += float(ss.capacita_carburante or 0.0)
-        else:
-            consumo_energia += livello * float(ss.coeff_consumo_energia or 0.0)
-        if ss.tipo == "motore":
-            velocita_motore_base += livello * float(ss.coeff_produzione or 0.0)
-        if ss.tipo == "manovra":
-            if st.direzione == "avanti":
-                spinta_manovra_avanti += livello * float(ss.coeff_produzione or 0.0)
-            elif st.direzione == "indietro":
-                spinta_manovra_indietro += livello * float(ss.coeff_produzione or 0.0)
-        if ss.tipo == "portale":
-            livello_portale = max(livello_portale, int(livello))
-            coeff_portale = float(ss.coeff_effetto_speciale or 0.15)
+
+    (
+        produzione,
+        consumo_energia,
+        consumo_carburante,
+        velocita_motore_base,
+        spinta_manovra_avanti,
+        spinta_manovra_indietro,
+        livello_portale,
+        coeff_portale,
+    ) = _calcola_produzione_consumo(sessione, stati)
 
     sessione.storage_energia_massimo = max(0.0, capacita_storage)
     if capacita_carburante > 0:
@@ -617,23 +780,40 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
     if sessione.storage_energia_attuale > sessione.storage_energia_massimo:
         sessione.storage_energia_attuale = sessione.storage_energia_massimo
 
-    if sessione.carburante_attuale <= 0:
-        produzione = 0.0
-        consumo_carburante = 0.0
-    else:
+    carburante_ok = float(sessione.carburante_attuale or 0.0) > 0.0
+    if carburante_ok:
         sessione.carburante_attuale = max(
-            0.0, sessione.carburante_attuale - min(sessione.carburante_attuale, consumo_carburante)
+            0.0,
+            sessione.carburante_attuale - min(sessione.carburante_attuale, consumo_carburante),
         )
-        # Se il carburante si esaurisce in questo tick, i reattori non producono oltre.
         if sessione.carburante_attuale <= 0:
             produzione = 0.0
             consumo_carburante = 0.0
+    else:
+        produzione = 0.0
+        consumo_carburante = 0.0
+
+    deficit = max(0.0, consumo_energia - produzione)
+    deficit = _assorbi_deficit_con_batterie(sessione, stati, deficit)
+    if deficit > 0:
+        _applica_shedding_energia(sessione, stati)
+        (
+            produzione,
+            consumo_energia,
+            consumo_carburante,
+            velocita_motore_base,
+            spinta_manovra_avanti,
+            spinta_manovra_indietro,
+            livello_portale,
+            coeff_portale,
+        ) = _calcola_produzione_consumo(sessione, stati)
+        if not carburante_ok:
+            produzione = 0.0
+        deficit = max(0.0, consumo_energia - produzione)
+        _assorbi_deficit_con_batterie(sessione, stati, deficit)
 
     saldo = produzione - consumo_energia
-    if saldo < 0:
-        assorbito = min(sessione.storage_energia_attuale, abs(saldo))
-        sessione.storage_energia_attuale -= assorbito
-    elif saldo > 0 and sessione.stato == SESSIONE_STATO_IDLE:
+    if saldo > 0 and sessione.stato == SESSIONE_STATO_IDLE:
         conversione = max(0.0, min(1.0, max((s.sottosistema.coeff_ricarica_storage or 0.5) for s in stati if s.sottosistema.tipo == "batteria") if any(s.sottosistema.tipo == "batteria" for s in stati) else 0.0))
         sessione.storage_energia_attuale = min(
             sessione.storage_energia_massimo,

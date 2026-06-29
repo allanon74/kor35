@@ -1422,3 +1422,105 @@ class SpegnimentoFineVoloTests(TestCase):
         stato.refresh_from_db()
         self.assertFalse(stato.online)
         self.assertIsNotNone(stato.guasto_at)
+
+
+class EnergiaBilancioTests(TestCase):
+    def test_senza_carburante_produzione_zero(self):
+        import string
+
+        from pilotaggio.engine import _calcola_produzione_consumo
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            carburante_attuale=0.0,
+            carburante_massimo=1000.0,
+            storage_energia_attuale=0.0,
+            storage_energia_massimo=500.0,
+        )
+        used = set(SottosistemaNave.objects.values_list("codice", flat=True))
+        codice = next(c for c in string.ascii_uppercase if c not in used)
+        gen = SottosistemaNave.objects.create(
+            codice=codice, nome="Reattore test", tipo="generatore", coeff_produzione=20.0
+        )
+        stato = StatoSottosistemaSessione.objects.create(
+            sessione=sessione,
+            sottosistema=gen,
+            online=True,
+            livello_target=5,
+            livello_attuale=5,
+        )
+        prod, _, _, _, _, _, _, _ = _calcola_produzione_consumo(sessione, [stato])
+        self.assertEqual(prod, 0.0)
+
+    def test_valida_livello_rifiuta_se_energia_insufficiente(self):
+        import string
+
+        from pilotaggio.engine import get_o_crea_stato_sottosistema, valida_livello_sottosistema_energia
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            carburante_attuale=0.0,
+            storage_energia_attuale=0.0,
+        )
+        used = set(SottosistemaNave.objects.values_list("codice", flat=True))
+        codice = next(c for c in string.ascii_uppercase if c not in used)
+        cons = SottosistemaNave.objects.create(
+            codice=codice,
+            nome="Consumatore test",
+            tipo="standard",
+            coeff_consumo_energia=5.0,
+        )
+        stato = get_o_crea_stato_sottosistema(sessione, cons)
+        stato.online = True
+        stato.livello_target = 0
+        stato.save(sync_nave=False)
+        ok, msg = valida_livello_sottosistema_energia(sessione, stato, 3)
+        self.assertFalse(ok)
+        self.assertIn("insufficiente", msg.lower())
+
+    def test_shedding_spegne_carichi_a_caso(self):
+        import string
+
+        from pilotaggio.engine import _applica_shedding_energia, _calcola_produzione_consumo
+
+        pilota = _crea_pilota()
+        sessione = SessioneVolo.objects.create(
+            pilota=pilota,
+            stato=SESSIONE_STATO_VOLO,
+            durata_pianificata_secondi=600,
+            carburante_attuale=0.0,
+            storage_energia_attuale=0.0,
+        )
+        used = set(SottosistemaNave.objects.values_list("codice", flat=True))
+        codici = [c for c in string.ascii_uppercase if c not in used][:2]
+        s1 = SottosistemaNave.objects.create(
+            codice=codici[0],
+            nome="Carico A",
+            tipo="standard",
+            coeff_consumo_energia=4.0,
+        )
+        s2 = SottosistemaNave.objects.create(
+            codice=codici[1],
+            nome="Carico B",
+            tipo="standard",
+            coeff_consumo_energia=4.0,
+        )
+        st1 = StatoSottosistemaSessione.objects.create(
+            sessione=sessione, sottosistema=s1, online=True, livello_target=3, livello_attuale=3
+        )
+        st2 = StatoSottosistemaSessione.objects.create(
+            sessione=sessione, sottosistema=s2, online=True, livello_target=3, livello_attuale=3
+        )
+        stati = [st1, st2]
+        _applica_shedding_energia(sessione, stati)
+        st1.refresh_from_db()
+        st2.refresh_from_db()
+        self.assertEqual(st1.livello_target + st2.livello_target, 0)
+        prod, consumo, _, _, _, _, _, _ = _calcola_produzione_consumo(sessione, stati)
+        self.assertLessEqual(consumo, prod)

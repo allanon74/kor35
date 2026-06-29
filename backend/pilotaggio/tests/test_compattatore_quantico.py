@@ -5,7 +5,13 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from pilotaggio.compattatore_engine import operazione_compattatore_quantico
-from pilotaggio.compattatore_quantico import genera_componenti_da_nome, normalizza_nome_quantico
+from pilotaggio.compattatore_quantico import (
+    _calcola_indice_componente,
+    _calcola_quantita_componenti,
+    _digest_nome,
+    genera_componenti_da_nome,
+    normalizza_nome_quantico,
+)
 from pilotaggio.models import CompattatoreStatoNave, PilotRuntimeConfig, SottosistemaNave, StatoSottosistemaNave
 
 
@@ -24,6 +30,27 @@ class CompattatoreQuanticoAlgorithmTests(TestCase):
         self.assertGreaterEqual(a["numero_unit"], 1)
         self.assertLessEqual(a["numero_unit"], 5)
         self.assertEqual(len(a["unita"]), a["numero_unit"])
+        for u in a["unita"]:
+            self.assertNotIn("lettera_fonte", u)
+
+    def test_stessa_stringa_esatta_stesso_risultato(self):
+        nome = "Modulo-Delta 42"
+        self.assertEqual(
+            genera_componenti_da_nome(nome),
+            genera_componenti_da_nome(nome),
+        )
+        norm = normalizza_nome_quantico(nome)
+        digest = _digest_nome(norm)
+        qty = _calcola_quantita_componenti(norm, digest)
+        self.assertEqual(qty, genera_componenti_da_nome(nome)["numero_unit"])
+        for i in range(qty):
+            indice = _calcola_indice_componente(norm, digest, i)
+            self.assertEqual(indice, genera_componenti_da_nome(nome)["unita"][i]["indice_componente"])
+
+    def test_modifica_una_lettera_cambia_esito(self):
+        base = genera_componenti_da_nome("Cristallo Alfa")
+        altro = genera_componenti_da_nome("Cristallo Alfb")
+        self.assertNotEqual(base, altro)
 
 
 class CompattatoreQuanticoOperationTests(TestCase):

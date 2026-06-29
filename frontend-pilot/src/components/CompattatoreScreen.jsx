@@ -1,5 +1,22 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
+import StivaCompattatoreGrid from './StivaCompattatoreGrid.jsx';
+import CompattatoreElementPicker from './CompattatoreElementPicker.jsx';
+import CompattatoreQrInput from './CompattatoreQrInput.jsx';
+
+function ResultScreen({ title, children, variant = 'default', empty }) {
+  return (
+    <div className={`comp-result-screen comp-result-screen--${variant}`}>
+      <div className="comp-result-screen-header">
+        <span className="comp-result-screen-title">{title}</span>
+        <span className="comp-result-screen-led" aria-hidden="true" />
+      </div>
+      <div className="comp-result-screen-body">
+        {empty ? <p className="comp-result-empty">{empty}</p> : children}
+      </div>
+    </div>
+  );
+}
 
 export default function CompattatoreScreen({ onLogout }) {
   const [data, setData] = useState(null);
@@ -7,8 +24,8 @@ export default function CompattatoreScreen({ onLogout }) {
   const [busy, setBusy] = useState(false);
   const [selectedMattone, setSelectedMattone] = useState('');
   const [lastRisonanza, setLastRisonanza] = useState(null);
+  const [lastClassicNote, setLastClassicNote] = useState('');
   const [lastQuantico, setLastQuantico] = useState(null);
-  const [quanticoOpen, setQuanticoOpen] = useState(false);
   const [quanticoNome, setQuanticoNome] = useState('');
   const [quanticoQrId, setQuanticoQrId] = useState('');
   const [quanticoPgId, setQuanticoPgId] = useState('');
@@ -31,18 +48,27 @@ export default function CompattatoreScreen({ onLogout }) {
 
   const runOp = async (tipo) => {
     if (!selectedMattone) {
-      setError('Seleziona un componente dalla stiva.');
+      setError('Seleziona un componente sorgente.');
       return;
     }
     setBusy(true);
     setError('');
+    setLastClassicNote('');
     try {
       let res;
       if (tipo === 'compressione') res = await api.compattatoreCompressione(selectedMattone);
       else if (tipo === 'decompressione') res = await api.compattatoreDecompressione(selectedMattone);
       else res = await api.compattatoreRisonanza(selectedMattone);
       setData(res);
-      if (res?.risonanza) setLastRisonanza(res.risonanza);
+      if (res?.risonanza) {
+        setLastRisonanza(res.risonanza);
+      } else {
+        const labels = {
+          compressione: 'Compressione 2:1 completata.',
+          decompressione: 'Decompressione 1:2 completata.',
+        };
+        setLastClassicNote(labels[tipo] || 'Operazione completata.');
+      }
     } catch (e) {
       setError(e.message || 'Operazione non riuscita.');
     } finally {
@@ -61,14 +87,13 @@ export default function CompattatoreScreen({ onLogout }) {
       } else if (quanticoNome.trim()) {
         body.nome_oggetto = quanticoNome.trim();
       } else {
-        setError('Inserisci il nome oggetto oppure un ID QR.');
+        setError('Inserisci il nome oggetto oppure acquisisci un QR.');
         setBusy(false);
         return;
       }
       const res = await api.compattatoreQuantico(body);
       setData(res);
       if (res?.quantico) setLastQuantico(res.quantico);
-      setQuanticoOpen(false);
       setQuanticoNome('');
       setQuanticoQrId('');
       setQuanticoPgId('');
@@ -79,171 +104,226 @@ export default function CompattatoreScreen({ onLogout }) {
     }
   };
 
-  const righe = data?.stiva?.righe || [];
-  const catalogo = righe.length ? righe : [];
   const quanticoOn = Boolean(data?.quantico_abilitato);
   const quanticoReady = Boolean(data?.quantico_disponibile);
+  const opReady = Boolean(data?.operazione_disponibile);
+  const energiaPct = Math.min(100, ((data?.energia_accumulata || 0) / (data?.energia_soglia_operazione || 9)) * 100);
 
   return (
-    <div className="card compattatore-screen" style={{ maxWidth: 960, margin: '0 auto' }}>
-      <h1 style={{ marginTop: 0 }}>Compattatore quantico</h1>
-      {!data?.abilitato ? (
-        <p className="error">Console compattatore disabilitata in configurazione staff.</p>
-      ) : null}
-      {!data?.operativo ? (
-        <p className="error">Non operativo — verifica sottosistema Z (online, energia &gt; 0).</p>
-      ) : (
-        <p style={{ color: '#9ccc65' }}>
-          Operativo · energia {data.livello_energia}/9 · accumulo {Math.round(data.energia_accumulata || 0)}/9
-          {data.operazione_disponibile ? ' · PRONTO' : ' · carica in corso'}
-        </p>
-      )}
+    <div className="compattatore-console">
+      <header className="compattatore-hud">
+        <div className="compattatore-hud-brand">
+          <span className="compattatore-hud-kicker">KOR-35 // NODO Z</span>
+          <h1 className="compattatore-hud-title">Compattatore quantico</h1>
+        </div>
+        <div className="compattatore-hud-status">
+          {!data?.abilitato ? (
+            <span className="comp-hud-pill comp-hud-pill--off">Console disabilitata</span>
+          ) : !data?.operativo ? (
+            <span className="comp-hud-pill comp-hud-pill--off">Sottosistema Z offline</span>
+          ) : (
+            <>
+              <span className={`comp-hud-pill ${opReady ? 'comp-hud-pill--ok' : 'comp-hud-pill--charge'}`}>
+                {opReady ? 'PRONTO' : 'CARICA'}
+              </span>
+              <div className="comp-energy-meter" title="Energia accumulata">
+                <span className="comp-energy-label">
+                  EN
+                  {' '}
+                  {Math.round(data?.energia_accumulata || 0)}
+                  /
+                  {data?.energia_soglia_operazione || 9}
+                </span>
+                <div className="comp-energy-track">
+                  <div className="comp-energy-fill" style={{ width: `${energiaPct}%` }} />
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </header>
 
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', margin: '1rem 0' }}>
-        <button type="button" className="btn" disabled={busy || !data?.operazione_disponibile} onClick={() => runOp('compressione')}>
-          Compressione 2:1
-        </button>
-        <button type="button" className="btn" disabled={busy || !data?.operazione_disponibile} onClick={() => runOp('decompressione')}>
-          Decompressione 1:2
-        </button>
-        <button type="button" className="btn" disabled={busy || !data?.operazione_disponibile} onClick={() => runOp('risonanza')}>
-          Risonanza
-        </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={busy || !quanticoReady}
-          title={quanticoOn ? 'Sacrificio oggetto → componenti' : 'FUORI USO — attivare da staff per l\'evento'}
-          onClick={() => quanticoOn && setQuanticoOpen((v) => !v)}
-        >
-          {quanticoOn ? 'Compattatore Quantico' : 'Compattatore Quantico — FUORI USO'}
-        </button>
-      </div>
+      {error ? <div className="compattatore-alert error">{error}</div> : null}
 
-      {quanticoOpen && quanticoOn ? (
-        <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem', background: '#1a2332' }}>
-          <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Sacrificio quantico</h2>
-          <p style={{ fontSize: '0.85rem', color: '#9ca3af', marginTop: 0 }}>
-            L&apos;oggetto viene eliminato (se QR + personaggio) e si generano 1–5 componenti dal nome.
+      <div className="compattatore-columns">
+        <section className="compattatore-panel compattatore-panel--classic">
+          <div className="compattatore-panel-corner compattatore-panel-corner--tl" aria-hidden="true" />
+          <div className="compattatore-panel-corner compattatore-panel-corner--br" aria-hidden="true" />
+          <h2 className="compattatore-panel-title">Motore classico</h2>
+          <p className="compattatore-panel-sub">Compressione · decompressione · risonanza</p>
+
+          <div className="comp-op-row">
+            <button
+              type="button"
+              className="comp-btn comp-btn--op"
+              disabled={busy || !opReady}
+              onClick={() => runOp('compressione')}
+            >
+              <span className="comp-btn-kicker">2:1</span>
+              Compressione
+            </button>
+            <button
+              type="button"
+              className="comp-btn comp-btn--op"
+              disabled={busy || !opReady}
+              onClick={() => runOp('decompressione')}
+            >
+              <span className="comp-btn-kicker">1:2</span>
+              Decompressione
+            </button>
+            <button
+              type="button"
+              className="comp-btn comp-btn--op comp-btn--risonanza"
+              disabled={busy || !opReady}
+              onClick={() => runOp('risonanza')}
+            >
+              <span className="comp-btn-kicker">◇◇</span>
+              Risonanza
+            </button>
+          </div>
+
+          <CompattatoreElementPicker
+            righe={data?.stiva?.righe || []}
+            selectedMattone={selectedMattone}
+            onSelectMattone={setSelectedMattone}
+          />
+
+          <ResultScreen
+            title="Output motore"
+            variant="classic"
+            empty={!lastRisonanza && !lastClassicNote ? 'In attesa di operazione…' : null}
+          >
+            {lastClassicNote ? (
+              <p className="comp-result-line comp-result-line--ok">{lastClassicNote}</p>
+            ) : null}
+            {lastRisonanza ? (
+              <>
+                <p className="comp-result-line">
+                  <strong>Slot A</strong>
+                  {' '}
+                  {lastRisonanza.slot_a?.esito === 'glitch'
+                    ? lastRisonanza.slot_a?.nome
+                    : lastRisonanza.slot_a?.colore_nome || '—'}
+                </p>
+                <p className="comp-result-line">
+                  <strong>Slot B</strong>
+                  {' '}
+                  {lastRisonanza.slot_b?.esito === 'glitch'
+                    ? lastRisonanza.slot_b?.nome
+                    : lastRisonanza.slot_b?.colore_nome || '—'}
+                </p>
+                {lastRisonanza.glitch?.length ? (
+                  <p className="comp-result-line comp-result-line--warn">
+                    Glitch:
+                    {' '}
+                    {lastRisonanza.glitch.map((g) => g.nome).join(', ')}
+                  </p>
+                ) : null}
+                {lastRisonanza.bonus?.length ? (
+                  <p className="comp-result-line comp-result-line--ok">
+                    Bonus:
+                    {' '}
+                    {lastRisonanza.bonus.map((b) => b.tipo).join(', ')}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </ResultScreen>
+        </section>
+
+        <section className={`compattatore-panel compattatore-panel--quantico ${!quanticoOn ? 'is-disabled' : ''}`}>
+          <div className="compattatore-panel-corner compattatore-panel-corner--tl" aria-hidden="true" />
+          <div className="compattatore-panel-corner compattatore-panel-corner--br" aria-hidden="true" />
+          <h2 className="compattatore-panel-title">Compattatore quantico</h2>
+          <p className="compattatore-panel-sub">
+            {quanticoOn ? 'Sacrificio oggetto → componenti (1–5)' : 'Fuori uso — attivare da staff'}
           </p>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            Nome oggetto (testo)
+
+          <label className="comp-field">
+            <span className="comp-field-label">Nome oggetto (testo libero)</span>
             <input
               type="text"
-              className="mono"
-              style={{ display: 'block', width: '100%', marginTop: '0.25rem' }}
+              className="comp-sci-input"
               value={quanticoNome}
-              onChange={(e) => setQuanticoNome(e.target.value)}
+              disabled={busy || !quanticoOn || !quanticoReady}
               placeholder="Es. Reattore instabile"
+              onChange={(e) => setQuanticoNome(e.target.value)}
             />
           </label>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            ID QR (opzionale — con personaggio elimina dall&apos;inventario)
-            <input
-              type="text"
-              className="mono"
-              style={{ display: 'block', width: '100%', marginTop: '0.25rem' }}
-              value={quanticoQrId}
-              onChange={(e) => setQuanticoQrId(e.target.value)}
-            />
-          </label>
-          <label style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
-            ID personaggio (obbligatorio con QR per eliminare oggetto)
-            <input
-              type="text"
-              className="mono"
-              style={{ display: 'block', width: '100%', marginTop: '0.25rem' }}
-              value={quanticoPgId}
-              onChange={(e) => setQuanticoPgId(e.target.value)}
-            />
-          </label>
-          <button type="button" className="btn" disabled={busy || !quanticoReady} onClick={runQuantico}>
+
+          <div className="comp-or-divider">
+            <span>oppure</span>
+          </div>
+
+          <CompattatoreQrInput
+            qrId={quanticoQrId}
+            personaggioId={quanticoPgId}
+            disabled={busy || !quanticoOn || !quanticoReady}
+            onQrIdChange={setQuanticoQrId}
+            onPersonaggioIdChange={setQuanticoPgId}
+          />
+
+          <button
+            type="button"
+            className="comp-btn comp-btn--quantico"
+            disabled={busy || !quanticoReady}
+            onClick={runQuantico}
+          >
             Esegui compattazione quantica
           </button>
-        </div>
-      ) : null}
 
-      {error ? <div className="error">{error}</div> : null}
-
-      {lastQuantico ? (
-        <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem', background: '#1a2332' }}>
-          <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Ultimo Compattatore Quantico</h2>
-          <p className="mono" style={{ fontSize: '0.85rem' }}>
-            {lastQuantico.nome_input}
-            {' → '}
-            {lastQuantico.numero_unit}
-            {' unità in stiva'}
-          </p>
-          {lastQuantico.oggetto_eliminato ? (
-            <p style={{ fontSize: '0.8rem', color: '#f87171' }}>
-              Oggetto eliminato:
-              {' '}
-              {lastQuantico.oggetto_eliminato}
-            </p>
-          ) : null}
-          <ul style={{ fontSize: '0.8rem', color: '#9ccc65', margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
-            {(lastQuantico.unita || []).map((u, i) => (
-              <li key={`q-${i}`}>
-                [{u.indice_componente}]
-                {' '}
-                {u.colore_nome}
-                {' '}
-                (da «
-                {u.lettera_fonte}
-                »)
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {lastRisonanza ? (
-        <div className="card" style={{ marginBottom: '1rem', padding: '0.75rem', background: '#1a2332' }}>
-          <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Ultima risonanza</h2>
-          <p className="mono" style={{ fontSize: '0.85rem' }}>
-            Slot A: {lastRisonanza.slot_a?.esito === 'glitch' ? lastRisonanza.slot_a?.nome : lastRisonanza.slot_a?.colore_nome || '—'}
-            {' · '}
-            Slot B: {lastRisonanza.slot_b?.esito === 'glitch' ? lastRisonanza.slot_b?.nome : lastRisonanza.slot_b?.colore_nome || '—'}
-          </p>
-          {lastRisonanza.glitch?.length ? (
-            <p className="error" style={{ fontSize: '0.85rem' }}>
-              Glitch: {lastRisonanza.glitch.map((g) => g.nome).join(', ')}
-            </p>
-          ) : null}
-          {lastRisonanza.bonus?.length ? (
-            <p style={{ color: '#9ccc65', fontSize: '0.85rem' }}>
-              Bonus: {lastRisonanza.bonus.map((b) => b.tipo).join(', ')}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <h2>Stiva</h2>
-      <div style={{ display: 'grid', gap: '0.35rem' }}>
-        {catalogo.length === 0 ? (
-          <p style={{ color: '#888' }}>Stiva vuota — carica componenti da staff.</p>
-        ) : (
-          catalogo.map((r) => (
-            <label key={r.mattone_id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <input
-                type="radio"
-                name="mattone"
-                value={r.mattone_id}
-                checked={selectedMattone === r.mattone_id}
-                onChange={() => setSelectedMattone(r.mattone_id)}
-              />
-              <span className="mono">
-                [{r.indice_componente}] {r.nome} · {r.colore_nome} × {r.quantita}
-              </span>
-            </label>
-          ))
-        )}
+          <ResultScreen
+            title="Output quantico"
+            variant="quantico"
+            empty={!lastQuantico ? 'Nessun sacrificio registrato.' : null}
+          >
+            {lastQuantico ? (
+              <>
+                <p className="comp-result-line comp-result-line--highlight">
+                  {lastQuantico.nome_input}
+                  {' → '}
+                  <strong>{lastQuantico.numero_unit}</strong>
+                  {' '}
+                  unità
+                </p>
+                {lastQuantico.oggetto_eliminato ? (
+                  <p className="comp-result-line comp-result-line--warn">
+                    Oggetto eliminato:
+                    {' '}
+                    {lastQuantico.oggetto_eliminato}
+                  </p>
+                ) : null}
+                <ul className="comp-result-units">
+                  {(lastQuantico.unita || []).map((u, i) => (
+                    <li key={`q-${i}`}>
+                      <span className="comp-result-unit-idx">[{u.indice_componente}]</span>
+                      {u.colore_nome}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </ResultScreen>
+        </section>
       </div>
 
+      <section className="compattatore-stiva-deck">
+        <div className="compattatore-stiva-deck-header">
+          <h2 className="compattatore-stiva-title">Stiva componenti</h2>
+          <span className="compattatore-stiva-sub">Coppie opposte · rischio annichilamento</span>
+        </div>
+        <StivaCompattatoreGrid
+          stiva={data?.stiva}
+          selectable={false}
+        />
+      </section>
+
       {onLogout ? (
-        <p style={{ marginTop: '1.5rem' }}>
-          <button type="button" className="btn" onClick={onLogout}>Logout console</button>
-        </p>
+        <footer className="compattatore-footer">
+          <button type="button" className="comp-btn comp-btn--ghost" onClick={onLogout}>
+            Logout console
+          </button>
+        </footer>
       ) : null}
     </div>
   );

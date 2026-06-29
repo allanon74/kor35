@@ -8,6 +8,7 @@ from pilotaggio.componenti_riparazione import valida_selezione_componenti
 from pilotaggio.componenti_stiva import (
     applica_annichilamento_opposti_stiva,
     build_stiva_payload,
+    build_staff_stiva_payload,
     staff_modifica_stiva,
 )
 from pilotaggio.models import (
@@ -49,6 +50,13 @@ class ComponentiStivaTests(TestCase):
         payload = build_stiva_payload()
         row = next(r for r in payload["righe"] if r["mattone_id"] == str(self.mattone_a.pk))
         self.assertEqual(row["quantita"], 3)
+
+    def test_staff_modifica_restituisce_catalogo_mattoni(self):
+        payload = staff_modifica_stiva(mattone_id=str(self.mattone_a.pk), delta=1)
+        self.assertIn("mattoni_catalogo", payload)
+        self.assertGreaterEqual(len(payload["mattoni_catalogo"]), 10)
+        staff = build_staff_stiva_payload()
+        self.assertEqual(len(staff["mattoni_catalogo"]), len(payload["mattoni_catalogo"]))
 
     def test_annichilamento_dopo_coesistenza(self):
         staff_modifica_stiva(mattone_id=str(self.mattone_a.pk), delta=2)

@@ -1,7 +1,11 @@
 """
 Compattatore Quantico: sacrificio oggetto (testo o QR) → 1–5 componenti in stiva.
 
-Algoritmo deterministico sul nome normalizzato (lettere A–Z e cifre).
+Due algoritmi deterministici sul nome normalizzato (tutte le lettere/cifre):
+1. quantità (1–5) — ogni carattere contribuisce;
+2. tipo (indice 0–9) per ogni unità — ogni carattere contribuisce.
+
+Stessa stringa esatta → stesso risultato; effetto apparentemente casuale.
 """
 from __future__ import annotations
 
@@ -13,7 +17,7 @@ from typing import Any, Dict, List
 from django.db import transaction
 from django.utils import timezone
 
-from .componenti_stiva import mattone_per_indice_colore, staff_modifica_stiva
+from .componenti_stiva import mattone_per_indice_colore
 
 _NOME_RE = re.compile(r"[^A-Z0-9]", re.IGNORECASE)
 
@@ -23,27 +27,56 @@ def normalizza_nome_quantico(nome: str) -> str:
     return _NOME_RE.sub("", (nome or "").upper())
 
 
+def _digest_nome(norm: str) -> bytes:
+    return hashlib.sha256(norm.encode("utf-8")).digest()
+
+
+def _calcola_quantita_componenti(norm: str, digest: bytes) -> int:
+    """Algoritmo 1: da 1 a 5 unità, con contributo di ogni carattere del nome."""
+    acc = 0
+    lunghezza = len(norm)
+    for i, ch in enumerate(norm):
+        acc = (
+            acc
+            + ord(ch) * (i + 1)
+            + digest[i % len(digest)] * lunghezza
+            + (ord(ch) ^ digest[(i + 7) % len(digest)])
+        ) & 0xFFFFFFFF
+    return 1 + (acc % 5)
+
+
+def _calcola_indice_componente(norm: str, digest: bytes, unita_idx: int) -> int:
+    """Algoritmo 2: indice 0–9 per l'unità, con contributo di ogni carattere del nome."""
+    acc = 0
+    lunghezza = len(norm)
+    for i, ch in enumerate(norm):
+        mix = (
+            ord(ch)
+            + digest[(i + unita_idx * 3 + 1) % len(digest)] * (unita_idx + 2)
+            + (i + 1) * lunghezza
+        )
+        acc = (acc ^ (mix * (i + lunghezza + unita_idx * 7 + 1))) & 0xFFFFFFFF
+    return acc % 10
+
+
 def genera_componenti_da_nome(nome: str) -> Dict[str, Any]:
     """
     Da un nome oggetto genera da 1 a 5 unità di componenti (indice 0–9).
 
-    Per ogni unità i:
-    - lettera sorgente = nome[i % len(nome)]
-    - indice = (ord(lettera) + digest[i+1] + i) mod 10
-    - numero unità = 1 + (digest[0] mod 5)
+    La quantità e il tipo di ogni unità derivano dall'intera stringa normalizzata
+    (non da una singola lettera «di partenza»).
     """
     norm = normalizza_nome_quantico(nome)
     if len(norm) < 2:
         raise ValueError("Il nome oggetto deve contenere almeno 2 caratteri alfanumerici.")
 
-    digest = hashlib.sha256(norm.encode("utf-8")).digest()
-    numero = 1 + (digest[0] % 5)
+    digest = _digest_nome(norm)
+    numero = _calcola_quantita_componenti(norm, digest)
     unita: List[dict] = []
     conteggio: Counter[int] = Counter()
 
     for i in range(numero):
-        lettera = norm[i % len(norm)]
-        indice = (ord(lettera) + digest[(i + 1) % len(digest)] + i) % 10
+        indice = _calcola_indice_componente(norm, digest, i)
         mattone = mattone_per_indice_colore(indice)
         if mattone is None:
             raise ValueError(f"Catalogo componenti incompleto (indice {indice}).")
@@ -51,7 +84,6 @@ def genera_componenti_da_nome(nome: str) -> Dict[str, Any]:
         unita.append(
             {
                 "indice_componente": indice,
-                "lettera_fonte": lettera,
                 "mattone_id": str(mattone.pk),
                 "mattone_nome": mattone.nome,
                 "colore_nome": mattone.caratteristica_associata.nome

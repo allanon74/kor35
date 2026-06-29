@@ -60,6 +60,7 @@ from .engine import (
     termina_sessione_volo,
     tick_sessione_se_dovuto,
     sessione_nave_operativa,
+    valida_livello_sottosistema_energia,
 )
 from .models import (
     ComandoCriticoGlobale,
@@ -1116,6 +1117,11 @@ class PilotSubsystemSetView(APIView):
 
         stato = get_o_crea_stato_sottosistema(sessione, sottosistema)
         livello = _clamp_livello(request.data.get("livello", stato.livello_target))
+        ok_energia, msg_energia = valida_livello_sottosistema_energia(
+            sessione, stato, livello
+        )
+        if not ok_energia:
+            return Response({"error": msg_energia}, status=status.HTTP_400_BAD_REQUEST)
         direzione = str(request.data.get("direzione") or stato.direzione or "avanti")
         if direzione not in {"avanti", "indietro", "su", "giu", "destra", "sinistra"}:
             direzione = "avanti"
@@ -2156,20 +2162,9 @@ class StaffPilotStivaView(APIView):
     permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get(self, request):
-        from .componenti_stiva import build_stiva_payload, mattoni_componente_qs
+        from .componenti_stiva import build_staff_stiva_payload
 
-        payload = build_stiva_payload()
-        payload["mattoni_catalogo"] = [
-            {
-                "id": str(m.pk),
-                "nome": m.nome,
-                "indice_componente": m.indice_componente,
-                "colore_id": str(m.caratteristica_associata_id),
-                "colore_nome": m.caratteristica_associata.nome if m.caratteristica_associata else "",
-            }
-            for m in mattoni_componente_qs()
-        ]
-        return Response(payload)
+        return Response(build_staff_stiva_payload())
 
     def post(self, request):
         from .componenti_stiva import staff_modifica_stiva
