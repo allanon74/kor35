@@ -17,3 +17,12 @@ export function getStatValueBySigla(characterData, punteggiList, sigla) {
 }
 
 export const DEFAULT_STIVA_ACCESS_STAT_SIGLA = '0IN';
+
+export {
+  DEFAULT_NAVIGAZIONE_SIGLA,
+  DEFAULT_INGEGNERIA_SIGLA,
+  DEFAULT_SABOTAGGIO_SIGLA,
+  DEFAULT_RIPARAZIONE_SIGLA,
+  DEFAULT_SCIENTIFICA_SIGLA,
+  DEFAULT_COMUNICAZIONI_SIGLA,
+} from './navigationStats.js';

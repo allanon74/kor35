@@ -88,7 +88,7 @@ from .models import (
 )
 from gestione_plot.permissions import IsStaffOrMaster
 
-from .permissions import IsPilotConsole
+from .permissions import IsPilotConsole, IsScientificConsole
 from .serializers import (
     ComandoCriticoGlobaleListSerializer,
     ComandoCriticoGlobaleSerializer,
@@ -114,9 +114,15 @@ from .serializers import (
 )
 
 
-SIGLA_PILOTAGGIO = "0PI"
-SIGLA_SABOTAGGIO = "0SA"
-SIGLA_RIPARAZIONE = "0RI"
+from .navigation_stats import (
+    build_navigation_stats_payload,
+    ingegneria_stat_sigla,
+    navigazione_stat_sigla,
+    riparazione_stat_sigla,
+    sabotaggio_stat_sigla,
+    scientifica_stat_sigla,
+)
+
 RIGENERAZIONE_CARBURANTE_AL_MINUTO = 100.0
 
 
@@ -426,13 +432,31 @@ def _tick_runtime_payload(sessione: Optional[SessioneVolo] = None) -> dict:
         "alarm_audio_enabled": bool(cfg.alarm_audio_enabled),
         "riparazione_componenti_abilitata": bool(cfg.riparazione_componenti_abilitata),
         "compattatore_console_abilitata": bool(cfg.compattatore_console_abilitata),
-        "compattatore_stat_accesso_sigla": cfg.compattatore_stat_accesso_sigla or "0IN",
+        "compattatore_stat_accesso_sigla": ingegneria_stat_sigla(cfg),
         "compattatore_quantico_abilitato": bool(cfg.compattatore_quantico_abilitato),
+        "scientifica_console_abilitata": bool(cfg.scientifica_console_abilitata),
+        "scientifica_stat_accesso_sigla": cfg.scientifica_stat_accesso_sigla or "0SC",
     }
 
 
 def _login_required_console() -> bool:
     return bool(PilotRuntimeConfig.get_solo().login_required_console)
+
+
+def _login_required_scientifica() -> bool:
+    return bool(PilotRuntimeConfig.get_solo().scientifica_login_richiesto)
+
+
+def _stat_accesso_per_ruolo_ticket(ruolo: str) -> str:
+    if ruolo == "scientifica":
+        return scientifica_stat_sigla()
+    return navigazione_stat_sigla()
+
+
+def _login_required_per_ruolo_ticket(ruolo: str) -> bool:
+    if ruolo == "scientifica":
+        return _login_required_scientifica()
+    return _login_required_console()
 
 
 def _ensure_tick_enabled() -> None:
@@ -506,12 +530,13 @@ class PilotQrLoginView(APIView):
                 {"error": "Questo QR non e' associato a un personaggio."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        valore = pilota.get_valore_statistica(SIGLA_PILOTAGGIO)
+        valore = pilota.get_valore_statistica(navigazione_stat_sigla())
+        nav_sigla = navigazione_stat_sigla()
         if int(valore or 0) < 1:
             return Response(
                 {
                     "error": (
-                        f"Accesso negato: serve statistica {SIGLA_PILOTAGGIO} >= 1 "
+                        f"Accesso negato: serve statistica {nav_sigla} >= 1 "
                         f"(hai {valore})."
                     )
                 },
@@ -532,7 +557,8 @@ class PilotQrLoginView(APIView):
                 "pilota": {
                     "id": pilota.pk,
                     "nome": getattr(pilota, "nome", str(pilota)),
-                    "statistica_0PI": valore,
+                    "statistica_navigazione": valore,
+                    "statistica_navigazione_sigla": navigazione_stat_sigla(),
                 },
             },
             status=status.HTTP_200_OK,
@@ -544,10 +570,12 @@ class PilotConsoleEnabledView(APIView):
     permission_classes: list = [permissions.AllowAny]
 
     def get(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
         return Response(
             {
                 "enabled": bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False)),
                 "login_required": _login_required_console(),
+                "navigazione_stat_accesso_sigla": navigazione_stat_sigla(cfg),
             }
         )
 
@@ -567,7 +595,7 @@ class PilotConsoleAutoLoginView(APIView):
         pilota = None
         candidati = Personaggio.objects.all().order_by("nome")
         for pg in candidati:
-            if int(pg.get_valore_statistica(SIGLA_PILOTAGGIO) or 0) >= 1:
+            if int(pg.get_valore_statistica(navigazione_stat_sigla()) or 0) >= 1:
                 pilota = pg
                 break
         if pilota is None:
@@ -624,6 +652,7 @@ class PilotConsoleTicketCreateView(APIView):
         ticket = PilotConsoleLoginTicket.objects.create(
             codice=PilotConsoleLoginTicket.genera_codice(),
             expires_at=timezone.now() + timedelta(seconds=durata_secondi),
+            ruolo="navigazione",
         )
         claim_path = reverse("pilot-ticket-claim", kwargs={"ticket_id": ticket.pk})
         claim_url = request.build_absolute_uri(f"{claim_path}?c={ticket.codice}")
@@ -685,12 +714,21 @@ class PilotConsoleTicketClaimView(APIView):
         qs = Personaggio.objects.filter(proprietario=request.user)
         if personaggio_id:
             qs = qs.filter(pk=personaggio_id)
+        ruolo = getattr(ticket, "ruolo", None) or "navigazione"
+        stat_sigla = _stat_accesso_per_ruolo_ticket(ruolo)
+        min_val = 1 if ruolo == "navigazione" else 1  # entrambi >0 o >=1: navigazione >=1, scientifica >0
         candidato = None
         for pg in qs.order_by("nome"):
-            if int(pg.get_valore_statistica(SIGLA_PILOTAGGIO) or 0) >= 1:
+            val = int(pg.get_valore_statistica(stat_sigla) or 0)
+            if ruolo == "navigazione":
+                ok = val >= 1
+            else:
+                ok = val > 0
+            if ok:
                 candidato = pg
                 break
         if candidato is None:
+            req = f"{stat_sigla} >= 1" if ruolo == "navigazione" else f"{stat_sigla} > 0"
             if wants_html:
                 return render(
                     request,
@@ -698,18 +736,19 @@ class PilotConsoleTicketClaimView(APIView):
                     {
                         "ok": False,
                         "title": "Accesso negato",
-                        "message": f"Nessun personaggio valido: serve statistica {SIGLA_PILOTAGGIO} >= 1.",
+                        "message": f"Nessun personaggio valido: serve statistica {req}.",
                         "return_url": return_url,
                     },
                     status=status.HTTP_403_FORBIDDEN,
                 )
             return Response(
-                {"error": f"Nessun personaggio valido: serve {SIGLA_PILOTAGGIO} >= 1."},
+                {"error": f"Nessun personaggio valido: serve {req}."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         ticket.pilota = candidato
         ticket.claimed_at = timezone.now()
         ticket.save(update_fields=["pilota", "claimed_at", "updated_at"])
+        console_label = "scientifica" if ruolo == "scientifica" else "pilota"
         if wants_html:
             return render(
                 request,
@@ -717,7 +756,7 @@ class PilotConsoleTicketClaimView(APIView):
                 {
                     "ok": True,
                     "title": "Console sbloccata",
-                    "message": f"Autenticazione completata per {getattr(candidato, 'nome', str(candidato))}. Ora puoi tornare alla console pilota.",
+                    "message": f"Autenticazione completata per {getattr(candidato, 'nome', str(candidato))}. Ora puoi tornare alla console {console_label}.",
                     "return_url": return_url,
                 },
                 status=status.HTTP_200_OK,
@@ -2105,6 +2144,18 @@ class StaffPilotRuntimeConfigView(APIView):
         return Response(serializer.data)
 
 
+class PilotNavigationConfigView(APIView):
+    """
+    GET /api/pilot/navigation-config/
+    Sigle statistiche navigazione (config runtime) per app giocatore e console.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response(build_navigation_stats_payload())
+
+
 class PilotStivaView(APIView):
     """GET /api/pilot/stiva/?personaggio_id= — inventario componenti nave (read-only, richiede stat accesso)."""
 
@@ -2117,7 +2168,7 @@ class PilotStivaView(APIView):
         from .models import PilotRuntimeConfig
 
         cfg = PilotRuntimeConfig.get_solo()
-        sigla = (cfg.compattatore_stat_accesso_sigla or "0IN").strip()
+        sigla = ingegneria_stat_sigla(cfg)
 
         personaggio_id = (request.query_params.get("personaggio_id") or "").strip()
         if not request.user.is_staff:
@@ -2312,6 +2363,169 @@ class PilotCompattatoreQuanticoView(APIView):
                 qr_id=request.data.get("qr_id"),
                 personaggio_id=request.data.get("personaggio_id"),
             )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class ScientificaConsoleEnabledView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def get(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        return Response(
+            {
+                "enabled": bool(cfg.scientifica_console_abilitata)
+                and bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False)),
+                "login_required": _login_required_scientifica(),
+                "scientifica_stat_accesso_sigla": scientifica_stat_sigla(cfg),
+            }
+        )
+
+
+class ScientificaConsoleAutoLoginView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def post(self, request):
+        if _login_required_scientifica():
+            return Response({"error": "Login obbligatorio: auto-login disabilitato."}, status=status.HTTP_403_FORBIDDEN)
+        cfg = PilotRuntimeConfig.get_solo()
+        if not cfg.scientifica_console_abilitata:
+            return Response({"error": "Console scientifica disabilitata."}, status=status.HTTP_403_FORBIDDEN)
+
+        sigla = scientifica_stat_sigla(cfg)
+        pilota = None
+        for pg in Personaggio.objects.all().order_by("nome"):
+            if int(pg.get_valore_statistica(sigla) or 0) > 0:
+                pilota = pg
+                break
+        if pilota is None:
+            pilota = Personaggio.objects.order_by("nome").first()
+        if pilota is None:
+            return Response({"error": "Nessun personaggio disponibile per auto-login."}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            existing = (
+                PilotConsoleToken.objects.select_for_update()
+                .filter(pilota=pilota, revocato_at__isnull=True)
+                .order_by("-created_at")
+                .first()
+            )
+            if existing:
+                token_obj = existing
+                mode = "auto_reuse"
+            else:
+                token_obj = PilotConsoleToken.objects.create(
+                    pilota=pilota, token=PilotConsoleToken.genera_token()
+                )
+                mode = "auto"
+
+        return Response(
+            {
+                "token": token_obj.token,
+                "operatore": {"id": pilota.pk, "nome": getattr(pilota, "nome", str(pilota))},
+                "mode": mode,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ScientificaConsoleTicketCreateView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = [permissions.AllowAny]
+
+    def post(self, request):
+        cfg = PilotRuntimeConfig.get_solo()
+        if not cfg.scientifica_console_abilitata:
+            return Response({"error": "Console scientifica disabilitata."}, status=status.HTTP_403_FORBIDDEN)
+        if not _login_required_scientifica():
+            return Response({"error": "Login ticket disattivato (console senza login)."}, status=status.HTTP_400_BAD_REQUEST)
+        if not bool(getattr(settings, "PILOT_CONSOLE_ENABLED", False)):
+            return Response({"error": "Console pilota disabilitata su questo ambiente."}, status=status.HTTP_403_FORBIDDEN)
+        durata_secondi = int(request.data.get("durata_secondi") or 120)
+        durata_secondi = max(30, min(durata_secondi, 300))
+        ticket = PilotConsoleLoginTicket.objects.create(
+            codice=PilotConsoleLoginTicket.genera_codice(),
+            expires_at=timezone.now() + timedelta(seconds=durata_secondi),
+            ruolo="scientifica",
+        )
+        claim_path = reverse("pilot-ticket-claim", kwargs={"ticket_id": ticket.pk})
+        claim_url = request.build_absolute_uri(f"{claim_path}?c={ticket.codice}")
+        return Response(
+            {
+                "ticket_id": str(ticket.pk),
+                "codice": ticket.codice,
+                "expires_at": ticket.expires_at.isoformat(),
+                "claim_url": claim_url,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PilotScientificaStateView(APIView):
+    """GET /api/pilot/scientifica/state/"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsScientificConsole]
+
+    def get(self, request):
+        from .scientifica_spectro import build_scientifica_state_payload
+
+        return Response(build_scientifica_state_payload())
+
+
+class PilotScientificaScanProfondoView(APIView):
+    """POST /api/pilot/scientifica/scan-profondo/ body { componenti_scelti: [{mattone_id, quantita}] }"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsScientificConsole]
+
+    def post(self, request):
+        from .scientifica_spectro import esegui_scan_profondo
+
+        componenti = request.data.get("componenti_scelti") or request.data.get("componenti") or []
+        try:
+            payload = esegui_scan_profondo(componenti_scelti=componenti)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotScientificaFaseView(APIView):
+    """POST /api/pilot/scientifica/fase/ body { codice: R|S|T, fase: 0|1|2 }"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsScientificConsole]
+
+    def post(self, request):
+        from .scientifica_engine import imposta_fase_matrice
+
+        codice = request.data.get("codice") or request.data.get("nucleo")
+        fase = request.data.get("fase")
+        if fase is None:
+            return Response({"error": "Campo fase obbligatorio (0–2)."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            payload = imposta_fase_matrice(codice=codice, fase=int(fase))
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
+
+
+class PilotScientificaInterventoView(APIView):
+    """POST /api/pilot/scientifica/intervento/ body { tipo, componenti_scelti? }"""
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsScientificConsole]
+
+    def post(self, request):
+        from .scientifica_engine import esegui_intervento_scientifico
+
+        tipo = request.data.get("tipo") or request.data.get("intervento")
+        componenti = request.data.get("componenti_scelti") or request.data.get("componenti") or []
+        try:
+            payload = esegui_intervento_scientifico(tipo=tipo, componenti_scelti=componenti)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(payload)

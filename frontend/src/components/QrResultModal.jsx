@@ -618,6 +618,9 @@ const PilotSottosistemaView = ({
   }, [qrId, data?.qrcode_id]);
 
   const d = data?.dati || {};
+  const navSigle = d.statistiche_navigazione_sigle || {};
+  const siglaRiparazione = navSigle.riparazione || '0RI';
+  const siglaSabotaggio = navSigle.sabotaggio || '0SA';
   const sottos = d.sottosistema || {};
   const stato = d.stato || {};
   const telemetria = d.telemetria || {};
@@ -801,7 +804,7 @@ const PilotSottosistemaView = ({
 
       {sessioneAttiva && guasto && !puoRiparare && !inRipristino && !espulso && (
         <p className="text-gray-500 text-xs text-center">
-          Riparazione disponibile con competenza <span className="font-mono text-gray-400">0RI</span>.
+          Riparazione disponibile con competenza <span className="font-mono text-gray-400">{siglaRiparazione}</span>.
         </p>
       )}
       {espulso && (
@@ -822,7 +825,7 @@ const PilotSottosistemaView = ({
 
       {sessioneAttiva && !guasto && !puoSabotare && !espulso && (
         <p className="text-gray-500 text-xs text-center">
-          Sabotaggio disponibile con competenza <span className="font-mono text-gray-400">0SA</span>.
+          Sabotaggio disponibile con competenza <span className="font-mono text-gray-400">{siglaSabotaggio}</span>.
         </p>
       )}
     </div>

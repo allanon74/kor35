@@ -1479,6 +1479,11 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
 
     try:
         if ca_permessa and _eval_outcome_regole(regole, "ca", stati_by_key, direzione):
+            if getattr(istanza, "ca_soppressa_scientifica", False):
+                istanza.ca_soppressa_scientifica = False
+                istanza.save(update_fields=["ca_soppressa_scientifica", "updated_at"])
+                esito_diario = "ca_soppressa"
+                return "ca_soppressa", sessione.defcon
             esito_diario, defcon_out = _applica_esito_ca_da_regole(sessione, istanza, regole)
             return esito_diario, defcon_out
 
@@ -1490,6 +1495,11 @@ def valuta_evento_tick(sessione: SessioneVolo, istanza: EventoAttivoSessione) ->
             return "st", applica_delta_defcon(sessione, -1)
 
         if _eval_soluzione_parziale(regole, stati_by_key, direzione):
+            if getattr(istanza, "eco_parziale_attiva", False):
+                istanza.eco_parziale_attiva = False
+                istanza.save(update_fields=["eco_parziale_attiva", "updated_at"])
+                esito_diario = "sp_eco"
+                return "sp_eco", sessione.defcon
             scadenza = _decrementa_ticks_evento(
                 sessione, istanza, regole, defcon_gia_penalizzato=False
             )
@@ -1733,6 +1743,12 @@ def termina_sessione_volo(
     from .allarme_equipaggio import reset_allarme_equipaggio_sessione
 
     reset_allarme_equipaggio_sessione(sessione)
+    try:
+        from .scientifica_engine import reset_stato_scientifica_volo
+
+        reset_stato_scientifica_volo()
+    except Exception:
+        pass
     return sessione
 
 
@@ -1749,15 +1765,25 @@ def prepara_sessione_nuovo_volo(sessione: SessioneVolo) -> None:
     sessione.distanza_percorsa = 0.0
     sessione.decollo_completato_at = None
     sessione.ultimo_tick_motore_at = None
+    sessione.scans_profondi_count = 0
+    sessione.interventi_scientifici_count = 0
     sessione.save(
         update_fields=[
             "next_event_at",
             "distanza_percorsa",
             "decollo_completato_at",
             "ultimo_tick_motore_at",
+            "scans_profondi_count",
+            "interventi_scientifici_count",
             "updated_at",
         ]
     )
+    try:
+        from .scientifica_engine import reset_stato_scientifica_volo
+
+        reset_stato_scientifica_volo()
+    except Exception:
+        pass
 
 
 def capacita_carburante_serbatoi() -> float:
@@ -2039,6 +2065,10 @@ def tick_sessione(sessione: SessioneVolo, *, force: bool = False) -> TickResult:
     from .compattatore_engine import tick_energia_compattatore
 
     tick_energia_compattatore()
+
+    from .scientifica_engine import tick_coerenza_scientifica
+
+    tick_coerenza_scientifica(sessione)
 
     return TickResult(sessione, nuovo, timeout, transizione)
 

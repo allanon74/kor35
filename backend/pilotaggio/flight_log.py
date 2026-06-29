@@ -46,6 +46,8 @@ SPIEGAZIONE_ESITO_TICK: dict[str, str] = {
     "ca_config": "Condizione catastrofica senza bersaglio valido: timeout evento, DEFCON +1.",
     "timeout": "Tempo evento scaduto: DEFCON +1.",
     "wait": "Attesa intervallo DEFCON (nessuna valutazione).",
+    "ca_soppressa": "CA soppressa dalla gabbia dimensionale (console scientifica).",
+    "sp_eco": "Soluzione parziale (SP) con eco parziale: tick non consumato.",
 }
 
 
@@ -202,6 +204,27 @@ def log_arrivo(sessione, *, emergenza: bool = False) -> None:
         sessione,
         tipo,
         msg,
+        defcon_pre=int(sessione.defcon or 0),
+        defcon_post=int(sessione.defcon or 0),
+    )
+
+
+def log_intervento_scientifico(sessione, istanza, tipo: str, effetto: dict) -> None:
+    label = {
+        "dilatazione": "Dilatazione temporale",
+        "gabbia": "Gabbia dimensionale",
+        "correzione": "Correzione paradosso",
+        "eco": "Eco parziale",
+        "reset_risonanza": "Reset risonanza",
+    }.get(str(tipo or "").lower(), tipo)
+    nome_ev = getattr(getattr(istanza, "evento", None), "nome", "") if istanza else ""
+    ctx = f" su «{nome_ev}»" if nome_ev else ""
+    registra_voce_diario(
+        sessione,
+        "intervento_scientifico",
+        f"Intervento scientifico: {label}{ctx}.",
+        evento_attivo=istanza,
+        dati={"tipo": tipo, "effetto": effetto or {}},
         defcon_pre=int(sessione.defcon or 0),
         defcon_post=int(sessione.defcon or 0),
     )

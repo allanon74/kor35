@@ -2514,6 +2514,10 @@ export const staffGetPilotCatalog = (onLogout) =>
 
 export const staffGetPilotRuntimeConfig = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/runtime-config/', { method: 'GET' }, onLogout);
+
+export const getPilotNavigationConfig = (onLogout) =>
+  fetchAuthenticated('/api/pilot/navigation-config/', { method: 'GET' }, onLogout);
+
 export const staffGetPilotSessioneLive = (onLogout) =>
   fetchAuthenticated('/api/pilot/staff/sessione-live/', { method: 'GET' }, onLogout);
 export const staffGetPilotSessioniOrfane = (onLogout, pilotaId = null) => {

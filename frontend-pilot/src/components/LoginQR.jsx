@@ -10,7 +10,7 @@ const POLL_MS = 2000;
  * - il telefono del giocatore loggato conferma;
  * - la console polla lo stato e riceve il token finale.
  */
-export default function LoginQR({ createTicket, pollTicket, onAuthorized, error }) {
+export default function LoginQR({ createTicket, pollTicket, onAuthorized, error, navigazioneStatSigla = '0PI' }) {
   const [ticket, setTicket] = useState(null);
   const [statusText, setStatusText] = useState('Inizializzazione...');
   const [localError, setLocalError] = useState('');
@@ -95,7 +95,7 @@ export default function LoginQR({ createTicket, pollTicket, onAuthorized, error 
         </div>
         {localError && <div className="error">{localError}</div>}
         {error && <div className="error">{error}</div>}
-        <p className="note">Requisito pilota: statistica 0PI &gt;= 1.</p>
+        <p className="note">Requisito pilota: statistica {navigazioneStatSigla} &gt;= 1.</p>
       </div>
     </div>
   );

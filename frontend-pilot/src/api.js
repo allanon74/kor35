@@ -121,4 +121,22 @@ export const api = {
     method: 'POST',
     body,
   }),
+  scientificaConsoleEnabled: () => request('/api/pilot/scientifica/console-enabled/', { auth: false }),
+  scientificaAutoLogin: () => request('/api/pilot/scientifica/auth/auto-login/', { method: 'POST', body: {}, auth: false }),
+  createScientificaConsoleTicket: () => request('/api/pilot/scientifica/auth/console-ticket/', {
+    method: 'POST', body: {}, auth: false,
+  }),
+  scientificaState: () => request('/api/pilot/scientifica/state/'),
+  scientificaScanProfondo: (componentiScelti) => request('/api/pilot/scientifica/scan-profondo/', {
+    method: 'POST',
+    body: { componenti_scelti: componentiScelti },
+  }),
+  scientificaFase: (codice, fase) => request('/api/pilot/scientifica/fase/', {
+    method: 'POST',
+    body: { codice, fase },
+  }),
+  scientificaIntervento: (tipo, componentiScelti = []) => request('/api/pilot/scientifica/intervento/', {
+    method: 'POST',
+    body: { tipo, componenti_scelti: componentiScelti },
+  }),
 };

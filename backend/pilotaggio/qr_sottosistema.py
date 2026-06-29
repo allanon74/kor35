@@ -12,8 +12,16 @@ from django.utils import timezone
 
 from personaggi.models import MinigiocoQrConfig, QrCode
 
-SIGLA_SABOTAGGIO = "0SA"
-SIGLA_RIPARAZIONE = "0RI"
+from .navigation_stats import (
+    DEFAULT_RIPARAZIONE_SIGLA,
+    DEFAULT_SABOTAGGIO_SIGLA,
+    riparazione_stat_sigla,
+    sabotaggio_stat_sigla,
+)
+
+# Alias legacy per test/import esistenti
+SIGLA_SABOTAGGIO = DEFAULT_SABOTAGGIO_SIGLA
+SIGLA_RIPARAZIONE = DEFAULT_RIPARAZIONE_SIGLA
 
 
 def sottosistema_per_qr(qr_code: QrCode):
@@ -175,8 +183,10 @@ def build_scan_payload(
     fase = fase_operativa_sessione(sessione)
     bus_attivo = stato is not None
 
-    v_sa = _valore_statistica_pg(scanner_pg, SIGLA_SABOTAGGIO)
-    v_ri = _valore_statistica_pg(scanner_pg, SIGLA_RIPARAZIONE)
+    sa_sigla = sabotaggio_stat_sigla()
+    ri_sigla = riparazione_stat_sigla()
+    v_sa = _valore_statistica_pg(scanner_pg, sa_sigla)
+    v_ri = _valore_statistica_pg(scanner_pg, ri_sigla)
     minigioco_riparazione = minigioco_richiesto_per_ripara(qr_code)
 
     puo_sabotare = bool(
@@ -246,8 +256,12 @@ def build_scan_payload(
             "puo_sabotare": puo_sabotare,
             "puo_riparare": puo_riparare,
             "statistiche_scanner": {
-                SIGLA_SABOTAGGIO: v_sa,
-                SIGLA_RIPARAZIONE: v_ri,
+                sa_sigla: v_sa,
+                ri_sigla: v_ri,
+            },
+            "statistiche_navigazione_sigle": {
+                "sabotaggio": sa_sigla,
+                "riparazione": ri_sigla,
             },
             "minigioco_riparazione": minigioco_riparazione,
             "requisiti_componenti": requisiti_componenti,
@@ -291,10 +305,11 @@ def sabota_sottosistema_da_qr(*, qr_code: QrCode, personaggio) -> Dict[str, Any]
     from .stato_nave import stato_operativo_sottosistema
     from .views import _ensure_runtime_subsystems
 
-    if _valore_statistica_pg(personaggio, SIGLA_SABOTAGGIO) <= 0:
+    sa_sigla = sabotaggio_stat_sigla()
+    if _valore_statistica_pg(personaggio, sa_sigla) <= 0:
         return {
             "ok": False,
-            "error": f"Servono punti {SIGLA_SABOTAGGIO} per sabotare un subsistema.",
+            "error": f"Servono punti {sa_sigla} per sabotare un subsistema.",
         }
 
     sottosistema = sottosistema_per_qr(qr_code)
@@ -351,10 +366,11 @@ def ripristina_sottosistema_da_qr(
     from .stato_nave import stato_operativo_sottosistema
     from .views import _ensure_runtime_subsystems
 
-    if _valore_statistica_pg(personaggio, SIGLA_RIPARAZIONE) <= 0:
+    ri_sigla = riparazione_stat_sigla()
+    if _valore_statistica_pg(personaggio, ri_sigla) <= 0:
         return {
             "ok": False,
-            "error": f"Servono punti {SIGLA_RIPARAZIONE} per riparare un subsistema.",
+            "error": f"Servono punti {ri_sigla} per riparare un subsistema.",
         }
 
     sottosistema = sottosistema_per_qr(qr_code)

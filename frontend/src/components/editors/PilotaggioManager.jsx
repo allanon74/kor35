@@ -10,6 +10,7 @@ import {
   MINIGIOCO_PAGE_KEYS,
   patchStaffListMinigiocoDefault,
 } from '../../utils/staffMinigiocoDefaults';
+import { NAVIGATION_STAT_FIELDS } from '../../lib/navigationStats.js';
 import StaffMinigiocoUsaDefaultToggle from './StaffMinigiocoUsaDefaultToggle';
 import {
   staffAssociaPilotSottosistemaQr,
@@ -59,7 +60,7 @@ const PILOT_TABS = [
   { id: 'stati_allerta', label: 'Stati allerta (DEFCON)' },
   { id: 'sessione_live', label: 'Sessione live' },
   { id: 'stiva', label: 'Stiva componenti' },
-  { id: 'runtime', label: 'Runtime Console' },
+  { id: 'runtime', label: 'Console di bordo' },
 ];
 
 const defaultEvento = {
@@ -1167,6 +1168,9 @@ export default function PilotaggioManager({ onLogout }) {
     try {
       const updated = await staffUpdatePilotRuntimeConfig(
         {
+          navigazione_stat_accesso_sigla: String(runtimeConfig.navigazione_stat_accesso_sigla || '0PI').trim(),
+          sabotaggio_stat_sigla: String(runtimeConfig.sabotaggio_stat_sigla || '0SA').trim(),
+          riparazione_stat_sigla: String(runtimeConfig.riparazione_stat_sigla || '0RI').trim(),
           login_required_console: Boolean(runtimeConfig.login_required_console),
           tick_interval_secondi: Number(runtimeConfig.tick_interval_secondi || 5),
           alarm_audio_enabled: Boolean(runtimeConfig.alarm_audio_enabled),
@@ -1176,6 +1180,22 @@ export default function PilotaggioManager({ onLogout }) {
           compattatore_login_richiesto: Boolean(runtimeConfig.compattatore_login_richiesto),
           compattatore_stat_accesso_sigla: String(runtimeConfig.compattatore_stat_accesso_sigla || '0IN').trim(),
           compattatore_quantico_abilitato: Boolean(runtimeConfig.compattatore_quantico_abilitato),
+          scientifica_console_abilitata: Boolean(runtimeConfig.scientifica_console_abilitata),
+          scientifica_login_richiesto: Boolean(runtimeConfig.scientifica_login_richiesto),
+          scientifica_stat_accesso_sigla: String(runtimeConfig.scientifica_stat_accesso_sigla || '0SC').trim(),
+          comunicazioni_console_abilitata: Boolean(runtimeConfig.comunicazioni_console_abilitata),
+          comunicazioni_stat_accesso_sigla: String(runtimeConfig.comunicazioni_stat_accesso_sigla || '0CO').trim(),
+          scientifica_scan_profondo_abilitato: Boolean(runtimeConfig.scientifica_scan_profondo_abilitato),
+          scientifica_scan_max_per_volo: Number(runtimeConfig.scientifica_scan_max_per_volo || 2),
+          scientifica_scan_requisiti_json: runtimeConfig.scientifica_scan_requisiti_json ?? [],
+          scientifica_interventi_abilitati: Boolean(runtimeConfig.scientifica_interventi_abilitati ?? true),
+          scientifica_coerenza_cap: Number(runtimeConfig.scientifica_coerenza_cap || 24),
+          scientifica_livello_min_esotici: Number(runtimeConfig.scientifica_livello_min_esotici || 1),
+          scientifica_interventi_max_per_volo: Number(runtimeConfig.scientifica_interventi_max_per_volo || 12),
+          scientifica_interventi_requisiti_json: runtimeConfig.scientifica_interventi_requisiti_json ?? {},
+          scientifica_energia_per_coerenza: Number(runtimeConfig.scientifica_energia_per_coerenza || 4),
+          scientifica_carica_intervento_soglia: Number(runtimeConfig.scientifica_carica_intervento_soglia || 100),
+          scientifica_carica_per_energia: Number(runtimeConfig.scientifica_carica_per_energia || 5),
         },
         onLogout,
       );
@@ -2115,91 +2135,295 @@ export default function PilotaggioManager({ onLogout }) {
       ) : null}
 
       {activeTab === 'runtime' ? (
-      <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60">
-        <h3 className="font-semibold mb-2">Runtime Console Pilotaggio</h3>
-        <p className="text-xs text-gray-400 mb-4">
-          Intervallo del tick motore in <strong className="text-gray-300">viaggio regolare</strong> (senza evento attivo).
-          Con evento attivo il motore usa la durata tick del DEFCON corrente.
-          {' '}Le checkbox hanno effetto sul server solo dopo <strong className="text-gray-300">Salva runtime</strong>.
-        </p>
+      <section className="rounded-xl border border-gray-700 p-4 bg-gray-900/60 space-y-6">
+        <div>
+          <h3 className="font-semibold mb-1">Runtime console di bordo</h3>
+          <p className="text-xs text-gray-400">
+            Intervallo tick in viaggio regolare; con evento attivo vale la durata DEFCON.
+            Le modifiche hanno effetto solo dopo <strong className="text-gray-300">Salva runtime</strong>.
+          </p>
+        </div>
+
         {runtimeConfig ? (
-          <div className="space-y-3 text-sm">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={Boolean(runtimeConfig.login_required_console)}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, login_required_console: e.target.checked }))}
-              />
-              Richiedi login console (ticket/QR)
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={Boolean(runtimeConfig.alarm_audio_enabled)}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, alarm_audio_enabled: e.target.checked }))}
-              />
-              Abilita audio allarmi console (beep su criticita)
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={Boolean(runtimeConfig.riparazione_componenti_abilitata)}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, riparazione_componenti_abilitata: e.target.checked }))}
-              />
-              Riparazione sottosistemi con componenti (stiva)
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={Boolean(runtimeConfig.annichilamento_opposti_abilitato)}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, annichilamento_opposti_abilitato: e.target.checked }))}
-              />
-              Annichilamento colori opposti in stiva
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={Boolean(runtimeConfig.compattatore_console_abilitata)}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_console_abilitata: e.target.checked }))}
-              />
-              Console compattatore (/pilot/?screen=compattatore)
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={Boolean(runtimeConfig.compattatore_login_richiesto)}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_login_richiesto: e.target.checked }))}
-              />
-              Login richiesto per console compattatore
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={Boolean(runtimeConfig.compattatore_quantico_abilitato)}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_quantico_abilitato: e.target.checked }))}
-              />
-              Compattatore Quantico (sacrificio oggetto → componenti; disattivo fino a evento)
-            </label>
-            <label className="block">
-              <span className="text-xs text-gray-400">Statistica accesso compattatore</span>
-              <input
-                className="bg-gray-800 rounded px-2 py-1 mt-1 font-mono uppercase"
-                maxLength={3}
-                value={runtimeConfig.compattatore_stat_accesso_sigla ?? '0IN'}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_stat_accesso_sigla: e.target.value }))}
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-gray-400">Intervallo tick (secondi)</span>
-              <input
-                type="number"
-                min={0.5}
-                step={0.5}
-                className="bg-gray-800 rounded px-2 py-1 mt-1"
-                value={runtimeConfig.tick_interval_secondi ?? 5}
-                onChange={(e) => setRuntimeConfig((p) => ({ ...p, tick_interval_secondi: e.target.value }))}
-              />
-            </label>
+          <>
+            <div className="rounded-lg border border-indigo-800/50 bg-indigo-950/20 p-4">
+              <h4 className="text-sm font-semibold text-indigo-200 mb-2">Statistiche navigazione</h4>
+              <p className="text-xs text-gray-400 mb-3">
+                Sigle personaggio per accesso alle console e azioni QR sui sottosistemi.
+                Creare le statistiche corrispondenti in admin Django (app personaggi) se mancanti.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-400 border-b border-gray-700">
+                      <th className="py-2 pr-3 font-medium">Ruolo</th>
+                      <th className="py-2 pr-3 font-medium w-24">Sigla</th>
+                      <th className="py-2 pr-3 font-medium w-20">Req.</th>
+                      <th className="py-2 font-medium">Console / percorso</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {NAVIGATION_STAT_FIELDS.map((row) => (
+                        <tr
+                          key={row.id}
+                          className={`border-b border-gray-800/80 ${row.future ? 'opacity-60' : ''}`}
+                        >
+                          <td className="py-2.5 pr-3 align-top">
+                            <div className="font-medium text-gray-200">{row.label}</div>
+                            {row.note ? (
+                              <div className="text-[11px] text-gray-500 mt-0.5">{row.note}</div>
+                            ) : null}
+                            {row.future ? (
+                              <div className="text-[11px] text-amber-400/90 mt-0.5">Non implementata — riservata</div>
+                            ) : null}
+                          </td>
+                          <td className="py-2.5 pr-3 align-top">
+                            {row.readOnlySigla ? (
+                              <span className="font-mono text-gray-400">
+                                {String(runtimeConfig[row.siglaField] || row.defaultSigla).toUpperCase()}
+                              </span>
+                            ) : (
+                              <input
+                                className="w-full bg-gray-800 rounded px-2 py-1 font-mono uppercase text-sm"
+                                maxLength={3}
+                                value={runtimeConfig[row.siglaField] ?? row.defaultSigla}
+                                onChange={(e) => setRuntimeConfig((p) => ({
+                                  ...p,
+                                  [row.siglaField]: e.target.value,
+                                }))}
+                              />
+                            )}
+                          </td>
+                          <td className="py-2.5 pr-3 align-top font-mono text-xs text-gray-400">
+                            {row.requisito}
+                          </td>
+                          <td className="py-2.5 align-top text-xs text-gray-500 font-mono">
+                            {row.url || '—'}
+                          </td>
+                        </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-gray-700/80 p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-200">Console Navigazione (pilota)</h4>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.login_required_console)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, login_required_console: e.target.checked }))}
+                />
+                Richiedi login (ticket/QR) — sigla configurata sopra
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.alarm_audio_enabled)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, alarm_audio_enabled: e.target.checked }))}
+                />
+                Audio allarmi su schermo stato (sottosistemi critici)
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-gray-700/80 p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-200">Console Ingegneria</h4>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.compattatore_console_abilitata)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_console_abilitata: e.target.checked }))}
+                />
+                Abilita console (/pilot/?screen=compattatore)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.compattatore_login_richiesto)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_login_richiesto: e.target.checked }))}
+                />
+                Login richiesto
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.compattatore_quantico_abilitato)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, compattatore_quantico_abilitato: e.target.checked }))}
+                />
+                Operazione quantica (sacrificio oggetto → componenti; off fino a evento)
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-gray-700/80 p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-200">Console Scientifica</h4>
+              <p className="text-xs text-gray-500">
+                Spettrografia, scan profondo, matrice R/S/T e interventi attivi sugli eventi.
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.scientifica_console_abilitata)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_console_abilitata: e.target.checked }))}
+                />
+                Abilita console (/pilot/?screen=scientifica)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.scientifica_login_richiesto)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_login_richiesto: e.target.checked }))}
+                />
+                Login richiesto
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.scientifica_scan_profondo_abilitato)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_scan_profondo_abilitato: e.target.checked }))}
+                />
+                Scan profondo (consumo componenti stiva)
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Max scan profondi per volo</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block w-24"
+                  value={runtimeConfig.scientifica_scan_max_per_volo ?? 2}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_scan_max_per_volo: e.target.value }))}
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.scientifica_interventi_abilitati ?? true)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_interventi_abilitati: e.target.checked }))}
+                />
+                Matrice R/S/T e interventi attivi (Fase 2)
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Cap coerenza di campo</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={99}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block w-24"
+                  value={runtimeConfig.scientifica_coerenza_cap ?? 24}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_coerenza_cap: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Livello minimo R/S/T per coerenza</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block w-24"
+                  value={runtimeConfig.scientifica_livello_min_esotici ?? 1}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_livello_min_esotici: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Max interventi attivi per volo</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block w-24"
+                  value={runtimeConfig.scientifica_interventi_max_per_volo ?? 12}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_interventi_max_per_volo: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Energia R/S/T per +1 coerenza (per tick)</span>
+                <input
+                  type="number"
+                  min={0.5}
+                  max={30}
+                  step={0.5}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block w-24"
+                  value={runtimeConfig.scientifica_energia_per_coerenza ?? 4}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_energia_per_coerenza: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Carica intervento richiesta (0–100)</span>
+                <input
+                  type="number"
+                  min={10}
+                  max={100}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block w-24"
+                  value={runtimeConfig.scientifica_carica_intervento_soglia ?? 100}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_carica_intervento_soglia: e.target.value }))}
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Carica guadagnata × energia/tick</span>
+                <input
+                  type="number"
+                  min={0.5}
+                  max={20}
+                  step={0.5}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block w-24"
+                  value={runtimeConfig.scientifica_carica_per_energia ?? 5}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, scientifica_carica_per_energia: e.target.value }))}
+                />
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-amber-900/40 bg-amber-950/10 p-4 space-y-2 opacity-80">
+              <h4 className="text-sm font-semibold text-amber-200/90">Console Comunicazioni (futuro)</h4>
+              <p className="text-xs text-gray-500">
+                Placeholder per messaggistica di bordo, prefetture o equipaggio — uso da definire.
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  disabled
+                  checked={Boolean(runtimeConfig.comunicazioni_console_abilitata)}
+                  readOnly
+                />
+                Abilita console (non ancora disponibile)
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-gray-700/80 p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-200">Stiva e riparazione QR</h4>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.riparazione_componenti_abilitata)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, riparazione_componenti_abilitata: e.target.checked }))}
+                />
+                Riparazione sottosistemi con componenti (stiva)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(runtimeConfig.annichilamento_opposti_abilitato)}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, annichilamento_opposti_abilitato: e.target.checked }))}
+                />
+                Annichilamento colori opposti in stiva
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-gray-700/80 p-4 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-200">Motore tick</h4>
+              <label className="block text-sm">
+                <span className="text-xs text-gray-400">Intervallo tick (secondi)</span>
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  className="bg-gray-800 rounded px-2 py-1 mt-1 block"
+                  value={runtimeConfig.tick_interval_secondi ?? 5}
+                  onChange={(e) => setRuntimeConfig((p) => ({ ...p, tick_interval_secondi: e.target.value }))}
+                />
+              </label>
+            </div>
+
             <button
               type="button"
               className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2221,7 +2445,7 @@ export default function PilotaggioManager({ onLogout }) {
                 {runtimeSaveFeedback.text}
               </p>
             ) : null}
-          </div>
+          </>
         ) : (
           <div className="text-gray-400 text-sm">Runtime config non disponibile.</div>
         )}

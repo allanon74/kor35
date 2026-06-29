@@ -175,13 +175,20 @@ class PilotConsoleTokenAdmin(admin.ModelAdmin):
 @admin.register(PilotRuntimeConfig)
 class PilotRuntimeConfigAdmin(admin.ModelAdmin):
     list_display = (
+        "navigazione_stat_accesso_sigla",
+        "compattatore_stat_accesso_sigla",
+        "scientifica_stat_accesso_sigla",
+        "sabotaggio_stat_sigla",
+        "riparazione_stat_sigla",
+        "comunicazioni_stat_accesso_sigla",
         "login_required_console",
         "alarm_audio_enabled",
         "riparazione_componenti_abilitata",
         "annichilamento_opposti_abilitato",
         "compattatore_console_abilitata",
+        "scientifica_console_abilitata",
+        "comunicazioni_console_abilitata",
         "compattatore_quantico_abilitato",
-        "compattatore_stat_accesso_sigla",
         "tick_enabled",
         "tick_interval_secondi",
         "tick_last_heartbeat",

@@ -3,6 +3,7 @@ import LoginQR from './components/LoginQR.jsx';
 import IdleScreen from './components/IdleScreen.jsx';
 import Cockpit from './components/Cockpit.jsx';
 import CompattatoreScreen from './components/CompattatoreScreen.jsx';
+import ScientificaScreen from './components/ScientificaScreen.jsx';
 import { api, getToken, setToken } from './api.js';
 import {
   flushOfflineQueue,
@@ -17,12 +18,14 @@ const POLL_ADVANCE_TICK = SCREEN_MODE !== 'status';
 const IS_CONTROL_ONLY = SCREEN_MODE === 'control';
 const IS_COMBINED = SCREEN_MODE === 'combined';
 const IS_COMPATTATORE = SCREEN_MODE === 'compattatore';
+const IS_SCIENTIFICA = SCREEN_MODE === 'scientifica';
 
 export default function App() {
   const [authToken, setAuthToken] = useState(getToken());
   const [authError, setAuthError] = useState('');
   const [consoleEnabled, setConsoleEnabled] = useState(true);
   const [loginRequired, setLoginRequired] = useState(true);
+  const [navigazioneStatSigla, setNavigazioneStatSigla] = useState('0PI');
   const [consoleChecked, setConsoleChecked] = useState(false);
   const [state, setState] = useState(() => loadCachedState());
   const [prefetture, setPrefetture] = useState([]);
@@ -94,10 +97,15 @@ export default function App() {
   }, [loginRequired]);
 
   useEffect(() => {
-    api.consoleEnabled()
+    const loader = IS_SCIENTIFICA ? api.scientificaConsoleEnabled : api.consoleEnabled;
+    loader()
       .then((res) => {
         setConsoleEnabled(!!res?.enabled);
         setLoginRequired(res?.login_required !== false);
+        const sigla = res?.scientifica_stat_accesso_sigla || res?.navigazione_stat_accesso_sigla;
+        if (sigla) {
+          setNavigazioneStatSigla(String(sigla).toUpperCase());
+        }
       })
       .catch(() => setConsoleEnabled(false))
       .finally(() => setConsoleChecked(true));
@@ -105,7 +113,8 @@ export default function App() {
 
   useEffect(() => {
     if (!consoleChecked || !consoleEnabled || loginRequired || authToken) return;
-    api.autoLogin()
+    const loginFn = IS_SCIENTIFICA ? api.scientificaAutoLogin : api.autoLogin;
+    loginFn()
       .then((res) => {
         if (res?.token) {
           setToken(res.token);
@@ -119,13 +128,13 @@ export default function App() {
   }, [consoleChecked, consoleEnabled, loginRequired, authToken]);
 
   useEffect(() => {
-    if (!authToken) return;
+    if (!authToken || IS_SCIENTIFICA) return;
     refreshState();
     api.prefetture().then(setPrefetture).catch(() => setPrefetture([]));
   }, [authToken, refreshState]);
 
   useEffect(() => {
-    if (!authToken) return;
+    if (!authToken || IS_SCIENTIFICA) return;
     const id = setInterval(() => {
       refreshState();
       flushOfflineQueue(api).then(({ applicati }) => {
@@ -273,8 +282,8 @@ export default function App() {
     return (
       <div className="center-screen">
         <div className="card">
-          <h1>KOR-35 // CONSOLE PILOTA</h1>
-          <div className="error">Console pilotaggio non disponibile su questo ambiente.</div>
+          <h1>KOR-35 // {IS_SCIENTIFICA ? 'CONSOLE SCIENTIFICA' : 'CONSOLE PILOTA'}</h1>
+          <div className="error">Console {IS_SCIENTIFICA ? 'scientifica' : 'pilotaggio'} non disponibile su questo ambiente.</div>
         </div>
       </div>
     );
@@ -284,7 +293,7 @@ export default function App() {
     return (
       <div className="app-shell">
         <div className="banner">
-          <div className="ident">KOR-35 // PILOT CONSOLE</div>
+          <div className="ident">KOR-35 // {IS_SCIENTIFICA ? 'LAB CAMPO' : 'PILOT CONSOLE'}</div>
           <div className="right">
             <span className={online ? 'net-online' : 'net-offline'}>
               {online ? 'BACKEND ON' : 'BACKEND OFF'}
@@ -294,14 +303,25 @@ export default function App() {
         <main>
           {loginRequired ? (
             <LoginQR
-              createTicket={api.createConsoleTicket}
+              createTicket={IS_SCIENTIFICA ? api.createScientificaConsoleTicket : api.createConsoleTicket}
               pollTicket={api.ticketStatus}
               onAuthorized={handleAuthorized}
               error={authError}
+              navigazioneStatSigla={navigazioneStatSigla}
             />
           ) : (
             <div className="center-screen"><div className="card">Accesso automatico console in corso...</div></div>
           )}
+        </main>
+      </div>
+    );
+  }
+
+  if (IS_SCIENTIFICA && authToken) {
+    return (
+      <div className="app-shell app-shell-scientifica">
+        <main>
+          <ScientificaScreen onLogout={handleLogout} navigazioneStatSigla={navigazioneStatSigla} />
         </main>
       </div>
     );

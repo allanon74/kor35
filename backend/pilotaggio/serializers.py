@@ -469,6 +469,8 @@ class PilotConsoleTokenSerializer(serializers.ModelSerializer):
 
 
 class PilotRuntimeConfigSerializer(serializers.ModelSerializer):
+    statistiche_navigazione = serializers.SerializerMethodField()
+
     class Meta:
         model = PilotRuntimeConfig
         fields = [
@@ -476,6 +478,9 @@ class PilotRuntimeConfigSerializer(serializers.ModelSerializer):
             "tick_interval_secondi",
             "tick_last_heartbeat",
             "stiva_ultimo_tick_at",
+            "navigazione_stat_accesso_sigla",
+            "sabotaggio_stat_sigla",
+            "riparazione_stat_sigla",
             "login_required_console",
             "alarm_audio_enabled",
             "riparazione_componenti_abilitata",
@@ -484,9 +489,36 @@ class PilotRuntimeConfigSerializer(serializers.ModelSerializer):
             "compattatore_login_richiesto",
             "compattatore_stat_accesso_sigla",
             "compattatore_quantico_abilitato",
+            "scientifica_console_abilitata",
+            "scientifica_login_richiesto",
+            "scientifica_stat_accesso_sigla",
+            "comunicazioni_console_abilitata",
+            "comunicazioni_stat_accesso_sigla",
+            "scientifica_scan_profondo_abilitato",
+            "scientifica_scan_max_per_volo",
+            "scientifica_scan_requisiti_json",
+            "scientifica_interventi_abilitati",
+            "scientifica_coerenza_cap",
+            "scientifica_livello_min_esotici",
+            "scientifica_interventi_max_per_volo",
+            "scientifica_interventi_requisiti_json",
+            "scientifica_energia_per_coerenza",
+            "scientifica_carica_intervento_soglia",
+            "scientifica_carica_per_energia",
+            "statistiche_navigazione",
             "updated_at",
         ]
-        read_only_fields = ["tick_last_heartbeat", "stiva_ultimo_tick_at", "updated_at"]
+        read_only_fields = [
+            "tick_last_heartbeat",
+            "stiva_ultimo_tick_at",
+            "statistiche_navigazione",
+            "updated_at",
+        ]
+
+    def get_statistiche_navigazione(self, obj):
+        from .navigation_stats import build_navigation_stats_payload
+
+        return build_navigation_stats_payload(obj)
 
 
 class CoppiaColoriComponenteSerializer(serializers.ModelSerializer):

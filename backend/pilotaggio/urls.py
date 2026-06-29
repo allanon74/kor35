@@ -86,6 +86,7 @@ urlpatterns = [
         views.StaffSessioniOrfaneView.as_view(),
         name="pilot-staff-sessioni-orfane",
     ),
+    path("navigation-config/", views.PilotNavigationConfigView.as_view(), name="pilot-navigation-config"),
     path("staff/runtime-config/", views.StaffPilotRuntimeConfigView.as_view(), name="pilot-staff-runtime-config"),
     path("staff/stiva/", views.StaffPilotStivaView.as_view(), name="pilot-staff-stiva"),
     path(
@@ -114,6 +115,29 @@ urlpatterns = [
         "compattatore/quantico/",
         views.PilotCompattatoreQuanticoView.as_view(),
         name="pilot-compattatore-quantico",
+    ),
+    path("scientifica/console-enabled/", views.ScientificaConsoleEnabledView.as_view(), name="scientifica-console-enabled"),
+    path("scientifica/auth/auto-login/", views.ScientificaConsoleAutoLoginView.as_view(), name="scientifica-auto-login"),
+    path(
+        "scientifica/auth/console-ticket/",
+        views.ScientificaConsoleTicketCreateView.as_view(),
+        name="scientifica-ticket-create",
+    ),
+    path("scientifica/state/", views.PilotScientificaStateView.as_view(), name="pilot-scientifica-state"),
+    path(
+        "scientifica/scan-profondo/",
+        views.PilotScientificaScanProfondoView.as_view(),
+        name="pilot-scientifica-scan-profondo",
+    ),
+    path(
+        "scientifica/fase/",
+        views.PilotScientificaFaseView.as_view(),
+        name="pilot-scientifica-fase",
+    ),
+    path(
+        "scientifica/intervento/",
+        views.PilotScientificaInterventoView.as_view(),
+        name="pilot-scientifica-intervento",
     ),
     path("", include(router.urls)),
 ]

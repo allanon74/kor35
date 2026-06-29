@@ -3726,4 +3726,336 @@ select, input[type=text], input[type=number] {
   }
 }
 
+/* --- Console Scientifica (Fase 1) --- */
+.app-shell-scientifica main {
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 20% 0%, #0d1a2d 0%, #050810 55%);
+}
+
+.scientifica-console {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 2rem;
+  color: #c5d4e8;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.scientifica-hud {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(100, 180, 255, 0.2);
+}
+
+.scientifica-hud-kicker {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: #64b5f6;
+  text-transform: uppercase;
+}
+
+.scientifica-hud-title {
+  margin: 0.25rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #e3f2fd;
+}
+
+.scientifica-hud-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sci-pill {
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.65rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.sci-pill--ok { border-color: #4caf50; color: #a5d6a7; }
+.sci-pill--idle { border-color: #78909c; color: #b0bec5; }
+.sci-pill--off { border-color: #546e7a; color: #78909c; }
+
+.sci-defcon {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  color: #ffab40;
+}
+
+.scientifica-alert.error {
+  background: rgba(183, 28, 28, 0.25);
+  border: 1px solid rgba(239, 83, 80, 0.5);
+  color: #ffcdd2;
+  padding: 0.65rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.scientifica-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .scientifica-grid { grid-template-columns: 1fr; }
+}
+
+.sci-panel {
+  background: rgba(13, 25, 45, 0.85);
+  border: 1px solid rgba(100, 180, 255, 0.15);
+  border-radius: 8px;
+  padding: 1rem 1.15rem;
+}
+
+.sci-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: #81d4fa;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sci-subtitle {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.75rem;
+  color: #78909c;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.sci-muted { color: #78909c; font-size: 0.85rem; line-height: 1.5; }
+.sci-event-desc { font-size: 0.9rem; line-height: 1.5; margin-bottom: 0.75rem; }
+
+.sci-bands { display: flex; flex-direction: column; gap: 0.45rem; }
+.sci-band-row {
+  display: grid;
+  grid-template-columns: 9rem 1fr 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+}
+.sci-band-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.sci-band-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.sci-band-pct { font-family: ui-monospace, monospace; text-align: right; color: #90a4ae; }
+
+.sci-delta-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+.sci-delta-list li { margin-bottom: 0.35rem; }
+
+.sci-risk {
+  margin-top: 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+.sci-risk--reazione { background: rgba(33, 150, 243, 0.12); border-left: 3px solid #42a5f5; }
+.sci-risk--moderato { background: rgba(96, 125, 139, 0.15); border-left: 3px solid #78909c; }
+.sci-risk--elevato { background: rgba(255, 152, 0, 0.12); border-left: 3px solid #ffa726; }
+.sci-risk--critico { background: rgba(244, 67, 54, 0.15); border-left: 3px solid #ef5350; }
+.sci-risk p { margin: 0.25rem 0 0; opacity: 0.9; }
+
+.sci-soluzione { font-size: 0.85rem; margin-top: 0.75rem; }
+.sci-chrono {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  font-family: ui-monospace, monospace;
+  color: #90caf9;
+}
+
+.sci-scan-result {
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+.sci-scan-kicker {
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #00e5ff;
+}
+.sci-scan-meta { font-size: 0.72rem; color: #78909c; }
+
+.sci-select-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+}
+.sci-select-wrap select {
+  background: #0a1520;
+  border: 1px solid rgba(100, 180, 255, 0.25);
+  color: #e3f2fd;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.sci-btn {
+  border: 1px solid rgba(100, 180, 255, 0.35);
+  background: transparent;
+  color: #b3e5fc;
+  padding: 0.55rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.sci-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.sci-btn--primary {
+  background: linear-gradient(180deg, rgba(0, 120, 200, 0.35), rgba(0, 80, 140, 0.25));
+  width: 100%;
+}
+.sci-btn--ghost { margin-top: 0.5rem; }
+
+.scientifica-footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.sci-panel--coerenza { margin-bottom: 0.75rem; }
+
+.sci-coerenza-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.sci-coerenza-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.sci-coerenza-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7e57c2, #26c6da);
+  transition: width 0.35s ease;
+}
+
+.sci-coerenza-head--sub { margin-top: 0.65rem; font-size: 0.8rem; }
+.sci-coerenza-track--carica { height: 8px; margin-top: 0.25rem; }
+.sci-coerenza-fill--carica {
+  background: linear-gradient(90deg, #ffb74d, #ff8f00);
+}
+.sci-coerenza-fill--ready {
+  background: linear-gradient(90deg, #66bb6a, #43a047);
+}
+
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(126, 87, 194, 0.25);
+  color: #ce93d8;
+}
+
+.sci-matrice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 720px) {
+  .sci-matrice-grid { grid-template-columns: 1fr; }
+}
+
+.sci-nucleo-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.sci-nucleo-head { display: flex; gap: 0.4rem; align-items: baseline; margin-bottom: 0.35rem; }
+.sci-nucleo-code {
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+  color: #80cbc4;
+}
+.sci-nucleo-name { font-size: 0.72rem; color: #90a4ae; }
+.sci-nucleo-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+.sci-nucleo-on { color: #81c784; }
+.sci-nucleo-off { color: #ef5350; }
+
+.sci-fase-controls { display: flex; gap: 0.35rem; }
+.sci-fase-btn {
+  flex: 1;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #b0bec5;
+  cursor: pointer;
+}
+.sci-fase-btn--active {
+  border-color: #7e57c2;
+  background: rgba(126, 87, 194, 0.25);
+  color: #e1bee7;
+}
+
+.sci-interventi-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem; }
+.sci-intervento-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: start;
+  padding: 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+.sci-intervento-info p { margin: 0.2rem 0; font-size: 0.8rem; color: #90a4ae; }
+.sci-intervento-cost { font-size: 0.72rem; color: #78909c; }
+.sci-intervento-select {
+  grid-column: 1 / -1;
+  background: #1a2332;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 0.35rem;
+  color: #eceff1;
+}
+.sci-btn--compact { width: auto; min-width: 5rem; padding: 0.35rem 0.75rem; }
+.sci-intervento-blocked {
+  grid-column: 1 / -1;
+  font-size: 0.72rem;
+  color: #78909c;
+}
 

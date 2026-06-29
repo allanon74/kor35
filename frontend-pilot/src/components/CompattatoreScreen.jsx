@@ -114,7 +114,7 @@ export default function CompattatoreScreen({ onLogout }) {
       <header className="compattatore-hud">
         <div className="compattatore-hud-brand">
           <span className="compattatore-hud-kicker">KOR-35 // NODO Z</span>
-          <h1 className="compattatore-hud-title">Compattatore quantico</h1>
+          <h1 className="compattatore-hud-title">Console Ingegneria</h1>
         </div>
         <div className="compattatore-hud-status">
           {!data?.abilitato ? (

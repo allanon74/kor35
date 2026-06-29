@@ -637,6 +637,14 @@ class SessioneVolo(SyncableModel, models.Model):
         blank=True,
         help_text="Ultimo cambio allarme equipaggio (sync LED WiFi).",
     )
+    scans_profondi_count = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Scan profondi eseguiti in questa sessione (max da runtime).",
+    )
+    interventi_scientifici_count = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Interventi scientifici attivi eseguiti in questa sessione.",
+    )
 
     class Meta:
         verbose_name = "Sessione di volo"
@@ -749,6 +757,31 @@ class EventoAttivoSessione(SyncableModel, models.Model):
             "Numero di tick evento gia' valutati. La CA e la scadenza critica precipizio "
             "non si applicano al primo check (tempo di reazione pilota)."
         ),
+    )
+    scan_profondo_eseguito = models.BooleanField(
+        default=False,
+        help_text="Scan profondo già usato su questo evento attivo.",
+    )
+    scan_profondo_hint_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Indizio rivelato dall'ultimo scan profondo su questo evento.",
+    )
+    ca_soppressa_scientifica = models.BooleanField(
+        default=False,
+        help_text="Prossima valutazione CA soppressa da gabbia dimensionale.",
+    )
+    eco_parziale_attiva = models.BooleanField(
+        default=False,
+        help_text="Prossima valutazione SP non decrementa i tick (eco parziale).",
+    )
+    dilatazioni_applicate = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Dilatazioni temporali già applicate su questo evento.",
+    )
+    correzione_paradosso_applicata = models.BooleanField(
+        default=False,
+        help_text="Correzione paradosso (DEFCON -1) già usata su questo evento.",
     )
 
     class Meta:
@@ -1000,6 +1033,15 @@ class PilotConsoleLoginTicket(SyncableModel, models.Model):
     )
     token_console = models.CharField(max_length=64, blank=True, default="")
     token_issued_at = models.DateTimeField(null=True, blank=True)
+    ruolo = models.CharField(
+        max_length=16,
+        choices=[
+            ("navigazione", "Console Navigazione"),
+            ("scientifica", "Console Scientifica"),
+        ],
+        default="navigazione",
+        help_text="Console destinataria del ticket login inverso.",
+    )
 
     class Meta:
         verbose_name = "Ticket login console"
@@ -1106,6 +1148,21 @@ class PilotRuntimeConfig(models.Model):
         blank=True,
         help_text="Ultimo tick annichilamento opposti stiva (idempotenza tra sessioni).",
     )
+    navigazione_stat_accesso_sigla = models.CharField(
+        max_length=3,
+        default="0PI",
+        help_text="Sigla statistica per accesso console navigazione (pilota, es. 0PI≥1).",
+    )
+    sabotaggio_stat_sigla = models.CharField(
+        max_length=3,
+        default="0SA",
+        help_text="Sigla statistica sabotaggio QR sottosistemi.",
+    )
+    riparazione_stat_sigla = models.CharField(
+        max_length=3,
+        default="0RI",
+        help_text="Sigla statistica riparazione (e ricarica) QR sottosistemi.",
+    )
     login_required_console = models.BooleanField(
         default=False,
         help_text="Se attivo, la console richiede login ticket/QR. Default disattivo (utile in dev).",
@@ -1124,20 +1181,91 @@ class PilotRuntimeConfig(models.Model):
     )
     compattatore_console_abilitata = models.BooleanField(
         default=False,
-        help_text="Abilita console /pilot/?screen=compattatore.",
+        help_text="Abilita Console Ingegneria (/pilot/?screen=compattatore).",
     )
     compattatore_login_richiesto = models.BooleanField(
         default=True,
-        help_text="Richiede login alla console compattatore.",
+        help_text="Richiede login alla Console Ingegneria.",
     )
     compattatore_stat_accesso_sigla = models.CharField(
         max_length=3,
         default="0IN",
-        help_text="Sigla statistica per accesso console compattatore (es. 0IN>0).",
+        help_text="Sigla statistica Console Ingegneria e tab Stiva app (es. 0IN>0).",
     )
     compattatore_quantico_abilitato = models.BooleanField(
         default=False,
-        help_text="Abilita operazione Compattatore Quantico in console (default disattivo fino a evento).",
+        help_text="Abilita operazione quantica in Console Ingegneria (default off fino a evento).",
+    )
+    scientifica_console_abilitata = models.BooleanField(
+        default=False,
+        help_text="Abilita console /pilot/?screen=scientifica (spettrografia Fase 1).",
+    )
+    scientifica_login_richiesto = models.BooleanField(
+        default=True,
+        help_text="Richiede login alla console scientifica.",
+    )
+    scientifica_stat_accesso_sigla = models.CharField(
+        max_length=3,
+        default="0SC",
+        help_text="Sigla statistica accesso console scientifica (es. 0SC>0).",
+    )
+    comunicazioni_console_abilitata = models.BooleanField(
+        default=False,
+        help_text="Riservato: console comunicazioni (non ancora implementata).",
+    )
+    comunicazioni_stat_accesso_sigla = models.CharField(
+        max_length=3,
+        default="0CO",
+        help_text="Sigla statistica futura console comunicazioni.",
+    )
+    scientifica_scan_profondo_abilitato = models.BooleanField(
+        default=True,
+        help_text="Abilita scan profondo (consumo componenti stiva) in console scientifica.",
+    )
+    scientifica_scan_max_per_volo = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Numero massimo di scan profondi per sessione di volo.",
+    )
+    scientifica_scan_requisiti_json = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Requisiti componenti per scan profondo (come riparazione QR). Vuoto = 1 unità qualsiasi.",
+    )
+    scientifica_interventi_abilitati = models.BooleanField(
+        default=True,
+        help_text="Abilita matrice R/S/T e interventi attivi in console scientifica.",
+    )
+    scientifica_coerenza_cap = models.PositiveSmallIntegerField(
+        default=24,
+        help_text="Massimo coerenza di campo accumulabile.",
+    )
+    scientifica_livello_min_esotici = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Livello minimo R/S/T per generare coerenza a ogni tick.",
+    )
+    scientifica_interventi_max_per_volo = models.PositiveSmallIntegerField(
+        default=12,
+        help_text="Limite interventi attivi (escluso reset risonanza) per sessione.",
+    )
+    scientifica_interventi_requisiti_json = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Override requisiti componenti per tipo intervento "
+            "(chiavi: dilatazione, gabbia, correzione, eco). Lista vuota = N unità qualsiasi."
+        ),
+    )
+    scientifica_energia_per_coerenza = models.FloatField(
+        default=4.0,
+        help_text="Unità energia R/S/T (per tick) necessarie per +1 coerenza.",
+    )
+    scientifica_carica_intervento_soglia = models.PositiveSmallIntegerField(
+        default=100,
+        help_text="Carica minima (0–100) per eseguire un intervento attivo.",
+    )
+    scientifica_carica_per_energia = models.FloatField(
+        default=5.0,
+        help_text="Punti carica guadagnati per tick per ogni unità energia su R/S/T.",
     )
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1164,6 +1292,42 @@ class CompattatoreStatoNave(SyncableModel, models.Model):
     class Meta:
         verbose_name = "Stato compattatore nave"
         verbose_name_plural = "Stato compattatore nave"
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(singleton_id=1)
+        return obj
+
+
+class ScientificoStatoNave(SyncableModel, models.Model):
+    """Coerenza di campo e fasi matrice R/S/T (singleton nave)."""
+
+    singleton_id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    coerenza_accumulata = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Coerenza di campo disponibile per interventi.",
+    )
+    fase_r = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Fase matrice Nucleo Temporale (0–2).",
+    )
+    fase_s = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Fase matrice Nucleo Dimensionale (0–2).",
+    )
+    fase_t = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Fase matrice Correttore Paradossi (0–2).",
+    )
+    carica_intervento = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Carica campo 0–100: si ricarica con l'energia inviata a R/S/T; serve per interventi.",
+    )
+
+    class Meta:
+        verbose_name = "Stato scientifico nave"
+        verbose_name_plural = "Stato scientifico nave"
 
     @classmethod
     def get_solo(cls):

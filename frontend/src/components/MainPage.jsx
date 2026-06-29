@@ -8,7 +8,7 @@ import QrResultModal from './QrResultModal.jsx';
 import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota } from '../api';
+import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 
@@ -127,6 +127,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [pilotRepairing, setPilotRepairing] = useState(false);
   const [pilotRecharging, setPilotRecharging] = useState(false);
   const [pilotSaboting, setPilotSaboting] = useState(false);
+  const [stivaAccessSigla, setStivaAccessSigla] = useState(DEFAULT_STIVA_ACCESS_STAT_SIGLA);
   const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -253,6 +254,18 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     isCampaignHeadMaster,
   } = useCharacter();
 
+  useEffect(() => {
+    let cancelled = false;
+    getPilotNavigationConfig(() => {})
+      .then((data) => {
+        if (cancelled) return;
+        const sigla = data?.sigle?.stiva_app || data?.sigle?.ingegneria;
+        if (sigla) setStivaAccessSigla(String(sigla).toUpperCase());
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const listWatchRowForSelected = useMemo(() => {
     if (!selectedCharacterId) return null;
     return (personaggiList || []).find((p) => String(p.id) === String(selectedCharacterId));
@@ -267,17 +280,17 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     return !!listWatchRowForSelected?.watch_enabled;
   }, [selectedCharacterId, selectedCharacterData, listWatchRowForSelected]);
 
-  /** Tab Stiva nave: visibile se il PG ha la statistica di accesso (default 0IN) > 0. */
+  /** Tab Stiva nave: visibile se il PG ha la statistica di accesso configurata (> 0). */
   const stivaTabEnabled = useMemo(() => {
     if (!selectedCharacterId || !selectedCharacterData) return false;
     return (
       getStatValueBySigla(
         selectedCharacterData,
         punteggiList,
-        DEFAULT_STIVA_ACCESS_STAT_SIGLA,
+        stivaAccessSigla,
       ) > 0
     );
-  }, [selectedCharacterId, selectedCharacterData, punteggiList]);
+  }, [selectedCharacterId, selectedCharacterData, punteggiList, stivaAccessSigla]);
 
   const isMainTabVisible = useCallback(
     (tab) => {
