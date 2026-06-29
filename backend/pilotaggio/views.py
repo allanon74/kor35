@@ -32,22 +32,32 @@ from personaggi.models import (
     QrCode,
 )
 
+from .allarme_equipaggio import (
+    build_allarme_led_payload,
+    imposta_allarme_equipaggio_sessione,
+)
 from .auth import PilotConsoleTokenAuthentication, get_pilot_from_request
 from .engine import (
     _clamp_livello,
+    _sessione_ha_decollato,
     applica_effetto_espulsione,
     applica_effetto_guasto,
     applica_effetto_inversione,
+    build_annuncio_decollo,
     calcola_distanza_target,
+    completa_decollo_sessione,
     evento_attivo_corrente,
     eventi_attivi_correnti,
+    finalizza_volo_sottosistemi,
     get_o_crea_stato_sottosistema,
+    percentuale_sistemi_operativi,
     prepara_sessione_nuovo_volo,
     staff_azione_sottosistema_sessione,
     staff_imposta_carburante_sessione,
     capacita_carburante_serbatoi,
     intervallo_tick_effettivo_sessione,
     secondi_fino_valutazione_evento,
+    termina_sessione_volo,
     tick_sessione_se_dovuto,
 )
 from .models import (
@@ -133,6 +143,51 @@ def _sessione_attiva_corrente() -> Optional[SessioneVolo]:
     )
 
 
+def _sessione_pilota_operativa(pilota) -> Optional[SessioneVolo]:
+    """Ultima sessione pilota non terminata (idle o volo)."""
+    return (
+        SessioneVolo.objects.filter(pilota=pilota)
+        .exclude(stato__in=["arrivata", "crashed"])
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _motore_livello_target(sessione: SessioneVolo) -> int:
+    motore = (
+        StatoSottosistemaSessione.objects.filter(
+            sessione=sessione, sottosistema__tipo="motore"
+        )
+        .order_by("sottosistema__ordine", "sottosistema__codice")
+        .first()
+    )
+    return int(motore.livello_target or 0) if motore else 0
+
+
+def _errore_se_motore_non_spento(sessione: SessioneVolo):
+    if _motore_livello_target(sessione) != 0:
+        return Response(
+            {
+                "error": (
+                    "Operazione disponibile solo con motore principale a livello 0."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return None
+
+
+def _sessione_staff_operativa() -> Optional[SessioneVolo]:
+    """
+    Sessione per il pannello staff: idle/volo attivi, oppure ultima sessione
+    (anche terminata) per controllo manuale sottosistemi.
+    """
+    attiva = _sessione_attiva_corrente()
+    if attiva is not None:
+        return attiva
+    return SessioneVolo.objects.order_by("-created_at").first()
+
+
 def _sessione_pilota_per_console(pilota) -> Optional[SessioneVolo]:
     """
     Ultima sessione del pilota per GET /state/.
@@ -169,6 +224,8 @@ def _ensure_sessione_idle_pilota(pilota) -> SessioneVolo:
         .order_by("-created_at")
         .first()
     )
+    if ultima is not None and ultima.is_terminata:
+        finalizza_volo_sottosistemi(ultima)
     if ultima is not None and ultima.stato == SESSIONE_STATO_IDLE:
         from pilotaggio.stato_nave import propaga_stati_nave_a_sessione
 
@@ -636,8 +693,6 @@ class PilotSessionResetView(APIView):
 
 def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
     """Stato runtime completo per la console pilota."""
-    from .engine import _sessione_ha_decollato
-
     if sessione is not None:
         _ensure_runtime_subsystems(sessione)
     decollo = sessione is not None and _sessione_ha_decollato(sessione)
@@ -747,6 +802,14 @@ def _build_state_payload(sessione: SessioneVolo, pilota: Personaggio) -> dict:
             "tick_secondi_base": float(getattr(sessione, "tick_secondi", 5) if sessione else 5),
         },
         "tick_runtime": _tick_runtime_payload(sessione),
+        "decollo_effettuato": decollo,
+        "percentuale_sistemi_operativi": (
+            percentuale_sistemi_operativi(sessione) if sessione else 100
+        ),
+        "allarme_equipaggio": (
+            getattr(sessione, "allarme_equipaggio", "crociera") if sessione else "crociera"
+        ),
+        "allarme_led": build_allarme_led_payload(sessione),
         "server_time": timezone.now().isoformat(),
     }
     return payload
@@ -1015,10 +1078,11 @@ class PilotSessionAbortView(APIView):
         )
         if sessione is None:
             return Response({"status": "no_session"}, status=status.HTTP_200_OK)
-        sessione.stato = SESSIONE_STATO_CRASHED
-        sessione.ended_at = timezone.now()
-        sessione.crash_reason = "manual_abort"
-        sessione.save(update_fields=["stato", "ended_at", "crash_reason", "updated_at"])
+        termina_sessione_volo(
+            sessione,
+            SESSIONE_STATO_CRASHED,
+            extra_update_fields={"crash_reason": "manual_abort"},
+        )
         from .flight_log import log_precipizio
 
         log_precipizio(sessione, "manual_abort")
@@ -1059,16 +1123,170 @@ class PilotSessionEmergencyLandingView(APIView):
                 {"error": "Atterraggio di emergenza disponibile solo con motore principale a 0."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if not _sessione_ha_decollato(sessione):
+            return Response(
+                {"error": "Atterraggio di emergenza disponibile solo dopo il decollo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        sessione.stato = SESSIONE_STATO_ARRIVATA
-        sessione.ended_at = timezone.now()
-        sessione.distanza_percorsa = float(sessione.distanza_target or sessione.distanza_percorsa or 0.0)
-        sessione.save(update_fields=["stato", "ended_at", "distanza_percorsa", "updated_at"])
+        distanza_finale = float(sessione.distanza_target or sessione.distanza_percorsa or 0.0)
+        termina_sessione_volo(
+            sessione,
+            SESSIONE_STATO_ARRIVATA,
+            extra_update_fields={"distanza_percorsa": distanza_finale},
+        )
         from .flight_log import log_arrivo
 
         log_arrivo(sessione, emergenza=True)
         _disable_tick_if_no_active_sessions()
         return Response(_build_state_payload(sessione, pilota))
+
+
+class PilotSessionTakeoffView(APIView):
+    """
+    POST /api/pilot/session/takeoff/
+    Prepara l'annuncio vocale di decollo (nave ancora a terra).
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        pilota = get_pilot_from_request(request)
+        sessione = (
+            SessioneVolo.objects.filter(pilota=pilota)
+            .exclude(stato__in=["arrivata", "crashed"])
+            .order_by("-created_at")
+            .first()
+        )
+        if sessione is None or sessione.stato != SESSIONE_STATO_VOLO:
+            return Response({"error": "Nessuna missione attiva."}, status=status.HTTP_400_BAD_REQUEST)
+        if _sessione_ha_decollato(sessione):
+            return Response({"error": "Decollo già effettuato."}, status=status.HTTP_409_CONFLICT)
+
+        motore = (
+            StatoSottosistemaSessione.objects.select_related("sottosistema")
+            .filter(sessione=sessione, sottosistema__tipo="motore")
+            .order_by("sottosistema__ordine", "sottosistema__codice")
+            .first()
+        )
+        if motore is not None and int(motore.livello_target or 0) != 0:
+            return Response(
+                {"error": "Decollo disponibile solo con motore principale a livello 0."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        annuncio = build_annuncio_decollo(sessione)
+        pct = percentuale_sistemi_operativi(sessione)
+        return Response(
+            {
+                "announcement": annuncio,
+                "percentuale_sistemi_operativi": pct,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PilotSessionTakeoffCompleteView(APIView):
+    """
+    POST /api/pilot/session/takeoff/complete/
+    Conferma decollo dopo sequenza vocale: inizia crociera ed eventi.
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        pilota = get_pilot_from_request(request)
+        sessione = (
+            SessioneVolo.objects.filter(pilota=pilota)
+            .exclude(stato__in=["arrivata", "crashed"])
+            .order_by("-created_at")
+            .first()
+        )
+        if sessione is None or sessione.stato != SESSIONE_STATO_VOLO:
+            return Response({"error": "Nessuna missione attiva."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            completa_decollo_sessione(sessione)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        sessione.refresh_from_db()
+        return Response(_build_state_payload(sessione, pilota), status=status.HTTP_200_OK)
+
+
+class PilotSessionLandingView(APIView):
+    """
+    POST /api/pilot/session/landing/
+    Atterraggio programmato (dopo decollo, motore a 0).
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        pilota = get_pilot_from_request(request)
+        sessione = _sessione_pilota_operativa(pilota)
+        if sessione is None or sessione.stato != SESSIONE_STATO_VOLO:
+            return Response({"error": "Nessuna missione attiva."}, status=status.HTTP_400_BAD_REQUEST)
+        if not _sessione_ha_decollato(sessione):
+            return Response(
+                {"error": "Atterraggio disponibile solo dopo il decollo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        err = _errore_se_motore_non_spento(sessione)
+        if err is not None:
+            return err
+
+        distanza_finale = float(sessione.distanza_target or sessione.distanza_percorsa or 0.0)
+        termina_sessione_volo(
+            sessione,
+            SESSIONE_STATO_ARRIVATA,
+            extra_update_fields={"distanza_percorsa": distanza_finale},
+        )
+        from .flight_log import log_arrivo
+
+        log_arrivo(sessione, emergenza=False)
+        _disable_tick_if_no_active_sessions()
+        return Response(_build_state_payload(sessione, pilota))
+
+
+class PilotSessionAllarmeEquipaggioView(APIView):
+    """
+    POST /api/pilot/session/allarme-equipaggio/
+    Body: { "allarme": "crociera"|"giallo"|"rosso"|"nero"|"blu" }
+    """
+
+    authentication_classes = [PilotConsoleTokenAuthentication]
+    permission_classes = [IsPilotConsole]
+
+    def post(self, request):
+        pilota = get_pilot_from_request(request)
+        sessione = _sessione_pilota_operativa(pilota)
+        if sessione is None:
+            return Response({"error": "Nessuna sessione attiva."}, status=status.HTTP_400_BAD_REQUEST)
+        allarme = request.data.get("allarme")
+        try:
+            annuncio = imposta_allarme_equipaggio_sessione(sessione, allarme)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        sessione.refresh_from_db()
+        payload = _build_state_payload(sessione, pilota)
+        payload["announcement"] = annuncio
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class PilotAllarmeLedStateView(APIView):
+    """
+    GET /api/pilot/allarme-led/state/
+    Stato cromatico per futuri dispositivi LED WiFi (polling LAN, senza auth).
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        sessione = _sessione_attiva_corrente()
+        return Response(build_allarme_led_payload(sessione))
 
 
 class PilotTickRuntimeStatusView(APIView):
@@ -1676,10 +1894,10 @@ def _build_staff_sessione_live_payload(sessione: Optional[SessioneVolo]) -> dict
         return {
             "sessione": None,
             "decollo_effettuato": False,
+            "sessione_terminata": False,
             "eventi_attivi": [],
             "sottosistemi": [],
         }
-    from .engine import _sessione_ha_decollato
 
     _ensure_runtime_subsystems(sessione)
     stati_qs = (
@@ -1698,6 +1916,7 @@ def _build_staff_sessione_live_payload(sessione: Optional[SessioneVolo]) -> dict
     return {
         "sessione": SessioneVoloSerializer(sessione).data,
         "decollo_effettuato": _sessione_ha_decollato(sessione),
+        "sessione_terminata": sessione.is_terminata,
         "eventi_attivi": EventoAttivoSerializer(pending, many=True).data,
         "sottosistemi": StatoSottosistemaRuntimeSerializer(stati_qs, many=True).data,
     }
@@ -1712,9 +1931,7 @@ class StaffSessioneLiveView(APIView):
     permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get(self, request):
-        sessione = _sessione_attiva_corrente()
-        if sessione is not None and sessione.stato != SESSIONE_STATO_VOLO:
-            sessione = None
+        sessione = _sessione_staff_operativa()
         return Response(_build_staff_sessione_live_payload(sessione))
 
 
@@ -1727,10 +1944,10 @@ class StaffSessioneSottosistemaAzioneView(APIView):
     permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def post(self, request):
-        sessione = _sessione_attiva_corrente()
-        if sessione is None or sessione.stato != SESSIONE_STATO_VOLO:
+        sessione = _sessione_staff_operativa()
+        if sessione is None:
             return Response(
-                {"error": "Nessuna sessione di volo attiva."},
+                {"error": "Nessuna sessione console disponibile."},
                 status=status.HTTP_409_CONFLICT,
             )
 

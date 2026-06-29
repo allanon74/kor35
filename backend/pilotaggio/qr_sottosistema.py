@@ -426,6 +426,10 @@ def ripristina_sottosistema_da_qr(
             "updated_at",
         ]
     )
+    if sessione is not None:
+        from .engine import marca_immunita_riparazione
+
+        marca_immunita_riparazione(sessione, sottosistema.pk)
 
     payload = build_scan_payload(
         qr_code=qr_code,

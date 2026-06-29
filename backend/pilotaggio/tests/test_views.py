@@ -174,7 +174,7 @@ class SessioneEndToEndTests(TestCase):
         self.assertEqual(res_state.status_code, 200, res_state.content)
         self.assertEqual(res_state.json()["sessione"]["stato"], SESSIONE_STATO_IDLE)
 
-    def test_start_passa_a_decollo(self):
+    def test_start_passa_a_volo_pre_decollo(self):
         res = self.client_api.post(
             "/api/pilot/session/start/",
             {"prefettura_partenza_id": self.partenza.pk, "prefettura_arrivo_id": self.arrivo.pk},
@@ -182,7 +182,8 @@ class SessioneEndToEndTests(TestCase):
         )
         self.assertEqual(res.status_code, 200, res.content)
         body = res.json()
-        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_DECOLLO)
+        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_VOLO)
+        self.assertFalse(body["decollo_effettuato"])
 
     def test_command_esegue_sequenza_decollo(self):
         self.client_api.post(
@@ -330,6 +331,33 @@ class StaffSessioneLiveTests(TestCase):
         stato.refresh_from_db()
         self.assertTrue(stato.online)
         self.assertEqual(stato.livello_attuale, 3)
+
+    def test_sessione_live_idle(self):
+        self.sessione.stato = SESSIONE_STATO_IDLE
+        self.sessione.decollo_completato_at = None
+        self.sessione.save(update_fields=["stato", "decollo_completato_at", "updated_at"])
+        res = self.client.get("/api/pilot/staff/sessione-live/")
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertEqual(body["sessione"]["stato"], SESSIONE_STATO_IDLE)
+        self.assertFalse(body["decollo_effettuato"])
+
+    def test_takeoff_flow(self):
+        from pilotaggio.models import PilotConsoleToken
+
+        self.sessione.decollo_completato_at = None
+        self.sessione.save(update_fields=["decollo_completato_at", "updated_at"])
+        token = PilotConsoleToken.objects.create(
+            pilota=self.pilota, token=PilotConsoleToken.genera_token()
+        )
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"PilotToken {token.token}")
+        res = client.post("/api/pilot/session/takeoff/", {}, format="json")
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertIn("announcement", res.json())
+        res2 = client.post("/api/pilot/session/takeoff/complete/", {}, format="json")
+        self.assertEqual(res2.status_code, 200, res2.content)
+        self.assertTrue(res2.json()["decollo_effettuato"])
 
 
 class StaffSerbatoioCarburanteTests(TestCase):

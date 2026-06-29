@@ -192,6 +192,46 @@ export default function App() {
     }
   }, [refreshState]);
 
+  const handleTakeoff = useCallback(async () => {
+    setError('');
+    setCommandStatus('Sequenza di decollo in corso...');
+    try {
+      const prep = await api.takeoffPrepare();
+      const { speakItalianAnnouncement } = await import('./pilotAlerts.js');
+      await speakItalianAnnouncement(prep?.announcement || '');
+      const res = await api.takeoffComplete();
+      setState(res);
+      saveCachedState(res);
+      setCommandStatus('Decollo completato. Crociera attiva.');
+      await refreshState();
+    } catch (e) {
+      setError(e.message || 'Errore decollo.');
+      setCommandStatus(`Errore decollo: ${e.message || 'non riuscito'}`);
+    }
+  }, [refreshState]);
+
+  const handleLanding = useCallback(async () => {
+    setError('');
+    try {
+      const res = await api.landing();
+      setState(res);
+      saveCachedState(res);
+      setCommandStatus('Atterraggio eseguito.');
+      await refreshState();
+    } catch (e) {
+      setError(e.message || 'Errore atterraggio.');
+      setCommandStatus(`Errore atterraggio: ${e.message || 'non riuscito'}`);
+    }
+  }, [refreshState]);
+
+  const handleSetAllarme = useCallback(async (allarme) => {
+    setError('');
+    const res = await api.setAllarmeEquipaggio(allarme);
+    setState(res);
+    saveCachedState(res);
+    return res;
+  }, []);
+
   const handleSubsystemSet = useCallback(async (payload) => {
     setError('');
     setCommandStatus('Invio comando in corso...');
@@ -297,6 +337,9 @@ export default function App() {
                 online={online}
                 onAbort={handleAbort}
                 onEmergencyLanding={handleEmergencyLanding}
+                onTakeoff={handleTakeoff}
+                onLanding={handleLanding}
+                onSetAllarme={handleSetAllarme}
                 onLogout={handleLogout}
                 onResetSession={handleResetSession}
                 tentativi={tentativi}

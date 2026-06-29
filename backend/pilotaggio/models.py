@@ -626,6 +626,17 @@ class SessioneVolo(SyncableModel, models.Model):
         blank=True,
         help_text="Timestamp dell'ultimo tick motore applicato (throttle poll API / worker).",
     )
+    allarme_equipaggio = models.CharField(
+        max_length=16,
+        default="crociera",
+        db_index=True,
+        help_text="Allarme equipaggio manuale (Giallo/Rosso/Nero/Blu) o crociera.",
+    )
+    allarme_equipaggio_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Ultimo cambio allarme equipaggio (sync LED WiFi).",
+    )
 
     class Meta:
         verbose_name = "Sessione di volo"

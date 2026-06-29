@@ -455,6 +455,8 @@ class SessioneVoloSerializer(serializers.ModelSerializer):
             "distanza_target",
             "distanza_percorsa",
             "crash_reason",
+            "allarme_equipaggio",
+            "allarme_equipaggio_at",
         ]
         read_only_fields = fields
 

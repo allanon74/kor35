@@ -1828,7 +1828,7 @@ export default function PilotaggioManager({ onLogout }) {
           <div>
             <h3 className="font-semibold text-amber-200">Sessione live — guasto / riparazione</h3>
             <p className="text-xs text-gray-400 mt-1">
-              Azioni sul volo attivo corrente (stato <code className="text-amber-100">volo</code>).
+              Controllo manuale sottosistemi (sessione idle, pre-volo o in crociera).
               Aggiornamento automatico ogni 4s.
             </p>
           </div>
@@ -1843,9 +1843,14 @@ export default function PilotaggioManager({ onLogout }) {
         </div>
 
         {!sessioneLive?.sessione ? (
-          <p className="text-gray-400 text-sm">Nessun volo attivo in questo momento.</p>
+          <p className="text-gray-400 text-sm">Nessuna sessione console disponibile.</p>
         ) : (
           <>
+            {sessioneLive.sessione_terminata ? (
+              <p className="text-amber-300 text-sm rounded-lg border border-amber-800/50 bg-amber-950/20 p-2">
+                Ultimo volo terminato ({sessioneLive.sessione.stato}) — i sottosistemi restano controllabili manualmente.
+              </p>
+            ) : null}
             <div className="grid md:grid-cols-4 gap-3 text-sm">
               <div className="rounded-lg border border-gray-700 bg-gray-950/50 p-3">
                 <div className="text-xs text-gray-500 uppercase">Pilota</div>
@@ -1862,7 +1867,11 @@ export default function PilotaggioManager({ onLogout }) {
               <div className="rounded-lg border border-gray-700 bg-gray-950/50 p-3">
                 <div className="text-xs text-gray-500 uppercase">Decollo</div>
                 <div className={sessioneLive.decollo_effettuato ? 'text-emerald-400' : 'text-amber-300'}>
-                  {sessioneLive.decollo_effettuato ? 'In crociera' : 'A terra (motori off)'}
+                  {sessioneLive.decollo_effettuato
+                    ? 'In crociera'
+                    : sessioneLive.sessione.stato === 'idle'
+                      ? 'A terra (idle)'
+                      : 'Pre-volo (motori off)'}
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
                   Distanza {Math.round(sessioneLive.sessione.distanza_percorsa || 0)} / {Math.round(sessioneLive.sessione.distanza_target || 0)}

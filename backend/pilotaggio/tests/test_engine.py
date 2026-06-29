@@ -401,14 +401,29 @@ class SequenzeVoloTests(TestCase):
         self.assertEqual(s.defcon, 1)
 
     def test_sequenza_atterraggio_completa_porta_ad_arrivata(self):
+        sottos, _ = SottosistemaNave.objects.get_or_create(
+            codice="Z",
+            defaults={"nome": "Test off", "attivo": True},
+        )
         s = SessioneVolo.objects.create(
             pilota=self.pilota, stato=SESSIONE_STATO_ATTERRAGGIO,
             durata_pianificata_secondi=600,
+        )
+        StatoSottosistemaSessione.objects.create(
+            sessione=s,
+            sottosistema=sottos,
+            online=True,
+            livello_attuale=5,
+            livello_target=5,
         )
         processa_codice(s, "X11")
         processa_codice(s, "Y22")
         s.refresh_from_db()
         self.assertEqual(s.stato, SESSIONE_STATO_ARRIVATA)
+        stato = StatoSottosistemaSessione.objects.get(sessione=s, sottosistema=sottos)
+        self.assertFalse(stato.online)
+        self.assertEqual(stato.livello_attuale, 0)
+        self.assertEqual(stato.livello_target, 0)
 
 
 class ComandoCriticoGlobaleTests(TestCase):

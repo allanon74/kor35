@@ -16,7 +16,7 @@ export default function IdleScreen({ prefetture, onStart, error, busy }) {
   return (
     <div className="center-screen">
       <h1>KOR-35 // PRECONTROLLO</h1>
-      <p>Stato nave: 0 - DISATTIVA. Imposta rotta e premi decollo per iniziare.</p>
+      <p>Stato nave: 0 - DISATTIVA. Imposta rotta e accedi alla plancia per i controlli pre-volo.</p>
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
         <label>
           <div className="banner" style={{ padding: 0, border: 0, marginBottom: '0.3rem' }}>
@@ -51,12 +51,13 @@ export default function IdleScreen({ prefetture, onStart, error, busy }) {
             disabled={busy || !partenzaId || !arrivoId}
             onClick={() => onStart(Number(partenzaId), Number(arrivoId))}
           >
-            Decollo
+            Prepara missione
           </button>
         </div>
         {error && <div className="error">{error}</div>}
         <p className="note">
-          Distanza viaggio iniziale randomica (1000..10000). Dopo il decollo, gestisci i sottosistemi dalla plancia.
+          Distanza viaggio iniziale randomica (1000..10000). Dalla plancia regola i sottosistemi,
+          poi usa <strong>Decollo</strong> sul propulsore principale per iniziare il volo.
         </p>
       </div>
     </div>

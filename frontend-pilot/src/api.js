@@ -79,6 +79,14 @@ export const api = {
     method: 'POST', body: payload,
   }),
   emergencyLanding: () => request('/api/pilot/session/emergency-landing/', { method: 'POST' }),
+  takeoffPrepare: () => request('/api/pilot/session/takeoff/', { method: 'POST' }),
+  takeoffComplete: () => request('/api/pilot/session/takeoff/complete/', { method: 'POST' }),
+  landing: () => request('/api/pilot/session/landing/', { method: 'POST' }),
+  setAllarmeEquipaggio: (allarme) => request('/api/pilot/session/allarme-equipaggio/', {
+    method: 'POST',
+    body: { allarme },
+  }),
+  allarmeLedState: () => request('/api/pilot/allarme-led/state/', { auth: false }),
   abort: () => request('/api/pilot/session/abort/', { method: 'POST' }),
   history: () => request('/api/pilot/session/history/'),
   diario: (sessioneId) => {

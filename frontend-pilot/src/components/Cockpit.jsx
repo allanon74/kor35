@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import FlightOpsPanel, { isAlimentazioneGroup } from './FlightOpsPanel.jsx';
 import {
   announceDefconChange,
   playCriticalEventAlarmTick,
@@ -328,10 +329,12 @@ function Subsystems({ sottosistemi, energia }) {
  */
 export default function Cockpit({
   state, online,
-  onAbort, onEmergencyLanding, onLogout, onResetSession, mode = 'both', onSubsystemSet,
+  onAbort, onEmergencyLanding, onTakeoff, onLanding, onSetAllarme,
+  onLogout, onResetSession, mode = 'both', onSubsystemSet,
   error, commandStatus,
 }) {
   const sessione = state.sessione || {};
+  const decolloEffettuato = Boolean(state.decollo_effettuato);
   const eventiAttivi = Array.isArray(state.eventi_attivi)
     ? state.eventi_attivi
     : (state.evento_attivo ? [state.evento_attivo] : []);
@@ -371,6 +374,22 @@ export default function Cockpit({
   const tickAlive = Boolean(state?.tick_runtime?.enabled && state?.tick_runtime?.alive);
   const alarmAudioEnabled = Boolean(state?.tick_runtime?.alarm_audio_enabled);
   const hasCriticalSubsystem = (state.sottosistemi || []).some((s) => Number(s.livello_target || 0) >= 8 && s.online);
+  const motore = (state.sottosistemi || []).find((s) => s.tipo === 'motore');
+  const motoreLivello = Number(motore?.livello_target || 0);
+  const allarmeEquipaggio = state.allarme_equipaggio || 'crociera';
+  const hasAlimentazioneColumn = Object.keys(groupedSystems).some(isAlimentazioneGroup);
+  const flightOpsPanel = (
+    <FlightOpsPanel
+      decolloEffettuato={decolloEffettuato}
+      allarmeEquipaggio={allarmeEquipaggio}
+      motoreLivello={motoreLivello}
+      onTakeoff={onTakeoff}
+      onLanding={onLanding}
+      onEmergencyLanding={onEmergencyLanding}
+      onSetAllarme={onSetAllarme}
+      disabled={!online}
+    />
+  );
 
   useEffect(() => {
     const shouldBeep = tickAlive && alarmAudioEnabled && hasCriticalSubsystem;
@@ -538,6 +557,11 @@ export default function Cockpit({
         isCombinedLayout ? 'cockpit-combined' : '',
       ].filter(Boolean).join(' ')}
     >
+      {!decolloEffettuato ? (
+        <div className="note" style={{ margin: '0.4rem 0.6rem', padding: '0.45rem 0.65rem', border: '1px solid #4a5a20', background: 'rgba(80,96,32,0.25)', borderRadius: 6 }}>
+          PRE-VOLO — regola i sottosistemi; usa <strong>Decollo</strong> nella colonna Alimentazione (motore a 0).
+        </div>
+      ) : null}
       {isCombinedLayout ? (
         <>
           <div className="cockpit-combined-status">
@@ -726,6 +750,7 @@ export default function Cockpit({
                             })()
                           ))}
                         </div>
+                        {isAlimentazioneGroup(groupName) ? flightOpsPanel : null}
                         <div className="system-footer">
                           <div className="system-summary-row">
                             <span>Attivi {clickableSubs.filter((s) => s.online).length}/{clickableSubs.length}</span>
@@ -750,6 +775,15 @@ export default function Cockpit({
                       </div>
                     );
                   })}
+                  {!hasAlimentazioneColumn ? (
+                    <div className={`system-column station-card ${groupTheme('Alimentazione').theme}`}>
+                      <div className="system-title">
+                        <span className="system-icon">{groupTheme('Alimentazione').icon}</span>
+                        <span className="system-name">Alimentazione</span>
+                      </div>
+                      {flightOpsPanel}
+                    </div>
+                  ) : null}
                   {!Object.keys(groupedSystems).length ? (
                     <div className="note">Nessun sottosistema disponibile in sessione. Prova un nuovo Decollo.</div>
                   ) : null}
@@ -933,6 +967,7 @@ export default function Cockpit({
                     })()
                   ))}
                 </div>
+                {isAlimentazioneGroup(groupName) ? flightOpsPanel : null}
                 <div className="system-footer">
                   <div className="system-summary-row">
                     <span>Attivi {clickableSubs.filter((s) => s.online).length}/{clickableSubs.length}</span>
@@ -957,6 +992,15 @@ export default function Cockpit({
               </div>
                 );
               })}
+            {!hasAlimentazioneColumn ? (
+              <div className={`system-column station-card ${groupTheme('Alimentazione').theme}`}>
+                <div className="system-title">
+                  <span className="system-icon">{groupTheme('Alimentazione').icon}</span>
+                  <span className="system-name">Alimentazione</span>
+                </div>
+                {flightOpsPanel}
+              </div>
+            ) : null}
             {!Object.keys(groupedSystems).length ? (
               <div className="note">Nessun sottosistema disponibile in sessione. Prova un nuovo Decollo.</div>
             ) : null}
@@ -1080,20 +1124,6 @@ export default function Cockpit({
                     Invia comando
                   </button>
                 </div>
-                {(selectedSubsystem.tipo === 'motore' && Number(editingLevel || 0) === 0) ? (
-                  <button
-                    type="button"
-                    className="btn danger modal-touch-emergency-bar"
-                    onClick={async () => {
-                      if (!onEmergencyLanding) return;
-                      if (!window.confirm("Confermi l'atterraggio di emergenza?")) return;
-                      await onEmergencyLanding();
-                      setSelectedSubsystem(null);
-                    }}
-                  >
-                    Atterraggio di emergenza
-                  </button>
-                ) : null}
               </div>
             </div>
           </div>

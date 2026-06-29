@@ -77,3 +77,22 @@ export function announceDefconChange(level) {
   utter.volume = 1;
   window.speechSynthesis.speak(utter);
 }
+
+/** Riproduce un annuncio vocale italiano; risolve alla fine della frase. */
+export function speakItalianAnnouncement(text) {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis || !text) {
+      resolve();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(String(text));
+    utter.lang = 'it-IT';
+    utter.rate = 0.9;
+    utter.pitch = 0.88;
+    utter.volume = 1;
+    utter.onend = () => resolve();
+    utter.onerror = () => resolve();
+    window.speechSynthesis.speak(utter);
+  });
+}

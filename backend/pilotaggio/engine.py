@@ -36,7 +36,9 @@ from .models import (
     EventoAttivoSessione,
     EventoNave,
     SESSIONE_STATO_ARRIVATA,
+    SESSIONE_STATO_ATTERRAGGIO,
     SESSIONE_STATO_CRASHED,
+    SESSIONE_STATO_DECOLLO,
     SESSIONE_STATO_IDLE,
     SESSIONE_STATO_VOLO,
     SEQUENZA_ATTERRAGGIO,
@@ -47,6 +49,10 @@ from .models import (
     StatoSottosistemaSessione,
     TentativoCodice,
 )
+
+# Immunita' temporanea al guasto random dopo riparazione manuale (QR/staff).
+REPAIR_IMMUNITY_SECONDS = 45
+_repair_immunity_until: dict[str, datetime] = {}
 
 TIPI_PRODUZIONE = {"generatore"}
 
@@ -368,12 +374,13 @@ def applica_delta_defcon(sessione: SessioneVolo, delta: int) -> int:
     if nuovo < 0:
         nuovo = 0
     if nuovo > DEFCON_MAX:
-        sessione.stato = SESSIONE_STATO_CRASHED
-        sessione.ended_at = timezone.now()
-        sessione.defcon = DEFCON_MAX + 1
-        sessione.crash_reason = "defcon_overflow"
-        sessione.save(
-            update_fields=["stato", "ended_at", "defcon", "crash_reason", "updated_at"]
+        termina_sessione_volo(
+            sessione,
+            SESSIONE_STATO_CRASHED,
+            extra_update_fields={
+                "defcon": DEFCON_MAX + 1,
+                "crash_reason": "defcon_overflow",
+            },
         )
         from .flight_log import log_precipizio
 
@@ -393,12 +400,13 @@ def forza_precipizio(
     """
     Precipitazione immediata: stato crashed e DEFCON a DEFCON_MAX+1 (es. 6 se MAX=5).
     """
-    sessione.stato = SESSIONE_STATO_CRASHED
-    sessione.ended_at = timezone.now()
-    sessione.defcon = DEFCON_MAX + 1
-    sessione.crash_reason = reason or "catastrophic_event"
-    sessione.save(
-        update_fields=["stato", "ended_at", "defcon", "crash_reason", "updated_at"]
+    termina_sessione_volo(
+        sessione,
+        SESSIONE_STATO_CRASHED,
+        extra_update_fields={
+            "defcon": DEFCON_MAX + 1,
+            "crash_reason": reason or "catastrophic_event",
+        },
     )
     from .flight_log import log_precipizio
 
@@ -431,8 +439,32 @@ def get_o_crea_stato_sottosistema(
     return stato
 
 
+def _repair_immunity_key(sessione: SessioneVolo, sottosistema_id) -> str:
+    return f"{sessione.pk}:{sottosistema_id}"
+
+
+def marca_immunita_riparazione(sessione: SessioneVolo, sottosistema_id) -> None:
+    """Evita guasto random immediato dopo riparazione manuale (QR/staff)."""
+    _repair_immunity_until[_repair_immunity_key(sessione, sottosistema_id)] = (
+        timezone.now() + timedelta(seconds=REPAIR_IMMUNITY_SECONDS)
+    )
+
+
+def _ha_immunita_riparazione(sessione: SessioneVolo, sottosistema_id) -> bool:
+    key = _repair_immunity_key(sessione, sottosistema_id)
+    until = _repair_immunity_until.get(key)
+    if until is None:
+        return False
+    if until <= timezone.now():
+        _repair_immunity_until.pop(key, None)
+        return False
+    return True
+
+
 def applica_recoveries_pendenti(sessione: SessioneVolo) -> None:
     """Riporta online i sottosistemi il cui recovery_at programmato (staff) e' scaduto."""
+    if sessione.is_terminata:
+        return
     now = timezone.now()
     qs = StatoSottosistemaSessione.objects.filter(
         sessione=sessione, online=False, recovery_at__isnull=False, recovery_at__lte=now
@@ -442,6 +474,7 @@ def applica_recoveries_pendenti(sessione: SessioneVolo) -> None:
         st.recovery_at = None
         st.guasto_at = None
         st.save(update_fields=["online", "recovery_at", "guasto_at", "updated_at"])
+        marca_immunita_riparazione(sessione, st.sottosistema_id)
 
 
 def _clamp_livello(val: int) -> int:
@@ -576,9 +609,10 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
             sessione.carburante_attuale + float(sessione.coeff_rigenerazione_carburante_riposo or 0.0),
         )
 
-    # End-of-energy: zero carburante + zero batterie + zero produzione => crash immediato.
+    # End-of-energy: solo in crociera (dopo decollo esplicito).
     if (
-        float(sessione.carburante_attuale or 0.0) <= 0.0
+        _sessione_ha_decollato(sessione)
+        and float(sessione.carburante_attuale or 0.0) <= 0.0
         and float(sessione.storage_energia_attuale or 0.0) <= 0.0
         and float(produzione or 0.0) <= 0.0
     ):
@@ -598,15 +632,16 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
         forza_precipizio(sessione, reason="end_of_energy")
         return
 
-    # Formula richiesta: base_motore * potenza_motore * (coeff_portale * livello_portale).
-    moltiplicatore_portale = max(0.0, coeff_portale * float(livello_portale))
-    velocita_motore = velocita_motore_base * moltiplicatore_portale
-    velocita_motore += (spinta_manovra_avanti * 0.35)
-    velocita_motore -= (spinta_manovra_indietro * 0.35)
-    sessione.distanza_percorsa = min(
-        float(sessione.distanza_target or 0.0),
-        float(sessione.distanza_percorsa or 0.0) + max(0.0, velocita_motore),
-    )
+    # Avanzamento distanza solo dopo decollo esplicito (comando pilota).
+    if _sessione_ha_decollato(sessione):
+        moltiplicatore_portale = max(0.0, coeff_portale * float(livello_portale))
+        velocita_motore = velocita_motore_base * moltiplicatore_portale
+        velocita_motore += (spinta_manovra_avanti * 0.35)
+        velocita_motore -= (spinta_manovra_indietro * 0.35)
+        sessione.distanza_percorsa = min(
+            float(sessione.distanza_target or 0.0),
+            float(sessione.distanza_percorsa or 0.0) + max(0.0, velocita_motore),
+        )
     sessione.produzione_ultimo_tick = round(produzione, 3)
     sessione.consumo_ultimo_tick = round(consumo_energia, 3)
     sessione.save(
@@ -621,10 +656,14 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
             "updated_at",
         ]
     )
-    _marca_crociera_se_spinta(sessione)
+
+    if not _sessione_ha_decollato(sessione):
+        return
 
     for st in stati:
         if not st.online:
+            continue
+        if _ha_immunita_riparazione(sessione, st.sottosistema_id):
             continue
         p_guasto = _prob_guasto_per_livello(st)
         if p_guasto <= 0:
@@ -632,12 +671,14 @@ def _avanza_energia_sessione(sessione: SessioneVolo) -> None:
         if random.random() < p_guasto:
             st.online = False
             st.guasto_at = timezone.now()
+            st.recovery_at = None
             st.livello_attuale = 0
             st.livello_target = 0
             st.save(
                 update_fields=[
                     "online",
                     "guasto_at",
+                    "recovery_at",
                     "livello_attuale",
                     "livello_target",
                     "updated_at",
@@ -710,9 +751,19 @@ def _applica_effetto_configurato(
         if target and target.online:
             target.online = False
             target.guasto_at = timezone.now()
+            target.recovery_at = None
             target.livello_target = 0
             target.livello_attuale = 0
-            target.save(update_fields=["online", "guasto_at", "livello_target", "livello_attuale", "updated_at"])
+            target.save(
+                update_fields=[
+                    "online",
+                    "guasto_at",
+                    "recovery_at",
+                    "livello_target",
+                    "livello_attuale",
+                    "updated_at",
+                ]
+            )
         return
     if tipo == "guasto_random_percent":
         p = max(0.0, min(100.0, valore)) / 100.0
@@ -728,9 +779,19 @@ def _applica_effetto_configurato(
         target = random.choice(pool)
         target.online = False
         target.guasto_at = timezone.now()
+        target.recovery_at = None
         target.livello_target = 0
         target.livello_attuale = 0
-        target.save(update_fields=["online", "guasto_at", "livello_target", "livello_attuale", "updated_at"])
+        target.save(
+            update_fields=[
+                "online",
+                "guasto_at",
+                "recovery_at",
+                "livello_target",
+                "livello_attuale",
+                "updated_at",
+            ]
+        )
 
 
 def applica_effetto_inversione(sessione: SessioneVolo, stato: StatoSottosistemaSessione) -> None:
@@ -964,6 +1025,9 @@ def _forza_guasto_stato_sottosistema(
     ts = now or timezone.now()
     stato.online = False
     stato.guasto_at = ts
+    stato.recovery_at = None
+    stato.livello_target = 0
+    stato.livello_attuale = 0
     stato.save(
         update_fields=[
             "online",
@@ -1323,10 +1387,112 @@ def _marca_crociera_se_spinta(sessione: SessioneVolo) -> None:
 
 def _sessione_ha_decollato(sessione: SessioneVolo) -> bool:
     """
-    Crociera iniziata: almeno un motore e' stato acceso almeno una volta in questa sessione.
-    Non basta la distanza (manovra/portale) ne' lo stato sessione «volo».
+    Crociera iniziata: decollo confermato esplicitamente dal pilota (non basta accendere i motori).
     """
     return sessione.decollo_completato_at is not None
+
+
+def percentuale_sistemi_operativi(sessione: SessioneVolo) -> int:
+    """Percentuale sottosistemi comandabili online (esclusi serbatoio/batteria)."""
+    qs = (
+        StatoSottosistemaSessione.objects.filter(
+            sessione=sessione,
+            sottosistema__attivo=True,
+        )
+        .exclude(sottosistema__tipo__in=["batteria", "serbatoio"])
+    )
+    total = qs.count()
+    if total <= 0:
+        return 100
+    online = qs.filter(online=True).count()
+    return int(round(100.0 * online / total))
+
+
+def build_annuncio_decollo(sessione: SessioneVolo) -> str:
+    pct = percentuale_sistemi_operativi(sessione)
+    return (
+        "Attenzione. Allarme Blu. "
+        "Mist Gider in decollo. Portelloni in chiusura. "
+        f"Sistemi operativi al {pct} per cento. "
+        "Propulsori di decollo attivati. "
+        "Apertura del portale nei sentieri completa."
+    )
+
+
+@transaction.atomic
+def completa_decollo_sessione(sessione: SessioneVolo) -> SessioneVolo:
+    """Segna il decollo effettivo: abilita eventi, distanza e guasti random da stress."""
+    sessione = SessioneVolo.objects.select_for_update().get(pk=sessione.pk)
+    if sessione.is_terminata:
+        raise ValueError("Sessione terminata.")
+    if sessione.stato != SESSIONE_STATO_VOLO:
+        raise ValueError("Decollo disponibile solo con missione attiva.")
+    if _sessione_ha_decollato(sessione):
+        return sessione
+    sessione.decollo_completato_at = timezone.now()
+    sessione.save(update_fields=["decollo_completato_at", "updated_at"])
+    from .flight_log import log_decollo
+
+    log_decollo(sessione)
+    return sessione
+
+
+def spegni_tutti_sottosistemi(sessione: SessioneVolo) -> None:
+    """
+    A fine volo o precipizio: tutti i sottosistemi spenti (offline, livello 0),
+    nessun timer di ripristino. Sincronizza lo stato persistente sulla nave.
+    """
+    stati = StatoSottosistemaSessione.objects.filter(sessione=sessione).select_related(
+        "sottosistema"
+    )
+    off_fields = [
+        "online",
+        "livello_attuale",
+        "livello_target",
+        "recovery_at",
+        "guasto_at",
+        "updated_at",
+    ]
+    for st in stati:
+        st.online = False
+        st.livello_attuale = 0
+        st.livello_target = 0
+        st.recovery_at = None
+        st.guasto_at = None
+        st.save(update_fields=off_fields)
+    for key in list(_repair_immunity_until.keys()):
+        if key.startswith(f"{sessione.pk}:"):
+            _repair_immunity_until.pop(key, None)
+
+
+def finalizza_volo_sottosistemi(sessione: SessioneVolo) -> None:
+    """Spegnimento completo al termine del volo (arrivo, emergenza, crash)."""
+    spegni_tutti_sottosistemi(sessione)
+
+
+def termina_sessione_volo(
+    sessione: SessioneVolo,
+    nuovo_stato: str,
+    *,
+    extra_update_fields: Optional[dict] = None,
+) -> SessioneVolo:
+    """
+    Chiude una sessione di volo e spegne tutti i sottosistemi (default a terra).
+    """
+    sessione.stato = nuovo_stato
+    sessione.ended_at = timezone.now()
+    update_fields = ["stato", "ended_at", "updated_at"]
+    if extra_update_fields:
+        for field, value in extra_update_fields.items():
+            setattr(sessione, field, value)
+            if field not in update_fields:
+                update_fields.append(field)
+    sessione.save(update_fields=update_fields)
+    finalizza_volo_sottosistemi(sessione)
+    from .allarme_equipaggio import reset_allarme_equipaggio_sessione
+
+    reset_allarme_equipaggio_sessione(sessione)
+    return sessione
 
 
 def prepara_sessione_nuovo_volo(sessione: SessioneVolo) -> None:
@@ -1391,8 +1557,6 @@ def staff_azione_sottosistema_sessione(
     """
     from .models import SottosistemaNave
 
-    if sessione.is_terminata:
-        raise ValueError("Sessione terminata.")
     if not isinstance(sottosistema, SottosistemaNave):
         raise ValueError("Sottosistema non valido.")
 
@@ -1437,6 +1601,7 @@ def staff_azione_sottosistema_sessione(
                 "updated_at",
             ]
         )
+        marca_immunita_riparazione(sessione, sottosistema.pk)
         return "ripara", stato
 
     # ripristino programmato
@@ -1554,6 +1719,8 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
     if sessione.is_terminata:
         return TickResult(sessione, None, False, False)
 
+    applica_recoveries_pendenti(sessione)
+
     pending_list = list(
         EventoAttivoSessione.objects.filter(
             sessione=sessione, esito=EVENTO_ESITO_PENDING
@@ -1563,9 +1730,10 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
         for pending in pending_list:
             _programma_prossimo_check_evento_se_manca(pending, sessione)
         if not any(_evento_pronto_per_valutazione(p, sessione) for p in pending_list):
+            _avanza_energia_sessione(sessione)
+            sessione.ultimo_tick_motore_at = timezone.now()
+            sessione.save(update_fields=["ultimo_tick_motore_at", "updated_at"])
             return TickResult(sessione, None, False, False)
-
-    applica_recoveries_pendenti(sessione)
 
     timeout = False
     if _sessione_ha_decollato(sessione):
@@ -1595,9 +1763,7 @@ def tick_sessione(sessione: SessioneVolo) -> TickResult:
         distanza_target = float(sessione.distanza_target or 0.0)
         distanza_percorsa = float(sessione.distanza_percorsa or 0.0)
         if distanza_target > 0 and distanza_percorsa >= distanza_target:
-            sessione.stato = SESSIONE_STATO_ARRIVATA
-            sessione.ended_at = timezone.now()
-            sessione.save(update_fields=["stato", "ended_at", "updated_at"])
+            termina_sessione_volo(sessione, SESSIONE_STATO_ARRIVATA)
             from .flight_log import log_arrivo
 
             log_arrivo(sessione)
@@ -1714,10 +1880,10 @@ def _processa_sequenza(
                 ]
             )
         elif completa and tipo == SEQUENZA_ATTERRAGGIO:
-            sessione.stato = SESSIONE_STATO_ARRIVATA
-            sessione.ended_at = timezone.now()
-            sessione.save(
-                update_fields=[idx_attr, "stato", "ended_at", "updated_at"]
+            termina_sessione_volo(
+                sessione,
+                SESSIONE_STATO_ARRIVATA,
+                extra_update_fields={idx_attr: idx},
             )
         else:
             sessione.save(update_fields=[idx_attr, "updated_at"])
