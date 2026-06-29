@@ -74,7 +74,9 @@ from .models import (
     TentativoCodice,
     VoceDiarioVolo,
 )
-from .permissions import IsPilotConsole, IsStaffUser
+from gestione_plot.permissions import IsStaffOrMaster
+
+from .permissions import IsPilotConsole
 from .serializers import (
     ComandoCriticoGlobaleListSerializer,
     ComandoCriticoGlobaleSerializer,
@@ -1433,7 +1435,7 @@ class PilotPrefettureView(generics.ListAPIView):
 
 
 class StaffSottosistemaViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get_queryset(self):
         from django.db.models import BooleanField, OuterRef, Subquery
@@ -1604,14 +1606,14 @@ class StaffSottosistemaViewSet(viewsets.ModelViewSet):
 class StaffComandoViewSet(viewsets.ModelViewSet):
     queryset = ComandoNave.objects.all().order_by("codice")
     serializer_class = ComandoNaveSerializer
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
 
 class StaffComandoCriticoGlobaleViewSet(viewsets.ModelViewSet):
     """Pattern globali: un codice valido che li matcha precipita la nave subito."""
 
     queryset = ComandoCriticoGlobale.objects.all().order_by("nome", "pattern")
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -1621,7 +1623,7 @@ class StaffComandoCriticoGlobaleViewSet(viewsets.ModelViewSet):
 
 class StaffIntensitaViewSet(viewsets.ModelViewSet):
     queryset = IntensitaComando.objects.all().order_by("valore")
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -1631,7 +1633,7 @@ class StaffIntensitaViewSet(viewsets.ModelViewSet):
 
 class StaffEventoViewSet(viewsets.ModelViewSet):
     queryset = EventoNave.objects.all().order_by("nome")
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -1646,14 +1648,14 @@ class StaffSequenzaViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = SequenzaVolo.objects.all().order_by("tipo", "-created_at")
     serializer_class = SequenzaVoloSerializer
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
 
 class StaffStatoAllertaViewSet(viewsets.ModelViewSet):
     """CRUD livelli DEFCON 0..6 (colori, tempi, nave abbattuta)."""
 
     queryset = StatoAllertaPilot.objects.all().order_by("livello")
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -1664,7 +1666,7 @@ class StaffStatoAllertaViewSet(viewsets.ModelViewSet):
 class StaffSessioneListView(generics.ListAPIView):
     """Elenco sessioni di volo (lettura) per staff."""
 
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
     serializer_class = SessioneVoloSerializer
     queryset = SessioneVolo.objects.all().order_by("-created_at")
 
@@ -1707,7 +1709,7 @@ class StaffSessioneLiveView(APIView):
     Stato runtime della sessione attiva (volo) per pannello staff.
     """
 
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get(self, request):
         sessione = _sessione_attiva_corrente()
@@ -1722,7 +1724,7 @@ class StaffSessioneSottosistemaAzioneView(APIView):
     Body: { sottosistema_id, azione: guasto|ripara|ripristino }
     """
 
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def post(self, request):
         sessione = _sessione_attiva_corrente()
@@ -1765,7 +1767,7 @@ class StaffSessioneSottosistemaAzioneView(APIView):
 
 
 class StaffPilotRuntimeConfigView(APIView):
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get(self, request):
         cfg = PilotRuntimeConfig.get_solo()
@@ -1833,7 +1835,7 @@ class StaffPilotStivaView(APIView):
     POST body {mattone_id, delta} — aggiunge/toglie quantità (staff).
     """
 
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def get(self, request):
         from .componenti_stiva import build_stiva_payload, mattoni_componente_qs
@@ -1878,7 +1880,7 @@ class StaffCoppiaColoriComponenteViewSet(viewsets.ModelViewSet):
         "ordine", "created_at"
     )
     serializer_class = CoppiaColoriComponenteSerializer
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
 
 class StaffAggiornaCodiciEventiView(APIView):
@@ -1888,7 +1890,7 @@ class StaffAggiornaCodiciEventiView(APIView):
     Rigenera codice esatto, parziali e precipizio da stato sottosistemi.
     """
 
-    permission_classes = [IsAuthenticated, IsStaffUser]
+    permission_classes = [IsAuthenticated, IsStaffOrMaster]
 
     def post(self, request):
         from .evento_codici import aggiorna_codici_eventi_da_stato

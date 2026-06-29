@@ -200,7 +200,7 @@ class EdgeSyncQrCodeNaturalPkTests(TestCase):
         master_id = "PRINTEDqr0001"
         local_id = "LOCALauto0001"
         local_updated = timezone.now()
-        remote_updated = local_updated
+        remote_updated = local_updated + timedelta(seconds=5)
 
         qr = QrCode.objects.create(id=local_id, sync_id=master_sync_id, testo="Locale")
         qr.updated_at = local_updated
@@ -226,10 +226,11 @@ class EdgeSyncQrCodeNaturalPkTests(TestCase):
         }
         view = EdgeSyncView()
         result = view._try_apply_one(QrCode, row)
-        self.assertEqual(result, "skipped")
+        self.assertEqual(result, "applied")
 
         qr = QrCode.objects.get(id=master_id)
         self.assertEqual(str(qr.sync_id), str(master_sync_id))
+        self.assertEqual(qr.testo, "Da master")
         self.assertFalse(QrCode.objects.filter(id=local_id).exists())
 
         cfg = MinigiocoQrConfig.objects.get(qr_code=qr)

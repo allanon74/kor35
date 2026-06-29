@@ -118,6 +118,9 @@ def expand_paginaregolamento_queryset_with_ancestors(model: type[models.Model], 
 
 
 PAGINA_REGOLAMENTO_LABEL = "gestione_plot.paginaregolamento"
+QRCODE_MODEL_LABEL = "personaggi.qrcode"
+# Modelli il cui PK non è auto-increment e coincide con un identificatore esterno (es. QR stampato).
+SYNC_NATURAL_PK_LABELS = frozenset({QRCODE_MODEL_LABEL})
 SYNC_MENU_ONLY_KEY = "_sync_menu_only"
 PAGINA_REGOLAMENTO_MENU_FIELD_NAMES = frozenset(
     {
@@ -250,6 +253,46 @@ def rekey_qrcode_primary_key(
         return qr
 
 
+def realign_natural_primary_key(
+    model: type[models.Model],
+    local_obj: models.Model,
+    want_pk: str,
+    pk_name: str,
+    *,
+    sync_id=None,
+    update_data: dict[str, Any] | None = None,
+    remote_updated_at=None,
+) -> bool:
+    """
+    Allinea il PK naturale locale a quello remoto (es. id stampato sul QR fisico).
+    Per QrCode usa rekey (create+migra FK+delete) per rispettare UNIQUE su sync_id.
+    """
+    old_pk = getattr(local_obj, pk_name)
+    want_pk = str(want_pk).strip()
+    if not want_pk or str(old_pk) == want_pk:
+        return True
+
+    if model.objects.filter(**{pk_name: want_pk}).exclude(pk=local_obj.pk).exists():
+        return False
+
+    if model._meta.label_lower == QRCODE_MODEL_LABEL and sync_id is not None:
+        try:
+            rekey_qrcode_primary_key(
+                old_id=str(old_pk),
+                new_id=want_pk,
+                sync_id=sync_id,
+                update_data=update_data,
+                remote_updated_at=remote_updated_at,
+            )
+            return True
+        except IntegrityError:
+            return False
+
+    with transaction.atomic():
+        model.objects.filter(pk=old_pk).update(**{pk_name: want_pk})
+    return True
+
+
 def ensure_qrcode_natural_pk_aligned(
     sync_id,
     row: dict[str, Any],
@@ -305,21 +348,37 @@ def apply_natural_pk_precheck(
         return "noop", local_obj
 
     if local_obj is not None and getattr(local_obj, pk_name) != want_pk:
-        if model.objects.filter(**{pk_name: want_pk}).exists():
+        by_pk = model.objects.filter(**{pk_name: want_pk}).first()
+        if by_pk is not None and str(by_pk.sync_id) != str(sync_id):
+            if (
+                by_pk.updated_at
+                and remote_updated_at
+                and remote_updated_at <= by_pk.updated_at
+            ):
+                return "skipped", by_pk
+            # Record con id fisico corretto ma sync_id locale errato: allinea sync_id e continua apply.
+            patch = dict(update_data)
+            patch["sync_id"] = sync_id
+            if remote_updated_at:
+                patch["updated_at"] = remote_updated_at
+            model.objects.filter(pk=by_pk.pk).update(**patch)
+            if str(local_obj.pk) != str(by_pk.pk):
+                model.objects.filter(pk=local_obj.pk).delete()
+            return "applied", model.objects.filter(pk=by_pk.pk).first()
+        if by_pk is not None and str(by_pk.sync_id) == str(sync_id):
+            local_obj = by_pk
+        elif not realign_natural_primary_key(
+            model,
+            local_obj,
+            want_pk,
+            pk_name,
+            sync_id=sync_id,
+            update_data=update_data,
+            remote_updated_at=remote_updated_at,
+        ):
             return "defer", local_obj
-        if model._meta.label_lower == "personaggi.qrcode":
-            try:
-                rekeyed = rekey_qrcode_primary_key(
-                    old_id=getattr(local_obj, pk_name),
-                    new_id=want_pk,
-                    sync_id=sync_id,
-                    update_data=update_data,
-                    remote_updated_at=remote_updated_at,
-                )
-                return "applied", rekeyed
-            except IntegrityError:
-                return "defer", local_obj
-        return "defer", local_obj
+        else:
+            local_obj = model.objects.filter(sync_id=sync_id).first()
 
     if local_obj is None:
         by_pk = model.objects.filter(**{pk_name: want_pk}).first()
@@ -353,6 +412,8 @@ def serialize_for_sync(instance: models.Model) -> dict[str, Any]:
 
     for field in model._meta.concrete_fields:
         if field.name == "id":
+            if model._meta.label_lower in SYNC_NATURAL_PK_LABELS:
+                data["id"] = getattr(instance, "id", None)
             continue
 
         if isinstance(field, models.ForeignKey):

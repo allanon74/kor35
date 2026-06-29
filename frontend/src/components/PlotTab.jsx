@@ -16,7 +16,7 @@ import { useCharacter } from './CharacterContext';
 import { Plus, X, Save, Printer, Calendar } from 'lucide-react';
 import EventoSection from './EventoSection';
 import GiornoSection from './GiornoSection';
-import QrTab from './QrTab'; 
+import StaffQrTab from './StaffQrTab';
 import RichTextEditor from './RichTextEditor';
 import EventoCoordinatePicker from './editors/EventoCoordinatePicker';
 import { normalizeCoordinatesForSave } from '../utils/eventoCoordinates';
@@ -1164,7 +1164,7 @@ const PlotTab = ({ onLogout }) => {
                         <button type="button" onClick={() => setScanningForVista(null)} className="px-4 py-2 bg-red-600 rounded-lg text-xs font-black shadow-lg">X ANNULLA</button>
                     </div>
                     <div className="flex-1">
-                        <QrTab onScanSuccess={async (qr_id) => {
+                        <StaffQrTab onScanSuccess={async (qr_id) => {
                             try {
                                 await associaQrAVista(scanningForVista, qr_id, onLogout, false);
                                 setScanningForVista(null); 

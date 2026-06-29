@@ -35,7 +35,7 @@ help:
 	@echo "  make env ENV=dev-home        # crea/attiva backend/.env.<env>"
 	@echo "  make setup                   # prepara runtime + build frontend"
 	@echo "  make up                      # avvia stack (con build + collectstatic)"
-	@echo "  make up-no-build             # avvio senza rebuild immagini"
+	@echo "  make up-no-build             # avvio senza rebuild immagini (obbligatorio mirror offline/evento)"
 	@echo "  make up-no-static            # avvio senza collectstatic"
 	@echo "  make migrate                 # esegue migrate nel container backend"
 	@echo "  make makemigrations          # crea migrazioni (opzionale: MAKEMIGRATIONS_APP=personaggi)"
