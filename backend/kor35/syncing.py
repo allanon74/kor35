@@ -231,16 +231,21 @@ def rekey_qrcode_primary_key(
         if QrCode.objects.filter(pk=new_id).exists():
             raise IntegrityError(f"QrCode id={new_id} già esistente")
 
-        # Libera il vincolo UNIQUE su sync_id prima di creare la riga con id master.
-        temp_sync_id = uuid.uuid4()
-        QrCode.objects.filter(pk=old_id).update(sync_id=temp_sync_id)
-
+        saved_vista_id = old.vista_id
         create_data = {f.name: getattr(old, f.name) for f in QrCode._meta.concrete_fields}
         create_data.update(patch)
+
+        # Libera UNIQUE su sync_id e vista_id (OneToOne) prima di inserire la riga con id master.
+        temp_sync_id = uuid.uuid4()
+        QrCode.objects.filter(pk=old_id).update(sync_id=temp_sync_id, vista_id=None)
+
         create_data["id"] = new_id
         create_data["sync_id"] = sync_id
         if remote_updated_at:
             create_data["updated_at"] = remote_updated_at
+        if "vista" not in patch:
+            create_data["vista_id"] = saved_vista_id
+
         qr = QrCode(**create_data)
         qr.save()
 

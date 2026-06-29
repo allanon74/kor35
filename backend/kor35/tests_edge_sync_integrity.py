@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from kor35.edge_sync import EdgeSyncView
 from kor35.syncing import serialize_for_sync
-from personaggi.models import MinigiocoQrConfig, Punteggio, QrCode, Tessitura
+from personaggi.models import Manifesto, MinigiocoQrConfig, Punteggio, QrCode, Tessitura
 from pilotaggio.models import SottosistemaNave
 
 
@@ -235,6 +235,41 @@ class EdgeSyncQrCodeNaturalPkTests(TestCase):
 
         cfg = MinigiocoQrConfig.objects.get(qr_code=qr)
         self.assertEqual(cfg.messaggio_pre, "Ciao")
+
+    def test_apply_rekeys_qrcode_with_vista_one_to_one(self):
+        """Rekey non deve violare personaggi_qrcode_vista_id_key."""
+        master_sync_id = uuid.uuid4()
+        master_id = "PRINTEDqr0002"
+        local_id = "LOCALauto0002"
+        manifesto = Manifesto.objects.create(nome="Man rekey", testo="")
+        local_updated = timezone.now()
+        remote_updated = local_updated + timedelta(seconds=5)
+
+        qr = QrCode.objects.create(
+            id=local_id, sync_id=master_sync_id, testo="Locale", vista=manifesto
+        )
+        qr.updated_at = local_updated
+        qr.save(update_fields=["updated_at"])
+
+        row = {
+            "sync_id": str(master_sync_id),
+            "id": master_id,
+            "testo": "Da master",
+            "inventario_presente": False,
+            "inventario_colore_codice": "",
+            "inventario_colore_sfondo": "",
+            "stl_creato": False,
+            "qr_stampato": False,
+            "vista": str(manifesto.sync_id),
+            "updated_at": remote_updated.isoformat(),
+        }
+        view = EdgeSyncView()
+        result = view._try_apply_one(QrCode, row)
+        self.assertEqual(result, "applied")
+
+        qr = QrCode.objects.get(id=master_id)
+        self.assertEqual(qr.vista_id, manifesto.pk)
+        self.assertFalse(QrCode.objects.filter(id=local_id).exists())
 
 
 class EdgeSyncMtiChildLwwTests(TestCase):
