@@ -85,3 +85,10 @@ class Command(BaseCommand):
                 f"(totale atteso {stats['carte_totali']})"
             )
         )
+        if stats.get("bustina_id"):
+            self.stdout.write(
+                f"Bustina demo: {stats['bustina_id']}"
+                + (" (nuova)" if stats.get("bustina_creata") else "")
+            )
+        if stats.get("bustina_qr_id"):
+            self.stdout.write(f"QR bustina: {stats['bustina_qr_id']}")

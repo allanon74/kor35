@@ -6,6 +6,7 @@ Dati: personaggi/data/carte_esempio_sette_elegie.json
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 from django.db import transaction
@@ -177,6 +178,55 @@ def _card_defaults(row: dict, espansione) -> dict:
     return out
 
 
+def _upsert_bustina(campagna, espansione, meta: dict, *, force: bool):
+    from personaggi.carte_collezionabili_models import BustinaCarte
+    from personaggi.bustina_carte_avista import ensure_bustina_qr
+
+    nome = meta["nome"]
+    defaults = {
+        "descrizione": meta.get("descrizione") or "",
+        "costo_crediti": Decimal(str(meta.get("costo_crediti") or "0")),
+        "carte_per_bustina": int(meta.get("carte_per_bustina") or 5),
+        "garantisce_min_rarita": meta.get("garantisce_min_rarita") or "",
+        "set_collezione": espansione.slug,
+        "ordine": int(meta.get("ordine") or 0),
+        "attiva": True,
+        "espansione": espansione,
+    }
+    bustina, created = BustinaCarte.objects.get_or_create(
+        campagna=campagna,
+        espansione=espansione,
+        nome=nome,
+        defaults=defaults,
+    )
+    if not created and force:
+        for key, val in defaults.items():
+            setattr(bustina, key, val)
+        bustina.save()
+
+    qr_id = None
+    if meta.get("con_qr", True):
+        qr, _portale = ensure_bustina_qr(bustina)
+        qr_id = qr.id
+
+    return bustina, created, qr_id
+
+
+def _ensure_config_carte_playtest(campagna):
+    """Abilita tab carte in OPEN se la config manca o è spenta."""
+    from personaggi.carte_collezionabili_models import CARTE_ACCESSO_OPEN, ConfigurazioneCarteCollezionabili
+
+    cfg, created = ConfigurazioneCarteCollezionabili.objects.get_or_create(
+        campagna=campagna,
+        defaults={"abilitata": True, "accesso_modo": CARTE_ACCESSO_OPEN},
+    )
+    if not created and (not cfg.abilitata or cfg.accesso_modo == "OFF"):
+        cfg.abilitata = True
+        cfg.accesso_modo = CARTE_ACCESSO_OPEN
+        cfg.save(update_fields=["abilitata", "accesso_modo", "updated_at"])
+    return cfg
+
+
 @transaction.atomic
 def seed_carte_esempio(
     *,
@@ -192,6 +242,7 @@ def seed_carte_esempio(
 
     payload = load_carte_esempio_payload()
     campagna = _resolve_campagna(campagna_slug)
+    _ensure_config_carte_playtest(campagna)
     esp_meta = payload["espansione"]
     codici_attesi = {row["codice"] for row in payload["carte"]}
 
@@ -202,7 +253,17 @@ def seed_carte_esempio(
                 codice__in=codici_attesi,
             ).values_list("codice", flat=True)
         )
-        if presenti == codici_attesi:
+        bustina_meta = payload.get("bustina")
+        bustina_ok = True
+        if bustina_meta:
+            from personaggi.carte_collezionabili_models import BustinaCarte
+
+            bustina_ok = BustinaCarte.objects.filter(
+                campagna=campagna,
+                espansione__slug=esp_meta["slug"],
+                nome=bustina_meta["nome"],
+            ).exists()
+        if presenti == codici_attesi and bustina_ok:
             return {
                 "campagna": campagna.slug,
                 "skipped": True,
@@ -233,6 +294,16 @@ def seed_carte_esempio(
             carta.save()
             carte_aggiornate += 1
 
+    bustina_id = None
+    bustina_creata = False
+    bustina_qr_id = None
+    bustina_meta = payload.get("bustina")
+    if bustina_meta:
+        bustina, bustina_creata, bustina_qr_id = _upsert_bustina(
+            campagna, espansione, bustina_meta, force=force
+        )
+        bustina_id = str(bustina.id)
+
     return {
         "campagna": campagna.slug,
         "campagna_nome": campagna.nome,
@@ -243,5 +314,8 @@ def seed_carte_esempio(
         "carte_create": carte_create,
         "carte_aggiornate": carte_aggiornate,
         "carte_totali": len(payload["carte"]),
+        "bustina_id": bustina_id,
+        "bustina_creata": bustina_creata,
+        "bustina_qr_id": bustina_qr_id,
         "skipped": False,
     }

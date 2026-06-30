@@ -5,7 +5,16 @@
     "descrizione": "Venticarte di esempio per playtest duello e bustine. Non canon lore.",
     "ordine": 10
   },
-  "keywords": true,
+    "keywords": true,
+  "bustina": {
+    "nome": "Sette Elegie — bustina demo",
+    "descrizione": "Cinque carte casuali dall'espansione demo. Per playtest e QR evento.",
+    "costo_crediti": "250",
+    "carte_per_bustina": 5,
+    "garantisce_min_rarita": "NC",
+    "ordine": 1,
+    "con_qr": true
+  },
   "carte": [
     {
       "codice": "ELE-PG-001",

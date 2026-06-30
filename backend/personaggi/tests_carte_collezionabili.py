@@ -375,3 +375,7 @@ class CarteEsempioSeedTests(TestCase):
         self.assertTrue(
             KeywordCarta.objects.filter(campagna=self.campagna, codice="COLPO").exists()
         )
+        bustina = BustinaCarte.objects.get(campagna=self.campagna, nome="Sette Elegie — bustina demo")
+        self.assertEqual(bustina.espansione.slug, "sette-elegie-demo")
+        self.assertEqual(bustina.carte_per_bustina, 5)
+        self.assertIsNotNone(bustina.qr_code_id)
