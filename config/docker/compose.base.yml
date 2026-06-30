@@ -43,6 +43,7 @@ services:
     volumes:
       - ../../.runtime-state:/app/runtime-state
       - ../../docs/wiki/staff:/app/wiki_staff_content:ro
+      - ../../docs/wiki/carte:/app/wiki_carte_content:ro
     environment:
       DB_HOST: db
       DB_PORT: "5432"

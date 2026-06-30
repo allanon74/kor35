@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_scommesse, watch_views
+from . import views, views_staff, views_scommesse, views_carte, watch_views
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -137,6 +137,11 @@ router.register(r'staff/campagne-feature-policy', views.CampagnaFeaturePolicyAdm
 router.register(r'staff/scommesse/sport', views_scommesse.SportScommesseStaffViewSet, basename='staff-scommesse-sport')
 router.register(r'staff/scommesse/squadre', views_scommesse.SquadraScommesseStaffViewSet, basename='staff-scommesse-squadre')
 router.register(r'staff/scommesse/calendari', views_scommesse.CalendarioScommesseStaffViewSet, basename='staff-scommesse-calendari')
+router.register(r'staff/carte/espansioni', views_carte.EspansioneCarteStaffViewSet, basename='staff-carte-espansioni')
+router.register(r'staff/carte/catalogo', views_carte.CartaCollezionabileStaffViewSet, basename='staff-carte-catalogo')
+router.register(r'staff/carte/bustine', views_carte.BustinaCarteStaffViewSet, basename='staff-carte-bustine')
+router.register(r'staff/carte/config', views_carte.ConfigurazioneCarteStaffViewSet, basename='staff-carte-config')
+router.register(r'staff/carte/keywords', views_carte.KeywordCartaStaffViewSet, basename='staff-carte-keywords')
 
 urlpatterns = [
     path('api/device/watch/pair/start/', watch_views.WatchPairStartView.as_view(), name='watch-pair-start'),
@@ -327,6 +332,33 @@ urlpatterns = [
     path('api/scommesse/config/', views_scommesse.ScommesseConfigPlayerView.as_view(), name='scommesse-config'),
     path('api/scommesse/squadre/<uuid:squadra_id>/storico/', views_scommesse.ScommesseSquadraStoricoView.as_view(), name='scommesse-squadra-storico'),
     path('api/staff/scommesse/config/', views_scommesse.ScommesseConfigStaffView.as_view(), name='staff-scommesse-config'),
+
+    path('api/carte/stato/', views_carte.CarteStatoGiocatoreView.as_view(), name='carte-stato'),
+    path('api/carte/collezione/', views_carte.CarteCollezionabiliGiocatoreView.as_view(), name='carte-collezione'),
+    path('api/carte/apri-bustina/', views_carte.CarteApriBustinaView.as_view(), name='carte-apri-bustina'),
+    path('api/carte/reliquiario/', views_carte.CarteReliquiarioView.as_view(), name='carte-reliquiario'),
+    path('api/carte/mazzo/', views_carte.CarteMazzoDuelloView.as_view(), name='carte-mazzo'),
+    path('api/carte/duello/', views_carte.CarteDuelloListaView.as_view(), name='carte-duello-lista'),
+    path('api/carte/duello/avversari/', views_carte.CarteDuelloAvversariView.as_view(), name='carte-duello-avversari'),
+    path('api/carte/duello/invita/', views_carte.CarteDuelloInvitaView.as_view(), name='carte-duello-invita'),
+    path('api/carte/duello/accetta/', views_carte.CarteDuelloAccettaView.as_view(), name='carte-duello-accetta-codice'),
+    path('api/carte/duello/<uuid:duello_id>/', views_carte.CarteDuelloDettaglioView.as_view(), name='carte-duello-dettaglio'),
+    path('api/carte/duello/<uuid:duello_id>/accetta/', views_carte.CarteDuelloAccettaView.as_view(), name='carte-duello-accetta'),
+    path('api/carte/duello/<uuid:duello_id>/azione/', views_carte.CarteDuelloAzioneView.as_view(), name='carte-duello-azione'),
+    path('api/carte/duello/<uuid:duello_id>/annulla/', views_carte.CarteDuelloAnnullaView.as_view(), name='carte-duello-annulla'),
+    path('api/carte/scontro/apri/', views_carte.CarteScontroApriView.as_view(), name='carte-scontro-apri'),
+    path('api/carte/scontro/unisciti/', views_carte.CarteScontroUniscitiView.as_view(), name='carte-scontro-unisciti'),
+    path('api/carte/scontro/<uuid:duello_id>/prematch/', views_carte.CarteScontroPrematchView.as_view(), name='carte-scontro-prematch'),
+    path(
+        'api/staff/carte/wiki-regolamento/sync/',
+        views_carte.StaffWikiCarteRegolamentoView.as_view(),
+        name='staff-carte-wiki-regolamento-sync',
+    ),
+    path(
+        'api/staff/carte/effect-schema/',
+        views_carte.StaffCarteEffectSchemaView.as_view(),
+        name='staff-carte-effect-schema',
+    ),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),
     

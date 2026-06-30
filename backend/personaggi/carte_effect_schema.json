@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kor35.it/schemas/carte-effect-script-v1.json",
+  "title": "KOR35 Carte — EffectScript v1",
+  "description": "Script effetti duello carte. Interpretato server-side; parametri [X] dalla keyword.",
+  "type": "object",
+  "required": ["version", "trigger", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/paramDef"
+      }
+    },
+    "trigger": {
+      "$ref": "#/$defs/trigger"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    }
+  },
+  "$defs": {
+    "paramDef": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": ["int", "string"]
+        },
+        "from_placeholder": {
+          "type": "string",
+          "pattern": "^[A-Z]+$"
+        },
+        "default": {
+          "oneOf": [
+            { "type": "integer" },
+            { "type": "string" }
+          ]
+        }
+      }
+    },
+    "trigger": {
+      "type": "object",
+      "required": ["event"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "enum": [
+            "on_play",
+            "on_exhaust",
+            "on_attack",
+            "on_turn_start",
+            "on_turn_end",
+            "manual"
+          ]
+        },
+        "source": {
+          "enum": ["this", "self", "opponent"],
+          "default": "this"
+        }
+      }
+    },
+    "valueRef": {
+      "oneOf": [
+        { "type": "integer" },
+        { "type": "string", "minLength": 1 },
+        {
+          "type": "object",
+          "required": ["ref"],
+          "additionalProperties": false,
+          "properties": {
+            "ref": {
+              "type": "string",
+              "pattern": "^(param\\.[A-Z]+|choice\\.[a-z][a-z0-9_]*|context\\.[a-z][a-z0-9_]*)$"
+            }
+          }
+        }
+      ]
+    },
+    "cardFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "enum": ["card", "hero"],
+          "default": "card"
+        },
+        "zone": {
+          "enum": ["hand", "field", "deck", "discard"]
+        },
+        "owner": {
+          "enum": ["controller", "opponent", "self", "any"]
+        },
+        "occupied": {
+          "type": "boolean",
+          "default": true
+        },
+        "card_type": {
+          "enum": ["PG", "OGG", "LUO", "EVT"]
+        },
+        "cost_play_lte": { "$ref": "#/$defs/valueRef" },
+        "cost_play_gte": { "$ref": "#/$defs/valueRef" },
+        "energy": { "type": "string", "minLength": 2, "maxLength": 3 }
+      }
+    },
+    "stepPlayerChoice": {
+      "type": "object",
+      "required": ["type", "id", "filter"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "player_choice" },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "prompt": { "type": "string", "maxLength": 500 },
+        "optional": { "type": "boolean", "default": false },
+        "min": { "type": "integer", "minimum": 0, "maximum": 15, "default": 0 },
+        "max": { "type": "integer", "minimum": 1, "maximum": 15, "default": 1 },
+        "filter": { "$ref": "#/$defs/cardFilter" }
+      }
+    },
+    "stepReplace": {
+      "type": "object",
+      "required": ["type", "slot", "with"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "replace" },
+        "slot": {
+          "enum": ["this", "hero_0", "hero_1", "location"]
+        },
+        "with": { "$ref": "#/$defs/valueRef" },
+        "skip_if_no_choice": { "type": "boolean", "default": false }
+      }
+    },
+    "stepModifyEnergy": {
+      "type": "object",
+      "required": ["type", "target", "delta"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "modify_energy" },
+        "target": { "enum": ["self", "opponent"] },
+        "delta": { "$ref": "#/$defs/valueRef" }
+      }
+    },
+    "stepModifyInfluence": {
+      "type": "object",
+      "required": ["type", "target", "delta"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "modify_influence" },
+        "target": { "enum": ["self", "opponent"] },
+        "delta": { "$ref": "#/$defs/valueRef" }
+      }
+    },
+    "stepDealDamage": {
+      "type": "object",
+      "required": ["type", "amount"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "deal_damage" },
+        "target": {
+          "oneOf": [
+            {
+              "enum": [
+                "opponent_influence",
+                "hero_0",
+                "hero_1",
+                "opponent_hero_0",
+                "opponent_hero_1"
+              ]
+            },
+            { "$ref": "#/$defs/valueRef" }
+          ],
+          "default": "opponent_influence"
+        },
+        "amount": { "$ref": "#/$defs/valueRef" }
+      }
+    },
+    "stepDrawCards": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "draw_cards" },
+        "count": { "$ref": "#/$defs/valueRef" },
+        "target": { "enum": ["self", "opponent"], "default": "self" }
+      }
+    },
+    "stepMoveCard": {
+      "type": "object",
+      "required": ["type", "from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "move_card" },
+        "card": { "$ref": "#/$defs/valueRef" },
+        "from": { "enum": ["hand", "deck", "discard", "field"] },
+        "to": { "enum": ["hand", "deck", "discard", "field", "exhaust"] },
+        "field_slot": {
+          "enum": ["hero_0", "hero_1", "location", "object_0", "object_1"]
+        }
+      }
+    },
+    "step": {
+      "oneOf": [
+        { "$ref": "#/$defs/stepPlayerChoice" },
+        { "$ref": "#/$defs/stepReplace" },
+        { "$ref": "#/$defs/stepModifyEnergy" },
+        { "$ref": "#/$defs/stepModifyInfluence" },
+        { "$ref": "#/$defs/stepDealDamage" },
+        { "$ref": "#/$defs/stepDrawCards" },
+        { "$ref": "#/$defs/stepMoveCard" }
+      ]
+    }
+  }
+}

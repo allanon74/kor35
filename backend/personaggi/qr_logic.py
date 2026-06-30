@@ -559,6 +559,16 @@ def descrivi_avista_per_associazione_qr(vista_obj):
     if portale:
         return _out("negozio_mercante", portale.negozio)
 
+    from .models import BustinaCartePortale, ScontroCartePortale
+
+    portale_scontro = ScontroCartePortale.objects.filter(pk=pk).select_related("duello").first()
+    if portale_scontro and portale_scontro.duello_id:
+        return _out("scontro_carte", portale_scontro.duello)
+
+    portale_bustina = BustinaCartePortale.objects.filter(pk=pk).select_related("bustina").first()
+    if portale_bustina:
+        return _out("bustina_carte", portale_bustina.bustina)
+
     if InnescoTimer.objects.filter(pk=pk).exists():
         return _out("innesco_timer", InnescoTimer.objects.get(pk=pk))
     if Nodo.objects.filter(pk=pk).exists():

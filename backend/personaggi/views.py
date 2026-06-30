@@ -1589,6 +1589,77 @@ class QrCodeDetailView(APIView):
                 status=status.HTTP_200_OK,
             )
 
+        from personaggi.bustina_carte_avista import bustina_da_vista_pk
+        from personaggi.carte_collezionabili_models import BustinaCarte, DuelloCarte
+        from personaggi.carte_collezionabili_service import serializza_bustina_qr
+        from personaggi.carte_lobby_service import serializza_scontro_qr
+        from personaggi.scontro_carte_avista import duello_da_vista_pk
+
+        duello_lobby = DuelloCarte.objects.filter(qr_code=qr_code).select_related("sfidante", "sfidato").first()
+        if not duello_lobby and qr_code.vista_id:
+            duello_lobby = duello_da_vista_pk(qr_code.vista_id)
+        if duello_lobby and duello_lobby.stato in ("LOB", "PRE"):
+            if not request.user.is_authenticated:
+                return Response({"error": "Autenticazione richiesta."}, status=status.HTTP_401_UNAUTHORIZED)
+            raw_pid = request.query_params.get("personaggio_id")
+            if raw_pid in (None, ""):
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                pid = int(raw_pid)
+            except (TypeError, ValueError):
+                return Response({"error": "personaggio_id non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+            if not scanner_pg:
+                return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+            try:
+                dati = serializza_scontro_qr(duello_lobby, scanner_pg)
+            except ValidationError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {
+                    "tipo_modello": "scontro_carte",
+                    "messaggio": f"Scontro carte — {duello_lobby.sfidante.nome}",
+                    "dati": dati,
+                    "qrcode_id": qr_code.id,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        bustina_carte = BustinaCarte.objects.filter(qr_code=qr_code, attiva=True).first()
+        if not bustina_carte and qr_code.vista_id:
+            candidato = bustina_da_vista_pk(qr_code.vista_id)
+            if candidato and candidato.attiva:
+                bustina_carte = candidato
+        if bustina_carte:
+            if not request.user.is_authenticated:
+                return Response({"error": "Autenticazione richiesta."}, status=status.HTTP_401_UNAUTHORIZED)
+            raw_pid = request.query_params.get("personaggio_id")
+            if raw_pid in (None, ""):
+                return Response(
+                    {"error": "Parametro personaggio_id richiesto."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                pid = int(raw_pid)
+            except (TypeError, ValueError):
+                return Response({"error": "personaggio_id non valido."}, status=status.HTTP_400_BAD_REQUEST)
+            scanner_pg = Personaggio.objects.filter(pk=pid, proprietario=request.user).first()
+            if not scanner_pg:
+                return Response({"error": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+            dati = serializza_bustina_qr(bustina_carte, scanner_pg)
+            return Response(
+                {
+                    "tipo_modello": "bustina_carte",
+                    "messaggio": dati.get("nome") or f"Bustina: {bustina_carte.nome}",
+                    "dati": dati,
+                    "qrcode_id": qr_code.id,
+                },
+                status=status.HTTP_200_OK,
+            )
+
         configurazione_timer = getattr(qr_code, "configurazione_timer", None)
         if configurazione_timer:
             return self.gestisci_scansione_timer(configurazione_timer)

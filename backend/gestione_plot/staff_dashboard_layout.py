@@ -43,6 +43,7 @@ KNOWN_STAFF_TOOL_IDS = frozenset({
     "scommesse",
     "manuali-pdf",
     "negozi-mercante",
+    "carte-collezionabili",
     "personaggi-eliminati",
     "personaggi",
     "regole-transazioni",
@@ -67,6 +68,7 @@ DEFAULT_STAFF_DASHBOARD_LAYOUT: dict[str, Any] = {
                 "qr-debug",
                 "scommesse",
                 "negozi-mercante",
+                "carte-collezionabili",
             ],
         },
         {

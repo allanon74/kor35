@@ -8,7 +8,7 @@ import QrResultModal from './QrResultModal.jsx';
 import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota } from '../api';
+import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 
@@ -17,7 +17,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy,     Store, Ship
+    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard
 } from 'lucide-react';
 
 import AbilitaTab from './AbilitaTab.jsx';
@@ -35,6 +35,7 @@ import WatchTab from './WatchTab.jsx';
 import JobRequestsWidget from './JobRequestsWidget.jsx'; 
 import PersonaggiTab from './PersonaggiTab.jsx';
 import ScommesseTab from './ScommesseTab.jsx';
+import CarteCollezionabiliTab from './CarteCollezionabiliTab.jsx';
 import NegoziMercanteTab from './NegoziMercanteTab.jsx';
 import StivaNaveTab from './StivaNaveTab.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
@@ -69,6 +70,7 @@ const AVAILABLE_TABS = [
     { id: 'transazioni', label: 'Transazioni', icon: ArrowRightLeft, component: TransazioniViewer },
     { id: 'personaggi', label: 'Personaggi', icon: Users, component: PersonaggiTab },
     { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: ScommesseTab },
+    { id: 'carte', label: 'Carte', icon: CreditCard, component: CarteCollezionabiliTab, requiresCarteAccess: true },
 ];
 
 const DEFAULT_SHORTCUTS = ['inventario', 'abilita', 'messaggi', 'qr'];
@@ -128,6 +130,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [pilotRecharging, setPilotRecharging] = useState(false);
   const [pilotSaboting, setPilotSaboting] = useState(false);
   const [stivaAccessSigla, setStivaAccessSigla] = useState(DEFAULT_STIVA_ACCESS_STAT_SIGLA);
+  const [carteTabEnabled, setCarteTabEnabled] = useState(false);
   const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -292,12 +295,31 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     );
   }, [selectedCharacterId, selectedCharacterData, punteggiList, stivaAccessSigla]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadCarteStato = async () => {
+      if (!selectedCharacterId) {
+        setCarteTabEnabled(false);
+        return;
+      }
+      try {
+        const stato = await carteGetStato(selectedCharacterId, onLogout);
+        if (!cancelled) setCarteTabEnabled(!!stato?.puo_accedere);
+      } catch {
+        if (!cancelled) setCarteTabEnabled(false);
+      }
+    };
+    loadCarteStato();
+    return () => { cancelled = true; };
+  }, [selectedCharacterId, onLogout]);
+
   const isMainTabVisible = useCallback(
     (tab) => {
       if (tab.requiresStivaAccess) return stivaTabEnabled;
+      if (tab.requiresCarteAccess) return carteTabEnabled;
       return true;
     },
-    [stivaTabEnabled],
+    [stivaTabEnabled, carteTabEnabled],
   );
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
@@ -758,6 +780,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
       setActiveTab('game');
     }
   }, [activeTab, stivaTabEnabled]);
+
+  useEffect(() => {
+    if (activeTab === 'carte' && !carteTabEnabled) {
+      setActiveTab('game');
+    }
+  }, [activeTab, carteTabEnabled]);
 
   useEffect(() => {
     if (activeTab !== 'watch') return;
