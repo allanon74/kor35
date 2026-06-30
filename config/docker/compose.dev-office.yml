@@ -17,6 +17,7 @@ services:
     volumes:
       - ../../backend:/app
       - ../../docs/wiki/staff:/app/wiki_staff_content:ro
+      - ../../docs/wiki/carte:/app/wiki_carte_content:ro
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 
@@ -25,6 +26,7 @@ services:
     volumes:
       - ../../backend:/app
       - ../../docs/wiki/staff:/app/wiki_staff_content:ro
+      - ../../docs/wiki/carte:/app/wiki_carte_content:ro
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 
@@ -33,6 +35,7 @@ services:
     volumes:
       - ../../backend:/app
       - ../../docs/wiki/staff:/app/wiki_staff_content:ro
+      - ../../docs/wiki/carte:/app/wiki_carte_content:ro
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
 

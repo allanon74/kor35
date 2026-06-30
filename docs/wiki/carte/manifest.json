@@ -1,0 +1,30 @@
+{
+  "section": {
+    "slug": "gioco-carte",
+    "titolo": "Gioco carte",
+    "ordine": 850,
+    "intro": "Regole e riferimenti per **Cronache delle Sette Elegie** (carte collezionabili KOR35).\n\nLa bozza è modificabile dalla Wiki staff; la visibilità ai giocatori segue la modalità accesso del gioco (Testing / Aperto)."
+  },
+  "pages": [
+    {
+      "slug": "carte-collezionabili-regolamento",
+      "titolo": "Regolamento carte (bozza)",
+      "source": "regolamento.md",
+      "ordine": 10
+    },
+    {
+      "slug": "carte-keywords-staff",
+      "titolo": "Keyword carte — guida master",
+      "source": "keywords-staff.md",
+      "ordine": 5,
+      "visibile_solo_staff": true
+    },
+    {
+      "slug": "carte-effect-script-v1",
+      "titolo": "EffectScript v1 — vocabolario",
+      "source": "effect-script-v1.md",
+      "ordine": 6,
+      "visibile_solo_staff": true
+    }
+  ]
+}

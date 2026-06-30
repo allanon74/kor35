@@ -1,0 +1,127 @@
+import React from 'react';
+import { CreditCard } from 'lucide-react';
+import IconaPunteggio from '../components/IconaPunteggio';
+import { resolveMediaUrl } from '../api';
+import {
+  CARTA_ENERGIA_LABEL,
+  CARTA_RARITA_LABEL,
+  CARTA_TIPO_LABEL,
+} from './carteConstants';
+import { useCardEnergyTheme } from './useCardEnergyTheme';
+import CardRulesText from './CardRulesText';
+
+const SIZE_CLASS = {
+  sm: 'w-[108px] min-h-[152px] text-[9px]',
+  md: 'w-[168px] min-h-[236px] text-[10px]',
+  lg: 'w-[220px] min-h-[308px] text-xs',
+};
+
+const ART_HEIGHT = {
+  sm: 'h-14',
+  md: 'h-24',
+  lg: 'h-32',
+};
+
+export default function CardFrame({
+  item,
+  carta: cartaProp,
+  selected = false,
+  onClick,
+  compact = false,
+  size: sizeProp,
+  temaEnergie: temaProp,
+  keywords = [],
+  showRules = true,
+  className = '',
+}) {
+  const c = cartaProp || item?.carta || item;
+  if (!c) return null;
+
+  const size = sizeProp || (compact ? 'sm' : 'md');
+  const { getTheme, getFrameStyles } = useCardEnergyTheme(temaProp);
+  const energy = getTheme(c.energia);
+  const styles = getFrameStyles(c.energia);
+  const img = c.immagine_url ? resolveMediaUrl(c.immagine_url) : null;
+  const hasStats = c.attacco != null || c.salute != null;
+
+  const inner = (
+  <>
+    <div className="flex items-center justify-between gap-1 px-2 py-1 font-bold" style={styles.header}>
+      <span
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black"
+        style={{ backgroundColor: 'rgba(0,0,0,0.25)', color: styles.header.color }}
+      >
+        {c.costo_gioco ?? 0}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-center">{c.nome}</span>
+      <span className="flex shrink-0 items-center gap-0.5">
+        {energy.icona_url ? (
+          <IconaPunteggio url={energy.icona_url} color={energy.colore} size="xs" mode="cerchio_inv" />
+        ) : (
+          <span className="rounded px-1 text-[8px] uppercase">{c.energia}</span>
+        )}
+      </span>
+    </div>
+
+    <div className={`relative mx-2 mt-2 overflow-hidden rounded-md border border-black/40 bg-black/30 ${ART_HEIGHT[size]}`}>
+      {img ? (
+        <img src={img} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full items-center justify-center text-gray-600">
+          <CreditCard size={compact ? 22 : 32} />
+        </div>
+      )}
+      <div
+        className="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide"
+        style={{ backgroundColor: 'rgba(0,0,0,0.55)', color: energy.colore }}
+      >
+        {CARTA_RARITA_LABEL[c.rarita] || c.rarita}
+      </div>
+    </div>
+
+    <div
+      className="mx-2 mt-1.5 rounded border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide"
+      style={styles.typeLine}
+    >
+      {CARTA_TIPO_LABEL[c.tipo] || c.tipo}
+      {' · '}
+      {CARTA_ENERGIA_LABEL[c.energia] || energy.nome}
+    </div>
+
+    {showRules && !compact && (
+      <div
+        className="mx-2 mt-1.5 flex-1 rounded border px-2 py-1.5 text-[10px] leading-snug text-gray-200"
+        style={styles.rulesBox}
+      >
+        <p className="line-clamp-4 whitespace-pre-wrap">
+          <CardRulesText text={c.testo_gioco || '—'} keywords={keywords} />
+        </p>
+      </div>
+    )}
+
+    {hasStats && (
+      <div className="mx-2 mb-2 mt-1 flex justify-end gap-2 font-mono text-[10px] font-bold" style={styles.stats}>
+        {c.attacco != null && <span>A{c.attacco}</span>}
+        {c.salute != null && <span>S{c.salute}</span>}
+        {c.iniziativa != null && <span>I{c.iniziativa}</span>}
+      </div>
+    )}
+  </>
+  );
+
+  const baseClass = `relative flex flex-col overflow-hidden rounded-xl border-[3px] text-left transition-transform ${SIZE_CLASS[size]} ${selected ? 'ring-2 ring-white/80 scale-[1.02]' : ''} ${onClick ? 'cursor-pointer hover:scale-[1.02]' : ''} ${className}`;
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={() => onClick(item || c)} className={baseClass} style={styles.wrapper}>
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <div className={baseClass} style={styles.wrapper}>
+      {inner}
+    </div>
+  );
+}

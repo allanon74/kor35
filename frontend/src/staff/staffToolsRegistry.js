@@ -23,6 +23,7 @@ import {
   Trophy,
   FileText,
   ArrowLeftRight,
+  CreditCard,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -63,6 +64,7 @@ export const STAFF_TOOL_ICON_MAP = {
   Users,
   Trophy,
   FileText,
+  CreditCard,
 };
 
 /**
@@ -101,6 +103,7 @@ export const STAFF_TOOLS_REGISTRY = {
   scommesse: { id: 'scommesse', label: 'Scommesse', icon: Trophy, color: 'bg-amber-600', componentKey: 'scommesse' },
   'manuali-pdf': { id: 'manuali-pdf', label: 'Manuali PDF', icon: FileText, color: 'bg-rose-800', componentKey: 'manuali-pdf' },
   'negozi-mercante': { id: 'negozi-mercante', label: 'Negozi mercante', icon: Package, color: 'bg-amber-900', componentKey: 'negozi-mercante' },
+  'carte-collezionabili': { id: 'carte-collezionabili', label: 'Carte collezionabili', icon: CreditCard, color: 'bg-violet-900', componentKey: 'carte-collezionabili' },
   'personaggi-eliminati': { id: 'personaggi-eliminati', label: 'Personaggi eliminati', icon: Skull, color: 'bg-red-900', componentKey: 'personaggi-eliminati' },
   personaggi: { id: 'personaggi', label: 'Personaggi', icon: Users, color: 'bg-teal-700', componentKey: 'personaggi' },
   'regole-transazioni': { id: 'regole-transazioni', label: 'Regole transazioni', icon: ArrowLeftRight, color: 'bg-amber-800', componentKey: 'regole-transazioni' },
@@ -117,7 +120,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'indigo',
       order: 0,
       collapsed_default: false,
-      tool_ids: ['plot', 'pilotaggio', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse', 'negozi-mercante'],
+      tool_ids: ['plot', 'pilotaggio', 'manifesti', 'nodi', 'innesco-timer', 'qr-debug', 'scommesse', 'negozi-mercante', 'carte-collezionabili'],
     },
     {
       id: 'database',

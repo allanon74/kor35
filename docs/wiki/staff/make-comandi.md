@@ -144,7 +144,10 @@ SSH: `kor35-mirror` → `kor35.ddns.net:10022`, utente `pi`.
 |---------|-------------|
 | `make backup-db ENV=prod` | Dump DB + rotazione |
 | `make wiki-staff-sync ENV=dev-home` | Aggiorna pagine Wiki staff da `docs/wiki/staff/` |
+| `make wiki-carte-sync ENV=dev-home` | Aggiorna bozza regolamento carte da `docs/wiki/carte/` |
+| `make wiki-carte-sync ENV=dev-home WIKI_CARTE_FORCE=1` | Sovrascrive pagina regolamento carte già in Wiki |
 | Dashboard staff → Manuali PDF | Pannello «Wiki operatività tecnica» (stesso effetto, richiede Master+) |
+| Dashboard staff → Carte → Config | Sync regolamento carte da repo (o `make wiki-carte-sync`) |
 
 ---
 

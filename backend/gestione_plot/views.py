@@ -1553,6 +1553,13 @@ def get_wiki_menu(request):
         # Player/non autenticati: solo pubblico non staff-only.
         queryset = queryset.filter(public=True, visibile_solo_staff=False)
 
+    from personaggi.carte_wiki_access import filtra_queryset_wiki_carte
+
+    wiki_user = effective_user
+    if wiki_user.is_anonymous and request.user.is_authenticated:
+        wiki_user = request.user
+    queryset = filtra_queryset_wiki_carte(queryset, request, user=wiki_user)
+
     serializer = PaginaRegolamentoSmallSerializer(queryset, many=True)
     return Response(serializer.data)
 
@@ -1568,6 +1575,13 @@ def get_wiki_page(request, slug):
         queryset = queryset.filter(visibile_solo_staff=False)
     else:
         queryset = queryset.filter(public=True, visibile_solo_staff=False)
+
+    from personaggi.carte_wiki_access import filtra_queryset_wiki_carte
+
+    wiki_user = effective_user
+    if wiki_user.is_anonymous and request.user.is_authenticated:
+        wiki_user = request.user
+    queryset = filtra_queryset_wiki_carte(queryset, request, user=wiki_user)
 
     page = get_object_or_404(queryset, slug=slug)
     serializer = PaginaRegolamentoSerializer(page)

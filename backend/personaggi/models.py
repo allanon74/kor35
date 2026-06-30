@@ -1539,6 +1539,7 @@ FEATURE_OGGETTI_BASE = "oggetti_base"
 FEATURE_CERIMONIALI = "cerimoniali"
 FEATURE_SOCIAL = "social"
 FEATURE_NEGOZI_MERCANTE = "negozi_mercante"
+FEATURE_CARTE_COLLEZIONABILI = "carte_collezionabili"
 
 FEATURE_KEY_CHOICES = [
     (FEATURE_ABILITA, "Abilita"),
@@ -1548,6 +1549,7 @@ FEATURE_KEY_CHOICES = [
     (FEATURE_CERIMONIALI, "Cerimoniali"),
     (FEATURE_SOCIAL, "Social"),
     (FEATURE_NEGOZI_MERCANTE, "Negozi mercante"),
+    (FEATURE_CARTE_COLLEZIONABILI, "Carte collezionabili"),
 ]
 
 FEATURE_MODE_SHARED = "SHARED"
@@ -5991,6 +5993,13 @@ class Personaggio(Inventario):
                     b = (pts // l.ogni_x_punti) * l.modificatore
                     if b > 0: _add(l.statistica_modificata.parametro, MODIFICATORE_ADDITIVO, b)
 
+        # 4. Reliquiario carte collezionabili
+        try:
+            from personaggi.carte_collezionabili_service import applica_modificatori_reliquiario
+            applica_modificatori_reliquiario(self, _add)
+        except Exception:
+            pass
+
         # 4. Effetti temporanei da consumo risorse (Fortuna / future pool)
         now_ts = timezone.now()
         eff_qs = EffettoRisorsaTemporaneo.objects.filter(personaggio=self, scadenza__gt=now_ts)
@@ -7699,6 +7708,42 @@ class NegozioMercantePortale(A_vista):
         return f"Negozio: {self.negozio.nome if self.negozio_id else self.nome}"
 
 
+class BustinaCartePortale(A_vista):
+    """Elemento A_vista per QR: scansione → acquisto bustina collegata."""
+
+    bustina = models.OneToOneField(
+        "BustinaCarte",
+        on_delete=models.CASCADE,
+        related_name="portale_avista",
+    )
+
+    class Meta:
+        verbose_name = "Portale bustina carte"
+        verbose_name_plural = "Portali bustine carte"
+
+    def __str__(self):
+        return f"Bustina: {self.bustina.nome if self.bustina_id else self.nome}"
+
+
+class ScontroCartePortale(A_vista):
+    """Elemento A_vista per QR lobby: scansione → unisciti allo scontro."""
+
+    duello = models.OneToOneField(
+        "DuelloCarte",
+        on_delete=models.CASCADE,
+        related_name="portale_avista",
+    )
+
+    class Meta:
+        verbose_name = "Portale scontro carte"
+        verbose_name_plural = "Portali scontri carte"
+
+    def __str__(self):
+        if self.duello_id:
+            return f"Scontro: {self.duello.sfidante.nome}"
+        return self.nome or "Scontro carte"
+
+
 # ============================================================================
 # SCOMMESSE IN-GAME
 # ============================================================================
@@ -7711,6 +7756,26 @@ from personaggi.scommesse_models import (  # noqa: E402, F401
     PuntataScommessa,
     SelezionePuntata,
     ConfigurazioneScommesse,
+)
+
+# ============================================================================
+# CARTE COLLEZIONABILI
+# ============================================================================
+from personaggi.carte_collezionabili_models import (  # noqa: E402, F401
+    EspansioneCarte,
+    CartaCollezionabile,
+    ConfigurazioneCarteCollezionabili,
+    BustinaCarte,
+    CartaPosseduta,
+    ReliquiarioSlot,
+    MazzoDuello,
+    AperturaBustinaCarte,
+    DuelloCarte,
+    CARTE_ACCESSO_OFF,
+    CARTE_ACCESSO_TEST,
+    CARTE_ACCESSO_OPEN,
+    CARTA_ENERGIA_AURA_SIGLA,
+    KeywordCarta,
 )
 
 # ============================================================================

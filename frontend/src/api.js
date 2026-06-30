@@ -3985,3 +3985,210 @@ export const staffScommesseSaveConfig = (data, onLogout) =>
         method: 'PATCH',
         body: JSON.stringify(data),
     }, onLogout);
+
+// --- Carte collezionabili ---
+const STAFF_CARTE = '/api/personaggi/api/staff/carte';
+
+export const carteGetStato = (charId, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/carte/stato/?char_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const carteGetCollezione = (charId, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/carte/collezione/?char_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const carteApriBustina = (charId, bustinaId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/apri-bustina/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, bustina_id: bustinaId }),
+    }, onLogout);
+
+export const carteEquipReliquiario = (charId, slotIndex, cartaPossedutaId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/reliquiario/', {
+        method: 'POST',
+        body: JSON.stringify({
+            char_id: charId,
+            slot_index: slotIndex,
+            carta_posseduta_id: cartaPossedutaId,
+        }),
+    }, onLogout);
+
+export const carteSaveMazzo = (charId, carteIds, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/mazzo/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, carte_ids: carteIds }),
+    }, onLogout);
+
+export const staffGetCarteCatalogo = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/catalogo/`, { method: 'GET' }, onLogout);
+
+export const staffGetCarteCatalogoByEspansione = (espansioneId, onLogout) =>
+    fetchAuthenticated(
+        `${STAFF_CARTE}/catalogo/?espansione_id=${encodeURIComponent(espansioneId)}`,
+        { method: 'GET' },
+        onLogout,
+    );
+
+export const staffGetCarteEspansioni = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/espansioni/`, { method: 'GET' }, onLogout);
+
+export const staffCreateCartaEspansione = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/espansioni/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartaEspansione = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/espansioni/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCartaEspansione = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/espansioni/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffCreateCartaCatalogo = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/catalogo/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartaCatalogo = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/catalogo/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCartaCatalogo = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/catalogo/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCarteBustine = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/bustine/`, { method: 'GET' }, onLogout);
+
+export const staffGetCarteBustineByEspansione = (espansioneId, onLogout) =>
+    fetchAuthenticated(
+        `${STAFF_CARTE}/bustine/?espansione_id=${encodeURIComponent(espansioneId)}`,
+        { method: 'GET' },
+        onLogout,
+    );
+
+export const staffCreateCartaBustina = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/bustine/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartaBustina = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/bustine/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCartaBustina = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/bustine/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCarteConfig = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/config/corrente/`, { method: 'GET' }, onLogout);
+
+export const carteGetDuelli = (charId, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/carte/duello/?char_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const carteGetAvversariDuello = (charId, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/carte/duello/avversari/?char_id=${encodeURIComponent(charId)}`,
+        { method: 'GET' },
+        onLogout,
+    );
+
+export const carteGetDuello = (charId, duelloId, onLogout) =>
+    fetchAuthenticated(
+        `/api/personaggi/api/carte/duello/${encodeURIComponent(duelloId)}/?char_id=${encodeURIComponent(charId)}`,
+        { method: 'GET' },
+        onLogout,
+    );
+
+export const carteInvitaDuello = (charId, payload, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/duello/invita/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, ...payload }),
+    }, onLogout);
+
+export const carteAccettaDuello = (charId, duelloId, payload, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/carte/duello/${encodeURIComponent(duelloId)}/accetta/`, {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, ...payload }),
+    }, onLogout);
+
+export const carteAccettaDuelloCodice = (charId, payload, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/duello/accetta/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, ...payload }),
+    }, onLogout);
+
+export const carteAzioneDuello = (charId, duelloId, azione, payload, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/carte/duello/${encodeURIComponent(duelloId)}/azione/`, {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, azione, payload: payload || {} }),
+    }, onLogout);
+
+export const carteApriScontro = (charId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/scontro/apri/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId }),
+    }, onLogout);
+
+export const carteUniscitiScontro = (charId, payload, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/scontro/unisciti/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, ...payload }),
+    }, onLogout);
+
+export const cartePrematchAzione = (charId, duelloId, azione, payload, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/carte/scontro/${encodeURIComponent(duelloId)}/prematch/`, {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, azione, payload: payload || {} }),
+    }, onLogout);
+
+export const staffSaveCarteConfig = (data, onLogout) => {
+    if (data?.id) {
+        return fetchAuthenticated(`${STAFF_CARTE}/config/${data.id}/`, {
+            method: 'PATCH',
+            body: JSON.stringify(data),
+        }, onLogout);
+    }
+    return fetchAuthenticated(`${STAFF_CARTE}/config/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+};
+
+export const staffGetCarteEffectSchema = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/effect-schema/`, { method: 'GET' }, onLogout);
+
+export const staffGetCarteKeywords = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/keywords/`, { method: 'GET' }, onLogout);
+
+export const staffCreateCartaKeyword = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/keywords/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartaKeyword = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/keywords/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCartaKeyword = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/keywords/${id}/`, { method: 'DELETE' }, onLogout);
+
+/** Metadati sorgenti wiki regolamento carte (docs/wiki/carte). */
+export const getStaffWikiCarteRegolamentoInfo = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/wiki-regolamento/sync/`, { method: 'GET' }, onLogout);
+
+/** Sincronizza bozza regolamento carte da repo (force=true sovrascrive). */
+export const syncStaffWikiCarteRegolamento = (onLogout, { force = true } = {}) =>
+    fetchAuthenticated(
+        `${STAFF_CARTE}/wiki-regolamento/sync/`,
+        { method: 'POST', body: JSON.stringify({ force }) },
+        onLogout,
+    );

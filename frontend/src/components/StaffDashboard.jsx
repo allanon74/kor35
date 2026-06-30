@@ -50,6 +50,7 @@ const CreazioneGuidataStaffManager = lazy(() => import('./editors/CreazioneGuida
 const ScommesseManager = lazy(() => import('./editors/ScommesseManager'));
 const ManualePdfManager = lazy(() => import('./editors/ManualePdfManager'));
 const NegozioMercanteManager = lazy(() => import('./editors/NegozioMercanteManager'));
+const CarteCollezionabiliManager = lazy(() => import('./editors/CarteCollezionabiliManager'));
 const PersonaggiEliminatiManager = lazy(() => import('./editors/PersonaggiEliminatiManager'));
 const PersonaggiStaffManager = lazy(() => import('./editors/PersonaggiStaffManager'));
 const RegoleTransazioneStaffManager = lazy(() => import('./editors/RegoleTransazioneStaffManager'));
@@ -86,6 +87,7 @@ const STAFF_COMPONENT_MAP = {
     scommesse: ScommesseManager,
     'manuali-pdf': ManualePdfManager,
     'negozi-mercante': NegozioMercanteManager,
+    'carte-collezionabili': CarteCollezionabiliManager,
     'personaggi-eliminati': PersonaggiEliminatiManager,
     personaggi: PersonaggiStaffManager,
     'regole-transazioni': RegoleTransazioneStaffManager,

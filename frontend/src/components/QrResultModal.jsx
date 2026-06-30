@@ -4,6 +4,8 @@ import { richiediTransazione, rubaOggetto, acquisisciItem, createTransazioneAvan
 import { useCharacter } from './CharacterContext';
 import { useTimers } from '../hooks/useTimers';
 import PropostaEditorModal from './PropostaEditorModal';
+
+const PersonaggioDuelloQrView = React.lazy(() => import('./PersonaggioDuelloQrView'));
 import ComponentiRiparazionePicker, {
   selezioneToArray,
   validateSelezioneComponenti,
@@ -333,7 +335,7 @@ const InventarioView = ({ data, onLogout }) => {
 //##################################################################
 // ## VISTA QR: TIPO PERSONAGGIO (3c) ##
 //##################################################################
-const PersonaggioView = ({ data, onLogout, onStealSuccess }) => {
+const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -447,6 +449,16 @@ const PersonaggioView = ({ data, onLogout, onStealSuccess }) => {
           </li>
         ))}
       </ul>
+
+      {qrcodeId && data?.id && String(data.id) !== String(selectedCharacterId) && (
+        <React.Suspense fallback={null}>
+          <PersonaggioDuelloQrView
+            avversario={data}
+            qrcodeId={qrcodeId}
+            onLogout={onLogout}
+          />
+        </React.Suspense>
+      )}
 
       {/* Modal Scambio */}
       {showScambioModal && selectedOggetto && data.id && (
@@ -917,6 +929,29 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         );
       }
 
+      case 'bustina_carte': {
+        const BustinaCarteQrView = React.lazy(() => import('./BustinaCarteQrView'));
+        return (
+          <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
+            <BustinaCarteQrView data={data.dati} onClose={onClose} onLogout={onLogout} />
+          </React.Suspense>
+        );
+      }
+
+      case 'scontro_carte': {
+        const ScontroCarteQrView = React.lazy(() => import('./ScontroCarteQrView'));
+        return (
+          <React.Suspense fallback={<Loader className="animate-spin mx-auto" />}>
+            <ScontroCarteQrView
+              data={data.dati}
+              qrcodeId={data.qrcode_id}
+              onClose={onClose}
+              onLogout={onLogout}
+            />
+          </React.Suspense>
+        );
+      }
+
       case 'manifesto':
       case 'a_vista':
         return <ManifestoView data={data.dati} />;
@@ -944,7 +979,14 @@ const QrResultModal = ({ data, onClose, onLogout, onStealSuccess, onPilotRipara,
         );
         
       case 'personaggio':
-        return <PersonaggioView data={data.dati} onLogout={onLogout} onStealSuccess={onStealSuccess} />;
+        return (
+          <PersonaggioView
+            data={data.dati}
+            qrcodeId={data.qrcode_id}
+            onLogout={onLogout}
+            onStealSuccess={onStealSuccess}
+          />
+        );
 
       case 'oggetto':
         if (!qrId) { 

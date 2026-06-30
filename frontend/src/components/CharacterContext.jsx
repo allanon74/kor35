@@ -588,6 +588,38 @@ export const CharacterProvider = ({ children, onLogout }) => {
             }
         }
 
+        if (action === 'DUELLO_INVITO' && inner?.destinatario_personaggio_id) {
+          const myId = parseInt(selectedCharacterId, 10);
+          if (String(inner.destinatario_personaggio_id) === String(myId)) {
+            const titolo = 'Sfida duello carte';
+            const testo = `${inner.sfidante_nome || 'Un avversario'} ti ha sfidato! Apri la tab Carte per accettare la partita.`;
+            setNotification({ titolo, testo, tipo: 'INDV' });
+            sendSystemNotification(titolo, testo);
+          }
+        }
+
+        if (
+          (action === 'DUELLO_LOBBY' || action === 'DUELLO_PREMATCH' || action === 'DUELLO_INIZIO')
+          && inner?.destinatario_personaggio_id
+        ) {
+          const myId = parseInt(selectedCharacterId, 10);
+          if (String(inner.destinatario_personaggio_id) === String(myId)) {
+            const titolo = action === 'DUELLO_LOBBY'
+              ? 'Scontro carte'
+              : action === 'DUELLO_PREMATCH'
+                ? 'Pre-partita carte'
+                : 'Duello iniziato';
+            const testo = action === 'DUELLO_LOBBY'
+              ? `${inner.sfidato_nome || 'Un avversario'} si è unito al tuo scontro! Apri la tab Carte.`
+              : action === 'DUELLO_PREMATCH'
+                ? `${inner.da_nome || 'Il tuo avversario'} ha aggiornato la pre-partita. Apri la tab Carte.`
+                : `La partita contro ${inner.avversario_nome || 'l\'avversario'} è iniziata! Apri la tab Carte.`;
+            setNotification({ titolo, testo, tipo: 'INDV' });
+            sendSystemNotification(titolo, testo);
+            window.dispatchEvent(new CustomEvent('kor35:duello-carte', { detail: inner }));
+          }
+        }
+
         if (d.type === 'notification') {
            const msg = d.payload;
            if (!msg || msg.action === 'TIMER_SYNC' || msg.action === 'TIMER_INNESCO_SYNC') {
