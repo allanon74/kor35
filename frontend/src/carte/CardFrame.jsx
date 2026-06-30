@@ -14,12 +14,14 @@ const SIZE_CLASS = {
   sm: 'w-[108px] min-h-[152px] text-[9px]',
   md: 'w-[168px] min-h-[236px] text-[10px]',
   lg: 'w-[220px] min-h-[308px] text-xs',
+  xl: 'w-[min(100%,360px)] min-h-[500px] text-sm',
 };
 
 const ART_HEIGHT = {
   sm: 'h-14',
   md: 'h-24',
   lg: 'h-32',
+  xl: 'h-52',
 };
 
 function CardStatBadges({ attacco, salute, iniziativa, compact = false }) {
@@ -60,6 +62,8 @@ export default function CardFrame({
   temaEnergie: temaProp,
   keywords = [],
   showRules = true,
+  showLoreText = false,
+  expandRules = false,
   className = '',
 }) {
   const c = cartaProp || item?.carta || item;
@@ -71,12 +75,20 @@ export default function CardFrame({
   const styles = getFrameStyles(c.energia);
   const img = c.immagine_url ? resolveMediaUrl(c.immagine_url) : null;
   const hasStats = c.attacco != null || c.salute != null || c.iniziativa != null;
+  const rulesTextClass = expandRules
+    ? 'text-[13px] leading-relaxed'
+    : size === 'xl'
+      ? 'text-xs leading-snug'
+      : 'text-[10px] leading-snug';
 
   const inner = (
   <>
-    <div className="flex items-center justify-between gap-1 px-2 py-1 font-bold" style={styles.header}>
+    <div
+      className={`flex items-center justify-between gap-1 px-2 py-1 font-bold ${size === 'xl' ? 'py-2 text-base' : ''}`}
+      style={styles.header}
+    >
       <span
-        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black"
+        className={`flex shrink-0 items-center justify-center rounded-full font-black ${size === 'xl' ? 'h-7 w-7 text-sm' : 'h-5 w-5 text-[10px]'}`}
         style={{ backgroundColor: 'rgba(0,0,0,0.25)', color: styles.header.color }}
       >
         {c.costo_gioco ?? 0}
@@ -108,7 +120,7 @@ export default function CardFrame({
     </div>
 
     <div
-      className="mx-2 mt-1.5 rounded border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide"
+      className={`mx-2 mt-1.5 rounded border px-1.5 py-0.5 font-semibold uppercase tracking-wide ${size === 'xl' ? 'px-2 py-1 text-[11px]' : 'text-[8px]'}`}
       style={styles.typeLine}
     >
       {CARTA_TIPO_LABEL[c.tipo] || c.tipo}
@@ -118,12 +130,23 @@ export default function CardFrame({
 
     {showRules && !compact && (
       <div
-        className="mx-2 mt-1.5 flex-1 rounded border px-2 py-1.5 text-[10px] leading-snug"
+        className={`mx-2 mt-1.5 flex min-h-0 flex-1 flex-col rounded border px-2 py-2 ${expandRules ? 'overflow-y-auto' : ''} ${rulesTextClass}`}
         style={styles.rulesBox}
       >
-        <p className="line-clamp-4 whitespace-pre-wrap">
-          <CardRulesText text={c.testo_gioco || '—'} keywords={keywords} />
-        </p>
+        <div className={expandRules ? '' : 'line-clamp-4'}>
+          <p className="whitespace-pre-wrap">
+            <CardRulesText
+              text={c.testo_gioco || '—'}
+              keywords={keywords}
+              maxLineLength={expandRules ? 120 : 90}
+            />
+          </p>
+          {showLoreText && c.testo_lore?.trim() && (
+            <p className={`mt-2 whitespace-pre-wrap italic text-gray-400/95 ${expandRules ? 'text-[12px] leading-relaxed' : ''}`}>
+              {c.testo_lore.trim()}
+            </p>
+          )}
+        </div>
       </div>
     )}
 

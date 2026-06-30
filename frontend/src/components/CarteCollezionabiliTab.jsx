@@ -22,7 +22,6 @@ import {
 } from '../api';
 import { RELIQUIARIO_SLOTS, MAZZO_DUELLO_SIZE, CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../carte/carteConstants';
 import CardFrame from '../carte/CardFrame';
-import CardRulesText from '../carte/CardRulesText';
 import { useDuelloLive } from '../carte/useDuelloLive';
 import MazzoDuelloBuilder from '../carte/MazzoDuelloBuilder';
 import {
@@ -74,61 +73,45 @@ function CollezioneStackCard({ stack, onSelect, temaEnergie, keywords }) {
 }
 
 function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords }) {
-  const [showLore, setShowLore] = useState(false);
   if (!item && !stack) return null;
   const displayItem = stack?.representative || item;
   const c = displayItem?.carta || displayItem;
   const copyCount = stack?.count ?? 1;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-4 sm:items-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 p-3 sm:items-center sm:p-6" onClick={onClose}>
       <div
-        className="flex max-h-[90vh] w-full max-w-lg flex-col gap-4 rounded-xl border border-gray-600 bg-gray-950 p-4 shadow-xl"
+        className="flex max-h-[96vh] w-full max-w-xl flex-col gap-3 overflow-y-auto rounded-xl border border-gray-600 bg-gray-950 p-4 shadow-2xl sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between">
-          <h3 className="text-lg font-bold text-white">Dettaglio carta</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-white">
-            <X size={22} />
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-lg font-bold text-white sm:text-xl">{c.nome || 'Dettaglio carta'}</h3>
+            {c.codice && (
+              <p className="text-[11px] text-gray-500">{c.codice}</p>
+            )}
+          </div>
+          <button type="button" onClick={onClose} className="shrink-0 text-gray-400 hover:text-white" aria-label="Chiudi">
+            <X size={24} />
           </button>
         </div>
-        <div className="flex justify-center">
-          <CardFrame item={displayItem} size="lg" temaEnergie={temaEnergie} showRules={false} />
+
+        <div className="flex justify-center py-1">
+          <CardFrame
+            item={displayItem}
+            size="xl"
+            temaEnergie={temaEnergie}
+            keywords={keywords}
+            showRules
+            showLoreText
+            expandRules
+          />
         </div>
+
         {copyCount > 1 && (
           <p className="text-center text-sm font-bold text-violet-300">
             Possiedi {copyCount} copie di questa carta
           </p>
-        )}
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowLore(false)}
-            className={`rounded px-3 py-1 text-xs font-bold ${!showLore ? 'bg-indigo-700 text-white' : 'bg-gray-800 text-gray-400'}`}
-          >
-            <Swords size={12} className="mr-1 inline" />
-            Gioco
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowLore(true)}
-            className={`rounded px-3 py-1 text-xs font-bold ${showLore ? 'bg-amber-800 text-white' : 'bg-gray-800 text-gray-400'}`}
-          >
-            <BookOpen size={12} className="mr-1 inline" />
-            Lore
-          </button>
-        </div>
-        <div className="max-h-40 overflow-y-auto rounded border border-gray-700 bg-gray-900/80 p-3 text-sm text-gray-200">
-          <p className="whitespace-pre-wrap">
-            {showLore ? (
-              c.testo_lore || 'Nessun testo lore.'
-            ) : (
-              <CardRulesText text={c.testo_gioco || 'Nessun effetto di gioco.'} keywords={keywords} />
-            )}
-          </p>
-        </div>
-        {c.codice && (
-          <p className="text-center text-[10px] text-gray-500">{c.codice}</p>
         )}
       </div>
     </div>
