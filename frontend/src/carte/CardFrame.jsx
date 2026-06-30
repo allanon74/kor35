@@ -1,5 +1,5 @@
 import React from 'react';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, Sword, Heart, Gauge } from 'lucide-react';
 import IconaPunteggio from '../components/IconaPunteggio';
 import { resolveMediaUrl } from '../api';
 import {
@@ -22,6 +22,34 @@ const ART_HEIGHT = {
   lg: 'h-32',
 };
 
+function CardStatBadges({ attacco, salute, iniziativa, compact = false }) {
+  const iconSize = compact ? 10 : 12;
+  const badgeClass =
+    'inline-flex items-center gap-0.5 rounded-md border border-white/15 bg-black/45 px-1 py-0.5 text-[9px] font-bold text-gray-100';
+  return (
+    <div className="mx-2 mb-2 mt-1 flex flex-wrap justify-end gap-1">
+      {attacco != null && (
+        <span className={badgeClass} title="Attacco">
+          <Sword size={iconSize} className="text-red-300" aria-hidden />
+          <span>{attacco}</span>
+        </span>
+      )}
+      {salute != null && (
+        <span className={badgeClass} title="Salute">
+          <Heart size={iconSize} className="text-rose-300" aria-hidden />
+          <span>{salute}</span>
+        </span>
+      )}
+      {iniziativa != null && (
+        <span className={badgeClass} title="Iniziativa">
+          <Gauge size={iconSize} className="text-sky-300" aria-hidden />
+          <span>{iniziativa}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function CardFrame({
   item,
   carta: cartaProp,
@@ -42,7 +70,7 @@ export default function CardFrame({
   const energy = getTheme(c.energia);
   const styles = getFrameStyles(c.energia);
   const img = c.immagine_url ? resolveMediaUrl(c.immagine_url) : null;
-  const hasStats = c.attacco != null || c.salute != null;
+  const hasStats = c.attacco != null || c.salute != null || c.iniziativa != null;
 
   const inner = (
   <>
@@ -90,7 +118,7 @@ export default function CardFrame({
 
     {showRules && !compact && (
       <div
-        className="mx-2 mt-1.5 flex-1 rounded border px-2 py-1.5 text-[10px] leading-snug text-gray-200"
+        className="mx-2 mt-1.5 flex-1 rounded border px-2 py-1.5 text-[10px] leading-snug"
         style={styles.rulesBox}
       >
         <p className="line-clamp-4 whitespace-pre-wrap">
@@ -100,11 +128,12 @@ export default function CardFrame({
     )}
 
     {hasStats && (
-      <div className="mx-2 mb-2 mt-1 flex justify-end gap-2 font-mono text-[10px] font-bold" style={styles.stats}>
-        {c.attacco != null && <span>A{c.attacco}</span>}
-        {c.salute != null && <span>S{c.salute}</span>}
-        {c.iniziativa != null && <span>I{c.iniziativa}</span>}
-      </div>
+      <CardStatBadges
+        attacco={c.attacco}
+        salute={c.salute}
+        iniziativa={c.iniziativa}
+        compact={compact}
+      />
     )}
   </>
   );

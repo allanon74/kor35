@@ -99,6 +99,7 @@ CARTA_FONTE_CHOICES = [
 
 RELIQUIARIO_SLOTS = 5
 MAZZO_DUELLO_SIZE = 15
+MAZZI_DUELLO_MAX_PER_PG = 5
 
 # Mappatura energia carta → sigla aura Punteggio (tipo AU) per colori/icona da DB
 CARTA_ENERGIA_AURA_SIGLA = {

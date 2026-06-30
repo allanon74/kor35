@@ -40,12 +40,28 @@ export function rgbaHex(hex, alpha = 1) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function relativeLuminance(hex) {
+  const { r, g, b } = parseHex(hex);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+/** Testo/icone su sfondo scuro della carta: evita nero su nero (es. energia Magica). */
+export function readableOnDark(hex) {
+  const lum = relativeLuminance(hex);
+  if (lum < 0.42) {
+    const lifted = shadeHex(hex, 0.58);
+    return relativeLuminance(lifted) < 0.42 ? '#d1d5db' : lifted;
+  }
+  return hex;
+}
+
 export function buildCardFrameStyles(energyTheme) {
   const colore = energyTheme?.colore || '#6b7280';
   const headerText = getContrastColor(colore);
   const isLightAura = headerText === 'black';
   const bodyBg = isLightAura ? '#111827' : shadeHex(colore, -0.82);
-  const panelBg = isLightAura ? '#1f2937' : shadeHex(colore, -0.7);
+  const panelBg = isLightAura ? '#1f2937' : shadeHex(colore, -0.55);
+  const accentOnBody = readableOnDark(colore);
 
   return {
     wrapper: {
@@ -59,16 +75,17 @@ export function buildCardFrameStyles(energyTheme) {
       borderBottom: `1px solid ${rgbaHex(colore, 0.5)}`,
     },
     typeLine: {
-      color: colore,
+      color: isLightAura ? colore : accentOnBody,
       borderColor: rgbaHex(colore, 0.35),
-      backgroundColor: rgbaHex(colore, 0.08),
+      backgroundColor: rgbaHex(colore, isLightAura ? 0.08 : 0.14),
     },
     rulesBox: {
       backgroundColor: panelBg,
       borderColor: rgbaHex(colore, 0.25),
+      color: '#e5e7eb',
     },
     stats: {
-      color: colore,
+      color: '#f3f4f6',
     },
     rarityGem: (raritaClass) => raritaClass,
   };

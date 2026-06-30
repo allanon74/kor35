@@ -25,6 +25,7 @@ from personaggi.carte_collezionabili_service import (
     lista_bustine,
     lista_espansioni_giocatore,
     personaggio_puo_accedere_carte,
+    elimina_mazzo_duello,
     salva_mazzo_duello,
     stato_carte_per_personaggio,
 )
@@ -151,11 +152,32 @@ class CarteMazzoDuelloView(APIView):
         char_id = request.data.get("char_id")
         carte_ids = request.data.get("carte_ids") or request.data.get("mazzo_ids") or []
         nome = request.data.get("nome") or "Mazzo principale"
+        mazzo_id = request.data.get("mazzo_id")
+        is_default = bool(request.data.get("is_default", False))
         if not char_id:
             return Response({"error": "char_id richiesto."}, status=400)
         pg = _get_pg(request, char_id)
         try:
-            return Response(salva_mazzo_duello(pg, carte_ids, nome=nome, is_default=True))
+            return Response(
+                salva_mazzo_duello(
+                    pg,
+                    carte_ids,
+                    mazzo_id=mazzo_id,
+                    nome=nome,
+                    is_default=is_default,
+                )
+            )
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
+
+    def delete(self, request):
+        char_id = request.data.get("char_id")
+        mazzo_id = request.data.get("mazzo_id")
+        if not char_id or not mazzo_id:
+            return Response({"error": "char_id e mazzo_id richiesti."}, status=400)
+        pg = _get_pg(request, char_id)
+        try:
+            return Response(elimina_mazzo_duello(pg, mazzo_id))
         except ValidationError as e:
             return Response({"error": str(e)}, status=400)
 

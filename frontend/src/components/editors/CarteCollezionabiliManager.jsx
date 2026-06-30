@@ -640,6 +640,46 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                 {Object.entries(CARTA_RARITA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>
+            <div className="rounded border border-violet-900/50 bg-violet-950/20 p-2">
+              <h4 className="mb-2 text-xs font-bold text-violet-300">Statistiche in gioco</h4>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {[
+                  { key: 'costo_gioco', label: 'Costo gioco', min: 0, max: 3 },
+                  { key: 'attacco', label: 'Attacco', min: 0, max: 99 },
+                  { key: 'salute', label: 'Salute', min: 0, max: 99 },
+                  { key: 'iniziativa', label: 'Iniziativa', min: 0, max: 5 },
+                ].map(({ key, label, min, max }) => (
+                  <label key={key} className="block text-xs text-gray-400">
+                    {label}
+                    <input
+                      type="number"
+                      min={min}
+                      max={max}
+                      className="mt-0.5 w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
+                      value={form[key] ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setForm((p) => ({
+                          ...p,
+                          [key]: raw === '' ? null : Number(raw),
+                        }));
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] text-gray-500">
+                Costo, Attacco, Salute e Iniziativa compaiono sulle carte PG in duello (icone spada, cuore, cronometro).
+              </p>
+              <label className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={!!form.duplicabile}
+                  onChange={(e) => setForm((p) => ({ ...p, duplicabile: e.target.checked }))}
+                />
+                Duplicabile nel mazzo (max 2 copie)
+              </label>
+            </div>
             <textarea
               className="h-20 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm"
               placeholder="Testo gioco"

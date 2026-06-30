@@ -16,7 +16,7 @@ const FALLBACK_COLORS = {
   MAR: '#4C36F5',
   TEC: '#FAF610',
   INN: '#C79E0B',
-  MAG: '#000000',
+  MAG: '#6b21a8',
   SAC: '#FFFFFF',
   PSI: '#EFAAFF',
   ARC: '#92FA88',

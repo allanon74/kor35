@@ -30,6 +30,7 @@ from personaggi.carte_collezionabili_models import (
     CARTA_ENERGIA_AURA_SIGLA,
     EspansioneCarte,
     KeywordCarta,
+    MAZZI_DUELLO_MAX_PER_PG,
     MAZZO_DUELLO_SIZE,
     MazzoDuello,
     RELIQUIARIO_SLOTS,
@@ -194,6 +195,7 @@ def _serializza_carta(carta: CartaCollezionabile) -> dict:
         "tag_tematici": carta.tag_tematici or [],
         "bonus_equip": carta.bonus_equip or {},
         "duplicabile": carta.duplicabile,
+        "ordine_set": carta.ordine_set,
         "immagine_url": carta.immagine.url if carta.immagine else None,
     }
 
@@ -636,23 +638,63 @@ def get_mazzo_default_ids(personaggio: Personaggio) -> list[str]:
 
 
 @transaction.atomic
-def salva_mazzo_duello(personaggio: Personaggio, carte_ids: list, *, nome: str = "Mazzo principale", is_default: bool = True) -> dict:
+def salva_mazzo_duello(
+    personaggio: Personaggio,
+    carte_ids: list,
+    *,
+    mazzo_id=None,
+    nome: str = "Mazzo principale",
+    is_default: bool = False,
+) -> dict:
     assert_personaggio_puo_accedere_carte(personaggio)
     ok, errs = valida_mazzo_duello(carte_ids, personaggio)
     if not ok:
         raise ValidationError(" ".join(errs))
     ids = [str(x) for x in carte_ids]
+    nome = (nome or "Mazzo").strip()[:80] or "Mazzo"
+
+    if mazzo_id:
+        mazzo = MazzoDuello.objects.filter(pk=mazzo_id, personaggio=personaggio).first()
+        if not mazzo:
+            raise ValidationError("Mazzo non trovato.")
+    else:
+        if MazzoDuello.objects.filter(personaggio=personaggio).count() >= MAZZI_DUELLO_MAX_PER_PG:
+            raise ValidationError(f"Massimo {MAZZI_DUELLO_MAX_PER_PG} mazzi per personaggio.")
+        mazzo = MazzoDuello.objects.create(
+            personaggio=personaggio,
+            nome=nome,
+            carte_possedute_ids=ids,
+            is_default=is_default,
+        )
+
     if is_default:
-        MazzoDuello.objects.filter(personaggio=personaggio, is_default=True).update(is_default=False)
-    mazzo, _ = MazzoDuello.objects.get_or_create(
-        personaggio=personaggio,
-        nome=nome,
-        defaults={"carte_possedute_ids": ids, "is_default": is_default},
-    )
+        MazzoDuello.objects.filter(personaggio=personaggio, is_default=True).exclude(pk=mazzo.pk).update(
+            is_default=False
+        )
+
+    mazzo.nome = nome
     mazzo.carte_possedute_ids = ids
-    mazzo.is_default = is_default
-    mazzo.save(update_fields=["carte_possedute_ids", "is_default", "updated_at"])
-    return {"mazzo": lista_mazzi_duello(personaggio)}
+    mazzo.is_default = is_default or (
+        not MazzoDuello.objects.filter(personaggio=personaggio, is_default=True).exclude(pk=mazzo.pk).exists()
+    )
+    mazzo.save(update_fields=["nome", "carte_possedute_ids", "is_default", "updated_at"])
+    return {"mazzi": lista_mazzi_duello(personaggio), "saved_id": str(mazzo.id)}
+
+
+@transaction.atomic
+def elimina_mazzo_duello(personaggio: Personaggio, mazzo_id) -> dict:
+    assert_personaggio_puo_accedere_carte(personaggio)
+    mazzo = MazzoDuello.objects.filter(pk=mazzo_id, personaggio=personaggio).first()
+    if not mazzo:
+        raise ValidationError("Mazzo non trovato.")
+    was_default = mazzo.is_default
+    mazzo.delete()
+    if was_default:
+        altro = MazzoDuello.objects.filter(personaggio=personaggio).order_by("nome").first()
+        if altro:
+            altro.is_default = True
+            altro.save(update_fields=["is_default", "updated_at"])
+    return {"mazzi": lista_mazzi_duello(personaggio)}
 
 
 def applica_modificatori_reliquiario(personaggio: Personaggio, add_fn) -> None:

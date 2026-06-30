@@ -4011,10 +4011,28 @@ export const carteEquipReliquiario = (charId, slotIndex, cartaPossedutaId, onLog
         }),
     }, onLogout);
 
-export const carteSaveMazzo = (charId, carteIds, onLogout) =>
-    fetchAuthenticated('/api/personaggi/api/carte/mazzo/', {
+export const MAZZO_DUELLO_SIZE = 15;
+export const MAZZI_DUELLO_MAX = 5;
+
+export const carteSaveMazzo = (charId, carteIds, options = {}, onLogout) => {
+    const opts = typeof options === 'function' ? {} : (options || {});
+    const logout = typeof options === 'function' ? options : onLogout;
+    return fetchAuthenticated('/api/personaggi/api/carte/mazzo/', {
         method: 'POST',
-        body: JSON.stringify({ char_id: charId, carte_ids: carteIds }),
+        body: JSON.stringify({
+            char_id: charId,
+            carte_ids: carteIds,
+            mazzo_id: opts.mazzoId || null,
+            nome: opts.nome,
+            is_default: opts.isDefault,
+        }),
+    }, logout);
+};
+
+export const carteDeleteMazzo = (charId, mazzoId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/mazzo/', {
+        method: 'DELETE',
+        body: JSON.stringify({ char_id: charId, mazzo_id: mazzoId }),
     }, onLogout);
 
 export const staffGetCarteCatalogo = (onLogout) =>

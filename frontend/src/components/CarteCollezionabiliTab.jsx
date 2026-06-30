@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CreditCard, Loader2, Sparkles, BookOpen, Swords, X, Package, Radio, ExternalLink,
+  CreditCard, Loader2, Sparkles, BookOpen, Swords, X, Package, Radio, ExternalLink, SlidersHorizontal,
 } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import {
@@ -15,16 +15,20 @@ import {
   carteAccettaDuello,
   carteAzioneDuello,
   carteSaveMazzo,
+  carteDeleteMazzo,
   carteGetAvversariDuello,
   carteApriScontro,
   cartePrematchAzione,
 } from '../api';
-import { RELIQUIARIO_SLOTS } from '../carte/carteConstants';
+import { RELIQUIARIO_SLOTS, MAZZO_DUELLO_SIZE, CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../carte/carteConstants';
 import CardFrame from '../carte/CardFrame';
 import CardRulesText from '../carte/CardRulesText';
 import { useDuelloLive } from '../carte/useDuelloLive';
-
-const MAZZO_DUELLO_SIZE = 15;
+import MazzoDuelloBuilder from '../carte/MazzoDuelloBuilder';
+import {
+  buildCollezioneView,
+  COLLEZIONE_SORT_OPTIONS,
+} from '../carte/collezioneUtils';
 
 function CartaCard({ item, selected, onSelect, compact = false, temaEnergie, keywords }) {
   return (
@@ -40,10 +44,41 @@ function CartaCard({ item, selected, onSelect, compact = false, temaEnergie, key
   );
 }
 
-function CartaDetailModal({ item, onClose, temaEnergie, keywords }) {
+function CollezioneStackCard({ stack, onSelect, temaEnergie, keywords }) {
+  return (
+    <div className="relative">
+      <CartaCard
+        item={stack.representative}
+        onSelect={() => onSelect(stack)}
+        temaEnergie={temaEnergie}
+        keywords={keywords}
+      />
+      {stack.count > 1 && (
+        <span
+          className="pointer-events-none absolute -right-1 -top-1 z-10 flex h-6 min-w-[1.5rem] items-center justify-center rounded-full border-2 border-gray-900 bg-violet-600 px-1 text-[11px] font-black text-white shadow-md"
+          title={`${stack.count} copie`}
+        >
+          ×{stack.count}
+        </span>
+      )}
+      {stack.inReliquarioCount > 0 && (
+        <span
+          className="pointer-events-none absolute bottom-1 left-1 z-10 rounded bg-indigo-900/90 px-1 py-0.5 text-[8px] font-bold text-indigo-200"
+          title="In reliquiario"
+        >
+          {stack.inReliquarioCount === stack.count ? 'Equip.' : `${stack.inReliquarioCount}/${stack.count} eq.`}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords }) {
   const [showLore, setShowLore] = useState(false);
-  if (!item) return null;
-  const c = item.carta || item;
+  if (!item && !stack) return null;
+  const displayItem = stack?.representative || item;
+  const c = displayItem?.carta || displayItem;
+  const copyCount = stack?.count ?? 1;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-4 sm:items-center" onClick={onClose}>
@@ -58,8 +93,13 @@ function CartaDetailModal({ item, onClose, temaEnergie, keywords }) {
           </button>
         </div>
         <div className="flex justify-center">
-          <CardFrame item={item} size="lg" temaEnergie={temaEnergie} showRules={false} />
+          <CardFrame item={displayItem} size="lg" temaEnergie={temaEnergie} showRules={false} />
         </div>
+        {copyCount > 1 && (
+          <p className="text-center text-sm font-bold text-violet-300">
+            Possiedi {copyCount} copie di questa carta
+          </p>
+        )}
         <div className="flex gap-2">
           <button
             type="button"
@@ -111,12 +151,24 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   const [codiceInvito, setCodiceInvito] = useState('');
   const [duelBusy, setDuelBusy] = useState(false);
   const [mazzoIds, setMazzoIds] = useState([]);
+  const [activeMazzoId, setActiveMazzoId] = useState(null);
+  const [mazzoNome, setMazzoNome] = useState('Mazzo 1');
+  const [mazzoIsDefault, setMazzoIsDefault] = useState(true);
   const [mazzoBuilderOpen, setMazzoBuilderOpen] = useState(false);
   const [savingMazzo, setSavingMazzo] = useState(false);
   const [avversari, setAvversari] = useState([]);
   const [selectedAvversarioId, setSelectedAvversarioId] = useState('');
   const [lobbyQr, setLobbyQr] = useState(null);
   const [postaInput, setPostaInput] = useState('0');
+  const [colSearch, setColSearch] = useState('');
+  const [colTipo, setColTipo] = useState('');
+  const [colEnergia, setColEnergia] = useState('');
+  const [colRarita, setColRarita] = useState('');
+  const [colEspansione, setColEspansione] = useState('');
+  const [colSoloLibere, setColSoloLibere] = useState(false);
+  const [colSort, setColSort] = useState('nome_asc');
+  const [colFiltersOpen, setColFiltersOpen] = useState(false);
+  const [detailStack, setDetailStack] = useState(null);
 
   const onDuelloWsUpdate = useCallback((payload) => {
     setActiveDuello(payload);
@@ -128,22 +180,34 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     onDuelloWsUpdate,
   );
 
-  useEffect(() => {
-    const defaultMazzo = (data?.mazzi || []).find((m) => m.is_default) || data?.mazzi?.[0];
-    if (defaultMazzo?.carte_possedute_ids?.length) {
-      setMazzoIds(defaultMazzo.carte_possedute_ids);
-    } else if ((data?.carte || []).length >= MAZZO_DUELLO_SIZE) {
-      setMazzoIds((data.carte || []).slice(0, MAZZO_DUELLO_SIZE).map((c) => c.id));
+  const loadMazzoIntoEditor = useCallback((m) => {
+    if (m) {
+      setActiveMazzoId(m.id);
+      setMazzoIds(m.carte_possedute_ids || []);
+      setMazzoNome(m.nome || 'Mazzo');
+      setMazzoIsDefault(!!m.is_default);
+    } else {
+      setActiveMazzoId(null);
+      setMazzoIds([]);
+      setMazzoNome(`Mazzo ${(data?.mazzi?.length || 0) + 1}`);
+      setMazzoIsDefault(!(data?.mazzi?.length));
     }
-  }, [data?.mazzi, data?.carte]);
+  }, [data?.mazzi?.length]);
 
-  const toggleMazzoCard = (cpId) => {
-    setMazzoIds((prev) => {
-      if (prev.includes(cpId)) return prev.filter((id) => id !== cpId);
-      if (prev.length >= MAZZO_DUELLO_SIZE) return prev;
-      return [...prev, cpId];
-    });
-  };
+  useEffect(() => {
+    if (!data?.mazzi) return;
+    const current = activeMazzoId
+      ? data.mazzi.find((m) => m.id === activeMazzoId)
+      : data.mazzi.find((m) => m.is_default) || data.mazzi[0];
+    if (current && !mazzoBuilderOpen) {
+      setMazzoIds(current.carte_possedute_ids || []);
+      if (!activeMazzoId) {
+        setActiveMazzoId(current.id);
+        setMazzoNome(current.nome || 'Mazzo');
+        setMazzoIsDefault(!!current.is_default);
+      }
+    }
+  }, [data?.mazzi, activeMazzoId, mazzoBuilderOpen]);
 
   const handleSaveMazzo = async () => {
     if (!charId || mazzoIds.length !== MAZZO_DUELLO_SIZE) {
@@ -153,11 +217,33 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     setSavingMazzo(true);
     setError('');
     try {
-      const res = await carteSaveMazzo(charId, mazzoIds, onLogout);
-      setData((prev) => ({ ...prev, mazzi: res.mazzo || res.mazzi }));
+      const res = await carteSaveMazzo(charId, mazzoIds, {
+        mazzoId: activeMazzoId,
+        nome: mazzoNome,
+        isDefault: mazzoIsDefault,
+      }, onLogout);
+      setData((prev) => ({ ...prev, mazzi: res.mazzi || [] }));
+      if (res.saved_id) setActiveMazzoId(res.saved_id);
       setMazzoBuilderOpen(false);
     } catch (e) {
       setError(e?.message || 'Salvataggio mazzo fallito.');
+    } finally {
+      setSavingMazzo(false);
+    }
+  };
+
+  const handleDeleteMazzo = async () => {
+    if (!charId || !activeMazzoId) return;
+    setSavingMazzo(true);
+    setError('');
+    try {
+      const res = await carteDeleteMazzo(charId, activeMazzoId, onLogout);
+      setData((prev) => ({ ...prev, mazzi: res.mazzi || [] }));
+      const next = (res.mazzi || [])[0];
+      loadMazzoIntoEditor(next || null);
+      setMazzoBuilderOpen(false);
+    } catch (e) {
+      setError(e?.message || 'Eliminazione mazzo fallita.');
     } finally {
       setSavingMazzo(false);
     }
@@ -486,6 +572,31 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   );
   const duelloAvvio = data?.duello_avvio || 'off';
 
+  const espansioniCollezione = useMemo(() => {
+    const seen = new Map();
+    (data?.carte || []).forEach((item) => {
+      const c = item.carta;
+      if (c?.espansione_id && !seen.has(c.espansione_id)) {
+        seen.set(c.espansione_id, c.espansione_nome || c.espansione_slug || 'Espansione');
+      }
+    });
+    return Array.from(seen.entries()).map(([id, nome]) => ({ id, nome }));
+  }, [data?.carte]);
+
+  const collezioneView = useMemo(
+    () => buildCollezioneView(data?.carte || [], {
+      search: colSearch,
+      tipo: colTipo,
+      energia: colEnergia,
+      rarita: colRarita,
+      espansioneId: colEspansione,
+      soloNonEquip: colSoloLibere,
+    }, colSort),
+    [data?.carte, colSearch, colTipo, colEnergia, colRarita, colEspansione, colSoloLibere, colSort],
+  );
+
+  const hasColFilters = !!(colSearch || colTipo || colEnergia || colRarita || colEspansione || colSoloLibere);
+
   const slots = Array.from({ length: RELIQUIARIO_SLOTS }, (_, i) => {
     const cpId = reliquiarioMap[String(i)];
     return cpId ? carteById.get(cpId) : null;
@@ -559,29 +670,34 @@ export default function CarteCollezionabiliTab({ onLogout }) {
               </button>
             </div>
             {mazzoBuilderOpen && (
-              <>
-                <div className="mb-2 flex flex-wrap justify-center gap-2">
-                  {(data.carte || []).map((item) => (
-                    <CartaCard
-                      key={item.id}
-                      item={item}
-                      compact
-                      selected={mazzoIds.includes(item.id)}
-                      onSelect={() => toggleMazzoCard(item.id)}
-                      temaEnergie={data?.tema_energie}
-                      keywords={cardKeywords}
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  disabled={savingMazzo || mazzoIds.length !== MAZZO_DUELLO_SIZE}
-                  onClick={handleSaveMazzo}
-                  className="rounded bg-emerald-800 px-3 py-1 text-xs font-bold disabled:opacity-50"
-                >
-                  {savingMazzo ? 'Salvataggio…' : 'Salva mazzo'}
-                </button>
-              </>
+              <MazzoDuelloBuilder
+                carte={data.carte || []}
+                carteById={carteById}
+                mazzi={data.mazzi || []}
+                activeMazzoId={activeMazzoId}
+                mazzoIds={mazzoIds}
+                mazzoNome={mazzoNome}
+                mazzoIsDefault={mazzoIsDefault}
+                onMazzoIdsChange={setMazzoIds}
+                onActiveMazzoChange={(m) => loadMazzoIntoEditor(m)}
+                onMazzoNomeChange={setMazzoNome}
+                onMazzoIsDefaultChange={setMazzoIsDefault}
+                onNewMazzo={() => loadMazzoIntoEditor(null)}
+                onSave={handleSaveMazzo}
+                onDelete={handleDeleteMazzo}
+                saving={savingMazzo}
+                temaEnergie={data?.tema_energie}
+                keywords={cardKeywords}
+              />
+            )}
+            {!mazzoBuilderOpen && (data.mazzi || []).length > 0 && (
+              <p className="text-xs text-gray-500">
+                Mazzo attivo:{' '}
+                <strong className="text-indigo-200">
+                  {(data.mazzi.find((m) => m.id === activeMazzoId) || data.mazzi.find((m) => m.is_default) || data.mazzi[0])?.nome}
+                </strong>
+                {' '}({mazzoIds.length}/{MAZZO_DUELLO_SIZE} carte)
+              </p>
             )}
           </section>
 
@@ -1253,25 +1369,156 @@ export default function CarteCollezionabiliTab({ onLogout }) {
 
           {/* Collezione */}
           <section>
-            <h3 className="mb-2 text-sm font-bold text-gray-300">
-              Collezione ({(data.carte || []).length})
-            </h3>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-gray-300">
+                Collezione ({collezioneView.totalCopie} carte · {collezioneView.uniqueCount} uniche
+                {hasColFilters ? ` · ${collezioneView.filteredCount} mostrate` : ''})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setColFiltersOpen((v) => !v)}
+                className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-bold ${colFiltersOpen || hasColFilters ? 'bg-violet-800 text-white' : 'bg-gray-800 text-gray-400'}`}
+              >
+                <SlidersHorizontal size={14} />
+                Filtri
+              </button>
+            </div>
+
+            {colFiltersOpen && (
+              <div className="mb-3 space-y-2 rounded-lg border border-gray-700 bg-gray-900/60 p-3">
+                <input
+                  type="search"
+                  value={colSearch}
+                  onChange={(e) => setColSearch(e.target.value)}
+                  placeholder="Cerca nome, codice, espansione…"
+                  className="w-full rounded border border-gray-600 bg-gray-950 px-2 py-1.5 text-sm text-white placeholder:text-gray-500"
+                />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                  <select
+                    value={colTipo}
+                    onChange={(e) => setColTipo(e.target.value)}
+                    className="rounded border border-gray-600 bg-gray-950 px-2 py-1.5 text-xs text-white"
+                  >
+                    <option value="">Tipo — tutti</option>
+                    {Object.entries(CARTA_TIPO_LABEL).map(([k, label]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={colEnergia}
+                    onChange={(e) => setColEnergia(e.target.value)}
+                    className="rounded border border-gray-600 bg-gray-950 px-2 py-1.5 text-xs text-white"
+                  >
+                    <option value="">Energia — tutte</option>
+                    {Object.entries(CARTA_ENERGIA_LABEL).map(([k, label]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={colRarita}
+                    onChange={(e) => setColRarita(e.target.value)}
+                    className="rounded border border-gray-600 bg-gray-950 px-2 py-1.5 text-xs text-white"
+                  >
+                    <option value="">Rarità — tutte</option>
+                    {Object.entries(CARTA_RARITA_LABEL).map(([k, label]) => (
+                      <option key={k} value={k}>{label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={colEspansione}
+                    onChange={(e) => setColEspansione(e.target.value)}
+                    className="rounded border border-gray-600 bg-gray-950 px-2 py-1.5 text-xs text-white"
+                  >
+                    <option value="">Espansione — tutte</option>
+                    {espansioniCollezione.map((esp) => (
+                      <option key={esp.id} value={esp.id}>{esp.nome}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={colSort}
+                    onChange={(e) => setColSort(e.target.value)}
+                    className="col-span-2 rounded border border-gray-600 bg-gray-950 px-2 py-1.5 text-xs text-white sm:col-span-1"
+                  >
+                    {COLLEZIONE_SORT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-gray-400">
+                  <input
+                    type="checkbox"
+                    checked={colSoloLibere}
+                    onChange={(e) => setColSoloLibere(e.target.checked)}
+                    className="rounded border-gray-600"
+                  />
+                  Solo carte non tutte equipaggiate nel reliquiario
+                </label>
+                {hasColFilters && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setColSearch('');
+                      setColTipo('');
+                      setColEnergia('');
+                      setColRarita('');
+                      setColEspansione('');
+                      setColSoloLibere(false);
+                    }}
+                    className="text-xs font-bold text-violet-300 hover:text-violet-200"
+                  >
+                    Azzera filtri
+                  </button>
+                )}
+              </div>
+            )}
+
+            {!colFiltersOpen && (
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <select
+                  value={colSort}
+                  onChange={(e) => setColSort(e.target.value)}
+                  className="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-300"
+                  aria-label="Ordinamento collezione"
+                >
+                  {COLLEZIONE_SORT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                {hasColFilters && (
+                  <span className="text-[10px] text-violet-300">Filtri attivi — apri pannello Filtri</span>
+                )}
+              </div>
+            )}
+
             <div className="flex flex-wrap justify-center gap-3">
-              {(data.carte || []).map((c) => (
-                <CartaCard key={c.id} item={c} onSelect={setDetail} temaEnergie={data?.tema_energie} keywords={cardKeywords} />
+              {collezioneView.stacks.map((stack) => (
+                <CollezioneStackCard
+                  key={stack.key}
+                  stack={stack}
+                  onSelect={setDetailStack}
+                  temaEnergie={data?.tema_energie}
+                  keywords={cardKeywords}
+                />
               ))}
             </div>
-            {(data.carte || []).length === 0 && (
+            {collezioneView.totalCopie === 0 && (
               <p className="text-sm text-gray-500">Nessuna carta. Apri una bustina per iniziare.</p>
+            )}
+            {collezioneView.totalCopie > 0 && collezioneView.filteredCount === 0 && (
+              <p className="text-sm text-gray-500">Nessuna carta corrisponde ai filtri selezionati.</p>
             )}
           </section>
         </>
       )}
 
-      {detail && (
+      {(detail || detailStack) && (
         <CartaDetailModal
           item={detail}
-          onClose={() => setDetail(null)}
+          stack={detailStack}
+          onClose={() => {
+            setDetail(null);
+            setDetailStack(null);
+          }}
           temaEnergie={data?.tema_energie}
           keywords={cardKeywords}
         />

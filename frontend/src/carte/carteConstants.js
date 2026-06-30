@@ -47,3 +47,5 @@ export const CARTA_ENERGIA_CLASS = {
 };
 
 export const RELIQUIARIO_SLOTS = 5;
+export const MAZZO_DUELLO_SIZE = 15;
+export const MAZZI_DUELLO_MAX = 5;
