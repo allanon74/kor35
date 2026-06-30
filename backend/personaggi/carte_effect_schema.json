@@ -87,6 +87,17 @@
         }
       ]
     },
+    "choiceRef": {
+      "type": "object",
+      "required": ["ref"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "pattern": "^(param\\.[A-Z]+|choice\\.[a-z][a-z0-9_]*|context\\.[a-z][a-z0-9_]*)$"
+        }
+      }
+    },
     "cardFilter": {
       "type": "object",
       "additionalProperties": false,
@@ -180,7 +191,7 @@
                 "opponent_hero_1"
               ]
             },
-            { "$ref": "#/$defs/valueRef" }
+            { "$ref": "#/$defs/choiceRef" }
           ],
           "default": "opponent_influence"
         },

@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync seed-componenti-nave cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -54,6 +54,7 @@ help:
 	@echo "  make pilot-tick-loop ENV=dev-home # worker tick manuale foreground (debug)"
 	@echo "  make pilot-tick-stop ENV=dev-home # disabilita tick runtime (flag)"
 	@echo "  make seed-componenti-nave ENV=dev-home  # placeholder catalogo 10 componenti (once per nodo)"
+	@echo "  make seed-carte-esempio ENV=dev-home    # 20 carte demo Sette Elegie + keyword MVP"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make deploy-be ENV=prod      # rebuild backend/daphne + restart + migrate + collectstatic"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
@@ -96,6 +97,10 @@ help:
 	@echo "Wiki regolamento carte (sorgenti docs/wiki/carte/):"
 	@echo "  make wiki-carte-sync ENV=dev-home              # sync bozza regolamento carte nel DB"
 	@echo "  make wiki-carte-sync ENV=dev-home WIKI_CARTE_FORCE=1  # sovrascrive contenuto esistente"
+	@echo ""
+	@echo "Catalogo carte demo:"
+	@echo "  make seed-carte-esempio ENV=dev-home              # espansione + 20 carte + keyword"
+	@echo "  make seed-carte-esempio ENV=dev-home CARTE_ESEMPIO_FORCE=1  # aggiorna se già presenti"
 
 setup:
 	./scripts/setup_wsl_pi_like.sh
@@ -305,6 +310,14 @@ seed-componenti-nave:
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py seed_componenti_nave \
 	  $(if $(filter 1,$(COMPONENTI_NAVE_SKIP_IF_COMPLETE)),--skip-if-complete,) \
 	  $(if $(filter 1,$(COMPONENTI_NAVE_FORCE_COPPIE)),--force,)
+
+CARTE_ESEMPIO_FORCE ?= 0
+CARTE_ESEMPIO_SKIP_IF_COMPLETE ?= 0
+seed-carte-esempio:
+	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py seed_carte_esempio \
+	  $(if $(filter 1,$(CARTE_ESEMPIO_SKIP_IF_COMPLETE)),--skip-if-complete,) \
+	  $(if $(filter 1,$(CARTE_ESEMPIO_FORCE)),--force,)
 
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh

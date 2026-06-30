@@ -325,3 +325,53 @@ class KeywordCartaParametriTests(TestCase):
             testo_regola="Quando questo personaggio si esaurisce, sostituiscilo con una carta fino a costo [X].",
         )
         self.assertTrue(kw.is_parametrizzata())
+
+
+class CarteEsempioSeedTests(TestCase):
+    def setUp(self):
+        self.campagna = Campagna.objects.create(slug="seed-carte", nome="Seed Carte", attiva=True)
+
+    def test_seed_carte_esempio_idempotente(self):
+        from personaggi.carte_collezionabili_models import CARTA_TIPO_EVENTO, CARTA_TIPO_LUOGO, CARTA_TIPO_OGGETTO, CARTA_TIPO_PERSONAGGIO
+        from personaggi.carte_esempio_seed import seed_carte_esempio
+
+        stats1 = seed_carte_esempio(campagna_slug="seed-carte")
+        self.assertEqual(stats1["carte_create"], 20)
+        self.assertGreaterEqual(stats1["keywords_create"], 5)
+
+        stats2 = seed_carte_esempio(campagna_slug="seed-carte", skip_if_complete=True)
+        self.assertTrue(stats2["skipped"])
+
+        self.assertEqual(
+            CartaCollezionabile.objects.filter(campagna=self.campagna).count(),
+            20,
+        )
+        self.assertEqual(
+            CartaCollezionabile.objects.filter(
+                campagna=self.campagna, tipo=CARTA_TIPO_PERSONAGGIO
+            ).count(),
+            10,
+        )
+        self.assertEqual(
+            CartaCollezionabile.objects.filter(
+                campagna=self.campagna, tipo=CARTA_TIPO_OGGETTO
+            ).count(),
+            2,
+        )
+        self.assertEqual(
+            CartaCollezionabile.objects.filter(
+                campagna=self.campagna, tipo=CARTA_TIPO_EVENTO
+            ).count(),
+            6,
+        )
+        self.assertEqual(
+            CartaCollezionabile.objects.filter(
+                campagna=self.campagna, tipo=CARTA_TIPO_LUOGO
+            ).count(),
+            2,
+        )
+        esp = EspansioneCarte.objects.get(campagna=self.campagna, slug="sette-elegie-demo")
+        self.assertEqual(esp.carte.count(), 20)
+        self.assertTrue(
+            KeywordCarta.objects.filter(campagna=self.campagna, codice="COLPO").exists()
+        )
