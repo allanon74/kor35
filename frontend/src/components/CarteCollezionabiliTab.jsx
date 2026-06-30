@@ -96,8 +96,8 @@ function CartaDetailModal({ item, onClose, temaEnergie, keywords }) {
 }
 
 export default function CarteCollezionabiliTab({ onLogout }) {
-  const { selectedCharacter } = useCharacter();
-  const charId = selectedCharacter?.id;
+  const { selectedCharacterId, selectedCharacterData } = useCharacter();
+  const charId = selectedCharacterId;
 
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
@@ -774,7 +774,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                       Posta attuale: {activeDuello.stato_prematch?.posta_cr ?? 0} CR
                       {activeDuello.stato_prematch?.posta_accettata ? ' · accettata' : ' · in negoziazione'}
                       {' · '}
-                      Riserva: {Number(data?.riserva ?? selectedCharacter?.riserva ?? 0).toFixed(0)} CR
+                      Riserva: {Number(data?.riserva ?? selectedCharacterData?.riserva ?? 0).toFixed(0)} CR
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <select
