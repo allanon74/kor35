@@ -1502,7 +1502,12 @@ export default function CarteCollezionabiliTab({ onLogout }) {
               ))}
             </div>
             {collezioneView.totalCopie === 0 && (
-              <p className="text-sm text-gray-500">Nessuna carta. Apri una bustina per iniziare.</p>
+              <p className="text-sm text-gray-500">
+                Nessuna carta in collezione.
+                {(data?.bustine?.length > 0 || (data?.espansioni || []).some((e) => (e.bustine || []).length > 0))
+                  ? ' Scorri alla sezione Bustine e aprine una per iniziare.'
+                  : ' Il catalogo demo va caricato con seed-carte-esempio; le carte si ottengono aprendo bustine.'}
+              </p>
             )}
             {collezioneView.totalCopie > 0 && collezioneView.filteredCount === 0 && (
               <p className="text-sm text-gray-500">Nessuna carta corrisponde ai filtri selezionati.</p>

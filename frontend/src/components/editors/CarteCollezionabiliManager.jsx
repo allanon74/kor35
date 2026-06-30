@@ -135,20 +135,34 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       setWikiInfo(wiki);
 
       const espId = selectedEspansione?.id;
-      if (espId) {
-        const [cat, bust] = await Promise.all([
-          staffGetCarteCatalogoByEspansione(espId, onLogout),
-          staffGetCarteBustineByEspansione(espId, onLogout),
-        ]);
+      const loadCatalogo = espId
+        ? staffGetCarteCatalogoByEspansione(espId, onLogout)
+        : staffGetCarteCatalogo(onLogout);
+      const loadBustine = espId
+        ? staffGetCarteBustineByEspansione(espId, onLogout)
+        : staffGetCarteBustine(onLogout);
+
+      const [catRes, bustRes] = await Promise.allSettled([loadCatalogo, loadBustine]);
+      const partialErrors = [];
+
+      if (catRes.status === 'fulfilled') {
+        const cat = catRes.value;
         setCarte(Array.isArray(cat) ? cat : cat?.results || []);
+      } else {
+        setCarte([]);
+        partialErrors.push(catRes.reason?.message || 'catalogo');
+      }
+
+      if (bustRes.status === 'fulfilled') {
+        const bust = bustRes.value;
         setBustine(Array.isArray(bust) ? bust : bust?.results || []);
       } else {
-        const [cat, bust] = await Promise.all([
-          staffGetCarteCatalogo(onLogout),
-          staffGetCarteBustine(onLogout),
-        ]);
-        setCarte(Array.isArray(cat) ? cat : cat?.results || []);
-        setBustine(Array.isArray(bust) ? bust : bust?.results || []);
+        setBustine([]);
+        partialErrors.push(bustRes.reason?.message || 'bustine');
+      }
+
+      if (partialErrors.length) {
+        setMsg(`Caricamento parziale: errore su ${partialErrors.join(', ')}.`);
       }
     } catch (e) {
       setMsg(e?.message || 'Errore caricamento.');

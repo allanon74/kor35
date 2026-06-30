@@ -313,11 +313,18 @@ seed-componenti-nave:
 
 CARTE_ESEMPIO_FORCE ?= 0
 CARTE_ESEMPIO_SKIP_IF_COMPLETE ?= 0
+CAMPAGNA_SLUG ?=
 seed-carte-esempio:
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py seed_carte_esempio \
+	  $(if $(CAMPAGNA_SLUG),--campagna-slug $(CAMPAGNA_SLUG),) \
 	  $(if $(filter 1,$(CARTE_ESEMPIO_SKIP_IF_COMPLETE)),--skip-if-complete,) \
 	  $(if $(filter 1,$(CARTE_ESEMPIO_FORCE)),--force,)
+
+diagnose-carte:
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py diagnose_carte_collezionabili \
+	  $(if $(CAMPAGNA_SLUG),--campagna-slug $(CAMPAGNA_SLUG),) \
+	  $(if $(PERSONAGGIO_ID),--personaggio-id $(PERSONAGGIO_ID),)
 
 cleanup-legacy:
 	./scripts/cleanup_legacy_wsl_stack.sh

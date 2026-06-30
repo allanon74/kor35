@@ -239,6 +239,7 @@ def seed_carte_esempio(
     Carica espansione demo + 20 carte. Ritorna statistiche per CLI/test.
     """
     from personaggi.carte_collezionabili_models import CartaCollezionabile
+    from personaggi.carte_collezionabili_service import get_carte_accesso_modo
 
     payload = load_carte_esempio_payload()
     campagna = _resolve_campagna(campagna_slug)
@@ -266,9 +267,12 @@ def seed_carte_esempio(
         if presenti == codici_attesi and bustina_ok:
             return {
                 "campagna": campagna.slug,
+                "campagna_nome": campagna.nome,
                 "skipped": True,
                 "carte_create": 0,
                 "carte_aggiornate": 0,
+                "carte_totali": len(codici_attesi),
+                "config_accesso": get_carte_accesso_modo(campagna),
             }
 
     kw_created = kw_updated = 0

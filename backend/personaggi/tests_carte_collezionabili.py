@@ -241,6 +241,49 @@ class CarteCollezionabiliServiceTests(TestCase):
         self.assertEqual(lista_keywords_campagna(self.campagna)[0]["nome"], "Evocazione")
 
 
+class BustinaCarteStaffApiTests(APITestCase):
+    url = "/api/personaggi/api/staff/carte/bustine/"
+
+    def setUp(self):
+        from personaggi.bustina_carte_avista import ensure_bustina_qr
+        from personaggi.models import CAMPAGNA_ROLE_MASTER, CampagnaUtente
+
+        self.user = User.objects.create_user(username="bust_staff", password="x")
+        self.campagna = Campagna.objects.create(slug="bust-test", nome="Bust Test", attiva=True)
+        ConfigurazioneCarteCollezionabili.objects.create(
+            campagna=self.campagna,
+            accesso_modo=CARTE_ACCESSO_OPEN,
+            abilitata=True,
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna, user=self.user, ruolo=CAMPAGNA_ROLE_MASTER, attivo=True
+        )
+        self.espansione = EspansioneCarte.objects.create(
+            campagna=self.campagna,
+            nome="Demo",
+            slug="demo-bust",
+            attiva=True,
+        )
+        self.bustina = BustinaCarte.objects.create(
+            campagna=self.campagna,
+            espansione=self.espansione,
+            nome="Bustina test",
+            costo_crediti=50,
+            carte_per_bustina=5,
+            attiva=True,
+        )
+        ensure_bustina_qr(self.bustina)
+        self.client.force_authenticate(user=self.user)
+
+    def test_list_bustine_serializza_qr_stringa(self):
+        resp = self.client.get(self.url, HTTP_X_CAMPAGNA=self.campagna.slug)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        items = resp.data if isinstance(resp.data, list) else resp.data.get("results", [])
+        self.assertEqual(len(items), 1)
+        self.assertIsInstance(items[0]["qr_code_id"], str)
+        self.assertTrue(items[0]["qr_code_id"])
+
+
 class KeywordCartaStaffApiTests(APITestCase):
     url = "/api/personaggi/api/staff/carte/keywords/"
 

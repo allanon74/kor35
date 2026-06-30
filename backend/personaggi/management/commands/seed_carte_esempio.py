@@ -62,7 +62,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.SUCCESS(
                     f"Skip: tutte le {stats.get('carte_totali', 20)} carte demo già presenti "
-                    f"(campagna {stats['campagna']})."
+                    f"(campagna {stats['campagna']}, accesso {stats.get('config_accesso', '?')})."
                 )
             )
             return
