@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CreditCard, Layers, Plus, RefreshCw, Save, BookOpen, Tag } from 'lucide-react';
+import { CreditCard, ImagePlus, Layers, Plus, RefreshCw, Save, BookOpen, Tag, X } from 'lucide-react';
 import {
   staffGetCarteCatalogo,
   staffGetCarteCatalogoByEspansione,
@@ -24,6 +24,7 @@ import {
   staffGetCarteEffectSchema,
   getStaffWikiCarteRegolamentoInfo,
   syncStaffWikiCarteRegolamento,
+  resolveMediaUrl,
 } from '../../api';
 import { CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../../carte/carteConstants';
 
@@ -49,6 +50,105 @@ const emptyCarta = (espansioneId = '') => ({
   attiva: true,
   ordine_set: 0,
 });
+
+const CARTA_READ_ONLY_KEYS = new Set([
+  'id', 'sync_id', 'created_at', 'updated_at', 'immagine_url', 'espansione_nome', 'campagna', 'immagine',
+]);
+
+const ESPANSIONE_READ_ONLY_KEYS = new Set([
+  'id', 'sync_id', 'created_at', 'updated_at', 'immagine_url', 'campagna', 'carte_count', 'bustine_count', 'immagine',
+]);
+
+function stripForApi(form, readOnlyKeys) {
+  const out = {};
+  Object.entries(form || {}).forEach(([key, val]) => {
+    if (!readOnlyKeys.has(key)) out[key] = val;
+  });
+  return out;
+}
+
+function appendFormField(fd, key, val) {
+  if (val === null || val === undefined) return;
+  if (typeof val === 'boolean') {
+    fd.append(key, val ? 'true' : 'false');
+    return;
+  }
+  if (typeof val === 'object') {
+    fd.append(key, JSON.stringify(val));
+    return;
+  }
+  fd.append(key, String(val));
+}
+
+function buildCartaFormData(form, file) {
+  const fd = new FormData();
+  Object.entries(stripForApi(form, CARTA_READ_ONLY_KEYS)).forEach(([key, val]) => {
+    appendFormField(fd, key, val);
+  });
+  if (file) fd.append('immagine', file);
+  return fd;
+}
+
+function buildEspansioneFormData(form, file) {
+  const fd = new FormData();
+  Object.entries(stripForApi(form, ESPANSIONE_READ_ONLY_KEYS)).forEach(([key, val]) => {
+    appendFormField(fd, key, val);
+  });
+  if (file) fd.append('immagine', file);
+  return fd;
+}
+
+function CartaImmagineUpload({ label, previewUrl, file, onFileChange, onRemoveExisting, removeExisting }) {
+  return (
+    <div className="rounded border border-gray-700 bg-gray-900/50 p-2">
+      <p className="mb-2 text-xs font-bold text-gray-300">{label}</p>
+      {previewUrl ? (
+        <div className="relative mb-2 flex justify-center">
+          <img
+            src={previewUrl}
+            alt="Anteprima"
+            className="max-h-40 rounded border border-gray-600 object-contain"
+          />
+          {file && (
+            <button
+              type="button"
+              className="absolute right-0 top-0 rounded-full bg-gray-900/90 p-1 text-gray-300 hover:text-white"
+              title="Annulla nuovo file"
+              onClick={() => onFileChange(null)}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      ) : (
+        <p className="mb-2 text-center text-[10px] text-gray-500">Nessuna immagine</p>
+      )}
+      <label className="flex cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-violet-700 bg-violet-950/20 px-2 py-2 text-xs text-violet-200 hover:bg-violet-950/40">
+        <ImagePlus size={14} />
+        {file ? file.name : 'Scegli immagine (JPG, PNG, WebP)'}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="hidden"
+          onChange={(e) => onFileChange(e.target.files?.[0] || null)}
+        />
+      </label>
+      {previewUrl && !file && onRemoveExisting && (
+        <label className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+          <input
+            type="checkbox"
+            checked={!!removeExisting}
+            onChange={(e) => onRemoveExisting(e.target.checked)}
+          />
+          Rimuovi immagine salvata
+        </label>
+      )}
+      <p className="mt-1 text-[10px] text-gray-500">
+        Compare nell&apos;arte della carta in app. Dopo il deploy, sincronizza i file con make sync-media se usi il mirror.
+      </p>
+    </div>
+  );
+}
 
 const emptyBustina = (espansioneId = '') => ({
   nome: '',
@@ -116,8 +216,50 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [wikiSyncing, setWikiSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+  const [cartaImmagineFile, setCartaImmagineFile] = useState(null);
+  const [cartaFilePreview, setCartaFilePreview] = useState(null);
+  const [removeCartaImmagine, setRemoveCartaImmagine] = useState(false);
+  const [espansioneImmagineFile, setEspansioneImmagineFile] = useState(null);
+  const [espansioneFilePreview, setEspansioneFilePreview] = useState(null);
+  const [removeEspansioneImmagine, setRemoveEspansioneImmagine] = useState(false);
 
   const activeEspansioneId = selectedEspansione?.id || '';
+
+  useEffect(() => {
+    if (!cartaImmagineFile) {
+      setCartaFilePreview(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(cartaImmagineFile);
+    setCartaFilePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [cartaImmagineFile]);
+
+  useEffect(() => {
+    if (!espansioneImmagineFile) {
+      setEspansioneFilePreview(null);
+      return undefined;
+    }
+    const url = URL.createObjectURL(espansioneImmagineFile);
+    setEspansioneFilePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [espansioneImmagineFile]);
+
+  const cartaPreviewUrl = cartaFilePreview
+    || (!removeCartaImmagine && form.immagine_url ? resolveMediaUrl(form.immagine_url) : null);
+
+  const espansionePreviewUrl = espansioneFilePreview
+    || (!removeEspansioneImmagine && espansioneForm.immagine_url ? resolveMediaUrl(espansioneForm.immagine_url) : null);
+
+  const resetCartaImmagineState = () => {
+    setCartaImmagineFile(null);
+    setRemoveCartaImmagine(false);
+  };
+
+  const resetEspansioneImmagineState = () => {
+    setEspansioneImmagineFile(null);
+    setRemoveEspansioneImmagine(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -188,14 +330,23 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const saveEspansione = async () => {
     try {
-      if (selectedEspansione?.id) {
-        await staffUpdateCartaEspansione(selectedEspansione.id, espansioneForm, onLogout);
+      let payload;
+      if (espansioneImmagineFile) {
+        payload = buildEspansioneFormData(espansioneForm, espansioneImmagineFile);
+      } else if (removeEspansioneImmagine && selectedEspansione?.id) {
+        payload = { ...stripForApi(espansioneForm, ESPANSIONE_READ_ONLY_KEYS), immagine: null };
       } else {
-        await staffCreateCartaEspansione(espansioneForm, onLogout);
+        payload = stripForApi(espansioneForm, ESPANSIONE_READ_ONLY_KEYS);
+      }
+      if (selectedEspansione?.id) {
+        await staffUpdateCartaEspansione(selectedEspansione.id, payload, onLogout);
+      } else {
+        await staffCreateCartaEspansione(payload, onLogout);
       }
       setMsg('Espansione salvata.');
       setSelectedEspansione(null);
       setEspansioneForm(emptyEspansione());
+      resetEspansioneImmagineState();
       await load();
     } catch (e) {
       setMsg(e?.message || 'Salvataggio espansione fallito.');
@@ -204,14 +355,23 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const saveCarta = async () => {
     try {
-      if (selected?.id) {
-        await staffUpdateCartaCatalogo(selected.id, form, onLogout);
+      let payload;
+      if (cartaImmagineFile) {
+        payload = buildCartaFormData(form, cartaImmagineFile);
+      } else if (removeCartaImmagine && selected?.id) {
+        payload = { ...stripForApi(form, CARTA_READ_ONLY_KEYS), immagine: null };
       } else {
-        await staffCreateCartaCatalogo(form, onLogout);
+        payload = stripForApi(form, CARTA_READ_ONLY_KEYS);
+      }
+      if (selected?.id) {
+        await staffUpdateCartaCatalogo(selected.id, payload, onLogout);
+      } else {
+        await staffCreateCartaCatalogo(payload, onLogout);
       }
       setMsg('Carta salvata.');
       setSelected(null);
       setForm(emptyCarta(activeEspansioneId));
+      resetCartaImmagineState();
       await load();
     } catch (e) {
       setMsg(e?.message || 'Salvataggio fallito.');
@@ -451,9 +611,11 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const selectEspansione = (esp) => {
     setSelectedEspansione(esp);
-    setEspansioneForm({ ...esp });
+    setEspansioneForm(esp ? { ...esp } : emptyEspansione());
+    resetEspansioneImmagineState();
     setSelected(null);
     setForm(emptyCarta(esp?.id));
+    resetCartaImmagineState();
     setSelectedBustina(null);
     setBustinaForm(emptyBustina(esp?.id));
   };
@@ -504,7 +666,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
               <button
                 type="button"
                 className="flex items-center gap-1 rounded bg-violet-800 px-2 py-1 text-xs"
-                onClick={() => { setSelectedEspansione(null); setEspansioneForm(emptyEspansione()); }}
+                onClick={() => { setSelectedEspansione(null); setEspansioneForm(emptyEspansione()); resetEspansioneImmagineState(); }}
               >
                 <Plus size={12} /> Nuova
               </button>
@@ -552,6 +714,14 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
               />
               Attiva
             </label>
+            <CartaImmagineUpload
+              label="Immagine copertina espansione"
+              previewUrl={espansionePreviewUrl}
+              file={espansioneImmagineFile}
+              onFileChange={setEspansioneImmagineFile}
+              removeExisting={removeEspansioneImmagine}
+              onRemoveExisting={selectedEspansione?.immagine_url ? setRemoveEspansioneImmagine : null}
+            />
             <div className="flex gap-2">
               <button type="button" className="flex items-center gap-1 rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveEspansione}>
                 <Save size={14} /> Salva
@@ -599,7 +769,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
               <button
                 type="button"
                 className="flex items-center gap-1 rounded bg-violet-800 px-2 py-1 text-xs"
-                onClick={() => { setSelected(null); setForm(emptyCarta(activeEspansioneId)); }}
+                onClick={() => { setSelected(null); setForm(emptyCarta(activeEspansioneId)); resetCartaImmagineState(); }}
               >
                 <Plus size={12} /> Nuova
               </button>
@@ -610,7 +780,11 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                   <button
                     type="button"
                     className={`w-full rounded px-2 py-1 text-left hover:bg-gray-800 ${selected?.id === c.id ? 'bg-gray-700' : ''}`}
-                    onClick={() => { setSelected(c); setForm({ ...c }); }}
+                    onClick={() => {
+                      setSelected(c);
+                      setForm({ ...c });
+                      resetCartaImmagineState();
+                    }}
                   >
                     <span className="font-bold">{c.nome}</span>
                     <span className="ml-2 text-xs text-gray-500">
@@ -643,6 +817,14 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                 onChange={(e) => setForm((p) => ({ ...p, [f]: e.target.value }))}
               />
             ))}
+            <CartaImmagineUpload
+              label="Immagine arte carta"
+              previewUrl={cartaPreviewUrl}
+              file={cartaImmagineFile}
+              onFileChange={setCartaImmagineFile}
+              removeExisting={removeCartaImmagine}
+              onRemoveExisting={form.immagine_url ? setRemoveCartaImmagine : null}
+            />
             <div className="grid grid-cols-3 gap-2">
               <select className="rounded bg-gray-900 px-2 py-1 text-sm" value={form.tipo} onChange={(e) => setForm((p) => ({ ...p, tipo: e.target.value }))}>
                 {Object.entries(CARTA_TIPO_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -718,6 +900,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                     await staffDeleteCartaCatalogo(selected.id, onLogout);
                     setSelected(null);
                     setForm(emptyCarta(activeEspansioneId));
+                    resetCartaImmagineState();
                     load();
                   }}
                 >

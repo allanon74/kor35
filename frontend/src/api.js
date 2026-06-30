@@ -4051,13 +4051,13 @@ export const staffGetCarteEspansioni = (onLogout) =>
 export const staffCreateCartaEspansione = (data, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/espansioni/`, {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data instanceof FormData ? data : JSON.stringify(data),
     }, onLogout);
 
 export const staffUpdateCartaEspansione = (id, data, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/espansioni/${id}/`, {
         method: 'PATCH',
-        body: JSON.stringify(data),
+        body: data instanceof FormData ? data : JSON.stringify(data),
     }, onLogout);
 
 export const staffDeleteCartaEspansione = (id, onLogout) =>
@@ -4066,13 +4066,13 @@ export const staffDeleteCartaEspansione = (id, onLogout) =>
 export const staffCreateCartaCatalogo = (data, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/catalogo/`, {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: data instanceof FormData ? data : JSON.stringify(data),
     }, onLogout);
 
 export const staffUpdateCartaCatalogo = (id, data, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/catalogo/${id}/`, {
         method: 'PATCH',
-        body: JSON.stringify(data),
+        body: data instanceof FormData ? data : JSON.stringify(data),
     }, onLogout);
 
 export const staffDeleteCartaCatalogo = (id, onLogout) =>
