@@ -120,7 +120,6 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
 
 
 class BustinaCarteSerializer(serializers.ModelSerializer):
-    qr_code_id = serializers.IntegerField(source="qr_code_id", read_only=True, allow_null=True)
     espansione_nome = serializers.CharField(source="espansione.nome", read_only=True, allow_null=True)
 
     class Meta:
