@@ -86,7 +86,9 @@ class SocialProfile(SyncableModel, models.Model):
 
     def save(self, *args, **kwargs):
         if self.foto_principale:
-            self.foto_principale = optimize_uploaded_image(self.foto_principale)
+            self.foto_principale = prepare_image_upload(
+                self.foto_principale, f"social/profiles/{self.personaggio_id}"
+            )
         super().save(*args, **kwargs)
 
 
@@ -149,7 +151,9 @@ class SocialPost(SyncableModel, models.Model):
         if not self.public_slug:
             self.public_slug = uuid.uuid4().hex[:16]
         if self.immagine:
-            self.immagine = optimize_uploaded_image(self.immagine)
+            self.immagine = prepare_image_upload(
+                self.immagine, f"social/posts/{self.autore_id}"
+            )
         self.clean()
         super().save(*args, **kwargs)
 
@@ -171,7 +175,9 @@ class SocialPostImage(SyncableModel, models.Model):
 
     def save(self, *args, **kwargs):
         if self.immagine:
-            self.immagine = optimize_uploaded_image(self.immagine)
+            self.immagine = prepare_image_upload(
+                self.immagine, f"social/posts/{self.post_id}/gallery"
+            )
         super().save(*args, **kwargs)
         from .post_media import sync_post_cover_image
 
@@ -340,7 +346,9 @@ class SocialGroupPost(SyncableModel, models.Model):
 
     def save(self, *args, **kwargs):
         if self.immagine:
-            self.immagine = optimize_uploaded_image(self.immagine)
+            self.immagine = prepare_image_upload(
+                self.immagine, f"social/posts/{self.autore_id}"
+            )
         self.clean()
         super().save(*args, **kwargs)
 
@@ -419,7 +427,9 @@ class SocialStory(SyncableModel, models.Model):
         if self.media and hasattr(self.media, "name"):
             name = str(self.media.name or "").lower()
             if name.endswith((".jpg", ".jpeg", ".png", ".webp")):
-                self.media = optimize_uploaded_image(self.media)
+                self.media = prepare_image_upload(
+                    self.media, f"social/stories/{self.autore_id}"
+                )
         self.clean()
         super().save(*args, **kwargs)
 
@@ -546,6 +556,42 @@ def extract_hashtags(text):
     return sorted(tags)
 
 
+def is_new_file_upload(field_file) -> bool:
+    return bool(field_file) and getattr(field_file, "_committed", True) is False
+
+
+def normalize_media_field_path(field_file, upload_prefix: str) -> None:
+    """
+    Ripara path annidati (upload_to riapplicato a ogni save) e sposta il file se serve.
+    """
+    if not field_file or not field_file.name:
+        return
+    prefix = upload_prefix.rstrip("/")
+    basename = os.path.basename(field_file.name.replace("\\", "/"))
+    if not basename:
+        return
+    normalized = f"{prefix}/{basename}"
+    if field_file.name == normalized:
+        return
+    storage = field_file.storage
+    old_name = field_file.name
+    if storage.exists(old_name):
+        if not storage.exists(normalized):
+            with storage.open(old_name, "rb") as src:
+                storage.save(normalized, src)
+        storage.delete(old_name)
+    field_file.name = normalized
+
+
+def prepare_image_upload(field_file, upload_prefix: str):
+    if not field_file:
+        return field_file
+    normalize_media_field_path(field_file, upload_prefix)
+    if is_new_file_upload(field_file):
+        return optimize_uploaded_image(field_file)
+    return field_file
+
+
 def optimize_uploaded_image(uploaded_file):
     """
     Resize/compressione semplice per ridurre spazio media.
@@ -559,7 +605,7 @@ def optimize_uploaded_image(uploaded_file):
         image.save(output, format="JPEG", quality=80, optimize=True)
         output.seek(0)
 
-        base_name = os.path.splitext(uploaded_file.name)[0]
+        base_name = os.path.splitext(os.path.basename(uploaded_file.name.replace("\\", "/")))[0]
         new_name = f"{base_name}.jpg"
         return ContentFile(output.read(), name=new_name)
     except Exception:
