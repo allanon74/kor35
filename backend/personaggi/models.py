@@ -4688,6 +4688,10 @@ class Personaggio(Inventario):
         ).exists()
 
     def can_edit_era_prefettura(self):
+        from personaggi.modificabilita import personaggio_scheda_modifica_libera
+
+        if personaggio_scheda_modifica_libera(self):
+            return True
         return not self.ha_eventi_iniziati()
 
     def _sync_abilita_default_era(self):

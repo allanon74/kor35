@@ -6,6 +6,14 @@ from gestione_plot.models import Evento
 from .models import abilita_prerequisito
 
 
+def personaggio_scheda_modifica_libera(personaggio) -> bool:
+    """Flag staff in impostazioni_ui: il giocatore può modificare la scheda oltre i vincoli evento."""
+    if not personaggio:
+        return False
+    ui = getattr(personaggio, "impostazioni_ui", None) or {}
+    return bool(ui.get("scheda_modifica_libera"))
+
+
 def get_event_context(now=None):
     """
     Restituisce:
@@ -25,13 +33,16 @@ def get_event_context(now=None):
     return event_in_corso, latest_event_start
 
 
-def is_modificabile_per_eventi(acquisizione_dt, event_in_corso: bool, latest_event_start):
+def is_modificabile_per_eventi(acquisizione_dt, event_in_corso: bool, latest_event_start, personaggio=None):
     """
     Regole richieste:
     - se siamo nel periodo inizio-fine di un evento: NON modificabile
     - se tra acquisto e oggi non c'è un inizio evento: modificabile
       (equivalente a: acquisizione_dt > latest_event_start, se presente)
+    - eccezione: personaggio con scheda_modifica_libera (flag staff)
     """
+    if personaggio and personaggio_scheda_modifica_libera(personaggio):
+        return True
     if event_in_corso:
         return False
     if not latest_event_start:

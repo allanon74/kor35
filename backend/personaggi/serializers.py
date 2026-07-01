@@ -2592,6 +2592,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         Razza (archetipo/forma AIN) modificabile solo finché il personaggio
         non ha partecipazioni a eventi già iniziati (o conclusi).
         """
+        from .modificabilita import personaggio_scheda_modifica_libera
+
+        if personaggio_scheda_modifica_libera(personaggio):
+            return True
         try:
             from django.utils import timezone
             now = timezone.now()
@@ -2601,6 +2605,10 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             return True
 
     def get_can_edit_era(self, personaggio):
+        from .modificabilita import personaggio_scheda_modifica_libera
+
+        if personaggio_scheda_modifica_libera(personaggio):
+            return True
         try:
             return personaggio.can_edit_era_prefettura()
         except Exception:
@@ -2615,13 +2623,17 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             self._event_mod_context_cache = get_event_context()
         return self._event_mod_context_cache
 
-    def _is_modificabile_per_eventi(self, acquisizione_dt):
+    def _is_modificabile_per_eventi(self, acquisizione_dt, personaggio=None):
         from .modificabilita import is_modificabile_per_eventi
         event_in_corso, latest_event_start = self._get_event_mod_context_cache()
+        pg = personaggio
+        if pg is None:
+            pg = self.context.get("personaggio")
         return is_modificabile_per_eventi(
             acquisizione_dt,
             event_in_corso=event_in_corso,
             latest_event_start=latest_event_start,
+            personaggio=pg,
         )
 
     def get_abilita_possedute(self, personaggio):
@@ -2652,7 +2664,7 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         for item in serialized:
             ab_id = item.get("id")
             acquired_at = acq_map.get(ab_id)
-            mod_base = self._is_modificabile_per_eventi(acquired_at)
+            mod_base = self._is_modificabile_per_eventi(acquired_at, personaggio=personaggio)
             item["is_modifiable"] = bool(mod_base and ab_id not in prereq_locked_ids)
             if paid_cr_map.get(ab_id):
                 item["costo_crediti_pagato"] = paid_cr_map[ab_id]
@@ -3132,6 +3144,10 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
         return bool(t and getattr(t, "giocante", False))
 
     def get_can_edit_razza(self, personaggio):
+        from .modificabilita import personaggio_scheda_modifica_libera
+
+        if personaggio_scheda_modifica_libera(personaggio):
+            return True
         try:
             from django.utils import timezone
             now = timezone.now()
@@ -3140,6 +3156,10 @@ class PersonaggioManageSerializer(serializers.ModelSerializer):
             return True
 
     def get_can_edit_era(self, personaggio):
+        from .modificabilita import personaggio_scheda_modifica_libera
+
+        if personaggio_scheda_modifica_libera(personaggio):
+            return True
         try:
             return personaggio.can_edit_era_prefettura()
         except Exception:
@@ -3436,10 +3456,33 @@ class PersonaggioAbilitaStaffSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='abilita.id', read_only=True)
     nome = serializers.CharField(source='abilita.nome', read_only=True)
     origine_label = serializers.CharField(source='get_origine_display', read_only=True)
+    is_modifiable = serializers.SerializerMethodField()
+    revoca_blocco = serializers.SerializerMethodField()
 
     class Meta:
         model = PersonaggioAbilita
-        fields = ('id', 'nome', 'origine', 'origine_label', 'data_acquisizione')
+        fields = (
+            'id', 'nome', 'origine', 'origine_label', 'data_acquisizione',
+            'is_modifiable', 'revoca_blocco',
+        )
+
+    def get_is_modifiable(self, obj):
+        personaggio = self.context.get('personaggio')
+        if not personaggio:
+            return False
+        from personaggi.abilita_personaggio_ops import valuta_revoca_abilita
+
+        ok, _, _ = valuta_revoca_abilita(personaggio, obj.abilita_id)
+        return ok
+
+    def get_revoca_blocco(self, obj):
+        personaggio = self.context.get('personaggio')
+        if not personaggio:
+            return ''
+        from personaggi.abilita_personaggio_ops import valuta_revoca_abilita
+
+        ok, err, _ = valuta_revoca_abilita(personaggio, obj.abilita_id)
+        return '' if ok else err
 
 
 class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
@@ -3456,6 +3499,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     carriere_membership = serializers.SerializerMethodField()
     risorse_pool_ui = serializers.SerializerMethodField()
     abilita_possedute = serializers.SerializerMethodField()
+    scheda_modifica_libera = serializers.SerializerMethodField()
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     movimenti_pc = PuntiCaratteristicaMovimentoListSerializer(many=True, read_only=True)
     tipologia = serializers.PrimaryKeyRelatedField(
@@ -3493,7 +3537,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'era_nome', 'prefettura_nome',
             'watch_enabled', 'peso_influencer', 'badge_instafame',
             'avatar_url', 'qrcode_id', 'qrcode_testo',
-            'carriere_membership', 'risorse_pool_ui', 'abilita_possedute',
+            'carriere_membership', 'risorse_pool_ui', 'abilita_possedute', 'scheda_modifica_libera',
             'movimenti_credito', 'movimenti_pc',
             'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
             'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
@@ -3505,7 +3549,8 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'tipologia_nome', 'giocante', 'campagna_nome',
             'era_nome', 'prefettura_nome', 'avatar_url',
             'qrcode_id', 'qrcode_testo', 'carriere_membership',
-            'risorse_pool_ui', 'abilita_possedute', 'movimenti_credito', 'movimenti_pc',
+            'risorse_pool_ui', 'abilita_possedute', 'scheda_modifica_libera',
+            'movimenti_credito', 'movimenti_pc',
         )
 
     def get_abilita_possedute(self, obj):
@@ -3514,7 +3559,13 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             .select_related('abilita')
             .order_by('abilita__nome')
         )
-        return PersonaggioAbilitaStaffSerializer(pivots, many=True).data
+        ctx = {**self.context, 'personaggio': obj}
+        return PersonaggioAbilitaStaffSerializer(pivots, many=True, context=ctx).data
+
+    def get_scheda_modifica_libera(self, obj):
+        from personaggi.modificabilita import personaggio_scheda_modifica_libera
+
+        return personaggio_scheda_modifica_libera(obj)
 
     def get_proprietario_nome(self, obj):
         user = obj.proprietario

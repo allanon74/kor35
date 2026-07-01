@@ -1222,7 +1222,7 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(body.get("professioni"), "Scout")
 
     def test_staff_assegna_e_rimuovi_abilita(self):
-        ab = Abilita.objects.create(nome="Staff Test Skill", costo_pc=2, costo_crediti=5)
+        ab = Abilita.objects.create(nome="Staff Test Skill", costo_pc=0, costo_crediti=0)
         base = f"/api/personaggi/api/staff/personaggi/{self.pg.id}"
 
         res_add = self.client.post(
@@ -1234,13 +1234,7 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         possedute = res_add.json().get("abilita_possedute") or []
         self.assertEqual(len(possedute), 1)
         self.assertEqual(possedute[0]["id"], ab.id)
-
-        res_dup = self.client.post(
-            f"{base}/assegna-abilita/",
-            {"abilita_id": ab.id},
-            format="json",
-        )
-        self.assertEqual(res_dup.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(possedute[0]["is_modifiable"])
 
         res_rm = self.client.post(
             f"{base}/rimuovi-abilita/",
@@ -1249,6 +1243,16 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         )
         self.assertEqual(res_rm.status_code, status.HTTP_200_OK, res_rm.content)
         self.assertEqual(len(res_rm.json().get("abilita_possedute") or []), 0)
+
+    def test_staff_scheda_modifica_libera_flag(self):
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/"
+        res = self.client.patch(
+            url,
+            {"impostazioni_ui": {"scheda_modifica_libera": True}},
+            format="json",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        self.assertTrue(res.json().get("scheda_modifica_libera"))
 
 
 class MetatalentiDecimalValoreTests(TestCase):

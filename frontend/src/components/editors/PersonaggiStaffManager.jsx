@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Users, Search, X, QrCode, Briefcase, Coins, FileText, StickyNote, Loader2, Plus, Skull, Heart, RotateCcw,
-  Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive,
+  Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive, Award,
 } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
@@ -42,6 +42,9 @@ import {
   staffRevivePersonaggio,
   deletePersonaggio,
   resolveMediaUrl,
+  getAcquirableSkills,
+  staffPersonaggioAssegnaAbilita,
+  staffPersonaggioRimuoviAbilita,
 } from '../../api';
 
 function caricaIncludesCarriera(carica, carrieraId) {
@@ -58,6 +61,7 @@ const TABS = [
   { id: 'bg', label: 'BG / Anagrafica', icon: FileText },
   { id: 'qr', label: 'QR', icon: QrCode },
   { id: 'membership', label: 'Carriere / KORP', icon: Briefcase },
+  { id: 'abilita', label: 'Abilità', icon: Award },
   { id: 'risorse', label: 'Risorse', icon: Coins },
   { id: 'inventario', label: 'Inventario', icon: Package },
   { id: 'instafame', label: 'InstaFame', icon: Sparkles },
@@ -109,6 +113,11 @@ const PersonaggiStaffManager = ({ onLogout }) => {
     foto_rotazione: 0,
   });
   const [socialProfileSaving, setSocialProfileSaving] = useState(false);
+  const [abilitaAcquistabili, setAbilitaAcquistabili] = useState([]);
+  const [abilitaAcqLoading, setAbilitaAcqLoading] = useState(false);
+  const [abilitaMotivo, setAbilitaMotivo] = useState('Intervento staff abilità');
+  const [selectedAbilitaId, setSelectedAbilitaId] = useState('');
+  const [abilitaBusy, setAbilitaBusy] = useState(false);
 
   const loadOggettiSenzaPosizione = useCallback(async () => {
     try {
@@ -232,6 +241,99 @@ const PersonaggiStaffManager = ({ onLogout }) => {
     setDetail(null);
     setShowQrScan(false);
     setMembershipForm(null);
+    setAbilitaAcquistabili([]);
+    setSelectedAbilitaId('');
+  };
+
+  const loadAbilitaAcquistabili = useCallback(async (personaggioId) => {
+    if (!personaggioId) return;
+    setAbilitaAcqLoading(true);
+    try {
+      const rows = await getAcquirableSkills(onLogout, personaggioId);
+      setAbilitaAcquistabili(Array.isArray(rows) ? rows : []);
+    } catch {
+      setAbilitaAcquistabili([]);
+    } finally {
+      setAbilitaAcqLoading(false);
+    }
+  }, [onLogout]);
+
+  useEffect(() => {
+    if (modalTab === 'abilita' && detail?.id) {
+      loadAbilitaAcquistabili(detail.id);
+    }
+  }, [modalTab, detail?.id, loadAbilitaAcquistabili]);
+
+  const handleSaveSchedaModificaLibera = async (checked) => {
+    if (!detail?.id) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const updated = await staffPatchPersonaggio(detail.id, {
+        impostazioni_ui: {
+          ...(detail.impostazioni_ui || {}),
+          scheda_modifica_libera: !!checked,
+        },
+      }, onLogout);
+      setDetail(updated);
+      setMessage(checked
+        ? 'Modifica scheda sbloccata per il giocatore.'
+        : 'Modifica scheda tornata alle regole standard.');
+    } catch (e) {
+      setMessage(e.message || 'Errore salvataggio flag modifica scheda');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssegnaAbilitaStaff = async () => {
+    if (!detail?.id || !selectedAbilitaId || abilitaBusy) return;
+    setAbilitaBusy(true);
+    setMessage('');
+    try {
+      const updated = await staffPersonaggioAssegnaAbilita(
+        detail.id,
+        selectedAbilitaId,
+        { motivo: abilitaMotivo },
+        onLogout,
+      );
+      setDetail(updated);
+      setSelectedAbilitaId('');
+      await loadAbilitaAcquistabili(detail.id);
+      setMessage('Abilità assegnata (costi applicati come in scheda giocatore).');
+    } catch (e) {
+      setMessage(e.message || 'Assegnazione abilità fallita');
+    } finally {
+      setAbilitaBusy(false);
+    }
+  };
+
+  const handleRimuoviAbilitaStaff = async (abilitaId, nome, isModifiable, blocco) => {
+    if (!detail?.id || abilitaBusy) return;
+    if (!isModifiable) {
+      setMessage(blocco || 'Abilità non revocabile.');
+      return;
+    }
+    if (!window.confirm(`Revocare «${nome}»? PC e crediti verranno rimborsati secondo le regole standard.`)) {
+      return;
+    }
+    setAbilitaBusy(true);
+    setMessage('');
+    try {
+      const updated = await staffPersonaggioRimuoviAbilita(
+        detail.id,
+        abilitaId,
+        { motivo: abilitaMotivo },
+        onLogout,
+      );
+      setDetail(updated);
+      await loadAbilitaAcquistabili(detail.id);
+      setMessage(`Abilità «${nome}» revocata con rimborso.`);
+    } catch (e) {
+      setMessage(e.message || 'Revoca abilità fallita');
+    } finally {
+      setAbilitaBusy(false);
+    }
   };
 
   const handleSaveFields = async (fields) => {
@@ -697,6 +799,126 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {modalTab === 'abilita' && (
+                    <div className="space-y-5 text-sm">
+                      <div className="bg-emerald-950/30 border border-emerald-800/60 rounded-lg p-4 space-y-3">
+                        <h4 className="font-bold text-emerald-300 uppercase text-xs tracking-wide">
+                          Modifica scheda giocatore
+                        </h4>
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={!!detail.scheda_modifica_libera}
+                            disabled={saving}
+                            onChange={(e) => void handleSaveSchedaModificaLibera(e.target.checked)}
+                          />
+                          <span>
+                            <span className="text-white font-medium block">
+                              Consenti modifica oltre i vincoli evento
+                            </span>
+                            <span className="text-gray-400 text-xs block mt-1">
+                              Il giocatore può cambiare Era, razza AIN e revocare/acquistare abilità anche con eventi
+                              in corso o già iniziati. Resta valido il blocco sulle abilità prerequisito di altre
+                              abilità possedute.
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">Motivo (log / movimenti)</label>
+                        <input
+                          className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5"
+                          value={abilitaMotivo}
+                          onChange={(e) => setAbilitaMotivo(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-3 space-y-2">
+                        <h4 className="font-bold text-white">Aggiungi abilità</h4>
+                        <p className="text-xs text-gray-500">
+                          Solo abilità acquistabili secondo le regole di scheda (requisiti, era, costi PC/CR).
+                        </p>
+                        {abilitaAcqLoading ? (
+                          <p className="text-gray-400 text-xs">Caricamento acquistabili…</p>
+                        ) : (
+                          <select
+                            className="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1.5"
+                            value={selectedAbilitaId}
+                            onChange={(e) => setSelectedAbilitaId(e.target.value)}
+                            disabled={abilitaBusy}
+                          >
+                            <option value="">Seleziona abilità acquistabile…</option>
+                            {abilitaAcquistabili.map((ab) => (
+                              <option key={ab.id} value={ab.id}>
+                                {ab.nome}
+                                {ab.costo_pc_calc != null ? ` · ${ab.costo_pc_calc} PC` : ''}
+                                {ab.costo_crediti_calc != null ? ` · ${ab.costo_crediti_calc} CR` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          disabled={!selectedAbilitaId || abilitaBusy}
+                          onClick={() => void handleAssegnaAbilitaStaff()}
+                          className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 rounded font-bold text-sm disabled:opacity-40"
+                        >
+                          Assegna abilità
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => loadAbilitaAcquistabili(detail.id)}
+                          className="text-xs text-gray-500 underline ml-2"
+                        >
+                          Aggiorna elenco acquistabili
+                        </button>
+                      </div>
+
+                      <div>
+                        <h4 className="font-bold text-white mb-2">
+                          Abilità possedute ({detail.abilita_possedute?.length || 0})
+                        </h4>
+                        <ul className="space-y-2 max-h-[40vh] overflow-y-auto">
+                          {(detail.abilita_possedute || []).map((ab) => (
+                            <li
+                              key={ab.id}
+                              className="bg-gray-800 border border-gray-700 rounded px-3 py-2 flex flex-wrap items-center justify-between gap-2"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-medium text-white">{ab.nome}</div>
+                                <div className="text-[10px] text-gray-500 uppercase">
+                                  {ab.origine_label || ab.origine}
+                                </div>
+                                {!ab.is_modifiable && ab.revoca_blocco && (
+                                  <div className="text-[10px] text-amber-400 mt-0.5">{ab.revoca_blocco}</div>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                disabled={abilitaBusy || !ab.is_modifiable}
+                                title={ab.revoca_blocco || ''}
+                                onClick={() => void handleRimuoviAbilitaStaff(
+                                  ab.id,
+                                  ab.nome,
+                                  ab.is_modifiable,
+                                  ab.revoca_blocco,
+                                )}
+                                className="px-3 py-1 rounded text-xs font-bold bg-red-900/70 hover:bg-red-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                Revoca
+                              </button>
+                            </li>
+                          ))}
+                          {!detail.abilita_possedute?.length && (
+                            <li className="text-gray-500">Nessuna abilità.</li>
+                          )}
+                        </ul>
+                      </div>
                     </div>
                   )}
 

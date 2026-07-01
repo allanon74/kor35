@@ -521,6 +521,8 @@ class AcquisisciAbilitaView(APIView):
     permission_classes = [IsAuthenticated]
     @transaction.atomic 
     def post(self, request, format=None):
+        from personaggi.abilita_personaggio_ops import acquisisci_abilita_personaggio
+
         personaggio_id = request.data.get('personaggio_id')
         abilita_id = request.data.get('abilita_id')
         if not personaggio_id: return Response({"error": "L'ID del personaggio è richiesto (personaggio_id)."}, status=status.HTTP_400_BAD_REQUEST)
@@ -531,194 +533,12 @@ class AcquisisciAbilitaView(APIView):
         except Personaggio.MultipleObjectsReturned: return Response({"error": "Errore interno: Trovati personaggi multipli con lo stesso ID per l'utente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         if not _can_operate_in_campaign(request.user, personaggio.campagna, needs_master=False):
             return Response({"error": "Non autorizzato per la campagna del personaggio."}, status=status.HTTP_403_FORBIDDEN)
-        try:
-            abilita = (
-                Abilita.objects.select_related('aura_riferimento', 'caratteristica', 'caratteristica_2')
-                .prefetch_related('abilita_requisito_set__requisito', 'abilita_prerequisiti')
-                .get(id=abilita_id)
-            )
-        except Abilita.DoesNotExist: return Response({"error": "Abilità non trovata."}, status=status.HTTP_404_NOT_FOUND)
-        abilita_qs = _campaign_feature_filter(request, Abilita.objects.filter(id=abilita_id), FEATURE_ABILITA)
-        if not abilita_qs.exists():
-            return Response({"error": "Abilità non disponibile nella campagna attiva."}, status=status.HTTP_403_FORBIDDEN)
 
-        from personaggi.accademia_catalogo import verifica_abilita_accademia
-        try:
-            verifica_abilita_accademia(abilita)
-        except ValidationError as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        result = acquisisci_abilita_personaggio(personaggio, abilita_id, request, staff=False)
+        if not result.ok:
+            return Response({"error": result.error}, status=status.HTTP_400_BAD_REQUEST)
 
-        era_ids_abilita = set(EraAbilita.objects.filter(abilita_id=abilita.id).values_list("era_id", flat=True))
-        if era_ids_abilita:
-            if not personaggio.era_id:
-                return Response(
-                    {"error": "Questa abilità richiede la selezione di un'Era di provenienza."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if personaggio.era_id not in era_ids_abilita:
-                return Response(
-                    {"error": "Questa abilità appartiene a un'altra Era e non è acquistabile dal personaggio."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-        regione_ids_abilita = set(RegioneAbilita.objects.filter(abilita_id=abilita.id).values_list("regione_id", flat=True))
-        if regione_ids_abilita:
-            regione_pg_id = getattr(getattr(personaggio, "prefettura", None), "regione_id", None)
-            if not regione_pg_id:
-                return Response(
-                    {"error": "Questa abilità richiede una regione di provenienza (tramite prefettura)."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if regione_pg_id not in regione_ids_abilita:
-                return Response(
-                    {"error": "Questa abilità appartiene a un'altra Regione e non è acquistabile dal personaggio."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-        if personaggio.abilita_possedute.filter(id=abilita_id).exists():
-            return Response({"error": "Abilità già posseduta."}, status=status.HTTP_400_BAD_REQUEST)
-
-        is_tratto_ain = (
-            abilita.is_tratto_aura
-            and abilita.aura_riferimento_id
-            and getattr(abilita.aura_riferimento, 'sigla', None) == 'AIN'
-        )
-
-        if is_tratto_ain:
-            now = timezone.now()
-            if personaggio.eventi_partecipati.filter(data_inizio__lte=now).exists():
-                return Response(
-                    {"error": "Non puoi modificare la razza: il personaggio partecipa già a un evento iniziato (o concluso)."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-        ok_val, msg_val = personaggio.valida_acquisizione_abilita(abilita)
-        if not ok_val:
-            return Response({"error": msg_val}, status=status.HTTP_400_BAD_REQUEST)
-
-        old_ain_trait = None
-        if is_tratto_ain:
-            liv = abilita.livello_riferimento
-            if liv in (0, 1):
-                old_ain_trait = (
-                    PersonaggioAbilita.objects.select_related("abilita")
-                    .filter(
-                        personaggio=personaggio,
-                        abilita__is_tratto_aura=True,
-                        abilita__aura_riferimento__sigla='AIN',
-                        abilita__livello_riferimento__in=(0, 1),
-                    )
-                    .order_by("-data_acquisizione")
-                    .first()
-                )
-                PersonaggioAbilita.objects.filter(
-                    personaggio=personaggio,
-                    abilita__is_tratto_aura=True,
-                    abilita__aura_riferimento__sigla='AIN',
-                    abilita__livello_riferimento__in=(0, 1),
-                ).delete()
-            elif liv == 2:
-                old_ain_trait = (
-                    PersonaggioAbilita.objects.select_related("abilita")
-                    .filter(
-                        personaggio=personaggio,
-                        abilita__is_tratto_aura=True,
-                        abilita__aura_riferimento__sigla='AIN',
-                        abilita__livello_riferimento=2,
-                    )
-                    .order_by("-data_acquisizione")
-                    .first()
-                )
-                PersonaggioAbilita.objects.filter(
-                    personaggio=personaggio,
-                    abilita__is_tratto_aura=True,
-                    abilita__aura_riferimento__sigla='AIN',
-                    abilita__livello_riferimento=2,
-                ).delete()
-            # Cache M2M: ricarica il personaggio dopo lo swap dei tratti AIN
-            personaggio = Personaggio.objects.select_related('tipologia').get(pk=personaggio.pk)
-
-        if not is_tratto_ain:
-            character_scores = personaggio.caratteristiche_base
-            for req in abilita.abilita_requisito_set.all():
-                punteggio_nome = req.requisito.nome
-                valore_richiesto = req.valore
-                punteggio_pg = character_scores.get(punteggio_nome, 0)
-                if punteggio_pg < valore_richiesto:
-                    return Response(
-                        {"error": f"Requisito non soddisfatto: {punteggio_nome} {valore_richiesto} (possiedi {punteggio_pg})"},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-        required_prereqs = [p.prerequisito for p in abilita.abilita_prerequisiti.all()]
-        if required_prereqs:
-            possessed_skill_ids = set(personaggio.abilita_possedute.values_list('id', flat=True))
-            for prereq in required_prereqs:
-                if prereq.id not in possessed_skill_ids:
-                    return Response({"error": f"Prerequisito non soddisfatto: {prereq.nome}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if is_tratto_ain:
-            old_abilita = old_ain_trait.abilita if old_ain_trait else None
-            old_costo_pc = int(getattr(old_abilita, "costo_pc", 0) or 0)
-            old_costo_crediti = Decimal(getattr(old_abilita, "costo_crediti", 0) or 0)
-            new_costo_pc = int(abilita.costo_pc or 0)
-            new_costo_crediti = Decimal(abilita.costo_crediti or 0)
-
-            # Swap AIN: prima "rimborsa" il vecchio tratto, poi applica il nuovo.
-            # Con costi negativi mantiene il delta corretto (es: -1 -> 0 => -1 PC).
-            pc_delta = old_costo_pc - new_costo_pc
-            crediti_delta = old_costo_crediti - new_costo_crediti
-
-            if pc_delta < 0 and personaggio.punti_caratteristica < abs(pc_delta):
-                return Response(
-                    {"error": f"Punti Caratteristica insufficenti. Richiesti: {abs(pc_delta)}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            if crediti_delta < 0 and Decimal(personaggio.crediti) < abs(crediti_delta):
-                return Response(
-                    {"error": f"Crediti insufficienti. Richiesti: {abs(crediti_delta)}"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if pc_delta:
-                personaggio.modifica_pc(pc_delta, f"Cambio tratto AIN: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}")
-            if crediti_delta:
-                personaggio.modifica_crediti(crediti_delta, f"Cambio tratto AIN: {old_abilita.nome if old_abilita else 'Nessuno'} -> {abilita.nome}")
-        else:
-            costo_pc_finale, costo_crediti_finale = calcola_costi_abilita_acquisto(personaggio, abilita)
-            mods = personaggio.modificatori_calcolati
-            sconto_stat = mods.get(PARAMETRO_SCONTO_ABILITA, {'add': 0, 'mol': 1.0})
-            sconto_valore = max(0, sconto_stat.get('add', 0))
-
-            if personaggio.punti_caratteristica < costo_pc_finale:
-                return Response({"error": f"Punti Caratteristica insufficenti. Richiesti: {costo_pc_finale}"}, status=status.HTTP_400_BAD_REQUEST)
-            if personaggio.crediti < costo_crediti_finale:
-                return Response(
-                    {"error": f"Crediti insufficenti. Richiesti: {costo_crediti_finale} (Costo base: {abilita.costo_crediti}, Sconto: {sconto_valore}%)"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            personaggio.modifica_pc(-costo_pc_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_pc_finale} PC)")
-            personaggio.modifica_crediti(-costo_crediti_finale, f"Acquisito abilità: {abilita.nome} (Costo: {costo_crediti_finale} Crediti)")
-
-        if is_tratto_ain:
-            costo_pc_pagato = int(abilita.costo_pc or 0)
-            costo_crediti_pagato = Decimal(abilita.costo_crediti or 0)
-        else:
-            costo_pc_pagato = int(costo_pc_finale)
-            costo_crediti_pagato = costo_crediti_finale
-
-        PersonaggioAbilita.objects.create(
-            personaggio=personaggio,
-            abilita=abilita,
-            origine=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
-            costo_pc_pagato=costo_pc_pagato,
-            costo_crediti_pagato=costo_crediti_pagato,
-        )
-        
-        cache.delete(f"acquirable_skills_{personaggio.id}")
-        
-        _sync_coma_state(personaggio)
-        serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
+        serializer = PersonaggioDetailSerializer(result.personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class AbilitaAcquistabiliView(generics.GenericAPIView):
@@ -1243,7 +1063,7 @@ class RevocaAbilitaView(APIView):
 
     @transaction.atomic
     def post(self, request, format=None):
-        from .modificabilita import get_event_context, is_modificabile_per_eventi, get_abilita_bloccate_da_prerequisito
+        from personaggi.abilita_personaggio_ops import revoca_abilita_personaggio
 
         personaggio_id = request.data.get("personaggio_id")
         abilita_id = request.data.get("abilita_id")
@@ -1255,54 +1075,12 @@ class RevocaAbilitaView(APIView):
         except Personaggio.DoesNotExist:
             return Response({"error": "Personaggio non trovato o non appartenente all'utente."}, status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            pivot = PersonaggioAbilita.objects.select_related("abilita").get(
-                personaggio=personaggio,
-                abilita_id=abilita_id,
-            )
-        except PersonaggioAbilita.DoesNotExist:
-            return Response({"error": "Abilità non posseduta."}, status=status.HTTP_400_BAD_REQUEST)
+        result = revoca_abilita_personaggio(personaggio, abilita_id, staff=False)
+        if not result.ok:
+            status_code = status.HTTP_403_FORBIDDEN if "automaticamente" in result.error else status.HTTP_400_BAD_REQUEST
+            return Response({"error": result.error}, status=status_code)
 
-        abilita = pivot.abilita
-        acquired_at = pivot.data_acquisizione
-        if pivot.origine != PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO:
-            return Response(
-                {"error": "Questa abilità è assegnata automaticamente (Era, Regione o Carriera/KORP) e non può essere revocata singolarmente."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        event_in_corso, latest_event_start = get_event_context()
-        if not is_modificabile_per_eventi(
-            acquired_at,
-            event_in_corso=event_in_corso,
-            latest_event_start=latest_event_start,
-        ):
-            return Response({"error": "Acquisto non revocabile in questo momento."}, status=status.HTTP_403_FORBIDDEN)
-
-        possessed_ids = set(personaggio.abilita_possedute.values_list("id", flat=True))
-        prereq_locked_ids = get_abilita_bloccate_da_prerequisito(possessed_ids)
-        if abilita.id in prereq_locked_ids:
-            return Response(
-                {"error": "Abilità non revocabile: è prerequisito di un'altra abilità posseduta."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        pc_refund = rimborso_pc_da_pivot(pivot, acquired_at=acquired_at)
-        credits_refund = rimborso_crediti_da_pivot(
-            pivot, item=abilita, acquired_at=acquired_at
-        )
-
-        if pc_refund:
-            personaggio.modifica_pc(pc_refund, f"Revocato acquisto abilità: {abilita.nome}")
-        if credits_refund:
-            personaggio.modifica_crediti(credits_refund, f"Revocato acquisto abilità: {abilita.nome}")
-
-        pivot.delete()
-        personaggio.aggiungi_log(f"Ha revocato l'acquisto dell'abilità '{abilita.nome}'.")
-
-        cache.delete(f"acquirable_skills_{personaggio.id}")
-
-        serializer = PersonaggioDetailSerializer(personaggio, context={"request": request})
+        serializer = PersonaggioDetailSerializer(result.personaggio, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
