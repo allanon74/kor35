@@ -101,6 +101,7 @@ from .models import (
     TipologiaEffetto, EffettoCasuale, Dichiarazione,
     Korp, Carriera, SegnoZodiacale, TipoCarriera, Carica, CarrieraTierSblocco,
     PersonaggioCarrieraMembership,
+    PersonaggioAbilita,
     StatisticaContainer, StatisticaContainerItem,
     Era, Prefettura, Regione,
     Campagna,
@@ -3429,6 +3430,18 @@ class PersonaggioStaffListSerializer(serializers.ModelSerializer):
         return QrCode.objects.filter(vista_id=obj.pk).values_list('id', flat=True).first()
 
 
+class PersonaggioAbilitaStaffSerializer(serializers.ModelSerializer):
+    """Pivot personaggio–abilità per la gestione staff."""
+
+    id = serializers.IntegerField(source='abilita.id', read_only=True)
+    nome = serializers.CharField(source='abilita.nome', read_only=True)
+    origine_label = serializers.CharField(source='get_origine_display', read_only=True)
+
+    class Meta:
+        model = PersonaggioAbilita
+        fields = ('id', 'nome', 'origine', 'origine_label', 'data_acquisizione')
+
+
 class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     tipologia_nome = serializers.CharField(source='tipologia.nome', read_only=True)
     giocante = serializers.BooleanField(source='tipologia.giocante', read_only=True)
@@ -3442,6 +3455,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     qrcode_testo = serializers.SerializerMethodField()
     carriere_membership = serializers.SerializerMethodField()
     risorse_pool_ui = serializers.SerializerMethodField()
+    abilita_possedute = serializers.SerializerMethodField()
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     movimenti_pc = PuntiCaratteristicaMovimentoListSerializer(many=True, read_only=True)
     tipologia = serializers.PrimaryKeyRelatedField(
@@ -3479,7 +3493,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'era_nome', 'prefettura_nome',
             'watch_enabled', 'peso_influencer', 'badge_instafame',
             'avatar_url', 'qrcode_id', 'qrcode_testo',
-            'carriere_membership', 'risorse_pool_ui',
+            'carriere_membership', 'risorse_pool_ui', 'abilita_possedute',
             'movimenti_credito', 'movimenti_pc',
             'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
             'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
@@ -3491,8 +3505,16 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'tipologia_nome', 'giocante', 'campagna_nome',
             'era_nome', 'prefettura_nome', 'avatar_url',
             'qrcode_id', 'qrcode_testo', 'carriere_membership',
-            'risorse_pool_ui', 'movimenti_credito', 'movimenti_pc',
+            'risorse_pool_ui', 'abilita_possedute', 'movimenti_credito', 'movimenti_pc',
         )
+
+    def get_abilita_possedute(self, obj):
+        pivots = (
+            PersonaggioAbilita.objects.filter(personaggio=obj)
+            .select_related('abilita')
+            .order_by('abilita__nome')
+        )
+        return PersonaggioAbilitaStaffSerializer(pivots, many=True).data
 
     def get_proprietario_nome(self, obj):
         user = obj.proprietario

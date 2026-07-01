@@ -16,10 +16,14 @@ import {
     staffKillPersonaggio,
     staffRevivePersonaggio,
     resolveMediaUrl,
+    staffGetPersonaggioDetail,
+    staffGetAbilitaList,
+    staffPersonaggioAssegnaAbilita,
+    staffPersonaggioRimuoviAbilita,
 } from '../api';
 import { useCharacter } from './CharacterContext';
 import { 
-    User, Users, Plus, Edit, X, ShieldAlert, Coins, Zap, Gem, RotateCcw, Skull, Heart, Watch, Trash2
+    User, Users, Plus, Edit, X, ShieldAlert, Coins, Zap, Gem, RotateCcw, Skull, Heart, Watch, Trash2, Award, Search
 } from 'lucide-react';
 import RichTextEditor from './RichTextEditor';
 import BuildVersions from './BuildVersions';
@@ -59,6 +63,15 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const [poolDetail, setPoolDetail] = useState(null);
     /** { [sigla]: { delta: string, motivo: string } } */
     const [poolInputs, setPoolInputs] = useState({});
+    /** Tab abilità: elenco possedute + catalogo per aggiunta */
+    const [abilitaDetailLoading, setAbilitaDetailLoading] = useState(false);
+    const [abilitaPossedute, setAbilitaPossedute] = useState([]);
+    const [abilitaCatalog, setAbilitaCatalog] = useState([]);
+    const [abilitaSearch, setAbilitaSearch] = useState('');
+    const [selectedAbilitaId, setSelectedAbilitaId] = useState('');
+    const [abilitaAddebitaRisorse, setAbilitaAddebitaRisorse] = useState(false);
+    const [abilitaRimborsaRisorse, setAbilitaRimborsaRisorse] = useState(false);
+    const [abilitaBusy, setAbilitaBusy] = useState(false);
     const [resourceData, setResourceData] = useState({
         charId: null,
         charName: '',
@@ -349,6 +362,12 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         setPoolDetail(null);
         setResourceModalTab('valute');
         setPoolInputs({});
+        setAbilitaPossedute([]);
+        setAbilitaCatalog([]);
+        setAbilitaSearch('');
+        setSelectedAbilitaId('');
+        setAbilitaAddebitaRisorse(false);
+        setAbilitaRimborsaRisorse(false);
     };
 
     const updatePoolInput = useCallback((sigla, field, value) => {
@@ -409,6 +428,121 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             cancelled = true;
         };
     }, [showResourceModal, resourceModalTab, resourceData.charId, onLogout]);
+
+    const reloadAbilitaStaff = useCallback(async () => {
+        if (!resourceData.charId) return;
+        const detail = await staffGetPersonaggioDetail(resourceData.charId, onLogout);
+        setAbilitaPossedute(Array.isArray(detail?.abilita_possedute) ? detail.abilita_possedute : []);
+    }, [resourceData.charId, onLogout]);
+
+    useEffect(() => {
+        if (!showResourceModal || resourceModalTab !== 'abilita' || !resourceData.charId) {
+            return undefined;
+        }
+        let cancelled = false;
+        (async () => {
+            setAbilitaDetailLoading(true);
+            try {
+                const [detailRes, catalogRes] = await Promise.all([
+                    staffGetPersonaggioDetail(resourceData.charId, onLogout),
+                    staffGetAbilitaList(onLogout, { pageSize: 200 }),
+                ]);
+                if (cancelled) return;
+                setAbilitaPossedute(
+                    Array.isArray(detailRes?.abilita_possedute) ? detailRes.abilita_possedute : []
+                );
+                const rows = Array.isArray(catalogRes) ? catalogRes : (catalogRes?.results || []);
+                setAbilitaCatalog(rows);
+            } catch (err) {
+                if (!cancelled) {
+                    setAbilitaPossedute([]);
+                    setAbilitaCatalog([]);
+                    alert('Impossibile caricare le abilità: ' + (err.message || err));
+                }
+            } finally {
+                if (!cancelled) setAbilitaDetailLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [showResourceModal, resourceModalTab, resourceData.charId, onLogout]);
+
+    const possessedAbilitaIds = useMemo(
+        () => new Set((abilitaPossedute || []).map((a) => String(a.id))),
+        [abilitaPossedute]
+    );
+
+    const abilitaCatalogFiltered = useMemo(() => {
+        const q = abilitaSearch.trim().toLowerCase();
+        return (abilitaCatalog || []).filter((ab) => {
+            if (possessedAbilitaIds.has(String(ab.id))) return false;
+            if (!q) return true;
+            return String(ab.nome || '').toLowerCase().includes(q);
+        });
+    }, [abilitaCatalog, abilitaSearch, possessedAbilitaIds]);
+
+    const handleAssegnaAbilita = async () => {
+        if (!selectedAbilitaId || abilitaBusy) return;
+        setAbilitaBusy(true);
+        try {
+            await staffPersonaggioAssegnaAbilita(
+                resourceData.charId,
+                selectedAbilitaId,
+                {
+                    motivo: resourceData.reason,
+                    addebitaRisorse: abilitaAddebitaRisorse,
+                },
+                onLogout
+            );
+            setSelectedAbilitaId('');
+            await reloadAbilitaStaff();
+            await fetchPersonaggi();
+            if (String(resourceData.charId) === String(selectedCharacterId)) {
+                refreshCharacterData();
+            }
+            setStaffFeedback({ type: 'success', message: 'Abilità assegnata.' });
+        } catch (error) {
+            setStaffFeedback({
+                type: 'error',
+                message: error?.message || 'Assegnazione abilità fallita.',
+            });
+        } finally {
+            setAbilitaBusy(false);
+        }
+    };
+
+    const handleRimuoviAbilita = async (abilitaId, nome) => {
+        if (abilitaBusy) return;
+        if (!window.confirm(`Rimuovere l'abilità «${nome}» da ${resourceData.charName}?`)) {
+            return;
+        }
+        setAbilitaBusy(true);
+        try {
+            await staffPersonaggioRimuoviAbilita(
+                resourceData.charId,
+                abilitaId,
+                {
+                    motivo: resourceData.reason,
+                    rimborsaRisorse: abilitaRimborsaRisorse,
+                },
+                onLogout
+            );
+            await reloadAbilitaStaff();
+            await fetchPersonaggi();
+            if (String(resourceData.charId) === String(selectedCharacterId)) {
+                refreshCharacterData();
+            }
+            setStaffFeedback({ type: 'success', message: `Abilità «${nome}» rimossa.` });
+        } catch (error) {
+            setStaffFeedback({
+                type: 'error',
+                message: error?.message || 'Rimozione abilità fallita.',
+            });
+        } finally {
+            setAbilitaBusy(false);
+        }
+    };
 
     const handlePoolAdjust = async (sigla, deltaRaw, motivoRiga) => {
         try {
@@ -1028,19 +1162,19 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
             {/* MODALE STAFF RISORSE */}
             {showResourceModal && (
                 <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
-                    <div className="bg-gray-800 w-full max-w-lg rounded-2xl border border-amber-600 shadow-2xl flex flex-col max-h-[90vh]">
+                    <div className={`bg-gray-800 w-full ${resourceModalTab === 'abilita' ? 'max-w-2xl' : 'max-w-lg'} rounded-2xl border border-amber-600 shadow-2xl flex flex-col max-h-[90vh]`}>
                         <div className="p-5 border-b border-gray-700 shrink-0">
                             <h3 className="text-amber-500 font-bold text-lg uppercase flex items-center gap-2">
-                                <ShieldAlert size={20} /> Gestione risorse: {resourceData.charName}
+                                <ShieldAlert size={20} /> Intervento staff: {resourceData.charName}
                             </h3>
                             <p className="text-[11px] text-gray-500 mt-1">
                                 Solo utenti con permessi adeguati. Le modifiche restano tracciate su movimenti e log.
                             </p>
-                            <div className="flex gap-2 mt-4">
+                            <div className="flex flex-wrap gap-2 mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setResourceModalTab('valute')}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition-all ${
+                                    className={`flex-1 min-w-[7rem] flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition-all ${
                                         resourceModalTab === 'valute'
                                             ? 'bg-amber-600 border-amber-500 text-white'
                                             : 'border-gray-600 text-gray-400 hover:bg-gray-750'
@@ -1051,13 +1185,24 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                 <button
                                     type="button"
                                     onClick={() => setResourceModalTab('risorse')}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition-all ${
+                                    className={`flex-1 min-w-[7rem] flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition-all ${
                                         resourceModalTab === 'risorse'
                                             ? 'bg-violet-600 border-violet-500 text-white'
                                             : 'border-gray-600 text-gray-400 hover:bg-gray-750'
                                     }`}
                                 >
                                     <Gem size={18} /> Risorse pool
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setResourceModalTab('abilita')}
+                                    className={`flex-1 min-w-[7rem] flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition-all ${
+                                        resourceModalTab === 'abilita'
+                                            ? 'bg-emerald-600 border-emerald-500 text-white'
+                                            : 'border-gray-600 text-gray-400 hover:bg-gray-750'
+                                    }`}
+                                >
+                                    <Award size={18} /> Abilità
                                 </button>
                             </div>
                         </div>
@@ -1222,6 +1367,127 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                                 </div>
                                             );
                                         })}
+                                </>
+                            )}
+
+                            {resourceModalTab === 'abilita' && (
+                                <>
+                                    <p className="text-xs text-gray-500">
+                                        Assegna o rimuovi abilità senza i vincoli della scheda giocatore. Opzionalmente
+                                        addebita PC/crediti all&apos;aggiunta o rimborsa alla rimozione.
+                                    </p>
+                                    <div>
+                                        <label className="block text-xs uppercase text-gray-500 mb-1">
+                                            Motivazione (log / movimenti)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-white text-sm"
+                                            placeholder="Es. Correzione referto, ricompensa quest, …"
+                                            value={resourceData.reason}
+                                            onChange={(e) =>
+                                                setResourceData({ ...resourceData, reason: e.target.value })
+                                            }
+                                        />
+                                    </div>
+                                    <div className="flex flex-wrap gap-4 text-sm">
+                                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="rounded border-gray-600"
+                                                checked={abilitaAddebitaRisorse}
+                                                onChange={(e) => setAbilitaAddebitaRisorse(e.target.checked)}
+                                            />
+                                            Addebita PC/CR all&apos;aggiunta
+                                        </label>
+                                        <label className="flex items-center gap-2 text-gray-300 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                className="rounded border-gray-600"
+                                                checked={abilitaRimborsaRisorse}
+                                                onChange={(e) => setAbilitaRimborsaRisorse(e.target.checked)}
+                                            />
+                                            Rimborsa PC/CR alla rimozione
+                                        </label>
+                                    </div>
+
+                                    <div className="bg-gray-900/60 border border-gray-700 rounded-xl p-4 space-y-3">
+                                        <h4 className="text-sm font-bold text-emerald-300 uppercase tracking-wide">
+                                            Aggiungi abilità
+                                        </h4>
+                                        <div className="relative">
+                                            <Search
+                                                size={16}
+                                                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+                                            />
+                                            <input
+                                                type="text"
+                                                className="w-full bg-gray-950 border border-gray-700 rounded-lg py-2 pl-9 pr-3 text-white text-sm"
+                                                placeholder="Cerca nel catalogo…"
+                                                value={abilitaSearch}
+                                                onChange={(e) => setAbilitaSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        <select
+                                            className="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white text-sm"
+                                            value={selectedAbilitaId}
+                                            onChange={(e) => setSelectedAbilitaId(e.target.value)}
+                                            disabled={abilitaDetailLoading || abilitaBusy}
+                                        >
+                                            <option value="">Seleziona abilità da assegnare…</option>
+                                            {abilitaCatalogFiltered.map((ab) => (
+                                                <option key={ab.id} value={ab.id}>
+                                                    {ab.nome}
+                                                    {ab.costo_pc ? ` · ${ab.costo_pc} PC` : ''}
+                                                    {ab.costo_crediti ? ` · ${ab.costo_crediti} CR` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            type="button"
+                                            onClick={handleAssegnaAbilita}
+                                            disabled={!selectedAbilitaId || abilitaBusy || abilitaDetailLoading}
+                                            className="w-full py-2 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-sm font-bold"
+                                        >
+                                            Assegna abilità selezionata
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <h4 className="text-sm font-bold text-white uppercase tracking-wide">
+                                            Abilità possedute ({abilitaPossedute.length})
+                                        </h4>
+                                        {abilitaDetailLoading && (
+                                            <p className="text-sm text-gray-400 animate-pulse">Caricamento…</p>
+                                        )}
+                                        {!abilitaDetailLoading && abilitaPossedute.length === 0 && (
+                                            <p className="text-sm text-gray-500 bg-gray-900/40 rounded-lg p-3 border border-gray-800">
+                                                Nessuna abilità su questo personaggio.
+                                            </p>
+                                        )}
+                                        {!abilitaDetailLoading &&
+                                            abilitaPossedute.map((ab) => (
+                                                <div
+                                                    key={ab.id}
+                                                    className="flex items-center justify-between gap-3 bg-gray-900/60 border border-gray-700 rounded-lg px-3 py-2"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <div className="font-medium text-white truncate">{ab.nome}</div>
+                                                        <div className="text-[10px] text-gray-500 uppercase">
+                                                            {ab.origine_label || ab.origine || '—'}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRimuoviAbilita(ab.id, ab.nome)}
+                                                        disabled={abilitaBusy}
+                                                        className="shrink-0 px-3 py-1.5 rounded bg-red-900/80 hover:bg-red-800 text-red-100 text-xs font-bold disabled:opacity-50"
+                                                    >
+                                                        Rimuovi
+                                                    </button>
+                                                </div>
+                                            ))}
+                                    </div>
                                 </>
                             )}
                         </div>

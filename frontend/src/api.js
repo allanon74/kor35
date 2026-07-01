@@ -2952,6 +2952,28 @@ export const staffAddResourcesToPersonaggio = (id, tipo, amount, reason, onLogou
     body: JSON.stringify({ tipo, amount, reason }),
   }, onLogout);
 
+/** Staff: assegna manualmente un'abilità a un personaggio. */
+export const staffPersonaggioAssegnaAbilita = (personaggioId, abilitaId, { motivo, addebitaRisorse } = {}, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/assegna-abilita/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      abilita_id: abilitaId,
+      motivo: motivo || '',
+      addebita_risorse: !!addebitaRisorse,
+    }),
+  }, onLogout);
+
+/** Staff: rimuove manualmente un'abilità da un personaggio. */
+export const staffPersonaggioRimuoviAbilita = (personaggioId, abilitaId, { motivo, rimborsaRisorse } = {}, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/rimuovi-abilita/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      abilita_id: abilitaId,
+      motivo: motivo || '',
+      rimborsa_risorse: !!rimborsaRisorse,
+    }),
+  }, onLogout);
+
 /** Staff: crea istanza Oggetto da OggettoBase nell'inventario del personaggio. */
 export const staffCreaOggettoDaBasePerPersonaggio = (personaggioId, oggettoBaseId, motivo, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/crea-oggetto-da-base/`, {

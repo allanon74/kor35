@@ -1221,6 +1221,35 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(body.get("descrizione"), "Nuova bio")
         self.assertEqual(body.get("professioni"), "Scout")
 
+    def test_staff_assegna_e_rimuovi_abilita(self):
+        ab = Abilita.objects.create(nome="Staff Test Skill", costo_pc=2, costo_crediti=5)
+        base = f"/api/personaggi/api/staff/personaggi/{self.pg.id}"
+
+        res_add = self.client.post(
+            f"{base}/assegna-abilita/",
+            {"abilita_id": ab.id, "motivo": "Test staff"},
+            format="json",
+        )
+        self.assertEqual(res_add.status_code, status.HTTP_200_OK, res_add.content)
+        possedute = res_add.json().get("abilita_possedute") or []
+        self.assertEqual(len(possedute), 1)
+        self.assertEqual(possedute[0]["id"], ab.id)
+
+        res_dup = self.client.post(
+            f"{base}/assegna-abilita/",
+            {"abilita_id": ab.id},
+            format="json",
+        )
+        self.assertEqual(res_dup.status_code, status.HTTP_400_BAD_REQUEST)
+
+        res_rm = self.client.post(
+            f"{base}/rimuovi-abilita/",
+            {"abilita_id": ab.id, "motivo": "Test rimozione"},
+            format="json",
+        )
+        self.assertEqual(res_rm.status_code, status.HTTP_200_OK, res_rm.content)
+        self.assertEqual(len(res_rm.json().get("abilita_possedute") or []), 0)
+
 
 class MetatalentiDecimalValoreTests(TestCase):
     """Regression: MattoneStatistica.valore è Decimal dopo migrazione 0220."""

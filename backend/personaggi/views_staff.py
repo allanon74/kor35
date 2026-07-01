@@ -1946,6 +1946,119 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Tipo risorsa non valido'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'status': 'success', 'new_val': val, 'msg': 'Risorse aggiornate'})
 
+    @action(detail=True, methods=['post'], url_path='assegna-abilita')
+    def assegna_abilita(self, request, pk=None):
+        """Assegna manualmente un'abilità al personaggio (senza vincoli giocatore)."""
+        from personaggi.models import PersonaggioAbilita, PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO
+        from personaggi.acquisto_costi import calcola_costi_abilita_acquisto
+        from personaggi.carriere_tier_sblocco import invalidate_acquirable_skills_cache
+        from personaggi.views import _sync_coma_state
+
+        personaggio = self.get_object()
+        abilita_id = request.data.get('abilita_id')
+        motivo = (request.data.get('motivo') or 'Assegnazione manuale staff').strip()
+        addebita = str(request.data.get('addebita_risorse', '')).lower() in ('1', 'true', 'yes')
+
+        if not abilita_id:
+            return Response({'detail': 'abilita_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            abilita = Abilita.objects.get(pk=abilita_id)
+        except Abilita.DoesNotExist:
+            return Response({'detail': 'Abilità non trovata.'}, status=status.HTTP_404_NOT_FOUND)
+        if personaggio.abilita_possedute.filter(pk=abilita_id).exists():
+            return Response({'detail': 'Abilità già posseduta.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        costo_pc_pagato = 0
+        costo_crediti_pagato = Decimal(0)
+
+        with transaction.atomic():
+            if addebita:
+                costo_pc_finale, costo_crediti_finale = calcola_costi_abilita_acquisto(personaggio, abilita)
+                if personaggio.punti_caratteristica < costo_pc_finale:
+                    return Response(
+                        {'detail': f'PC insufficienti ({costo_pc_finale} richiesti).'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if personaggio.crediti < costo_crediti_finale:
+                    return Response(
+                        {'detail': f'Crediti insufficienti ({costo_crediti_finale} richiesti).'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if costo_pc_finale:
+                    personaggio.modifica_pc(
+                        -costo_pc_finale,
+                        f"Staff: assegnata abilità {abilita.nome} ({motivo})",
+                    )
+                if costo_crediti_finale:
+                    personaggio.modifica_crediti(
+                        -costo_crediti_finale,
+                        f"Staff: assegnata abilità {abilita.nome} ({motivo})",
+                    )
+                costo_pc_pagato = int(costo_pc_finale)
+                costo_crediti_pagato = costo_crediti_finale
+
+            PersonaggioAbilita.objects.create(
+                personaggio=personaggio,
+                abilita=abilita,
+                origine=PERSONAGGIO_ABILITA_ORIGINE_ACQUISTO,
+                costo_pc_pagato=costo_pc_pagato,
+                costo_crediti_pagato=costo_crediti_pagato,
+            )
+            personaggio.aggiungi_log(f"Staff: assegnata abilità «{abilita.nome}» ({motivo}).")
+
+        invalidate_acquirable_skills_cache(personaggio.id)
+        _sync_coma_state(personaggio)
+        personaggio.refresh_from_db()
+        return Response(self._serialize_detail(personaggio, request))
+
+    @action(detail=True, methods=['post'], url_path='rimuovi-abilita')
+    def rimuovi_abilita(self, request, pk=None):
+        """Rimuove manualmente un'abilità dal personaggio (anche default Era/KORP)."""
+        from personaggi.models import PersonaggioAbilita
+        from personaggi.acquisto_costi import rimborso_pc_da_pivot, rimborso_crediti_da_pivot
+        from personaggi.carriere_tier_sblocco import invalidate_acquirable_skills_cache
+        from personaggi.views import _sync_coma_state
+
+        personaggio = self.get_object()
+        abilita_id = request.data.get('abilita_id')
+        motivo = (request.data.get('motivo') or 'Rimozione manuale staff').strip()
+        rimborsa = str(request.data.get('rimborsa_risorse', '')).lower() in ('1', 'true', 'yes')
+
+        if not abilita_id:
+            return Response({'detail': 'abilita_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            pivot = PersonaggioAbilita.objects.select_related('abilita').get(
+                personaggio=personaggio,
+                abilita_id=abilita_id,
+            )
+        except PersonaggioAbilita.DoesNotExist:
+            return Response({'detail': 'Abilità non posseduta.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        abilita = pivot.abilita
+        acquired_at = pivot.data_acquisizione
+
+        with transaction.atomic():
+            if rimborsa:
+                pc_refund = rimborso_pc_da_pivot(pivot, acquired_at=acquired_at)
+                credits_refund = rimborso_crediti_da_pivot(pivot, item=abilita, acquired_at=acquired_at)
+                if pc_refund:
+                    personaggio.modifica_pc(
+                        pc_refund,
+                        f"Staff: rimossa abilità {abilita.nome} ({motivo})",
+                    )
+                if credits_refund:
+                    personaggio.modifica_crediti(
+                        credits_refund,
+                        f"Staff: rimossa abilità {abilita.nome} ({motivo})",
+                    )
+            pivot.delete()
+            personaggio.aggiungi_log(f"Staff: rimossa abilità «{abilita.nome}» ({motivo}).")
+
+        invalidate_acquirable_skills_cache(personaggio.id)
+        _sync_coma_state(personaggio)
+        personaggio.refresh_from_db()
+        return Response(self._serialize_detail(personaggio, request))
+
     @action(detail=True, methods=['post'], url_path='crea-oggetto-da-base')
     def crea_oggetto_da_base(self, request, pk=None):
         """Crea un'istanza Oggetto da OggettoBase e la mette nell'inventario del personaggio."""
