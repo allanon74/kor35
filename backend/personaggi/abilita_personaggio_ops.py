@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from personaggi.acquisto_costi import (
+    PARAMETRO_SCONTO_ABILITA,
     calcola_costi_abilita_acquisto,
     rimborso_crediti_da_pivot,
     rimborso_pc_da_pivot,
@@ -30,7 +31,6 @@ from personaggi.models import (
     Personaggio,
     PersonaggioAbilita,
     RegioneAbilita,
-    PARAMETRO_SCONTO_ABILITA,
 )
 
 
