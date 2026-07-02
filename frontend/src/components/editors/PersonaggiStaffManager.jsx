@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Users, Search, X, QrCode, Briefcase, Coins, FileText, StickyNote, Loader2, Plus, Skull, Heart, RotateCcw,
-  Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive, Award,
+  Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive, Award, Dna,
 } from 'lucide-react';
-import RichTextEditor from '../RichTextEditor';
+import StaffRazzaAuraTab from './StaffRazzaAuraTab';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
 import StaffQrTab from '../StaffQrTab';
 import SearchableSelect from './SearchableSelect';
@@ -62,6 +62,7 @@ const TABS = [
   { id: 'qr', label: 'QR', icon: QrCode },
   { id: 'membership', label: 'Carriere / KORP', icon: Briefcase },
   { id: 'abilita', label: 'Abilità', icon: Award },
+  { id: 'razza-aura', label: 'Razza / Aura', icon: Dna },
   { id: 'risorse', label: 'Risorse', icon: Coins },
   { id: 'inventario', label: 'Inventario', icon: Package },
   { id: 'instafame', label: 'InstaFame', icon: Sparkles },
@@ -920,6 +921,18 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         </ul>
                       </div>
                     </div>
+                  )}
+
+                  {modalTab === 'razza-aura' && detail && (
+                    <StaffRazzaAuraTab
+                      detail={detail}
+                      onLogout={onLogout}
+                      motivo={abilitaMotivo}
+                      onDetailUpdated={(updated) => {
+                        setDetail(updated);
+                        setMessage('Razza / modelli aura aggiornati.');
+                      }}
+                    />
                   )}
 
                   {modalTab === 'risorse' && (

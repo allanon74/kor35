@@ -2972,6 +2972,27 @@ export const staffPersonaggioRimuoviAbilita = (personaggioId, abilitaId, { motiv
     }),
   }, onLogout);
 
+/** Staff: assegna o sostituisce modello aura per un personaggio. */
+export const staffPersonaggioAssegnaModelloAura = (personaggioId, modelloAuraId, { motivo } = {}, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/assegna-modello-aura/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      modello_aura_id: modelloAuraId,
+      motivo: motivo || '',
+    }),
+  }, onLogout);
+
+/** Staff: rimuove modello aura (per aura_id o modello_aura_id). */
+export const staffPersonaggioRimuoviModelloAura = (personaggioId, { aura_id, modello_aura_id, motivo } = {}, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/rimuovi-modello-aura/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      aura_id,
+      modello_aura_id,
+      motivo: motivo || '',
+    }),
+  }, onLogout);
+
 /** Staff: crea istanza Oggetto da OggettoBase nell'inventario del personaggio. */
 export const staffCreaOggettoDaBasePerPersonaggio = (personaggioId, oggettoBaseId, motivo, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${personaggioId}/crea-oggetto-da-base/`, {

@@ -3499,7 +3499,11 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
     carriere_membership = serializers.SerializerMethodField()
     risorse_pool_ui = serializers.SerializerMethodField()
     abilita_possedute = serializers.SerializerMethodField()
+    razza_abilita = serializers.SerializerMethodField()
     scheda_modifica_libera = serializers.SerializerMethodField()
+    punteggi_base = serializers.JSONField(read_only=True)
+    modelli_aura = ModelloAuraSerializer(many=True, read_only=True)
+    can_edit_razza = serializers.SerializerMethodField()
     movimenti_credito = CreditoMovimentoSerializer(many=True, read_only=True)
     movimenti_pc = PuntiCaratteristicaMovimentoListSerializer(many=True, read_only=True)
     tipologia = serializers.PrimaryKeyRelatedField(
@@ -3537,7 +3541,8 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'era_nome', 'prefettura_nome',
             'watch_enabled', 'peso_influencer', 'badge_instafame',
             'avatar_url', 'qrcode_id', 'qrcode_testo',
-            'carriere_membership', 'risorse_pool_ui', 'abilita_possedute', 'scheda_modifica_libera',
+            'carriere_membership', 'risorse_pool_ui', 'abilita_possedute', 'razza_abilita',
+            'scheda_modifica_libera', 'punteggi_base', 'modelli_aura', 'can_edit_razza',
             'movimenti_credito', 'movimenti_pc',
             'oggetti_inventario', 'eventi_partecipati', 'watch_binding', 'impostazioni_ui',
             'foto_trucco_url', 'foto_outfit_url', 'foto_trucco', 'foto_outfit',
@@ -3549,9 +3554,56 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'tipologia_nome', 'giocante', 'campagna_nome',
             'era_nome', 'prefettura_nome', 'avatar_url',
             'qrcode_id', 'qrcode_testo', 'carriere_membership',
-            'risorse_pool_ui', 'abilita_possedute', 'scheda_modifica_libera',
+            'risorse_pool_ui', 'abilita_possedute', 'razza_abilita', 'scheda_modifica_libera',
+            'punteggi_base', 'modelli_aura', 'can_edit_razza',
             'movimenti_credito', 'movimenti_pc',
         )
+
+    def get_can_edit_razza(self, personaggio):
+        from .modificabilita import personaggio_scheda_modifica_libera
+
+        if personaggio_scheda_modifica_libera(personaggio):
+            return True
+        try:
+            now = timezone.now()
+            return not personaggio.eventi_partecipati.filter(data_inizio__lte=now).exists()
+        except Exception:
+            return True
+
+    def get_razza_abilita(self, obj):
+        """Tratti AIN posseduti con metadati revoca (stesse regole del tab Abilità)."""
+        from personaggi.abilita_personaggio_ops import valuta_revoca_abilita
+        from personaggi.models import PersonaggioAbilita
+
+        pivots = (
+            PersonaggioAbilita.objects.filter(
+                personaggio=obj,
+                abilita__is_tratto_aura=True,
+                abilita__aura_riferimento__sigla='AIN',
+            )
+            .select_related(
+                'abilita',
+                'abilita__caratteristica',
+                'abilita__caratteristica_2',
+                'abilita__aura_riferimento',
+            )
+            .prefetch_related(
+                'abilita__abilita_punteggio_set__punteggio',
+            )
+            .order_by('abilita__livello_riferimento', 'abilita__nome')
+        )
+        ctx = {**self.context, 'personaggio': obj}
+        out = []
+        for pivot in pivots:
+            ab = pivot.abilita
+            ok, err, _ = valuta_revoca_abilita(obj, ab.id)
+            item = AbilitaMasterListSerializer(ab, context=ctx).data
+            item['is_modifiable'] = ok
+            item['revoca_blocco'] = '' if ok else err
+            item['origine'] = pivot.origine
+            item['origine_label'] = pivot.get_origine_display()
+            out.append(item)
+        return out
 
     def get_abilita_possedute(self, obj):
         pivots = (

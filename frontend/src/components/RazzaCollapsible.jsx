@@ -126,37 +126,20 @@ function OptionCard({ nomeDisplay, descrizione, accent, selected, disabled, onCl
   return null;
 }
 
-export function RazzaModal({
-  isOpen,
-  onClose,
-  personaggioId,
+export function RazzaPickerContent({
   abilitaPossedute,
   punteggiBase,
   punteggiList,
   auraInnataRecord,
-  onLogout,
+  canEdit = true,
+  editBlockedMessage = 'Modifica razza non consentita in questo momento.',
+  onPick,
   onUpdated,
+  inline = false,
 }) {
   const [loadingId, setLoadingId] = useState(null);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState('archetipo');
-  const acquireMutation = useOptimisticAcquireAbilita();
-
-  useEffect(() => {
-    if (!isOpen) {
-      setError(null);
-      setLoadingId(null);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape' && !loadingId) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, loadingId, onClose]);
 
   const ainVal = useMemo(() => {
     if (!auraInnataRecord?.nome || !punteggiBase) return 0;
@@ -302,11 +285,14 @@ export function RazzaModal({
   }, []);
 
   const handlePick = async (trait) => {
+    if (!canEdit) {
+      setError(editBlockedMessage);
+      return;
+    }
     setError(null);
     setLoadingId(trait.id);
     try {
-      await acquireMutation.mutateAsync({ abilitaId: trait.id, charId: personaggioId });
-      // Riallinea in background con i dati server dopo update ottimistico.
+      await onPick(trait.id);
       if (onUpdated) onUpdated();
     } catch (e) {
       setError(e.message || 'Selezione non consentita.');
@@ -405,7 +391,168 @@ export function RazzaModal({
     [getRequisitiBadges, handlePick, loadingId]
   );
 
+  if (!auraInnataRecord) {
+    return (
+      <p className="text-sm text-slate-400">
+        Aura innata (AIN) non configurata nel catalogo punteggi.
+      </p>
+    );
+  }
+
+  return (
+    <div className={inline ? 'space-y-4' : 'p-4 overflow-y-auto space-y-4 flex-1'}>
+      {error && (
+        <div className="text-sm text-red-300 bg-red-900/50 border border-red-500/50 rounded-md p-2">{error}</div>
+      )}
+      {!canEdit && (
+        <div className="text-sm text-amber-200 bg-amber-950/40 border border-amber-700/50 rounded-md p-2">
+          {editBlockedMessage}
+        </div>
+      )}
+
+      <div className={inline ? '' : 'sticky top-0 z-10 -mx-4 px-4 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800'}>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setTab('archetipo')}
+            className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors border ${
+              tab === 'archetipo'
+                ? 'bg-amber-950/30 border-amber-700/60 text-amber-200'
+                : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-slate-600'
+            }`}
+          >
+            Archetipo
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('forma')}
+            disabled={ainVal < 2}
+            className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors border ${
+              tab === 'forma'
+                ? 'bg-cyan-950/30 border-cyan-700/60 text-cyan-200'
+                : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-slate-600'
+            } ${ainVal < 2 ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title={ainVal < 2 ? 'Le forme si sbloccano a Aura innata 2' : undefined}
+          >
+            Forma
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-500 mt-2">
+          Aura innata: <span className="text-slate-300 font-semibold">{ainVal}</span>
+          {ainVal < 2 ? <span className="ml-2">· Le forme si sbloccano a 2</span> : null}
+        </p>
+      </div>
+
+      {tab === 'archetipo' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wider text-slate-500">Attuale</p>
+            <AccentBadge accent="archetipo">Archetipo</AccentBadge>
+          </div>
+          {archetipoSelezionato ? (
+            <OptionCardV2 trait={archetipoSelezionato} accent="archetipo" selected showSelect={false} />
+          ) : (
+            <OptionCardV2 trait={traitUmanoCatalogo || null} accent="archetipo" selected showSelect={false} />
+          )}
+
+          <div className="pt-3 border-t border-slate-800">
+            <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Selezionabili</p>
+            <div className="space-y-2">
+              {archetipiAltri.length === 0 ? (
+                <p className="text-xs text-slate-500">Nessun altro archetipo selezionabile.</p>
+              ) : (
+                archetipiAltri.map((trait) => (
+                  <OptionCardV2
+                    key={trait.id}
+                    accent="archetipo"
+                    trait={trait}
+                    selected={false}
+                    showSelect={canEdit}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'forma' && (
+        <div className="space-y-3">
+          {ainVal < 2 ? (
+            <div className="text-sm text-slate-300 bg-slate-800/40 border border-slate-700 rounded-lg p-3">
+              Le forme sono disponibili solo con <span className="font-semibold text-white">Aura innata 2</span>.
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <p className="text-xs uppercase tracking-wider text-slate-500">Attuale</p>
+                <AccentBadge accent="forma">Forma</AccentBadge>
+              </div>
+              {formaSelezionata ? (
+                <OptionCardV2 trait={formaSelezionata} accent="forma" selected showSelect={false} />
+              ) : (
+                <div className="text-sm text-slate-300 bg-slate-800/30 border border-slate-700 rounded-lg p-3">
+                  Nessuna forma selezionata.
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-slate-800">
+                <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Selezionabili</p>
+                <div className="space-y-2">
+                  {formeAltri.length === 0 ? (
+                    <p className="text-xs text-slate-500">Non ci sono altre forme selezionabili.</p>
+                  ) : (
+                    formeAltri.map((trait) => (
+                      <OptionCardV2
+                        key={trait.id}
+                        accent="forma"
+                        trait={trait}
+                        selected={false}
+                        showSelect={canEdit}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function RazzaModal({
+  isOpen,
+  onClose,
+  personaggioId,
+  abilitaPossedute,
+  punteggiBase,
+  punteggiList,
+  auraInnataRecord,
+  onLogout,
+  onUpdated,
+  canEdit = true,
+}) {
+  const acquireMutation = useOptimisticAcquireAbilita();
+
+  const handlePick = async (abilitaId) => {
+    await acquireMutation.mutateAsync({ abilitaId, charId: personaggioId });
+  };
+
   if (!isOpen || !auraInnataRecord) return null;
+
+  const ainVal = Number(punteggiBase?.[auraInnataRecord.nome]) || 0;
+  const isTrattoInnita = (ab) =>
+    ab?.is_tratto_aura
+    && ab?.aura_riferimento
+    && String(ab.aura_riferimento.sigla || '').toUpperCase() === 'AIN';
+  const arch = (abilitaPossedute || []).find(
+    (ab) => isTrattoInnita(ab) && (ab.livello_riferimento === 0 || ab.livello_riferimento === 1),
+  );
+  const forma = (abilitaPossedute || []).find(
+    (ab) => isTrattoInnita(ab) && ab.livello_riferimento === 2,
+  );
 
   return (
     <div
@@ -413,7 +560,7 @@ export function RazzaModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="razza-modal-title"
-      onClick={(e) => e.target === e.currentTarget && !loadingId && onClose()}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl">
         <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/60 rounded-t-xl shrink-0">
@@ -424,145 +571,39 @@ export function RazzaModal({
             <p className="text-xs text-slate-400 mt-0.5">
               Archetipo:{' '}
               <span className="text-amber-200/90">
-                {archetipoSelezionato ? stripRazzaPrefix(archetipoSelezionato.nome) : 'Umano'}
+                {arch ? stripRazzaPrefix(arch.nome) : 'Umano'}
               </span>
               {ainVal >= 2 && (
                 <>
                   {' '}
                   Forma:{' '}
                   <span className="text-cyan-200/90">
-                    {formaSelezionata ? stripRazzaPrefix(formaSelezionata.nome) : 'Nessuna'}
+                    {forma ? stripRazzaPrefix(forma.nome) : 'Nessuna'}
                   </span>
                 </>
               )}
             </p>
-            <p className="text-[11px] text-slate-500 mt-1">
-              Aura innata: <span className="text-slate-300 font-semibold">{ainVal}</span>
-              {ainVal < 2 ? <span className="ml-2">· Le forme si sbloccano a 2</span> : null}
-            </p>
           </div>
           <button
             type="button"
-            disabled={!!loadingId}
             onClick={onClose}
-            className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white disabled:opacity-50"
+            className="p-2 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white"
             aria-label="Chiudi"
           >
             <X size={24} />
           </button>
         </div>
 
-        <div className="p-4 overflow-y-auto space-y-4 flex-1">
-          {error && (
-            <div className="text-sm text-red-300 bg-red-900/50 border border-red-500/50 rounded-md p-2">{error}</div>
-          )}
-
-          {/* Segmented control (mobile-friendly) */}
-          <div className="sticky top-0 z-10 -mx-4 px-4 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800">
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setTab('archetipo')}
-                className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors border ${
-                  tab === 'archetipo'
-                    ? 'bg-amber-950/30 border-amber-700/60 text-amber-200'
-                    : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-slate-600'
-                }`}
-              >
-                Archetipo
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('forma')}
-                disabled={ainVal < 2}
-                className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors border ${
-                  tab === 'forma'
-                    ? 'bg-cyan-950/30 border-cyan-700/60 text-cyan-200'
-                    : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-slate-600'
-                } ${ainVal < 2 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={ainVal < 2 ? 'Le forme si sbloccano a Aura innata 2' : undefined}
-              >
-                Forma
-              </button>
-            </div>
-          </div>
-
-          {tab === 'archetipo' && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs uppercase tracking-wider text-slate-500">Attuale</p>
-                <AccentBadge accent="archetipo">Archetipo</AccentBadge>
-              </div>
-              {archetipoSelezionato ? (
-                <OptionCardV2 trait={archetipoSelezionato} accent="archetipo" selected showSelect={false} />
-              ) : (
-                <OptionCardV2 trait={traitUmanoCatalogo || null} accent="archetipo" selected showSelect={false} />
-              )}
-
-              <div className="pt-3 border-t border-slate-800">
-                <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Selezionabili</p>
-                <div className="space-y-2">
-                  {archetipiAltri.length === 0 ? (
-                    <p className="text-xs text-slate-500">Nessun altro archetipo selezionabile.</p>
-                  ) : (
-                    archetipiAltri.map((trait) => (
-                      <OptionCardV2
-                        key={trait.id}
-                        accent="archetipo"
-                        trait={trait}
-                        selected={false}
-                        showSelect={true}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === 'forma' && (
-            <div className="space-y-3">
-              {ainVal < 2 ? (
-                <div className="text-sm text-slate-300 bg-slate-800/40 border border-slate-700 rounded-lg p-3">
-                  Le forme sono disponibili solo con <span className="font-semibold text-white">Aura innata 2</span>.
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Attuale</p>
-                    <AccentBadge accent="forma">Forma</AccentBadge>
-                  </div>
-                  {formaSelezionata ? (
-                    <OptionCardV2 trait={formaSelezionata} accent="forma" selected showSelect={false} />
-                  ) : (
-                    <div className="text-sm text-slate-300 bg-slate-800/30 border border-slate-700 rounded-lg p-3">
-                      Nessuna forma selezionata.
-                    </div>
-                  )}
-
-                  <div className="pt-3 border-t border-slate-800">
-                    <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Selezionabili</p>
-                    <div className="space-y-2">
-                      {formeAltri.length === 0 ? (
-                        <p className="text-xs text-slate-500">Non ci sono altre forme selezionabili.</p>
-                      ) : (
-                        formeAltri.map((trait) => (
-                          <OptionCardV2
-                            key={trait.id}
-                            accent="forma"
-                            trait={trait}
-                            selected={false}
-                            showSelect={true}
-                          />
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        <RazzaPickerContent
+          abilitaPossedute={abilitaPossedute}
+          punteggiBase={punteggiBase}
+          punteggiList={punteggiList}
+          auraInnataRecord={auraInnataRecord}
+          canEdit={canEdit}
+          editBlockedMessage="Non puoi modificare la razza: il personaggio partecipa già a un evento iniziato."
+          onPick={handlePick}
+          onUpdated={onUpdated}
+        />
       </div>
     </div>
   );

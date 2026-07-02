@@ -1996,6 +1996,79 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             return Response({'detail': result.error}, status=status_code)
         return Response(self._serialize_detail(result.personaggio, request))
 
+    @action(detail=True, methods=['post'], url_path='assegna-modello-aura')
+    def assegna_modello_aura(self, request, pk=None):
+        """Assegna o sostituisce il modello di aura per un'aura (intervento staff)."""
+        from personaggi.models import ModelloAura, PersonaggioModelloAura
+
+        personaggio = self.get_object()
+        modello_id = request.data.get('modello_aura_id') or request.data.get('modello_id')
+        motivo = (request.data.get('motivo') or 'Assegnazione modello aura staff').strip()
+        if not modello_id:
+            return Response({'detail': 'modello_aura_id obbligatorio.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            modello = ModelloAura.objects.select_related('aura').get(pk=modello_id)
+        except ModelloAura.DoesNotExist:
+            return Response({'detail': 'Modello aura non trovato.'}, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            existing = PersonaggioModelloAura.objects.filter(
+                personaggio=personaggio,
+                modello_aura__aura_id=modello.aura_id,
+            ).select_related('modello_aura').first()
+            if existing:
+                old_nome = existing.modello_aura.nome
+                existing.delete()
+                personaggio.aggiungi_log(
+                    f"Staff: rimosso modello aura «{old_nome}» per {modello.aura.nome} ({motivo})."
+                )
+            PersonaggioModelloAura.objects.create(personaggio=personaggio, modello_aura=modello)
+            personaggio.aggiungi_log(
+                f"Staff: assegnato modello aura «{modello.nome}» per {modello.aura.nome} ({motivo})."
+            )
+
+        personaggio.refresh_from_db()
+        return Response(self._serialize_detail(personaggio, request))
+
+    @action(detail=True, methods=['post'], url_path='rimuovi-modello-aura')
+    def rimuovi_modello_aura(self, request, pk=None):
+        """Rimuove il modello di aura scelto per un'aura."""
+        from personaggi.models import PersonaggioModelloAura
+
+        personaggio = self.get_object()
+        aura_id = request.data.get('aura_id')
+        modello_id = request.data.get('modello_aura_id') or request.data.get('modello_id')
+        motivo = (request.data.get('motivo') or 'Rimozione modello aura staff').strip()
+
+        qs = PersonaggioModelloAura.objects.filter(personaggio=personaggio).select_related(
+            'modello_aura', 'modello_aura__aura'
+        )
+        if modello_id:
+            qs = qs.filter(modello_aura_id=modello_id)
+        elif aura_id:
+            qs = qs.filter(modello_aura__aura_id=aura_id)
+        else:
+            return Response(
+                {'detail': 'Specificare aura_id o modello_aura_id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        removed = list(qs)
+        if not removed:
+            return Response({'detail': 'Nessun modello aura da rimuovere.'}, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            for row in removed:
+                personaggio.aggiungi_log(
+                    f"Staff: rimosso modello aura «{row.modello_aura.nome}» "
+                    f"per {row.modello_aura.aura.nome} ({motivo})."
+                )
+                row.delete()
+
+        personaggio.refresh_from_db()
+        return Response(self._serialize_detail(personaggio, request))
+
     @action(detail=True, methods=['post'], url_path='crea-oggetto-da-base')
     def crea_oggetto_da_base(self, request, pk=None):
         """Crea un'istanza Oggetto da OggettoBase e la mette nell'inventario del personaggio."""

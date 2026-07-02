@@ -1254,6 +1254,83 @@ class PersonaggioStaffRetrieveTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
         self.assertTrue(res.json().get("scheda_modifica_libera"))
 
+    def test_staff_detail_razza_e_modelli_aura(self):
+        from personaggi.models import (
+            AURA,
+            CARATTERISTICA,
+            Abilita,
+            ModelloAura,
+            PersonaggioModelloAura,
+            Punteggio,
+        )
+
+        ain = Punteggio.objects.create(nome="Aura Innata", sigla="AIN", tipo=AURA)
+        aura_palette = Punteggio.objects.create(nome="Aura Test", sigla="AT1", tipo=AURA)
+        car = Punteggio.objects.create(nome="Forza", sigla="FOR", tipo=CARATTERISTICA)
+        trait = Abilita.objects.create(
+            nome="forma - Lupo",
+            is_tratto_aura=True,
+            aura_riferimento=ain,
+            livello_riferimento=2,
+            caratteristica=car,
+            caratteristica_2=car,
+            costo_pc=0,
+            costo_crediti=0,
+        )
+        modello = ModelloAura.objects.create(aura=aura_palette, nome="Modello Alfa")
+        PersonaggioModelloAura.objects.create(personaggio=self.pg, modello_aura=modello)
+        self.pg.abilita_possedute.add(trait)
+
+        url = f"/api/personaggi/api/staff/personaggi/{self.pg.id}/"
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, status.HTTP_200_OK, res.content)
+        body = res.json()
+        self.assertIn("punteggi_base", body)
+        self.assertIn("can_edit_razza", body)
+        self.assertEqual(len(body.get("modelli_aura") or []), 1)
+        razza = body.get("razza_abilita") or []
+        self.assertEqual(len(razza), 1)
+        self.assertEqual(razza[0]["id"], trait.id)
+        self.assertIn("is_modifiable", razza[0])
+
+    def test_staff_assegna_e_rimuovi_modello_aura(self):
+        from personaggi.models import AURA, ModelloAura, PersonaggioModelloAura, Punteggio
+
+        aura = Punteggio.objects.create(nome="Aura Staff", sigla="AST", tipo=AURA)
+        m1 = ModelloAura.objects.create(aura=aura, nome="M1")
+        m2 = ModelloAura.objects.create(aura=aura, nome="M2")
+        base = f"/api/personaggi/api/staff/personaggi/{self.pg.id}"
+
+        res_add = self.client.post(
+            f"{base}/assegna-modello-aura/",
+            {"modello_aura_id": m1.id, "motivo": "Test"},
+            format="json",
+        )
+        self.assertEqual(res_add.status_code, status.HTTP_200_OK, res_add.content)
+        self.assertEqual(len(res_add.json().get("modelli_aura") or []), 1)
+
+        res_swap = self.client.post(
+            f"{base}/assegna-modello-aura/",
+            {"modello_aura_id": m2.id, "motivo": "Swap"},
+            format="json",
+        )
+        self.assertEqual(res_swap.status_code, status.HTTP_200_OK, res_swap.content)
+        modelli = res_swap.json().get("modelli_aura") or []
+        self.assertEqual(len(modelli), 1)
+        self.assertEqual(modelli[0]["nome"], "M2")
+        self.assertEqual(
+            PersonaggioModelloAura.objects.filter(personaggio=self.pg, modello_aura__aura=aura).count(),
+            1,
+        )
+
+        res_rm = self.client.post(
+            f"{base}/rimuovi-modello-aura/",
+            {"aura_id": aura.id, "motivo": "Pulizia"},
+            format="json",
+        )
+        self.assertEqual(res_rm.status_code, status.HTTP_200_OK, res_rm.content)
+        self.assertEqual(len(res_rm.json().get("modelli_aura") or []), 0)
+
 
 class MetatalentiDecimalValoreTests(TestCase):
     """Regression: MattoneStatistica.valore è Decimal dopo migrazione 0220."""
