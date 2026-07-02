@@ -5,6 +5,7 @@ import {
   ItalianDateTimeInput,
   ItalianTimeInput,
 } from '../ItalianDateTimeInputs';
+import { localDateTimeToApiIso, apiIsoToLocalDateTimeValue } from '../../utils/italianDateTime';
 
 const TIPO_REQUISITO_OPTS = [
   { id: 'statistica', label: 'Statistica (sigla)' },
@@ -246,20 +247,9 @@ const FasciaEditor = ({ fascia, onChange, onRemove }) => {
   );
 };
 
-const toIsoFromLocal = (local) => {
-  if (!local) return '';
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString();
-};
+const toIsoFromLocal = (local) => localDateTimeToApiIso(local) || '';
 
-const fromIsoToLocal = (iso) => {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+const fromIsoToLocal = (iso) => apiIsoToLocalDateTimeValue(iso);
 
 export const RegoleAperturaEditor = ({ value, onChange, lookup }) => {
   const regole = value && typeof value === 'object' ? value : { modalita: 'sempre_aperto' };

@@ -24,6 +24,7 @@ import {
 import {
   ItalianDateTimeInput,
 } from '../ItalianDateTimeInputs';
+import { localDateTimeToApiIso } from '../../utils/italianDateTime';
 
 const TABS = [
   { id: 'org', label: 'Carriere / KORP', icon: Briefcase },
@@ -535,7 +536,7 @@ function MembershipModal({
               <ItalianDateTimeInput
                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm"
                 value={form.data_da || ''}
-                onChange={(v) => setForm({ ...form, data_da: v ? new Date(v).toISOString() : null })}
+                onChange={(v) => setForm({ ...form, data_da: localDateTimeToApiIso(v) })}
               />
             </div>
             <div>
@@ -543,7 +544,7 @@ function MembershipModal({
               <ItalianDateTimeInput
                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm"
                 value={form.data_a || ''}
-                onChange={(v) => setForm({ ...form, data_a: v ? new Date(v).toISOString() : null })}
+                onChange={(v) => setForm({ ...form, data_a: localDateTimeToApiIso(v) })}
               />
             </div>
           </div>

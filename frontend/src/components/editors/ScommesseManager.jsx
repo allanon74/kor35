@@ -27,6 +27,7 @@ import {
   ItalianDateTimeInput,
   ItalianTimeInput,
 } from '../ItalianDateTimeInputs';
+import { localDateTimeToApiIso } from '../../utils/italianDateTime';
 
 const toList = (data) => (Array.isArray(data) ? data : data?.results || []);
 
@@ -153,8 +154,8 @@ const ScommesseManager = ({ onBack, onLogout }) => {
       const payload = {
         sport: formCalendario.sport,
         titolo: formCalendario.titolo || '',
-        data_apertura: new Date(formCalendario.data_apertura || Date.now()).toISOString(),
-        data_risoluzione: new Date(formCalendario.data_risoluzione).toISOString(),
+        data_apertura: localDateTimeToApiIso(formCalendario.data_apertura) || new Date().toISOString(),
+        data_risoluzione: localDateTimeToApiIso(formCalendario.data_risoluzione),
         importo_max_senza_codice: formCalendario.importo_max_senza_codice || '10.00',
         attivo: formCalendario.attivo !== false,
       };

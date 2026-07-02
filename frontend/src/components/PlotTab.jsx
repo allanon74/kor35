@@ -22,6 +22,7 @@ import StaffQrTab from './StaffQrTab';
 import RichTextEditor from './RichTextEditor';
 import EventoCoordinatePicker from './editors/EventoCoordinatePicker';
 import { normalizeCoordinatesForSave } from '../utils/eventoCoordinates';
+import { localDateTimeToApiIso, localDateToApiIso } from '../utils/italianDateTime';
 import ConfirmDialog from './editors/ConfirmDialog';
 import QrAssociationConflictBody from './editors/QrAssociationConflictBody';
 import useStaffMinigiocoQr from '../hooks/useStaffMinigiocoQr';
@@ -191,6 +192,12 @@ const PlotTab = ({ onLogout }) => {
                 delete raw.partecipanti_details;
                 ['iscrizione_apertura', 'iscrizione_chiusura'].forEach((k) => {
                     if (raw[k] === '' || raw[k] === undefined) raw[k] = null;
+                    else if (raw[k]) raw[k] = localDateTimeToApiIso(raw[k]);
+                });
+                ['data_inizio', 'data_fine'].forEach((k) => {
+                    if (!raw[k]) return;
+                    const v = String(raw[k]).trim();
+                    raw[k] = /^\d{4}-\d{2}-\d{2}$/.test(v) ? localDateToApiIso(v) : localDateTimeToApiIso(v);
                 });
                 const cost = parseFloat(String(raw.iscrizione_costo_euro ?? '0').replace(',', '.'));
                 raw.iscrizione_costo_euro = Number.isFinite(cost) ? cost : 0;
@@ -230,6 +237,9 @@ const PlotTab = ({ onLogout }) => {
                 else await createEvento(raw, onLogout);
             } else if (editMode === 'giorno') {
                 const data = { ...formData, evento: selectedEvento.id };
+                ['data_ora_inizio', 'data_ora_fine'].forEach((k) => {
+                    if (data[k]) data[k] = localDateTimeToApiIso(data[k]);
+                });
                 if (formData.id) await updateGiorno(formData.id, data, onLogout);
                 else await createGiorno(data, onLogout);
             } else if (editMode === 'quest') {

@@ -22,7 +22,7 @@ import {
   staffUpdateNodo,
   staffDeleteNodo,
 } from '../../api';
-import { ItalianDateTimeInput } from '../ItalianDateTimeInputs';
+import { localDateTimeToApiIso } from '../../utils/italianDateTime';
 
 const emptyForm = () => ({
   nome: '',
@@ -92,7 +92,9 @@ const NodoManager = ({ onBack, onLogout }) => {
     formData.append('testo', editing.testo || '');
     formData.append('tipo_nodo', editing.tipo_nodo || 'MIN');
     formData.append('reward_config', editing.reward_config || '');
-    if (editing.disponibile_dal) formData.append('disponibile_dal', editing.disponibile_dal);
+    if (editing.disponibile_dal) {
+      formData.append('disponibile_dal', localDateTimeToApiIso(editing.disponibile_dal));
+    }
     if (editing.foto_posizione instanceof File) formData.append('foto_posizione', editing.foto_posizione);
     try {
       if (editing.id) {
