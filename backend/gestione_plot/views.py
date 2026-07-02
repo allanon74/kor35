@@ -448,7 +448,10 @@ class EventoViewSet(viewsets.ModelViewSet):
                 'infusioni': InfusioneSerializer(Infusione.objects.all().select_related('aura_richiesta', 'aura_infusione'), many=True).data,
                 'cerimoniali': CerimonialeSerializer(Cerimoniale.objects.all(), many=True).data,
                 'oggetti': oggetti_data,
-                'staff': UserShortSerializer(User.objects.filter(is_staff=True).only('id', 'username', 'first_name', 'last_name'), many=True).data,
+                'staff': UserShortSerializer(
+                    _campagna_staff_users_for_request(request),
+                    many=True,
+                ).data,
                 'negozi_mercante': self._negozi_mercante_risorse_editor(),
             })
         except Exception:
@@ -1208,6 +1211,30 @@ def _get_active_campaign_for_request(request):
     if campagna:
         return campagna
     return Campagna.objects.filter(attiva=True, is_default=True).first() or Campagna.objects.filter(slug="kor35").first()
+
+
+def _campagna_staff_users_for_request(request):
+    """
+    Utenti staff dell'evento/plot: membership attiva nella campagna corrente
+    con ruolo Staffer, Master o Head Master (non Redactor/Giocatore).
+    """
+    campagna = _get_active_campaign_for_request(request)
+    if not campagna:
+        return User.objects.none()
+    staff_user_ids = CampagnaUtente.objects.filter(
+        campagna=campagna,
+        attivo=True,
+        ruolo__in=(
+            CAMPAGNA_ROLE_STAFFER,
+            CAMPAGNA_ROLE_MASTER,
+            CAMPAGNA_ROLE_HEAD_MASTER,
+        ),
+    ).values_list("user_id", flat=True)
+    return (
+        User.objects.filter(pk__in=staff_user_ids)
+        .only("id", "username", "first_name", "last_name")
+        .order_by("username")
+    )
 
 
 def _campaign_role_for_request(request, user_override=None):

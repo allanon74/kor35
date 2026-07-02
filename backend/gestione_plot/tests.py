@@ -200,3 +200,57 @@ class WikiPermissionsMatrixTests(APITestCase):
                     public=True,
                 )
                 self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class RisorseEditorStaffCampagnaTests(APITestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.campagna = Campagna.objects.create(slug="plot-staff-test", nome="Plot Staff Test", attiva=True)
+        self.alt_campagna = Campagna.objects.create(slug="altra-campagna", nome="Altra", attiva=True)
+
+        self.master = User.objects.create_user(username="plot_master", password="x")
+        self.staffer = User.objects.create_user(username="plot_staffer", password="x")
+        self.redactor = User.objects.create_user(username="plot_redactor", password="x")
+        self.django_staff_only = User.objects.create_user(
+            username="django_staff_only", password="x", is_staff=True
+        )
+        self.alt_staffer = User.objects.create_user(username="alt_staffer", password="x")
+
+        CampagnaUtente.objects.create(
+            campagna=self.campagna, user=self.master, ruolo=CAMPAGNA_ROLE_MASTER, attivo=True
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna, user=self.staffer, ruolo=CAMPAGNA_ROLE_STAFFER, attivo=True
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna, user=self.redactor, ruolo=CAMPAGNA_ROLE_REDACTOR, attivo=True
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.alt_campagna, user=self.alt_staffer, ruolo=CAMPAGNA_ROLE_STAFFER, attivo=True
+        )
+
+    def _get_risorse(self, user, campagna_slug):
+        self.client.force_authenticate(user=user)
+        return self.client.get(
+            "/api/plot/api/eventi/risorse_editor/",
+            HTTP_X_CAMPAGNA=campagna_slug,
+        )
+
+    def test_risorse_editor_staff_da_campagna_non_django_is_staff(self):
+        resp = self._get_risorse(self.master, self.campagna.slug)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usernames = {row["username"] for row in resp.data.get("staff", [])}
+        self.assertEqual(usernames, {"plot_master", "plot_staffer"})
+        self.assertNotIn("plot_redactor", usernames)
+        self.assertNotIn("django_staff_only", usernames)
+        self.assertNotIn("alt_staffer", usernames)
+
+    def test_risorse_editor_staff_rispetta_header_campagna(self):
+        resp = self._get_risorse(self.alt_staffer, self.alt_campagna.slug)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        usernames = {row["username"] for row in resp.data.get("staff", [])}
+        self.assertEqual(usernames, {"alt_staffer"})
+
+        resp_main = self._get_risorse(self.master, self.campagna.slug)
+        usernames_main = {row["username"] for row in resp_main.data.get("staff", [])}
+        self.assertEqual(usernames_main, {"plot_master", "plot_staffer"})

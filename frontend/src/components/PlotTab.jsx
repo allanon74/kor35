@@ -30,7 +30,7 @@ import {
 } from './ItalianDateTimeInputs';
 
 // Cache per le risorse (persiste per la sessione)
-const RISORSE_CACHE_KEY = 'plot_risorse_cache';
+const RISORSE_CACHE_KEY = 'plot_risorse_cache_v2';
 const RISORSE_CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minuti
 
 const PlotTab = ({ onLogout }) => {
