@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -97,6 +97,11 @@ help:
 	@echo "Wiki regolamento carte (sorgenti docs/wiki/carte/):"
 	@echo "  make wiki-carte-sync ENV=dev-home              # sync bozza regolamento carte nel DB"
 	@echo "  make wiki-carte-sync ENV=dev-home WIKI_CARTE_FORCE=1  # sovrascrive contenuto esistente"
+	@echo ""
+	@echo "Scommesse — giornate automatiche ogni N giorni (cadenza torneo):"
+	@echo "  make scommesse-sync-programmazione ENV=prod     # crea giornate in scadenza"
+	@echo "  opzionale: SCOMMESSE_SYNC_MAX=2                # max calendari per sport"
+	@echo "  (timer systemd: config/systemd/kor35-scommesse-programmazione.timer)"
 	@echo ""
 	@echo "Catalogo carte demo:"
 	@echo "  make seed-carte-esempio ENV=dev-home              # espansione + 20 carte + keyword"
@@ -302,6 +307,11 @@ WIKI_CARTE_FORCE ?= 0
 wiki-carte-sync:
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py sync_wiki_carte_regolamento $(if $(filter 1,$(WIKI_CARTE_FORCE)),--force,)
+
+SCOMMESSE_SYNC_MAX ?= 1
+scommesse-sync-programmazione:
+	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py scommesse_sync_programmazione --max-per-sport $(SCOMMESSE_SYNC_MAX)
 
 COMPONENTI_NAVE_FORCE_COPPIE ?= 0
 COMPONENTI_NAVE_SKIP_IF_COMPLETE ?= 1

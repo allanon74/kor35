@@ -3902,6 +3902,12 @@ export const scommesseGetConfig = (onLogout) =>
 export const scommesseGetSquadraStorico = (squadraId, onLogout) =>
     fetchAuthenticated(`/api/personaggi/api/scommesse/squadre/${squadraId}/storico/`, { method: 'GET' }, onLogout);
 
+export const scommesseGetClassifiche = (onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/scommesse/classifiche/', { method: 'GET' }, onLogout);
+
+export const scommesseGetClassificaSport = (sportId, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/scommesse/sport/${sportId}/classifica/`, { method: 'GET' }, onLogout);
+
 export const scommesseGetCalendario = (calendarioId, onLogout) =>
     fetchAuthenticated(`/api/personaggi/api/scommesse/calendari/${calendarioId}/`, { method: 'GET' }, onLogout);
 
@@ -3996,6 +4002,36 @@ export const staffScommesseDeleteCalendario = (id, onLogout) =>
 
 export const staffScommesseRigeneraIncontri = (calendarioId, onLogout) =>
     fetchAuthenticated(`${STAFF_SCOMMESSE}/calendari/${calendarioId}/rigenera-incontri/`, { method: 'POST' }, onLogout);
+
+export const staffScommesseGetProgrammazioni = (sportId, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/programmazioni/${sportId ? `?sport=${sportId}` : ''}`, { method: 'GET' }, onLogout);
+
+export const staffScommesseSaveProgrammazione = (data, onLogout, id = null) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/programmazioni/${id ? `${id}/` : ''}`, {
+        method: id ? 'PATCH' : 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffScommesseDeleteProgrammazione = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/programmazioni/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffScommesseSincronizzaProgrammazione = (id, onLogout, maxCrea = 1) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/programmazioni/${id}/sincronizza/`, {
+        method: 'POST',
+        body: JSON.stringify({ max_crea: maxCrea }),
+    }, onLogout);
+
+export const staffScommesseSincronizzaTutteProgrammazioni = (onLogout, maxPerSport = 1) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/programmazioni/sincronizza-tutte/`, {
+        method: 'POST',
+        body: JSON.stringify({ max_crea_per_sport: maxPerSport }),
+    }, onLogout);
+
+export const staffScommesseGeneraCalendarioPerEvento = (programmazioneId, eventoId, onLogout) =>
+    fetchAuthenticated(`${STAFF_SCOMMESSE}/programmazioni/${programmazioneId}/genera-per-evento/`, {
+        method: 'POST',
+        body: JSON.stringify({ evento_id: eventoId }),
+    }, onLogout);
 
 export const staffScommesseGetConfig = (onLogout, campagnaId = null) =>
     fetchAuthenticated(`${STAFF_SCOMMESSE}/config/${campagnaId ? `?campagna=${campagnaId}` : ''}`, { method: 'GET' }, onLogout);

@@ -10,6 +10,7 @@ class ScommesseConfig:
     importo_max_senza_codice_default: Decimal
     scadenza_calendario_ore: int
     commissione_allibratore_pct: Decimal
+    bonus_quota_allibratore_pct: Decimal
     margine_book_default: Decimal
     margine_book_min: Decimal
     riduzione_margine_per_punto_all: Decimal
@@ -29,6 +30,7 @@ DEFAULT_SCOMMESSE_CONFIG = ScommesseConfig(
     importo_max_senza_codice_default=Decimal("15.00"),
     scadenza_calendario_ore=24,
     commissione_allibratore_pct=Decimal("0.08"),
+    bonus_quota_allibratore_pct=Decimal("0.10"),
     margine_book_default=Decimal("1.06"),
     margine_book_min=Decimal("1.02"),
     riduzione_margine_per_punto_all=Decimal("0.015"),
@@ -46,6 +48,9 @@ def _from_model(obj) -> ScommesseConfig:
         importo_max_senza_codice_default=obj.importo_max_senza_codice_default,
         scadenza_calendario_ore=obj.scadenza_calendario_ore,
         commissione_allibratore_pct=obj.commissione_allibratore_pct,
+        bonus_quota_allibratore_pct=getattr(
+            obj, "bonus_quota_allibratore_pct", DEFAULT_SCOMMESSE_CONFIG.bonus_quota_allibratore_pct
+        ),
         margine_book_default=obj.margine_book_default,
         margine_book_min=obj.margine_book_min,
         riduzione_margine_per_punto_all=obj.riduzione_margine_per_punto_all,
@@ -79,6 +84,7 @@ def config_to_public_dict(cfg: ScommesseConfig, personaggio=None) -> dict:
         "importo_max_senza_codice_default": str(cfg.importo_max_senza_codice_default),
         "scadenza_calendario_ore": cfg.scadenza_calendario_ore,
         "commissione_allibratore_pct": str(cfg.commissione_allibratore_pct),
+        "bonus_quota_allibratore_pct": str(cfg.bonus_quota_allibratore_pct),
         "margine_book_default": str(cfg.margine_book_default),
         "max_selezioni_combinata": cfg.max_selezioni_combinata,
         "variabilita_potenza_pct": cfg.variabilita_potenza_pct,

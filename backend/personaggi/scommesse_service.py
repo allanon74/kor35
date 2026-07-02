@@ -14,10 +14,9 @@ from personaggi.scommesse_logic import (
     ALLIBRATORE_SIGLA,
     ESITI_VALIDI,
     ESITO_PAREGGIO,
+    applica_bonus_quota_allibratore,
     applica_variazione_potenza_dopo_incontro,
-    calcola_probabilita_esito,
     calendario_ancora_visibile,
-    margine_allibratore,
     risultati_pubblicati,
 )
 from personaggi.scommesse_risultati import formatta_risultato, pareggio_consentito
@@ -107,6 +106,13 @@ def _liquida_calendario(calendario: CalendarioScommesse):
             vincita = _decimal2(puntata.importo * puntata.quota_totale)
             puntata.stato = PuntataScommessa.STATO_WON
             puntata.vincita = vincita
+            if puntata.codice_id:
+                commissione = _decimal2(vincita * cfg.commissione_allibratore_pct)
+                if commissione > 0:
+                    puntata.codice.allibratore.modifica_crediti(
+                        float(commissione),
+                        f"Commissione allibratore vincita codice {puntata.codice.codice}",
+                    )
         else:
             puntata.stato = PuntataScommessa.STATO_LOST
             puntata.vincita = Decimal("0.00")
@@ -120,18 +126,13 @@ def _liquida_calendario(calendario: CalendarioScommesse):
     calendario.save(update_fields=["liquidato", "updated_at"])
 
 
-def _quota_selezione(incontro: IncontroScommesse, esito: str, margine_bonus=None, allow_draw: bool = True) -> Decimal:
+def _quota_selezione(incontro: IncontroScommesse, esito: str, *, bonus_allibratore=False, cfg=None) -> Decimal:
     base = incontro.quota_per_esito(esito)
-    if margine_bonus is None:
+    if not bonus_allibratore:
         return base
-    p_casa, p_pareggio, p_trasf = calcola_probabilita_esito(
-        incontro.potenza_casa_effettiva,
-        incontro.potenza_trasferta_effettiva,
-        allow_draw=allow_draw,
-    )
-    prob_map = {"1": p_casa, "X": p_pareggio, "2": p_trasf}
-    prob = prob_map.get(esito, p_casa)
-    return _decimal2(margine_bonus / Decimal(str(prob)))
+    campagna_id = getattr(getattr(incontro.calendario, "sport", None), "campagna_id", None)
+    cfg = cfg or get_config_scommesse(campagna_id)
+    return applica_bonus_quota_allibratore(base, cfg)
 
 
 @transaction.atomic
@@ -166,8 +167,11 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         raise ValidationError("Importo non valido.")
 
     codice_obj = None
-    margine_bonus = None
+    is_allibratore = personaggio.get_valore_statistica(ALLIBRATORE_SIGLA) > 0
+    bonus_allibratore = False
     if codice_str:
+        if is_allibratore:
+            raise ValidationError("Gli allibratori non possono usare codici scommessa.")
         if usa_riserva:
             raise ValidationError("Il codice allibratore non è utilizzabile con la riserva.")
         codice_str = codice_str.strip().upper()
@@ -176,13 +180,11 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         ).first()
         if not codice_obj:
             raise ValidationError("Codice scommessa non valido o già utilizzato.")
-        valore_all = codice_obj.allibratore.get_valore_statistica(ALLIBRATORE_SIGLA)
-        margine_bonus = margine_allibratore(valore_all, cfg)
-    else:
-        if not usa_riserva and importo > calendario.importo_max_senza_codice:
-            raise ValidationError(
-                f"Senza codice allibratore il massimo è {calendario.importo_max_senza_codice} CR."
-            )
+        bonus_allibratore = True
+    elif not is_allibratore and not usa_riserva and importo > calendario.importo_max_senza_codice:
+        raise ValidationError(
+            f"Senza codice allibratore il massimo è {calendario.importo_max_senza_codice} CR."
+        )
 
     importo_riserva = Decimal("0.00")
     if usa_riserva:
@@ -222,7 +224,12 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         tipo_sport = calendario.sport.tipo_risultato
         if esito == ESITO_PAREGGIO and not pareggio_consentito(tipo_sport):
             raise ValidationError("Il pareggio non è disponibile per questo sport.")
-        q = _quota_selezione(incontro, esito, margine_bonus, allow_draw=pareggio_consentito(tipo_sport))
+        q = _quota_selezione(
+            incontro,
+            esito,
+            bonus_allibratore=bonus_allibratore,
+            cfg=cfg,
+        )
         quota_totale *= q
 
     quota_totale = _decimal2(quota_totale)
@@ -240,12 +247,6 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         codice_obj.usato = True
         codice_obj.usato_at = timezone.now()
         codice_obj.save(update_fields=["usato", "usato_at", "updated_at"])
-        commissione = _decimal2(importo * cfg.commissione_allibratore_pct)
-        if commissione > 0:
-            codice_obj.allibratore.modifica_crediti(
-                float(commissione),
-                f"Commissione allibratore codice {codice_obj.codice}",
-            )
 
     puntata = PuntataScommessa.objects.create(
         personaggio=personaggio,

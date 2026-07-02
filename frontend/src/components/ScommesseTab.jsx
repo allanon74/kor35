@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Trophy, Ticket, Key, ChevronLeft, CheckCircle2, XCircle, Clock, X } from 'lucide-react';
+import { Loader2, Trophy, Ticket, Key, ChevronLeft, CheckCircle2, XCircle, Clock, X, BarChart3 } from 'lucide-react';
 import { useCharacter } from './CharacterContext';
 import {
   scommesseGeneraCodice,
   scommesseGetCalendari,
   scommesseGetCalendario,
+  scommesseGetClassifiche,
+  scommesseGetClassificaSport,
   scommesseGetMiePuntate,
   scommesseGetMieiCodici,
   scommesseGetSquadraStorico,
@@ -135,6 +137,7 @@ const ScommesseTab = ({ onLogout }) => {
   const [ritirandoId, setRitirandoId] = useState(null);
   const [codici, setCodici] = useState([]);
   const [valoreAll, setValoreAll] = useState(0);
+  const [canGenerareCodice, setCanGenerareCodice] = useState(false);
   const [config, setConfig] = useState(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [listRefreshing, setListRefreshing] = useState(false);
@@ -148,6 +151,10 @@ const ScommesseTab = ({ onLogout }) => {
   const [squadraModal, setSquadraModal] = useState(null);
   const [squadraStorico, setSquadraStorico] = useState(null);
   const [storicoLoading, setStoricoLoading] = useState(false);
+  const [classifiche, setClassifiche] = useState([]);
+  const [classificheLoading, setClassificheLoading] = useState(false);
+  const [classificaSportId, setClassificaSportId] = useState('');
+  const [classificaDettaglio, setClassificaDettaglio] = useState(null);
 
   const isAllibratore = valoreAll > 0;
 
@@ -206,6 +213,7 @@ const ScommesseTab = ({ onLogout }) => {
         const codRes = await scommesseGetMieiCodici(pgId, onLogout);
         setCodici(Array.isArray(codRes?.codici) ? codRes.codici : (Array.isArray(codRes) ? codRes : []));
         setValoreAll(Number(codRes?.valore_all ?? getValoreAllFromChar(char)) || 0);
+        setCanGenerareCodice(Boolean(codRes?.can_generare));
       } else {
         setPuntate([]);
         setPuntatePage(1);
@@ -213,6 +221,7 @@ const ScommesseTab = ({ onLogout }) => {
         setPuntateHasMore(false);
         setCodici([]);
         setValoreAll(0);
+        setCanGenerareCodice(false);
       }
     } catch (e) {
       setStatus(e.message);
@@ -229,6 +238,46 @@ const ScommesseTab = ({ onLogout }) => {
       loadPuntate({ page: 1, append: false });
     }
   }, [section, view, pgId, loadPuntate]);
+
+  const loadClassifiche = useCallback(async () => {
+    setClassificheLoading(true);
+    try {
+      const res = await scommesseGetClassifiche(onLogout);
+      const list = Array.isArray(res?.classifiche) ? res.classifiche : [];
+      setClassifiche(list);
+      if (list.length && !classificaSportId) {
+        setClassificaSportId(String(list[0].sport.id));
+      }
+    } catch (e) {
+      setStatus(e.message);
+      setClassifiche([]);
+    } finally {
+      setClassificheLoading(false);
+    }
+  }, [onLogout]);
+
+  useEffect(() => {
+    if (section === 'classifiche' && view === 'list') {
+      loadClassifiche();
+    }
+  }, [section, view, loadClassifiche]);
+
+  useEffect(() => {
+    if (section !== 'classifiche' || !classificaSportId) {
+      setClassificaDettaglio(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await scommesseGetClassificaSport(classificaSportId, onLogout);
+        if (!cancelled) setClassificaDettaglio(data);
+      } catch (e) {
+        if (!cancelled) setStatus(e.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [section, classificaSportId, onLogout]);
 
   const apriStoricoSquadra = async (squadraId, squadraNome) => {
     setSquadraModal({ id: squadraId, nome: squadraNome });
@@ -293,16 +342,20 @@ const ScommesseTab = ({ onLogout }) => {
     if (!calendarioDetail?.incontri) return '1.00';
     const keys = Object.keys(selezioni);
     if (!keys.length) return '1.00';
+    const bonusPct = !isAllibratore && codiceInput.trim()
+      ? Number(config?.bonus_quota_allibratore_pct ?? 0.1)
+      : 0;
     let tot = 1;
     for (const inc of calendarioDetail.incontri) {
       const esito = selezioni[inc.id];
       if (!esito) continue;
       const pareggioRiga = inc.pareggio_consentito ?? pareggioConsentito(calendarioDetail.sport_tipo_risultato);
-      const q = esito === '1'
+      let q = esito === '1'
         ? Number(inc.quota_casa)
         : esito === 'X' && pareggioRiga
           ? Number(inc.quota_pareggio)
           : Number(inc.quota_trasferta);
+      if (bonusPct > 0) q *= (1 + bonusPct);
       tot *= q;
     }
     return tot.toFixed(2);
@@ -534,7 +587,7 @@ const ScommesseTab = ({ onLogout }) => {
                 className="flex-1 rounded border border-gray-600 bg-gray-900 px-3 py-2 text-sm"
                 placeholder="Importo CR"
               />
-              {!usaRiserva && (
+              {!usaRiserva && !isAllibratore && (
                 <input
                   type="text"
                   maxLength={5}
@@ -547,8 +600,13 @@ const ScommesseTab = ({ onLogout }) => {
             </div>
             <p className="text-xs text-gray-400">
               Quota combinata stimata: {quotaPreview}x
-              {!usaRiserva && (
+              {isAllibratore ? (
+                <> · Nessun limite di puntata (allibratore)</>
+              ) : !usaRiserva && (
                 <> · Max senza codice: {calendarioDetail.importo_max_senza_codice} CR</>
+              )}
+              {!isAllibratore && codiceInput.trim() && config?.bonus_quota_allibratore_pct && (
+                <> · Bonus codice: +{Math.round(Number(config.bonus_quota_allibratore_pct) * 100)}% quota</>
               )}
             </p>
             {status && <p className="text-xs text-amber-300">{status}</p>}
@@ -720,6 +778,81 @@ const ScommesseTab = ({ onLogout }) => {
     );
   };
 
+  const renderClassifiche = () => {
+    if (classificheLoading) {
+      return (
+        <div className="flex justify-center py-12 text-gray-400">
+          <Loader2 className="animate-spin" size={28} />
+        </div>
+      );
+    }
+    if (!classifiche.length) {
+      return (
+        <p className="text-sm text-gray-500">
+          Nessuna classifica disponibile: servono almeno una giornata conclusa e liquidata.
+        </p>
+      );
+    }
+    const dettaglio = classificaDettaglio || classifiche.find((c) => String(c.sport.id) === classificaSportId);
+    const righe = dettaglio?.classifica || [];
+    const pareggioOk = dettaglio?.pareggio_consentito !== false;
+    return (
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <BarChart3 size={18} className="text-emerald-400" />
+          <select
+            value={classificaSportId}
+            onChange={(e) => setClassificaSportId(e.target.value)}
+            className="rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm"
+          >
+            {classifiche.map((c) => (
+              <option key={c.sport.id} value={c.sport.id}>{c.sport.nome}</option>
+            ))}
+          </select>
+          {dettaglio?.giornate_liquidate != null && (
+            <span className="text-xs text-gray-500">{dettaglio.giornate_liquidate} giornate concluse</span>
+          )}
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-gray-700">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="bg-gray-800 text-xs uppercase text-gray-400">
+              <tr>
+                <th className="px-3 py-2">#</th>
+                <th className="px-3 py-2">Squadra</th>
+                <th className="px-3 py-2 text-center">Pt</th>
+                <th className="px-3 py-2 text-center">G</th>
+                <th className="px-3 py-2 text-center">V</th>
+                {pareggioOk && <th className="px-3 py-2 text-center">P</th>}
+                <th className="px-3 py-2 text-center">S</th>
+                <th className="px-3 py-2 text-center">GF</th>
+                <th className="px-3 py-2 text-center">GS</th>
+                <th className="px-3 py-2 text-center">DR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {righe.map((r) => (
+                <tr key={r.squadra_id} className="border-t border-gray-700/80">
+                  <td className="px-3 py-2 font-bold text-amber-300">{r.posizione}</td>
+                  <td className="px-3 py-2">
+                    <NomeSquadraClick id={r.squadra_id} nome={r.nome} onClick={apriStoricoSquadra} />
+                  </td>
+                  <td className="px-3 py-2 text-center font-bold">{r.punti}</td>
+                  <td className="px-3 py-2 text-center text-gray-300">{r.giocate}</td>
+                  <td className="px-3 py-2 text-center text-emerald-400">{r.vinte}</td>
+                  {pareggioOk && <td className="px-3 py-2 text-center text-gray-300">{r.pareggiate}</td>}
+                  <td className="px-3 py-2 text-center text-red-400">{r.perse}</td>
+                  <td className="px-3 py-2 text-center">{r.gol_fatti}</td>
+                  <td className="px-3 py-2 text-center">{r.gol_subiti}</td>
+                  <td className="px-3 py-2 text-center">{r.differenza_reti}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    );
+  };
+
   const scommettiOra = calendari.filter((c) => c.scommesse_aperte);
   const inArrivo = calendari.filter((c) => !c.scommesse_aperte && !c.risultati_visibili);
   const conclusi = calendari.filter((c) => c.risultati_visibili);
@@ -812,7 +945,19 @@ const ScommesseTab = ({ onLogout }) => {
               }`}
             >
               <Ticket size={15} />
-              Le mie scommesse
+              Le mie
+            </button>
+            <button
+              type="button"
+              onClick={() => setSection('classifiche')}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
+                section === 'classifiche'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              <BarChart3 size={15} />
+              Classifiche
             </button>
           </div>
         )}
@@ -827,6 +972,8 @@ const ScommesseTab = ({ onLogout }) => {
 
         {section === 'mie' && renderMiePuntate()}
 
+        {section === 'classifiche' && renderClassifiche()}
+
         {section === 'play' && (
           <>
         {isAllibratore && (
@@ -836,14 +983,27 @@ const ScommesseTab = ({ onLogout }) => {
                 <Key size={16} /> Allibratore (ALL {valoreAll})
                 {config?.commissione_allibratore_pct && (
                   <span className="font-normal text-amber-100/70">
-                    · comm. {Math.round(Number(config.commissione_allibratore_pct) * 100)}%
+                    · comm. {Math.round(Number(config.commissione_allibratore_pct) * 100)}% sulle vincite
                   </span>
                 )}
               </span>
-              <button type="button" disabled={submitting} onClick={handleGeneraCodice} className="rounded bg-amber-700 px-3 py-1 text-xs font-bold">
+              <button
+                type="button"
+                disabled={submitting || !canGenerareCodice}
+                onClick={handleGeneraCodice}
+                className="rounded bg-amber-700 px-3 py-1 text-xs font-bold disabled:opacity-50"
+              >
                 Genera codice
               </button>
             </div>
+            {!canGenerareCodice && (
+              <p className="mb-2 text-xs text-amber-100/70">
+                I codici si generano solo durante un evento attivo a cui partecipi.
+              </p>
+            )}
+            <p className="mb-2 text-xs text-amber-100/60">
+              Non puoi usare codici sulle tue puntate; hai comunque importi illimitati.
+            </p>
             <div className="flex flex-wrap gap-2">
               {codici.filter((c) => !c.usato).slice(0, 8).map((c) => (
                 <span key={c.id} className="rounded bg-gray-900 px-2 py-1 font-mono text-sm text-amber-100">{c.codice}</span>

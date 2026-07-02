@@ -7754,6 +7754,7 @@ class ScontroCartePortale(A_vista):
 from personaggi.scommesse_models import (  # noqa: E402, F401
     SportScommesse,
     SquadraScommesse,
+    ProgrammazioneTorneoScommesse,
     CalendarioScommesse,
     IncontroScommesse,
     CodiceScommessa,

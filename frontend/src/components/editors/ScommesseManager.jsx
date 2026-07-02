@@ -1,19 +1,26 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, Pencil, Trash2, RefreshCw, Trophy } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, RefreshCw, Trophy, CalendarClock } from 'lucide-react';
 import ConfirmDialog from './ConfirmDialog';
 import {
   staffScommesseDeleteCalendario,
+  staffScommesseDeleteProgrammazione,
   staffScommesseDeleteSport,
   staffScommesseDeleteSquadra,
+  staffScommesseGeneraCalendarioPerEvento,
   staffScommesseGetCalendari,
   staffScommesseGetConfig,
+  staffScommesseGetProgrammazioni,
   staffScommesseGetSport,
   staffScommesseGetSquadre,
   staffScommesseRigeneraIncontri,
   staffScommesseSaveCalendario,
   staffScommesseSaveConfig,
+  staffScommesseSaveProgrammazione,
   staffScommesseSaveSport,
   staffScommesseSaveSquadra,
+  staffScommesseSincronizzaProgrammazione,
+  staffScommesseSincronizzaTutteProgrammazioni,
+  scommesseGetClassificaSport,
 } from '../../api';
 import { TIPI_RISULTATO, labelTipoRisultato, pareggioConsentito } from '../../scommesse/risultatiSport';
 
@@ -40,18 +47,24 @@ const ScommesseManager = ({ onBack, onLogout }) => {
   const [formCalendario, setFormCalendario] = useState(null);
   const [config, setConfig] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [programmazioni, setProgrammazioni] = useState([]);
+  const [formProgrammazione, setFormProgrammazione] = useState(null);
+  const [classificaStaff, setClassificaStaff] = useState(null);
+  const [classificaSportId, setClassificaSportId] = useState('');
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [s, c, cfg] = await Promise.all([
+      const [s, c, cfg, prog] = await Promise.all([
         staffScommesseGetSport(onLogout),
         staffScommesseGetCalendari(onLogout),
         staffScommesseGetConfig(onLogout),
+        staffScommesseGetProgrammazioni('', onLogout),
       ]);
       setSport(toList(s));
       setCalendari(toList(c));
       setConfig(cfg || null);
+      setProgrammazioni(toList(prog));
     } catch (e) {
       setStatus({ type: 'error', message: e.message });
     } finally {
@@ -158,6 +171,7 @@ const ScommesseManager = ({ onBack, onLogout }) => {
       if (pendingDelete.type === 'sport') await staffScommesseDeleteSport(pendingDelete.id, onLogout);
       if (pendingDelete.type === 'squadra') await staffScommesseDeleteSquadra(pendingDelete.id, onLogout);
       if (pendingDelete.type === 'calendario') await staffScommesseDeleteCalendario(pendingDelete.id, onLogout);
+      if (pendingDelete.type === 'programmazione') await staffScommesseDeleteProgrammazione(pendingDelete.id, onLogout);
       setPendingDelete(null);
       await loadAll();
       await loadSquadre(filterSportId);
@@ -191,6 +205,81 @@ const ScommesseManager = ({ onBack, onLogout }) => {
     }
   };
 
+  const handleSaveProgrammazione = async () => {
+    if (!formProgrammazione?.sport) {
+      setStatus({ type: 'warning', message: 'Seleziona uno sport.' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await staffScommesseSaveProgrammazione(
+        {
+          sport: formProgrammazione.sport,
+          attiva: formProgrammazione.attiva !== false,
+          auto_genera: formProgrammazione.auto_genera !== false,
+          strategia_accoppiamento: formProgrammazione.strategia_accoppiamento || 'ROUND_ROBIN',
+          ore_apertura_prima_evento: Number(formProgrammazione.ore_apertura_prima_evento) || 336,
+          ore_chiusura_prima_evento: Number(formProgrammazione.ore_chiusura_prima_evento) || 2,
+        },
+        onLogout,
+        formProgrammazione.id || null,
+      );
+      setFormProgrammazione(null);
+      await loadAll();
+      setStatus({ type: 'success', message: 'Programmazione salvata.' });
+    } catch (e) {
+      setStatus({ type: 'error', message: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSincronizzaProgrammazione = async (progId) => {
+    try {
+      const res = await staffScommesseSincronizzaProgrammazione(progId, onLogout, 1);
+      await loadAll();
+      setStatus({ type: 'success', message: `Creati ${res.creati || 0} calendari.` });
+    } catch (e) {
+      setStatus({ type: 'error', message: e.message });
+    }
+  };
+
+  const handleSincronizzaTutte = async () => {
+    try {
+      const res = await staffScommesseSincronizzaTutteProgrammazioni(onLogout, 1);
+      await loadAll();
+      const n = (res.creati || []).length;
+      setStatus({ type: 'success', message: n ? `Creati ${n} calendari.` : 'Nessun nuovo calendario.' });
+    } catch (e) {
+      setStatus({ type: 'error', message: e.message });
+    }
+  };
+
+  const loadClassificaStaff = async (sportId) => {
+    if (!sportId) {
+      setClassificaStaff(null);
+      return;
+    }
+    try {
+      const data = await scommesseGetClassificaSport(sportId, onLogout);
+      setClassificaStaff(data);
+    } catch (e) {
+      setStatus({ type: 'error', message: e.message });
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'classifiche' && classificaSportId) {
+      loadClassificaStaff(classificaSportId);
+    }
+  }, [subTab, classificaSportId]);
+
+  useEffect(() => {
+    if (subTab === 'classifiche' && sport.length && !classificaSportId) {
+      setClassificaSportId(String(sport[0].id));
+    }
+  }, [subTab, sport, classificaSportId]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-gray-400">
@@ -210,7 +299,7 @@ const ScommesseManager = ({ onBack, onLogout }) => {
           <h1 className="text-lg font-bold">Gestione scommesse</h1>
         </div>
         <div className="mt-3 flex gap-2">
-          {['sport', 'squadre', 'calendari', 'parametri'].map((t) => (
+          {['sport', 'squadre', 'calendari', 'programmazione', 'classifiche', 'parametri'].map((t) => (
             <button
               key={t}
               type="button"
@@ -312,6 +401,8 @@ const ScommesseManager = ({ onBack, onLogout }) => {
                       <div className="font-bold">{cal.titolo || cal.sport_nome}</div>
                       <div className="mt-1 text-xs text-gray-400">
                         {cal.sport_tipo_risultato_label || labelTipoRisultato(cal.sport_tipo_risultato)}
+                        {cal.giornata_numero ? ` · Giornata ${cal.giornata_numero}` : ''}
+                        {cal.evento_titolo ? ` · ${cal.evento_titolo}` : ''}
                         {' · '}{cal.num_incontri} incontri · risoluzione {new Date(cal.data_risoluzione).toLocaleString('it-IT')}
                       </div>
                       <div className="text-xs text-gray-500">
@@ -344,16 +435,157 @@ const ScommesseManager = ({ onBack, onLogout }) => {
           </div>
         )}
 
+        {subTab === 'programmazione' && (
+          <div>
+            <div className="mb-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setFormProgrammazione({
+                  sport: sport[0]?.id || '',
+                  attiva: true,
+                  auto_genera: true,
+                  strategia_accoppiamento: 'ROUND_ROBIN',
+                  intervallo_giorni: 14,
+                  sfasamento_giorni: programmazioni.length * 3,
+                  giorni_apertura: 12,
+                  ora_risoluzione: '18:00',
+                  ore_apertura_prima_evento: 336,
+                  ore_chiusura_prima_evento: 2,
+                })}
+                className="flex items-center gap-2 rounded bg-emerald-700 px-3 py-2 text-sm font-bold"
+              >
+                <Plus size={16} /> Nuova programmazione
+              </button>
+              <button
+                type="button"
+                onClick={handleSincronizzaTutte}
+                className="flex items-center gap-2 rounded bg-cyan-800 px-3 py-2 text-sm font-bold"
+              >
+                <CalendarClock size={16} /> Sincronizza tutte
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-gray-400">
+              Tra un evento LARP e l&apos;altro, ogni sport può pubblicare una giornata ogni 14 giorni (o intervallo
+              personalizzato), sfalsata rispetto agli altri sport. Le giornate in evento si creano manualmente
+              dal tab Calendari o con «Genera» sotto un evento. Il timer giornaliero (o «Sincronizza tutte») crea
+              le giornate automatiche quando scade la cadenza.
+            </p>
+            <div className="space-y-3">
+              {programmazioni.map((p) => (
+                <div key={p.id} className="rounded border border-gray-700 bg-gray-800 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-bold">{p.sport_nome}</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        {p.attiva ? 'Attiva' : 'Spenta'} · {p.strategia_accoppiamento === 'ROUND_ROBIN' ? 'Girone' : 'Casuale'}
+                        {' · '}Giornata {p.giornata_corrente}
+                        {p.ultimo_evento_titolo ? ` · ultimo: ${p.ultimo_evento_titolo}` : ''}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Ogni {p.intervallo_giorni ?? 14} giorni
+                        {p.sfasamento_giorni ? ` · sfasamento +${p.sfasamento_giorni}g` : ''}
+                        {' · '}apertura {p.giorni_apertura ?? 12}g prima della risoluzione
+                      </div>
+                      {p.stato?.prossima_giornata_cadenza && (
+                        <div className="mt-1 text-xs text-cyan-300/80">
+                          Prossima auto: giornata {p.stato.prossima_giornata_cadenza.giornata_numero}
+                          {' · '}apre {new Date(p.stato.prossima_giornata_cadenza.data_apertura_prevista).toLocaleString('it-IT')}
+                          {p.stato.prossima_giornata_cadenza.pronta ? ' · pronta da creare' : ''}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button type="button" title="Sincronizza cadenza" onClick={() => handleSincronizzaProgrammazione(p.id)} className="text-cyan-400"><RefreshCw size={16} /></button>
+                      <button type="button" onClick={() => setFormProgrammazione(p)} className="text-indigo-400"><Pencil size={16} /></button>
+                      <button type="button" onClick={() => setPendingDelete({ type: 'programmazione', id: p.id })} className="text-red-400"><Trash2 size={16} /></button>
+                    </div>
+                  </div>
+                  {p.stato?.prossimi_eventi?.length > 0 && (
+                    <div className="mt-2 border-t border-gray-700 pt-2 text-xs text-gray-400">
+                      Eventi LARP — generazione manuale:
+                      <ul className="mt-1 space-y-1">
+                        {p.stato.prossimi_eventi.slice(0, 3).map((ev) => (
+                          <li key={ev.evento_id} className="flex flex-wrap items-center justify-between gap-2">
+                            <span>{ev.evento_titolo} ({new Date(ev.data_inizio_evento).toLocaleDateString('it-IT')})</span>
+                            <button
+                              type="button"
+                              className="text-cyan-300 hover:underline"
+                              onClick={() => staffScommesseGeneraCalendarioPerEvento(p.id, ev.evento_id, onLogout).then(() => loadAll())}
+                            >
+                              Genera
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {!programmazioni.length && (
+                <p className="text-sm text-gray-500">Nessuna programmazione configurata.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {subTab === 'classifiche' && (
+          <div>
+            <select
+              value={classificaSportId}
+              onChange={(e) => setClassificaSportId(e.target.value)}
+              className="mb-4 rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm"
+            >
+              <option value="">Seleziona sport</option>
+              {sport.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+            </select>
+            {classificaStaff?.classifica?.length > 0 ? (
+              <div className="overflow-x-auto rounded border border-gray-700">
+                <table className="w-full min-w-[480px] text-left text-sm">
+                  <thead className="bg-gray-800 text-xs uppercase text-gray-400">
+                    <tr>
+                      <th className="px-2 py-2">#</th>
+                      <th className="px-2 py-2">Squadra</th>
+                      <th className="px-2 py-2 text-center">Pt</th>
+                      <th className="px-2 py-2 text-center">G</th>
+                      <th className="px-2 py-2 text-center">V</th>
+                      {classificaStaff.pareggio_consentito && <th className="px-2 py-2 text-center">P</th>}
+                      <th className="px-2 py-2 text-center">S</th>
+                      <th className="px-2 py-2 text-center">DR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classificaStaff.classifica.map((r) => (
+                      <tr key={r.squadra_id} className="border-t border-gray-700">
+                        <td className="px-2 py-1">{r.posizione}</td>
+                        <td className="px-2 py-1">{r.nome}</td>
+                        <td className="px-2 py-1 text-center font-bold">{r.punti}</td>
+                        <td className="px-2 py-1 text-center">{r.giocate}</td>
+                        <td className="px-2 py-1 text-center">{r.vinte}</td>
+                        {classificaStaff.pareggio_consentito && <td className="px-2 py-1 text-center">{r.pareggiate}</td>}
+                        <td className="px-2 py-1 text-center">{r.perse}</td>
+                        <td className="px-2 py-1 text-center">{r.differenza_reti}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Nessun risultato liquidato per questo sport.</p>
+            )}
+          </div>
+        )}
+
         {subTab === 'parametri' && config && (
           <div className="max-w-lg space-y-4">
             <p className="text-sm text-gray-400">Parametri di equilibrio per la campagna corrente. I nuovi calendari ereditano il max CR senza codice.</p>
             {[
               { key: 'importo_max_senza_codice_default', label: 'Max CR senza codice (default calendari)', step: '0.01' },
               { key: 'scadenza_calendario_ore', label: 'Ore visibilità dopo risultati', step: '1' },
-              { key: 'commissione_allibratore_pct', label: 'Commissione allibratore (0.08 = 8%)', step: '0.001' },
+              { key: 'commissione_allibratore_pct', label: 'Commissione allibratore su vincita (0.08 = 8%)', step: '0.001' },
+              { key: 'bonus_quota_allibratore_pct', label: 'Bonus quota con codice (0.10 = +10%)', step: '0.001' },
               { key: 'margine_book_default', label: 'Margine book standard', step: '0.001' },
-              { key: 'margine_book_min', label: 'Margine book minimo (codice ALL)', step: '0.001' },
-              { key: 'riduzione_margine_per_punto_all', label: 'Riduzione margine per punto ALL', step: '0.001' },
+              { key: 'margine_book_min', label: 'Margine book minimo (legacy, non usato)', step: '0.001' },
+              { key: 'riduzione_margine_per_punto_all', label: 'Riduzione margine per punto ALL (legacy)', step: '0.001' },
               { key: 'variabilita_potenza_pct', label: 'Variabilità potenza squadre (±%)', step: '1' },
               { key: 'max_selezioni_combinata', label: 'Max eventi scommessa combinata', step: '1' },
               { key: 'potenza_delta_vittoria', label: 'Delta potenza base vincitrice (× fattore incontro)', step: '1' },
@@ -384,13 +616,14 @@ const ScommesseManager = ({ onBack, onLogout }) => {
         )}
       </div>
 
-      {(formSport || formSquadra || formCalendario) && (
+      {(formSport || formSquadra || formCalendario || formProgrammazione) && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-md rounded-lg border border-gray-600 bg-gray-800 p-4 shadow-xl">
             <h3 className="mb-3 font-bold">
               {formSport && (formSport.id ? 'Modifica sport' : 'Nuovo sport')}
               {formSquadra && (formSquadra.id ? 'Modifica squadra' : 'Nuova squadra')}
               {formCalendario && (formCalendario.id ? 'Modifica calendario' : 'Nuovo calendario')}
+              {formProgrammazione && (formProgrammazione.id ? 'Modifica programmazione' : 'Nuova programmazione')}
             </h3>
 
             {formSport && (
@@ -442,12 +675,74 @@ const ScommesseManager = ({ onBack, onLogout }) => {
               </div>
             )}
 
+            {formProgrammazione && (
+              <div className="space-y-3">
+                <select
+                  className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2"
+                  value={formProgrammazione.sport}
+                  onChange={(e) => setFormProgrammazione({ ...formProgrammazione, sport: e.target.value })}
+                  disabled={!!formProgrammazione.id}
+                >
+                  <option value="">Seleziona sport</option>
+                  {sport.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                </select>
+                <select
+                  className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2"
+                  value={formProgrammazione.strategia_accoppiamento || 'ROUND_ROBIN'}
+                  onChange={(e) => setFormProgrammazione({ ...formProgrammazione, strategia_accoppiamento: e.target.value })}
+                >
+                  <option value="ROUND_ROBIN">Girone all&apos;italiana</option>
+                  <option value="RANDOM">Accoppiamenti casuali</option>
+                </select>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-gray-300">Intervallo tra giornate (giorni)</span>
+                  <input type="number" min={1} className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.intervallo_giorni ?? 14} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, intervallo_giorni: e.target.value })} />
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-gray-300">Sfasamento (giorni)</span>
+                  <input type="number" min={0} className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.sfasamento_giorni ?? 0} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, sfasamento_giorni: e.target.value })} />
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-gray-300">Giorni apertura scommesse</span>
+                  <input type="number" min={1} className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.giorni_apertura ?? 12} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, giorni_apertura: e.target.value })} />
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-gray-300">Ora risoluzione (cadenza)</span>
+                  <input type="time" className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={(formProgrammazione.ora_risoluzione || '18:00').slice(0, 5)} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, ora_risoluzione: e.target.value })} />
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-gray-300">Data ancoraggio ciclo (opzionale)</span>
+                  <input type="datetime-local" className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.data_ancora_cadenza?.slice(0, 16) || ''} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, data_ancora_cadenza: e.target.value || null })} />
+                </label>
+                <details className="text-sm text-gray-400">
+                  <summary className="cursor-pointer text-gray-300">Finestre manuali in evento LARP</summary>
+                  <div className="mt-2 space-y-2">
+                    <label className="block">
+                      <span className="mb-1 block text-gray-300">Ore apertura prima evento</span>
+                      <input type="number" min={1} className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.ore_apertura_prima_evento ?? 336} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, ore_apertura_prima_evento: e.target.value })} />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-gray-300">Ore chiusura prima evento</span>
+                      <input type="number" min={1} className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.ore_chiusura_prima_evento ?? 2} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, ore_chiusura_prima_evento: e.target.value })} />
+                    </label>
+                  </div>
+                </details>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={formProgrammazione.attiva !== false} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, attiva: e.target.checked })} /> Programmazione attiva</label>
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={formProgrammazione.auto_genera !== false} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, auto_genera: e.target.checked })} /> Auto-genera sulla cadenza</label>
+              </div>
+            )}
+
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => { setFormSport(null); setFormSquadra(null); setFormCalendario(null); }} className="rounded px-3 py-2 text-sm text-gray-300">Annulla</button>
+              <button type="button" onClick={() => { setFormSport(null); setFormSquadra(null); setFormCalendario(null); setFormProgrammazione(null); }} className="rounded px-3 py-2 text-sm text-gray-300">Annulla</button>
               <button
                 type="button"
                 disabled={saving}
-                onClick={formSport ? handleSaveSport : formSquadra ? handleSaveSquadra : handleSaveCalendario}
+                onClick={
+                  formSport ? handleSaveSport
+                    : formSquadra ? handleSaveSquadra
+                      : formProgrammazione ? handleSaveProgrammazione
+                        : handleSaveCalendario
+                }
                 className="rounded bg-emerald-600 px-4 py-2 text-sm font-bold disabled:opacity-50"
               >
                 {saving ? 'Salvataggio…' : 'Salva'}

@@ -16,6 +16,7 @@ from personaggi.scommesse_models import (
     CodiceScommessa,
     ConfigurazioneScommesse,
     IncontroScommesse,
+    ProgrammazioneTorneoScommesse,
     PuntataScommessa,
     SelezionePuntata,
     SportScommesse,
@@ -164,6 +165,7 @@ class CalendarioScommesseListSerializer(serializers.ModelSerializer):
     risultati_visibili = serializers.SerializerMethodField()
     visibile_fino = serializers.SerializerMethodField()
     scommesse_aperte = serializers.SerializerMethodField()
+    evento_titolo = serializers.SerializerMethodField()
 
     class Meta:
         model = CalendarioScommesse
@@ -173,6 +175,7 @@ class CalendarioScommesseListSerializer(serializers.ModelSerializer):
             "titolo",
             "data_apertura", "data_risoluzione", "importo_max_senza_codice",
             "attivo", "liquidato", "num_incontri",
+            "giornata_numero", "evento_titolo",
             "risultati_visibili", "visibile_fino", "scommesse_aperte",
             "created_at", "updated_at",
         ]
@@ -200,6 +203,11 @@ class CalendarioScommesseListSerializer(serializers.ModelSerializer):
         if risultati_pubblicati(obj.data_risoluzione):
             return False
         return timezone.now() >= obj.data_apertura
+
+    def get_evento_titolo(self, obj):
+        if obj.evento_id and getattr(obj, "evento", None):
+            return obj.evento.titolo
+        return None
 
 
 class CalendarioScommesseDetailSerializer(CalendarioScommesseListSerializer):
@@ -246,7 +254,8 @@ class ConfigurazioneScommesseSerializer(serializers.ModelSerializer):
         fields = [
             "id", "sync_id", "campagna", "campagna_nome", "attiva",
             "importo_max_senza_codice_default", "scadenza_calendario_ore",
-            "commissione_allibratore_pct", "margine_book_default", "margine_book_min",
+            "commissione_allibratore_pct", "bonus_quota_allibratore_pct",
+            "margine_book_default", "margine_book_min",
             "riduzione_margine_per_punto_all", "variabilita_potenza_pct",
             "max_selezioni_combinata", "potenza_delta_vittoria", "potenza_delta_sconfitta",
             "soglia_vincita_rilevante", "max_ritiro_vincita_calendario",
@@ -376,3 +385,26 @@ class PiazzamentoPuntataSerializer(serializers.Serializer):
         if attrs.get("usa_bonus_scommesse") and not attrs.get("usa_riserva"):
             attrs["usa_riserva"] = True
         return attrs
+
+
+class ProgrammazioneTorneoScommesseSerializer(serializers.ModelSerializer):
+    sport_nome = serializers.CharField(source="sport.nome", read_only=True)
+    ultimo_evento_titolo = serializers.CharField(source="ultimo_evento.titolo", read_only=True, allow_null=True)
+    stato = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProgrammazioneTorneoScommesse
+        fields = [
+            "id", "sync_id", "sport", "sport_nome", "attiva", "auto_genera",
+            "intervallo_giorni", "sfasamento_giorni", "giorni_apertura", "ora_risoluzione",
+            "data_ancora_cadenza",
+            "strategia_accoppiamento", "ore_apertura_prima_evento", "ore_chiusura_prima_evento",
+            "giornata_corrente", "ultimo_evento", "ultimo_evento_titolo",
+            "stato", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "sync_id", "giornata_corrente", "ultimo_evento", "created_at", "updated_at"]
+
+    def get_stato(self, obj):
+        from personaggi.scommesse_scheduling import stato_programmazione
+        return stato_programmazione(obj)
+

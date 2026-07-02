@@ -1148,16 +1148,17 @@ class Command(BaseCommand):
 
 <h3>💰 Limiti di puntata</h3>
 <p>Senza codice speciale, l'importo massimo per singola scommessa è limitato (di default <strong>15 CR</strong>, salvo diversa impostazione sul calendario).</p>
-<p>Con un <strong>codice allibratore</strong> valido non ci sono limiti di importo e ricevi quote più favorevoli.</p>
+<p>Con un <strong>codice allibratore</strong> valido non ci sono limiti di importo e ricevi quote più favorevoli (+10% sulla quota, salvo diversa impostazione).</p>
 
 <h3>🔑 Allibratore e codici (statistica ALL)</h3>
 <p>Se il tuo personaggio possiede la statistica <strong>Allibratore (sigla ALL &gt; 0)</strong> puoi:</p>
 <ul>
-    <li>Generare codici alfanumerici da <strong>5 caratteri</strong> (monouso, una scommessa ciascuno)</li>
+    <li>Generare codici alfanumerici da <strong>5 caratteri</strong> (monouso, una scommessa ciascuno) <strong>solo durante un evento attivo</strong></li>
     <li>Condividere un codice con un altro giocatore che lo inserisce al momento della puntata</li>
-    <li>Ricevere una <strong>commissione</strong> sull'importo puntato (di default 8%)</li>
+    <li>Ricevere una <strong>commissione</strong> sull'importo vinto (di default 8%) quando la puntata con il tuo codice risulta vincente</li>
+    <li>Scommettere <strong>senza limiti di importo</strong>, ma <strong>non puoi usare codici</strong> (né i tuoi né quelli altrui)</li>
 </ul>
-<p>Quote più favorevoli: più alto è il valore ALL, minore è il margine del bookmaker applicato alla scommessa con codice.</p>
+<p>Con codice allibratore la quota aumenta del bonus configurato (default +10%).</p>
 
 <h3>📋 Le mie scommesse</h3>
 <p>Nella stessa tab trovi l'elenco delle puntate effettuate e l'esito (in attesa, vinta, persa) dopo la risoluzione del calendario.</p>

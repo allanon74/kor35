@@ -95,11 +95,11 @@ def calcola_quote(
     }
 
 
-def margine_allibratore(valore_all: int, cfg: ScommesseConfig | None = None) -> Decimal:
-    """Quote più favorevoli per scommesse con codice allibratore."""
+def applica_bonus_quota_allibratore(quota: Decimal, cfg: ScommesseConfig | None = None) -> Decimal:
+    """Aumenta la quota del bonus configurato (default +10%) per scommesse con codice allibratore."""
     cfg = cfg or get_config_scommesse()
-    riduzione = Decimal(str(max(0, valore_all))) * cfg.riduzione_margine_per_punto_all
-    return max(cfg.margine_book_min, cfg.margine_book_default - riduzione)
+    fattore = Decimal("1") + cfg.bonus_quota_allibratore_pct
+    return _decimal2(quota * fattore)
 
 
 def genera_esito_incontro(
@@ -147,6 +147,55 @@ def accoppia_squadre_random(squadre, seed: str) -> list[tuple]:
     for i in range(0, len(ids) - 1, 2):
         coppie.append((ids[i], ids[i + 1]))
     return coppie
+
+
+STRATEGIA_ACCOPPIAMENTO_RANDOM = "RANDOM"
+STRATEGIA_ACCOPPIAMENTO_ROUND_ROBIN = "ROUND_ROBIN"
+STRATEGIA_ACCOPPIAMENTO_CHOICES = [
+    (STRATEGIA_ACCOPPIAMENTO_RANDOM, "Casuale"),
+    (STRATEGIA_ACCOPPIAMENTO_ROUND_ROBIN, "Girone all'italiana"),
+]
+
+
+def accoppia_squadre_round_robin(squadre, giornata_index: int, seed: str = "") -> list[tuple]:
+    """Restituisce le coppie per una giornata del girone all'italiana (ordine deterministico)."""
+    teams = sorted(squadre, key=lambda s: str(s.sync_id))
+    n = len(teams)
+    if n < 2:
+        return []
+
+    if n % 2 == 1:
+        teams = teams + [None]
+        n += 1
+
+    fixed = teams[0]
+    rotating = list(teams[1:])
+    num_rounds = n - 1
+    round_idx = giornata_index % num_rounds if num_rounds else 0
+
+    for _ in range(round_idx):
+        rotating = [rotating[-1]] + rotating[:-1]
+
+    round_list = [fixed] + rotating
+    pairs = []
+    half = n // 2
+    for i in range(half):
+        a = round_list[i]
+        b = round_list[n - 1 - i]
+        if a is None or b is None:
+            continue
+        if round_idx % 2 == 0:
+            pairs.append((a, b))
+        else:
+            pairs.append((b, a))
+    return pairs
+
+
+def num_giornate_round_robin(num_squadre: int) -> int:
+    """Numero di giornate per un girone all'italiana completo."""
+    if num_squadre < 2:
+        return 0
+    return num_squadre - 1 if num_squadre % 2 == 0 else num_squadre
 
 
 def calendario_visibile_fino(data_risoluzione, campagna=None):

@@ -2,6 +2,7 @@
 Modelli per il sistema scommesse in-game.
 """
 import uuid
+from datetime import time
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -15,7 +16,11 @@ from personaggi.scommesse_risultati import TIPO_CALCIO, TIPO_RISULTATO_CHOICES, 
 from personaggi.scommesse_logic import (
     ALLIBRATORE_SIGLA,
     ESITI_VALIDI,
+    STRATEGIA_ACCOPPIAMENTO_CHOICES,
+    STRATEGIA_ACCOPPIAMENTO_RANDOM,
+    STRATEGIA_ACCOPPIAMENTO_ROUND_ROBIN,
     accoppia_squadre_random,
+    accoppia_squadre_round_robin,
     calcola_quote,
     genera_codice_scommessa,
     genera_esito_incontro,
@@ -79,6 +84,81 @@ class SquadraScommesse(SyncableModel, models.Model):
         return f"{self.nome} ({self.sport.nome})"
 
 
+class ProgrammazioneTorneoScommesse(SyncableModel, models.Model):
+    """
+    Configurazione cadenzata (es. ogni 14 giorni) per giornate torneo tra un evento LARP e il successivo.
+    Le giornate legate a un evento in loco si creano manualmente dallo staff.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sport = models.OneToOneField(
+        SportScommesse,
+        on_delete=models.CASCADE,
+        related_name="programmazione",
+    )
+    attiva = models.BooleanField(
+        default=False,
+        help_text="Se attiva, la sincronizzazione può creare nuove giornate.",
+    )
+    auto_genera = models.BooleanField(
+        default=True,
+        help_text="Crea automaticamente calendari sulla cadenza temporale (cron/sync).",
+    )
+    intervallo_giorni = models.PositiveSmallIntegerField(
+        default=14,
+        help_text="Giorni tra una giornata automatica e la successiva (default 14).",
+    )
+    sfasamento_giorni = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Ritardo in giorni rispetto all'ancora per sfalsare gli sport tra loro.",
+    )
+    giorni_apertura = models.PositiveSmallIntegerField(
+        default=12,
+        help_text="Giorni di apertura scommesse prima della pubblicazione risultati.",
+    )
+    ora_risoluzione = models.TimeField(
+        default=time(18, 0),
+        help_text="Ora locale di pubblicazione risultati per le giornate a cadenza.",
+    )
+    data_ancora_cadenza = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Prima data di riferimento del ciclo (opzionale; default creazione programmazione).",
+    )
+    strategia_accoppiamento = models.CharField(
+        max_length=16,
+        choices=STRATEGIA_ACCOPPIAMENTO_CHOICES,
+        default=STRATEGIA_ACCOPPIAMENTO_ROUND_ROBIN,
+    )
+    ore_apertura_prima_evento = models.PositiveIntegerField(
+        default=336,
+        help_text="Ore prima dell'inizio evento in cui aprono le scommesse (default 14 giorni).",
+    )
+    ore_chiusura_prima_evento = models.PositiveIntegerField(
+        default=2,
+        help_text="Ore prima dell'inizio evento in cui si pubblicano i risultati (default 2h).",
+    )
+    giornata_corrente = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Contatore giornate già generate (usato per il girone).",
+    )
+    ultimo_evento = models.ForeignKey(
+        "gestione_plot.Evento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="programmazioni_scommesse_ultimo",
+    )
+
+    class Meta:
+        verbose_name = "Programmazione torneo scommesse"
+        verbose_name_plural = "Programmazioni torneo scommesse"
+
+    def __str__(self):
+        stato = "attiva" if self.attiva else "spenta"
+        return f"Programmazione {self.sport.nome} ({stato})"
+
+
 class CalendarioScommesse(SyncableModel, models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -99,11 +179,38 @@ class CalendarioScommesse(SyncableModel, models.Model):
     )
     attivo = models.BooleanField(default=True)
     liquidato = models.BooleanField(default=False)
+    evento = models.ForeignKey(
+        "gestione_plot.Evento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calendari_scommesse",
+        help_text="Evento LARP a cui è collegata questa giornata (se generata da programmazione).",
+    )
+    giornata_numero = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Numero giornata nel torneo (1, 2, 3…).",
+    )
+    programmazione = models.ForeignKey(
+        ProgrammazioneTorneoScommesse,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="calendari_generati",
+    )
 
     class Meta:
         verbose_name = "Calendario scommesse"
         verbose_name_plural = "Calendari scommesse"
         ordering = ["-data_risoluzione"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sport", "evento"],
+                condition=models.Q(evento__isnull=False),
+                name="uniq_calendario_sport_evento",
+            ),
+        ]
 
     def __str__(self):
         label = self.titolo or f"Calendario {self.sport.nome}"
@@ -113,16 +220,28 @@ class CalendarioScommesse(SyncableModel, models.Model):
     def risultati_visibili(self):
         return risultati_pubblicati(self.data_risoluzione)
 
-    def genera_incontri(self):
-        """Genera accoppiamenti casuali e calcola quote/risultati (nascosti fino a data_risoluzione)."""
+    def genera_incontri(self, strategia=None, giornata_index=None):
+        """Genera accoppiamenti e calcola quote/risultati (nascosti fino a data_risoluzione)."""
         squadre = list(
             self.sport.squadre.filter(attiva=True).order_by("nome")
         )
         if len(squadre) < 2:
             raise ValidationError("Servono almeno 2 squadre attive per generare un calendario.")
 
+        if strategia is None and self.programmazione_id:
+            strategia = self.programmazione.strategia_accoppiamento
+        if strategia is None:
+            strategia = STRATEGIA_ACCOPPIAMENTO_RANDOM
+        if giornata_index is None and self.giornata_numero is not None:
+            giornata_index = max(0, int(self.giornata_numero) - 1)
+        elif giornata_index is None:
+            giornata_index = 0
+
         seed_base = str(self.sync_id)
-        coppie = accoppia_squadre_random(squadre, seed_base)
+        if strategia == STRATEGIA_ACCOPPIAMENTO_ROUND_ROBIN:
+            coppie = accoppia_squadre_round_robin(squadre, giornata_index, seed_base)
+        else:
+            coppie = accoppia_squadre_random(squadre, seed_base)
         self.incontri.all().delete()
         cfg = get_config_scommesse(self.sport.campagna_id)
         allow_draw = pareggio_consentito(self.sport.tipo_risultato)
@@ -362,7 +481,13 @@ class ConfigurazioneScommesse(SyncableModel, models.Model):
         max_digits=5,
         decimal_places=4,
         default=DEFAULT_SCOMMESSE_CONFIG.commissione_allibratore_pct,
-        help_text="Frazione dell'importo (es. 0.08 = 8%) accreditata all'allibratore.",
+        help_text="Frazione della vincita (es. 0.08 = 8%) accreditata all'allibratore se la puntata vince.",
+    )
+    bonus_quota_allibratore_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=DEFAULT_SCOMMESSE_CONFIG.bonus_quota_allibratore_pct,
+        help_text="Bonus quota con codice allibratore (es. 0.10 = +10% sulla quota).",
     )
     margine_book_default = models.DecimalField(
         max_digits=6,

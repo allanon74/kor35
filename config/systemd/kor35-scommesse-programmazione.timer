@@ -1,0 +1,11 @@
+[Unit]
+Description=KOR35 - Scheduler giornate scommesse (programmazioni torneo)
+
+[Timer]
+# Ogni giorno alle 04:00 — crea giornate a cadenza (es. ogni 14 giorni) se in scadenza
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

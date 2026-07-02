@@ -1,0 +1,12 @@
+[Unit]
+Description=KOR35 - Genera giornate scommesse da programmazioni torneo
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/kor35/config/docker
+Environment=COMPOSE_PROJECT_NAME=kor35-prod
+Environment=KOR35_BACKEND_ENV_FILE=/srv/kor35/backend/.env.prod
+
+ExecStart=/usr/bin/docker compose -f compose.base.yml -f compose.prod.yml exec -T backend python manage.py scommesse_sync_programmazione --max-per-sport 1

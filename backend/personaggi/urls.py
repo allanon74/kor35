@@ -137,6 +137,11 @@ router.register(r'staff/campagne-feature-policy', views.CampagnaFeaturePolicyAdm
 router.register(r'staff/scommesse/sport', views_scommesse.SportScommesseStaffViewSet, basename='staff-scommesse-sport')
 router.register(r'staff/scommesse/squadre', views_scommesse.SquadraScommesseStaffViewSet, basename='staff-scommesse-squadre')
 router.register(r'staff/scommesse/calendari', views_scommesse.CalendarioScommesseStaffViewSet, basename='staff-scommesse-calendari')
+router.register(
+    r'staff/scommesse/programmazioni',
+    views_scommesse.ProgrammazioneTorneoScommesseStaffViewSet,
+    basename='staff-scommesse-programmazioni',
+)
 router.register(r'staff/carte/espansioni', views_carte.EspansioneCarteStaffViewSet, basename='staff-carte-espansioni')
 router.register(r'staff/carte/catalogo', views_carte.CartaCollezionabileStaffViewSet, basename='staff-carte-catalogo')
 router.register(r'staff/carte/bustine', views_carte.BustinaCarteStaffViewSet, basename='staff-carte-bustine')
@@ -331,6 +336,8 @@ urlpatterns = [
     path('api/scommesse/miei-codici/', views_scommesse.ScommesseMieiCodiciView.as_view(), name='scommesse-miei-codici'),
     path('api/scommesse/config/', views_scommesse.ScommesseConfigPlayerView.as_view(), name='scommesse-config'),
     path('api/scommesse/squadre/<uuid:squadra_id>/storico/', views_scommesse.ScommesseSquadraStoricoView.as_view(), name='scommesse-squadra-storico'),
+    path('api/scommesse/classifiche/', views_scommesse.ScommesseClassifichePlayerView.as_view(), name='scommesse-classifiche'),
+    path('api/scommesse/sport/<uuid:sport_id>/classifica/', views_scommesse.ScommesseClassificaSportPlayerView.as_view(), name='scommesse-classifica-sport'),
     path('api/staff/scommesse/config/', views_scommesse.ScommesseConfigStaffView.as_view(), name='staff-scommesse-config'),
 
     path('api/carte/stato/', views_carte.CarteStatoGiocatoreView.as_view(), name='carte-stato'),
