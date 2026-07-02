@@ -20,6 +20,37 @@ export const RICH_TEXT_SHARED_STYLES = `
     color: #4f46e5;
   }
 
+  /* Tipografia viewer (allineata all'editor; Tailwind preflight azzera margini p/h) */
+  .ql-editor-view p {
+    margin: 0.5em 0;
+  }
+  .ql-editor-view strong,
+  .ql-editor-view b {
+    font-weight: 700;
+    color: inherit;
+  }
+  .ql-editor-view em,
+  .ql-editor-view i {
+    font-style: italic;
+  }
+  .ql-editor-view u {
+    text-decoration: underline;
+  }
+  .ql-editor-view h1 { font-size: 2em; font-weight: 700; margin: 0.67em 0; }
+  .ql-editor-view h2 { font-size: 1.5em; font-weight: 700; margin: 0.75em 0; }
+  .ql-editor-view h3 { font-size: 1.17em; font-weight: 700; margin: 0.83em 0; }
+  .ql-editor-view h4 { font-size: 1em; font-weight: 700; margin: 1em 0; }
+  .ql-editor-view h5 { font-size: 0.83em; font-weight: 700; margin: 1.5em 0; }
+  .ql-editor-view h6 { font-size: 0.67em; font-weight: 700; margin: 2em 0; }
+  .ql-editor-view pre {
+    white-space: pre-wrap;
+    font-family: ui-monospace, monospace;
+    margin: 0.5em 0;
+    padding: 0.5em 0.75em;
+    border-radius: 0.375rem;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
   .ql-editor-view ul, .wiki-content ul {
     list-style-type: disc;
     margin: 0.5em 0;

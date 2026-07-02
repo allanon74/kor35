@@ -324,8 +324,9 @@ const RichTextEditor = ({
     };
 
     // Esegue i comandi di formattazione
+    const SEMANTIC_FORMAT_COMMANDS = new Set(['bold', 'italic', 'underline', 'strikeThrough']);
     const execCommand = (command, value = null) => {
-        document.execCommand('styleWithCSS', false, true);
+        document.execCommand('styleWithCSS', false, !SEMANTIC_FORMAT_COMMANDS.has(command));
         document.execCommand(command, false, value);
         
         if (editorRef.current) {
