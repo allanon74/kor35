@@ -82,3 +82,33 @@ export function italianTimeToIso(text) {
   if (hours > 23 || minutes > 59) return null;
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** Valore per input nativo type="date" (yyyy-mm-dd). */
+export function isoToNativeDateValue(iso) {
+  if (!iso) return '';
+  const datePart = String(iso).split('T')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return datePart;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** Valore per input nativo type="datetime-local" (yyyy-mm-ddTHH:mm, locale). */
+export function isoToNativeDateTimeLocalValue(iso) {
+  if (!iso) return '';
+  const raw = String(iso);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw.slice(0, 16))) return raw.slice(0, 16);
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/** Valore per input nativo type="time" (HH:mm). */
+export function isoToNativeTimeValue(time) {
+  if (!time) return '';
+  const [h, m] = String(time).split(':');
+  if (h === undefined || m === undefined) return '';
+  return `${pad2(h)}:${pad2(m)}`;
+}
