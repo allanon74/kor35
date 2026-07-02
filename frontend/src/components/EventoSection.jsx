@@ -4,8 +4,9 @@ import {
     Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck, Ticket,
 } from 'lucide-react';
 import { RichTextViewer } from './RichTextDisplay';
+import EventoPortateSection from './EventoPortateSection';
 
-const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense }) => {
+const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRefresh, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
     const [reportLoading, setReportLoading] = useState(false);
@@ -243,6 +244,13 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                     )}
                 </div>
             </div>
+
+            <EventoPortateSection
+                evento={evento}
+                isMaster={isMaster}
+                onRefresh={onRefresh}
+                onLogout={onLogout}
+            />
 
             {/* SEZIONE PARTECIPANTI (Collassabile) */}
             <div className="border-t border-gray-800/50 pt-4">

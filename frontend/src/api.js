@@ -67,6 +67,7 @@ const __MAINTENANCE_BLOCKED_PREFIXES = [
   '/api/pilot/',
   '/api/plot/api/staff/',
   '/api/plot/api/eventi',
+  '/api/plot/api/voci-portare',
   '/api/plot/api/giorni',
   '/api/plot/api/quests',
   '/api/plot/api/mostri-istanza',
@@ -1912,6 +1913,13 @@ export const terminaEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/termina/`, { method: 'POST', body: '{}' }, onLogout);
 export const reportRicompenseEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/report_ricompense/`, { method: 'GET' }, onLogout);
+
+export const createVocePortare = (data, onLogout) =>
+  fetchAuthenticated('/api/plot/api/voci-portare/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const updateVocePortare = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/voci-portare/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const deleteVocePortare = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/voci-portare/${id}/`, { method: 'DELETE' }, onLogout);
 
 /** Elenco eventi con iscrizione aperta, requisiti utente e meta PayPal (client id per SDK). */
 export const getIscrizioniEventoEligibility = (onLogout) =>

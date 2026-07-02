@@ -369,6 +369,10 @@ const PlotTab = ({ onLogout }) => {
         if (!selectedEvento?.id) return null;
         return reportRicompenseEvento(selectedEvento.id, onLogout);
     }, [selectedEvento, onLogout]);
+
+    const handleRefreshEvento = useCallback(async () => {
+        await refreshData();
+    }, [refreshData]);
     
     // Callback per GiornoSection (spostato fuori dal JSX)
     const handleAddQuest = useCallback((gid) => startEdit('quest', { giorno: gid }), [startEdit]);
@@ -1135,6 +1139,8 @@ const PlotTab = ({ onLogout }) => {
                                 onIniziaEvento={handleIniziaEvento}
                                 onTerminaEvento={handleTerminaEvento}
                                 onReportRicompense={handleReportRicompenseEvento}
+                                onRefresh={handleRefreshEvento}
+                                onLogout={onLogout}
                             />
                         )}
                         <div className="p-4 space-y-16">

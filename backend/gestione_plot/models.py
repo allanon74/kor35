@@ -200,6 +200,44 @@ class EventoIscrizioneOpzione(SyncableModel, models.Model):
         return f"{self.evento_id} — {self.nome}"
 
 
+class EventoVocePortare(SyncableModel, models.Model):
+    """
+    Voce della checklist «cose da portare» per un evento, con master incaricato e flag pronto.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    evento = models.ForeignKey(
+        Evento,
+        on_delete=models.CASCADE,
+        related_name="voci_portare",
+    )
+    descrizione = models.CharField(max_length=255)
+    portatore = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="eventi_voci_portare",
+        verbose_name="Master incaricato",
+    )
+    ordine = models.PositiveIntegerField(default=0)
+    a_posto = models.BooleanField(
+        default=False,
+        verbose_name="A posto",
+        help_text="Segna quando la voce è pronta / portata.",
+    )
+
+    class Meta:
+        verbose_name = "Voce da portare (evento)"
+        verbose_name_plural = "Voci da portare (evento)"
+        ordering = ["ordine", "descrizione"]
+
+    def __str__(self):
+        who = self.portatore.username if self.portatore_id else "—"
+        return f"{self.evento_id}: {self.descrizione} ({who})"
+
+
 class EventoPremioPersonaggio(SyncableModel, models.Model):
     """
     Segna che PC e crediti d'evento sono stati accreditati una volta al PG iscritto

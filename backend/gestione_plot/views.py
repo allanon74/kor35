@@ -55,7 +55,7 @@ from personaggi.serializers import (
     TessituraSerializer, InfusioneSerializer, CerimonialeSerializer, OggettoSerializer,
                                     )
 from .models import (
-    Evento, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate,
+    Evento, EventoVocePortare, PaginaRegolamento, Quest, QuestMostro, QuestVista, GiornoEvento, MostroTemplate,
     PngAssegnato, StaffOffGame, QuestFase, QuestTask, WikiImmagine, WikiTierWidget,
     WikiTierCollectionWidget, WikiButtonWidget, WikiButton, WikiMattoniWidget,
     ConfigurazioneSito, LinkSocial, ManualePdf, ManualePdfBatchJob, ManualePdfGenerazione,
@@ -64,8 +64,9 @@ from .serializers import (
     EventoSerializer, EventoPubblicoSerializer, EventoPubblicoDettaglioSerializer, PaginaRegolamentoSerializer, PaginaRegolamentoSmallSerializer, QuestMostroSerializer, QuestVistaSerializer,
     GiornoEventoSerializer, QuestSerializer, PngAssegnatoSerializer, 
     MostroTemplateSerializer, StaffOffGameSerializer, QuestFaseSerializer, QuestTaskSerializer, WikiImmagineSerializer, WikiTierWidgetSerializer, WikiTierCollectionWidgetSerializer, WikiButtonWidgetSerializer,
-    ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer, UserShortSerializer
-    ,     WikiMattoniWidgetSerializer,
+    ConfigurazioneSitoSerializer, LinkSocialSerializer, WikiTierSerializer, UserShortSerializer,
+    EventoVocePortareSerializer,
+    WikiMattoniWidgetSerializer,
     MattoneWikiSerializer,
     PunteggioWikiSerializer,
     PublicDichiarazioneGlossarioSerializer,
@@ -112,6 +113,40 @@ class IsMasterOrReadOnly(permissions.BasePermission):
             return True
         # Scrittura solo a Master/Head Master/Admin
         return _is_campaign_master_plus(request)
+
+
+class IsEventoVocePortarePermission(permissions.BasePermission):
+    """
+    Staff assegnato all'evento: lettura e toggle a_posto sulle proprie voci (o non assegnate).
+    Master/Head Master: CRUD completo.
+    """
+
+    def has_permission(self, request, view):
+        if not _is_campaign_staff_plus(request):
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.method == 'POST' or request.method == 'DELETE':
+            return _is_campaign_master_plus(request)
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        evento = obj.evento
+        if user.is_superuser or _is_campaign_master_plus(request):
+            return True
+        if not evento.staff_assegnato.filter(pk=user.pk).exists():
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.method in ('PUT', 'PATCH'):
+            data_keys = set(request.data.keys())
+            if not data_keys.issubset({'a_posto'}):
+                return False
+            if obj.portatore_id is None or obj.portatore_id == user.pk:
+                return True
+            return False
+        return False
 
 
 def _is_campaign_wiki_editor_plus(request):
@@ -163,6 +198,8 @@ class EventoViewSet(viewsets.ModelViewSet):
         
         base_queryset = Evento.objects.all().prefetch_related(
             'iscrizione_opzioni',
+            'voci_portare__portatore',
+            'staff_assegnato',
             'giorni__quests__mostri_presenti',
             'giorni__quests__png_richiesti',
             'giorni__quests__viste_previste__manifesto',
@@ -603,6 +640,48 @@ class PngAssegnatoViewSet(viewsets.ModelViewSet):
 class StaffOffGameViewSet(viewsets.ModelViewSet):
     queryset = StaffOffGame.objects.all()
     serializer_class = StaffOffGameSerializer
+
+
+class EventoVocePortareViewSet(viewsets.ModelViewSet):
+    serializer_class = EventoVocePortareSerializer
+    permission_classes = [IsEventoVocePortarePermission]
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = EventoVocePortare.objects.select_related('evento', 'portatore').order_by('ordine', 'descrizione')
+        evento_id = self.request.query_params.get('evento')
+        if evento_id:
+            qs = qs.filter(evento_id=evento_id)
+        if user.is_superuser:
+            return qs
+        return qs.filter(evento__staff_assegnato=user).distinct()
+
+    def perform_create(self, serializer):
+        evento = serializer.validated_data['evento']
+        ordine = serializer.validated_data.get('ordine')
+        if not ordine:
+            last = (
+                EventoVocePortare.objects.filter(evento=evento)
+                .order_by('-ordine')
+                .values_list('ordine', flat=True)
+                .first()
+            )
+            serializer.save(ordine=(last or 0) + 1)
+        else:
+            serializer.save()
+
+    def perform_update(self, serializer):
+        if not _is_campaign_master_plus(self.request):
+            allowed = {'a_posto'}
+            if set(self.request.data.keys()) - allowed:
+                raise ValidationError({'detail': 'Modifica non consentita.'})
+            serializer.save()
+            return
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        instance.delete()
     
 class QuestFaseViewSet(viewsets.ModelViewSet):
     queryset = QuestFase.objects.all()

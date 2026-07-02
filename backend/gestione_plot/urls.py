@@ -22,7 +22,7 @@ from .creazione_guidata_views import (
 from .views import(
     EventoViewSet, PublicAuraViewSet, PublicTabellaViewSet, PublicTierViewSet, PublicEventiViewSet, QuestMostroViewSet, 
     QuestVistaViewSet, GiornoEventoViewSet, QuestViewSet, PngAssegnatoViewSet, 
-    MostroTemplateViewSet, StaffOffGameViewSet, QuestFaseViewSet, QuestTaskViewSet,
+    MostroTemplateViewSet, StaffOffGameViewSet, EventoVocePortareViewSet, QuestFaseViewSet, QuestTaskViewSet,
     PaginaRegolamentoSmallViewSet, PaginaRegolamentoViewSet,
     PublicPaginaRegolamentoMenu, PublicPaginaRegolamentoDetail,
     ManualePdfViewSet, PublicManualePdfViewSet,
@@ -46,6 +46,7 @@ from personaggi.views_staff import(
 
 router = DefaultRouter()
 router.register(r'eventi', EventoViewSet, basename='eventi')
+router.register(r'voci-portare', EventoVocePortareViewSet, basename='voci-portare')
 router.register(r'giorni', GiornoEventoViewSet, basename='giorni')
 router.register(r'quests', QuestViewSet, basename='quests')
 router.register(r'mostri-istanza', QuestMostroViewSet)

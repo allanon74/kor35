@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import (
-    Evento, EventoIscrizioneOpzione, GiornoEvento, PaginaRegolamento, Quest,
+    Evento, EventoIscrizioneOpzione, EventoVocePortare, GiornoEvento, PaginaRegolamento, Quest,
     MostroTemplate, AttaccoTemplate,
     QuestMostro, PngAssegnato, QuestVista, StaffOffGame,
     QuestFase, QuestTask, WikiImmagine, WikiTierWidget, WikiTierCollectionWidget, WikiButtonWidget, WikiButton,
@@ -244,6 +244,35 @@ class EventoIscrizioneOpzioneSerializer(serializers.ModelSerializer):
         ]
 
 
+class EventoVocePortareSerializer(serializers.ModelSerializer):
+    portatore_details = UserShortSerializer(source='portatore', read_only=True)
+
+    class Meta:
+        model = EventoVocePortare
+        fields = [
+            'id', 'sync_id', 'evento', 'descrizione', 'portatore', 'portatore_details',
+            'ordine', 'a_posto', 'updated_at',
+        ]
+        read_only_fields = ['id', 'sync_id', 'updated_at']
+
+    def validate_descrizione(self, value):
+        text = (value or '').strip()
+        if not text:
+            raise serializers.ValidationError('Descrizione obbligatoria.')
+        return text
+
+    def validate(self, attrs):
+        evento = attrs.get('evento') or getattr(self.instance, 'evento', None)
+        portatore = attrs.get('portatore', getattr(self.instance, 'portatore', None))
+        if 'portatore' in attrs and portatore is None:
+            return attrs
+        if portatore and evento and not evento.staff_assegnato.filter(pk=portatore.pk).exists():
+            raise serializers.ValidationError(
+                {'portatore': 'Il master deve essere tra lo staff assegnato all\'evento.'}
+            )
+        return attrs
+
+
 def _upsert_iscrizione_opzioni(evento: Evento, opzioni_data: list | None):
     if opzioni_data is None:
         return
@@ -286,6 +315,7 @@ def _upsert_iscrizione_opzioni(evento: Evento, opzioni_data: list | None):
 class EventoSerializer(serializers.ModelSerializer):
     giorni = serializers.SerializerMethodField()
     iscrizione_opzioni = EventoIscrizioneOpzioneSerializer(many=True, required=False)
+    voci_portare = EventoVocePortareSerializer(many=True, read_only=True)
 
     # Questi campi permettono al frontend di vedere i nomi (UserCheck e Users icone)
     staff_details = UserShortSerializer(source='staff_assegnato', many=True, read_only=True)
@@ -300,7 +330,7 @@ class EventoSerializer(serializers.ModelSerializer):
             'started_at', 'ended_at', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',
-            'iscrizione_test_attiva', 'iscrizione_opzioni',
+            'iscrizione_test_attiva', 'iscrizione_opzioni', 'voci_portare',
         ]
 
     def validate(self, attrs):
