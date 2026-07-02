@@ -22,6 +22,7 @@ import {
   staffUpdateNodo,
   staffDeleteNodo,
 } from '../../api';
+import { ItalianDateTimeInput } from '../ItalianDateTimeInputs';
 
 const emptyForm = () => ({
   nome: '',
@@ -269,11 +270,10 @@ const NodoManager = ({ onBack, onLogout }) => {
               </label>
               <label className="block text-sm">
                 Disponibile dal (forzatura, opzionale)
-                <input
-                  type="datetime-local"
+                <ItalianDateTimeInput
                   className="w-full mt-1 px-2 py-1 rounded bg-gray-800 border border-gray-600"
                   value={editing.disponibile_dal || ''}
-                  onChange={(e) => setEditing({ ...editing, disponibile_dal: e.target.value })}
+                  onChange={(v) => setEditing({ ...editing, disponibile_dal: v })}
                 />
               </label>
             </div>

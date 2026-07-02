@@ -21,6 +21,9 @@ import {
   getPersonaggiEditList,
   staffGetAbilitaListAll,
 } from '../../api';
+import {
+  ItalianDateTimeInput,
+} from '../ItalianDateTimeInputs';
 
 const TABS = [
   { id: 'org', label: 'Carriere / KORP', icon: Briefcase },
@@ -529,20 +532,18 @@ function MembershipModal({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs text-gray-500">Data da</label>
-              <input
-                type="datetime-local"
+              <ItalianDateTimeInput
                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm"
-                value={form.data_da ? form.data_da.slice(0, 16) : ''}
-                onChange={(e) => setForm({ ...form, data_da: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                value={form.data_da || ''}
+                onChange={(v) => setForm({ ...form, data_da: v ? new Date(v).toISOString() : null })}
               />
             </div>
             <div>
               <label className="text-xs text-gray-500">Data a (vuoto = attiva)</label>
-              <input
-                type="datetime-local"
+              <ItalianDateTimeInput
                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm"
-                value={form.data_a ? form.data_a.slice(0, 16) : ''}
-                onChange={(e) => setForm({ ...form, data_a: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                value={form.data_a || ''}
+                onChange={(v) => setForm({ ...form, data_a: v ? new Date(v).toISOString() : null })}
               />
             </div>
           </div>

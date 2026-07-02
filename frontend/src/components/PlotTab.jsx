@@ -23,6 +23,11 @@ import { normalizeCoordinatesForSave } from '../utils/eventoCoordinates';
 import ConfirmDialog from './editors/ConfirmDialog';
 import QrAssociationConflictBody from './editors/QrAssociationConflictBody';
 import useStaffMinigiocoQr from '../hooks/useStaffMinigiocoQr';
+import {
+    ItalianDateInput,
+    ItalianDateTimeInput,
+    ItalianTimeInput,
+} from './ItalianDateTimeInputs';
 
 // Cache per le risorse (persiste per la sessione)
 const RISORSE_CACHE_KEY = 'plot_risorse_cache';
@@ -157,11 +162,6 @@ const PlotTab = ({ onLogout }) => {
             return updated || sorted[0];
         });
     }, [onLogout]);
-
-    // Formatters memoized
-    const formatDateForInput = useCallback((iso) => iso ? iso.split('T')[0] : '', []);
-    const formatDateTimeForInput = useCallback((iso) => iso ? iso.slice(0, 16) : '', []);
-    const formatTimeForInput = useCallback((time) => time ? time.slice(0, 5) : '', []);
 
     const startEdit = useCallback((tipo, oggetto = {}) => {
         setEditMode(tipo);
@@ -644,8 +644,8 @@ const PlotTab = ({ onLogout }) => {
                                         <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Titolo</label>
                                         <input className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700 focus:border-indigo-500 outline-none" value={formData.titolo || ''} onChange={e => setFormData({...formData, titolo: e.target.value})} />
                                     </div>
-                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Inizio</label><input type="date" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatDateForInput(formData.data_inizio)} onChange={e => setFormData({...formData, data_inizio: e.target.value})} /></div>
-                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Fine</label><input type="date" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatDateForInput(formData.data_fine)} onChange={e => setFormData({...formData, data_fine: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Inizio</label><ItalianDateInput className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.data_inizio || ''} onChange={(v) => setFormData({ ...formData, data_inizio: v })} /></div>
+                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Fine</label><ItalianDateInput className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.data_fine || ''} onChange={(v) => setFormData({ ...formData, data_fine: v })} /></div>
                                     <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Luogo</label><input className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.luogo || ''} onChange={e => setFormData({...formData, luogo: e.target.value})} /></div>
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-500 uppercase px-1">PC premio presenza</label>
@@ -713,12 +713,11 @@ const PlotTab = ({ onLogout }) => {
                                             <label className="text-[10px] font-bold text-gray-500 uppercase px-1">
                                                 Iscrizione — apertura
                                             </label>
-                                            <input
-                                                type="datetime-local"
+                                            <ItalianDateTimeInput
                                                 className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
-                                                value={formatDateTimeForInput(formData.iscrizione_apertura)}
-                                                onChange={(e) =>
-                                                    setFormData({ ...formData, iscrizione_apertura: e.target.value || null })
+                                                value={formData.iscrizione_apertura || ''}
+                                                onChange={(v) =>
+                                                    setFormData({ ...formData, iscrizione_apertura: v || null })
                                                 }
                                             />
                                         </div>
@@ -726,12 +725,11 @@ const PlotTab = ({ onLogout }) => {
                                             <label className="text-[10px] font-bold text-gray-500 uppercase px-1">
                                                 Iscrizione — chiusura
                                             </label>
-                                            <input
-                                                type="datetime-local"
+                                            <ItalianDateTimeInput
                                                 className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
-                                                value={formatDateTimeForInput(formData.iscrizione_chiusura)}
-                                                onChange={(e) =>
-                                                    setFormData({ ...formData, iscrizione_chiusura: e.target.value || null })
+                                                value={formData.iscrizione_chiusura || ''}
+                                                onChange={(v) =>
+                                                    setFormData({ ...formData, iscrizione_chiusura: v || null })
                                                 }
                                             />
                                         </div>
@@ -907,11 +905,11 @@ const PlotTab = ({ onLogout }) => {
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Inizio (Data/Ora)</label>
-                                        <input type="datetime-local" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatDateTimeForInput(formData.data_ora_inizio)} onChange={e => setFormData({...formData, data_ora_inizio: e.target.value})} />
+                                        <ItalianDateTimeInput className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.data_ora_inizio || ''} onChange={(v) => setFormData({ ...formData, data_ora_inizio: v })} />
                                     </div>
                                     <div>
                                         <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Fine (Data/Ora)</label>
-                                        <input type="datetime-local" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatDateTimeForInput(formData.data_ora_fine)} onChange={e => setFormData({...formData, data_ora_fine: e.target.value})} />
+                                        <ItalianDateTimeInput className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.data_ora_fine || ''} onChange={(v) => setFormData({ ...formData, data_ora_fine: v })} />
                                     </div>
                                     <div className="md:col-span-2">
                                         <RichTextEditor label="Descrizione Plot Completa (Info Master)" value={formData.descrizione_completa} onChange={val => setFormData({...formData, descrizione_completa: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
@@ -921,7 +919,7 @@ const PlotTab = ({ onLogout }) => {
                             {editMode === 'quest' && (
                                 <>
                                     <div className="md:col-span-2"><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Titolo Quest</label><input className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.titolo || ''} onChange={e => setFormData({...formData, titolo: e.target.value})} /></div>
-                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Orario</label><input type="time" className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formatTimeForInput(formData.orario_indicativo)} onChange={e => setFormData({...formData, orario_indicativo: e.target.value})} /></div>
+                                    <div><label className="text-[10px] font-bold text-gray-500 uppercase px-1">Orario</label><ItalianTimeInput className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700" value={formData.orario_indicativo || ''} onChange={(v) => setFormData({ ...formData, orario_indicativo: v })} /></div>
                                     <div className="md:col-span-2">
                                         <RichTextEditor label="Descrizione Ampia" value={formData.descrizione_ampia} onChange={val => setFormData({...formData, descrizione_ampia: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
                                     </div>

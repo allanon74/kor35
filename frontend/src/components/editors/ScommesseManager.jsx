@@ -23,6 +23,10 @@ import {
   scommesseGetClassificaSport,
 } from '../../api';
 import { TIPI_RISULTATO, labelTipoRisultato, pareggioConsentito } from '../../scommesse/risultatiSport';
+import {
+  ItalianDateTimeInput,
+  ItalianTimeInput,
+} from '../ItalianDateTimeInputs';
 
 const toList = (data) => (Array.isArray(data) ? data : data?.results || []);
 
@@ -668,9 +672,9 @@ const ScommesseManager = ({ onBack, onLogout }) => {
                 </select>
                 <input className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" placeholder="Titolo (opzionale)" value={formCalendario.titolo || ''} onChange={(e) => setFormCalendario({ ...formCalendario, titolo: e.target.value })} />
                 <label className="text-xs text-gray-400">Apertura scommesse</label>
-                <input type="datetime-local" className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formCalendario.data_apertura?.slice(0, 16) || ''} onChange={(e) => setFormCalendario({ ...formCalendario, data_apertura: e.target.value })} />
+                <ItalianDateTimeInput className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formCalendario.data_apertura || ''} onChange={(v) => setFormCalendario({ ...formCalendario, data_apertura: v })} />
                 <label className="text-xs text-gray-400">Pubblicazione risultati</label>
-                <input type="datetime-local" className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formCalendario.data_risoluzione?.slice(0, 16) || ''} onChange={(e) => setFormCalendario({ ...formCalendario, data_risoluzione: e.target.value })} />
+                <ItalianDateTimeInput className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formCalendario.data_risoluzione || ''} onChange={(v) => setFormCalendario({ ...formCalendario, data_risoluzione: v })} />
                 <input type="number" step="0.01" className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" placeholder="Max CR senza codice" value={formCalendario.importo_max_senza_codice} onChange={(e) => setFormCalendario({ ...formCalendario, importo_max_senza_codice: e.target.value })} />
               </div>
             )}
@@ -708,11 +712,11 @@ const ScommesseManager = ({ onBack, onLogout }) => {
                 </label>
                 <label className="block text-sm">
                   <span className="mb-1 block text-gray-300">Ora risoluzione (cadenza)</span>
-                  <input type="time" className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={(formProgrammazione.ora_risoluzione || '18:00').slice(0, 5)} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, ora_risoluzione: e.target.value })} />
+                  <ItalianTimeInput className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.ora_risoluzione || '18:00'} onChange={(v) => setFormProgrammazione({ ...formProgrammazione, ora_risoluzione: v || '18:00' })} />
                 </label>
                 <label className="block text-sm">
                   <span className="mb-1 block text-gray-300">Data ancoraggio ciclo (opzionale)</span>
-                  <input type="datetime-local" className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.data_ancora_cadenza?.slice(0, 16) || ''} onChange={(e) => setFormProgrammazione({ ...formProgrammazione, data_ancora_cadenza: e.target.value || null })} />
+                  <ItalianDateTimeInput className="w-full rounded border border-gray-600 bg-gray-900 px-3 py-2" value={formProgrammazione.data_ancora_cadenza || ''} onChange={(v) => setFormProgrammazione({ ...formProgrammazione, data_ancora_cadenza: v || null })} />
                 </label>
                 <details className="text-sm text-gray-400">
                   <summary className="cursor-pointer text-gray-300">Finestre manuali in evento LARP</summary>

@@ -1,6 +1,10 @@
 import React from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import FilterableCombobox from './FilterableCombobox';
+import {
+  ItalianDateTimeInput,
+  ItalianTimeInput,
+} from '../ItalianDateTimeInputs';
 
 const TIPO_REQUISITO_OPTS = [
   { id: 'statistica', label: 'Statistica (sigla)' },
@@ -202,20 +206,18 @@ const FasciaEditor = ({ fascia, onChange, onRemove }) => {
           <div className="flex gap-2">
             <label className="flex-1">
               Da
-              <input
-                type="time"
+              <ItalianTimeInput
                 className="w-full mt-0.5 bg-gray-800 border border-gray-600 rounded px-1"
                 value={fascia.ora_inizio || '09:00'}
-                onChange={(e) => onChange({ ...fascia, ora_inizio: e.target.value })}
+                onChange={(v) => onChange({ ...fascia, ora_inizio: v || '09:00' })}
               />
             </label>
             <label className="flex-1">
               A
-              <input
-                type="time"
+              <ItalianTimeInput
                 className="w-full mt-0.5 bg-gray-800 border border-gray-600 rounded px-1"
                 value={fascia.ora_fine || '18:00'}
-                onChange={(e) => onChange({ ...fascia, ora_fine: e.target.value })}
+                onChange={(v) => onChange({ ...fascia, ora_fine: v || '18:00' })}
               />
             </label>
           </div>
@@ -224,20 +226,18 @@ const FasciaEditor = ({ fascia, onChange, onRemove }) => {
         <div className="flex flex-col gap-2">
           <label>
             Inizio
-            <input
-              type="datetime-local"
+            <ItalianDateTimeInput
               className="w-full mt-0.5 bg-gray-800 border border-gray-600 rounded px-1"
               value={fascia.inizio_local || ''}
-              onChange={(e) => onChange({ ...fascia, inizio_local: e.target.value })}
+              onChange={(v) => onChange({ ...fascia, inizio_local: v })}
             />
           </label>
           <label>
             Fine
-            <input
-              type="datetime-local"
+            <ItalianDateTimeInput
               className="w-full mt-0.5 bg-gray-800 border border-gray-600 rounded px-1"
               value={fascia.fine_local || ''}
-              onChange={(e) => onChange({ ...fascia, fine_local: e.target.value })}
+              onChange={(v) => onChange({ ...fascia, fine_local: v })}
             />
           </label>
         </div>
