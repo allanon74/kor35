@@ -24,6 +24,24 @@ export const setActiveCampaignSlug = (slug) => {
 /** Confronto stabile slug campagna (DB vs localStorage / header). */
 export const normCampaignSlug = (s) => String(s || '').trim().toLowerCase();
 
+export const plotRisorseCacheKey = (campaignSlug = getActiveCampaignSlug()) =>
+  `plot_risorse_cache_v3_${normCampaignSlug(campaignSlug || 'kor35')}`;
+
+/** Invalida cache risorse Plot (es. dopo cambio ruolo membership campagna). */
+export const invalidatePlotRisorseCache = (campaignSlug = null) => {
+  try {
+    if (campaignSlug) {
+      sessionStorage.removeItem(plotRisorseCacheKey(campaignSlug));
+      return;
+    }
+    Object.keys(sessionStorage).forEach((key) => {
+      if (key.startsWith('plot_risorse_cache_v3_')) sessionStorage.removeItem(key);
+    });
+  } catch (_e) {
+    /* storage non disponibile */
+  }
+};
+
 /**
  * Stato globale maintenance: quando attivo, i client API evitano di chiamare
  * gli endpoint applicativi bloccati dal middleware (silenzioso, niente console.error).

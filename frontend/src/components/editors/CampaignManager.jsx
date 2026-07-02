@@ -13,6 +13,7 @@ import {
   staffUpdateCampagna,
   staffUpdateCampagnaFeaturePolicy,
   staffUpdateCampagnaUtente,
+  invalidatePlotRisorseCache,
 } from '../../api';
 
 const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
@@ -93,12 +94,13 @@ const CampaignManager = ({ onLogout }) => {
     });
   }, [policies, campagneById, filterPolicies]);
 
-  const executeAction = useCallback(async (action) => {
+  const executeAction = useCallback(async (action, { invalidatePlotCache = false } = {}) => {
     setSaving(true);
     setError('');
     try {
       await action();
       await loadAll();
+      if (invalidatePlotCache) invalidatePlotRisorseCache();
     } catch (e) {
       setError(e?.message || 'Operazione non riuscita.');
     } finally {
@@ -171,7 +173,7 @@ const CampaignManager = ({ onLogout }) => {
           <button className="px-3 py-1.5 bg-cyan-600 rounded text-xs font-bold disabled:opacity-50" disabled={saving || !newMembro.campagna || !newMembro.user} onClick={() => executeAction(async () => {
             await staffCreateCampagnaUtente(newMembro, onLogout);
             setNewMembro({ campagna: '', user: '', ruolo: 'PLAYER', attivo: true });
-          })}>Nuova membership</button>
+          }, { invalidatePlotCache: true })}>Nuova membership</button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
           <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" value={newMembro.campagna} onChange={(e) => setNewMembro((s) => ({ ...s, campagna: e.target.value }))}>
@@ -203,14 +205,14 @@ const CampaignManager = ({ onLogout }) => {
                 <div>{m.user_username || m.user}</div>
                 <div className="text-gray-400 text-xs">{campagneById[m.campagna]?.nome || m.campagna_nome || m.campagna}</div>
               </div>
-              <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1" value={m.ruolo} onChange={(e) => executeAction(() => staffUpdateCampagnaUtente(m.id, { ruolo: e.target.value }, onLogout))}>
+              <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1" value={m.ruolo} onChange={(e) => executeAction(() => staffUpdateCampagnaUtente(m.id, { ruolo: e.target.value }, onLogout), { invalidatePlotCache: true })}>
                 {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
               <label className="text-xs flex items-center gap-2">
-                <input type="checkbox" checked={!!m.attivo} onChange={(e) => executeAction(() => staffUpdateCampagnaUtente(m.id, { attivo: e.target.checked }, onLogout))} />
+                <input type="checkbox" checked={!!m.attivo} onChange={(e) => executeAction(() => staffUpdateCampagnaUtente(m.id, { attivo: e.target.checked }, onLogout), { invalidatePlotCache: true })} />
                 Attivo
               </label>
-              <button className="text-xs bg-red-700/40 border border-red-700 rounded px-2 py-1" onClick={() => executeAction(() => staffDeleteCampagnaUtente(m.id, onLogout))}>Rimuovi</button>
+              <button className="text-xs bg-red-700/40 border border-red-700 rounded px-2 py-1" onClick={() => executeAction(() => staffDeleteCampagnaUtente(m.id, onLogout), { invalidatePlotCache: true })}>Rimuovi</button>
             </div>
           ))}
         </div>

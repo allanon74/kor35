@@ -10,7 +10,9 @@ import {
     addTaskToFase, updateTask, removeTaskFromFase,
     // AGGIUNTI GLI IMPORT MANCANTI PER LO STAFF:
     staffCreateOffGame, staffDeleteOffGame,
-    fetchAuthenticated 
+    fetchAuthenticated,
+    getActiveCampaignSlug,
+    plotRisorseCacheKey,
 } from '../api';
 import { useCharacter } from './CharacterContext';
 import { Plus, X, Save, Printer, Calendar } from 'lucide-react';
@@ -29,60 +31,74 @@ import {
     ItalianTimeInput,
 } from './ItalianDateTimeInputs';
 
-// Cache per le risorse (persiste per la sessione)
-const RISORSE_CACHE_KEY = 'plot_risorse_cache_v2';
+// Cache risorse plot: solo anteprima immediata; i dati freschi arrivano sempre dal server.
 const RISORSE_CACHE_TIMEOUT = 5 * 60 * 1000; // 5 minuti
 
+const readPlotRisorseCache = (campaignSlug) => {
+    try {
+        const cached = sessionStorage.getItem(plotRisorseCacheKey(campaignSlug));
+        if (!cached) return null;
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp >= RISORSE_CACHE_TIMEOUT) return null;
+        return data;
+    } catch (e) {
+        console.warn('PlotTab: errore lettura cache risorse:', e);
+        return null;
+    }
+};
+
+const EMPTY_RISORSE = { png: [], templates: [], manifesti: [], inventari: [], staff: [], a_vista: [] };
+
 const PlotTab = ({ onLogout }) => {
-    const { isCampaignMaster } = useCharacter();
+    const { isCampaignMaster, activeCampaign } = useCharacter();
     const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
     const canManagePlot = isCampaignMaster;
     const [eventi, setEventi] = useState([]);
     const [selectedEvento, setSelectedEvento] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [risorse, setRisorse] = useState(() => {
-        // Prova a caricare dalla cache
-        try {
-            const cached = sessionStorage.getItem(RISORSE_CACHE_KEY);
-            if (cached) {
-                const { data, timestamp } = JSON.parse(cached);
-                if (Date.now() - timestamp < RISORSE_CACHE_TIMEOUT) {
-                    console.log("PlotTab: Risorse caricate dalla cache");
-                    return data;
-                }
-            }
-        } catch (e) {
-            console.warn("PlotTab: Errore lettura cache:", e);
-        }
-        return { png: [], templates: [], manifesti: [], inventari: [], staff: [], a_vista: [] };
-    });
-    const [risorseLoaded, setRisorseLoaded] = useState(() => {
-        // Verifica se le risorse sono state caricate dalla cache
-        try {
-            const cached = sessionStorage.getItem(RISORSE_CACHE_KEY);
-            if (cached) {
-                const { timestamp } = JSON.parse(cached);
-                return Date.now() - timestamp < RISORSE_CACHE_TIMEOUT;
-            }
-        } catch (e) {
-            // Ignora errori
-        }
-        return false;
-    });
+    const [risorse, setRisorse] = useState(() => readPlotRisorseCache(getActiveCampaignSlug()) || EMPTY_RISORSE);
+    const [risorseLoading, setRisorseLoading] = useState(false);
     
-    const [editMode, setEditMode] = useState(null); 
+    const [editMode, setEditMode] = useState(null);
     const [formData, setFormData] = useState({});
     const [scanningForVista, setScanningForVista] = useState(null);
     const [pendingQrPlotReplace, setPendingQrPlotReplace] = useState(null);
+
+    const loadRisorseEditor = useCallback(async (campaignSlug = activeCampaign) => {
+        setRisorseLoading(true);
+        try {
+            const [risData, aVistaData] = await Promise.all([
+                getRisorseEditor(onLogout),
+                getAVistaDisponibili(onLogout),
+            ]);
+            const risorseData = {
+                ...(risData || {}),
+                a_vista: aVistaData?.a_vista || [],
+            };
+            setRisorse(risorseData);
+            try {
+                sessionStorage.setItem(plotRisorseCacheKey(campaignSlug), JSON.stringify({
+                    data: risorseData,
+                    timestamp: Date.now(),
+                }));
+            } catch (e) {
+                console.warn('PlotTab: errore salvataggio cache risorse:', e);
+            }
+            return risorseData;
+        } catch (risError) {
+            console.error('PlotTab: errore caricamento risorse editor:', risError);
+            throw risError;
+        } finally {
+            setRisorseLoading(false);
+        }
+    }, [onLogout, activeCampaign]);
 
     const loadInitialData = useCallback(async () => {
         try {
             console.log("PlotTab: Inizio caricamento eventi...");
             
-            // Carica prima gli eventi (più importante, più veloce)
             const evData = await getEventi(onLogout);
             
-            // Verifica che evData sia un array
             if (!Array.isArray(evData)) {
                 console.error("PlotTab: evData non è un array:", evData);
                 setEventi([]);
@@ -90,7 +106,6 @@ const PlotTab = ({ onLogout }) => {
                 return;
             }
             
-            // Ordina eventi per data e trova il primo futuro
             const sortedEvents = evData.sort((a, b) => new Date(a.data_inizio) - new Date(b.data_inizio));
             const today = new Date().setHours(0,0,0,0);
             const nextEvent = sortedEvents.find(ev => new Date(ev.data_inizio) >= today) || sortedEvents[0];
@@ -103,52 +118,18 @@ const PlotTab = ({ onLogout }) => {
                 console.warn("PlotTab: Nessun evento trovato");
             }
             
-            // Ora che gli eventi sono caricati, possiamo mostrare l'interfaccia
             setLoading(false);
-            
-            // Carica le risorse in background (lazy loading) solo se non in cache
-            if (!risorseLoaded) {
-                console.log("PlotTab: Caricamento risorse in background...");
-                try {
-                    // Carica sia risorse che a_vista in parallelo
-                    const [risData, aVistaData] = await Promise.all([
-                        getRisorseEditor(onLogout),
-                        getAVistaDisponibili(onLogout)
-                    ]);
-                    console.log("PlotTab: Risorse caricate:", risData);
-                    console.log("PlotTab: A_vista disponibili:", aVistaData);
-                    
-                    const risorseData = {
-                        ...(risData || {}),
-                        a_vista: aVistaData?.a_vista || []
-                    };
-                    setRisorse(risorseData);
-                    setRisorseLoaded(true);
-                    
-                    // Salva in cache
-                    try {
-                        sessionStorage.setItem(RISORSE_CACHE_KEY, JSON.stringify({
-                            data: risorseData,
-                            timestamp: Date.now()
-                        }));
-                    } catch (e) {
-                        console.warn("PlotTab: Errore salvataggio cache:", e);
-                    }
-                } catch (risError) {
-                    console.error("PlotTab: Errore caricamento risorse (non critico):", risError);
-                    // Le risorse non sono critiche, possiamo continuare senza
-                }
-            } else {
-                console.log("PlotTab: Risorse già in cache, skip caricamento");
-            }
+
+            // Sempre ricarica dal server (membership campagna / staff possono cambiare).
+            await loadRisorseEditor(activeCampaign);
         } catch (e) { 
             console.error("PlotTab: Errore caricamento plot:", e);
             alert(`Errore nel caricamento dei dati plot: ${e.message || e}`);
             setEventi([]);
-            setRisorse({ png: [], templates: [], manifesti: [], inventari: [], staff: [], a_vista: [] });
+            setRisorse(EMPTY_RISORSE);
             setLoading(false);
         }
-    }, [onLogout, risorseLoaded]);
+    }, [onLogout, activeCampaign, loadRisorseEditor]);
 
     useEffect(() => { loadInitialData(); }, [loadInitialData]);
 
@@ -374,8 +355,8 @@ const PlotTab = ({ onLogout }) => {
     }, [selectedEvento, onLogout]);
 
     const handleRefreshEvento = useCallback(async () => {
-        await refreshData();
-    }, [refreshData]);
+        await Promise.all([refreshData(), loadRisorseEditor(activeCampaign)]);
+    }, [refreshData, loadRisorseEditor, activeCampaign]);
     
     // Callback per GiornoSection (spostato fuori dal JSX)
     const handleAddQuest = useCallback((gid) => startEdit('quest', { giorno: gid }), [startEdit]);
@@ -1141,6 +1122,8 @@ const PlotTab = ({ onLogout }) => {
                                 onTerminaEvento={handleTerminaEvento}
                                 onReportRicompense={handleReportRicompenseEvento}
                                 onRefresh={handleRefreshEvento}
+                                onRefreshRisorse={() => loadRisorseEditor(activeCampaign)}
+                                risorseLoading={risorseLoading}
                                 onLogout={onLogout}
                             />
                         )}

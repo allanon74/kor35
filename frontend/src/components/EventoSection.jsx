@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import {
     MapPin, Edit2, Trash2, Calendar,
-    Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck, Ticket,
+    Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck, Ticket, RefreshCw,
 } from 'lucide-react';
 import { RichTextViewer } from './RichTextDisplay';
 import EventoPortateSection from './EventoPortateSection';
@@ -17,7 +17,7 @@ const staffLabel = (user) => {
     return full || user.username || `Utente #${user.id}`;
 };
 
-const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRefresh, onLogout }) => {
+const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
     const [reportLoading, setReportLoading] = useState(false);
@@ -36,10 +36,14 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
     }, [evento?.staff_assegnato, evento?.staff_details]);
 
     const effectiveStaffIds = useMemo(() => {
+        let ids;
         if (serverStaffIds.length === 0 && allStaffIds.length > 0) {
-            return allStaffIds;
+            ids = allStaffIds;
+        } else {
+            ids = serverStaffIds;
         }
-        return serverStaffIds;
+        // Esclude chi non è più staff di campagna (es. Master → Player).
+        return ids.filter((id) => allStaffIds.includes(id));
     }, [serverStaffIds, allStaffIds]);
 
     useEffect(() => {
@@ -270,8 +274,22 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
 
             {/* SEZIONE STAFF (Sempre visibile) */}
             <div className="space-y-3 pt-2">
-                <div className="flex items-center gap-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
-                    <ShieldCheck size={14}/> Staff presente all&apos;evento
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                        <ShieldCheck size={14}/> Staff presente all&apos;evento
+                    </div>
+                    {onRefreshRisorse ? (
+                        <button
+                            type="button"
+                            onClick={() => onRefreshRisorse()}
+                            disabled={risorseLoading}
+                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-[10px] font-bold uppercase text-indigo-300 hover:bg-indigo-900/40 disabled:opacity-50"
+                            title="Aggiorna elenco staff da campagna"
+                        >
+                            <RefreshCw size={12} className={risorseLoading ? 'animate-spin' : ''} />
+                            Aggiorna lista
+                        </button>
+                    ) : null}
                 </div>
                 <p className="text-[10px] text-gray-500 normal-case font-medium">
                     {isMaster
