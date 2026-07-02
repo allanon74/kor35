@@ -242,6 +242,9 @@ const PlotTab = ({ onLogout }) => {
                           attiva: op.attiva !== false,
                       }))
                     : [];
+                if (!raw.id) {
+                    raw.staff_assegnato = (risorse.staff || []).map((s) => s.id).filter((id) => id != null);
+                }
                 if (raw.id) await updateEvento(raw.id, raw, onLogout);
                 else await createEvento(raw, onLogout);
             } else if (editMode === 'giorno') {
@@ -286,7 +289,7 @@ const PlotTab = ({ onLogout }) => {
             setEditMode(null);
             refreshData();
         } catch (e) { alert("Errore durante il salvataggio."); console.error(e); }
-    }, [editMode, formData, selectedEvento, onLogout, refreshData]);
+    }, [editMode, formData, selectedEvento, onLogout, refreshData, risorse.staff]);
 
     const handleDeleteEvento = useCallback(async (id) => { 
         if(window.confirm("Eliminare intero evento?")) { 
@@ -349,9 +352,9 @@ const PlotTab = ({ onLogout }) => {
 }), [selectedEvento, onLogout, refreshData, openMinigioco]);
 
     // Callbacks per EventoSection (spostati fuori dal JSX)
-    const handleUpdateEvento = useCallback((id, data) => { 
-        updateEvento(id, data, onLogout); 
-        refreshData(); 
+    const handleUpdateEvento = useCallback(async (id, data) => {
+        await updateEvento(id, data, onLogout);
+        await refreshData();
     }, [onLogout, refreshData]);
 
     const handleAddGiorno = useCallback(() => startEdit('giorno'), [startEdit]);

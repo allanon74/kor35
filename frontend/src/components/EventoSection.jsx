@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, memo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, memo } from 'react';
 import {
     MapPin, Edit2, Trash2, Calendar,
     Users, Star, UserPlus, X, ChevronDown, ChevronUp, ShieldCheck, Ticket,
@@ -6,14 +6,47 @@ import {
 import { RichTextViewer } from './RichTextDisplay';
 import EventoPortateSection from './EventoPortateSection';
 
+const normalizeStaffIds = (list) => (
+    (list || [])
+        .map((item) => Number(typeof item === 'object' ? item.id : item))
+        .filter((id) => Number.isFinite(id))
+);
+
+const staffLabel = (user) => {
+    const full = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+    return full || user.username || `Utente #${user.id}`;
+};
+
 const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRefresh, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
     const [reportLoading, setReportLoading] = useState(false);
     const [reportError, setReportError] = useState('');
     const [reportData, setReportData] = useState(null);
+    const [localStaffIds, setLocalStaffIds] = useState([]);
+    const [savingStaff, setSavingStaff] = useState(false);
 
-    if (!evento) return null;
+    const allStaff = useMemo(() => risorse.staff || [], [risorse.staff]);
+    const allStaffIds = useMemo(() => normalizeStaffIds(allStaff), [allStaff]);
+
+    const serverStaffIds = useMemo(() => {
+        const fromRaw = normalizeStaffIds(evento?.staff_assegnato);
+        const fromDetails = normalizeStaffIds(evento?.staff_details);
+        return fromRaw.length > 0 ? fromRaw : fromDetails;
+    }, [evento?.staff_assegnato, evento?.staff_details]);
+
+    const effectiveStaffIds = useMemo(() => {
+        if (serverStaffIds.length === 0 && allStaffIds.length > 0) {
+            return allStaffIds;
+        }
+        return serverStaffIds;
+    }, [serverStaffIds, allStaffIds]);
+
+    useEffect(() => {
+        if (!savingStaff) {
+            setLocalStaffIds(effectiveStaffIds);
+        }
+    }, [effectiveStaffIds, savingStaff, evento?.id]);
 
     // Filtriamo i personaggi per mostrare solo i GIOCANTI (flag giocante: true) per le iscrizioni (Memoized)
     const personaggiGiocanti = useMemo(() => 
@@ -31,23 +64,44 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
     }, []);
 
     const handleListChange = useCallback(async (fieldName, targetId, action) => {
+        if (!evento) return;
         let currentList = evento[fieldName] || [];
-        // Estraiamo gli ID se la lista contiene oggetti
-        const currentIds = currentList.map(item => typeof item === 'object' ? item.id : item);
-        
+        const currentIds = normalizeStaffIds(currentList);
+
         let newIds;
-        const targetIdInt = parseInt(targetId);
-        
+        const targetIdInt = parseInt(targetId, 10);
+
         if (action === 'add') {
             if (currentIds.includes(targetIdInt)) return;
             newIds = [...currentIds, targetIdInt];
         } else {
-            newIds = currentIds.filter(id => id !== targetIdInt);
+            newIds = currentIds.filter((id) => id !== targetIdInt);
         }
 
-        // Chiamata al backend per aggiornare la lista Many-to-Many
-        onUpdateEvento(evento.id, { [fieldName]: newIds });
-    }, [evento.id, evento, onUpdateEvento]);
+        await onUpdateEvento(evento.id, { [fieldName]: newIds });
+    }, [evento, onUpdateEvento]);
+
+    const handleStaffToggle = useCallback(async (userId, checked) => {
+        if (!evento) return;
+        const id = Number(userId);
+        if (!Number.isFinite(id)) return;
+
+        const previousIds = localStaffIds;
+        const newIds = checked
+            ? [...new Set([...localStaffIds, id])]
+            : localStaffIds.filter((staffId) => staffId !== id);
+
+        setLocalStaffIds(newIds);
+        setSavingStaff(true);
+        try {
+            await onUpdateEvento(evento.id, { staff_assegnato: newIds });
+        } catch (e) {
+            setLocalStaffIds(previousIds);
+            console.error(e);
+        } finally {
+            setSavingStaff(false);
+        }
+    }, [evento, localStaffIds, onUpdateEvento]);
 
     const handleLoadReport = useCallback(async () => {
         if (!onReportRicompense) return;
@@ -63,6 +117,8 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
             setReportLoading(false);
         }
     }, [onReportRicompense]);
+
+    if (!evento) return null;
 
     return (
         <div className="bg-indigo-900/10 border-b border-gray-800 p-6 space-y-6 shadow-inner">
@@ -215,34 +271,47 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
             {/* SEZIONE STAFF (Sempre visibile) */}
             <div className="space-y-3 pt-2">
                 <div className="flex items-center gap-2 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
-                    <ShieldCheck size={14}/> Staff Assegnato
+                    <ShieldCheck size={14}/> Staff presente all&apos;evento
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    {evento.staff_details?.map(user => (
-                        <div key={user.id} className="flex items-center gap-2 bg-indigo-900/30 border border-indigo-500/30 px-2 py-1 rounded-full text-[11px]">
-                            <span className="font-bold">{user.username}</span>
-                            {isMaster && (
-                                <button onClick={() => handleListChange('staff_assegnato', user.id, 'remove')} className="text-indigo-400 hover:text-red-400">
-                                    <X size={12}/>
-                                </button>
-                            )}
-                        </div>
-                    ))}
-                    {isMaster && (
-                        <select 
-                            className="bg-gray-900 border border-gray-700 rounded text-[10px] p-1 outline-none focus:border-indigo-500"
-                            onChange={(e) => {
-                                if(e.target.value) handleListChange('staff_assegnato', e.target.value, 'add');
-                                e.target.value = "";
-                            }}
-                        >
-                            <option value="">Aggiungi Staff...</option>
-                            {risorse.staff?.filter(s => !(evento.staff_assegnato || []).includes(s.id)).map(s => (
-                                <option key={s.id} value={s.id}>{s.username}</option>
-                            ))}
-                        </select>
-                    )}
-                </div>
+                <p className="text-[10px] text-gray-500 normal-case font-medium">
+                    {isMaster
+                        ? 'Spunta i membri staff presenti. Di default tutti risultano selezionati.'
+                        : 'Elenco staff assegnato a questo evento.'}
+                    {savingStaff ? ' · Salvataggio…' : null}
+                </p>
+                {allStaff.length === 0 ? (
+                    <p className="text-[11px] text-gray-500 italic">Nessun membro staff disponibile.</p>
+                ) : (
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                        {allStaff.map((user) => {
+                            const userId = Number(user.id);
+                            const checked = localStaffIds.includes(userId);
+                            return (
+                                <li key={user.id}>
+                                    <label
+                                        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-[11px] transition-colors ${
+                                            checked
+                                                ? 'border-indigo-500/40 bg-indigo-900/25 text-indigo-100'
+                                                : 'border-gray-800 bg-gray-900/40 text-gray-400'
+                                        } ${!isMaster || savingStaff ? 'cursor-default' : 'cursor-pointer hover:border-indigo-500/30'}`}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            className="rounded border-gray-600 text-indigo-500 focus:ring-indigo-500"
+                                            checked={checked}
+                                            disabled={!isMaster || savingStaff}
+                                            onChange={(e) => handleStaffToggle(user.id, e.target.checked)}
+                                        />
+                                        <span className="font-semibold truncate">{staffLabel(user)}</span>
+                                        {user.username && staffLabel(user) !== user.username ? (
+                                            <span className="text-[10px] text-gray-500 truncate">@{user.username}</span>
+                                        ) : null}
+                                    </label>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
             </div>
 
             <EventoPortateSection
