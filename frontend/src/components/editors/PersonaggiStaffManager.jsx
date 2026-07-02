@@ -4,6 +4,7 @@ import {
   Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive, Award, Dna,
 } from 'lucide-react';
 import StaffRazzaAuraTab from './StaffRazzaAuraTab';
+import RichTextEditor from '../RichTextEditor';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
 import StaffQrTab from '../StaffQrTab';
 import SearchableSelect from './SearchableSelect';
