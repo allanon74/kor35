@@ -82,6 +82,12 @@ if ! command -v certbot >/dev/null 2>&1; then
   exit 1
 fi
 
+RENEWAL_CONF="/etc/letsencrypt/renewal/${DOMAIN}.conf"
+if [ -f "$RENEWAL_CONF" ] && grep -q '^authenticator = standalone' "$RENEWAL_CONF"; then
+  echo "Migrazione certbot DDNS da standalone a webroot..."
+  certbot reconfigure --cert-name "$DOMAIN" --webroot -w "$WEBROOT" --non-interactive
+fi
+
 if [ ! -d "$LE_LIVE" ]; then
   echo "Prima emissione certificato per ${DOMAIN}..."
   certbot certonly \
@@ -89,9 +95,15 @@ if [ ! -d "$LE_LIVE" ]; then
     --agree-tos \
     --register-unsafely-without-email \
     --webroot -w "$WEBROOT" \
-    -d "$DOMAIN"
+    -d "$DOMAIN" \
+    --cert-name "$DOMAIN"
 elif [ "$FORCE_RENEW" = "1" ]; then
-  certbot renew --cert-name "$DOMAIN" --force-renewal
+  certbot certonly \
+    --webroot -w "$WEBROOT" \
+    -d "$DOMAIN" \
+    --cert-name "$DOMAIN" \
+    --force-renewal \
+    --non-interactive
 else
   certbot renew --cert-name "$DOMAIN"
 fi
