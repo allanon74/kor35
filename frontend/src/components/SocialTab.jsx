@@ -204,6 +204,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const [editingCommentByPost, setEditingCommentByPost] = useState({});
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [editMentionSuggestions, setEditMentionSuggestions] = useState([]);
   const [commentMentionSuggestions, setCommentMentionSuggestions] = useState({});
   const [commentSendingByPost, setCommentSendingByPost] = useState({});
   const [commentSentFxByPost, setCommentSentFxByPost] = useState({});
@@ -250,6 +251,8 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   const editGroupPostMediaCameraInputRef = useRef(null);
   const postMentionCursorRef = useRef(null);
   const postPendingSelectionRef = useRef(null);
+  const editMentionCursorRef = useRef(null);
+  const editPendingSelectionRef = useRef(null);
   const storyMentionCursorRef = useRef(null);
   const storyPendingSelectionRef = useRef(null);
   const commentMentionCursorRef = useRef({});
@@ -734,6 +737,34 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
     setMentionSuggestions([]);
   };
 
+  const updateEditPostTextWithMentions = async (nextText, cursorPos) => {
+    const cursor = cursorPos ?? String(nextText || '').length;
+    editMentionCursorRef.current = cursor;
+    setEditingPost((p) => (p ? { ...p, testo: nextText } : p));
+    const active = findActiveMention(nextText, cursor);
+    if (!active?.query) {
+      setEditMentionSuggestions([]);
+      return;
+    }
+    const res = await searchPersonaggi(active.query, selectedCharacterId);
+    setEditMentionSuggestions(Array.isArray(res) ? res : []);
+  };
+
+  const insertMentionInEditPost = (personaggio) => {
+    setEditingPost((p) => {
+      if (!p) return p;
+      const { text, cursorPos } = replaceActiveMention(
+        p.testo || '',
+        editMentionCursorRef.current ?? String(p.testo || '').length,
+        `@${personaggio.id} `
+      );
+      editPendingSelectionRef.current = cursorPos;
+      editMentionCursorRef.current = cursorPos;
+      return { ...p, testo: text };
+    });
+    setEditMentionSuggestions([]);
+  };
+
   const updateCommentWithMentions = async (postId, nextText, cursorPos) => {
     const cursor = cursorPos ?? String(nextText || '').length;
     commentMentionCursorRef.current[postId] = cursor;
@@ -940,6 +971,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
   };
 
   const startEditPost = (post) => {
+    setEditMentionSuggestions([]);
     setEditingPost({
       id: post.id,
       titolo: post.titolo || '',
@@ -981,6 +1013,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
       fd.append('clear_immagini', '1');
     }
     await socialUpdatePost(editingPost.id, fd, onLogout);
+    setEditMentionSuggestions([]);
     setEditingPost(null);
     await loadAll();
   };
@@ -2222,7 +2255,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               <div
                 className={
                   hasMedia
-                    ? 'order-2 lg:order-none lg:float-left lg:w-1/2 lg:max-w-[50%] lg:flex lg:items-start lg:justify-center lg:bg-black/60 lg:border-r lg:border-gray-700/50'
+                    ? 'order-2 lg:order-none lg:float-left lg:w-1/2 lg:max-w-[50%] lg:mr-4 lg:flex lg:items-start lg:justify-center lg:bg-black/60 lg:border-r lg:border-gray-700/50'
                     : ''
                 }
               >
@@ -2233,7 +2266,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               <div
                 className={`w-full aspect-4/5 overflow-hidden border-y border-gray-700/60 bg-black ${
                   hasMedia
-                    ? 'order-2 lg:order-none lg:float-left lg:w-1/2 lg:max-w-[50%] lg:aspect-auto lg:border-y-0 lg:flex lg:items-start lg:justify-center'
+                    ? 'order-2 lg:order-none lg:float-left lg:w-1/2 lg:max-w-[50%] lg:mr-4 lg:aspect-auto lg:border-y-0 lg:flex lg:items-start lg:justify-center'
                     : ''
                 }`}
               >
@@ -2247,7 +2280,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
             <div
               className={`flex justify-between items-center gap-3 px-3 pt-3 pb-2 md:px-4 ${
-                hasMedia ? 'order-1 lg:order-none lg:overflow-hidden lg:border-b lg:border-gray-700/40' : ''
+                hasMedia ? 'order-1 lg:order-none lg:overflow-hidden lg:pl-5 lg:border-b lg:border-gray-700/40' : ''
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -2279,7 +2312,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             {post.titolo && (
               <p
                 className={`px-3 md:px-4 pt-2 text-sm md:text-base font-semibold text-amber-100 leading-relaxed ${
-                  hasMedia ? 'order-3 lg:order-none' : ''
+                  hasMedia ? 'order-3 lg:order-none lg:pl-5' : ''
                 }`}
               >
                 {post.titolo}
@@ -2288,7 +2321,7 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             {post.testo && (
               <p
                 className={`px-3 md:px-4 pb-1 text-sm md:text-base text-gray-200 leading-relaxed ${
-                  hasMedia ? 'order-3 lg:order-none' : 'pt-2'
+                  hasMedia ? 'order-3 lg:order-none lg:pl-5' : 'pt-2'
                 }`}
               >
                 {renderTextWithMentions(post.testo, post.tags)}
@@ -2991,7 +3024,15 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
           <div className="w-full max-w-2xl rounded-2xl bg-gray-900 border border-gray-700 p-3 md:p-4 space-y-3 max-h-[92vh] overflow-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold">Modifica post (admin)</h3>
-              <button onClick={() => setEditingPost(null)} className="text-gray-400 hover:text-white">X</button>
+              <button
+                onClick={() => {
+                  setEditMentionSuggestions([]);
+                  setEditingPost(null);
+                }}
+                className="text-gray-400 hover:text-white"
+              >
+                X
+              </button>
             </div>
             <input
               className="w-full bg-gray-800 rounded p-2 border border-gray-700"
@@ -3001,8 +3042,27 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
             <InstafameTextArea
               placeholder="Testo del post..."
               value={editingPost.testo || ''}
-              onChange={(testo) => setEditingPost((p) => ({ ...p, testo }))}
+              onChange={updateEditPostTextWithMentions}
+              onCursorActivity={updateEditPostTextWithMentions}
+              pendingSelectionRef={editPendingSelectionRef}
             />
+            {editMentionSuggestions.length > 0 && (
+              <div className="bg-gray-800 border border-gray-700 rounded p-2 text-sm">
+                <div className="text-xs text-gray-400 mb-1">Suggerimenti tag (@):</div>
+                <div className="flex flex-wrap gap-2">
+                  {editMentionSuggestions.map((p) => (
+                    <button
+                      key={`edit-mention-${p.id}`}
+                      type="button"
+                      onClick={() => insertMentionInEditPost(p)}
+                      className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600"
+                    >
+                      {p.nome} <span className="text-xs text-gray-400">@{p.id}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <select
                 className="bg-gray-800 rounded p-2 border border-gray-700"

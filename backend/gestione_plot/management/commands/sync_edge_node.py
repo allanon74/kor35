@@ -31,6 +31,7 @@ from kor35.sync_tombstone import (
     tombstone_blocks_record_apply,
 )
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
+from social.mention_tags import suppress_mention_notify
 
 
 class Command(BaseCommand):
@@ -191,25 +192,26 @@ class Command(BaseCommand):
         max_rounds = max(len(pending), 1)
         tombstone_rows = incoming_payload.get(TOMBSTONE_PAYLOAD_KEY, []) or []
         with transaction.atomic():
-            for _ in range(max_rounds):
-                if not pending:
-                    break
-                next_pending = []
-                progressed = 0
+            with suppress_mention_notify():
+                for _ in range(max_rounds):
+                    if not pending:
+                        break
+                    next_pending = []
+                    progressed = 0
 
-                for model, row in pending:
-                    status = self._try_apply_one(model, row)
-                    if status == "defer":
-                        next_pending.append((model, row))
-                        continue
-                    if status == "skipped":
+                    for model, row in pending:
+                        status = self._try_apply_one(model, row)
+                        if status == "defer":
+                            next_pending.append((model, row))
+                            continue
+                        if status == "skipped":
+                            progressed += 1
+                            continue
                         progressed += 1
-                        continue
-                    progressed += 1
 
-                pending = next_pending
-                if progressed == 0:
-                    break
+                    pending = next_pending
+                    if progressed == 0:
+                        break
 
         apply_tombstone_rows(model_registry, tombstone_rows)
 

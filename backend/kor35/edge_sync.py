@@ -34,6 +34,7 @@ from kor35.sync_tombstone import (
     tombstone_blocks_record_apply,
 )
 from personaggi.models import AuthGroupSyncState, AuthUserSyncState
+from social.mention_tags import suppress_mention_notify
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +75,10 @@ class EdgeSyncView(APIView):
 
         try:
             with transaction.atomic():
-                self._apply_users(incoming_records.get("auth.user", []))
-                self._apply_groups(incoming_records.get("auth.group", []))
-                self._apply_sync_models(incoming_records)
+                with suppress_mention_notify():
+                    self._apply_users(incoming_records.get("auth.user", []))
+                    self._apply_groups(incoming_records.get("auth.group", []))
+                    self._apply_sync_models(incoming_records)
 
             apply_tombstone_rows(
                 self._sync_model_registry(),

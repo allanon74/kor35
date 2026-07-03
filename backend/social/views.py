@@ -45,7 +45,6 @@ from .models import (
     SocialStoryReply,
     SocialStoryTag,
     SocialStoryView,
-    extract_mentioned_personaggi_ids,
     social_story_active_q,
     social_story_expired_q,
 )
@@ -144,34 +143,6 @@ def visible_stories_queryset_for_personaggio(personaggio):
     ).distinct()
 
 
-def sync_story_tags(story):
-    ids = extract_mentioned_personaggi_ids(story.testo)
-    existing = set(SocialStoryTag.objects.filter(story=story).values_list("personaggio_id", flat=True))
-    new_ids = [pid for pid in ids if pid not in existing]
-    SocialStoryTag.objects.filter(story=story).exclude(personaggio_id__in=ids).delete()
-    SocialStoryTag.objects.bulk_create(
-        [SocialStoryTag(story=story, personaggio_id=pid) for pid in new_ids]
-    )
-    if new_ids:
-        from .mention_notifications import notify_instafame_mentions
-
-        notify_instafame_mentions(story.autore, new_ids, "story", story=story)
-
-
-def sync_post_tags(post):
-    text = f"{post.titolo or ''}\n{post.testo or ''}".strip()
-    ids = extract_mentioned_personaggi_ids(text)
-    existing = set(SocialPostTag.objects.filter(post=post).values_list("personaggio_id", flat=True))
-    new_ids = [pid for pid in ids if pid not in existing]
-    SocialPostTag.objects.filter(post=post).exclude(personaggio_id__in=ids).delete()
-    SocialPostTag.objects.bulk_create(
-        [SocialPostTag(post=post, personaggio_id=pid) for pid in new_ids]
-    )
-    if new_ids:
-        from .mention_notifications import notify_instafame_mentions
-
-        notify_instafame_mentions(post.autore, new_ids, "post", post=post)
-
 
 class SocialStoryViewSet(viewsets.ModelViewSet):
     serializer_class = SocialStorySerializer
@@ -223,7 +194,6 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             if not is_member:
                 raise permissions.PermissionDenied("Il personaggio non appartiene alla KORP selezionata.")
         story = serializer.save(autore=personaggio, evento=get_evento_in_corso())
-        sync_story_tags(story)
         if story.auto_publish_mode == SocialStory.AUTO_PUBLISH_NOW:
             try:
                 self._promote_story_to_post(story)
@@ -232,7 +202,6 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         story = serializer.save()
-        sync_story_tags(story)
         if story.auto_publish_mode == SocialStory.AUTO_PUBLISH_NOW and not story.converted_post_id:
             try:
                 self._promote_story_to_post(story)
@@ -272,22 +241,16 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             else:
                 post.video = story.media
                 post.save(update_fields=["video", "updated_at"])
-        sync_post_tags(post)
 
         # Migra replies -> commenti post
         for rp in story.replies.select_related("autore", "autore__social_profile").all():
-            c = SocialComment.objects.create(
+            SocialComment.objects.create(
                 post=post,
                 autore=rp.autore,
                 testo=rp.testo,
                 evento=story.evento,
                 created_at=rp.created_at,
                 likes_base=random_likes_base(rp.autore),
-            )
-            ids = extract_mentioned_personaggi_ids(c.testo)
-            existing = set(SocialCommentTag.objects.filter(comment=c).values_list("personaggio_id", flat=True))
-            SocialCommentTag.objects.bulk_create(
-                [SocialCommentTag(comment=c, personaggio_id=pid) for pid in ids if pid not in existing]
             )
 
         # Migra reactions -> like post (1 per autore)
@@ -607,7 +570,6 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc))
         post.refresh_from_db()
         post.full_clean()
-        self._sync_tags_for_post(post)
 
     def perform_update(self, serializer):
         post = serializer.save()
@@ -622,10 +584,6 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             raise ValidationError(exc.messages if hasattr(exc, "messages") else str(exc))
         post.refresh_from_db()
         post.full_clean()
-        self._sync_tags_for_post(post)
-
-    def _sync_tags_for_post(self, post):
-        sync_post_tags(post)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def like(self, request, pk=None):
@@ -680,7 +638,6 @@ class SocialPostViewSet(viewsets.ModelViewSet):
             evento=get_evento_in_corso(),
             likes_base=random_likes_base(personaggio),
         )
-        self._sync_tags_for_comment(comment)
         return Response(
             SocialCommentSerializer(comment, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
@@ -733,21 +690,7 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         serializer = SocialCommentSerializer(comment, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         updated_comment = serializer.save()
-        self._sync_tags_for_comment(updated_comment)
         return Response(SocialCommentSerializer(updated_comment).data, status=status.HTTP_200_OK)
-
-    def _sync_tags_for_comment(self, comment):
-        ids = extract_mentioned_personaggi_ids(comment.testo)
-        existing = set(SocialCommentTag.objects.filter(comment=comment).values_list("personaggio_id", flat=True))
-        new_ids = [pid for pid in ids if pid not in existing]
-        SocialCommentTag.objects.filter(comment=comment).exclude(personaggio_id__in=ids).delete()
-        SocialCommentTag.objects.bulk_create(
-            [SocialCommentTag(comment=comment, personaggio_id=pid) for pid in new_ids]
-        )
-        if new_ids:
-            from .mention_notifications import notify_instafame_mentions
-
-            notify_instafame_mentions(comment.autore, new_ids, "comment", comment=comment, post=comment.post)
 
 
 class SocialGroupViewSet(viewsets.ModelViewSet):
