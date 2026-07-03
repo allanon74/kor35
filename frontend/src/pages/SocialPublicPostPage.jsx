@@ -48,7 +48,7 @@ export default function SocialPublicPostPage() {
       <div className="max-w-5xl mx-auto p-4 md:p-8">
         <div
           className={`bg-white rounded-xl shadow border border-gray-200 overflow-hidden ${
-            hasMedia ? 'lg:grid lg:grid-cols-2 lg:items-stretch' : 'max-w-2xl mx-auto'
+            hasMedia ? 'flex flex-col lg:block lg:overflow-hidden' : 'max-w-2xl mx-auto'
           }`}
         >
           {hasMedia && (
@@ -62,7 +62,7 @@ export default function SocialPublicPostPage() {
           )}
 
           {(postImages.length > 0 || post.video) && (
-            <div className="lg:flex lg:items-center lg:justify-center lg:bg-black lg:min-h-[360px] lg:max-h-[720px] lg:border-r lg:border-gray-200">
+            <div className="order-2 lg:order-none lg:float-left lg:w-1/2 lg:max-w-[50%] lg:flex lg:items-center lg:justify-center lg:bg-black lg:min-h-[360px] lg:max-h-[720px] lg:border-r lg:border-gray-200">
               {postImages.length > 0 ? (
                 <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth className="border-gray-200" />
               ) : (
@@ -73,36 +73,52 @@ export default function SocialPublicPostPage() {
             </div>
           )}
 
-          <div className={hasMedia ? 'lg:flex lg:flex-col lg:min-h-[360px]' : ''}>
-            {hasMedia && (
-              <div className="hidden lg:block px-5 pt-5 pb-3 border-b border-gray-200">
-                <p className="text-sm text-gray-500">
-                  <span className="font-semibold text-gray-900">{post.autore_nome}</span>
-                  {' · '}
-                  {new Date(post.created_at).toLocaleString('it-IT')}
-                </p>
-              </div>
-            )}
-
-            {!hasMedia && (
-              <div className="px-5 pt-5 pb-3">
-                <p className="text-sm text-gray-500">
-                  <span className="font-semibold text-gray-900">{post.autore_nome}</span>
-                  {' · '}
-                  {new Date(post.created_at).toLocaleString('it-IT')}
-                </p>
-              </div>
-            )}
-
-            <div className={`px-5 py-4 space-y-3 ${hasMedia ? 'lg:flex-1 lg:overflow-y-auto' : ''}`}>
-              {post.titolo && <h1 className="text-xl md:text-2xl font-bold text-gray-900">{post.titolo}</h1>}
-              {post.testo && <p className="text-gray-800 whitespace-pre-wrap">{post.testo}</p>}
-
-              <div className="text-sm text-gray-600 border-t border-gray-200 pt-3">
-                Like: <span className="font-semibold">{formatCount(post.likes_count)}</span> · Commenti:{' '}
-                <span className="font-semibold">{formatCount(post.comments_count)}</span>
-              </div>
+          {hasMedia && (
+            <div className="hidden lg:block order-1 lg:order-none lg:overflow-hidden px-5 pt-5 pb-3 border-b border-gray-200">
+              <p className="text-sm text-gray-500">
+                <span className="font-semibold text-gray-900">{post.autore_nome}</span>
+                {' · '}
+                {new Date(post.created_at).toLocaleString('it-IT')}
+              </p>
             </div>
+          )}
+
+          {!hasMedia && (
+            <div className="px-5 pt-5 pb-3">
+              <p className="text-sm text-gray-500">
+                <span className="font-semibold text-gray-900">{post.autore_nome}</span>
+                {' · '}
+                {new Date(post.created_at).toLocaleString('it-IT')}
+              </p>
+            </div>
+          )}
+
+          {post.titolo && (
+            <h1
+              className={`px-5 pt-4 text-xl md:text-2xl font-bold text-gray-900 ${
+                hasMedia ? 'order-3 lg:order-none' : ''
+              }`}
+            >
+              {post.titolo}
+            </h1>
+          )}
+          {post.testo && (
+            <p
+              className={`px-5 py-4 text-gray-800 whitespace-pre-wrap ${
+                hasMedia ? 'order-3 lg:order-none' : ''
+              }`}
+            >
+              {post.testo}
+            </p>
+          )}
+
+          <div
+            className={`px-5 py-4 text-sm text-gray-600 border-t border-gray-200 ${
+              hasMedia ? 'order-4 lg:order-none lg:clear-both' : ''
+            }`}
+          >
+            Like: <span className="font-semibold">{formatCount(post.likes_count)}</span> · Commenti:{' '}
+            <span className="font-semibold">{formatCount(post.comments_count)}</span>
           </div>
         </div>
 

@@ -2217,10 +2217,37 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
 
           return (
           <article key={post.id} className="rounded-3xl border border-amber-300/35 bg-linear-to-b from-[#24152a]/96 to-[#1a111f]/96 overflow-hidden shadow-[0_14px_34px_rgba(0,0,0,0.40)]">
-            <div className={hasMedia ? 'lg:grid lg:grid-cols-2 lg:items-start' : ''}>
+            <div className={hasMedia ? 'flex flex-col lg:block lg:overflow-hidden' : ''}>
+            {postImages.length > 0 && (
+              <div
+                className={
+                  hasMedia
+                    ? 'order-2 lg:order-none lg:float-left lg:w-1/2 lg:max-w-[50%] lg:flex lg:items-start lg:justify-center lg:bg-black/60 lg:border-r lg:border-gray-700/50'
+                    : ''
+                }
+              >
+                <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth />
+              </div>
+            )}
+            {post.video && (
+              <div
+                className={`w-full aspect-4/5 overflow-hidden border-y border-gray-700/60 bg-black ${
+                  hasMedia
+                    ? 'order-2 lg:order-none lg:float-left lg:w-1/2 lg:max-w-[50%] lg:aspect-auto lg:border-y-0 lg:flex lg:items-start lg:justify-center'
+                    : ''
+                }`}
+              >
+                <video
+                  controls
+                  src={resolveMediaUrl(post.video)}
+                  className="h-full w-full object-cover lg:object-contain lg:h-auto lg:max-h-none"
+                />
+              </div>
+            )}
+
             <div
               className={`flex justify-between items-center gap-3 px-3 pt-3 pb-2 md:px-4 ${
-                hasMedia ? 'lg:col-start-2 lg:row-start-1 lg:border-b lg:border-gray-700/40 lg:shrink-0' : ''
+                hasMedia ? 'order-1 lg:order-none lg:overflow-hidden lg:border-b lg:border-gray-700/40' : ''
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -2249,49 +2276,31 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </span>
             </div>
 
-            {postImages.length > 0 && (
-              <div
-                className={
-                  hasMedia
-                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:items-start lg:justify-center lg:bg-black/60 lg:border-r lg:border-gray-700/50'
-                    : ''
-                }
-              >
-                <InstafameMediaCarousel images={postImages} alt={post.titolo} fullWidth />
-              </div>
-            )}
-            {post.video && (
-              <div
-                className={`w-full aspect-4/5 overflow-hidden border-y border-gray-700/60 bg-black ${
-                  hasMedia
-                    ? 'lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:aspect-auto lg:border-y-0 lg:flex lg:items-start lg:justify-center'
-                    : ''
+            {post.titolo && (
+              <p
+                className={`px-3 md:px-4 pt-2 text-sm md:text-base font-semibold text-amber-100 leading-relaxed ${
+                  hasMedia ? 'order-3 lg:order-none' : ''
                 }`}
               >
-                <video
-                  controls
-                  src={resolveMediaUrl(post.video)}
-                  className="h-full w-full object-cover lg:object-contain lg:h-auto lg:max-h-none"
-                />
-              </div>
+                {post.titolo}
+              </p>
+            )}
+            {post.testo && (
+              <p
+                className={`px-3 md:px-4 pb-1 text-sm md:text-base text-gray-200 leading-relaxed ${
+                  hasMedia ? 'order-3 lg:order-none' : 'pt-2'
+                }`}
+              >
+                {renderTextWithMentions(post.testo, post.tags)}
+              </p>
             )}
 
-            <div
-              className={`px-3 py-3 md:px-4 space-y-2.5 ${
-                hasMedia ? 'lg:col-start-2 lg:row-start-2' : ''
-              }`}
-            >
-            <div className="space-y-1.5 text-sm md:text-base leading-relaxed">
-              {post.titolo && (
-                <p className="font-semibold text-amber-100">{post.titolo}</p>
-              )}
-              {post.testo && (
-                <p className="text-gray-200">{renderTextWithMentions(post.testo, post.tags)}</p>
-              )}
-            </div>
-
             {Array.isArray(post.hashtags) && post.hashtags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div
+                className={`flex flex-wrap gap-2 px-3 md:px-4 py-1 ${
+                  hasMedia ? 'order-3 lg:order-none lg:clear-both' : ''
+                }`}
+              >
                 {post.hashtags.map((h) => (
                   <button
                     key={`ph-${post.id}-${h}`}
@@ -2308,7 +2317,11 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </div>
             )}
             {post.tags?.length > 0 && (
-              <div className="text-xs text-amber-300/90">
+              <div
+                className={`text-xs text-amber-300/90 px-3 md:px-4 py-1 ${
+                  hasMedia ? 'order-3 lg:order-none lg:clear-both' : ''
+                }`}
+              >
                 Tag:{' '}
                 {post.tags.map((t) => (
                   <button
@@ -2323,6 +2336,11 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
               </div>
             )}
 
+            <div
+              className={`px-3 py-3 md:px-4 space-y-2.5 ${
+                hasMedia ? 'order-4 lg:order-none lg:clear-both' : 'space-y-2.5'
+              }`}
+            >
             <div className="flex gap-2 flex-wrap pt-0.5">
               <button
                 onClick={() => handleToggleLike(post.id)}
