@@ -354,7 +354,12 @@ class SocialPostSerializer(serializers.ModelSerializer):
         rows = obj.post_images.all()
         urls = []
         for row in rows:
-            if not row.immagine:
+            if not row.immagine or not row.immagine.name:
+                continue
+            try:
+                if not row.immagine.storage.exists(row.immagine.name):
+                    continue
+            except Exception:
                 continue
             url = row.immagine.url
             if request:

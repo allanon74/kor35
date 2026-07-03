@@ -1,6 +1,9 @@
 """Gestione media multi-immagine per post InstaFame."""
 
+import os
+
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.db import transaction
 
 from .models import MAX_POST_IMAGES, SocialPost, SocialPostImage
@@ -24,10 +27,29 @@ def post_has_gallery_images(post: SocialPost) -> bool:
 def sync_post_cover_image(post: SocialPost):
     """Mantiene post.immagine allineata alla prima foto della galleria (retrocompatibilità)."""
     first = post.post_images.order_by("ordine", "id").first()
-    cover = first.immagine if first and first.immagine else None
-    if post.immagine == cover:
+    if not first or not first.immagine or not first.immagine.name:
+        if post.immagine:
+            post.immagine = None
+            post.save(update_fields=["immagine", "updated_at"])
         return
-    post.immagine = cover
+
+    gallery_name = first.immagine.name
+    cover_prefix = f"social/posts/{post.autore_id}"
+    cover_name = f"{cover_prefix}/{os.path.basename(gallery_name.replace(chr(92), '/'))}"
+
+    if post.immagine and post.immagine.name == cover_name:
+        return
+
+    storage = first.immagine.storage
+    if not storage.exists(gallery_name):
+        return
+
+    if not storage.exists(cover_name):
+        with storage.open(gallery_name, "rb") as src:
+            storage.save(cover_name, ContentFile(src.read()))
+
+    # Copia indipendente: non riusare il FieldFile della galleria (prepare_image_upload sposterebbe il file).
+    post.immagine.name = cover_name
     post.save(update_fields=["immagine", "updated_at"])
 
 
