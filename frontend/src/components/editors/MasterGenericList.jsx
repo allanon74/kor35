@@ -12,6 +12,11 @@ const MasterGenericList = ({
   onMinigioco,
   addLabel = "Nuovo",
   loading = false,
+  /** Testo usato per la ricerca libera (default: nome/titolo/…). */
+  getSearchText = null,
+  /** Etichetta modale eliminazione (default: nome/titolo/…). */
+  getItemLabel: getItemLabelProp = null,
+  searchPlaceholder = 'Cerca per nome...',
   filterConfig = [], 
   columns = [],
   sortLogic,
@@ -74,10 +79,16 @@ const MasterGenericList = ({
     setSearchTerm('');
   }, []);
 
+  const resolveSearchText = useCallback((item) => {
+    if (getSearchText) return String(getSearchText(item) || '');
+    return item.nome || item.titolo || item.dichiarazione || item.label || '';
+  }, [getSearchText]);
+
   const getItemLabel = useCallback((item) => {
     if (!item) return '';
+    if (getItemLabelProp) return getItemLabelProp(item);
     return item.nome || item.titolo || item.dichiarazione || item.label || `ID ${item.id}`;
-  }, []);
+  }, [getItemLabelProp]);
 
   const handleConfirmDelete = useCallback(async () => {
     if (!pendingDeleteItem || !onDelete) return;
@@ -100,8 +111,7 @@ const MasterGenericList = ({
     // I dati vengono sempre mostrati, i filtri sono opzionali
 
     let filtered = items.filter(item => {
-      // Cerca in 'nome' o 'titolo' (per supportare sia oggetti che immagini)
-      const searchText = (item.nome || item.titolo || "").toLowerCase();
+      const searchText = resolveSearchText(item).toLowerCase();
       const matchSearch = searchText.includes(debouncedSearchTerm.toLowerCase());
       if (debouncedSearchTerm && !matchSearch) return false;
       
@@ -115,7 +125,7 @@ const MasterGenericList = ({
     });
 
     return sortLogic ? [...filtered].sort(sortLogic) : filtered;
-  }, [items, debouncedSearchTerm, activeFilters, sortLogic, filterConfig, serverDrivenFiltering]);
+  }, [items, debouncedSearchTerm, activeFilters, sortLogic, filterConfig, serverDrivenFiltering, resolveSearchText]);
 
   return (
     // H-FULL e FLEX-COL sono cruciali per bloccare l'altezza e scrollare dentro
@@ -148,7 +158,7 @@ const MasterGenericList = ({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
           <input 
             type="text" 
-            placeholder="Cerca per nome..." 
+            placeholder={searchPlaceholder} 
             className="w-full bg-gray-950 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-sm focus:border-cyan-500 outline-none text-white transition-all placeholder:text-gray-700"
             value={searchTerm} 
             onChange={e => setSearchTerm(e.target.value)}

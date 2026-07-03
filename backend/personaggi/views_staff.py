@@ -1030,7 +1030,16 @@ class PersonaggioCarrieraMembershipStaffViewSet(viewsets.ModelViewSet):
     serializer_class = PersonaggioCarrieraMembershipStaffSerializer
     permission_classes = [IsStaffOrMaster]
     filterset_fields = ["personaggio", "carriera", "tipo_carriera__codice", "data_a"]
-    search_fields = ["personaggio__nome", "carriera__nome", "carica__nome"]
+    search_fields = [
+        "personaggio__nome",
+        "personaggio__proprietario__username",
+        "personaggio__proprietario__first_name",
+        "personaggio__proprietario__last_name",
+        "carriera__nome",
+        "carica__nome",
+        "tipo_carriera__codice",
+        "tipo_carriera__nome",
+    ]
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):

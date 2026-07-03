@@ -681,6 +681,27 @@ export default function CarriereKorpsManager({ onLogout }) {
     [],
   );
 
+  const membershipSearchText = useCallback(
+    (item) =>
+      [
+        item.personaggio_nome,
+        item.carriera_nome,
+        item.carica_nome,
+        item.tipo_carriera_codice,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    [],
+  );
+
+  const membershipItemLabel = useCallback(
+    (item) =>
+      [item.personaggio_nome, item.carriera_nome, item.carica_nome]
+        .filter(Boolean)
+        .join(' · ') || `Appartenenza #${item.id}`,
+    [],
+  );
+
   const membershipColumns = useMemo(
     () => [
       { header: 'PG', render: (x) => x.personaggio_nome || `#${x.personaggio}` },
@@ -910,6 +931,9 @@ export default function CarriereKorpsManager({ onLogout }) {
             persistKey="staff-carriere-korps-membership"
             addLabel="Nuova appartenenza"
             emptyMessage="Nessuna appartenenza registrata."
+            searchPlaceholder="Cerca personaggio, giocatore, KORP, carriera o carica…"
+            getSearchText={membershipSearchText}
+            getItemLabel={membershipItemLabel}
             onAdd={() => setModalMembership({})}
             onEdit={(item) =>
               setModalMembership({
