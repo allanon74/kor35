@@ -4681,6 +4681,24 @@ class Personaggio(Inventario):
     def modifica_pc(self, i, d): 
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
 
+    def modifica_riserva_scommesse(self, delta, motivo):
+        """Variazione riserva scommesse (staff); non scrive movimenti crediti separati."""
+        delta = Decimal(str(delta)).quantize(Decimal("0.01"))
+        attuale = Decimal(str(self.riserva or 0)).quantize(Decimal("0.01"))
+        self.riserva = max(Decimal("0.00"), attuale + delta)
+        self.save(update_fields=["riserva", "updated_at"])
+        segno = "+" if delta >= 0 else ""
+        self.aggiungi_log(f"Riserva scommesse {segno}{delta} CR — {motivo}")
+
+    def imposta_riserva_scommesse(self, valore, motivo):
+        valore = max(Decimal("0.00"), Decimal(str(valore)).quantize(Decimal("0.01")))
+        precedente = Decimal(str(self.riserva or 0)).quantize(Decimal("0.01"))
+        self.riserva = valore
+        self.save(update_fields=["riserva", "updated_at"])
+        self.aggiungi_log(
+            f"Riserva scommesse impostata a {valore} CR (era {precedente}) — {motivo}"
+        )
+
     def ha_eventi_iniziati(self):
         now = timezone.now()
         return self.eventi_partecipati.filter(

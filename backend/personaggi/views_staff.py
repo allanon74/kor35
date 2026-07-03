@@ -1946,6 +1946,65 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Tipo risorsa non valido'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'status': 'success', 'new_val': val, 'msg': 'Risorse aggiornate'})
 
+    @action(detail=True, methods=['get', 'post'], url_path='riserva-scommesse')
+    def riserva_scommesse(self, request, pk=None):
+        """GET: saldo riserva + ultime puntate. POST: delta o valore assoluto."""
+        from decimal import Decimal, InvalidOperation
+
+        from personaggi.scommesse_models import PuntataScommessa
+        from personaggi.serializers_scommesse import PuntataScommessaSerializer
+
+        personaggio = self.get_object()
+
+        if request.method == 'GET':
+            puntate = (
+                PuntataScommessa.objects.filter(personaggio=personaggio)
+                .select_related("calendario__sport", "codice")
+                .prefetch_related(
+                    "selezioni__incontro__squadra_casa",
+                    "selezioni__incontro__squadra_trasferta",
+                )
+                .order_by("-created_at")[:40]
+            )
+            ctx = {"personaggio": personaggio, "staff_view": True}
+            return Response({
+                "riserva": str(personaggio.riserva or Decimal("0.00")),
+                "crediti": personaggio.crediti,
+                "puntate": PuntataScommessaSerializer(puntate, many=True, context=ctx).data,
+            })
+
+        motivo = (request.data.get("motivo") or "Intervento staff riserva scommesse").strip()
+        if not motivo:
+            return Response({"error": "Motivo obbligatorio."}, status=status.HTTP_400_BAD_REQUEST)
+
+        mode = (request.data.get("mode") or "delta").strip().lower()
+        try:
+            if mode == "set":
+                raw = request.data.get("valore")
+                if raw in (None, ""):
+                    return Response({"error": "valore obbligatorio per mode=set."}, status=status.HTTP_400_BAD_REQUEST)
+                valore = Decimal(str(raw))
+                personaggio.imposta_riserva_scommesse(valore, motivo)
+            elif mode == "delta":
+                raw = request.data.get("delta", request.data.get("amount"))
+                if raw in (None, ""):
+                    return Response({"error": "delta obbligatorio."}, status=status.HTTP_400_BAD_REQUEST)
+                delta = Decimal(str(raw))
+                if delta == 0:
+                    return Response({"error": "delta non può essere zero."}, status=status.HTTP_400_BAD_REQUEST)
+                personaggio.modifica_riserva_scommesse(delta, motivo)
+            else:
+                return Response({"error": "mode non valido (delta|set)."}, status=status.HTTP_400_BAD_REQUEST)
+        except (InvalidOperation, TypeError, ValueError):
+            return Response({"error": "Importo non valido."}, status=status.HTTP_400_BAD_REQUEST)
+
+        personaggio.refresh_from_db()
+        return Response({
+            "status": "success",
+            "riserva": str(personaggio.riserva),
+            "detail": self._serialize_detail(personaggio, request),
+        })
+
     @action(detail=True, methods=['post'], url_path='assegna-abilita')
     def assegna_abilita(self, request, pk=None):
         """Assegna un'abilità con le stesse regole dell'acquisto giocatore (costi inclusi)."""

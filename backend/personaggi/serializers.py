@@ -3535,7 +3535,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
             'tipologia', 'tipologia_nome', 'giocante',
             'proprietario', 'proprietario_nome', 'proprietario_username',
             'data_nascita', 'data_morte',
-            'crediti', 'punti_caratteristica',
+            'crediti', 'riserva', 'punti_caratteristica',
             'campagna', 'campagna_nome',
             'era', 'prefettura', 'prefettura_esterna',
             'era_nome', 'prefettura_nome',
@@ -3550,7 +3550,7 @@ class PersonaggioStaffDetailSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             'proprietario', 'proprietario_nome', 'proprietario_username',
-            'crediti', 'punti_caratteristica', 'data_nascita',
+            'crediti', 'riserva', 'punti_caratteristica', 'data_nascita',
             'tipologia_nome', 'giocante', 'campagna_nome',
             'era_nome', 'prefettura_nome', 'avatar_url',
             'qrcode_id', 'qrcode_testo', 'carriere_membership',

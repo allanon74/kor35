@@ -10,7 +10,7 @@ const TransazioniViewer = ({ onLogout, charId }) => {
   const [selectedTransazioneId, setSelectedTransazioneId] = useState(null);
   
   // Prendi l'ID del personaggio selezionato (usa prop se disponibile, altrimenti context)
-  const { selectedCharacterId: contextCharId } = useCharacter();
+  const { selectedCharacterId: contextCharId, transazioniGiocatoreAbilitate, bypassEventoGate } = useCharacter();
   const selectedCharacterId = charId || contextCharId;
   const queryClient = useQueryClient();
   
@@ -32,6 +32,11 @@ const TransazioniViewer = ({ onLogout, charId }) => {
 
   return (
     <div className="transazioni-container">
+      {!transazioniGiocatoreAbilitate && !bypassEventoGate && (
+        <p className="text-sm text-amber-300/90 bg-amber-950/40 border border-amber-800/50 rounded p-3 mb-4">
+          Nuovi scambi e accettazioni sono disponibili solo durante un evento aperto. Puoi consultare lo storico e rifiutare proposte in sospeso.
+        </p>
+      )}
       <div className="flex space-x-4 mb-4 border-b border-gray-700 pb-2">
         <button 
             onClick={() => { setTipo('entrata'); setPage(1); }}

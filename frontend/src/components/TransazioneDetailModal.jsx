@@ -32,7 +32,7 @@ const PropostaBeniList = ({ label, oggetti = [], consumabili = [] }) => {
 };
 
 const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) => {
-  const { selectedCharacterData, selectedCharacterId } = useCharacter();
+  const { selectedCharacterData, selectedCharacterId, transazioniGiocatoreAbilitate, bypassEventoGate } = useCharacter();
   const [transazione, setTransazione] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showPropostaEditor, setShowPropostaEditor] = useState(false);
@@ -56,6 +56,10 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
   };
 
   const handleAccetta = async () => {
+    if (!transazioniGiocatoreAbilitate) {
+      alert('Gli scambi sono disponibili solo durante un evento aperto.');
+      return;
+    }
     if (!window.confirm("Sei sicuro di voler accettare questa transazione? Gli scambi verranno eseguiti immediatamente.")) {
       return;
     }
@@ -160,6 +164,11 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
 
             {/* Content */}
             <div className="p-6 overflow-y-auto grow custom-scrollbar space-y-6">
+              {transazione.stato === 'IN_ATTESA' && !transazioniGiocatoreAbilitate && !bypassEventoGate && (
+                <p className="text-sm text-amber-300/90 bg-amber-950/40 border border-amber-800/50 rounded p-3">
+                  Accettazione e nuove proposte di scambio sono disponibili solo durante un evento aperto.
+                </p>
+              )}
               {/* Info Transazione */}
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <div className="flex justify-between items-center mb-2">
@@ -289,7 +298,7 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                 {canAccetta() && (
                   <button
                     onClick={handleAccetta}
-                    disabled={actionLoading}
+                    disabled={actionLoading || !transazioniGiocatoreAbilitate}
                     className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold text-sm flex items-center gap-2 disabled:opacity-50"
                   >
                     {actionLoading ? (
@@ -300,7 +309,7 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                     Accetta
                   </button>
                 )}
-                {isMioTurno() && (
+                {isMioTurno() && transazioniGiocatoreAbilitate && (
                   <button
                     onClick={() => setShowPropostaEditor(true)}
                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-bold text-sm flex items-center gap-2"

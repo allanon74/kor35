@@ -386,9 +386,11 @@ class ScommesseGeneraCodiceView(APIView):
                 {"error": "Serve la statistica Allibratore (ALL > 0) per generare codici."},
                 status=403,
             )
-        if not personaggio_in_evento_attivo(personaggio):
+        from personaggi.transazioni_evento import GIOCO_LIVE_BLOCCO_MSG, gioco_live_consentito
+
+        if not gioco_live_consentito(user=request.user, campagna=personaggio.campagna):
             return Response(
-                {"error": "I codici allibratore si possono generare solo durante un evento attivo."},
+                {"error": GIOCO_LIVE_BLOCCO_MSG},
                 status=403,
             )
         try:
@@ -409,12 +411,14 @@ class ScommesseMieiCodiciView(APIView):
         if not personaggio:
             return Response({"valore_all": 0, "can_generare": False, "codici": []})
         valore_all = personaggio.get_valore_statistica(ALLIBRATORE_SIGLA)
-        in_evento = personaggio_in_evento_attivo(personaggio) is not None
+        from personaggi.transazioni_evento import gioco_live_consentito
+
+        azioni_ok = gioco_live_consentito(user=request.user, campagna=personaggio.campagna)
         codici = CodiceScommessa.objects.filter(allibratore=personaggio).order_by("-created_at")[:30]
         return Response({
             "valore_all": valore_all,
-            "can_generare": valore_all > 0 and in_evento,
-            "in_evento_attivo": in_evento,
+            "can_generare": valore_all > 0 and azioni_ok,
+            "in_evento_attivo": azioni_ok,
             "codici": CodiceScommessaSerializer(codici, many=True).data,
         })
 

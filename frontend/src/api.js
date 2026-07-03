@@ -1968,6 +1968,9 @@ export const postIscrizioneEventoAnnulla = (body, onLogout) =>
 export const postEventoPremiApplica = (onLogout) =>
   fetchAuthenticated('/api/personaggi/api/evento-premi/applica/', { method: 'POST', body: '{}' }, onLogout);
 
+export const getGiocoEventoStato = (onLogout) =>
+  fetchAuthenticated('/api/personaggi/api/gioco/evento-stato/', { method: 'GET' }, onLogout);
+
 // --- NEGOZI MERCANTE ---
 export const fetchNegoziCorporativi = (charId, onLogout) =>
   fetchAuthenticated(
@@ -2969,6 +2972,17 @@ export const staffPatchPersonaggioSocialProfile = (id, payload, onLogout) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/social-profile/`, {
     method: 'PATCH',
     body: payload instanceof FormData ? payload : JSON.stringify(payload),
+  }, onLogout);
+
+/** Staff: riserva scommesse — saldo e puntate recenti. */
+export const staffGetPersonaggioRiservaScommesse = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/riserva-scommesse/`, { method: 'GET' }, onLogout);
+
+/** Staff: modifica riserva scommesse ({ mode: 'delta'|'set', delta|valore, motivo }). */
+export const staffAdjustPersonaggioRiservaScommesse = (id, payload, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/riserva-scommesse/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   }, onLogout);
 
 /** Staff: aggiungi crediti o PC a un personaggio. */

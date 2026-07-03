@@ -998,7 +998,7 @@ const ScommesseTab = ({ onLogout }) => {
             </div>
             {!canGenerareCodice && (
               <p className="mb-2 text-xs text-amber-100/70">
-                I codici si generano solo durante un evento attivo a cui partecipi.
+                I codici si generano solo durante un evento aperto (staff/master di campagna anche inter-evento).
               </p>
             )}
             <p className="mb-2 text-xs text-amber-100/60">

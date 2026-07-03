@@ -14,7 +14,7 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
   const qrReaderId = "qr-reader-element";
   
   // Prendi il personaggio attivo dal context
-  const { selectedCharacterId } = useCharacter();
+  const { selectedCharacterId, azioniLiveAbilitate, bypassEventoGate } = useCharacter();
 
   const handleScanData = async (decodedText) => {
     // Controlla se un personaggio è selezionato
@@ -151,6 +151,12 @@ const QrTab = ({ onScanSuccess, onLogout, isStealingOnCooldown, cooldownTimer, o
   return (
     <div className="flex flex-col items-center p-4">
       <h2 className="text-2xl font-bold mb-6 text-indigo-400">Scansione QR Code</h2>
+
+      {!azioniLiveAbilitate && !bypassEventoGate && (
+        <div className="w-full max-w-md p-3 mb-4 text-sm text-amber-200/90 bg-amber-950/40 border border-amber-800/50 rounded-lg">
+          Scansione nodi, furti e scambi da QR personaggio sono attivi solo durante un evento aperto.
+        </div>
+      )}
 
       {/* --- NUOVO BLOCCO COOLDOWN --- */}
       {isStealingOnCooldown && (

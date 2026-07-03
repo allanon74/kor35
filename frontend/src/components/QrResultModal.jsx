@@ -343,10 +343,11 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
   const [showScambioModal, setShowScambioModal] = useState(false);
   const [selectedOggetto, setSelectedOggetto] = useState(null);
 
-  const { selectedCharacterData, selectedCharacterId } = useCharacter();
+  const { selectedCharacterData, selectedCharacterId, transazioniGiocatoreAbilitate, bypassEventoGate } = useCharacter();
+  const transazioniAbilitate = transazioniGiocatoreAbilitate;
   
   const handleRuba = async (oggettoId, oggettoNome) => {
-     if (isLoading) return;
+     if (isLoading || !transazioniAbilitate) return;
      setIsLoading(true);
      setMessage('Tentativo di furto in corso...');
      setError('');
@@ -364,6 +365,7 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
   }
 
   const handleScambio = (oggetto) => {
+    if (!transazioniAbilitate) return;
     if (!data.id) {
       alert("Impossibile determinare il personaggio destinatario.");
       return;
@@ -410,6 +412,11 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
       )}
 
       <h3 className="text-2xl font-bold mb-4 flex items-center"><User className="mr-2"/> {data.nome || 'Personaggio'}</h3>
+      {!transazioniAbilitate && !bypassEventoGate && (
+        <p className="text-amber-300/90 text-sm mb-4 bg-amber-950/40 border border-amber-800/50 rounded p-2">
+          Furti e scambi sono disponibili solo durante un evento aperto.
+        </p>
+      )}
       {error && <p className="text-red-400 mb-4 bg-red-900 bg-opacity-30 p-2 rounded">{error}</p>}
       {message && <p className="text-green-400 mb-4 bg-green-900 bg-opacity-30 p-2 rounded">{message}</p>}
       
@@ -431,17 +438,17 @@ const PersonaggioView = ({ data, qrcodeId, onLogout, onStealSuccess }) => {
               </button>
               <button 
                 onClick={() => handleRuba(obj.id, obj.nome)}
-                disabled={isLoading}
-                className={`p-2 bg-red-600 rounded hover:bg-red-700 ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Ruba"
+                disabled={isLoading || !transazioniAbilitate}
+                className={`p-2 bg-red-600 rounded hover:bg-red-700 ${isLoading || !transazioniAbilitate ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={transazioniAbilitate ? 'Ruba' : 'Disponibile solo in evento aperto'}
               >
                 {isLoading ? <Loader size={18} className="animate-spin" /> : <Bot size={18} />}
               </button>
               <button 
                 onClick={() => handleScambio(obj)}
-                disabled={isLoading || selectedCharacterId === data.id}
-                className={`p-2 bg-indigo-600 rounded hover:bg-indigo-700 ${isLoading || selectedCharacterId === data.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title="Proponi Scambio"
+                disabled={isLoading || selectedCharacterId === data.id || !transazioniAbilitate}
+                className={`p-2 bg-indigo-600 rounded hover:bg-indigo-700 ${isLoading || selectedCharacterId === data.id || !transazioniAbilitate ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={transazioniAbilitate ? 'Proponi Scambio' : 'Disponibile solo in evento aperto'}
               >
                 <ArrowRightLeft size={18} />
               </button>

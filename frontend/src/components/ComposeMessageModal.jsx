@@ -3,6 +3,7 @@ import { Dialog, DialogPanel, DialogTitle, DialogBackdrop } from '@headlessui/re
 import { searchPersonaggi, fetchAuthenticated, getPersonaggioDetail } from '../api';
 import RichTextEditor from './RichTextEditor';
 import { Shield, User, X, UserCircle, Eye, EyeOff } from 'lucide-react';
+import { useCharacter } from './CharacterContext';
 
 const filterTransferableItems = (oggetti = []) =>
   (oggetti || []).filter(
@@ -21,6 +22,8 @@ const ComposeMessageModal = ({
   currentCredits = 0,
   isCampaignStaffer = false,
 }) => {
+  const { transazioniGiocatoreAbilitate, bypassEventoGate } = useCharacter();
+  const transferConsentito = transazioniGiocatoreAbilitate;
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [selectedRecipient, setSelectedRecipient] = useState(null);
@@ -196,6 +199,11 @@ const ComposeMessageModal = ({
     if (!cleanText && !testo.includes('<img')) {
         setError("Il messaggio non può essere vuoto.");
         return;
+    }
+
+    if (includeTransfer && !transferConsentito) {
+      setError('Allegati crediti/oggetti disponibili solo durante un evento aperto.');
+      return;
     }
 
     const parsedCrediti = includeTransfer ? Math.max(0, Number(creditiToSend || 0)) : 0;
@@ -438,10 +446,16 @@ const ComposeMessageModal = ({
 
             {!isStaffMessage && (
               <div className="rounded border border-gray-700 bg-gray-900/40 p-3 space-y-3">
-                <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-200 cursor-pointer">
+                {!transferConsentito && !bypassEventoGate && (
+                  <p className="text-xs text-amber-300/90">
+                    Crediti e oggetti via messaggio sono disponibili solo durante un evento aperto.
+                  </p>
+                )}
+                <label className={`inline-flex items-center gap-2 text-sm font-medium text-gray-200 ${transferConsentito ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
                   <input
                     type="checkbox"
                     checked={includeTransfer}
+                    disabled={!transferConsentito}
                     onChange={(e) => {
                       const enabled = e.target.checked;
                       setIncludeTransfer(enabled);
@@ -450,7 +464,7 @@ const ComposeMessageModal = ({
                         setSelectedItemIds([]);
                       }
                     }}
-                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 disabled:opacity-50"
                   />
                   Allega crediti e/o oggetti
                 </label>

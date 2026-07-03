@@ -21,7 +21,8 @@ import {
   setActiveCampaignSlug,
   normCampaignSlug,
   postEventoPremiApplica,
-} from '../api'; 
+  getGiocoEventoStato,
+} from '../api';
 import NotificationPopup from './NotificationPopup';
 import { putOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
 import { activateWebPush, isWebPushSupported } from '../lib/webpush';
@@ -108,6 +109,15 @@ export const CharacterProvider = ({ children, onLogout }) => {
   const canUseWizardTest = isGlobalSuperuser || isDjangoStaff || isCampaignStaffer;
 
   const [viewAll, setViewAll] = useState(false);
+  const [giocoEventoStato, setGiocoEventoStato] = useState({
+    evento_aperto: false,
+    evento_titolo: null,
+    azioni_live_abilitate: false,
+    bypass_evento_gate: false,
+    transazioni_giocatore_abilitate: false,
+    nodo_scan_abilitato: false,
+    allibratore_codici_abilitati: false,
+  });
   
   // --- NUOVO STATO PER I TIMER (GESTIONE GLOBALE) ---
   const [activeTimers, setActiveTimers] = useState({});
@@ -155,6 +165,34 @@ export const CharacterProvider = ({ children, onLogout }) => {
     };
     loadCampaigns();
   }, [onLogout, activeCampaign]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadGiocoEventoStato = async () => {
+      try {
+        const data = await getGiocoEventoStato(onLogout);
+        if (!cancelled && data && typeof data === 'object') {
+          setGiocoEventoStato({
+            evento_aperto: !!data.evento_aperto,
+            evento_titolo: data.evento_titolo || null,
+            azioni_live_abilitate: !!data.azioni_live_abilitate,
+            bypass_evento_gate: !!data.bypass_evento_gate,
+            transazioni_giocatore_abilitate: !!data.transazioni_giocatore_abilitate,
+            nodo_scan_abilitato: !!data.nodo_scan_abilitato,
+            allibratore_codici_abilitati: !!data.allibratore_codici_abilitati,
+          });
+        }
+      } catch {
+        /* rete: mantieni ultimo stato noto */
+      }
+    };
+    loadGiocoEventoStato();
+    const interval = setInterval(loadGiocoEventoStato, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [onLogout]);
 
   useEffect(() => {
     const loadInitialTimers = async () => {
@@ -226,6 +264,22 @@ export const CharacterProvider = ({ children, onLogout }) => {
           await refetchPersonaggiList();
           if (selectedCharacterId) {
             await refetchCharacterDetail();
+          }
+          try {
+            const stato = await getGiocoEventoStato(onLogout);
+            if (stato && typeof stato === 'object') {
+              setGiocoEventoStato({
+                evento_aperto: !!stato.evento_aperto,
+                evento_titolo: stato.evento_titolo || null,
+                azioni_live_abilitate: !!stato.azioni_live_abilitate,
+                bypass_evento_gate: !!stato.bypass_evento_gate,
+                transazioni_giocatore_abilitate: !!stato.transazioni_giocatore_abilitate,
+                nodo_scan_abilitato: !!stato.nodo_scan_abilitato,
+                allibratore_codici_abilitati: !!stato.allibratore_codici_abilitati,
+              });
+            }
+          } catch {
+            /* noop */
           }
         }
       } catch {
@@ -701,6 +755,13 @@ export const CharacterProvider = ({ children, onLogout }) => {
     handleDeleteMessage,
     subscribeToPush,
     isWebPushSupported,
+    giocoEventoStato,
+    eventoAperto: !!giocoEventoStato.evento_aperto,
+    azioniLiveAbilitate: !!giocoEventoStato.azioni_live_abilitate,
+    bypassEventoGate: !!giocoEventoStato.bypass_evento_gate,
+    transazioniGiocatoreAbilitate: !!giocoEventoStato.azioni_live_abilitate,
+    nodoScanAbilitato: !!giocoEventoStato.nodo_scan_abilitato,
+    allibratoreCodiciAbilitati: !!giocoEventoStato.allibratore_codici_abilitati,
   };
 
   return (

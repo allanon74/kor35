@@ -1557,6 +1557,9 @@ class QrCodeDetailView(APIView):
                     {"error": "Parametro personaggio_id richiesto per la scansione nodo."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            blocked = _gioco_live_bloccato_response(request, campagna=scanner_pg.campagna)
+            if blocked:
+                return blocked
             res = qr_logic.applica_effetto_nodo_scan(scanner_pg, nodo)
             if not res.get("ok"):
                 if res.get("error") == "nodo_in_cooldown":
@@ -1925,6 +1928,9 @@ class TransazioneRichiediView(APIView):
         try:
             personaggio_richiedente = Personaggio.objects.get(proprietario=request.user)
         except Personaggio.DoesNotExist: return Response({"error": "Nessun personaggio trovato per questo utente (richiedente)."}, status=status.HTTP_404_NOT_FOUND)
+        blocked = _gioco_live_bloccato_response(request, campagna=personaggio_richiedente.campagna)
+        if blocked:
+            return blocked
         serializer = TransazioneCreateSerializer(data=request.data, context={'richiedente': personaggio_richiedente})
         if serializer.is_valid():
             transazione = serializer.save()
@@ -1938,6 +1944,9 @@ class TransazioneConfermaView(APIView):
         try:
             personaggio_mittente = Personaggio.objects.get(proprietario=request.user)
         except Personaggio.DoesNotExist: return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
+        blocked = _gioco_live_bloccato_response(request, campagna=personaggio_mittente.campagna)
+        if blocked:
+            return blocked
         try:
             # Supporta sia sistema legacy che nuovo
             transazione = TransazioneSospesa.objects.filter(
@@ -1967,6 +1976,9 @@ class TransazioneAvanzataCreateView(APIView):
             iniziatore = Personaggio.objects.get(proprietario=request.user)
         except Personaggio.DoesNotExist:
             return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
+        blocked = _gioco_live_bloccato_response(request, campagna=iniziatore.campagna)
+        if blocked:
+            return blocked
         
         from .serializers import TransazioneAvanzataCreateSerializer
         serializer = TransazioneAvanzataCreateSerializer(data=request.data, context={'iniziatore': iniziatore})
@@ -2019,6 +2031,9 @@ class PropostaTransazioneCreateView(APIView):
             autore = Personaggio.objects.get(proprietario=request.user)
         except Personaggio.DoesNotExist:
             return Response({"error": "Nessun personaggio trovato per questo utente."}, status=status.HTTP_404_NOT_FOUND)
+        blocked = _gioco_live_bloccato_response(request, campagna=autore.campagna)
+        if blocked:
+            return blocked
         
         try:
             transazione = TransazioneSospesa.objects.filter(
@@ -2259,6 +2274,9 @@ class RubaView(APIView):
                 {"error": "Nessun personaggio trovato per questo utente (usa personaggio_id se ne hai più d'uno)."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        blocked = _gioco_live_bloccato_response(request, campagna=personaggio_richiedente.campagna)
+        if blocked:
+            return blocked
         serializer = RubaSerializer(data=request.data, context={"richiedente": personaggio_richiedente})
         if serializer.is_valid():
             try:
@@ -2379,6 +2397,25 @@ class EventoPremiApplicaView(APIView):
 
         data = applica_premi_presenza_eventi(request.user)
         return Response(data, status=status.HTTP_200_OK)
+
+
+class EventoGiocoStatoView(APIView):
+    """GET: evento aperto e flag azioni live (furti, scambi, nodi, allibratore) lato client."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        from .transazioni_evento import gioco_stato_evento
+
+        return Response(gioco_stato_evento(request), status=status.HTTP_200_OK)
+
+
+def _gioco_live_bloccato_response(request, campagna=None):
+    from .transazioni_evento import GIOCO_LIVE_BLOCCO_MSG, gioco_live_consentito
+
+    if gioco_live_consentito(user=getattr(request, "user", None), campagna=campagna):
+        return None
+    return Response({"error": GIOCO_LIVE_BLOCCO_MSG}, status=status.HTTP_403_FORBIDDEN)
 
 
 class PunteggiListView(generics.ListAPIView):
@@ -3046,6 +3083,15 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
             raise serializers.ValidationError(
                 {"detail": "Non puoi allegare crediti o oggetti nei messaggi allo staff."}
             )
+
+        if not is_staff_message and (crediti_da_inviare > 0 or oggetti_ids):
+            from .transazioni_evento import GIOCO_LIVE_BLOCCO_MSG, gioco_live_consentito
+
+            if not gioco_live_consentito(
+                user=self.request.user,
+                campagna=personaggio_mittente.campagna,
+            ):
+                raise serializers.ValidationError({"detail": GIOCO_LIVE_BLOCCO_MSG})
 
         if not is_staff_message and not validated.get('destinatario_personaggio'):
             raise serializers.ValidationError({"destinatario_id": "Destinatario obbligatorio."})

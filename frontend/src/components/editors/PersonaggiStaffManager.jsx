@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Users, Search, X, QrCode, Briefcase, Coins, FileText, StickyNote, Loader2, Plus, Skull, Heart, RotateCcw,
-  Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive, Award, Dna,
+  Sparkles, Watch, Package, ScrollText, Calendar, Mail, Wand2, Archive, Award, Dna, Trophy,
 } from 'lucide-react';
 import StaffRazzaAuraTab from './StaffRazzaAuraTab';
+import StaffRiservaScommesseTab from './StaffRiservaScommesseTab';
 import RichTextEditor from '../RichTextEditor';
 import StaffCostumePhotosSection from '../StaffCostumePhotosSection';
 import StaffQrTab from '../StaffQrTab';
@@ -65,6 +66,7 @@ const TABS = [
   { id: 'abilita', label: 'Abilità', icon: Award },
   { id: 'razza-aura', label: 'Razza / Aura', icon: Dna },
   { id: 'risorse', label: 'Risorse', icon: Coins },
+  { id: 'riserva-scommesse', label: 'Riserva scommesse', icon: Trophy },
   { id: 'inventario', label: 'Inventario', icon: Package },
   { id: 'instafame', label: 'InstaFame', icon: Sparkles },
   { id: 'watch', label: 'Watch', icon: Watch },
@@ -1000,6 +1002,17 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                         </div>
                       </div>
                     </div>
+                  )}
+
+                  {modalTab === 'riserva-scommesse' && detail && (
+                    <StaffRiservaScommesseTab
+                      personaggioId={detail.id}
+                      onLogout={onLogout}
+                      onDetailUpdated={(updated) => {
+                        setDetail(updated);
+                        setMessage('Riserva scommesse aggiornata.');
+                      }}
+                    />
                   )}
 
                   {modalTab === 'inventario' && (
