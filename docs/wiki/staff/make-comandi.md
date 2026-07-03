@@ -78,14 +78,23 @@ Master = `ENV=prod`. Replica = `dev-office`, `mirror`.
 
 ---
 
-## Certificati TLS (prod → mirror)
+## Certificati TLS
+
+| Dominio | Nodo | Cartella | Automazione |
+|---------|------|----------|-------------|
+| `www.kor35.it` | prod + mirror | `certs/` | `make install-prod-tls-automation ENV=prod` + timer sync mirror |
+| `kor35.ddns.net` | solo mirror | `certs_ddns/` | `make install-mirror-ddns-tls ENV=mirror` |
 
 | Comando | Descrizione |
 |---------|-------------|
-| `make sync-certs-to-mirror ENV=prod` | Su prod: copia certificati locali sul mirror Pi |
+| `make sync-certs-to-mirror ENV=prod` | Su prod: copia `certs/` sul mirror Pi |
 | `make sync-certs-prod-to-mirror` | Da PC dev: relay SSH prod → mirror |
+| `make refresh-prod-docker-tls ENV=prod` | Su prod: LE → `nginx-docker/certs/` |
+| `make install-prod-tls-automation ENV=prod` | Webroot certbot + hook + timer mirror |
+| `make install-mirror-ddns-tls ENV=mirror` | Sul Pi: certbot `kor35.ddns.net` + timer |
+| `make mirror-renew-ddns-tls ENV=mirror FORCE=1` | Rinnovo immediato DDNS sul Pi |
 
-Script: `scripts/sync_tls_certs_to_mirror.sh`. Host mirror: `pi@kor35.ddns.net:10022`.
+Script: `scripts/sync_tls_certs_to_mirror.sh`, `scripts/mirror_renew_ddns_tls.sh`. Host mirror: `pi@kor35.ddns.net:10022`.
 
 ---
 

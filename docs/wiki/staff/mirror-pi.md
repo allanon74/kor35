@@ -78,7 +78,36 @@ make mirror-network-check ENV=mirror
 
 ### Certificati TLS (prod → mirror)
 
-**Da questa postazione dev** (SSH a `www.kor35.it` e `kor35.ddns.net`):
+Due domini distinti:
+
+| Dominio | Dove vive il cert | Rinnovo |
+|---------|-------------------|---------|
+| `www.kor35.it` | prod (`certs/`) + copia mirror (`certs/`) | certbot su **prod** (webroot) |
+| `kor35.ddns.net` | solo mirror (`certs_ddns/`) | certbot sul **Pi** (webroot) |
+
+**Fix immediato cert scaduto su `kor35.ddns.net`** (sul Pi, con rete/router):
+
+```bash
+cd /home/pi/kor35-replica
+git pull
+sudo make install-mirror-ddns-tls ENV=mirror FORCE=1
+# oppure solo rinnovo se automazione già installata:
+sudo make mirror-renew-ddns-tls ENV=mirror FORCE=1
+```
+
+Se SSH DDNS non risponde: LAN `ssh pi@192.168.1.200` o WiFi emergenza `ssh pi@10.42.0.1`.
+
+**Automazione prod** (dopo deploy del monorepo):
+
+```bash
+cd /srv/kor35
+git pull
+sudo make install-prod-tls-automation ENV=prod
+# copia subito www.kor35.it sul mirror:
+make sync-certs-to-mirror ENV=prod
+```
+
+**Da questa postazione dev** (relay prod → mirror, solo `www.kor35.it`):
 
 ```bash
 cp config/env_templates/sync-mirror-certs.env.example .env.sync-mirror-certs
@@ -87,13 +116,9 @@ make sync-certs-prod-to-mirror
 make sync-certs-prod-to-mirror DRY_RUN=1    # anteprima
 ```
 
-**Sul server prod** (cert già in `config/docker/nginx-docker/certs/`):
+Script: `scripts/sync_tls_certs_to_mirror.sh`, `scripts/mirror_renew_ddns_tls.sh`, `scripts/install_prod_tls_automation.sh` — reload nginx al termine.
 
-```bash
-make sync-certs-to-mirror ENV=prod
-```
-
-Script: `scripts/sync_tls_certs_to_mirror.sh` — reload nginx sul mirror al termine.
+Timer systemd: `kor35-prod-cert-sync-mirror.timer` (prod), `kor35-mirror-ddns-cert-renew.timer` (Pi).
 
 In **modalità evento** offline: `http://www.kor35.it` (HTTP). HTTPS richiede cert aggiornati sul Pi.
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=KOR35 Prod - Scheduler sync certificati TLS verso mirror
+
+[Timer]
+OnBootSec=15min
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=300s
+
+[Install]
+WantedBy=timers.target

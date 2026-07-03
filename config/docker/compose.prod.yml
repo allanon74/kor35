@@ -55,3 +55,4 @@ services:
       - ./nginx-docker/static_data:/app/static
       - ./nginx-docker/media_data:/app/media
       - ./nginx-docker/certs:/etc/nginx/certs:ro
+      - ./nginx-docker/certbot_webroot:/var/www/certbot:ro

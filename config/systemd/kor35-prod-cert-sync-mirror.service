@@ -1,0 +1,19 @@
+[Unit]
+Description=KOR35 Prod - Sync certificati TLS verso mirror Pi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/srv/kor35
+
+# Richiede chiave SSH deploy → pi@kor35.ddns.net (porta 10022) in ~/.ssh/
+ExecStart=/srv/kor35/scripts/sync_tls_certs_to_mirror.sh
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

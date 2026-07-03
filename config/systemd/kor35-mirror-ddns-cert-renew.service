@@ -1,0 +1,18 @@
+[Unit]
+Description=KOR35 Mirror - Rinnovo certificato TLS kor35.ddns.net
+After=network-online.target docker.service kor35-mirror-stack.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/home/pi/kor35-replica
+
+ExecStart=/home/pi/kor35-replica/scripts/mirror_renew_ddns_tls.sh
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

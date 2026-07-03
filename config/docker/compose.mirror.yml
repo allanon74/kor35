@@ -43,6 +43,7 @@ services:
       - ./nginx-docker/media_data:/app/media
       - ./nginx-docker/certs:/etc/nginx/certs:ro
       - ./nginx-docker/certs_ddns:/etc/nginx/certs_ddns:ro
+      - ./nginx-docker/certbot_webroot:/var/www/certbot:ro
 
   omada-controller:
     # Pin versione: evita downgrade involontari (es. latest -> 5.x) che bloccano l'avvio

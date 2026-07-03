@@ -1,0 +1,12 @@
+[Unit]
+Description=KOR35 Mirror - Scheduler rinnovo TLS kor35.ddns.net
+
+[Timer]
+OnBootSec=10min
+# Due passate al giorno (allineato al timer snap certbot)
+OnCalendar=*-*-* 03,15:00:00
+Persistent=true
+RandomizedDelaySec=300s
+
+[Install]
+WantedBy=timers.target
