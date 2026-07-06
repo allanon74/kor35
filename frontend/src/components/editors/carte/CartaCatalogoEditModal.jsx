@@ -1,18 +1,18 @@
 import React, { useMemo } from 'react';
-import CardFrame from '../../carte/CardFrame';
-import { buildTemaEnergieFromPunteggi } from '../../carte/carteEnergyAuraMap';
-import { CardRulesPreview } from '../../carte/cardTextBlocks';
-import { CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../../carte/carteConstants';
+import CardFrame from '../../../carte/CardFrame';
+import { buildTemaEnergieFromPunteggi } from '../../../carte/carteEnergyAuraMap';
+import { CardRulesPreview } from '../../../carte/cardTextBlocks';
+import { CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../../../carte/carteConstants';
 import {
   LabeledField,
   StaffFieldGrid,
   StaffModal,
   StaffSection,
   staffInputClass,
-} from '../../staff/StaffCrudUi';
-import BonusEquipEditor from './BonusEquipEditor';
-import CartaEffectScriptsEditor from './CartaEffectScriptsEditor';
-import StatModInline from './inlines/StatModInline';
+} from '../../../staff/StaffCrudUi';
+import BonusEquipEditor from '../BonusEquipEditor';
+import CartaEffectScriptsEditor from '../CartaEffectScriptsEditor';
+import StatModInline from '../inlines/StatModInline';
 
 function CartaImmagineUpload({
   label,
