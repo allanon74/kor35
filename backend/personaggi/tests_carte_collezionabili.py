@@ -10,10 +10,15 @@ from django.test import TestCase
 from personaggi.carte_collezionabili_models import (
     BustinaCarte,
     ConfigurazioneCarteCollezionabili,
+    CARTA_ENERGIA_INNATA,
+    CARTA_ENERGIA_MAGICA,
     CARTA_ENERGIA_MARZIALE,
     CARTA_ENERGIA_SACRA,
     CARTA_ENERGIA_TECNOLOGICA,
     CARTA_RARITA_COMUNE,
+    CARTA_TIPO_EVENTO,
+    CARTA_TIPO_LUOGO,
+    CARTA_TIPO_OGGETTO,
     CARTA_TIPO_PERSONAGGIO,
     CARTE_ACCESSO_OFF,
     CARTE_ACCESSO_OPEN,
@@ -22,18 +27,23 @@ from personaggi.carte_collezionabili_models import (
     CartaPosseduta,
     EspansioneCarte,
     KeywordCarta,
+    MAZZO_DUELLO_SIZE,
     ReliquiarioSlot,
 )
 from personaggi.carte_collezionabili_service import (
     _pool_carte,
     apri_bustina,
     build_collezione_payload,
+    descrizione_regole_mazzo_duello,
     equip_reliquio,
     is_carte_collezionabili_abilitate,
     get_tema_energie_carte,
     lista_keywords_campagna,
     personaggio_puo_accedere_carte,
+    salva_mazzo_duello,
+    valida_leader_duello,
     valida_mazzo_duello,
+    valida_setup_duello,
 )
 from personaggi.models import AURA, Campagna, Personaggio, Punteggio, TipologiaPersonaggio
 from rest_framework import status
@@ -128,6 +138,14 @@ class CarteCollezionabiliServiceTests(TestCase):
         slot = ReliquiarioSlot.objects.get(personaggio=self.pg, slot_index=0)
         self.assertEqual(slot.carta_posseduta_id, cp.id)
 
+    def test_equip_reliquio_stessa_carta_catalogo(self):
+        carta = CartaCollezionabile.objects.first()
+        cp1 = CartaPosseduta.objects.create(personaggio=self.pg, carta=carta)
+        cp2 = CartaPosseduta.objects.create(personaggio=self.pg, carta=carta)
+        equip_reliquio(self.pg, 0, str(cp1.id))
+        with self.assertRaises(ValidationError):
+            equip_reliquio(self.pg, 1, str(cp2.id))
+
     def test_build_collezione(self):
         cp = CartaPosseduta.objects.create(
             personaggio=self.pg,
@@ -137,6 +155,8 @@ class CarteCollezionabiliServiceTests(TestCase):
         payload = build_collezione_payload(self.pg)
         self.assertEqual(len(payload["carte"]), 1)
         self.assertIn("legami_attivi", payload)
+        self.assertIn("regole_mazzo", payload)
+        self.assertGreaterEqual(len(payload["regole_mazzo"]), 5)
         self.assertTrue(payload["puo_accedere"])
 
     def test_valida_mazzo_insufficiente(self):
@@ -422,3 +442,135 @@ class CarteEsempioSeedTests(TestCase):
         self.assertEqual(bustina.espansione.slug, "sette-elegie-demo")
         self.assertEqual(bustina.carte_per_bustina, 5)
         self.assertIsNotNone(bustina.qr_code_id)
+
+
+class ValidazioneMazzoDuelloTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="mazzo_val", password="x")
+        self.campagna = Campagna.objects.create(slug="mazzo-val", nome="Mazzo Val", attiva=True)
+        tipo = TipologiaPersonaggio.objects.create(nome="Umano")
+        self.pg = Personaggio.objects.create(
+            nome="Tester",
+            proprietario=self.user,
+            campagna=self.campagna,
+            tipologia=tipo,
+        )
+
+    def _carta(self, codice, tipo, energia, nome=None):
+        c = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            codice=codice,
+            nome=nome or codice,
+            tipo=tipo,
+            energia=energia,
+            rarita=CARTA_RARITA_COMUNE,
+            attacco=2 if tipo == CARTA_TIPO_PERSONAGGIO else None,
+            salute=2 if tipo == CARTA_TIPO_PERSONAGGIO else None,
+            costo_gioco=1,
+        )
+        return CartaPosseduta.objects.create(personaggio=self.pg, carta=c)
+
+    def _mazzo_valido_ids(self):
+        specs = (
+            [(CARTA_TIPO_PERSONAGGIO, CARTA_ENERGIA_MARZIALE)] * 4
+            + [(CARTA_TIPO_PERSONAGGIO, CARTA_ENERGIA_SACRA)] * 4
+            + [(CARTA_TIPO_LUOGO, CARTA_ENERGIA_SACRA)] * 2
+            + [(CARTA_TIPO_EVENTO, CARTA_ENERGIA_SACRA)] * 3
+            + [(CARTA_TIPO_OGGETTO, CARTA_ENERGIA_MARZIALE)] * 2
+        )
+        return [str(self._carta(f"MV-{i}", t, e).id) for i, (t, e) in enumerate(specs)]
+
+    def _leader_id(self):
+        return str(
+            self._carta(
+                f"MV-LEADER-{id(self)}",
+                CARTA_TIPO_PERSONAGGIO,
+                CARTA_ENERGIA_MARZIALE,
+                nome="Leader test",
+            ).id
+        )
+
+    def test_mazzo_valido_regolamento(self):
+        ok, errs = valida_setup_duello(self._mazzo_valido_ids(), self._leader_id(), self.pg)
+        self.assertTrue(ok, errs)
+
+    def test_descrizione_regole_non_vuota(self):
+        regole = descrizione_regole_mazzo_duello()
+        self.assertGreaterEqual(len(regole), 5)
+        self.assertTrue(any("8" in r for r in regole))
+
+    def test_troppo_pochi_personaggi(self):
+        ids = self._mazzo_valido_ids()
+        extra_evt1 = str(self._carta("EVT-X1", CARTA_TIPO_EVENTO, CARTA_ENERGIA_SACRA).id)
+        extra_evt2 = str(self._carta("EVT-X2", CARTA_TIPO_EVENTO, CARTA_ENERGIA_SACRA).id)
+        bad = [extra_evt1, extra_evt2] + ids[2:]
+        ok, errs = valida_mazzo_duello(bad, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("Personaggi" in e for e in errs))
+
+    def test_troppe_terre(self):
+        ids = self._mazzo_valido_ids()
+        extra_luo1 = str(self._carta("LUO-3", CARTA_TIPO_LUOGO, CARTA_ENERGIA_SACRA).id)
+        extra_luo2 = str(self._carta("LUO-4", CARTA_TIPO_LUOGO, CARTA_ENERGIA_SACRA).id)
+        # 2 terre nel mazzo valido + 2 extra al posto di 1 effetto e 1 equip
+        bad = ids[:11] + [extra_luo1, extra_luo2] + ids[13:]
+        ok, errs = valida_mazzo_duello(bad, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("Terre" in e for e in errs))
+
+    def test_troppe_aure(self):
+        ids = []
+        energie = [
+            CARTA_ENERGIA_MARZIALE,
+            CARTA_ENERGIA_TECNOLOGICA,
+            CARTA_ENERGIA_INNATA,
+            CARTA_ENERGIA_MAGICA,
+        ]
+        for i in range(MAZZO_DUELLO_SIZE):
+            cp = self._carta(f"A4-{i}", CARTA_TIPO_PERSONAGGIO, energie[i % 4])
+            ids.append(str(cp.id))
+        ok, errs = valida_mazzo_duello(ids, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("aure" in e.lower() for e in errs))
+
+    def test_manca_aura_soprannaturale(self):
+        ids = [str(self._carta(f"NAT-{i}", CARTA_TIPO_PERSONAGGIO, CARTA_ENERGIA_MARZIALE).id)
+               for i in range(MAZZO_DUELLO_SIZE)]
+        ok, errs = valida_mazzo_duello(ids, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("Soprannaturale" in e for e in errs))
+
+    def test_equip_senza_personaggio_aura(self):
+        ids = self._mazzo_valido_ids()
+        cp_mag = self._carta("OGG-MAG", CARTA_TIPO_OGGETTO, CARTA_ENERGIA_MAGICA)
+        bad = ids[:14] + [str(cp_mag.id)]
+        ok, errs = valida_mazzo_duello(bad, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("Equipaggiamento" in e and "Magica" in e for e in errs))
+
+    def test_leader_obbligatorio(self):
+        ok, errs = valida_leader_duello(None, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("Leader" in e for e in errs))
+
+    def test_leader_non_nel_mazzo(self):
+        ids = self._mazzo_valido_ids()
+        ok, errs = valida_leader_duello(ids[0], self.pg, ids)
+        self.assertFalse(ok)
+        self.assertTrue(any("non può essere incluso" in e for e in errs))
+
+    def test_salva_mazzo_con_leader(self):
+        ConfigurazioneCarteCollezionabili.objects.create(
+            campagna=self.campagna,
+            accesso_modo=CARTE_ACCESSO_OPEN,
+            abilitata=True,
+        )
+        leader_id = self._leader_id()
+        res = salva_mazzo_duello(
+            self.pg,
+            self._mazzo_valido_ids(),
+            leader_carta_posseduta_id=leader_id,
+            nome="Test leader",
+        )
+        mazzo = next(m for m in res["mazzi"] if m["nome"] == "Test leader")
+        self.assertEqual(mazzo["leader_carta_posseduta_id"], leader_id)

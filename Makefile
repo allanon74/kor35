@@ -54,7 +54,7 @@ help:
 	@echo "  make pilot-tick-loop ENV=dev-home # worker tick manuale foreground (debug)"
 	@echo "  make pilot-tick-stop ENV=dev-home # disabilita tick runtime (flag)"
 	@echo "  make seed-componenti-nave ENV=dev-home  # placeholder catalogo 10 componenti (once per nodo)"
-	@echo "  make seed-carte-esempio ENV=dev-home    # 20 carte demo Sette Elegie + keyword MVP"
+	@echo "  make seed-carte-esempio ENV=dev-home    # 20 carte demo Sette Elegie + keyword MVP + combo reliquiario"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make deploy-be ENV=prod      # rebuild backend/daphne + restart + migrate + collectstatic"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
@@ -346,6 +346,13 @@ seed-carte-esempio:
 	  $(if $(CAMPAGNA_SLUG),--campagna-slug $(CAMPAGNA_SLUG),) \
 	  $(if $(filter 1,$(CARTE_ESEMPIO_SKIP_IF_COMPLETE)),--skip-if-complete,) \
 	  $(if $(filter 1,$(CARTE_ESEMPIO_FORCE)),--force,)
+
+CARTE_COMBO_FORCE ?= 0
+seed-carte-combo-reliquiario:
+	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py seed_carte_combo_reliquiario \
+	  $(if $(CAMPAGNA_SLUG),--campagna-slug $(CAMPAGNA_SLUG),) \
+	  $(if $(filter 1,$(CARTE_COMBO_FORCE)),--force,)
 
 diagnose-carte:
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py diagnose_carte_collezionabili \

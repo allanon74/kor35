@@ -1,75 +1,80 @@
-# Regolamento carte — bozza MVP
+# Regolamento carte — accesso e app
 
-> Documento di lavoro. Aggiorna questa pagina dalla Wiki o riesegui la sincronizzazione da staff.
+> **Regole complete di gioco:** vedi la pagina **[Regole di gioco — Sette Elegie](carte-regolamento-gioco)** (mazzo, mana, combattimento, color pie).
 
-## Obiettivo del gioco
+## Obiettivo (sintesi)
 
-**Cronache delle Sette Elegie** è un gioco di carte collezionabili legato al mondo KOR35. I personaggi ottengono carte da bustine, le equipaggiano nel **Reliquiario** per bonus passivi e possono sfidarsi in **duelli live**.
+**Cronache delle Sette Elegie** è il gioco di carte collezionabili di KOR35: collezione, reliquiario, bustine e **duelli** tra personaggi giocanti. Vince chi porta l’avversario a **0 punti vita** (partenza **20**).
 
-## Struttura collezione
+## Dove leggere le regole
 
-- **Espansioni**: insiemi tematici di carte (ogni espansione ha le proprie bustine).
-- **Bustine**: pacchetti acquistabili con crediti in-game o tramite QR evento.
+| Pagina Wiki | Contenuto |
+|-------------|-----------|
+| **Regole di gioco** | Regolamento completo (mazzo, Leader, mana, combattimento, aure) |
+| *Questa pagina* | Collezione, duello in app, keyword, economia bustine |
+
+## Collezione ed espansioni
+
+- **Espansioni**: set tematici di carte e bustine dedicate.
+- **Bustine**: acquisto con crediti in-game o QR evento.
 - **Rarità**: Comune → Non comune → Rara → Epica → Leggendaria → Unica.
 
-## Mazzo da duello
+## Mazzo da duello (validazione app)
 
-- **15 carte** esattamente.
-- Almeno **2 energie diverse** nel mazzo.
-- Almeno **2 carte Naturali** (Marziale, Tecnologica, Innata) e **2 Soprannaturali**.
-- Massimo **6 carte** per singola energia.
-- Carte **Uniche**: 1 copia; altre carte al massimo **2 copie** se `duplicabile`.
+L’app controlla il mazzo da **15 carte** (il **Leader** è scelto a parte — vedi [regolamento di gioco](carte-regolamento-gioco)):
 
-## Duello live (MVP)
+- **15 carte** esattamente nel mazzo selezionato.
+- **1 Leader** (Personaggio comandante) scelto a parte — non fa parte delle 15 carte.
+- Almeno **8 Personaggi**.
+- Massimo **2 Terre**.
+- Massimo **3 aure diverse** (le Terre non contano nell’aura).
+- Almeno un’aura **Naturale** (Marziale, Tecnologica, Innata) e una **Soprannaturale** (Magica, Sacra, Psionica, Arcana).
+- Per giocare **Equipaggiamenti** o **Effetti** di un’aura serve almeno un **Personaggio** di quell’aura nel mazzo.
+- Copie: **1** (o **2** se la carta è `duplicabile`).
 
-- **Influenza** iniziale: 20 per giocatore. Vince chi porta l'influenza avversaria a 0.
-- Turni alternati; azioni: gioca carta, attacca, passa.
-- Sincronizzazione in tempo reale via app.
+Le regole di gioco complete (Leader, mana, combattimento) sono nel [regolamento di gioco](carte-regolamento-gioco).
+
+## Duello in app
+
+- **Influenza** (= punti vita): 20 per giocatore.
+- Turni alternati; azioni principali: gioca carta, attacca, passa, rispondi a effetti (`effect_choice`).
+- Sync in tempo reale (WebSocket).
 
 ### Avvio partita
 
-| Modalità gioco | Come si inizia una partita |
-|----------------|----------------------------|
-| **TEST** | Sfida a distanza: scegli l'avversario da una lista (tab Carte). Puoi accettare anche con codice invito. |
-| **OPEN** (produzione) | **Apri scontro** (tab Carte) → mostra il **QR della sessione** → l'avversario lo scansiona e **si unisce** → fase **pre-partita** (mazzo, posta, pronto) → partita. |
+| Modalità | Come si inizia |
+|----------|----------------|
+| **TEST** | Sfida da lista avversari (tab Carte). |
+| **OPEN** | **Apri scontro** → QR sessione → avversario si unisce → **prematch** (mazzo, posta, pronto) → partita. |
 
-In OPEN la posta può essere 0 o in CR (riserva scommesse o crediti). Modalità **live** (turni in app) o **manuale** (tavolo fisico).
+Posta opzionale in CR. Modalità **live** (turni in app) o **manuale** (tavolo fisico, stato aggiornato a mano).
 
 ## Reliquiario
 
-- **5 slot** equipaggiabili.
-- Bonus passivi da `bonus_equip` sulle carte (es. +1 a una statistica).
-- Combo **legami** se equipaggi carte collegate (stesso `legame_id`, set, energie).
+- **5 slot** per bonus passivi fuori dal duello (`bonus_equip`).
+- **Legami** tra carte con stesso `legame_id` o set.
 
 ## Keyword
 
-Nel testo delle carte le **parole chiave** hanno significato regolamentare. Sono evidenziate in grassetto; se c'è spazio compare un promemoria breve tra parentesi, altrimenti tocca la parola per il testo completo.
+Parole chiave nel testo carta (grassetto in app). Parametri `[X]`, `[Y]`, …
 
-Le keyword si definiscono in **staff → Carte → Keywords** (i master hanno anche la guida Wiki *Keyword carte — guida master*, solo staff). Supportano **parametri** con placeholder `[X]`, `[Y]`, … nel nome e nel testo regola.
+Esempi automatizzati in duello live: **Mutazione**, **Colpo**, **Ferita**, **Pesca**, **Rigenerazione** (EffectScript v1).
 
-### Esempio parametrizzato: Mutazione
-
-| Campo staff | Valore |
-|-------------|--------|
-| Nome | `Mutazione [X]` |
-| Testo regola | `Quando questo personaggio si esaurisce, sostituiscilo con una carta fino a costo [X].` |
-
-Su una carta che contiene **Mutazione 0**, il giocatore vede la regola con *costo 0*.
-
-### Esempi fissi (bozza)
-
-| Keyword | Significato (bozza) |
-|---------|---------------------|
-| Evocazione | Metti in gioco una carta dalla mano pagando il costo energia. |
-| Influenza | Punti «vita» del duello (partenza 20). |
-
-Sync sorgenti Wiki: `make wiki-carte-sync ENV=dev-home` — vedi `docs/wiki/carte/README.md`.
+Master: Wiki *Keyword carte — guida master* e *EffectScript v1*.
 
 ## Economia bustine
 
-- Limite giornaliero e **pity** (bustine senza Rara+): configurabili da staff per campagna.
-- Il pool di una bustina è limitato all'**espansione** collegata.
+- Limite giornaliero e **pity** configurabili da staff.
+- Pool bustina limitato all’**espansione** collegata.
+
+## Catalogo demo
+
+Venticarte di esempio + bustina «Sette Elegie — bustina demo»:
+
+```bash
+make seed-carte-esempio ENV=dev-home
+```
 
 ---
 
-*Ultimo aggiornamento: bozza iniziale generata dal repository.*
+*Sync sorgenti: `make wiki-carte-sync ENV=…` — vedi `docs/wiki/carte/README.md`.*

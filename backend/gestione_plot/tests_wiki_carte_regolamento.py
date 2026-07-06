@@ -17,6 +17,7 @@ class WikiCarteRegolamentoSyncTests(TestCase):
         results = sync_wiki_carte_regolamento(force=True)
         slugs = {r["slug"] for r in results}
         self.assertIn("gioco-carte", slugs)
+        self.assertIn("carte-regolamento-gioco", slugs)
         self.assertIn("carte-collezionabili-regolamento", slugs)
         self.assertIn("carte-keywords-staff", slugs)
 
@@ -27,6 +28,11 @@ class WikiCarteRegolamentoSyncTests(TestCase):
         page = PaginaRegolamento.objects.get(slug="carte-collezionabili-regolamento")
         self.assertEqual(page.parent_id, parent.id)
         self.assertIn("Cronache delle Sette Elegie", page.contenuto)
+
+        regole = PaginaRegolamento.objects.get(slug="carte-regolamento-gioco")
+        self.assertEqual(regole.parent_id, parent.id)
+        self.assertIn("Leader", regole.contenuto)
+        self.assertIn("Forza", regole.contenuto)
 
         staff_kw = PaginaRegolamento.objects.get(slug="carte-keywords-staff")
         self.assertEqual(staff_kw.parent_id, parent.id)

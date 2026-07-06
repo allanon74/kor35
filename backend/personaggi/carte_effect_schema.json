@@ -222,6 +222,61 @@
         }
       }
     },
+    "stepModifyShell": {
+      "type": "object",
+      "required": ["type", "delta"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "modify_shell" },
+        "hero": { "enum": ["this", "hero_0", "hero_1"], "default": "this" },
+        "delta": { "$ref": "#/$defs/valueRef" },
+        "set": { "type": "boolean", "default": false },
+        "optional": { "type": "boolean", "default": false }
+      }
+    },
+    "stepHealHeroes": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "heal_heroes" },
+        "target": {
+          "enum": ["self_hero", "own_heroes", "own_non_exhausted"],
+          "default": "self_hero"
+        },
+        "amount": {
+          "oneOf": [
+            { "type": "string", "const": "full" },
+            { "type": "integer" },
+            {
+              "type": "object",
+              "required": ["ref"],
+              "additionalProperties": false,
+              "properties": {
+                "ref": {
+                  "type": "string",
+                  "pattern": "^(param\\.[A-Z]+|choice\\.[a-z][a-z0-9_]*|context\\.[a-z][a-z0-9_]*)$"
+                }
+              }
+            }
+          ],
+          "default": 1
+        }
+      }
+    },
+    "stepSinergiaIfActive": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "sinergia_if_active" },
+        "min_count": { "type": "integer", "minimum": 2, "maximum": 2, "default": 2 },
+        "draw_count": { "$ref": "#/$defs/valueRef" },
+        "draw_target": { "enum": ["self", "opponent"], "default": "self" },
+        "energy_delta": { "$ref": "#/$defs/valueRef" },
+        "energy_target": { "enum": ["self", "opponent"], "default": "self" }
+      }
+    },
     "step": {
       "oneOf": [
         { "$ref": "#/$defs/stepPlayerChoice" },
@@ -230,7 +285,10 @@
         { "$ref": "#/$defs/stepModifyInfluence" },
         { "$ref": "#/$defs/stepDealDamage" },
         { "$ref": "#/$defs/stepDrawCards" },
-        { "$ref": "#/$defs/stepMoveCard" }
+        { "$ref": "#/$defs/stepMoveCard" },
+        { "$ref": "#/$defs/stepModifyShell" },
+        { "$ref": "#/$defs/stepHealHeroes" },
+        { "$ref": "#/$defs/stepSinergiaIfActive" }
       ]
     }
   }

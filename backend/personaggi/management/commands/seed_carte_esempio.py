@@ -45,6 +45,16 @@ class Command(BaseCommand):
             action="store_true",
             help="Non crea/aggiorna le 5 keyword con effect_script MVP.",
         )
+        parser.add_argument(
+            "--grant-starter",
+            action="store_true",
+            help="Dopo il seed, concede le carte demo e crediti ai PG della campagna.",
+        )
+        parser.add_argument(
+            "--personaggio-nome",
+            default="",
+            help="Con --grant-starter, limita a un PG per nome (es. «Mario»).",
+        )
 
     def handle(self, *args, **options):
         slug = (options.get("campagna_slug") or "").strip() or None
@@ -55,6 +65,15 @@ class Command(BaseCommand):
                 skip_if_complete=options.get("skip_if_complete", False),
                 with_keywords=not options.get("no_keywords", False),
             )
+            if options.get("grant_starter"):
+                from personaggi.carte_esempio_seed import grant_starter_kit, _resolve_campagna
+
+                campagna = _resolve_campagna(slug)
+                nome_pg = (options.get("personaggio_nome") or "").strip() or None
+                stats["starter"] = grant_starter_kit(
+                    campagna,
+                    personaggio_nome=nome_pg,
+                )
         except Exception as exc:
             raise CommandError(str(exc)) from exc
 
@@ -92,3 +111,13 @@ class Command(BaseCommand):
             )
         if stats.get("bustina_qr_id"):
             self.stdout.write(f"QR bustina: {stats['bustina_qr_id']}")
+        starter = stats.get("starter")
+        if starter:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Starter kit: {starter['carte_concedute']} carte nuove su "
+                    f"{len(starter['personaggi'])} PG "
+                    f"({', '.join(starter['personaggi'][:5])}"
+                    f"{'…' if len(starter['personaggi']) > 5 else ''})"
+                )
+            )

@@ -22,8 +22,10 @@ import {
 } from '../api';
 import { RELIQUIARIO_SLOTS, MAZZO_DUELLO_SIZE, CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../carte/carteConstants';
 import CardFrame from '../carte/CardFrame';
+import { LoreFullModal } from '../carte/cardTextBlocks';
 import { useDuelloLive } from '../carte/useDuelloLive';
 import MazzoDuelloBuilder from '../carte/MazzoDuelloBuilder';
+import MercatoCartePanel from '../carte/MercatoCartePanel';
 import {
   buildCollezioneView,
   COLLEZIONE_SORT_OPTIONS,
@@ -73,6 +75,7 @@ function CollezioneStackCard({ stack, onSelect, temaEnergie, keywords }) {
 }
 
 function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords }) {
+  const [loreOpen, setLoreOpen] = useState(false);
   if (!item && !stack) return null;
   const displayItem = stack?.representative || item;
   const c = displayItem?.carta || displayItem;
@@ -105,8 +108,18 @@ function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords }) {
             showRules
             showLoreText
             expandRules
+            loreClamp
+            onLoreExpand={() => setLoreOpen(true)}
           />
         </div>
+
+        {loreOpen && (
+          <LoreFullModal
+            text={c.testo_lore}
+            title={`Lore — ${c.nome}`}
+            onClose={() => setLoreOpen(false)}
+          />
+        )}
 
         {copyCount > 1 && (
           <p className="text-center text-sm font-bold text-violet-300">
@@ -134,6 +147,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   const [codiceInvito, setCodiceInvito] = useState('');
   const [duelBusy, setDuelBusy] = useState(false);
   const [mazzoIds, setMazzoIds] = useState([]);
+  const [leaderId, setLeaderId] = useState(null);
   const [activeMazzoId, setActiveMazzoId] = useState(null);
   const [mazzoNome, setMazzoNome] = useState('Mazzo 1');
   const [mazzoIsDefault, setMazzoIsDefault] = useState(true);
@@ -152,6 +166,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   const [colSort, setColSort] = useState('nome_asc');
   const [colFiltersOpen, setColFiltersOpen] = useState(false);
   const [detailStack, setDetailStack] = useState(null);
+  const [playerTab, setPlayerTab] = useState('gioco');
 
   const onDuelloWsUpdate = useCallback((payload) => {
     setActiveDuello(payload);
@@ -163,15 +178,24 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     onDuelloWsUpdate,
   );
 
+  const handleMazzoIdsChange = useCallback((ids) => {
+    setMazzoIds(ids);
+    if (leaderId && ids.includes(leaderId)) {
+      setLeaderId(null);
+    }
+  }, [leaderId]);
+
   const loadMazzoIntoEditor = useCallback((m) => {
     if (m) {
       setActiveMazzoId(m.id);
       setMazzoIds(m.carte_possedute_ids || []);
+      setLeaderId(m.leader_carta_posseduta_id || null);
       setMazzoNome(m.nome || 'Mazzo');
       setMazzoIsDefault(!!m.is_default);
     } else {
       setActiveMazzoId(null);
       setMazzoIds([]);
+      setLeaderId(null);
       setMazzoNome(`Mazzo ${(data?.mazzi?.length || 0) + 1}`);
       setMazzoIsDefault(!(data?.mazzi?.length));
     }
@@ -184,6 +208,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
       : data.mazzi.find((m) => m.is_default) || data.mazzi[0];
     if (current && !mazzoBuilderOpen) {
       setMazzoIds(current.carte_possedute_ids || []);
+      setLeaderId(current.leader_carta_posseduta_id || null);
       if (!activeMazzoId) {
         setActiveMazzoId(current.id);
         setMazzoNome(current.nome || 'Mazzo');
@@ -197,6 +222,10 @@ export default function CarteCollezionabiliTab({ onLogout }) {
       setError(`Il mazzo deve avere esattamente ${MAZZO_DUELLO_SIZE} carte.`);
       return;
     }
+    if (!leaderId) {
+      setError('Seleziona un Leader (Personaggio comandante).');
+      return;
+    }
     setSavingMazzo(true);
     setError('');
     try {
@@ -204,6 +233,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
         mazzoId: activeMazzoId,
         nome: mazzoNome,
         isDefault: mazzoIsDefault,
+        leaderId,
       }, onLogout);
       setData((prev) => ({ ...prev, mazzi: res.mazzi || [] }));
       if (res.saved_id) setActiveMazzoId(res.saved_id);
@@ -358,9 +388,11 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     }
   };
 
+  const duelSetupReady = mazzoIds.length === MAZZO_DUELLO_SIZE && !!leaderId;
+
   const handleCreaInvito = async () => {
-    if (!charId || mazzoIds.length < MAZZO_DUELLO_SIZE) {
-      setError(`Servono esattamente ${MAZZO_DUELLO_SIZE} carte nel mazzo da duello.`);
+    if (!charId || !duelSetupReady) {
+      setError(`Servono ${MAZZO_DUELLO_SIZE} carte nel mazzo e un Leader.`);
       return;
     }
     if (data?.duello_avvio === 'lista' && !selectedAvversarioId) {
@@ -369,7 +401,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     }
     setDuelBusy(true);
     try {
-      const body = { mazzo_ids: mazzoIds };
+      const body = { mazzo_ids: mazzoIds, leader_id: leaderId };
       if (data?.duello_avvio === 'lista') {
         body.sfidato_id = selectedAvversarioId;
       }
@@ -385,8 +417,8 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   };
 
   const handleAccettaInvito = async (duelloId) => {
-    if (!charId || mazzoIds.length < MAZZO_DUELLO_SIZE) {
-      setError(`Servono esattamente ${MAZZO_DUELLO_SIZE} carte nel mazzo.`);
+    if (!charId || !duelSetupReady) {
+      setError(`Servono ${MAZZO_DUELLO_SIZE} carte nel mazzo e un Leader.`);
       return;
     }
     setDuelBusy(true);
@@ -394,7 +426,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
       const partita = await carteAccettaDuello(
         charId,
         duelloId,
-        { mazzo_ids: mazzoIds },
+        { mazzo_ids: mazzoIds, leader_id: leaderId },
         onLogout,
       );
       setActiveDuello(partita);
@@ -408,15 +440,15 @@ export default function CarteCollezionabiliTab({ onLogout }) {
 
   const handleAccettaCodice = async () => {
     if (!charId || !codiceInvito.trim()) return;
-    if (mazzoIds.length < MAZZO_DUELLO_SIZE) {
-      setError(`Servono esattamente ${MAZZO_DUELLO_SIZE} carte nel mazzo.`);
+    if (mazzoIds.length < MAZZO_DUELLO_SIZE || !leaderId) {
+      setError(`Servono ${MAZZO_DUELLO_SIZE} carte nel mazzo e un Leader.`);
       return;
     }
     setDuelBusy(true);
     try {
       const partita = await carteAccettaDuelloCodice(
         charId,
-        { codice_invito: codiceInvito.trim().toUpperCase(), mazzo_ids: mazzoIds },
+        { codice_invito: codiceInvito.trim().toUpperCase(), mazzo_ids: mazzoIds, leader_id: leaderId },
         onLogout,
       );
       setActiveDuello(partita);
@@ -446,14 +478,44 @@ export default function CarteCollezionabiliTab({ onLogout }) {
   const mioCampo = activeDuello?.stato_gioco?.campo?.[String(charId)] || {};
   const mieiEroi = mioCampo.eroi || [null, null];
   const miaEnergia = mioCampo.energia ?? 0;
+  const manaMassimo = mioCampo.mana_massimo ?? 3;
+  const turnoFlags = mioCampo.turno_flags || {};
+  const faseTurno = mioCampo.fase_turno || 'APE';
+  const faseTurnoLabel = mioCampo.fase_turno_label || 'Apertura';
+  const guscioEroi = mioCampo.guscio_eroi || [0, 0];
+  const bonusLeader = mioCampo.bonus_leader || [];
+  const inFaseCombattimento = faseTurno === 'COM';
+  const inFaseChiusura = faseTurno === 'CHI';
+  const passaLabel = faseTurno === 'APE'
+    ? 'Vai al combattimento'
+    : faseTurno === 'COM'
+      ? 'Fine combattimento'
+      : 'Passa turno';
+  const permanenteGiocato = !!turnoFlags.permanente_giocato;
+  const effettoGiocato = !!turnoFlags.effetto_giocato;
   const avversarioId = activeDuello?.sfidante?.id === charId
     ? activeDuello?.sfidato?.id
     : activeDuello?.sfidante?.id;
   const campoAvversario = avversarioId
     ? (activeDuello?.stato_gioco?.campo?.[String(avversarioId)] || {})
     : {};
+  const mieiEroiEsauriti = mioCampo.eroi_esauriti || [false, false];
+  const eroiIsLeader = mioCampo.eroi_is_leader || [false, false];
+  const difensoreSlotAvversario = campoAvversario.difensore_slot;
+  const terraCondivisa = activeDuello?.stato_gioco?.terra_condivisa;
+  const terraCpId = terraCondivisa?.carta_posseduta_id || null;
 
   const aggiornaCampoManuale = (patch) => handleDuelloAzione('aggiorna_stato', patch);
+
+  const impostaTerraCondivisa = (cpId) => {
+    if (!cpId) {
+      handleDuelloAzione('aggiorna_stato', { terra: null });
+      return;
+    }
+    handleDuelloAzione('aggiorna_stato', {
+      terra: { carta_posseduta_id: cpId, giocatore_id: String(charId) },
+    });
+  };
 
   const impostaEroeSlot = (slot, cpId) => {
     const eroi = [...mieiEroi];
@@ -479,14 +541,18 @@ export default function CarteCollezionabiliTab({ onLogout }) {
 
   const renderGiocaCartaButtons = (cpId, meta) => {
     const tipo = meta?.tipo;
+    const costo = meta?.costo_gioco ?? 0;
+    const manaOk = miaEnergia >= costo;
+    const disabledBase = duelBusy || !manaOk || inFaseCombattimento;
     if (tipo === 'PG') {
+      if (permanenteGiocato) return null;
       return [0, 1].map((slot) => (
         !mieiEroi[slot] ? (
           <button
             key={`${cpId}-slot-${slot}`}
             type="button"
-            disabled={duelBusy}
-            className="rounded border border-indigo-700 px-2 py-1 hover:bg-indigo-950/40"
+            disabled={disabledBase}
+            className="rounded border border-indigo-700 px-2 py-1 hover:bg-indigo-950/40 disabled:opacity-40"
             onClick={() => handleDuelloAzione('gioca_carta', {
               carta_posseduta_id: cpId,
               slot_eroe: slot,
@@ -498,13 +564,14 @@ export default function CarteCollezionabiliTab({ onLogout }) {
       ));
     }
     if (tipo === 'OGG') {
+      if (permanenteGiocato) return null;
       return [0, 1].map((slot) => (
         mieiEroi[slot] && !mieiOggetti[String(slot)] ? (
           <button
             key={`${cpId}-ogg-${slot}`}
             type="button"
-            disabled={duelBusy}
-            className="rounded border border-amber-800 px-2 py-1 hover:bg-amber-950/30"
+            disabled={disabledBase}
+            className="rounded border border-amber-800 px-2 py-1 hover:bg-amber-950/30 disabled:opacity-40"
             onClick={() => handleDuelloAzione('gioca_carta', {
               carta_posseduta_id: cpId,
               slot_eroe: slot,
@@ -516,25 +583,26 @@ export default function CarteCollezionabiliTab({ onLogout }) {
       ));
     }
     if (tipo === 'LUO') {
-      if (mioCampo.luogo) return null;
+      if (permanenteGiocato) return null;
       return (
         <button
           key={cpId}
           type="button"
-          disabled={duelBusy}
-          className="rounded border border-emerald-800 px-2 py-1 hover:bg-emerald-950/30"
+          disabled={disabledBase}
+          className="rounded border border-emerald-800 px-2 py-1 hover:bg-emerald-950/30 disabled:opacity-40"
           onClick={() => handleDuelloAzione('gioca_carta', { carta_posseduta_id: cpId })}
         >
           Gioca luogo: {meta?.nome || 'carta'}
         </button>
       );
     }
+    if (effettoGiocato) return null;
     return (
       <button
         key={cpId}
         type="button"
-        disabled={duelBusy}
-        className="rounded border border-gray-600 px-2 py-1 hover:bg-gray-800"
+        disabled={disabledBase}
+        className="rounded border border-gray-600 px-2 py-1 hover:bg-gray-800 disabled:opacity-40"
         onClick={() => handleDuelloAzione('gioca_carta', { carta_posseduta_id: cpId })}
       >
         Gioca {meta?.nome || 'carta'}
@@ -585,6 +653,33 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     return cpId ? carteById.get(cpId) : null;
   });
 
+  const equippedCatalogIds = useMemo(() => {
+    const ids = new Set();
+    slots.forEach((item, idx) => {
+      if (item?.carta?.id && idx !== equipMode) ids.add(item.carta.id);
+    });
+    return ids;
+  }, [slots, equipMode]);
+
+  const carteEquipabili = useMemo(
+    () => (data?.carte || []).filter((c) => {
+      const catalogId = c.carta?.id;
+      return !catalogId || !equippedCatalogIds.has(catalogId);
+    }),
+    [data?.carte, equippedCatalogIds],
+  );
+
+  const slotComboColors = useMemo(() => {
+    const map = {};
+    (data?.legami_attivi || []).forEach((combo) => {
+      (combo.slot_indices || []).forEach((idx) => {
+        const key = Number(idx);
+        if (!map[key]) map[key] = combo.colore || '#10b981';
+      });
+    });
+    return map;
+  }, [data?.legami_attivi]);
+
   if (!charId) {
     return <p className="p-4 text-gray-400">Seleziona un personaggio.</p>;
   }
@@ -597,7 +692,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
           <div>
             <h2 className="text-lg font-bold">Cronache delle Sette Elegie</h2>
             <p className="text-xs text-gray-400">
-              Collezione · Reliquiario · Bustine · Duello live
+              Mazzo · Duello · Bustine · Mercato · Reliquiario · Collezione
               {data?.accesso_modo === 'TEST' && (
                 <span className="ml-2 rounded bg-amber-900 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
                   TESTING
@@ -637,6 +732,26 @@ export default function CarteCollezionabiliTab({ onLogout }) {
       )}
 
       {!loading && data && data.puo_accedere && (
+        <div className="flex flex-wrap gap-2 border-b border-gray-800 pb-2">
+          {[
+            { id: 'gioco', label: 'Gioco & bustine' },
+            { id: 'mercato', label: 'Mercato' },
+            { id: 'reliquiario', label: 'Reliquiario' },
+            { id: 'collezione', label: 'Collezione' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setPlayerTab(t.id)}
+              className={`rounded px-3 py-1.5 text-xs font-bold ${playerTab === t.id ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-400'}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {!loading && data && data.puo_accedere && playerTab === 'gioco' && (
         <>
           {/* Mazzo duello */}
           <section className="rounded-lg border border-indigo-800 bg-indigo-950/20 p-3">
@@ -661,7 +776,10 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                 mazzoIds={mazzoIds}
                 mazzoNome={mazzoNome}
                 mazzoIsDefault={mazzoIsDefault}
-                onMazzoIdsChange={setMazzoIds}
+                leaderId={leaderId}
+                onLeaderChange={setLeaderId}
+                regoleMazzo={data.regole_mazzo || []}
+                onMazzoIdsChange={handleMazzoIdsChange}
                 onActiveMazzoChange={(m) => loadMazzoIntoEditor(m)}
                 onMazzoNomeChange={setMazzoNome}
                 onMazzoIsDefaultChange={setMazzoIsDefault}
@@ -700,7 +818,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                     </span>
                     <button
                       type="button"
-                      disabled={duelBusy || mazzoIds.length !== MAZZO_DUELLO_SIZE}
+                      disabled={duelBusy || !duelSetupReady}
                       onClick={() => handleAccettaInvito(d.id)}
                       className="rounded bg-emerald-800 px-2 py-1 font-bold disabled:opacity-50"
                     >
@@ -708,9 +826,9 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                     </button>
                   </div>
                 ))}
-                {mazzoIds.length !== MAZZO_DUELLO_SIZE && (
+                {!duelSetupReady && (
                   <p className="text-[10px] text-amber-400/80">
-                    Configura un mazzo da {MAZZO_DUELLO_SIZE} carte prima di accettare.
+                    Configura mazzo ({MAZZO_DUELLO_SIZE} carte) e Leader prima di accettare.
                   </p>
                 )}
               </div>
@@ -898,11 +1016,11 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        disabled={duelBusy || mazzoIds.length !== MAZZO_DUELLO_SIZE}
-                        onClick={() => handlePrematch('imposta_mazzo', { mazzo_ids: mazzoIds })}
+                        disabled={duelBusy || !duelSetupReady}
+                        onClick={() => handlePrematch('imposta_mazzo', { mazzo_ids: mazzoIds, leader_id: leaderId })}
                         className="rounded bg-indigo-900 px-2 py-1 disabled:opacity-50"
                       >
-                        Conferma mazzo ({mazzoIds.length}/{MAZZO_DUELLO_SIZE})
+                        Conferma mazzo + Leader
                       </button>
                       <button
                         type="button"
@@ -1050,13 +1168,13 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                       </button>
                     </div>
                     <p className="mb-1 text-[10px] text-gray-400">
-                      Luogo: {nomeCartaDuello(mioCampo.luogo)}
-                      {mioCampo.luogo && (
+                      Terra condivisa: {nomeCartaDuello(terraCpId)}
+                      {terraCpId && (
                         <button
                           type="button"
                           disabled={duelBusy}
                           className="ml-2 text-amber-400 underline"
-                          onClick={() => aggiornaCampoManuale({ luogo: null })}
+                          onClick={() => impostaTerraCondivisa(null)}
                         >
                           rimuovi
                         </button>
@@ -1102,7 +1220,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                           type="button"
                           disabled={duelBusy}
                           className="rounded border border-gray-600 px-1 py-0.5 text-[10px]"
-                          onClick={() => aggiornaCampoManuale({ luogo: cpId })}
+                          onClick={() => impostaTerraCondivisa(cpId)}
                         >
                           Luogo: {nomeCartaDuello(cpId)}
                         </button>
@@ -1119,7 +1237,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                           return `${nomeCartaDuello(id)}${sal != null ? ` (${sal})` : ''}`;
                         }).join(', ')}
                         {' · '}
-                        luogo: {nomeCartaDuello(campoAvversario.luogo)}
+                        terra: {nomeCartaDuello(terraCpId)}
                       </p>
                     )}
                   </div>
@@ -1128,18 +1246,32 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                   <div className="mb-2 rounded border border-gray-800 bg-gray-950/50 p-2 text-[10px] text-gray-400">
                     <p className="mb-1 font-bold uppercase tracking-wide text-gray-300">Campo</p>
                     <p>
-                      Energia {miaEnergia}
+                      Mana {miaEnergia}/{manaMassimo}
+                      {mioCampo.turno_numero ? ` · turno ${mioCampo.turno_numero}` : ''}
+                      {' · '}
+                      Fase: {faseTurnoLabel}
                       {' · '}
                       Mazzo {mioCampo.mazzo_count ?? 0}
                       {' · '}
                       Scarto {mioCampo.scarto_count ?? 0}
                     </p>
-                    <p>Luogo: {nomeCartaDuello(mioCampo.luogo)}</p>
+                    {bonusLeader.length > 0 && (
+                      <p className="text-amber-300/90">
+                        Leader: {bonusLeader.join(' · ')}
+                      </p>
+                    )}
+                    <p>
+                      Terra condivisa: {nomeCartaDuello(terraCpId)}
+                      {terraCpId && terraCondivisa?.giocatore_id === String(charId) ? ' (tua)' : ''}
+                    </p>
                     {[0, 1].map((slot) => (
                       mieiEroi[slot] ? (
                         <p key={`campo-eroe-${slot}`}>
                           Eroe {slot}: {nomeCartaDuello(mieiEroi[slot])}
+                          {eroiIsLeader[slot] ? ' · Leader' : ''}
                           {saluteEroeCampo(mioCampo, slot) != null ? ` (${saluteEroeCampo(mioCampo, slot)} PV)` : ''}
+                          {(guscioEroi[slot] || 0) > 0 ? ` · Guscio ${guscioEroi[slot]}` : ''}
+                          {mieiEroiEsauriti[slot] ? ' · esaurito' : ''}
                           {nomeOggettoSuEroe(slot) ? ` · ${nomeOggettoSuEroe(slot)}` : ''}
                         </p>
                       ) : null
@@ -1159,34 +1291,44 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                         className="rounded bg-gray-700 px-2 py-1"
                         onClick={() => handleDuelloAzione('passa')}
                       >
-                        Passa
+                        {passaLabel}
                       </button>
                     </div>
                     <div className="flex flex-wrap gap-1 border-t border-gray-800 pt-2">
                       {[0, 1].map((slotAtk) => (
-                        mieiEroi[slotAtk] ? (
+                        mieiEroi[slotAtk] && !mieiEroiEsauriti[slotAtk] ? (
                           <div key={`atk-grp-${slotAtk}`} className="flex flex-wrap gap-1">
                             <button
                               type="button"
-                              disabled={duelBusy}
-                              className="rounded bg-red-900 px-2 py-1"
+                              disabled={duelBusy || inFaseChiusura || difensoreSlotAvversario != null}
+                              className="rounded bg-red-900 px-2 py-1 disabled:opacity-40"
+                              title={
+                                inFaseChiusura
+                                  ? 'In fase finale non puoi attaccare'
+                                  : difensoreSlotAvversario != null
+                                    ? 'Devi attaccare il Difensore avversario'
+                                    : undefined
+                              }
                               onClick={() => handleDuelloAzione('attacca', { slot_eroe: slotAtk })}
                             >
                               Eroe {slotAtk} → Influenza
                             </button>
                             {[0, 1].map((slotAvv) => (
-                              (campoAvversario.eroi || [])[slotAvv] ? (
+                              (campoAvversario.eroi || [])[slotAvv]
+                              && (difensoreSlotAvversario == null || difensoreSlotAvversario === slotAvv) ? (
                                 <button
                                   key={`atk-${slotAtk}-avv-${slotAvv}`}
                                   type="button"
-                                  disabled={duelBusy}
-                                  className="rounded bg-red-950 px-2 py-1"
+                                  disabled={duelBusy || inFaseChiusura}
+                                  className="rounded bg-red-950 px-2 py-1 disabled:opacity-40"
                                   onClick={() => handleDuelloAzione('attacca', {
                                     slot_eroe: slotAtk,
                                     bersaglio_eroe_slot: slotAvv,
                                   })}
                                 >
                                   Eroe {slotAtk} → avv. {slotAvv}
+                                  {slotAvv === difensoreSlotAvversario ? ' (Difensore)' : ''}
+                                  {(campoAvversario.eroi_is_leader || [])[slotAvv] ? ' (Leader)' : ''}
                                   {saluteEroeCampo(campoAvversario, slotAvv) != null
                                     ? ` (${saluteEroeCampo(campoAvversario, slotAvv)} PV)`
                                     : ''}
@@ -1290,37 +1432,6 @@ export default function CarteCollezionabiliTab({ onLogout }) {
             </section>
           )}
 
-          {/* Reliquiario */}
-          <section>
-            <h3 className="mb-2 flex items-center gap-1 text-sm font-bold text-indigo-300">
-              <Sparkles size={16} /> Reliquiario (5 slot)
-            </h3>
-            <div className="grid grid-cols-5 gap-2">
-              {slots.map((item, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setEquipMode(idx)}
-                  className="flex min-h-[72px] flex-col items-center justify-center rounded-lg border border-dashed border-gray-600 bg-gray-800/50 p-1 text-center hover:border-indigo-500"
-                >
-                  {item ? (
-                    <span className="truncate text-[10px] font-bold">{item.carta.nome}</span>
-                  ) : (
-                    <span className="text-[10px] text-gray-500">Slot {idx + 1}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-            {(data.legami_attivi || []).length > 0 && (
-              <ul className="mt-2 space-y-1 text-xs text-emerald-300">
-                {data.legami_attivi.map((l) => (
-                  <li key={l.id}>✦ {l.nome}: {l.descrizione}</li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Progress espansioni */}
           {(data.progress_espansioni || []).length > 0 && (
             <section>
               <h3 className="mb-2 text-sm font-bold text-gray-300">Espansioni</h3>
@@ -1335,7 +1446,6 @@ export default function CarteCollezionabiliTab({ onLogout }) {
             </section>
           )}
 
-          {/* Progress set legacy */}
           {(data.progress_sets || []).length > 0 && (
             <section>
               <h3 className="mb-2 text-sm font-bold text-gray-300">Cronache</h3>
@@ -1350,6 +1460,94 @@ export default function CarteCollezionabiliTab({ onLogout }) {
             </section>
           )}
 
+        </>
+      )}
+
+      {!loading && data && data.puo_accedere && playerTab === 'mercato' && (
+        <MercatoCartePanel
+          charId={charId}
+          onLogout={onLogout}
+          onError={setError}
+          onCollezioneUpdate={(collezione) => {
+            setData((prev) => ({ ...prev, ...collezione }));
+          }}
+        />
+      )}
+
+      {!loading && data && data.puo_accedere && playerTab === 'reliquiario' && (
+        <>
+          <section className="rounded-lg border border-indigo-800 bg-indigo-950/20 p-3">
+            <h3 className="mb-3 flex items-center gap-1 text-sm font-bold text-indigo-300">
+              <Sparkles size={16} /> Reliquiario (5 slot)
+            </h3>
+            <p className="mb-3 text-xs text-gray-500">
+              Tocca uno slot per equipaggiare. Il testo mostrato è quello reliquiario (non il testo gioco della carta).
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {slots.map((item, idx) => {
+                const comboColor = slotComboColors[idx];
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setEquipMode(idx)}
+                    className="rounded-lg border-2 border-dashed border-gray-600 bg-gray-900/40 p-1 text-left transition hover:border-indigo-400"
+                    style={comboColor ? { borderColor: comboColor, borderStyle: 'solid' } : undefined}
+                  >
+                    {item ? (
+                      <CardFrame
+                        item={item}
+                        reliquiarioMode
+                        size="md"
+                        temaEnergie={data?.tema_energie}
+                        keywords={cardKeywords}
+                        showRules
+                        rulesTextOverride={
+                          item.carta?.testo_reliquiario?.trim()
+                            ? item.carta.testo_reliquiario
+                            : 'Nessuna abilità reliquiario definita.'
+                        }
+                      />
+                    ) : (
+                      <div className="flex min-h-[236px] flex-col items-center justify-center text-xs text-gray-500">
+                        Slot {idx + 1}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {(data.legami_attivi || []).length > 0 && (
+              <div className="mt-4 space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wide text-gray-400">Combo attive</h4>
+                {data.legami_attivi.map((combo) => (
+                  <div
+                    key={combo.id}
+                    className="rounded-lg border-2 bg-gray-900/50 p-3"
+                    style={{ borderColor: combo.colore || '#10b981' }}
+                  >
+                    <p className="font-bold" style={{ color: combo.colore || '#10b981' }}>
+                      {combo.nome}
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-200">
+                      {combo.testo || combo.descrizione}
+                    </p>
+                    {(combo.slot_indices || []).length > 0 && (
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        Slot coinvolti: {(combo.slot_indices || []).map((i) => i + 1).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {!loading && data && data.puo_accedere && playerTab === 'collezione' && (
+        <>
           {/* Collezione */}
           <section>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -1516,6 +1714,9 @@ export default function CarteCollezionabiliTab({ onLogout }) {
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-4 sm:items-center" onClick={() => setEquipMode(null)}>
           <div className="max-h-[70vh] w-full max-w-lg overflow-y-auto rounded-xl border border-gray-600 bg-gray-900 p-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="mb-3 font-bold">Equipaggia slot {equipMode + 1}</h3>
+            <p className="mb-3 text-xs text-gray-400">
+              Non puoi equipaggiare due copie della stessa carta catalogo nel reliquiario.
+            </p>
             <button
               type="button"
               className="mb-3 w-full rounded border border-gray-600 py-2 text-sm text-gray-400 hover:bg-gray-800"
@@ -1524,7 +1725,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
               Svuota slot
             </button>
             <div className="flex flex-wrap justify-center gap-2">
-              {(data?.carte || []).map((c) => (
+              {carteEquipabili.map((c) => (
                 <CartaCard
                   key={c.id}
                   item={c}
@@ -1534,6 +1735,9 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                   keywords={cardKeywords}
                 />
               ))}
+              {carteEquipabili.length === 0 && (
+                <p className="text-sm text-gray-500">Nessuna carta disponibile per questo slot.</p>
+              )}
             </div>
           </div>
         </div>

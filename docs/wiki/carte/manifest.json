@@ -7,8 +7,14 @@
   },
   "pages": [
     {
+      "slug": "carte-regolamento-gioco",
+      "titolo": "Regole di gioco — Sette Elegie",
+      "source": "regolamento-gioco.md",
+      "ordine": 1
+    },
+    {
       "slug": "carte-collezionabili-regolamento",
-      "titolo": "Regolamento carte (bozza)",
+      "titolo": "Carte — app e collezione",
       "source": "regolamento.md",
       "ordine": 10
     },
@@ -24,6 +30,13 @@
       "titolo": "EffectScript v1 — vocabolario",
       "source": "effect-script-v1.md",
       "ordine": 6,
+      "visibile_solo_staff": true
+    },
+    {
+      "slug": "carte-mercato-scambio",
+      "titolo": "Mercato scambio carte",
+      "source": "mercato-scambio.md",
+      "ordine": 7,
       "visibile_solo_staff": true
     }
   ]

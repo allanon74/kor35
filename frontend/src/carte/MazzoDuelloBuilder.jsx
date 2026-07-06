@@ -14,6 +14,9 @@ export default function MazzoDuelloBuilder({
   mazzoIds,
   mazzoNome,
   mazzoIsDefault,
+  leaderId,
+  regoleMazzo = [],
+  onLeaderChange,
   onMazzoIdsChange,
   onActiveMazzoChange,
   onMazzoNomeChange,
@@ -27,6 +30,11 @@ export default function MazzoDuelloBuilder({
 }) {
   const stacks = useMemo(() => groupCollezioneStacks(carte), [carte]);
   const inMazzoSet = useMemo(() => new Set(mazzoIds), [mazzoIds]);
+  const leaderStacks = useMemo(
+    () => stacks.filter((s) => s.carta?.tipo === 'PG'),
+    [stacks],
+  );
+  const leaderItem = leaderId ? carteById.get(leaderId) : null;
 
   const countCopiesInMazzoForCarta = (cartaId) => mazzoIds.filter((cpId) => {
     const item = carteById.get(cpId);
@@ -57,6 +65,17 @@ export default function MazzoDuelloBuilder({
         Tocca una carta nella collezione per aggiungerla (max {MAZZO_DUELLO_SIZE}).
         Tocca una carta nel mazzo (con la X) per rimuoverla.
       </p>
+
+      {regoleMazzo.length > 0 && (
+        <details className="rounded border border-indigo-900/60 bg-indigo-950/30 px-2 py-1.5 text-xs text-indigo-100/90">
+          <summary className="cursor-pointer font-bold text-indigo-200">Regole mazzo (Sette Elegie)</summary>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+            {regoleMazzo.map((regola) => (
+              <li key={regola}>{regola}</li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <div className="flex flex-wrap gap-1">
         {mazziSlots.map((m, idx) => {
@@ -104,6 +123,63 @@ export default function MazzoDuelloBuilder({
           />
           Predefinito per i duelli
         </label>
+      </div>
+
+      <div>
+        <div className="mb-1 flex items-center justify-between text-xs font-bold text-amber-200">
+          <span>Leader (comandante)</span>
+          <span className={leaderId ? 'text-emerald-300' : 'text-amber-300'}>
+            {leaderId ? 'Selezionato' : 'Obbligatorio'}
+          </span>
+        </div>
+        {leaderItem ? (
+          <button
+            type="button"
+            onClick={() => onLeaderChange(null)}
+            className="relative rounded-lg border-2 border-amber-500 bg-amber-950/30 p-1"
+            title="Rimuovi Leader"
+          >
+            <CardFrame
+              item={leaderItem}
+              compact
+              temaEnergie={temaEnergie}
+              keywords={keywords}
+              showRules={false}
+            />
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-800 text-white">
+              <X size={10} />
+            </span>
+          </button>
+        ) : (
+          <p className="text-[10px] text-gray-500">Scegli un Personaggio dalla lista sotto (non nel mazzo).</p>
+        )}
+        {!leaderId && (
+          <div className="mt-2 flex flex-wrap justify-center gap-2">
+            {leaderStacks.map((stack) => {
+              const inDeck = countCopiesInMazzoForCarta(stack.carta.id);
+              const pick = stack.copies.find((c) => !inMazzoSet.has(c.id));
+              const canPick = pick && inDeck === 0;
+              return (
+                <button
+                  key={`leader-${stack.key}`}
+                  type="button"
+                  disabled={!canPick}
+                  onClick={() => canPick && onLeaderChange(pick.id)}
+                  className={`relative rounded-lg ${canPick ? 'opacity-100' : 'opacity-30'}`}
+                  title={canPick ? 'Scegli come Leader' : 'Già nel mazzo o non disponibile'}
+                >
+                  <CardFrame
+                    item={stack.representative}
+                    compact
+                    temaEnergie={temaEnergie}
+                    keywords={keywords}
+                    showRules={false}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div>
@@ -188,7 +264,7 @@ export default function MazzoDuelloBuilder({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={saving || mazzoIds.length !== MAZZO_DUELLO_SIZE}
+          disabled={saving || mazzoIds.length !== MAZZO_DUELLO_SIZE || !leaderId}
           onClick={onSave}
           className="rounded bg-emerald-800 px-3 py-1.5 text-xs font-bold disabled:opacity-50"
         >

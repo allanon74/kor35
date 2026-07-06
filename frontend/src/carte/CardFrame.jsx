@@ -9,6 +9,7 @@ import {
 } from './carteConstants';
 import { useCardEnergyTheme } from './useCardEnergyTheme';
 import CardRulesText from './CardRulesText';
+import { LoreTextBlock } from './cardTextBlocks';
 
 const SIZE_CLASS = {
   sm: 'w-[108px] min-h-[152px] text-[9px]',
@@ -64,17 +65,24 @@ export default function CardFrame({
   showRules = true,
   showLoreText = false,
   expandRules = false,
+  rulesTextOverride = null,
+  reliquiarioMode = false,
+  onLoreExpand = null,
+  loreClamp = true,
   className = '',
 }) {
   const c = cartaProp || item?.carta || item;
   if (!c) return null;
 
-  const size = sizeProp || (compact ? 'sm' : 'md');
+  const size = sizeProp || (reliquiarioMode ? 'md' : (compact ? 'sm' : 'md'));
   const { getTheme, getFrameStyles } = useCardEnergyTheme(temaProp);
   const energy = getTheme(c.energia);
   const styles = getFrameStyles(c.energia);
   const img = c.immagine_url ? resolveMediaUrl(c.immagine_url) : null;
   const hasStats = c.attacco != null || c.salute != null || c.iniziativa != null;
+  const rulesText = rulesTextOverride != null
+    ? rulesTextOverride
+    : (reliquiarioMode ? '—' : (c.testo_gioco || '—'));
   const rulesTextClass = expandRules
     ? 'text-[13px] leading-relaxed'
     : size === 'xl'
@@ -128,29 +136,41 @@ export default function CardFrame({
       {CARTA_ENERGIA_LABEL[c.energia] || energy.nome}
     </div>
 
-    {showRules && !compact && (
+    {showRules && (!compact || reliquiarioMode) && (
       <div
         className={`mx-2 mt-1.5 flex min-h-0 flex-1 flex-col rounded border px-2 py-2 ${expandRules ? 'overflow-y-auto' : ''} ${rulesTextClass}`}
         style={styles.rulesBox}
       >
+        {reliquiarioMode && (
+          <p className="mb-1 text-[8px] font-bold uppercase tracking-wide text-indigo-300/90">
+            Abilità reliquiario
+          </p>
+        )}
         <div className={expandRules ? '' : 'line-clamp-4'}>
           <p className="whitespace-pre-wrap">
             <CardRulesText
-              text={c.testo_gioco || '—'}
+              text={rulesText}
               keywords={keywords}
               maxLineLength={expandRules ? 120 : 90}
             />
           </p>
           {showLoreText && c.testo_lore?.trim() && (
-            <p className={`mt-2 whitespace-pre-wrap italic text-gray-400/95 ${expandRules ? 'text-[12px] leading-relaxed' : ''}`}>
-              {c.testo_lore.trim()}
-            </p>
+            expandRules && !loreClamp ? (
+              <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed italic text-gray-400/95">
+                {c.testo_lore.trim()}
+              </p>
+            ) : (
+              <LoreTextBlock
+                text={c.testo_lore}
+                onExpand={onLoreExpand}
+              />
+            )
           )}
         </div>
       </div>
     )}
 
-    {hasStats && (
+    {hasStats && !reliquiarioMode && (
       <CardStatBadges
         attacco={c.attacco}
         salute={c.salute}

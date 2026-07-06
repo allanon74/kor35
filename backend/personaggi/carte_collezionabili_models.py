@@ -99,6 +99,9 @@ CARTA_FONTE_CHOICES = [
 
 RELIQUIARIO_SLOTS = 5
 MAZZO_DUELLO_SIZE = 15
+MAZZO_MIN_PERSONAGGI = 8
+MAZZO_MAX_TERRE = 2
+MAZZO_MAX_AURE = 3
 MAZZI_DUELLO_MAX_PER_PG = 5
 
 # Mappatura energia carta → sigla aura Punteggio (tipo AU) per colori/icona da DB
@@ -249,6 +252,11 @@ class CartaCollezionabile(SyncableModel, models.Model):
 
     testo_gioco = models.TextField(blank=True, default="")
     testo_lore = models.TextField(blank=True, default="")
+    testo_reliquiario = models.TextField(
+        blank=True,
+        default="",
+        help_text="Testo mostrato sullo slot reliquiario quando equipaggiata (sostituisce il testo gioco).",
+    )
     set_collezione = models.CharField(
         max_length=80,
         blank=True,
@@ -281,7 +289,11 @@ class CartaCollezionabile(SyncableModel, models.Model):
     bonus_equip = models.JSONField(
         default=dict,
         blank=True,
-        help_text='Bonus passivo reliquiario, es. {"stat_sigla":"FOR","valore":1}',
+        help_text=(
+            'Bonus equip: reliquiario {"stat_sigla":"FOR","valore":1}; '
+            'duello {"forza":1,"robustezza_se_leader":2} o '
+            '{"duello":[{"stat":"forza","valore":2},{"stat":"robustezza","valore":2,"se_leader":true}]}'
+        ),
     )
     duplicabile = models.BooleanField(
         default=False,
@@ -312,6 +324,69 @@ class CartaCollezionabile(SyncableModel, models.Model):
     @property
     def is_soprannaturale(self):
         return self.energia in CARTA_ENERGIE_SOPRANNATURALI
+
+
+COMBO_TRIGGER_LEGAME = "LEGAME"
+COMBO_TRIGGER_SET = "SET"
+COMBO_TRIGGER_CARTE = "CARTE"
+COMBO_TRIGGER_ENERGIE_NAT = "ENERGIE_NAT"
+COMBO_TRIGGER_ENERGIE_SOP = "ENERGIE_SOP"
+COMBO_TRIGGER_CHOICES = [
+    (COMBO_TRIGGER_LEGAME, "Stesso legame_id"),
+    (COMBO_TRIGGER_SET, "Stesso set_collezione"),
+    (COMBO_TRIGGER_CARTE, "Carte specifiche (codici)"),
+    (COMBO_TRIGGER_ENERGIE_NAT, "Energie naturali distinte"),
+    (COMBO_TRIGGER_ENERGIE_SOP, "Energie soprannaturali distinte"),
+]
+
+
+class ComboReliquiario(SyncableModel, models.Model):
+    """Combo reliquiario definita da staff (non compare sulla carta)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.CASCADE,
+        related_name="combo_reliquiario",
+    )
+    codice = models.CharField(max_length=60, db_index=True)
+    nome = models.CharField(max_length=120)
+    testo = models.TextField(
+        blank=True,
+        default="",
+        help_text="Testo mostrato nella sezione combo attive sotto il reliquiario.",
+    )
+    colore = models.CharField(
+        max_length=7,
+        default="#10b981",
+        help_text="Colore bordo/testo combo (es. #10b981).",
+    )
+    tipo_trigger = models.CharField(max_length=12, choices=COMBO_TRIGGER_CHOICES, db_index=True)
+    param_legame_id = models.CharField(max_length=80, blank=True, default="")
+    param_set_collezione = models.CharField(max_length=80, blank=True, default="")
+    param_carte_codici = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Lista codici carta richiesti, es. ["ST-KAEL-001","ST-KAEL-002"].',
+    )
+    param_min_count = models.PositiveSmallIntegerField(
+        default=2,
+        help_text="Soglia minima (conteggio legame/set/energie). Ignorata per trigger CARTE.",
+    )
+    ordine = models.PositiveSmallIntegerField(default=0)
+    attiva = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Combo reliquiario"
+        verbose_name_plural = "Combo reliquiario"
+        ordering = ["ordine", "nome"]
+        unique_together = [("campagna", "codice")]
+
+    def __str__(self):
+        return self.nome
 
 
 class ConfigurazioneCarteCollezionabili(SyncableModel, models.Model):
@@ -521,6 +596,12 @@ class MazzoDuello(SyncableModel, models.Model):
         blank=True,
         help_text="Lista UUID CartaPosseduta (max 15).",
     )
+    leader_carta_posseduta_id = models.CharField(
+        max_length=36,
+        blank=True,
+        default="",
+        help_text="UUID CartaPosseduta Leader (Personaggio comandante, fuori dal mazzo).",
+    )
     is_default = models.BooleanField(default=False)
 
     class Meta:
@@ -622,6 +703,8 @@ class DuelloCarte(SyncableModel, models.Model):
     )
     mazzo_sfidante_ids = models.JSONField(default=list, blank=True)
     mazzo_sfidato_ids = models.JSONField(default=list, blank=True)
+    leader_sfidante_id = models.CharField(max_length=36, blank=True, default="")
+    leader_sfidato_id = models.CharField(max_length=36, blank=True, default="")
     stato = models.CharField(
         max_length=3,
         choices=DUELLO_STATO_CHOICES,
@@ -681,3 +764,106 @@ class DuelloCarte(SyncableModel, models.Model):
     def __str__(self):
         nome_b = self.sfidato.nome if self.sfidato_id else "?"
         return f"{self.sfidante.nome} vs {nome_b} ({self.stato})"
+
+
+# --- Mercato / scambio carte tra personaggi ---
+SCAMBIO_STATO_APERTA = "APR"
+SCAMBIO_STATO_ACCETTATA = "ACC"
+SCAMBIO_STATO_ANNULLATA = "ANN"
+SCAMBIO_STATO_SCADUTA = "SCD"
+SCAMBIO_STATO_CHOICES = [
+    (SCAMBIO_STATO_APERTA, "Aperta"),
+    (SCAMBIO_STATO_ACCETTATA, "Accettata"),
+    (SCAMBIO_STATO_ANNULLATA, "Annullata"),
+    (SCAMBIO_STATO_SCADUTA, "Scaduta"),
+]
+
+
+class OffertaScambioCarte(SyncableModel, models.Model):
+    """
+    Offerta di scambio carte tra personaggi della stessa campagna.
+    MVP: persistenza + admin; API/UI mercato in sviluppo.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="offerte_scambio_carte",
+    )
+    offerente = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.CASCADE,
+        related_name="offerte_scambio_carte_inviate",
+    )
+    carta_offerta = models.ForeignKey(
+        "CartaPosseduta",
+        on_delete=models.CASCADE,
+        related_name="offerte_scambio",
+    )
+    richiesta_carta = models.ForeignKey(
+        "CartaCollezionabile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="offerte_scambio_richieste",
+        help_text="Carta catalogo desiderata (qualsiasi copia posseduta dall'accettante).",
+    )
+    richiesta_crediti = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Crediti richiesti in aggiunta o al posto di una carta.",
+    )
+    messaggio = models.TextField(blank=True, default="")
+    stato = models.CharField(
+        max_length=3,
+        choices=SCAMBIO_STATO_CHOICES,
+        default=SCAMBIO_STATO_APERTA,
+        db_index=True,
+    )
+    accettante = models.ForeignKey(
+        "Personaggio",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="offerte_scambio_accettate",
+    )
+    accettata_at = models.DateTimeField(null=True, blank=True)
+    carta_contropartita = models.ForeignKey(
+        "CartaPosseduta",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="offerte_scambio_contropartita",
+        help_text="Copia ceduta dall'accettante al completamento (se richiesta carta).",
+    )
+    commissione_crediti = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+    )
+    crediti_trasferiti = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Crediti netti ricevuti dall'offerente dopo commissione.",
+    )
+
+    class Meta:
+        verbose_name = "Offerta scambio carte"
+        verbose_name_plural = "Offerte scambio carte"
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        richiesta = self.richiesta_carta.nome if self.richiesta_carta_id else "crediti"
+        return f"{self.offerente.nome} offre carta → {richiesta} ({self.stato})"

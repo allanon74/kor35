@@ -147,6 +147,7 @@ router.register(r'staff/carte/catalogo', views_carte.CartaCollezionabileStaffVie
 router.register(r'staff/carte/bustine', views_carte.BustinaCarteStaffViewSet, basename='staff-carte-bustine')
 router.register(r'staff/carte/config', views_carte.ConfigurazioneCarteStaffViewSet, basename='staff-carte-config')
 router.register(r'staff/carte/keywords', views_carte.KeywordCartaStaffViewSet, basename='staff-carte-keywords')
+router.register(r'staff/carte/combo-reliquiario', views_carte.ComboReliquiarioStaffViewSet, basename='staff-carte-combo-reliquiario')
 
 urlpatterns = [
     path('api/device/watch/pair/start/', watch_views.WatchPairStartView.as_view(), name='watch-pair-start'),
@@ -345,6 +346,9 @@ urlpatterns = [
     path('api/carte/collezione/', views_carte.CarteCollezionabiliGiocatoreView.as_view(), name='carte-collezione'),
     path('api/carte/apri-bustina/', views_carte.CarteApriBustinaView.as_view(), name='carte-apri-bustina'),
     path('api/carte/reliquiario/', views_carte.CarteReliquiarioView.as_view(), name='carte-reliquiario'),
+    path('api/carte/mercato/', views_carte.CarteMercatoView.as_view(), name='carte-mercato'),
+    path('api/carte/mercato/accetta/', views_carte.CarteMercatoAccettaView.as_view(), name='carte-mercato-accetta'),
+    path('api/carte/mercato/annulla/', views_carte.CarteMercatoAnnullaView.as_view(), name='carte-mercato-annulla'),
     path('api/carte/mazzo/', views_carte.CarteMazzoDuelloView.as_view(), name='carte-mazzo'),
     path('api/carte/duello/', views_carte.CarteDuelloListaView.as_view(), name='carte-duello-lista'),
     path('api/carte/duello/avversari/', views_carte.CarteDuelloAvversariView.as_view(), name='carte-duello-avversari'),
@@ -366,6 +370,11 @@ urlpatterns = [
         'api/staff/carte/effect-schema/',
         views_carte.StaffCarteEffectSchemaView.as_view(),
         name='staff-carte-effect-schema',
+    ),
+    path(
+        'api/staff/carte/scambi/',
+        views_carte.StaffCarteScambiView.as_view(),
+        name='staff-carte-scambi',
     ),
     
     path('api/user/me/', views.UserMeView.as_view(), name='user_me_api'),

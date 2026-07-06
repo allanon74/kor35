@@ -144,6 +144,24 @@ def _advance_effect(duello: DuelloCarte, state: dict) -> dict | None:
             state["step_index"] = idx
             continue
 
+        if stype == "modify_shell":
+            _exec_modify_shell(duello, controller, step, state)
+            idx += 1
+            state["step_index"] = idx
+            continue
+
+        if stype == "heal_heroes":
+            _exec_heal_heroes(duello, controller, step, state)
+            idx += 1
+            state["step_index"] = idx
+            continue
+
+        if stype == "sinergia_if_active":
+            _exec_sinergia_if_active(duello, controller, step, state)
+            idx += 1
+            state["step_index"] = idx
+            continue
+
         raise ValidationError(f"Passo effetto non implementato: {stype}")
 
     _pop_queue_head(duello)
@@ -559,6 +577,140 @@ def _exec_move_card(duello: DuelloCarte, controller: Personaggio, step: dict, st
         dst.append(cp_id)
         lato[dst_key] = dst
     _append_log(duello.stato_gioco, f"{controller.nome}: spostamento carta (effetto).")
+
+
+def _resolve_hero_slot_from_step(duello: DuelloCarte, controller: Personaggio, step: dict, state: dict) -> int | None:
+    from personaggi.carte_duello_service import _hero_slot_per_carta
+
+    hero = step.get("hero") or "this"
+    ctx = state.get("context") or {}
+    pg_key = ctx.get("pg_key") or _pg_key(controller)
+    lato = (duello.stato_gioco or {}).get(pg_key) or {}
+    if hero == "this":
+        slot = ctx.get("hero_slot")
+        if slot is not None:
+            return int(slot)
+        return _hero_slot_per_carta(lato, ctx.get("carta_posseduta_id"))
+    if hero in ("hero_0", "hero_1"):
+        return 0 if hero == "hero_0" else 1
+    return None
+
+
+def _exec_modify_shell(duello: DuelloCarte, controller: Personaggio, step: dict, state: dict):
+    from personaggi.carte_duello_service import _modifica_guscio_eroe
+
+    slot = _resolve_hero_slot_from_step(duello, controller, step, state)
+    if slot is None:
+        if step.get("optional"):
+            return
+        raise ValidationError("modify_shell: slot eroe non trovato.")
+    delta = int(resolve_value_ref(step.get("delta"), params=state["params"], choices=state["choices"]) or 0)
+    pg_key = (state.get("context") or {}).get("pg_key") or _pg_key(controller)
+    lato = duello.stato_gioco[pg_key]
+    _modifica_guscio_eroe(lato, slot, delta, set_value=bool(step.get("set")))
+    _append_log(duello.stato_gioco, f"{controller.nome}: Guscio slot {slot + 1} → {_guscio_log(lato, slot)}.")
+
+
+def _guscio_log(lato: dict, slot: int) -> int:
+    from personaggi.carte_duello_service import _guscio_eroi
+
+    return _guscio_eroi(lato)[slot]
+
+
+def _exec_heal_heroes(duello: DuelloCarte, controller: Personaggio, step: dict, state: dict):
+    from personaggi.carte_duello_service import (
+        _eroi_esauriti,
+        _hero_slot_per_carta,
+        _stats_eroe_slot,
+    )
+
+    target = step.get("target") or "self_hero"
+    amount_raw = step.get("amount", 1)
+    if amount_raw == "full":
+        amount = None
+    else:
+        amount = int(resolve_value_ref(amount_raw, params=state["params"], choices=state["choices"]) or 0)
+
+    ctx = state.get("context") or {}
+    pg_key = ctx.get("pg_key") or _pg_key(controller)
+    lato = duello.stato_gioco[pg_key]
+    esauriti = _eroi_esauriti(lato)
+    sal = lato.setdefault("salute_eroi", [None, None])
+    slots: list[int] = []
+
+    if target == "self_hero":
+        slot = _resolve_hero_slot_from_step(duello, controller, step, state)
+        if slot is not None:
+            slots = [slot]
+    elif target in ("own_heroes", "own_non_exhausted"):
+        for slot in (0, 1):
+            if not (lato.get("eroi") or [None, None])[slot]:
+                continue
+            if target == "own_non_exhausted" and esauriti[slot]:
+                continue
+            slots.append(slot)
+    else:
+        raise ValidationError(f"heal_heroes target non supportato: {target}")
+
+    curati = 0
+    for slot in slots:
+        try:
+            stats = _stats_eroe_slot(duello, controller, lato, slot)
+            max_hp = int(stats["robustezza"])
+            cur = sal[slot]
+            if cur is None:
+                cur = max_hp
+            if amount is None:
+                sal[slot] = max_hp
+            else:
+                sal[slot] = min(max_hp, int(cur) + amount)
+            curati += 1
+        except Exception:
+            continue
+    if curati:
+        _append_log(duello.stato_gioco, f"{controller.nome}: Guarigione su {curati} personaggio/i.")
+
+
+def _conta_eroi_sinergia(lato: dict) -> int:
+    from personaggi.carte_collezionabili_models import CartaPosseduta
+
+    count = 0
+    for slot in (0, 1):
+        cp_id = (lato.get("eroi") or [None, None])[slot]
+        if not cp_id:
+            continue
+        cp = CartaPosseduta.objects.filter(pk=cp_id).select_related("carta").first()
+        if cp and "sinergia" in (cp.carta.testo_gioco or "").lower():
+            count += 1
+    return count
+
+
+def _exec_sinergia_if_active(duello: DuelloCarte, controller: Personaggio, step: dict, state: dict):
+    min_count = int(step.get("min_count") or 2)
+    pg_key = (state.get("context") or {}).get("pg_key") or _pg_key(controller)
+    lato = duello.stato_gioco[pg_key]
+    if _conta_eroi_sinergia(lato) < min_count:
+        return
+
+    draw_count = step.get("draw_count")
+    if draw_count is not None:
+        sub = {
+            "type": "draw_cards",
+            "count": draw_count,
+            "target": step.get("draw_target") or "self",
+        }
+        _exec_draw_cards(duello, controller, sub, state)
+
+    energy_delta = step.get("energy_delta")
+    if energy_delta is not None:
+        sub = {
+            "type": "modify_energy",
+            "target": step.get("energy_target") or "self",
+            "delta": energy_delta,
+        }
+        _exec_modify_energy(duello, controller, sub, state)
+
+    _append_log(duello.stato_gioco, f"{controller.nome}: Sinergia attiva ({min_count}+ personaggi).")
 
 
 def get_open_effect_choice(duello: DuelloCarte, personaggio: Personaggio) -> dict | None:

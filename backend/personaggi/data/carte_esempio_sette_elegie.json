@@ -186,7 +186,7 @@
       "costo_gioco": 1,
       "ordine_set": 11,
       "bonus_equip": {"stat_sigla": "FOR", "valore": 1},
-      "testo_gioco": "Equipaggia su un eroe: +1 attacco simbolico (bonus reliquiario FOR).",
+      "testo_gioco": "Equipaggia: +1 Forza; in duello conta anche il bonus reliquiario FOR.",
       "testo_lore": "Lama incisa con rune del primo Consiglio.",
       "tag_tematici": ["arma", "runa"]
     },

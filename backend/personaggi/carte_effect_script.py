@@ -270,3 +270,94 @@ def danno_eroe_effect_script_template() -> dict:
             },
         ],
     }
+
+
+def guscio_effect_script_template() -> dict:
+    """Script on_play: assegna X segnalini Guscio a questo personaggio."""
+    return {
+        "version": EFFECT_SCRIPT_VERSION,
+        "params": {
+            "X": {"type": "int", "from_placeholder": "X", "default": 1},
+        },
+        "trigger": {"event": "on_play", "source": "this"},
+        "steps": [
+            {
+                "type": "modify_shell",
+                "hero": "this",
+                "delta": {"ref": "param.X"},
+                "set": True,
+            },
+        ],
+    }
+
+
+def guarigione_effect_script_template() -> dict:
+    """Script on_turn_end: cura questo personaggio di X PV (fino al massimo)."""
+    return {
+        "version": EFFECT_SCRIPT_VERSION,
+        "params": {
+            "X": {"type": "int", "from_placeholder": "X", "default": 1},
+        },
+        "trigger": {"event": "on_turn_end", "source": "self"},
+        "steps": [
+            {
+                "type": "heal_heroes",
+                "target": "self_hero",
+                "amount": {"ref": "param.X"},
+            },
+        ],
+    }
+
+
+def guarigione_completa_effect_script_template() -> dict:
+    """Script on_turn_end: ripristina PV massimi a questo personaggio."""
+    return {
+        "version": EFFECT_SCRIPT_VERSION,
+        "params": {},
+        "trigger": {"event": "on_turn_end", "source": "self"},
+        "steps": [
+            {
+                "type": "heal_heroes",
+                "target": "self_hero",
+                "amount": "full",
+            },
+        ],
+    }
+
+
+def sinergia_pesca_effect_script_template() -> dict:
+    """Script on_turn_start: se 2+ personaggi Sinergia in campo, pesca X."""
+    return {
+        "version": EFFECT_SCRIPT_VERSION,
+        "params": {
+            "X": {"type": "int", "from_placeholder": "X", "default": 1},
+        },
+        "trigger": {"event": "on_turn_start", "source": "self"},
+        "steps": [
+            {
+                "type": "sinergia_if_active",
+                "min_count": 2,
+                "draw_count": {"ref": "param.X"},
+                "draw_target": "self",
+            },
+        ],
+    }
+
+
+def sinergia_energia_effect_script_template() -> dict:
+    """Script on_turn_start: se 2+ Sinergia, +X mana."""
+    return {
+        "version": EFFECT_SCRIPT_VERSION,
+        "params": {
+            "X": {"type": "int", "from_placeholder": "X", "default": 1},
+        },
+        "trigger": {"event": "on_turn_start", "source": "self"},
+        "steps": [
+            {
+                "type": "sinergia_if_active",
+                "min_count": 2,
+                "energy_delta": {"ref": "param.X"},
+                "energy_target": "self",
+            },
+        ],
+    }

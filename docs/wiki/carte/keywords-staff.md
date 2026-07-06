@@ -163,7 +163,7 @@ Il **compositore staff** (form → JSON) arriverà dopo il vocabolario stabile. 
 - [ ] Keyword attive e testate su 2–3 carte campione nel catalogo
 - [ ] Regolamento Wiki sincronizzato (`make wiki-carte-sync … FORCE=1`)
 - [ ] Bustine/espansioni attive e QR bustina verificati se in campo
-- [ ] PG con mazzo da 15 carte valido (energie, naturali/soprannaturali, duplicati)
+- [ ] PG con mazzo da 15 carte valido (min 8 PG, max 2 terre, max 3 aure, affinità OGG/EVT)
 - [ ] Per OPEN: spiegare flusso **Apri scontro** / QR / pre-partita
 
 ## Lavori in coda (sviluppo)

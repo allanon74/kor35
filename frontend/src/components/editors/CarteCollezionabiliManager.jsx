@@ -21,12 +21,29 @@ import {
   staffCreateCartaKeyword,
   staffUpdateCartaKeyword,
   staffDeleteCartaKeyword,
-  staffGetCarteEffectSchema,
   getStaffWikiCarteRegolamentoInfo,
   syncStaffWikiCarteRegolamento,
   resolveMediaUrl,
+  getPunteggiList,
 } from '../../api';
 import { CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../../carte/carteConstants';
+import { CardRulesPreview } from '../../carte/cardTextBlocks';
+import BonusEquipEditor from './BonusEquipEditor';
+import ComboReliquiarioStaffPanel from './ComboReliquiarioStaffPanel';
+import EffectScriptWizard from './EffectScriptWizard';
+import MercatoScambiStaffPanel from './MercatoScambiStaffPanel';
+import StatModInline from './inlines/StatModInline';
+
+function normalizeCartaStats(rows) {
+  return (rows || []).map((row) => ({
+    ...row,
+    statistica: row.statistica?.id || row.statistica,
+    limit_a_aure: row.limit_a_aure || [],
+    limit_a_elementi: row.limit_a_elementi || [],
+    tipo_modificatore: row.tipo_modificatore || 'ADD',
+    valore: row.valore ?? 0,
+  }));
+}
 
 const emptyCarta = (espansioneId = '') => ({
   codice: '',
@@ -40,6 +57,8 @@ const emptyCarta = (espansioneId = '') => ({
   iniziativa: 3,
   testo_gioco: '',
   testo_lore: '',
+  testo_reliquiario: '',
+  statistiche_reliquiario: [],
   set_collezione: '',
   espansione: espansioneId || null,
   campagna_origine: '',
@@ -210,7 +229,6 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [selectedBustina, setSelectedBustina] = useState(null);
   const [keywordForm, setKeywordForm] = useState(emptyKeyword());
   const [effectScriptText, setEffectScriptText] = useState('');
-  const [mutazioneX, setMutazioneX] = useState('0');
   const [selectedKeyword, setSelectedKeyword] = useState(null);
   const [wikiInfo, setWikiInfo] = useState(null);
   const [wikiSyncing, setWikiSyncing] = useState(false);
@@ -222,6 +240,11 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [espansioneImmagineFile, setEspansioneImmagineFile] = useState(null);
   const [espansioneFilePreview, setEspansioneFilePreview] = useState(null);
   const [removeEspansioneImmagine, setRemoveEspansioneImmagine] = useState(false);
+  const [punteggi, setPunteggi] = useState([]);
+
+  const statsOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'ST'), [punteggi]);
+  const auraOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'AU'), [punteggi]);
+  const elementOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'EL'), [punteggi]);
 
   const activeEspansioneId = selectedEspansione?.id || '';
 
@@ -264,17 +287,19 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [esp, cfg, kw, wiki] = await Promise.all([
+      const [esp, cfg, kw, wiki, punt] = await Promise.all([
         staffGetCarteEspansioni(onLogout),
         staffGetCarteConfig(onLogout),
         staffGetCarteKeywords(onLogout),
         getStaffWikiCarteRegolamentoInfo(onLogout).catch(() => null),
+        getPunteggiList(onLogout).catch(() => []),
       ]);
       const espList = Array.isArray(esp) ? esp : esp?.results || [];
       setEspansioni(espList);
       if (cfg) setConfig(cfg);
       setKeywords(Array.isArray(kw) ? kw : kw?.results || []);
       setWikiInfo(wiki);
+      setPunteggi(punt || []);
 
       const espId = selectedEspansione?.id;
       const loadCatalogo = espId
@@ -356,12 +381,16 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const saveCarta = async () => {
     try {
       let payload;
+      const formPayload = {
+        ...form,
+        statistiche_reliquiario: normalizeCartaStats(form.statistiche_reliquiario),
+      };
       if (cartaImmagineFile) {
-        payload = buildCartaFormData(form, cartaImmagineFile);
+        payload = buildCartaFormData(formPayload, cartaImmagineFile);
       } else if (removeCartaImmagine && selected?.id) {
-        payload = { ...stripForApi(form, CARTA_READ_ONLY_KEYS), immagine: null };
+        payload = { ...stripForApi(formPayload, CARTA_READ_ONLY_KEYS), immagine: null };
       } else {
-        payload = stripForApi(form, CARTA_READ_ONLY_KEYS);
+        payload = stripForApi(formPayload, CARTA_READ_ONLY_KEYS);
       }
       if (selected?.id) {
         await staffUpdateCartaCatalogo(selected.id, payload, onLogout);
@@ -425,161 +454,6 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     }
   };
 
-  const loadMutazioneTemplate = async () => {
-    try {
-      const data = await staffGetCarteEffectSchema(onLogout);
-      const tpl = data?.templates?.mutazione;
-      if (tpl) {
-        setEffectScriptText(JSON.stringify(tpl, null, 2));
-        setMsg('Template Mutazione [X] caricato nello script.');
-      }
-    } catch (e) {
-      setMsg(e?.message || 'Caricamento template fallito.');
-    }
-  };
-
-  const applyMutazioneComposer = async () => {
-    try {
-      const data = await staffGetCarteEffectSchema(onLogout);
-      const tpl = data?.templates?.mutazione;
-      if (!tpl) {
-        setMsg('Template Mutazione non disponibile.');
-        return;
-      }
-      const xVal = parseInt(mutazioneX, 10);
-      const script = JSON.parse(JSON.stringify(tpl));
-      if (script.params?.X) {
-        script.params.X.default = Number.isFinite(xVal) ? xVal : 0;
-      }
-      setEffectScriptText(JSON.stringify(script, null, 2));
-      setKeywordForm((p) => ({
-        ...p,
-        codice: p.codice || 'MUTAZIONE',
-        nome: p.nome || 'Mutazione [X]',
-        testo_regola: p.testo_regola || (
-          'Quando questo Personaggio si esaurisce, puoi sostituirlo con un Personaggio '
-          + 'dalla tua mano con costo gioco ≤ [X].'
-        ),
-        reminder_breve: p.reminder_breve || 'Mutazione ≤[X]',
-      }));
-      setMsg('Compositore Mutazione applicato (nome, regola, script).');
-    } catch (e) {
-      setMsg(e?.message || 'Compositore fallito.');
-    }
-  };
-
-  const applyColpoComposer = async () => {
-    try {
-      const data = await staffGetCarteEffectSchema(onLogout);
-      const tpl = data?.templates?.colpo_influenza;
-      if (!tpl) {
-        setMsg('Template Colpo non disponibile.');
-        return;
-      }
-      const xVal = parseInt(mutazioneX, 10);
-      const script = JSON.parse(JSON.stringify(tpl));
-      if (script.params?.X) {
-        script.params.X.default = Number.isFinite(xVal) ? xVal : 1;
-      }
-      setEffectScriptText(JSON.stringify(script, null, 2));
-      setKeywordForm((p) => ({
-        ...p,
-        codice: p.codice || 'COLPO',
-        nome: p.nome || 'Colpo [X]',
-        testo_regola: p.testo_regola || 'Quando giochi questa carta, infliggi [X] danni all\'influenza avversaria.',
-        reminder_breve: p.reminder_breve || 'Colpo [X]',
-      }));
-      setMsg('Compositore Colpo [X] applicato.');
-    } catch (e) {
-      setMsg(e?.message || 'Compositore fallito.');
-    }
-  };
-
-  const applyPescaComposer = async () => {
-    try {
-      const data = await staffGetCarteEffectSchema(onLogout);
-      const tpl = data?.templates?.pesca;
-      if (!tpl) {
-        setMsg('Template Pesca non disponibile.');
-        return;
-      }
-      const xVal = parseInt(mutazioneX, 10);
-      const script = JSON.parse(JSON.stringify(tpl));
-      if (script.params?.X) {
-        script.params.X.default = Number.isFinite(xVal) ? xVal : 1;
-      }
-      setEffectScriptText(JSON.stringify(script, null, 2));
-      setKeywordForm((p) => ({
-        ...p,
-        codice: p.codice || 'PESCA',
-        nome: p.nome || 'Pesca [X]',
-        testo_regola: p.testo_regola || (
-          'All\'inizio del tuo turno, mentre questa carta è in gioco: Pesca [X].'
-        ),
-        reminder_breve: p.reminder_breve || 'Pesca [X]',
-      }));
-      setMsg('Compositore Pesca [X] (on_turn_start) applicato.');
-    } catch (e) {
-      setMsg(e?.message || 'Compositore fallito.');
-    }
-  };
-
-  const applyRigenerazioneComposer = async () => {
-    try {
-      const data = await staffGetCarteEffectSchema(onLogout);
-      const tpl = data?.templates?.rigenerazione_energia;
-      if (!tpl) {
-        setMsg('Template Rigenerazione non disponibile.');
-        return;
-      }
-      const xVal = parseInt(mutazioneX, 10);
-      const script = JSON.parse(JSON.stringify(tpl));
-      if (script.params?.X) {
-        script.params.X.default = Number.isFinite(xVal) ? xVal : 1;
-      }
-      setEffectScriptText(JSON.stringify(script, null, 2));
-      setKeywordForm((p) => ({
-        ...p,
-        codice: p.codice || 'RIGENERAZIONE',
-        nome: p.nome || 'Rigenerazione [X]',
-        testo_regola: p.testo_regola || 'Quando giochi questa carta, guadagni [X] energia.',
-        reminder_breve: p.reminder_breve || 'Rigenerazione [X]',
-      }));
-      setMsg('Compositore Rigenerazione [X] (on_play) applicato.');
-    } catch (e) {
-      setMsg(e?.message || 'Compositore fallito.');
-    }
-  };
-
-  const applyDannoEroeComposer = async () => {
-    try {
-      const data = await staffGetCarteEffectSchema(onLogout);
-      const tpl = data?.templates?.danno_eroe;
-      if (!tpl) {
-        setMsg('Template Danno eroe non disponibile.');
-        return;
-      }
-      const xVal = parseInt(mutazioneX, 10);
-      const script = JSON.parse(JSON.stringify(tpl));
-      if (script.params?.X) {
-        script.params.X.default = Number.isFinite(xVal) ? xVal : 1;
-      }
-      setEffectScriptText(JSON.stringify(script, null, 2));
-      setKeywordForm((p) => ({
-        ...p,
-        codice: p.codice || 'FERITA',
-        nome: p.nome || 'Ferita [X]',
-        testo_regola: p.testo_regola || (
-          'Quando giochi questa carta, scegli un eroe avversario e infliggi [X] danni.'
-        ),
-        reminder_breve: p.reminder_breve || 'Ferita [X]',
-      }));
-      setMsg('Compositore Ferita [X] (scelta eroe) applicato.');
-    } catch (e) {
-      setMsg(e?.message || 'Compositore fallito.');
-    }
-  };
-
   const deleteKeyword = async (id) => {
     if (!window.confirm('Eliminare questa keyword?')) return;
     try {
@@ -634,14 +508,14 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       {msg && <p className="text-sm text-amber-300">{msg}</p>}
 
       <div className="flex flex-wrap gap-2">
-        {['espansioni', 'catalogo', 'bustine', 'keywords', 'config'].map((t) => (
+        {['espansioni', 'catalogo', 'bustine', 'keywords', 'combo-reliquiario', 'scambi', 'config'].map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
             className={`rounded px-3 py-1 text-sm capitalize ${tab === t ? 'bg-violet-700' : 'bg-gray-800'}`}
           >
-            {t}
+            {t === 'combo-reliquiario' ? 'combo reliquiario' : t === 'scambi' ? 'mercato scambi' : t}
           </button>
         ))}
       </div>
@@ -782,7 +656,12 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                     className={`w-full rounded px-2 py-1 text-left hover:bg-gray-800 ${selected?.id === c.id ? 'bg-gray-700' : ''}`}
                     onClick={() => {
                       setSelected(c);
-                      setForm({ ...c });
+                      setForm({
+                        ...c,
+                        bonus_equip: c.bonus_equip && typeof c.bonus_equip === 'object' ? c.bonus_equip : {},
+                        statistiche_reliquiario: normalizeCartaStats(c.statistiche_reliquiario),
+                        testo_reliquiario: c.testo_reliquiario || '',
+                      });
                       resetCartaImmagineState();
                     }}
                   >
@@ -876,18 +755,76 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                 Duplicabile nel mazzo (max 2 copie)
               </label>
             </div>
-            <textarea
-              className="h-20 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm"
-              placeholder="Testo gioco"
-              value={form.testo_gioco || ''}
-              onChange={(e) => setForm((p) => ({ ...p, testo_gioco: e.target.value }))}
+            <BonusEquipEditor
+              tipo={form.tipo}
+              value={form.bonus_equip}
+              onChange={(bonus_equip) => setForm((p) => ({ ...p, bonus_equip }))}
             />
-            <textarea
-              className="h-20 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm"
-              placeholder="Testo lore"
-              value={form.testo_lore || ''}
-              onChange={(e) => setForm((p) => ({ ...p, testo_lore: e.target.value }))}
+            <div className="rounded border border-violet-900/50 bg-violet-950/20 p-2 space-y-2">
+              <h4 className="text-xs font-bold text-violet-300">Testo gioco (Keywords)</h4>
+              <textarea
+                className="h-36 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm leading-relaxed"
+                placeholder="Testo regole in gioco — le Keywords del tab dedicato vengono evidenziate in anteprima"
+                value={form.testo_gioco || ''}
+                onChange={(e) => setForm((p) => ({ ...p, testo_gioco: e.target.value }))}
+              />
+              <CardRulesPreview text={form.testo_gioco} keywords={keywords} />
+            </div>
+            <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-2 space-y-2">
+              <h4 className="text-xs font-bold text-indigo-300">Testo reliquiario (solo se equipaggiata)</h4>
+              <p className="text-[10px] text-gray-500">
+                Sostituisce il testo gioco nello slot reliquiario del personaggio. Non compare sulla carta in collezione/duello.
+              </p>
+              <textarea
+                className="h-28 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm leading-relaxed"
+                placeholder="Effetto passivo nel reliquiario…"
+                value={form.testo_reliquiario || ''}
+                onChange={(e) => setForm((p) => ({ ...p, testo_reliquiario: e.target.value }))}
+              />
+              <CardRulesPreview
+                text={form.testo_reliquiario}
+                keywords={keywords}
+                label="Anteprima testo reliquiario"
+              />
+            </div>
+            <StatModInline
+              items={form.statistiche_reliquiario || []}
+              options={statsOptions}
+              auraOptions={auraOptions}
+              elementOptions={elementOptions}
+              onAdd={() => setForm((p) => ({
+                ...p,
+                statistiche_reliquiario: [...(p.statistiche_reliquiario || []), {
+                  statistica: null,
+                  valore: 0,
+                  tipo_modificatore: 'ADD',
+                  usa_limitazione_aura: false,
+                  usa_limitazione_elemento: false,
+                  usa_condizione_text: false,
+                  condizione_text: '',
+                  limit_a_aure: [],
+                  limit_a_elementi: [],
+                }],
+              }))}
+              onChange={(i, field, val) => setForm((p) => {
+                const next = [...(p.statistiche_reliquiario || [])];
+                next[i] = { ...next[i], [field]: val };
+                return { ...p, statistiche_reliquiario: next };
+              })}
+              onRemove={(i) => setForm((p) => ({
+                ...p,
+                statistiche_reliquiario: (p.statistiche_reliquiario || []).filter((_, idx) => idx !== i),
+              }))}
             />
+            <div className="rounded border border-gray-700/80 bg-gray-900/40 p-2 space-y-2">
+              <h4 className="text-xs font-bold text-gray-300">Testo di lore</h4>
+              <textarea
+                className="h-44 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm leading-relaxed"
+                placeholder="Flavor, storia, citazioni…"
+                value={form.testo_lore || ''}
+                onChange={(e) => setForm((p) => ({ ...p, testo_lore: e.target.value }))}
+              />
+            </div>
             <div className="flex gap-2">
               <button type="button" className="flex items-center gap-1 rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveCarta}>
                 <Save size={14} /> Salva
@@ -1022,7 +959,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             {' '}
             → su carta con <em>Mutazione 0</em> mostra <em>costo 0</em>.
             {' '}
-            Guida completa in Wiki → <strong>Gioco carte → Keyword carte — guida master</strong>.
+            Guida completa in Wiki → <strong>EffectScript v1 — vocabolario</strong> e <strong>Keyword carte — guida master</strong>.
           </p>
           <div className="rounded border border-gray-700 p-3">
             <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-violet-300">
@@ -1114,73 +1051,19 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
               />
               Attiva
             </label>
-            <div className="rounded border border-violet-900/50 bg-violet-950/20 p-2">
-              <p className="mb-2 text-xs font-bold text-violet-300">Compositore keyword parametrizzate</p>
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="text-xs">
-                  Valore X
-                  <input
-                    type="number"
-                    min={0}
-                    className="mt-1 block w-24 rounded bg-gray-900 px-2 py-1"
-                    value={mutazioneX}
-                    onChange={(e) => setMutazioneX(e.target.value)}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="rounded bg-violet-800 px-2 py-1 text-xs"
-                  onClick={applyMutazioneComposer}
-                >
-                  Mutazione [X]
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-rose-900 px-2 py-1 text-xs"
-                  onClick={applyColpoComposer}
-                >
-                  Colpo [X] (on_play)
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-sky-900 px-2 py-1 text-xs"
-                  onClick={applyPescaComposer}
-                >
-                  Pesca [X] (turno)
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-amber-900 px-2 py-1 text-xs"
-                  onClick={applyRigenerazioneComposer}
-                >
-                  Rigenerazione [X]
-                </button>
-                <button
-                  type="button"
-                  className="rounded bg-orange-900 px-2 py-1 text-xs"
-                  onClick={applyDannoEroeComposer}
-                >
-                  Ferita [X] (eroe)
-                </button>
-              </div>
-            </div>
-            <label className="block text-sm">
-              Effect script (JSON v1, opzionale)
-              <textarea
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1 font-mono text-xs"
-                rows={8}
-                placeholder='{"version":1,...}'
-                value={effectScriptText}
-                onChange={(e) => setEffectScriptText(e.target.value)}
-              />
-            </label>
-            <button
-              type="button"
-              className="rounded bg-violet-900 px-2 py-1 text-xs"
-              onClick={loadMutazioneTemplate}
-            >
-              Carica template Mutazione [X]
-            </button>
+            <EffectScriptWizard
+              keywordForm={keywordForm}
+              setKeywordForm={setKeywordForm}
+              effectScriptText={effectScriptText}
+              setEffectScriptText={setEffectScriptText}
+              onLogout={onLogout}
+              onMessage={setMsg}
+            />
+            {!effectScriptText && (
+              <p className="text-[10px] text-gray-500">
+                Nessuno script: la keyword resta solo testuale. Usa il wizard per aggiungere effetti automatici in duello.
+              </p>
+            )}
             <div className="flex gap-2">
               <button type="button" className="rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveKeyword}>
                 <Save size={14} className="mr-1 inline" />
@@ -1198,6 +1081,14 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {!loading && tab === 'combo-reliquiario' && (
+        <ComboReliquiarioStaffPanel onLogout={onLogout} carteCatalogo={carte} />
+      )}
+
+      {!loading && tab === 'scambi' && (
+        <MercatoScambiStaffPanel onLogout={onLogout} />
       )}
 
       {!loading && tab === 'config' && (

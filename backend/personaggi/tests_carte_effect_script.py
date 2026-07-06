@@ -55,6 +55,41 @@ class CarteEffectScriptValidationTests(TestCase):
         validate_effect_script(script)
         validate_effect_script_for_keyword(script, nome="Ferita [X]", codice="FERITA")
 
+    def test_guscio_template_valido(self):
+        from personaggi.carte_effect_script import guscio_effect_script_template
+
+        script = guscio_effect_script_template()
+        validate_effect_script(script)
+        validate_effect_script_for_keyword(script, nome="Guscio [X]", codice="GUSCIO")
+
+    def test_guarigione_template_valido(self):
+        from personaggi.carte_effect_script import (
+            guarigione_completa_effect_script_template,
+            guarigione_effect_script_template,
+        )
+
+        script = guarigione_effect_script_template()
+        validate_effect_script(script)
+        validate_effect_script_for_keyword(script, nome="Guarigione [X]", codice="GUARIGIONE")
+
+        script_full = guarigione_completa_effect_script_template()
+        validate_effect_script(script_full)
+        validate_effect_script_for_keyword(script_full, nome="Guarigione", codice="GUARIGIONE")
+
+    def test_sinergia_template_valido(self):
+        from personaggi.carte_effect_script import (
+            sinergia_energia_effect_script_template,
+            sinergia_pesca_effect_script_template,
+        )
+
+        script = sinergia_pesca_effect_script_template()
+        validate_effect_script(script)
+        validate_effect_script_for_keyword(script, nome="Sinergia [X]", codice="SINERGIA")
+
+        script_en = sinergia_energia_effect_script_template()
+        validate_effect_script(script_en)
+        validate_effect_script_for_keyword(script_en, nome="Sinergia [X]", codice="SINERGIA")
+
     def test_rigenerazione_template_valido(self):
         script = rigenerazione_energia_effect_script_template()
         validate_effect_script(script)
@@ -472,6 +507,133 @@ class CarteEffectEngineMutazioneTests(TestCase):
         self.assertEqual(duello.stato_gioco[key_b]["salute_eroi"][0], 2)
         self.assertEqual(duello.stato_gioco[key_b]["eroi"][0], str(cp_eroe_b.id))
 
+    def test_on_play_guscio_assegna_segnalini(self):
+        from personaggi.carte_effect_script import guscio_effect_script_template
+
+        script = guscio_effect_script_template()
+        KeywordCarta.objects.create(
+            campagna=self.campagna,
+            codice="GUSCIO",
+            nome="Guscio [X]",
+            testo_regola="Ottiene [X] Guscio.",
+            effect_script=script,
+        )
+        eroe = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            codice="FX-GUSCIO",
+            nome="Corazzato",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+            costo_gioco=1,
+            attacco=1,
+            salute=3,
+            testo_gioco="Guscio 2.",
+        )
+        cp_eroe = CartaPosseduta.objects.create(personaggio=self.pg_a, carta=eroe)
+        mazzo_ids = [str(cp_eroe.id)] + [
+            str(self._carta_in_mano(f"G{i}", 1, f"g{i}").id) for i in range(14)
+        ]
+        duello = DuelloCarte.objects.create(
+            campagna=self.campagna,
+            sfidante=self.pg_a,
+            sfidato=self.pg_b,
+            stato=DUELLO_STATO_IN_CORSO,
+            turno_personaggio=self.pg_a,
+            mazzo_sfidante_ids=mazzo_ids,
+            mazzo_sfidato_ids=mazzo_ids,
+        )
+        duello.stato_gioco = _inizializza_stato_gioco(duello)
+        key_a = _pg_key(self.pg_a)
+        duello.stato_gioco[key_a]["mano"] = [str(cp_eroe.id)]
+        duello.stato_gioco[key_a]["energia"] = 5
+        duello.save()
+
+        esegui_azione_duello(
+            duello.id,
+            self.pg_a,
+            "gioca_carta",
+            {"carta_posseduta_id": str(cp_eroe.id), "slot_eroe": 0},
+        )
+        duello.refresh_from_db()
+        self.assertEqual(duello.stato_gioco[key_a]["guscio_eroi"][0], 2)
+
+    def test_sinergia_pesca_con_due_eroi(self):
+        from personaggi.carte_effect_script import sinergia_pesca_effect_script_template
+
+        script = sinergia_pesca_effect_script_template()
+        KeywordCarta.objects.create(
+            campagna=self.campagna,
+            codice="SIN_PESCA",
+            nome="Sinergia [X]",
+            testo_regola="Con 2+ Sinergia: Pesca [X].",
+            effect_script=script,
+        )
+        eroe1 = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            codice="FX-SIN-1",
+            nome="Alleato A",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+            costo_gioco=1,
+            attacco=1,
+            salute=2,
+            testo_gioco="Sinergia 1.",
+        )
+        eroe2 = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            codice="FX-SIN-2",
+            nome="Alleato B",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+            costo_gioco=1,
+            attacco=1,
+            salute=2,
+            testo_gioco="Compagno che combatte in sinergia",
+        )
+        cp1 = CartaPosseduta.objects.create(personaggio=self.pg_a, carta=eroe1)
+        cp2 = CartaPosseduta.objects.create(personaggio=self.pg_a, carta=eroe2)
+        extra = []
+        for i in range(10):
+            c = CartaCollezionabile.objects.create(
+                campagna=self.campagna,
+                codice=f"FX-SD{i}",
+                nome=f"Deck {i}",
+                tipo=CARTA_TIPO_PERSONAGGIO,
+                energia=CARTA_ENERGIA_MARZIALE,
+                rarita=CARTA_RARITA_COMUNE,
+                costo_gioco=1,
+            )
+            extra.append(CartaPosseduta.objects.create(personaggio=self.pg_a, carta=c))
+        mazzo_ids = [str(cp.id) for cp in extra[:15]]
+        while len(mazzo_ids) < 15:
+            mazzo_ids.append(str(extra[0].id))
+
+        duello = DuelloCarte.objects.create(
+            campagna=self.campagna,
+            sfidante=self.pg_a,
+            sfidato=self.pg_b,
+            stato=DUELLO_STATO_IN_CORSO,
+            turno_personaggio=self.pg_a,
+            mazzo_sfidante_ids=mazzo_ids[:15],
+            mazzo_sfidato_ids=mazzo_ids[:15],
+        )
+        duello.stato_gioco = _inizializza_stato_gioco(duello)
+        key_a = _pg_key(self.pg_a)
+        mano_prima = len(duello.stato_gioco[key_a]["mano"])
+        duello.stato_gioco[key_a]["eroi"][0] = str(cp1.id)
+        duello.stato_gioco[key_a]["eroi"][1] = str(cp2.id)
+        duello.stato_gioco[key_a]["mazzo"] = [str(cp.id) for cp in extra]
+        duello.save()
+
+        _avvia_turno_con_effetti(duello, self.pg_a)
+        duello.refresh_from_db()
+        mano_dopo = len(duello.stato_gioco[key_a]["mano"])
+        # +1 pesca turno base +1 Sinergia (solo eroe1 ha keyword nel testo)
+        self.assertEqual(mano_dopo, mano_prima + 2)
+
 
 class CarteEffectTurnTriggerTests(TestCase):
     def setUp(self):
@@ -541,14 +703,18 @@ class CarteEffectTurnTriggerTests(TestCase):
         duello.stato_gioco = _inizializza_stato_gioco(duello)
         key_a = _pg_key(self.pg_a)
         mano_prima = len(duello.stato_gioco[key_a]["mano"])
-        duello.stato_gioco[key_a]["luogo"] = str(cp_luogo.id)
+        duello.stato_gioco["terra"] = {
+            "carta_posseduta_id": str(cp_luogo.id),
+            "giocatore_id": key_a,
+        }
         duello.stato_gioco[key_a]["mazzo"] = [str(cp.id) for cp in extra]
         duello.save()
 
         _avvia_turno_con_effetti(duello, self.pg_a)
         duello.refresh_from_db()
         mano_dopo = len(duello.stato_gioco[key_a]["mano"])
-        self.assertEqual(mano_dopo, mano_prima + 1)
+        # +1 pesca turno base +1 keyword Pesca
+        self.assertEqual(mano_dopo, mano_prima + 2)
 
     def test_on_turn_start_catena_due_carte_campo(self):
         """Luogo + eroe con Pesca: entrambi gli effetti si accodano e risolvono."""
@@ -615,7 +781,10 @@ class CarteEffectTurnTriggerTests(TestCase):
         duello.stato_gioco = _inizializza_stato_gioco(duello)
         key_a = _pg_key(self.pg_a)
         mano_prima = len(duello.stato_gioco[key_a]["mano"])
-        duello.stato_gioco[key_a]["luogo"] = str(cp_luogo.id)
+        duello.stato_gioco["terra"] = {
+            "carta_posseduta_id": str(cp_luogo.id),
+            "giocatore_id": key_a,
+        }
         duello.stato_gioco[key_a]["eroi"][0] = str(cp_eroe.id)
         duello.stato_gioco[key_a]["mazzo"] = [str(cp.id) for cp in extra]
         duello.save()
@@ -623,5 +792,6 @@ class CarteEffectTurnTriggerTests(TestCase):
         _avvia_turno_con_effetti(duello, self.pg_a)
         duello.refresh_from_db()
         mano_dopo = len(duello.stato_gioco[key_a]["mano"])
-        self.assertEqual(mano_dopo, mano_prima + 2)
+        # +1 pesca turno base +2 keyword (luogo + eroe)
+        self.assertEqual(mano_dopo, mano_prima + 3)
         self.assertEqual(len(duello.stato_gioco.get("effect_queue") or []), 0)

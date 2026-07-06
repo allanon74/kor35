@@ -98,6 +98,20 @@ PERSONAGGI_ADMIN_MODEL_GROUPS = {
     "StatoInnescoTimerPersonaggio": ("QR", 46),
     "TipologiaTimer": ("QR", 47),
     "StatoTimerAttivo": ("QR", 48),
+    # Carte collezionabili
+    "KeywordCarta": ("Carte", 80),
+    "EspansioneCarte": ("Carte", 81),
+    "CartaCollezionabile": ("Carte", 82),
+    "BustinaCarte": ("Carte", 83),
+    "ConfigurazioneCarteCollezionabili": ("Carte", 84),
+    "ComboReliquiario": ("Carte", 85),
+    "CartaReliquiarioStatistica": ("Carte", 86),
+    "ComboReliquiarioStatistica": ("Carte", 87),
+    "CartaPosseduta": ("Carte", 88),
+    "ReliquiarioSlot": ("Carte", 89),
+    "MazzoDuello": ("Carte", 90),
+    "DuelloCarte": ("Carte", 91),
+    "OffertaScambioCarte": ("Carte", 92),
     # Sistemi di regole
     "Punteggio": ("Regole", 50),
     "Statistica": ("Regole", 51),
@@ -1536,4 +1550,7 @@ class CreazioneConsumabileInCorsoAdmin(admin.ModelAdmin):
     list_filter = ('completata',)
     search_fields = ('personaggio__nome', 'tessitura__nome')
     autocomplete_fields = ['personaggio', 'tessitura']
+
+# Carte collezionabili — registrazione modelli admin
+from personaggi import admin_carte  # noqa: F401, E402
 

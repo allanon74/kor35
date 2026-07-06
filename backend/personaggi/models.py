@@ -7782,11 +7782,75 @@ from personaggi.scommesse_models import (  # noqa: E402, F401
 )
 
 # ============================================================================
+# CARTE COLLEZIONABILI — modificatori statistici
+# ============================================================================
+
+
+class CartaReliquiarioStatistica(CondizioneStatisticaMixin, SyncableModel, models.Model):
+    """Modificatore statistica PG quando la carta è equipaggiata nel reliquiario."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    carta = models.ForeignKey(
+        "CartaCollezionabile",
+        on_delete=models.CASCADE,
+        related_name="reliquiario_statistiche",
+    )
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore = stat_modificatore_valore_field()
+    tipo_modificatore = models.CharField(
+        max_length=3,
+        choices=MODIFICATORE_CHOICES,
+        default=MODIFICATORE_ADDITIVO,
+    )
+
+    class Meta:
+        verbose_name = "Statistica reliquiario carta"
+        verbose_name_plural = "Statistiche reliquiario carta"
+        unique_together = [("carta", "statistica")]
+
+    def __str__(self):
+        return f"{self.carta.nome}: {self.statistica.nome} {self.valore}"
+
+
+class ComboReliquiarioStatistica(CondizioneStatisticaMixin, SyncableModel, models.Model):
+    """Modificatore statistica PG quando una combo reliquiario è attiva."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    combo = models.ForeignKey(
+        "ComboReliquiario",
+        on_delete=models.CASCADE,
+        related_name="statistiche",
+    )
+    statistica = models.ForeignKey(Statistica, on_delete=models.CASCADE)
+    valore = stat_modificatore_valore_field()
+    tipo_modificatore = models.CharField(
+        max_length=3,
+        choices=MODIFICATORE_CHOICES,
+        default=MODIFICATORE_ADDITIVO,
+    )
+
+    class Meta:
+        verbose_name = "Statistica combo reliquiario"
+        verbose_name_plural = "Statistiche combo reliquiario"
+        unique_together = [("combo", "statistica")]
+
+    def __str__(self):
+        return f"{self.combo.nome}: {self.statistica.nome} {self.valore}"
+
+
+# ============================================================================
 # CARTE COLLEZIONABILI
 # ============================================================================
 from personaggi.carte_collezionabili_models import (  # noqa: E402, F401
     EspansioneCarte,
     CartaCollezionabile,
+    ComboReliquiario,
     ConfigurazioneCarteCollezionabili,
     BustinaCarte,
     CartaPosseduta,
@@ -7794,6 +7858,7 @@ from personaggi.carte_collezionabili_models import (  # noqa: E402, F401
     MazzoDuello,
     AperturaBustinaCarte,
     DuelloCarte,
+    OffertaScambioCarte,
     CARTE_ACCESSO_OFF,
     CARTE_ACCESSO_TEST,
     CARTE_ACCESSO_OPEN,

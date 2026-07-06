@@ -19,11 +19,16 @@ from personaggi.carte_collezionabili_models import (
     CARTE_ACCESSO_TEST,
     CARTA_ENERGIE_NATURALI,
     CARTA_ENERGIE_SOPRANNATURALI,
+    CARTA_ENERGIA_CHOICES,
     CARTA_FONTE_BUSTINA,
     CARTA_RARITA_CHOICES,
     CARTA_RARITA_COMUNE,
     CARTA_RARITA_RARA,
     CARTA_RARITA_UNICA,
+    CARTA_TIPO_EVENTO,
+    CARTA_TIPO_LUOGO,
+    CARTA_TIPO_OGGETTO,
+    CARTA_TIPO_PERSONAGGIO,
     CartaCollezionabile,
     CartaPosseduta,
     ConfigurazioneCarteCollezionabili,
@@ -32,6 +37,9 @@ from personaggi.carte_collezionabili_models import (
     KeywordCarta,
     MAZZI_DUELLO_MAX_PER_PG,
     MAZZO_DUELLO_SIZE,
+    MAZZO_MAX_AURE,
+    MAZZO_MAX_TERRE,
+    MAZZO_MIN_PERSONAGGI,
     MazzoDuello,
     RELIQUIARIO_SLOTS,
     ReliquiarioSlot,
@@ -186,6 +194,7 @@ def _serializza_carta(carta: CartaCollezionabile) -> dict:
         "iniziativa": carta.iniziativa,
         "testo_gioco": carta.testo_gioco,
         "testo_lore": carta.testo_lore,
+        "testo_reliquiario": carta.testo_reliquiario,
         "set_collezione": carta.set_collezione,
         "espansione_id": str(esp.id) if esp else None,
         "espansione_nome": esp.nome if esp else None,
@@ -245,6 +254,7 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
             "bustine": [],
             "config": {},
             "keywords": [],
+            "regole_mazzo": descrizione_regole_mazzo_duello(),
         }
 
     possedute = (
@@ -310,6 +320,7 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
         "riserva": float(personaggio.riserva),
         "tema_energie": get_tema_energie_carte(),
         "keywords": lista_keywords_campagna(personaggio.campagna),
+        "regole_mazzo": descrizione_regole_mazzo_duello(),
     }
 
 
@@ -342,60 +353,10 @@ def _progress_espansioni(personaggio: Personaggio) -> list[dict]:
 
 
 def calcola_legami_attivi(personaggio: Personaggio) -> list[dict]:
-    """Combo tematiche dallo slot reliquiario equipaggiato."""
-    carte = list(
-        CartaCollezionabile.objects.filter(
-            possessioni__slot_reliquiario__personaggio=personaggio,
-            possessioni__slot_reliquiario__carta_posseduta__isnull=False,
-        ).distinct()
-    )
-    if not carte:
-        return []
+    """Combo reliquiario attive (definite da staff)."""
+    from personaggi.carte_reliquiario_combo import calcola_combo_reliquiario_attive
 
-    legami: list[dict] = []
-    energie = {c.energia for c in carte}
-    naturali = energie & CARTA_ENERGIE_NATURALI
-    soprannaturali = energie & CARTA_ENERGIE_SOPRANNATURALI
-
-    if len(naturali) >= 3:
-        legami.append({
-            "id": "triade_naturale",
-            "nome": "Triade Naturale",
-            "descrizione": "Marziale + Tecnologica + Innata equipaggiate.",
-        })
-
-    by_legame: dict[str, int] = {}
-    by_set: dict[str, int] = {}
-    for c in carte:
-        if c.legame_id:
-            by_legame[c.legame_id] = by_legame.get(c.legame_id, 0) + 1
-        if c.set_collezione:
-            by_set[c.set_collezione] = by_set.get(c.set_collezione, 0) + 1
-
-    for legame_id, count in by_legame.items():
-        if count >= 2:
-            legami.append({
-                "id": legame_id,
-                "nome": legame_id.replace("-", " ").title(),
-                "descrizione": f"{count} carte del legame «{legame_id}».",
-            })
-
-    for set_slug, count in by_set.items():
-        if count >= 3:
-            legami.append({
-                "id": f"set-{set_slug}",
-                "nome": f"Echi di {set_slug.replace('-', ' ').title()}",
-                "descrizione": f"{count} carte del set «{set_slug}».",
-            })
-
-    if len(soprannaturali) >= 4:
-        legami.append({
-            "id": "quadrifoglio_astrale",
-            "nome": "Quadrifoglio Astrale",
-            "descrizione": "Quattro energie soprannaturali diverse.",
-        })
-
-    return legami
+    return calcola_combo_reliquiario_attive(personaggio)
 
 
 @transaction.atomic
@@ -500,7 +461,22 @@ def equip_reliquio(personaggio: Personaggio, slot_index: int, carta_posseduta_id
         personaggio=personaggio,
     )
 
-    # Una carta non può stare in due slot
+    altri_slot = (
+        ReliquiarioSlot.objects.filter(
+            personaggio=personaggio,
+            carta_posseduta__isnull=False,
+        )
+        .exclude(pk=slot.pk)
+        .select_related("carta_posseduta__carta")
+    )
+    for altro in altri_slot:
+        if altro.carta_posseduta and altro.carta_posseduta.carta_id == cp.carta_id:
+            raise ValidationError(
+                f"«{cp.carta.nome}» è già equipaggiata nello slot {altro.slot_index + 1}. "
+                "Non puoi equipaggiare due copie della stessa carta."
+            )
+
+    # Una stessa istanza non può stare in due slot
     ReliquiarioSlot.objects.filter(
         personaggio=personaggio,
         carta_posseduta=cp,
@@ -568,8 +544,71 @@ def lista_espansioni_giocatore(campagna) -> list[dict]:
     return result
 
 
+_ENERGIA_ETICHETTA = dict(CARTA_ENERGIA_CHOICES)
+
+
+def valida_leader_duello(
+    leader_id,
+    personaggio: Personaggio,
+    mazzo_ids: list | None = None,
+) -> tuple[bool, list[str]]:
+    """Leader = carta Personaggio comandante, separata dalle 15 carte del mazzo."""
+    errori: list[str] = []
+    if not leader_id:
+        errori.append("Seleziona un Leader (Personaggio comandante).")
+        return False, errori
+
+    lid = str(leader_id)
+    ids_mazzo = [str(x) for x in (mazzo_ids or [])]
+    if lid in ids_mazzo:
+        errori.append("Il Leader non può essere incluso nelle 15 carte del mazzo.")
+        return False, errori
+
+    cp = (
+        CartaPosseduta.objects.filter(pk=lid, personaggio=personaggio)
+        .select_related("carta")
+        .first()
+    )
+    if not cp:
+        errori.append("Il Leader selezionato non appartiene al personaggio.")
+        return False, errori
+    if cp.carta.tipo != CARTA_TIPO_PERSONAGGIO:
+        errori.append("Il Leader deve essere una carta Personaggio.")
+        return False, errori
+    return True, errori
+
+
+def valida_setup_duello(
+    mazzo_ids: list,
+    leader_id,
+    personaggio: Personaggio,
+) -> tuple[bool, list[str]]:
+    """Mazzo 15 carte + Leader (regolamento Sette Elegie)."""
+    ok, errs = valida_mazzo_duello(mazzo_ids, personaggio)
+    if not ok:
+        return False, errs
+    ok_l, errs_l = valida_leader_duello(leader_id, personaggio, mazzo_ids)
+    if not ok_l:
+        return False, errs_l
+    return True, []
+
+
+def descrizione_regole_mazzo_duello() -> list[str]:
+    """Regole costruzione mazzo (testo per API / UI)."""
+    return [
+        f"Esattamente {MAZZO_DUELLO_SIZE} carte (oltre al Leader, scelto a parte).",
+        "1 Leader (Personaggio comandante) scelto separatamente — non conta tra le 15 carte; definisce l'aura primaria del mazzo.",
+        f"Almeno {MAZZO_MIN_PERSONAGGI} Personaggi.",
+        f"Massimo {MAZZO_MAX_TERRE} Terre.",
+        f"Massimo {MAZZO_MAX_AURE} aure diverse (Terre senza aura).",
+        "Almeno un'aura Naturale (Marziale, Tecnologica, Innata) e una Soprannaturale (Magica, Sacra, Psionica, Arcana).",
+        "Per giocare Equipaggiamenti o Effetti di un'aura serve almeno un Personaggio di quell'aura nel mazzo.",
+        "Massimo 1 copia per carta (2 se «duplicabile»).",
+    ]
+
+
 def valida_mazzo_duello(carte_possedute_ids: list, personaggio: Personaggio) -> tuple[bool, list[str]]:
-    """Validazione regole mazzo 15 carte (per fase duello)."""
+    """Validazione regole mazzo 15 carte (regolamento Sette Elegie)."""
     errori: list[str] = []
     ids = [str(x) for x in (carte_possedute_ids or [])]
     if len(ids) != MAZZO_DUELLO_SIZE:
@@ -587,27 +626,53 @@ def valida_mazzo_duello(carte_possedute_ids: list, personaggio: Personaggio) -> 
         return False, errori
 
     carte = [p.carta for p in possedute]
-    energie = {c.energia for c in carte}
-    if len(energie) < 2:
-        errori.append("Il mazzo deve usare almeno 2 energie diverse.")
 
-    naturali = sum(1 for c in carte if c.energia in CARTA_ENERGIE_NATURALI)
-    soprannaturali = sum(1 for c in carte if c.energia in CARTA_ENERGIE_SOPRANNATURALI)
-    if naturali < 2:
-        errori.append("Servono almeno 2 carte Naturali (Marziale/Tecnologica/Innata).")
-    if soprannaturali < 2:
-        errori.append("Servono almeno 2 carte Soprannaturali.")
+    pg_count = sum(1 for c in carte if c.tipo == CARTA_TIPO_PERSONAGGIO)
+    if pg_count < MAZZO_MIN_PERSONAGGI:
+        errori.append(
+            f"Servono almeno {MAZZO_MIN_PERSONAGGI} Personaggi nel mazzo (attuali: {pg_count})."
+        )
 
-    per_energia: dict[str, int] = {}
+    terre = sum(1 for c in carte if c.tipo == CARTA_TIPO_LUOGO)
+    if terre > MAZZO_MAX_TERRE:
+        errori.append(f"Massimo {MAZZO_MAX_TERRE} Terre nel mazzo (attuali: {terre}).")
+
+    carte_con_aura = [c for c in carte if c.tipo != CARTA_TIPO_LUOGO]
+    energie = {c.energia for c in carte_con_aura if c.energia}
+
+    if len(energie) > MAZZO_MAX_AURE:
+        errori.append(
+            f"Massimo {MAZZO_MAX_AURE} aure diverse nel mazzo (attuali: {len(energie)})."
+        )
+
+    if not (energie & CARTA_ENERGIE_NATURALI):
+        errori.append(
+            "Il mazzo deve includere almeno un'aura Naturale "
+            "(Marziale, Tecnologica o Innata)."
+        )
+    if not (energie & CARTA_ENERGIE_SOPRANNATURALI):
+        errori.append(
+            "Il mazzo deve includere almeno un'aura Soprannaturale "
+            "(Magica, Sacra, Psionica o Arcana)."
+        )
+
+    pg_energie = {c.energia for c in carte if c.tipo == CARTA_TIPO_PERSONAGGIO}
+    for carta in carte:
+        if carta.tipo not in (CARTA_TIPO_OGGETTO, CARTA_TIPO_EVENTO):
+            continue
+        if carta.energia in pg_energie:
+            continue
+        aura_nome = _ENERGIA_ETICHETTA.get(carta.energia, carta.energia)
+        tipo_nome = "Equipaggiamento" if carta.tipo == CARTA_TIPO_OGGETTO else "Effetto"
+        errori.append(
+            f"«{carta.nome}» ({tipo_nome} {aura_nome}): "
+            f"serve almeno un Personaggio {aura_nome} nel mazzo."
+        )
+
     per_carta: dict[str, int] = {}
     for c in carte:
-        per_energia[c.energia] = per_energia.get(c.energia, 0) + 1
         key = str(c.id)
         per_carta[key] = per_carta.get(key, 0) + 1
-
-    for energia, count in per_energia.items():
-        if count > 6:
-            errori.append(f"Troppe carte {energia}: massimo 6.")
 
     for carta_id, count in per_carta.items():
         carta = next(c for c in carte if str(c.id) == carta_id)
@@ -624,6 +689,7 @@ def lista_mazzi_duello(personaggio: Personaggio) -> list[dict]:
             "id": str(m.id),
             "nome": m.nome,
             "carte_possedute_ids": m.carte_possedute_ids or [],
+            "leader_carta_posseduta_id": m.leader_carta_posseduta_id or None,
             "is_default": m.is_default,
         }
         for m in MazzoDuello.objects.filter(personaggio=personaggio).order_by("-is_default", "nome")
@@ -637,6 +703,13 @@ def get_mazzo_default_ids(personaggio: Personaggio) -> list[str]:
     return []
 
 
+def get_mazzo_default_leader_id(personaggio: Personaggio) -> str | None:
+    m = MazzoDuello.objects.filter(personaggio=personaggio, is_default=True).first()
+    if m and m.leader_carta_posseduta_id:
+        return str(m.leader_carta_posseduta_id)
+    return None
+
+
 @transaction.atomic
 def salva_mazzo_duello(
     personaggio: Personaggio,
@@ -645,12 +718,14 @@ def salva_mazzo_duello(
     mazzo_id=None,
     nome: str = "Mazzo principale",
     is_default: bool = False,
+    leader_carta_posseduta_id=None,
 ) -> dict:
     assert_personaggio_puo_accedere_carte(personaggio)
-    ok, errs = valida_mazzo_duello(carte_ids, personaggio)
+    ok, errs = valida_setup_duello(carte_ids, leader_carta_posseduta_id, personaggio)
     if not ok:
         raise ValidationError(" ".join(errs))
     ids = [str(x) for x in carte_ids]
+    leader_id = str(leader_carta_posseduta_id)
     nome = (nome or "Mazzo").strip()[:80] or "Mazzo"
 
     if mazzo_id:
@@ -664,6 +739,7 @@ def salva_mazzo_duello(
             personaggio=personaggio,
             nome=nome,
             carte_possedute_ids=ids,
+            leader_carta_posseduta_id=leader_id,
             is_default=is_default,
         )
 
@@ -674,10 +750,19 @@ def salva_mazzo_duello(
 
     mazzo.nome = nome
     mazzo.carte_possedute_ids = ids
+    mazzo.leader_carta_posseduta_id = leader_id
     mazzo.is_default = is_default or (
         not MazzoDuello.objects.filter(personaggio=personaggio, is_default=True).exclude(pk=mazzo.pk).exists()
     )
-    mazzo.save(update_fields=["nome", "carte_possedute_ids", "is_default", "updated_at"])
+    mazzo.save(
+        update_fields=[
+            "nome",
+            "carte_possedute_ids",
+            "leader_carta_posseduta_id",
+            "is_default",
+            "updated_at",
+        ]
+    )
     return {"mazzi": lista_mazzi_duello(personaggio), "saved_id": str(mazzo.id)}
 
 
@@ -699,26 +784,65 @@ def elimina_mazzo_duello(personaggio: Personaggio, mazzo_id) -> dict:
 
 def applica_modificatori_reliquiario(personaggio: Personaggio, add_fn) -> None:
     """Integrazione in Personaggio.modificatori_calcolati."""
+    from personaggi.models import (
+        CartaReliquiarioStatistica,
+        ComboReliquiarioStatistica,
+        stat_link_attivo_in_contesto,
+        stat_link_solo_oggetto_ospitante,
+    )
+    from personaggi.carte_reliquiario_combo import calcola_combo_reliquiario_attive
+
     if not personaggio_puo_accedere_carte(personaggio):
         return
+
+    def _applica_stat_link(stat_link):
+        if stat_link_solo_oggetto_ospitante(stat_link):
+            return
+        if stat_link.usa_limitazione_elemento or stat_link.usa_limitazione_aura:
+            return
+        if stat_link.usa_condizione_text:
+            if not stat_link_attivo_in_contesto(personaggio, stat_link, {}):
+                return
+        if stat_link.statistica and stat_link.statistica.parametro:
+            add_fn(stat_link.statistica.parametro, stat_link.tipo_modificatore, stat_link.valore)
+
     slots = (
         ReliquiarioSlot.objects.filter(personaggio=personaggio, carta_posseduta__isnull=False)
         .select_related("carta_posseduta__carta")
     )
+    carta_ids = []
     for slot in slots:
+        carta_ids.append(slot.carta_posseduta.carta_id)
         bonus = slot.carta_posseduta.carta.bonus_equip or {}
         sigla = (bonus.get("stat_sigla") or "").strip()
-        if not sigla:
-            continue
-        try:
-            valore = float(bonus.get("valore") or 0)
-        except (TypeError, ValueError):
-            continue
-        if valore == 0:
-            continue
-        stat = Statistica.objects.filter(sigla=sigla).first()
-        if stat and stat.parametro:
-            add_fn(stat.parametro, MODIFICATORE_ADDITIVO, valore)
+        if sigla:
+            try:
+                valore = float(bonus.get("valore") or 0)
+            except (TypeError, ValueError):
+                valore = 0
+            if valore != 0:
+                stat = Statistica.objects.filter(sigla=sigla).first()
+                if stat and stat.parametro:
+                    add_fn(stat.parametro, MODIFICATORE_ADDITIVO, valore)
+
+    if carta_ids:
+        stat_qs = (
+            CartaReliquiarioStatistica.objects.filter(carta_id__in=carta_ids)
+            .select_related("statistica")
+            .prefetch_related("limit_a_aure", "limit_a_elementi")
+        )
+        for stat_link in stat_qs:
+            _applica_stat_link(stat_link)
+
+    combo_attive_ids = [c["id"] for c in calcola_combo_reliquiario_attive(personaggio)]
+    if combo_attive_ids:
+        combo_stat_qs = (
+            ComboReliquiarioStatistica.objects.filter(combo_id__in=combo_attive_ids)
+            .select_related("statistica")
+            .prefetch_related("limit_a_aure", "limit_a_elementi")
+        )
+        for stat_link in combo_stat_qs:
+            _applica_stat_link(stat_link)
 
 
 def serializza_bustina_qr(bustina: BustinaCarte, personaggio: Personaggio | None = None) -> dict:

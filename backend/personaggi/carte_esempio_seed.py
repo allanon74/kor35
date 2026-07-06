@@ -308,6 +308,14 @@ def seed_carte_esempio(
         )
         bustina_id = str(bustina.id)
 
+    from personaggi.carte_combo_reliquiario_seed import seed_combo_reliquiario
+
+    combo_stats = seed_combo_reliquiario(
+        campagna=campagna,
+        force=force,
+        include_catalog_derived=True,
+    )
+
     return {
         "campagna": campagna.slug,
         "campagna_nome": campagna.nome,
@@ -321,5 +329,65 @@ def seed_carte_esempio(
         "bustina_id": bustina_id,
         "bustina_creata": bustina_creata,
         "bustina_qr_id": bustina_qr_id,
+        "combo_reliquiario_create": combo_stats["created"],
+        "combo_reliquiario_aggiornate": combo_stats["updated"],
+        "combo_reliquiario_skipped": combo_stats["skipped"],
         "skipped": False,
+    }
+
+
+@transaction.atomic
+def grant_starter_kit(
+    campagna,
+    *,
+    personaggio_nome: str | None = None,
+    crediti: Decimal | None = None,
+) -> dict:
+    """
+    Concede 1 copia di ogni carta demo al personaggio (o a tutti i PG della campagna)
+    e crediti sufficienti per aprire bustine.
+    """
+    from personaggi.carte_collezionabili_models import (
+        CARTA_FONTE_BUSTINA,
+        CartaCollezionabile,
+        CartaPosseduta,
+    )
+    from personaggi.models import Personaggio
+
+    payload = load_carte_esempio_payload()
+    esp_slug = payload["espansione"]["slug"]
+    carte = CartaCollezionabile.objects.filter(campagna=campagna, espansione__slug=esp_slug)
+    if not carte.exists():
+        raise ValueError("Esegui prima seed_carte_esempio per creare il catalogo demo.")
+
+    qs = Personaggio.objects.filter(campagna=campagna)
+    if personaggio_nome:
+        qs = qs.filter(nome__iexact=personaggio_nome.strip())
+    if not qs.exists():
+        raise ValueError("Nessun personaggio trovato per lo starter kit.")
+
+    if crediti is None:
+        bustina_meta = payload.get("bustina") or {}
+        crediti = Decimal(str(bustina_meta.get("costo_crediti", 250))) * 2
+
+    personaggi = []
+    carte_concedute = 0
+    for pg in qs:
+        for carta in carte:
+            _, created = CartaPosseduta.objects.get_or_create(
+                personaggio=pg,
+                carta=carta,
+                defaults={"fonte": CARTA_FONTE_BUSTINA},
+            )
+            if created:
+                carte_concedute += 1
+        attuali = Decimal(str(pg.crediti))
+        if crediti > attuali:
+            pg.modifica_crediti(crediti - attuali, "Starter kit carte demo")
+        personaggi.append(pg.nome)
+
+    return {
+        "personaggi": personaggi,
+        "carte_concedute": carte_concedute,
+        "crediti_target": float(crediti),
     }

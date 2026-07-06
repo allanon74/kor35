@@ -16,6 +16,7 @@ export default function PersonaggioDuelloQrView({ avversario, qrcodeId, onClose,
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [mazzoIds, setMazzoIds] = useState([]);
+  const [leaderId, setLeaderId] = useState(null);
   const [duelloAvvio, setDuelloAvvio] = useState('off');
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export default function PersonaggioDuelloQrView({ avversario, qrcodeId, onClose,
         const defaultMazzo = (data?.mazzi || []).find((m) => m.is_default) || data?.mazzi?.[0];
         if (defaultMazzo?.carte_possedute_ids?.length === MAZZO_DUELLO_SIZE) {
           setMazzoIds(defaultMazzo.carte_possedute_ids);
+          setLeaderId(defaultMazzo.leader_carta_posseduta_id || null);
         } else if ((data?.carte || []).length >= MAZZO_DUELLO_SIZE) {
           setMazzoIds((data.carte || []).slice(0, MAZZO_DUELLO_SIZE).map((c) => c.id));
         }
@@ -45,8 +47,8 @@ export default function PersonaggioDuelloQrView({ avversario, qrcodeId, onClose,
   }, [selectedCharacterId, onLogout]);
 
   const handleSfida = async () => {
-    if (!selectedCharacterId || !qrcodeId || mazzoIds.length !== MAZZO_DUELLO_SIZE) {
-      setError(`Servono esattamente ${MAZZO_DUELLO_SIZE} carte nel mazzo da duello.`);
+    if (!selectedCharacterId || !qrcodeId || mazzoIds.length !== MAZZO_DUELLO_SIZE || !leaderId) {
+      setError(`Servono ${MAZZO_DUELLO_SIZE} carte nel mazzo e un Leader.`);
       return;
     }
     if (String(avversario?.id) === String(selectedCharacterId)) {
@@ -58,7 +60,7 @@ export default function PersonaggioDuelloQrView({ avversario, qrcodeId, onClose,
     try {
       await carteInvitaDuello(
         selectedCharacterId,
-        { mazzo_ids: mazzoIds, qrcode_id: qrcodeId },
+        { mazzo_ids: mazzoIds, leader_id: leaderId, qrcode_id: qrcodeId },
         onLogout,
       );
       setSuccess(

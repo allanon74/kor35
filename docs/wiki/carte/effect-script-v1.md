@@ -138,6 +138,60 @@ Pesca dal mazzo verso la mano. `count`: numero o ref; `target`: `self` | `oppone
 
 Sposta carta tra zone (`from` / `to`); opzionale `field_slot` se destinazione campo.
 
+### `modify_shell`
+
+Assegna o modifica segnalini **Guscio** su un eroe. Il Guscio assorbe un colpo letale (l'eroe resta a 1 PV).
+
+```json
+{
+  "type": "modify_shell",
+  "hero": "this",
+  "delta": { "ref": "param.X" },
+  "set": true
+}
+```
+
+| Campo | Valori |
+|-------|--------|
+| `hero` | `this` (carta/eroe del contesto), `hero_0`, `hero_1` |
+| `delta` | Numero o ref; con `set: true` imposta il valore assoluto |
+| `set` | Se `true`, sostituisce i segnalini; altrimenti somma |
+
+### `heal_heroes`
+
+Cura PV degli eroi (fino alla Robustezza massima).
+
+```json
+{
+  "type": "heal_heroes",
+  "target": "self_hero",
+  "amount": { "ref": "param.X" }
+}
+```
+
+| `target` | Eroi curati |
+|----------|-------------|
+| `self_hero` | L'eroe della carta / contesto |
+| `own_heroes` | Tutti i tuoi eroi in campo |
+| `own_non_exhausted` | I tuoi eroi non esauriti |
+
+`amount`: intero, ref, oppure `"full"` per ripristino completo.
+
+### `sinergia_if_active`
+
+Effetto condizionale: conta i personaggi in campo il cui `testo_gioco` contiene «sinergia» (case insensitive). Se `min_count` (default 2) è raggiunto, applica pesca e/o mana.
+
+```json
+{
+  "type": "sinergia_if_active",
+  "min_count": 2,
+  "draw_count": { "ref": "param.X" },
+  "draw_target": "self"
+}
+```
+
+Opzionale `energy_delta` + `energy_target` (`self` \| `opponent`) per bonus mana.
+
 ## Riferimenti (`ref`)
 
 | Pattern | Esempio |
@@ -198,6 +252,46 @@ Template disponibile in API staff (`templates.mutazione`) e pulsante nel tab Key
 }
 ```
 
+## Wizard EffectScript (dashboard staff)
+
+**Dashboard staff → Carte → Keywords → Wizard EffectScript v1**
+
+Workflow consigliato per una nuova keyword con effetto automatico in duello:
+
+1. **Codice e nome** — usa placeholder maiuscoli tra parentesi quadre: `Mutazione [X]`, `Colpo [Y]`.
+2. **Testo regola** — ripeti gli stessi `[X]` nel testo mostrato sulla carta.
+3. **Ricetta** — nel wizard scegli un template (Mutazione, Colpo, Pesca, Rigenerazione, Ferita, Guscio, Guarigione, Sinergia) oppure «Vuoto» per script custom.
+4. **Trigger** — `on_play`, `on_exhaust`, `on_turn_start`, ecc. (deve combaciare con quando vuoi che scatti l’effetto).
+5. **Parametri** — il wizard legge `[X]` dal nome e imposta i `default` in `params`.
+6. **Valida script** — pulsante che chiama `POST /api/staff/carte/effect-schema/` con `{ script, nome, codice }`.
+7. **Salva keyword** — la validazione server ripete gli stessi controlli al salvataggio.
+
+Per passi custom oltre i template: apri **Modifica JSON avanzato** nel wizard.
+
+### Ricette template (API `templates.*`)
+
+| Template | Trigger default | Effetto |
+|----------|-----------------|---------|
+| `mutazione` | `on_exhaust` | Scelta PG in mano ≤ X, poi `replace` |
+| `colpo_influenza` | `on_play` | Danno influenza avversaria |
+| `pesca` | `on_turn_start` | Pesca X carte |
+| `rigenerazione_energia` | `on_play` | +X energia |
+| `danno_eroe` | `on_play` | Scelta eroe avversario, danno salute |
+| `guscio` | `on_play` | Assegna X segnalini Guscio all'eroe |
+| `guarigione` | `on_turn_end` | Cura X PV a questo personaggio |
+| `guarigione_completa` | `on_turn_end` | Ripristina tutti i PV |
+| `sinergia_pesca` | `on_turn_start` | Se 2+ Sinergia: pesca X |
+| `sinergia_energia` | `on_turn_start` | Se 2+ Sinergia: +X mana |
+
+### Errori comuni
+
+| Errore | Causa | Fix |
+|--------|-------|-----|
+| `params.X` mancante | Nome `Mutazione [X]` ma script senza `params.X` | Aggiungi param o usa wizard |
+| `from_placeholder` errato | `params.X.from_placeholder` ≠ `X` | Allinea al placeholder nel nome |
+| `steps` vuoto | Script senza passi | Almeno uno step obbligatorio |
+| Trigger non scatta | Evento sbagliato (es. `on_play` su effetto «a inizio turno») | Usa `on_turn_start` |
+
 ## Dove si salva
 
 **Dashboard staff → Carte → Keywords → campo Effect script (JSON)**.
@@ -218,7 +312,12 @@ Validazione al salvataggio: schema JSON + allineamento placeholder ↔ `params`.
 | `draw_cards` | ✅ |
 | `deal_damage` su eroi (slot) | ✅ |
 | `move_card` (hand/deck/discard/field) | ✅ MVP |
-| Compositore staff | ✅ Mutazione, Colpo, Pesca, Rigenerazione, Ferita (eroe) |
+| `modify_shell` (Guscio) | ✅ |
+| `heal_heroes` (Guarigione) | ✅ |
+| `sinergia_if_active` | ✅ |
+| Fasi turno (Apertura / Combattimento / Chiusura) | ✅ |
+| Bonus passivi Leader (color pie) | ✅ |
+| Compositore staff | ✅ Wizard EffectScript v1 (ricette + validazione) |
 | Catena effetti (coda FIFO) | ✅ |
 | `player_choice` bersaglio eroe | ✅ |
 
@@ -226,7 +325,8 @@ Validazione al salvataggio: schema JSON + allineamento placeholder ↔ `params`.
 
 | Metodo | URL |
 |--------|-----|
-| GET | `/api/staff/carte/effect-schema/` — schema + template Mutazione |
+| GET | `/api/staff/carte/effect-schema/` — schema + template |
+| POST | `/api/staff/carte/effect-schema/` — valida `{ script, nome, codice }` |
 | CRUD | `/api/staff/carte/keywords/` — include `effect_script` |
 
 In duello: azione giocatore `effect_choice` con `{ "choice_id", "carta_posseduta_id" }`.

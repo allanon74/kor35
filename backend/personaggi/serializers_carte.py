@@ -1,6 +1,9 @@
 """
 Serializers carte collezionabili.
 """
+import json
+
+from django.db import transaction
 from django.utils.text import slugify
 from rest_framework import serializers
 
@@ -9,10 +12,81 @@ from personaggi.carte_collezionabili_models import (
     CARTE_ACCESSO_OFF,
     CARTE_ACCESSO_OPEN,
     CartaCollezionabile,
+    ComboReliquiario,
     ConfigurazioneCarteCollezionabili,
     EspansioneCarte,
     KeywordCarta,
 )
+from personaggi.models import CartaReliquiarioStatistica, ComboReliquiarioStatistica
+from personaggi.serializers import StatisticaSerializer
+
+
+def _parse_json_field(value, field_name):
+    if value in (None, "", []):
+        return value if value != "" else None
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise serializers.ValidationError({field_name: "JSON non valido."}) from exc
+    return value
+
+
+class CartaReliquiarioStatisticaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CartaReliquiarioStatistica
+        fields = "__all__"
+        read_only_fields = ["carta", "id", "sync_id", "created_at", "updated_at"]
+        validators = []
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["statistica"] = StatisticaSerializer(instance.statistica).data
+        rep["limit_a_aure"] = list(instance.limit_a_aure.values_list("id", flat=True))
+        rep["limit_a_elementi"] = list(instance.limit_a_elementi.values_list("id", flat=True))
+        return rep
+
+
+class ComboReliquiarioStatisticaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComboReliquiarioStatistica
+        fields = "__all__"
+        read_only_fields = ["combo", "id", "sync_id", "created_at", "updated_at"]
+        validators = []
+
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep["statistica"] = StatisticaSerializer(instance.statistica).data
+        rep["limit_a_aure"] = list(instance.limit_a_aure.values_list("id", flat=True))
+        rep["limit_a_elementi"] = list(instance.limit_a_elementi.values_list("id", flat=True))
+        return rep
+
+
+def _save_condizione_stat_rows(model_cls, parent_field, parent_instance, rows):
+    if rows is None:
+        return
+    fk_name = parent_field
+    filter_kw = {fk_name: parent_instance}
+    model_cls.objects.filter(**filter_kw).delete()
+    for item in rows:
+        data = dict(item)
+        aure = data.pop("limit_a_aure", []) or []
+        elementi = data.pop("limit_a_elementi", []) or []
+        data.pop("id", None)
+        data.pop("sync_id", None)
+        data.pop("created_at", None)
+        data.pop("updated_at", None)
+        stat = data.pop("statistica", None)
+        if isinstance(stat, dict):
+            stat = stat.get("id")
+        if not stat:
+            continue
+        data["statistica_id"] = stat
+        row = model_cls.objects.create(**filter_kw, **data)
+        if aure:
+            row.limit_a_aure.set(aure)
+        if elementi:
+            row.limit_a_elementi.set(elementi)
 
 
 class EspansioneCarteSerializer(serializers.ModelSerializer):
@@ -75,6 +149,11 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
     immagine_url = serializers.SerializerMethodField()
     espansione_nome = serializers.CharField(source="espansione.nome", read_only=True, allow_null=True)
+    statistiche_reliquiario = CartaReliquiarioStatisticaSerializer(
+        source="reliquiario_statistiche",
+        many=True,
+        required=False,
+    )
 
     class Meta:
         model = CartaCollezionabile
@@ -97,11 +176,13 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             "iniziativa",
             "testo_gioco",
             "testo_lore",
+            "testo_reliquiario",
             "set_collezione",
             "campagna_origine",
             "legame_id",
             "tag_tematici",
             "bonus_equip",
+            "statistiche_reliquiario",
             "duplicabile",
             "immagine",
             "immagine_url",
@@ -117,6 +198,93 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.immagine.url)
             return obj.immagine.url
         return None
+
+    def validate_bonus_equip(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from personaggi.carte_equip_bonus import validate_bonus_equip
+
+        parsed = _parse_json_field(value, "bonus_equip")
+        try:
+            return validate_bonus_equip(parsed)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+
+    def validate_statistiche_reliquiario(self, value):
+        return _parse_json_field(value, "statistiche_reliquiario") or []
+
+    def validate_tag_tematici(self, value):
+        parsed = _parse_json_field(value, "tag_tematici")
+        return parsed if parsed is not None else []
+
+    @transaction.atomic
+    def create(self, validated_data):
+        stats = validated_data.pop("reliquiario_statistiche", [])
+        carta = CartaCollezionabile.objects.create(**validated_data)
+        _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", carta, stats)
+        return carta
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        stats = validated_data.pop("reliquiario_statistiche", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if stats is not None:
+            _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", instance, stats)
+        return instance
+
+
+class ComboReliquiarioSerializer(serializers.ModelSerializer):
+    statistiche = ComboReliquiarioStatisticaSerializer(many=True, required=False)
+
+    class Meta:
+        model = ComboReliquiario
+        fields = [
+            "id",
+            "sync_id",
+            "created_at",
+            "updated_at",
+            "campagna",
+            "codice",
+            "nome",
+            "testo",
+            "colore",
+            "tipo_trigger",
+            "param_legame_id",
+            "param_set_collezione",
+            "param_carte_codici",
+            "param_min_count",
+            "ordine",
+            "attiva",
+            "statistiche",
+        ]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at"]
+
+    def validate_param_carte_codici(self, value):
+        parsed = _parse_json_field(value, "param_carte_codici")
+        if parsed is None:
+            return []
+        if not isinstance(parsed, list):
+            raise serializers.ValidationError("Deve essere una lista di codici carta.")
+        return [str(c).strip() for c in parsed if str(c).strip()]
+
+    @transaction.atomic
+    def create(self, validated_data):
+        stats = validated_data.pop("statistiche", [])
+        combo = ComboReliquiario.objects.create(**validated_data)
+        _save_condizione_stat_rows(ComboReliquiarioStatistica, "combo", combo, stats)
+        return combo
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        stats = validated_data.pop("statistiche", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if stats is not None:
+            _save_condizione_stat_rows(ComboReliquiarioStatistica, "combo", instance, stats)
+        return instance
 
 
 class BustinaCarteSerializer(serializers.ModelSerializer):

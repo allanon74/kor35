@@ -26,7 +26,7 @@ from personaggi.carte_collezionabili_service import (
     assert_personaggio_puo_accedere_carte,
     get_carte_accesso_modo,
     personaggio_puo_accedere_carte,
-    valida_mazzo_duello,
+    valida_setup_duello,
 )
 from personaggi.carte_duello_service import (
     _avvia_turno_con_effetti,
@@ -48,11 +48,13 @@ def _prematch_vuoto() -> dict:
         "posta_ultima_proposta_da": None,
         "sfidante": {
             "mazzo_ids": [],
+            "leader_id": None,
             "pronto": False,
             "posta_fonte": POSTA_FONTE_RISERVA,
         },
         "sfidato": {
             "mazzo_ids": [],
+            "leader_id": None,
             "pronto": False,
             "posta_fonte": POSTA_FONTE_RISERVA,
         },
@@ -297,8 +299,10 @@ def _maybe_avvia_partita(duello: DuelloCarte) -> bool:
         return False
     mazzo_a = s.get("mazzo_ids") or []
     mazzo_b = t.get("mazzo_ids") or []
-    ok_a, err_a = valida_mazzo_duello(mazzo_a, duello.sfidante)
-    ok_b, err_b = valida_mazzo_duello(mazzo_b, duello.sfidato)
+    leader_a = s.get("leader_id")
+    leader_b = t.get("leader_id")
+    ok_a, err_a = valida_setup_duello(mazzo_a, leader_a, duello.sfidante)
+    ok_b, err_b = valida_setup_duello(mazzo_b, leader_b, duello.sfidato)
     if not ok_a:
         raise ValidationError(" ".join(err_a))
     if not ok_b:
@@ -313,6 +317,8 @@ def _maybe_avvia_partita(duello: DuelloCarte) -> bool:
 
     duello.mazzo_sfidante_ids = [str(x) for x in mazzo_a]
     duello.mazzo_sfidato_ids = [str(x) for x in mazzo_b]
+    duello.leader_sfidante_id = str(leader_a)
+    duello.leader_sfidato_id = str(leader_b)
     duello.posta_cr = posta
     duello.modalita_partita = pre.get("modalita_partita") or duello.modalita_partita
     duello.stato = DUELLO_STATO_IN_CORSO
@@ -380,10 +386,12 @@ def azione_prematch(duello_id, personaggio: Personaggio, azione: str, payload: d
 
     elif azione == "imposta_mazzo":
         mazzo_ids = payload.get("mazzo_ids") or []
-        ok, errs = valida_mazzo_duello(mazzo_ids, personaggio)
+        leader_id = payload.get("leader_id")
+        ok, errs = valida_setup_duello(mazzo_ids, leader_id, personaggio)
         if not ok:
             raise ValidationError(" ".join(errs))
         lato["mazzo_ids"] = [str(x) for x in mazzo_ids]
+        lato["leader_id"] = str(leader_id)
         lato["pronto"] = False
 
     elif azione == "imposta_posta_fonte":
@@ -404,6 +412,8 @@ def azione_prematch(duello_id, personaggio: Personaggio, azione: str, payload: d
         if pronto:
             if not lato.get("mazzo_ids"):
                 raise ValidationError("Seleziona un mazzo prima di essere pronto.")
+            if not lato.get("leader_id"):
+                raise ValidationError("Seleziona un Leader prima di essere pronto.")
             posta_attuale = Decimal(str(pre.get("posta_cr") or 0))
             if posta_attuale > 0 and not pre.get("posta_accettata"):
                 raise ValidationError("Accetta la posta prima di essere pronto.")

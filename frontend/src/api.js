@@ -4128,6 +4128,27 @@ export const carteEquipReliquiario = (charId, slotIndex, cartaPossedutaId, onLog
         }),
     }, onLogout);
 
+export const carteGetMercato = (charId, onLogout) =>
+    fetchAuthenticated(`/api/personaggi/api/carte/mercato/?char_id=${encodeURIComponent(charId)}`, { method: 'GET' }, onLogout);
+
+export const carteCreaOffertaMercato = (charId, data, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/mercato/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, ...data }),
+    }, onLogout);
+
+export const carteAccettaOffertaMercato = (charId, offertaId, data = {}, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/mercato/accetta/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, offerta_id: offertaId, ...data }),
+    }, onLogout);
+
+export const carteAnnullaOffertaMercato = (charId, offertaId, onLogout) =>
+    fetchAuthenticated('/api/personaggi/api/carte/mercato/annulla/', {
+        method: 'POST',
+        body: JSON.stringify({ char_id: charId, offerta_id: offertaId }),
+    }, onLogout);
+
 export const MAZZO_DUELLO_SIZE = 15;
 export const MAZZI_DUELLO_MAX = 5;
 
@@ -4142,6 +4163,7 @@ export const carteSaveMazzo = (charId, carteIds, options = {}, onLogout) => {
             mazzo_id: opts.mazzoId || null,
             nome: opts.nome,
             is_default: opts.isDefault,
+            leader_id: opts.leaderId || null,
         }),
     }, logout);
 };
@@ -4298,6 +4320,12 @@ export const staffSaveCarteConfig = (data, onLogout) => {
 export const staffGetCarteEffectSchema = (onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/effect-schema/`, { method: 'GET' }, onLogout);
 
+export const staffValidateCarteEffectScript = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/effect-schema/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
 export const staffGetCarteKeywords = (onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/keywords/`, { method: 'GET' }, onLogout);
 
@@ -4315,6 +4343,32 @@ export const staffUpdateCartaKeyword = (id, data, onLogout) =>
 
 export const staffDeleteCartaKeyword = (id, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/keywords/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCarteComboReliquiario = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/combo-reliquiario/`, { method: 'GET' }, onLogout);
+
+export const staffCreateCartaComboReliquiario = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/combo-reliquiario/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartaComboReliquiario = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/combo-reliquiario/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCartaComboReliquiario = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/combo-reliquiario/${id}/`, { method: 'DELETE' }, onLogout);
+
+export const staffGetCarteScambi = (onLogout, { stato = '', limit = 100 } = {}) => {
+    const params = new URLSearchParams();
+    if (stato) params.set('stato', stato);
+    if (limit) params.set('limit', String(limit));
+    const qs = params.toString();
+    return fetchAuthenticated(`${STAFF_CARTE}/scambi/${qs ? `?${qs}` : ''}`, { method: 'GET' }, onLogout);
+};
 
 /** Metadati sorgenti wiki regolamento carte (docs/wiki/carte). */
 export const getStaffWikiCarteRegolamentoInfo = (onLogout) =>
