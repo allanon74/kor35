@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CreditCard, ImagePlus, Layers, Plus, RefreshCw, Save, BookOpen, Tag, X } from 'lucide-react';
+import { CreditCard, ImagePlus, RefreshCw, BookOpen, X } from 'lucide-react';
 import {
   staffGetCarteCatalogo,
   staffGetCarteCatalogoByEspansione,
@@ -30,17 +30,20 @@ import {
   resolveMediaUrl,
   getPunteggiList,
 } from '../../api';
-import { CARTA_ENERGIA_LABEL, CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../../carte/carteConstants';
-import { CardRulesPreview } from '../../carte/cardTextBlocks';
-import BonusEquipEditor from './BonusEquipEditor';
+import { CARTA_RARITA_LABEL, CARTA_TIPO_LABEL } from '../../carte/carteConstants';
+import {
+  LabeledField,
+  StaffFieldGrid,
+  StaffListRow,
+  StaffListToolbar,
+  StaffModal,
+  staffInputClass,
+} from '../../staff/StaffCrudUi';
+import CartaCatalogoEditModal from './carte/CartaCatalogoEditModal';
 import ComboReliquiarioStaffPanel from './ComboReliquiarioStaffPanel';
 import EffectScriptWizard from './EffectScriptWizard';
-import CartaEffectScriptsEditor, {
-  effectScriptsFromApi,
-  effectScriptsToApi,
-} from './CartaEffectScriptsEditor';
+import { effectScriptsFromApi, effectScriptsToApi } from './CartaEffectScriptsEditor';
 import MercatoScambiStaffPanel from './MercatoScambiStaffPanel';
-import StatModInline from './inlines/StatModInline';
 
 function normalizeCartaStats(rows) {
   return (rows || []).map((row) => ({
@@ -262,6 +265,12 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [espansioneFilePreview, setEspansioneFilePreview] = useState(null);
   const [removeEspansioneImmagine, setRemoveEspansioneImmagine] = useState(false);
   const [punteggi, setPunteggi] = useState([]);
+  const [cartaModalOpen, setCartaModalOpen] = useState(false);
+  const [espansioneModalOpen, setEspansioneModalOpen] = useState(false);
+  const [espansioneEditTarget, setEspansioneEditTarget] = useState(null);
+  const [bustinaModalOpen, setBustinaModalOpen] = useState(false);
+  const [tagModalOpen, setTagModalOpen] = useState(false);
+  const [keywordModalOpen, setKeywordModalOpen] = useState(false);
 
   const statsOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'ST'), [punteggi]);
   const auraOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'AU'), [punteggi]);
@@ -376,28 +385,85 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     return map;
   }, [espansioni, bustine]);
 
+  const deleteCarta = async (id) => {
+    try {
+      await staffDeleteCartaCatalogo(id, onLogout);
+      setMsg('Carta eliminata.');
+      if (selected?.id === id) {
+        setCartaModalOpen(false);
+        setSelected(null);
+        setForm(emptyCarta(activeEspansioneId));
+        resetCartaImmagineState();
+      }
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Eliminazione fallita.');
+    }
+  };
+
+  const openCartaModal = (c = null) => {
+    if (c) {
+      setSelected(c);
+      setForm({
+        ...c,
+        bonus_equip: c.bonus_equip && typeof c.bonus_equip === 'object' ? c.bonus_equip : {},
+        statistiche_reliquiario: normalizeCartaStats(c.statistiche_reliquiario),
+        testo_reliquiario: c.testo_reliquiario || '',
+        tag_ids: c.tag_ids || [],
+        effect_scripts_entries: effectScriptsFromApi(c.effect_scripts),
+      });
+    } else {
+      setSelected(null);
+      setForm(emptyCarta(activeEspansioneId));
+    }
+    resetCartaImmagineState();
+    setCartaModalOpen(true);
+  };
+
   const saveEspansione = async () => {
     try {
       let payload;
       if (espansioneImmagineFile) {
         payload = buildEspansioneFormData(espansioneForm, espansioneImmagineFile);
-      } else if (removeEspansioneImmagine && selectedEspansione?.id) {
+      } else if (removeEspansioneImmagine && espansioneEditTarget?.id) {
         payload = { ...stripForApi(espansioneForm, ESPANSIONE_READ_ONLY_KEYS), immagine: null };
       } else {
         payload = stripForApi(espansioneForm, ESPANSIONE_READ_ONLY_KEYS);
       }
-      if (selectedEspansione?.id) {
-        await staffUpdateCartaEspansione(selectedEspansione.id, payload, onLogout);
+      if (espansioneEditTarget?.id) {
+        await staffUpdateCartaEspansione(espansioneEditTarget.id, payload, onLogout);
       } else {
         await staffCreateCartaEspansione(payload, onLogout);
       }
       setMsg('Espansione salvata.');
-      setSelectedEspansione(null);
+      setEspansioneModalOpen(false);
+      setEspansioneEditTarget(null);
       setEspansioneForm(emptyEspansione());
       resetEspansioneImmagineState();
       await load();
     } catch (e) {
       setMsg(e?.message || 'Salvataggio espansione fallito.');
+    }
+  };
+
+  const openEspansioneModal = (e = null) => {
+    setEspansioneEditTarget(e);
+    setEspansioneForm(e ? { ...e } : emptyEspansione());
+    resetEspansioneImmagineState();
+    setEspansioneModalOpen(true);
+  };
+
+  const deleteEspansione = async (id) => {
+    try {
+      await staffDeleteCartaEspansione(id, onLogout);
+      setMsg('Espansione eliminata.');
+      if (selectedEspansione?.id === id) {
+        setEspansioneModalOpen(false);
+        selectEspansione(null);
+      }
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Eliminazione fallita.');
     }
   };
 
@@ -430,6 +496,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         await staffCreateCartaCatalogo(payload, onLogout);
       }
       setMsg('Carta salvata.');
+      setCartaModalOpen(false);
       setSelected(null);
       setForm(emptyCarta(activeEspansioneId));
       resetCartaImmagineState();
@@ -447,11 +514,32 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         await staffCreateCartaBustina(bustinaForm, onLogout);
       }
       setMsg('Bustina salvata.');
+      setBustinaModalOpen(false);
       setSelectedBustina(null);
       setBustinaForm(emptyBustina(activeEspansioneId));
       await load();
     } catch (e) {
       setMsg(e?.message || 'Salvataggio fallito.');
+    }
+  };
+
+  const openBustinaModal = (b = null) => {
+    setSelectedBustina(b);
+    setBustinaForm(b ? { ...b } : emptyBustina(activeEspansioneId));
+    setBustinaModalOpen(true);
+  };
+
+  const deleteBustina = async (id) => {
+    try {
+      await staffDeleteCartaBustina(id, onLogout);
+      setMsg('Bustina eliminata.');
+      if (selectedBustina?.id === id) {
+        setBustinaModalOpen(false);
+        setSelectedBustina(null);
+      }
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Eliminazione fallita.');
     }
   };
 
@@ -477,6 +565,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         await staffCreateCartaKeyword(payload, onLogout);
       }
       setMsg('Keyword salvata.');
+      setKeywordModalOpen(false);
       setSelectedKeyword(null);
       setKeywordForm(emptyKeyword());
       setEffectScriptText('');
@@ -486,14 +575,23 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     }
   };
 
+  const openKeywordModal = (k = null) => {
+    setSelectedKeyword(k);
+    setKeywordForm(k ? { ...k } : emptyKeyword());
+    setEffectScriptText(k ? formatEffectScriptText(k.effect_script) : '');
+    setKeywordModalOpen(true);
+  };
+
   const deleteKeyword = async (id) => {
-    if (!window.confirm('Eliminare questa keyword?')) return;
     try {
       await staffDeleteCartaKeyword(id, onLogout);
       setMsg('Keyword eliminata.');
-      setSelectedKeyword(null);
-      setKeywordForm(emptyKeyword());
-      setEffectScriptText('');
+      if (selectedKeyword?.id === id) {
+        setKeywordModalOpen(false);
+        setSelectedKeyword(null);
+        setKeywordForm(emptyKeyword());
+        setEffectScriptText('');
+      }
       await load();
     } catch (e) {
       setMsg(e?.message || 'Eliminazione fallita.');
@@ -509,6 +607,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         await staffCreateCartaTag(payload, onLogout);
       }
       setMsg('Tag salvato.');
+      setTagModalOpen(false);
       setSelectedTag(null);
       setTagForm(emptyTag());
       await load();
@@ -517,13 +616,21 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     }
   };
 
+  const openTagModal = (t = null) => {
+    setSelectedTag(t);
+    setTagForm(t ? { ...t } : emptyTag());
+    setTagModalOpen(true);
+  };
+
   const deleteTag = async (id) => {
-    if (!window.confirm('Eliminare questo tag?')) return;
     try {
       await staffDeleteCartaTag(id, onLogout);
       setMsg('Tag eliminato.');
-      setSelectedTag(null);
-      setTagForm(emptyTag());
+      if (selectedTag?.id === id) {
+        setTagModalOpen(false);
+        setSelectedTag(null);
+        setTagForm(emptyTag());
+      }
       await load();
     } catch (e) {
       setMsg(e?.message || 'Eliminazione tag fallita.');
@@ -593,704 +700,453 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       {loading && <p className="text-gray-400">Caricamento…</p>}
 
       {!loading && tab === 'espansioni' && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="flex items-center gap-1 font-bold">
-                <Layers size={16} className="text-violet-400" /> Espansioni ({espansioni.length})
-              </h3>
-              <button
-                type="button"
-                className="flex items-center gap-1 rounded bg-violet-800 px-2 py-1 text-xs"
-                onClick={() => { setSelectedEspansione(null); setEspansioneForm(emptyEspansione()); resetEspansioneImmagineState(); }}
+        <div>
+          <StaffListToolbar
+            title="Espansioni"
+            count={espansioni.length}
+            onAdd={() => openEspansioneModal(null)}
+            addLabel="Nuova espansione"
+          />
+          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
+            {espansioni.map((e) => (
+              <StaffListRow
+                key={e.id}
+                onEdit={() => openEspansioneModal(e)}
+                onDelete={() => deleteEspansione(e.id)}
+                deleteConfirm={`Eliminare l'espansione «${e.nome}»?`}
               >
-                <Plus size={12} /> Nuova
-              </button>
-            </div>
-            <ul className="max-h-[50vh] space-y-1 overflow-y-auto text-sm">
-              {espansioni.map((e) => (
-                <li key={e.id}>
-                  <button
-                    type="button"
-                    className={`w-full rounded px-2 py-2 text-left hover:bg-gray-800 ${selectedEspansione?.id === e.id ? 'bg-gray-700' : ''}`}
-                    onClick={() => selectEspansione(e)}
-                  >
-                    <span className="font-bold">{e.nome}</span>
-                    <span className="ml-2 text-xs text-gray-500">
-                      {e.slug} · {e.carte_count ?? 0} carte · {e.bustine_count ?? 0} bustine
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="space-y-2 rounded border border-gray-700 p-3">
-            <h3 className="font-bold">{selectedEspansione ? 'Modifica espansione' : 'Nuova espansione'}</h3>
-            {['nome', 'slug', 'descrizione'].map((f) => (
-              <input
-                key={f}
-                className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
-                placeholder={f}
-                value={espansioneForm[f] || ''}
-                onChange={(e) => setEspansioneForm((p) => ({ ...p, [f]: e.target.value }))}
-              />
-            ))}
-            <input
-              type="number"
-              className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
-              placeholder="Ordine"
-              value={espansioneForm.ordine}
-              onChange={(e) => setEspansioneForm((p) => ({ ...p, ordine: Number(e.target.value) }))}
-            />
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!espansioneForm.attiva}
-                onChange={(e) => setEspansioneForm((p) => ({ ...p, attiva: e.target.checked }))}
-              />
-              Attiva
-            </label>
-            <CartaImmagineUpload
-              label="Immagine copertina espansione"
-              previewUrl={espansionePreviewUrl}
-              file={espansioneImmagineFile}
-              onFileChange={setEspansioneImmagineFile}
-              removeExisting={removeEspansioneImmagine}
-              onRemoveExisting={selectedEspansione?.immagine_url ? setRemoveEspansioneImmagine : null}
-            />
-            <div className="flex gap-2">
-              <button type="button" className="flex items-center gap-1 rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveEspansione}>
-                <Save size={14} /> Salva
-              </button>
-              {selectedEspansione?.id && (
-                <>
-                  <button
-                    type="button"
-                    className="rounded bg-sky-800 px-3 py-1 text-sm"
-                    onClick={() => { setTab('catalogo'); selectEspansione(selectedEspansione); }}
-                  >
-                    Carte
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded bg-amber-800 px-3 py-1 text-sm"
-                    onClick={() => { setTab('bustine'); selectEspansione(selectedEspansione); }}
-                  >
-                    Bustine
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded bg-red-900 px-3 py-1 text-sm"
-                    onClick={async () => {
-                      await staffDeleteCartaEspansione(selectedEspansione.id, onLogout);
-                      setSelectedEspansione(null);
-                      setEspansioneForm(emptyEspansione());
-                      load();
-                    }}
-                  >
-                    Elimina
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!loading && tab === 'catalogo' && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-bold">Catalogo ({carte.length})</h3>
-              <button
-                type="button"
-                className="flex items-center gap-1 rounded bg-violet-800 px-2 py-1 text-xs"
-                onClick={() => { setSelected(null); setForm(emptyCarta(activeEspansioneId)); resetCartaImmagineState(); }}
-              >
-                <Plus size={12} /> Nuova
-              </button>
-            </div>
-            <ul className="max-h-[50vh] space-y-1 overflow-y-auto text-sm">
-              {carte.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    className={`w-full rounded px-2 py-1 text-left hover:bg-gray-800 ${selected?.id === c.id ? 'bg-gray-700' : ''}`}
-                    onClick={() => {
-                      setSelected(c);
-                      setForm({
-                        ...c,
-                        bonus_equip: c.bonus_equip && typeof c.bonus_equip === 'object' ? c.bonus_equip : {},
-                        statistiche_reliquiario: normalizeCartaStats(c.statistiche_reliquiario),
-                        testo_reliquiario: c.testo_reliquiario || '',
-                        tag_ids: c.tag_ids || [],
-                        effect_scripts_entries: effectScriptsFromApi(c.effect_scripts),
-                      });
-                      resetCartaImmagineState();
-                    }}
-                  >
-                    <span className="font-bold">{c.nome}</span>
-                    <span className="ml-2 text-xs text-gray-500">
-                      {c.codice} · {CARTA_RARITA_LABEL[c.rarita]}
-                      {c.espansione_nome ? ` · ${c.espansione_nome}` : ''}
-                      {(c.tag_codici || []).length > 0 ? ` · [${c.tag_codici.join(', ')}]` : ''}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="space-y-2 rounded border border-gray-700 p-3">
-            <h3 className="font-bold">{selected ? 'Modifica carta' : 'Nuova carta'}</h3>
-            <select
-              className="w-full rounded bg-gray-900 px-2 py-1 text-sm"
-              value={form.espansione || ''}
-              onChange={(e) => setForm((p) => ({ ...p, espansione: e.target.value || null }))}
-            >
-              <option value="">— Nessuna espansione —</option>
-              {espansioni.map((e) => (
-                <option key={e.id} value={e.id}>{e.nome}</option>
-              ))}
-            </select>
-            {['codice', 'nome', 'set_collezione', 'campagna_origine', 'legame_id'].map((f) => (
-              <input
-                key={f}
-                className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
-                placeholder={f}
-                value={form[f] || ''}
-                onChange={(e) => setForm((p) => ({ ...p, [f]: e.target.value }))}
-              />
-            ))}
-            <CartaImmagineUpload
-              label="Immagine arte carta"
-              previewUrl={cartaPreviewUrl}
-              file={cartaImmagineFile}
-              onFileChange={setCartaImmagineFile}
-              removeExisting={removeCartaImmagine}
-              onRemoveExisting={form.immagine_url ? setRemoveCartaImmagine : null}
-            />
-            <div className="grid grid-cols-3 gap-2">
-              <select className="rounded bg-gray-900 px-2 py-1 text-sm" value={form.tipo} onChange={(e) => setForm((p) => ({ ...p, tipo: e.target.value }))}>
-                {Object.entries(CARTA_TIPO_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-              <select className="rounded bg-gray-900 px-2 py-1 text-sm" value={form.energia} onChange={(e) => setForm((p) => ({ ...p, energia: e.target.value }))}>
-                {Object.entries(CARTA_ENERGIA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-              <select className="rounded bg-gray-900 px-2 py-1 text-sm" value={form.rarita} onChange={(e) => setForm((p) => ({ ...p, rarita: e.target.value }))}>
-                {Object.entries(CARTA_RARITA_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-            <div className="rounded border border-violet-900/50 bg-violet-950/20 p-2">
-              <h4 className="mb-2 text-xs font-bold text-violet-300">Statistiche in gioco</h4>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[
-                  { key: 'costo_gioco', label: 'Costo gioco', min: 0, max: 3 },
-                  { key: 'attacco', label: 'Attacco', min: 0, max: 99 },
-                  { key: 'salute', label: 'Salute', min: 0, max: 99 },
-                  { key: 'iniziativa', label: 'Iniziativa', min: 0, max: 5 },
-                ].map(({ key, label, min, max }) => (
-                  <label key={key} className="block text-xs text-gray-400">
-                    {label}
-                    <input
-                      type="number"
-                      min={min}
-                      max={max}
-                      className="mt-0.5 w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
-                      value={form[key] ?? ''}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        setForm((p) => ({
-                          ...p,
-                          [key]: raw === '' ? null : Number(raw),
-                        }));
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
-              <p className="mt-1 text-[10px] text-gray-500">
-                Costo, Attacco, Salute e Iniziativa compaiono sulle carte PG in duello (icone spada, cuore, cronometro).
-              </p>
-              <label className="mt-2 flex items-center gap-2 text-xs text-gray-400">
-                <input
-                  type="checkbox"
-                  checked={!!form.duplicabile}
-                  onChange={(e) => setForm((p) => ({ ...p, duplicabile: e.target.checked }))}
-                />
-                Duplicabile nel mazzo (max 2 copie)
-              </label>
-            </div>
-            {tags.length > 0 && (
-              <div className="rounded border border-amber-900/40 bg-amber-950/20 p-2">
-                <h4 className="mb-2 text-xs font-bold text-amber-300">Tag meccanici</h4>
-                <div className="flex flex-wrap gap-2">
-                  {tags.filter((t) => t.attiva !== false).map((t) => {
-                    const checked = (form.tag_ids || []).includes(t.id);
-                    return (
-                      <label
-                        key={t.id}
-                        className={`flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs ${
-                          checked ? 'border-amber-500 bg-amber-900/40' : 'border-gray-600'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            setForm((p) => {
-                              const cur = p.tag_ids || [];
-                              const next = checked
-                                ? cur.filter((id) => id !== t.id)
-                                : [...cur, t.id];
-                              return { ...p, tag_ids: next };
-                            });
-                          }}
-                        />
-                        <span className="font-mono text-[10px] text-gray-400">{t.codice}</span>
-                        {t.nome}
-                      </label>
-                    );
-                  })}
-                </div>
-                <p className="mt-1 text-[10px] text-gray-500">
-                  I tag non compaiono nel testo carta: servono agli effetti keyword (es. Cavalleria, Crociata).
+                <p className="font-bold text-white">{e.nome}</p>
+                <p className="text-xs text-gray-500">
+                  <span className="text-gray-400">Slug:</span> {e.slug}
+                  {' · '}
+                  <span className="text-gray-400">Carte:</span> {e.carte_count ?? 0}
+                  {' · '}
+                  <span className="text-gray-400">Bustine:</span> {e.bustine_count ?? 0}
+                  {!e.attiva && <span className="ml-2 text-amber-500">(disattiva)</span>}
                 </p>
-              </div>
-            )}
-            <BonusEquipEditor
-              tipo={form.tipo}
-              value={form.bonus_equip}
-              onChange={(bonus_equip) => setForm((p) => ({ ...p, bonus_equip }))}
-            />
-            <CartaEffectScriptsEditor
-              entries={form.effect_scripts_entries || []}
-              onChange={(effect_scripts_entries) => setForm((p) => ({ ...p, effect_scripts_entries }))}
-              onMessage={setMsg}
-            />
-            <div className="rounded border border-violet-900/50 bg-violet-950/20 p-2 space-y-2">
-              <h4 className="text-xs font-bold text-violet-300">Testo gioco (flavour + keyword condivise)</h4>
-              <textarea
-                className="h-36 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm leading-relaxed"
-                placeholder="Testo regole in gioco — le Keywords del tab dedicato vengono evidenziate in anteprima"
-                value={form.testo_gioco || ''}
-                onChange={(e) => setForm((p) => ({ ...p, testo_gioco: e.target.value }))}
-              />
-              <CardRulesPreview text={form.testo_gioco} keywords={keywords} />
-            </div>
-            <div className="rounded border border-indigo-900/50 bg-indigo-950/20 p-2 space-y-2">
-              <h4 className="text-xs font-bold text-indigo-300">Testo reliquiario (solo se equipaggiata)</h4>
-              <p className="text-[10px] text-gray-500">
-                Sostituisce il testo gioco nello slot reliquiario del personaggio. Non compare sulla carta in collezione/duello.
-              </p>
-              <textarea
-                className="h-28 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm leading-relaxed"
-                placeholder="Effetto passivo nel reliquiario…"
-                value={form.testo_reliquiario || ''}
-                onChange={(e) => setForm((p) => ({ ...p, testo_reliquiario: e.target.value }))}
-              />
-              <CardRulesPreview
-                text={form.testo_reliquiario}
-                keywords={keywords}
-                label="Anteprima testo reliquiario"
-              />
-            </div>
-            <StatModInline
-              items={form.statistiche_reliquiario || []}
-              options={statsOptions}
-              auraOptions={auraOptions}
-              elementOptions={elementOptions}
-              onAdd={() => setForm((p) => ({
-                ...p,
-                statistiche_reliquiario: [...(p.statistiche_reliquiario || []), {
-                  statistica: null,
-                  valore: 0,
-                  tipo_modificatore: 'ADD',
-                  usa_limitazione_aura: false,
-                  usa_limitazione_elemento: false,
-                  usa_condizione_text: false,
-                  condizione_text: '',
-                  limit_a_aure: [],
-                  limit_a_elementi: [],
-                }],
-              }))}
-              onChange={(i, field, val) => setForm((p) => {
-                const next = [...(p.statistiche_reliquiario || [])];
-                next[i] = { ...next[i], [field]: val };
-                return { ...p, statistiche_reliquiario: next };
-              })}
-              onRemove={(i) => setForm((p) => ({
-                ...p,
-                statistiche_reliquiario: (p.statistiche_reliquiario || []).filter((_, idx) => idx !== i),
-              }))}
-            />
-            <div className="rounded border border-gray-700/80 bg-gray-900/40 p-2 space-y-2">
-              <h4 className="text-xs font-bold text-gray-300">Testo di lore</h4>
-              <textarea
-                className="h-44 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm leading-relaxed"
-                placeholder="Flavor, storia, citazioni…"
-                value={form.testo_lore || ''}
-                onChange={(e) => setForm((p) => ({ ...p, testo_lore: e.target.value }))}
-              />
-            </div>
-            <div className="flex gap-2">
-              <button type="button" className="flex items-center gap-1 rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveCarta}>
-                <Save size={14} /> Salva
-              </button>
-              {selected?.id && (
                 <button
                   type="button"
-                  className="rounded bg-red-900 px-3 py-1 text-sm"
-                  onClick={async () => {
-                    await staffDeleteCartaCatalogo(selected.id, onLogout);
-                    setSelected(null);
-                    setForm(emptyCarta(activeEspansioneId));
-                    resetCartaImmagineState();
-                    load();
-                  }}
+                  className="mt-1 text-[10px] text-violet-400 underline"
+                  onClick={() => { selectEspansione(e); setTab('catalogo'); }}
                 >
-                  Elimina
+                  Filtra catalogo e bustine
                 </button>
-              )}
-            </div>
-          </div>
+              </StaffListRow>
+            ))}
+          </ul>
         </div>
       )}
 
-      {!loading && tab === 'bustine' && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-bold">Bustine ({bustine.length})</h3>
-              <button
-                type="button"
-                className="rounded bg-violet-800 px-2 py-1 text-xs"
-                onClick={() => { setSelectedBustina(null); setBustinaForm(emptyBustina(activeEspansioneId)); }}
+      <StaffModal
+        open={espansioneModalOpen}
+        title={espansioneEditTarget?.id ? `Modifica espansione — ${espansioneForm.nome}` : 'Nuova espansione'}
+        onClose={() => setEspansioneModalOpen(false)}
+        onSave={saveEspansione}
+      >
+        <div className="space-y-3">
+          <LabeledField label="Nome" required>
+            <input
+              className={staffInputClass()}
+              value={espansioneForm.nome || ''}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, nome: ev.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Slug" required hint="Identificatore URL univoco (es. caduta-del-consiglio).">
+            <input
+              className={staffInputClass('font-mono')}
+              value={espansioneForm.slug || ''}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, slug: ev.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Descrizione">
+            <textarea
+              className={staffInputClass('min-h-[80px]')}
+              value={espansioneForm.descrizione || ''}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, descrizione: ev.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Ordine menu">
+            <input
+              type="number"
+              className={staffInputClass()}
+              value={espansioneForm.ordine}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, ordine: Number(ev.target.value) }))}
+            />
+          </LabeledField>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!espansioneForm.attiva}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, attiva: ev.target.checked }))}
+            />
+            Espansione attiva
+          </label>
+          <CartaImmagineUpload
+            label="Copertina espansione"
+            previewUrl={espansionePreviewUrl}
+            file={espansioneImmagineFile}
+            onFileChange={setEspansioneImmagineFile}
+            removeExisting={removeEspansioneImmagine}
+            onRemoveExisting={espansioneEditTarget?.immagine_url ? setRemoveEspansioneImmagine : null}
+          />
+        </div>
+      </StaffModal>
+
+      {!loading && tab === 'catalogo' && (
+        <div>
+          <StaffListToolbar
+            title="Catalogo carte"
+            count={carte.length}
+            onAdd={() => openCartaModal(null)}
+            addLabel="Nuova carta"
+          />
+          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
+            {carte.map((c) => (
+              <StaffListRow
+                key={c.id}
+                onEdit={() => openCartaModal(c)}
+                onDelete={() => deleteCarta(c.id)}
+                deleteConfirm={`Eliminare la carta «${c.nome}» (${c.codice})?`}
               >
-                <Plus size={12} className="inline" /> Nuova
-              </button>
-            </div>
-            {espansioni.map((e) => {
-              const list = bustinePerEspansione.get(e.id) || [];
-              if (!list.length && selectedEspansione?.id && selectedEspansione.id !== e.id) return null;
-              return (
-                <div key={e.id} className="mb-3">
-                  <h4 className="mb-1 text-xs font-bold uppercase text-violet-300">{e.nome}</h4>
-                  <ul className="space-y-1 text-sm">
-                    {list.map((b) => (
-                      <li key={b.id}>
-                        <button
-                          type="button"
-                          className="w-full rounded px-2 py-1 text-left hover:bg-gray-800"
-                          onClick={() => { setSelectedBustina(b); setBustinaForm({ ...b }); }}
-                        >
-                          {b.nome} — {b.costo_crediti} CR
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
-            {(bustinePerEspansione.get(null) || []).length > 0 && (
-              <div className="mb-3">
-                <h4 className="mb-1 text-xs font-bold uppercase text-gray-500">Senza espansione</h4>
-                <ul className="space-y-1 text-sm">
-                  {(bustinePerEspansione.get(null) || []).map((b) => (
-                    <li key={b.id}>
-                      <button
-                        type="button"
-                        className="w-full rounded px-2 py-1 text-left hover:bg-gray-800"
-                        onClick={() => { setSelectedBustina(b); setBustinaForm({ ...b }); }}
-                      >
-                        {b.nome} — {b.costo_crediti} CR
-                      </button>
-                    </li>
+                <p className="font-bold text-white">{c.nome}</p>
+                <p className="text-xs text-gray-500">
+                  <span className="text-gray-400">Codice:</span> {c.codice}
+                  {' · '}
+                  <span className="text-gray-400">Tipo:</span> {CARTA_TIPO_LABEL[c.tipo] || c.tipo}
+                  {' · '}
+                  <span className="text-gray-400">Rarità:</span> {CARTA_RARITA_LABEL[c.rarita] || c.rarita}
+                </p>
+                <p className="text-xs text-gray-600">
+                  {c.espansione_nome && <><span className="text-gray-400">Espansione:</span> {c.espansione_nome} · </>}
+                  {c.set_collezione && <><span className="text-gray-400">Set:</span> {c.set_collezione} · </>}
+                  {c.legame_id && <><span className="text-gray-400">Legame:</span> {c.legame_id} · </>}
+                  {(c.tag_codici || []).length > 0 && (
+                    <><span className="text-gray-400">Tag:</span> [{c.tag_codici.join(', ')}]</>
+                  )}
+                  {!c.attiva && <span className="ml-1 text-amber-500">(disattiva)</span>}
+                </p>
+              </StaffListRow>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <CartaCatalogoEditModal
+        open={cartaModalOpen}
+        isEdit={!!selected?.id}
+        form={form}
+        setForm={setForm}
+        onClose={() => setCartaModalOpen(false)}
+        onSave={saveCarta}
+        espansioni={espansioni}
+        tags={tags}
+        keywords={keywords}
+        statsOptions={statsOptions}
+        auraOptions={auraOptions}
+        elementOptions={elementOptions}
+        punteggi={punteggi}
+        cartaPreviewUrl={cartaPreviewUrl}
+        cartaImmagineFile={cartaImmagineFile}
+        onCartaImmagineChange={setCartaImmagineFile}
+        removeCartaImmagine={removeCartaImmagine}
+        onRemoveCartaImmagine={setRemoveCartaImmagine}
+        onMessage={setMsg}
+      />
+
+      {!loading && tab === 'bustine' && (
+        <div>
+          <StaffListToolbar
+            title="Bustine"
+            count={bustine.length}
+            onAdd={() => openBustinaModal(null)}
+            addLabel="Nuova bustina"
+          />
+          {espansioni.map((e) => {
+            const list = bustinePerEspansione.get(e.id) || [];
+            if (!list.length && selectedEspansione?.id && selectedEspansione.id !== e.id) return null;
+            if (!list.length) return null;
+            return (
+              <div key={e.id} className="mb-4">
+                <h4 className="mb-2 text-xs font-bold uppercase text-violet-300">{e.nome}</h4>
+                <ul className="space-y-1">
+                  {list.map((b) => (
+                    <StaffListRow
+                      key={b.id}
+                      onEdit={() => openBustinaModal(b)}
+                      onDelete={() => deleteBustina(b.id)}
+                      deleteConfirm={`Eliminare la bustina «${b.nome}»?`}
+                    >
+                      <p className="font-bold">{b.nome}</p>
+                      <p className="text-xs text-gray-500">
+                        <span className="text-gray-400">Costo:</span> {b.costo_crediti} CR
+                        {' · '}
+                        <span className="text-gray-400">Carte:</span> {b.carte_per_bustina}
+                        {b.set_collezione && (
+                          <> · <span className="text-gray-400">Set:</span> {b.set_collezione}</>
+                        )}
+                      </p>
+                    </StaffListRow>
                   ))}
                 </ul>
               </div>
-            )}
-          </div>
-          <div className="space-y-2 rounded border border-gray-700 p-3">
-            <h3 className="font-bold">{selectedBustina ? 'Modifica bustina' : 'Nuova bustina'}</h3>
+            );
+          })}
+          {(bustinePerEspansione.get(null) || []).length > 0 && (
+            <div className="mb-4">
+              <h4 className="mb-2 text-xs font-bold uppercase text-gray-500">Senza espansione</h4>
+              <ul className="space-y-1">
+                {(bustinePerEspansione.get(null) || []).map((b) => (
+                  <StaffListRow
+                    key={b.id}
+                    onEdit={() => openBustinaModal(b)}
+                    onDelete={() => deleteBustina(b.id)}
+                    deleteConfirm={`Eliminare la bustina «${b.nome}»?`}
+                  >
+                    <p className="font-bold">{b.nome}</p>
+                    <p className="text-xs text-gray-500">{b.costo_crediti} CR · {b.carte_per_bustina} carte</p>
+                  </StaffListRow>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      <StaffModal
+        open={bustinaModalOpen}
+        title={selectedBustina?.id ? `Modifica bustina — ${bustinaForm.nome}` : 'Nuova bustina'}
+        onClose={() => setBustinaModalOpen(false)}
+        onSave={saveBustina}
+      >
+        <div className="space-y-3">
+          <LabeledField label="Espansione">
             <select
-              className="w-full rounded bg-gray-900 px-2 py-1 text-sm"
+              className={staffInputClass()}
               value={bustinaForm.espansione || ''}
               onChange={(e) => setBustinaForm((p) => ({ ...p, espansione: e.target.value || null }))}
             >
-              <option value="">— Nessuna espansione —</option>
+              <option value="">— Nessuna —</option>
               {espansioni.map((e) => (
                 <option key={e.id} value={e.id}>{e.nome}</option>
               ))}
             </select>
-            {['nome', 'descrizione', 'set_collezione'].map((f) => (
-              <input
-                key={f}
-                className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
-                placeholder={f}
-                value={bustinaForm[f] || ''}
-                onChange={(e) => setBustinaForm((p) => ({ ...p, [f]: e.target.value }))}
-              />
-            ))}
+          </LabeledField>
+          <LabeledField label="Nome" required>
             <input
-              type="number"
-              className="w-full rounded border border-gray-600 bg-gray-900 px-2 py-1 text-sm"
-              placeholder="Costo CR"
-              value={bustinaForm.costo_crediti}
-              onChange={(e) => setBustinaForm((p) => ({ ...p, costo_crediti: e.target.value }))}
+              className={staffInputClass()}
+              value={bustinaForm.nome || ''}
+              onChange={(e) => setBustinaForm((p) => ({ ...p, nome: e.target.value }))}
             />
-            <button type="button" className="rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveBustina}>Salva bustina</button>
-            {selectedBustina?.id && (
-              <button
-                type="button"
-                className="ml-2 rounded bg-red-900 px-3 py-1 text-sm"
-                onClick={async () => {
-                  await staffDeleteCartaBustina(selectedBustina.id, onLogout);
-                  setSelectedBustina(null);
-                  load();
-                }}
-              >
-                Elimina
-              </button>
-            )}
-          </div>
+          </LabeledField>
+          <LabeledField label="Descrizione">
+            <textarea
+              className={staffInputClass('min-h-[72px]')}
+              value={bustinaForm.descrizione || ''}
+              onChange={(e) => setBustinaForm((p) => ({ ...p, descrizione: e.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Set cronaca (legacy)" hint="Filtra carte eleggibili per set narrativo.">
+            <input
+              className={staffInputClass()}
+              value={bustinaForm.set_collezione || ''}
+              onChange={(e) => setBustinaForm((p) => ({ ...p, set_collezione: e.target.value }))}
+            />
+          </LabeledField>
+          <StaffFieldGrid>
+            <LabeledField label="Costo (CR)">
+              <input
+                type="number"
+                className={staffInputClass()}
+                value={bustinaForm.costo_crediti}
+                onChange={(e) => setBustinaForm((p) => ({ ...p, costo_crediti: e.target.value }))}
+              />
+            </LabeledField>
+            <LabeledField label="Carte per bustina">
+              <input
+                type="number"
+                className={staffInputClass()}
+                value={bustinaForm.carte_per_bustina}
+                onChange={(e) => setBustinaForm((p) => ({ ...p, carte_per_bustina: Number(e.target.value) }))}
+              />
+            </LabeledField>
+          </StaffFieldGrid>
         </div>
-      )}
+      </StaffModal>
 
       {!loading && tab === 'tags' && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <p className="col-span-full text-xs text-gray-500">
+        <div>
+          <p className="mb-3 text-xs text-gray-500">
             I <strong>tag</strong> sono etichette meccaniche assegnate dal catalogo (non si cercano nel testo).
-            Le keyword possono usarli negli EffectScript per buff, distruzione o filtri (es. tag <code>CAVALIERE</code>).
+            Le keyword e gli EffectScript carta possono usarli per buff, distruzione o filtri.
           </p>
-          <div className="rounded border border-gray-700 p-3">
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-amber-300">
-              <Tag size={16} /> Tag ({tags.length})
-            </h3>
-            <ul className="max-h-80 space-y-1 overflow-y-auto text-sm">
-              {tags.map((t) => (
-                <li key={t.id}>
-                  <button
-                    type="button"
-                    className={`w-full rounded px-2 py-1 text-left ${selectedTag?.id === t.id ? 'bg-amber-900' : 'hover:bg-gray-800'}`}
-                    onClick={() => {
-                      setSelectedTag(t);
-                      setTagForm({ ...t });
-                    }}
-                  >
-                    <span className="font-mono text-xs text-gray-500">{t.codice}</span>
-                    {' — '}
-                    {t.nome}
-                    {!t.attiva && <span className="ml-1 text-amber-500">(off)</span>}
-                  </button>
-                </li>
-              ))}
-              {tags.length === 0 && <p className="text-gray-500">Nessun tag.</p>}
-            </ul>
-            <button
-              type="button"
-              className="mt-2 flex items-center gap-1 rounded bg-gray-800 px-2 py-1 text-xs"
-              onClick={() => {
-                setSelectedTag(null);
-                setTagForm(emptyTag());
-              }}
-            >
-              <Plus size={12} /> Nuovo tag
-            </button>
-          </div>
-          <div className="space-y-2 rounded border border-gray-700 p-3">
-            <label className="block text-sm">
-              Codice
-              <input
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1 font-mono uppercase"
-                value={tagForm.codice}
-                onChange={(e) => setTagForm((p) => ({ ...p, codice: e.target.value.toUpperCase() }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Nome
-              <input
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
-                value={tagForm.nome}
-                onChange={(e) => setTagForm((p) => ({ ...p, nome: e.target.value }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Descrizione
-              <textarea
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
-                rows={3}
-                value={tagForm.descrizione || ''}
-                onChange={(e) => setTagForm((p) => ({ ...p, descrizione: e.target.value }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Colore UI
-              <input
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1 font-mono"
-                placeholder="#c9a227"
-                value={tagForm.colore || ''}
-                onChange={(e) => setTagForm((p) => ({ ...p, colore: e.target.value }))}
-              />
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={tagForm.attiva !== false}
-                onChange={(e) => setTagForm((p) => ({ ...p, attiva: e.target.checked }))}
-              />
-              Attivo
-            </label>
-            <div className="flex gap-2">
-              <button type="button" className="rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveTag}>
-                <Save size={14} className="inline" /> Salva
-              </button>
-              {selectedTag?.id && (
-                <button
-                  type="button"
-                  className="rounded bg-red-900 px-3 py-1 text-sm"
-                  onClick={() => deleteTag(selectedTag.id)}
-                >
-                  Elimina
-                </button>
-              )}
-            </div>
-          </div>
+          <StaffListToolbar title="Tag meccanici" count={tags.length} onAdd={() => openTagModal(null)} addLabel="Nuovo tag" />
+          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
+            {tags.map((t) => (
+              <StaffListRow
+                key={t.id}
+                onEdit={() => openTagModal(t)}
+                onDelete={() => deleteTag(t.id)}
+                deleteConfirm={`Eliminare il tag «${t.nome}»?`}
+              >
+                <p className="font-bold">{t.nome}</p>
+                <p className="text-xs text-gray-500">
+                  <span className="font-mono text-gray-400">{t.codice}</span>
+                  {t.colore && <> · <span className="text-gray-400">Colore:</span> {t.colore}</>}
+                  {!t.attiva && <span className="ml-2 text-amber-500">(disattivo)</span>}
+                </p>
+              </StaffListRow>
+            ))}
+          </ul>
         </div>
       )}
 
+      <StaffModal
+        open={tagModalOpen}
+        title={selectedTag?.id ? `Modifica tag — ${tagForm.nome}` : 'Nuovo tag'}
+        onClose={() => setTagModalOpen(false)}
+        onSave={saveTag}
+      >
+        <div className="space-y-3">
+          <LabeledField label="Codice" required hint="Es. CAVALIERE — univoco per campagna.">
+            <input
+              className={staffInputClass('font-mono uppercase')}
+              value={tagForm.codice}
+              onChange={(e) => setTagForm((p) => ({ ...p, codice: e.target.value.toUpperCase() }))}
+            />
+          </LabeledField>
+          <LabeledField label="Nome" required>
+            <input
+              className={staffInputClass()}
+              value={tagForm.nome}
+              onChange={(e) => setTagForm((p) => ({ ...p, nome: e.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Descrizione">
+            <textarea
+              className={staffInputClass('min-h-[72px]')}
+              rows={3}
+              value={tagForm.descrizione || ''}
+              onChange={(e) => setTagForm((p) => ({ ...p, descrizione: e.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Colore UI" hint="Es. #c9a227 per glossario.">
+            <input
+              className={staffInputClass('font-mono')}
+              value={tagForm.colore || ''}
+              onChange={(e) => setTagForm((p) => ({ ...p, colore: e.target.value }))}
+            />
+          </LabeledField>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={tagForm.attiva !== false}
+              onChange={(e) => setTagForm((p) => ({ ...p, attiva: e.target.checked }))}
+            />
+            Tag attivo
+          </label>
+        </div>
+      </StaffModal>
+
       {!loading && tab === 'keywords' && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <p className="col-span-full text-xs text-gray-500">
-            Placeholder <code className="text-violet-300">[X]</code>, <code className="text-violet-300">[Y]</code>…
-            nel nome e nel testo regola: es. nome <code>Mutazione [X]</code> + regola
-            {' '}
-            <code>…costo [X].</code>
-            {' '}
-            → su carta con <em>Mutazione 0</em> mostra <em>costo 0</em>.
-            {' '}
-            Guida completa in Wiki → <strong>EffectScript v1 — vocabolario</strong> e <strong>Keyword carte — guida master</strong>.
+        <div>
+          <p className="mb-3 text-xs text-gray-500">
+            Placeholder <code className="text-violet-300">[X]</code> nel nome e nel testo regola.
+            Wiki: <strong>EffectScript v1</strong> e <strong>Keyword carte — guida master</strong>.
           </p>
-          <div className="rounded border border-gray-700 p-3">
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-violet-300">
-              <Tag size={16} /> Keyword ({keywords.length})
-            </h3>
-            <ul className="max-h-80 space-y-1 overflow-y-auto text-sm">
-              {keywords.map((k) => (
-                <li key={k.id}>
-                  <button
-                    type="button"
-                    className={`w-full rounded px-2 py-1 text-left ${selectedKeyword?.id === k.id ? 'bg-violet-900' : 'hover:bg-gray-800'}`}
-                    onClick={() => {
-                      setSelectedKeyword(k);
-                      setKeywordForm({ ...k });
-                      setEffectScriptText(formatEffectScriptText(k.effect_script));
-                    }}
-                  >
-                    <span className="font-mono text-xs text-gray-500">{k.codice}</span>
-                    {' — '}
-                    {k.nome}
-                    {!k.attiva && <span className="ml-1 text-amber-500">(off)</span>}
-                  </button>
-                </li>
-              ))}
-              {keywords.length === 0 && <p className="text-gray-500">Nessuna keyword.</p>}
-            </ul>
-            <button
-              type="button"
-              className="mt-2 flex items-center gap-1 rounded bg-gray-800 px-2 py-1 text-xs"
-              onClick={() => {
-                setSelectedKeyword(null);
-                setKeywordForm(emptyKeyword());
-                setEffectScriptText('');
-              }}
-            >
-              <Plus size={12} /> Nuova keyword
-            </button>
-          </div>
-          <div className="space-y-2 rounded border border-gray-700 p-3">
-            <label className="block text-sm">
-              Codice
+          <StaffListToolbar
+            title="Keyword condivise"
+            count={keywords.length}
+            onAdd={() => openKeywordModal(null)}
+            addLabel="Nuova keyword"
+          />
+          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
+            {keywords.map((k) => (
+              <StaffListRow
+                key={k.id}
+                onEdit={() => openKeywordModal(k)}
+                onDelete={() => deleteKeyword(k.id)}
+                deleteConfirm={`Eliminare la keyword «${k.nome}»?`}
+              >
+                <p className="font-bold">{k.nome}</p>
+                <p className="text-xs text-gray-500">
+                  <span className="font-mono text-gray-400">{k.codice}</span>
+                  {' · '}
+                  <span className="text-gray-400">Priorità:</span> {k.priorita ?? 0}
+                  {k.effect_script && Object.keys(k.effect_script).length > 0 && (
+                    <span className="ml-2 text-violet-400">EffectScript</span>
+                  )}
+                  {!k.attiva && <span className="ml-2 text-amber-500">(disattiva)</span>}
+                </p>
+              </StaffListRow>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <StaffModal
+        open={keywordModalOpen}
+        wide
+        title={selectedKeyword?.id ? `Modifica keyword — ${keywordForm.nome}` : 'Nuova keyword'}
+        onClose={() => setKeywordModalOpen(false)}
+        onSave={saveKeyword}
+      >
+        <div className="space-y-3">
+          <StaffFieldGrid>
+            <LabeledField label="Codice" required>
               <input
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1 font-mono uppercase"
+                className={staffInputClass('font-mono uppercase')}
                 value={keywordForm.codice}
                 onChange={(e) => setKeywordForm((p) => ({ ...p, codice: e.target.value.toUpperCase() }))}
               />
-            </label>
-            <label className="block text-sm">
-              Nome (nel testo carta)
-              <input
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
-                placeholder="Es. Mutazione [X] o Evocazione"
-                value={keywordForm.nome}
-                onChange={(e) => setKeywordForm((p) => ({ ...p, nome: e.target.value }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Testo regola completo
-              <textarea
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
-                rows={4}
-                placeholder="Usa gli stessi [X] del nome, es. …costo [X]."
-                value={keywordForm.testo_regola}
-                onChange={(e) => setKeywordForm((p) => ({ ...p, testo_regola: e.target.value }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Reminder breve (inline se c&apos;è spazio)
-              <input
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
-                value={keywordForm.reminder_breve}
-                onChange={(e) => setKeywordForm((p) => ({ ...p, reminder_breve: e.target.value }))}
-              />
-            </label>
-            <label className="block text-sm">
-              Priorità match
+            </LabeledField>
+            <LabeledField label="Priorità match" hint="Più alto = preferito su overlap.">
               <input
                 type="number"
-                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
+                className={staffInputClass()}
                 value={keywordForm.priorita}
                 onChange={(e) => setKeywordForm((p) => ({ ...p, priorita: Number(e.target.value) }))}
               />
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={keywordForm.attiva !== false}
-                onChange={(e) => setKeywordForm((p) => ({ ...p, attiva: e.target.checked }))}
-              />
-              Attiva
-            </label>
-            <EffectScriptWizard
-              keywordForm={keywordForm}
-              setKeywordForm={setKeywordForm}
-              effectScriptText={effectScriptText}
-              setEffectScriptText={setEffectScriptText}
-              onLogout={onLogout}
-              onMessage={setMsg}
+            </LabeledField>
+          </StaffFieldGrid>
+          <LabeledField label="Nome (nel testo carta)" required hint='Es. Mutazione [X] o Evocazione'>
+            <input
+              className={staffInputClass()}
+              value={keywordForm.nome}
+              onChange={(e) => setKeywordForm((p) => ({ ...p, nome: e.target.value }))}
             />
-            {!effectScriptText && (
-              <p className="text-[10px] text-gray-500">
-                Nessuno script: la keyword resta solo testuale. Usa il wizard per aggiungere effetti automatici in duello.
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button type="button" className="rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveKeyword}>
-                <Save size={14} className="mr-1 inline" />
-                Salva
-              </button>
-              {selectedKeyword?.id && (
-                <button
-                  type="button"
-                  className="rounded bg-red-900 px-3 py-1 text-sm"
-                  onClick={() => deleteKeyword(selectedKeyword.id)}
-                >
-                  Elimina
-                </button>
-              )}
-            </div>
-          </div>
+          </LabeledField>
+          <LabeledField label="Testo regola completo" hint="Mostrato al tap; stessi [X] del nome.">
+            <textarea
+              className={staffInputClass('min-h-[96px]')}
+              value={keywordForm.testo_regola}
+              onChange={(e) => setKeywordForm((p) => ({ ...p, testo_regola: e.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Reminder breve">
+            <input
+              className={staffInputClass()}
+              value={keywordForm.reminder_breve}
+              onChange={(e) => setKeywordForm((p) => ({ ...p, reminder_breve: e.target.value }))}
+            />
+          </LabeledField>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={keywordForm.attiva !== false}
+              onChange={(e) => setKeywordForm((p) => ({ ...p, attiva: e.target.checked }))}
+            />
+            Keyword attiva
+          </label>
+          <EffectScriptWizard
+            keywordForm={keywordForm}
+            setKeywordForm={setKeywordForm}
+            effectScriptText={effectScriptText}
+            setEffectScriptText={setEffectScriptText}
+            onLogout={onLogout}
+            onMessage={setMsg}
+          />
         </div>
-      )}
+      </StaffModal>
 
       {!loading && tab === 'combo-reliquiario' && (
         <ComboReliquiarioStaffPanel onLogout={onLogout} carteCatalogo={carte} />

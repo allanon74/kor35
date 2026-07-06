@@ -1,0 +1,27 @@
+# Staff CRUD UI — pattern liste + modale
+
+## Regola
+
+Per editor staff (cataloghi, configurazioni, entità multiple):
+
+1. **Lista full-width** con `StaffListToolbar` + `StaffListRow` (`frontend/src/staff/StaffCrudUi.jsx`).
+2. **Azioni riga**: icona matita (modifica) + cestino (elimina con `confirm`).
+3. **Create/Edit in `StaffModal`** — mai pannello affiancato o sotto alla lista.
+4. **Campi con etichetta** via `LabeledField` (label + hint opzionale), non placeholder come unica etichetta.
+5. **Sezioni** raggruppate con `StaffSection` quando il form è lungo.
+
+## Componenti
+
+| Componente | Uso |
+|------------|-----|
+| `StaffModal` | Overlay create/edit con Salva / Annulla |
+| `StaffListToolbar` | Titolo, conteggio, pulsante Nuovo |
+| `StaffListRow` | Riga con edit/delete + contenuto metadati |
+| `LabeledField` | Label + hint + controllo |
+| `staffInputClass()` | Stile input uniforme |
+
+## Riferimento implementato
+
+`CarteCollezionabiliManager.jsx` — espansioni, catalogo, bustine, tag, keyword, combo.
+
+Nuovi tool staff: registrare anche in whitelist dashboard (`KNOWN_STAFF_TOOL_IDS`).
