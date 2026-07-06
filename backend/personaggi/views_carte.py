@@ -18,6 +18,7 @@ from personaggi.carte_collezionabili_models import (
     ConfigurazioneCarteCollezionabili,
     EspansioneCarte,
     KeywordCarta,
+    TagCarta,
     OffertaScambioCarte,
 )
 from personaggi.carte_collezionabili_service import (
@@ -62,6 +63,7 @@ from personaggi.serializers_carte import (
     ConfigurazioneCarteCollezionabiliSerializer,
     EspansioneCarteSerializer,
     KeywordCartaSerializer,
+    TagCartaSerializer,
 )
 from personaggi.views import _can_operate_in_campaign
 from personaggi.views_staff import _campaign_feature_filter, _get_active_campaign, _get_default_campaign
@@ -503,6 +505,7 @@ class CartaCollezionabileStaffViewSet(viewsets.ModelViewSet):
                 "reliquiario_statistiche__statistica",
                 "reliquiario_statistiche__limit_a_aure",
                 "reliquiario_statistiche__limit_a_elementi",
+                "tags",
             )
         )
         qs = _campaign_feature_filter(self.request, qs, FEATURE_CARTE_COLLEZIONABILI)
@@ -583,6 +586,23 @@ class KeywordCartaStaffViewSet(viewsets.ModelViewSet):
         serializer.save(campagna=campagna)
 
 
+class TagCartaStaffViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsStaffOrMaster]
+    serializer_class = TagCartaSerializer
+
+    def get_queryset(self):
+        qs = TagCarta.objects.all().select_related("campagna").order_by("nome")
+        return _campaign_feature_filter(self.request, qs, FEATURE_CARTE_COLLEZIONABILI)
+
+    def perform_create(self, serializer):
+        campagna = _get_active_campaign(self.request) or _get_default_campaign()
+        if not campagna:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            raise DRFValidationError({"campagna": "Campagna attiva non trovata."})
+        serializer.save(campagna=campagna)
+
+
 class ComboReliquiarioStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
     serializer_class = ComboReliquiarioSerializer
@@ -619,6 +639,8 @@ class StaffCarteEffectSchemaView(APIView):
             EFFECT_SCRIPT_VERSION,
             colpo_influenza_effect_script_template,
             danno_eroe_effect_script_template,
+            cavalleria_effect_script_template,
+            crociata_effect_script_template,
             get_effect_script_schema,
             guscio_effect_script_template,
             guarigione_completa_effect_script_template,
@@ -644,6 +666,8 @@ class StaffCarteEffectSchemaView(APIView):
                 "guarigione_completa": guarigione_completa_effect_script_template(),
                 "sinergia_pesca": sinergia_pesca_effect_script_template(),
                 "sinergia_energia": sinergia_energia_effect_script_template(),
+                "cavalleria": cavalleria_effect_script_template(),
+                "crociata": crociata_effect_script_template(),
             },
         })
 
@@ -651,15 +675,19 @@ class StaffCarteEffectSchemaView(APIView):
         """Valida uno script rispetto a schema + placeholder keyword."""
         from django.core.exceptions import ValidationError as DjangoValidationError
 
-        from personaggi.carte_effect_script import validate_effect_script_for_keyword
+        from personaggi.carte_effect_script import validate_effect_script, validate_effect_script_for_keyword
 
         script = request.data.get("script")
         nome = (request.data.get("nome") or "").strip()
         codice = (request.data.get("codice") or "").strip()
+        mode = (request.data.get("mode") or "keyword").strip().lower()
         if script is None or script == "":
             return Response({"valid": True, "script": {}, "detail": "Script vuoto."})
         try:
-            validated = validate_effect_script_for_keyword(script, nome=nome, codice=codice)
+            if mode == "carta":
+                validated = validate_effect_script(script)
+            else:
+                validated = validate_effect_script_for_keyword(script, nome=nome, codice=codice)
             return Response({"valid": True, "script": validated, "detail": "Script valido."})
         except DjangoValidationError as exc:
             errors = exc.messages if hasattr(exc, "messages") else [str(exc)]

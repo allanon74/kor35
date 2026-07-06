@@ -12,6 +12,7 @@ from personaggi.models import (
     DuelloCarte,
     EspansioneCarte,
     KeywordCarta,
+    TagCarta,
     MazzoDuello,
     OffertaScambioCarte,
     ReliquiarioSlot,
@@ -30,6 +31,15 @@ class ComboReliquiarioStatisticaInline(admin.TabularInline):
     extra = 0
     autocomplete_fields = ["statistica"]
     fields = ("statistica", "valore", "tipo_modificatore")
+
+
+@admin.register(TagCarta)
+class TagCartaAdmin(admin.ModelAdmin):
+    list_display = ("codice", "nome", "campagna", "colore", "attiva", "updated_at")
+    list_filter = ("attiva", "campagna")
+    search_fields = ("codice", "nome", "descrizione")
+    readonly_fields = ("id", "sync_id", "created_at", "updated_at")
+    autocomplete_fields = ["campagna"]
 
 
 @admin.register(KeywordCarta)
@@ -57,6 +67,7 @@ class CartaCollezionabileAdmin(admin.ModelAdmin):
     search_fields = ("codice", "nome", "testo_gioco", "testo_reliquiario")
     readonly_fields = ("id", "sync_id", "created_at", "updated_at")
     autocomplete_fields = ["campagna", "espansione"]
+    filter_horizontal = ["tags"]
     inlines = [CartaReliquiarioStatisticaInline]
     fieldsets = (
         (None, {
@@ -70,7 +81,7 @@ class CartaCollezionabileAdmin(admin.ModelAdmin):
             "fields": ("testo_gioco", "testo_lore", "testo_reliquiario", "immagine"),
         }),
         ("Collezione", {
-            "fields": ("set_collezione", "bonus_equip"),
+            "fields": ("set_collezione", "bonus_equip", "effect_scripts"),
             "classes": ("collapse",),
         }),
         ("Sync", {

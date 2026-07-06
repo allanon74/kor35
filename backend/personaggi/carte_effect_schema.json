@@ -277,6 +277,35 @@
         "energy_target": { "enum": ["self", "opponent"], "default": "self" }
       }
     },
+    "stepModifyTaggedHeroes": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "modify_tagged_heroes" },
+        "tag": { "type": "string", "minLength": 1 },
+        "tags_any": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "tags_all": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "owner": { "enum": ["controller", "opponent", "any"], "default": "controller" },
+        "forza_delta": { "$ref": "#/$defs/valueRef" },
+        "robustezza_delta": { "$ref": "#/$defs/valueRef" },
+        "iniziativa_delta": { "$ref": "#/$defs/valueRef" }
+      }
+    },
+    "stepDestroyHeroes": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "destroy_heroes" },
+        "tag": { "type": "string", "minLength": 1 },
+        "tags_any": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "tags_all": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "tags_none": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "owner": { "enum": ["controller", "opponent", "any"], "default": "controller" },
+        "optional": { "type": "boolean", "default": false }
+      }
+    },
     "step": {
       "oneOf": [
         { "$ref": "#/$defs/stepPlayerChoice" },
@@ -288,7 +317,9 @@
         { "$ref": "#/$defs/stepMoveCard" },
         { "$ref": "#/$defs/stepModifyShell" },
         { "$ref": "#/$defs/stepHealHeroes" },
-        { "$ref": "#/$defs/stepSinergiaIfActive" }
+        { "$ref": "#/$defs/stepSinergiaIfActive" },
+        { "$ref": "#/$defs/stepModifyTaggedHeroes" },
+        { "$ref": "#/$defs/stepDestroyHeroes" }
       ]
     }
   }

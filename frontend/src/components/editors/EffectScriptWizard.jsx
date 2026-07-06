@@ -113,6 +113,25 @@ export const EFFECT_SCRIPT_RECIPES = [
     reminder_breve: 'Sinergia +[X]',
     defaultX: 1,
   },
+  {
+    templateKey: 'cavalleria',
+    label: 'Cavalleria [X]',
+    codice: 'CAVALLERIA',
+    nome: 'Cavalleria [X]',
+    testo_regola:
+      'I tuoi personaggi con tag Cavaliere prendono +[X] Forza e +[X] Robustezza.',
+    reminder_breve: 'Cavalleria +[X]',
+    defaultX: 1,
+  },
+  {
+    templateKey: 'crociata',
+    label: 'Crociata',
+    codice: 'CROCIATA',
+    nome: 'Crociata',
+    testo_regola: 'Distruggi tutti i personaggi in gioco che non hanno il tag Cavaliere.',
+    reminder_breve: 'Crociata',
+    defaultX: 0,
+  },
 ];
 
 function parsePlaceholders(...texts) {
@@ -153,13 +172,18 @@ function patchScript(script, { placeholders, paramValues, triggerEvent, triggerS
 }
 
 export default function EffectScriptWizard({
-  keywordForm,
+  keywordForm: keywordFormProp,
   setKeywordForm,
   effectScriptText,
   setEffectScriptText,
   onLogout,
   onMessage,
+  mode = 'keyword',
+  triggerOptions = null,
 }) {
+  const keywordForm = keywordFormProp || { nome: '', codice: '', testo_regola: '' };
+  const triggerList = triggerOptions || TRIGGER_EVENTS;
+  const isCartaMode = mode === 'carta';
   const [schemaData, setSchemaData] = useState(null);
   const [selectedRecipeKey, setSelectedRecipeKey] = useState(null);
   const [paramValues, setParamValues] = useState({ X: 0 });
@@ -175,10 +199,13 @@ export default function EffectScriptWizard({
       .catch((e) => onMessage?.(e?.message || 'Caricamento schema EffectScript fallito.'));
   }, [onLogout, onMessage]);
 
-  const placeholders = useMemo(
-    () => parsePlaceholders(keywordForm.nome, keywordForm.codice, keywordForm.testo_regola),
-    [keywordForm.nome, keywordForm.codice, keywordForm.testo_regola],
-  );
+  const placeholders = useMemo(() => {
+    if (isCartaMode) {
+      const parsed = tryParseJson(effectScriptText);
+      return Object.keys(parsed?.params || {});
+    }
+    return parsePlaceholders(keywordForm.nome, keywordForm.codice, keywordForm.testo_regola);
+  }, [isCartaMode, effectScriptText, keywordForm.nome, keywordForm.codice, keywordForm.testo_regola]);
 
   const syncScriptText = useCallback(
     (baseScript) => {
@@ -208,13 +235,15 @@ export default function EffectScriptWizard({
     setParamValues(nextParams);
     setTriggerEvent(tpl.trigger?.event || 'on_play');
     setTriggerSource(tpl.trigger?.source || 'this');
-    setKeywordForm((prev) => ({
-      ...prev,
-      codice: prev.codice || recipe.codice,
-      nome: prev.nome || recipe.nome,
-      testo_regola: prev.testo_regola || recipe.testo_regola,
-      reminder_breve: prev.reminder_breve || recipe.reminder_breve,
-    }));
+    if (!isCartaMode && setKeywordForm) {
+      setKeywordForm((prev) => ({
+        ...prev,
+        codice: prev.codice || recipe.codice,
+        nome: prev.nome || recipe.nome,
+        testo_regola: prev.testo_regola || recipe.testo_regola,
+        reminder_breve: prev.reminder_breve || recipe.reminder_breve,
+      }));
+    }
     syncScriptText(tpl);
     setValidation(null);
     onMessage?.(`Ricetta «${recipe.label}» applicata.`);
@@ -258,6 +287,7 @@ export default function EffectScriptWizard({
           script: parsed,
           nome: keywordForm.nome,
           codice: keywordForm.codice,
+          mode: isCartaMode ? 'carta' : 'keyword',
         },
         onLogout,
       );
@@ -336,7 +366,7 @@ export default function EffectScriptWizard({
             value={triggerEvent}
             onChange={(e) => setTriggerEvent(e.target.value)}
           >
-            {TRIGGER_EVENTS.map((opt) => (
+            {triggerList.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
@@ -356,7 +386,13 @@ export default function EffectScriptWizard({
           </p>
           {placeholders.length === 0 ? (
             <p className="text-[10px] text-gray-500">
-              Aggiungi <code className="text-violet-300">[X]</code> nel nome keyword per parametrizzare.
+              {isCartaMode
+                ? 'Imposta params nello script (es. X con default) o usa una ricetta con [X].'
+                : (
+                  <>
+                    Aggiungi <code className="text-violet-300">[X]</code> nel nome keyword per parametrizzare.
+                  </>
+                )}
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">

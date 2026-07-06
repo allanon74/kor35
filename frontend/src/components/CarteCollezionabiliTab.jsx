@@ -31,7 +31,7 @@ import {
   COLLEZIONE_SORT_OPTIONS,
 } from '../carte/collezioneUtils';
 
-function CartaCard({ item, selected, onSelect, compact = false, temaEnergie, keywords }) {
+function CartaCard({ item, selected, onSelect, compact = false, temaEnergie, keywords, tagsGlossary }) {
   return (
     <CardFrame
       item={item}
@@ -40,12 +40,13 @@ function CartaCard({ item, selected, onSelect, compact = false, temaEnergie, key
       compact={compact}
       temaEnergie={temaEnergie}
       keywords={keywords}
+      tagsGlossary={tagsGlossary}
       showRules={!compact}
     />
   );
 }
 
-function CollezioneStackCard({ stack, onSelect, temaEnergie, keywords }) {
+function CollezioneStackCard({ stack, onSelect, temaEnergie, keywords, tagsGlossary }) {
   return (
     <div className="relative">
       <CartaCard
@@ -53,6 +54,7 @@ function CollezioneStackCard({ stack, onSelect, temaEnergie, keywords }) {
         onSelect={() => onSelect(stack)}
         temaEnergie={temaEnergie}
         keywords={keywords}
+        tagsGlossary={tagsGlossary}
       />
       {stack.count > 1 && (
         <span
@@ -74,7 +76,7 @@ function CollezioneStackCard({ stack, onSelect, temaEnergie, keywords }) {
   );
 }
 
-function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords }) {
+function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords, tagsGlossary }) {
   const [loreOpen, setLoreOpen] = useState(false);
   if (!item && !stack) return null;
   const displayItem = stack?.representative || item;
@@ -105,6 +107,7 @@ function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords }) {
             size="xl"
             temaEnergie={temaEnergie}
             keywords={keywords}
+            tagsGlossary={tagsGlossary}
             showRules
             showLoreText
             expandRules
@@ -539,6 +542,30 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     return sal ?? activeDuello?.carte?.[cpId]?.salute ?? null;
   };
 
+  const abilitaManualiCampo = useMemo(() => {
+    if (!activeDuello?.carte) return [];
+    const cpIds = [];
+    (mieiEroi || []).forEach((id) => { if (id) cpIds.push(id); });
+    Object.values(mieiOggetti || {}).forEach((id) => { if (id) cpIds.push(id); });
+    if (terraCpId && String(terraCondivisa?.giocatore_id) === String(charId)) {
+      cpIds.push(terraCpId);
+    }
+    const out = [];
+    cpIds.forEach((cpId) => {
+      const meta = activeDuello.carte[cpId];
+      (meta?.abilita_manuali || []).forEach((ab) => {
+        out.push({
+          cpId,
+          index: ab.index,
+          codice: ab.codice,
+          nome: ab.nome,
+          cartaNome: meta?.nome || 'Carta',
+        });
+      });
+    });
+    return out;
+  }, [activeDuello, mieiEroi, mieiOggetti, terraCpId, terraCondivisa, charId]);
+
   const renderGiocaCartaButtons = (cpId, meta) => {
     const tipo = meta?.tipo;
     const costo = meta?.costo_gioco ?? 0;
@@ -617,6 +644,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
     return map;
   }, [data?.carte]);
   const cardKeywords = data?.keywords || [];
+  const cardTagsGlossary = data?.tags || [];
   const invitiPendenti = useMemo(
     () => (duelli || []).filter((d) => d.stato === 'ATT' && d.richiede_mia_accettazione),
     [duelli],
@@ -789,6 +817,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                 saving={savingMazzo}
                 temaEnergie={data?.tema_energie}
                 keywords={cardKeywords}
+                tagsGlossary={cardTagsGlossary}
               />
             )}
             {!mazzoBuilderOpen && (data.mazzi || []).length > 0 && (
@@ -1339,6 +1368,27 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                         ) : null
                       ))}
                     </div>
+                    {abilitaManualiCampo.length > 0 && (
+                      <div className="flex flex-wrap gap-1 border-t border-gray-800 pt-2">
+                        {abilitaManualiCampo.map((ab) => (
+                          <button
+                            key={`ab-${ab.cpId}-${ab.index}-${ab.codice}`}
+                            type="button"
+                            disabled={duelBusy || inFaseChiusura}
+                            className="rounded bg-violet-900 px-2 py-1 text-[11px] disabled:opacity-40"
+                            title={`${ab.cartaNome} — ${ab.nome}`}
+                            onClick={() => handleDuelloAzione('attiva_abilita', {
+                              carta_posseduta_id: ab.cpId,
+                              script_index: ab.index,
+                              script_codice: ab.codice || undefined,
+                            })}
+                          >
+                            {ab.nome}
+                            <span className="ml-1 text-violet-300/80">({ab.cartaNome})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 {activeDuello.stato === 'FIN' && (
@@ -1426,7 +1476,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
               <h3 className="mb-2 text-sm font-bold text-violet-300">Ultime carte ottenute</h3>
               <div className="flex flex-wrap justify-center gap-2">
                 {lastPull.map((c) => (
-                  <CartaCard key={c.id} item={c} onSelect={setDetail} compact temaEnergie={data?.tema_energie} keywords={cardKeywords} />
+                  <CartaCard key={c.id} item={c} onSelect={setDetail} compact temaEnergie={data?.tema_energie} keywords={cardKeywords} tagsGlossary={cardTagsGlossary} />
                 ))}
               </div>
             </section>
@@ -1501,6 +1551,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                         size="md"
                         temaEnergie={data?.tema_energie}
                         keywords={cardKeywords}
+                        tagsGlossary={cardTagsGlossary}
                         showRules
                         rulesTextOverride={
                           item.carta?.testo_reliquiario?.trim()
@@ -1679,6 +1730,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                   onSelect={setDetailStack}
                   temaEnergie={data?.tema_energie}
                   keywords={cardKeywords}
+                  tagsGlossary={cardTagsGlossary}
                 />
               ))}
             </div>
@@ -1707,6 +1759,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
           }}
           temaEnergie={data?.tema_energie}
           keywords={cardKeywords}
+          tagsGlossary={cardTagsGlossary}
         />
       )}
 
@@ -1733,6 +1786,7 @@ export default function CarteCollezionabiliTab({ onLogout }) {
                   onSelect={() => handleEquip(equipMode, c.id)}
                   temaEnergie={data?.tema_energie}
                   keywords={cardKeywords}
+                  tagsGlossary={cardTagsGlossary}
                 />
               ))}
               {carteEquipabili.length === 0 && (

@@ -4344,6 +4344,24 @@ export const staffUpdateCartaKeyword = (id, data, onLogout) =>
 export const staffDeleteCartaKeyword = (id, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/keywords/${id}/`, { method: 'DELETE' }, onLogout);
 
+export const staffGetCarteTags = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/tags/`, { method: 'GET' }, onLogout);
+
+export const staffCreateCartaTag = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/tags/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartaTag = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/tags/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCartaTag = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/tags/${id}/`, { method: 'DELETE' }, onLogout);
+
 export const staffGetCarteComboReliquiario = (onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/combo-reliquiario/`, { method: 'GET' }, onLogout);
 

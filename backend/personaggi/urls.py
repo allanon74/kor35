@@ -147,6 +147,7 @@ router.register(r'staff/carte/catalogo', views_carte.CartaCollezionabileStaffVie
 router.register(r'staff/carte/bustine', views_carte.BustinaCarteStaffViewSet, basename='staff-carte-bustine')
 router.register(r'staff/carte/config', views_carte.ConfigurazioneCarteStaffViewSet, basename='staff-carte-config')
 router.register(r'staff/carte/keywords', views_carte.KeywordCartaStaffViewSet, basename='staff-carte-keywords')
+router.register(r'staff/carte/tags', views_carte.TagCartaStaffViewSet, basename='staff-carte-tags')
 router.register(r'staff/carte/combo-reliquiario', views_carte.ComboReliquiarioStaffViewSet, basename='staff-carte-combo-reliquiario')
 
 urlpatterns = [

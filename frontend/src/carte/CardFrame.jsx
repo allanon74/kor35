@@ -10,6 +10,7 @@ import {
 import { useCardEnergyTheme } from './useCardEnergyTheme';
 import CardRulesText from './CardRulesText';
 import { LoreTextBlock } from './cardTextBlocks';
+import { resolveCartaTagLabels } from './carteTagUtils';
 
 const SIZE_CLASS = {
   sm: 'w-[108px] min-h-[152px] text-[9px]',
@@ -62,6 +63,7 @@ export default function CardFrame({
   size: sizeProp,
   temaEnergie: temaProp,
   keywords = [],
+  tagsGlossary = [],
   showRules = true,
   showLoreText = false,
   expandRules = false,
@@ -83,6 +85,7 @@ export default function CardFrame({
   const rulesText = rulesTextOverride != null
     ? rulesTextOverride
     : (reliquiarioMode ? '—' : (c.testo_gioco || '—'));
+  const tagLabels = resolveCartaTagLabels(c, tagsGlossary);
   const rulesTextClass = expandRules
     ? 'text-[13px] leading-relaxed'
     : size === 'xl'
@@ -141,6 +144,11 @@ export default function CardFrame({
         className={`mx-2 mt-1.5 flex min-h-0 flex-1 flex-col rounded border px-2 py-2 ${expandRules ? 'overflow-y-auto' : ''} ${rulesTextClass}`}
         style={styles.rulesBox}
       >
+        {tagLabels.length > 0 && (
+          <p className={`mb-1 font-bold leading-tight text-white ${size === 'xl' ? 'text-sm' : ''}`}>
+            {tagLabels.join(' · ')}
+          </p>
+        )}
         {reliquiarioMode && (
           <p className="mb-1 text-[8px] font-bold uppercase tracking-wide text-indigo-300/90">
             Abilità reliquiario

@@ -183,6 +183,50 @@ class KeywordCarta(SyncableModel, models.Model):
         return keyword_ha_parametri(self.nome) or keyword_ha_parametri(self.codice)
 
 
+class TagCarta(SyncableModel, models.Model):
+    """
+    Etichetta meccanica assegnata esplicitamente alle carte (non parsata dal testo).
+    Le keyword possono riferirsi ai tag negli EffectScript (buff, distruzione, filtri).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="tag_carte",
+    )
+    codice = models.CharField(
+        max_length=40,
+        db_index=True,
+        help_text="Identificatore univoco per campagna, es. CAVALIERE",
+    )
+    nome = models.CharField(max_length=80, help_text="Nome mostrato, es. Cavaliere")
+    descrizione = models.TextField(
+        blank=True,
+        default="",
+        help_text="Spiegazione per staff / glossario.",
+    )
+    colore = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+        help_text="Colore UI opzionale (#RRGGBB).",
+    )
+    attiva = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Tag carta"
+        verbose_name_plural = "Tag carte"
+        ordering = ["nome"]
+        unique_together = [("campagna", "codice")]
+
+    def __str__(self):
+        return self.nome or self.codice
+
+
 class EspansioneCarte(SyncableModel, models.Model):
     """Collezione / espansione che raggruppa carte e bustine autonome."""
 
@@ -286,6 +330,12 @@ class CartaCollezionabile(SyncableModel, models.Model):
         help_text="Identificatore combo reliquiario.",
     )
     tag_tematici = models.JSONField(default=list, blank=True)
+    tags = models.ManyToManyField(
+        TagCarta,
+        blank=True,
+        related_name="carte",
+        help_text="Tag meccanici (Cavaliere, Orda, …) usati da keyword ed effetti.",
+    )
     bonus_equip = models.JSONField(
         default=dict,
         blank=True,
@@ -293,6 +343,14 @@ class CartaCollezionabile(SyncableModel, models.Model):
             'Bonus equip: reliquiario {"stat_sigla":"FOR","valore":1}; '
             'duello {"forza":1,"robustezza_se_leader":2} o '
             '{"duello":[{"stat":"forza","valore":2},{"stat":"robustezza","valore":2,"se_leader":true}]}'
+        ),
+    )
+    effect_scripts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "EffectScript v1 sulla carta (senza keyword nel testo). "
+            "Ogni elemento: {codice?, nome?, script: {version, trigger, steps, params?}}."
         ),
     )
     duplicabile = models.BooleanField(

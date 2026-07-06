@@ -21,6 +21,10 @@ import {
   staffCreateCartaKeyword,
   staffUpdateCartaKeyword,
   staffDeleteCartaKeyword,
+  staffGetCarteTags,
+  staffCreateCartaTag,
+  staffUpdateCartaTag,
+  staffDeleteCartaTag,
   getStaffWikiCarteRegolamentoInfo,
   syncStaffWikiCarteRegolamento,
   resolveMediaUrl,
@@ -31,6 +35,10 @@ import { CardRulesPreview } from '../../carte/cardTextBlocks';
 import BonusEquipEditor from './BonusEquipEditor';
 import ComboReliquiarioStaffPanel from './ComboReliquiarioStaffPanel';
 import EffectScriptWizard from './EffectScriptWizard';
+import CartaEffectScriptsEditor, {
+  effectScriptsFromApi,
+  effectScriptsToApi,
+} from './CartaEffectScriptsEditor';
 import MercatoScambiStaffPanel from './MercatoScambiStaffPanel';
 import StatModInline from './inlines/StatModInline';
 
@@ -64,7 +72,9 @@ const emptyCarta = (espansioneId = '') => ({
   campagna_origine: '',
   legame_id: '',
   tag_tematici: [],
+  tag_ids: [],
   bonus_equip: {},
+  effect_scripts_entries: [],
   duplicabile: false,
   attiva: true,
   ordine_set: 0,
@@ -189,6 +199,14 @@ const emptyEspansione = () => ({
   attiva: true,
 });
 
+const emptyTag = () => ({
+  codice: '',
+  nome: '',
+  descrizione: '',
+  colore: '',
+  attiva: true,
+});
+
 const emptyKeyword = () => ({
   codice: '',
   nome: '',
@@ -214,6 +232,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [carte, setCarte] = useState([]);
   const [bustine, setBustine] = useState([]);
   const [keywords, setKeywords] = useState([]);
+  const [tags, setTags] = useState([]);
   const [config, setConfig] = useState({
     pity_soglia: 20,
     max_bustine_giorno: 10,
@@ -230,6 +249,8 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [keywordForm, setKeywordForm] = useState(emptyKeyword());
   const [effectScriptText, setEffectScriptText] = useState('');
   const [selectedKeyword, setSelectedKeyword] = useState(null);
+  const [tagForm, setTagForm] = useState(emptyTag());
+  const [selectedTag, setSelectedTag] = useState(null);
   const [wikiInfo, setWikiInfo] = useState(null);
   const [wikiSyncing, setWikiSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -287,10 +308,11 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [esp, cfg, kw, wiki, punt] = await Promise.all([
+      const [esp, cfg, kw, tagRes, wiki, punt] = await Promise.all([
         staffGetCarteEspansioni(onLogout),
         staffGetCarteConfig(onLogout),
         staffGetCarteKeywords(onLogout),
+        staffGetCarteTags(onLogout),
         getStaffWikiCarteRegolamentoInfo(onLogout).catch(() => null),
         getPunteggiList(onLogout).catch(() => []),
       ]);
@@ -298,6 +320,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       setEspansioni(espList);
       if (cfg) setConfig(cfg);
       setKeywords(Array.isArray(kw) ? kw : kw?.results || []);
+      setTags(Array.isArray(tagRes) ? tagRes : tagRes?.results || []);
       setWikiInfo(wiki);
       setPunteggi(punt || []);
 
@@ -380,11 +403,20 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const saveCarta = async () => {
     try {
+      let effect_scripts;
+      try {
+        effect_scripts = effectScriptsToApi(form.effect_scripts_entries || []);
+      } catch (e) {
+        setMsg(e?.message || 'EffectScript carta: JSON non valido.');
+        return;
+      }
       let payload;
       const formPayload = {
         ...form,
         statistiche_reliquiario: normalizeCartaStats(form.statistiche_reliquiario),
+        effect_scripts,
       };
+      delete formPayload.effect_scripts_entries;
       if (cartaImmagineFile) {
         payload = buildCartaFormData(formPayload, cartaImmagineFile);
       } else if (removeCartaImmagine && selected?.id) {
@@ -468,6 +500,36 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     }
   };
 
+  const saveTag = async () => {
+    try {
+      const payload = { ...tagForm };
+      if (selectedTag?.id) {
+        await staffUpdateCartaTag(selectedTag.id, payload, onLogout);
+      } else {
+        await staffCreateCartaTag(payload, onLogout);
+      }
+      setMsg('Tag salvato.');
+      setSelectedTag(null);
+      setTagForm(emptyTag());
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Salvataggio tag fallito.');
+    }
+  };
+
+  const deleteTag = async (id) => {
+    if (!window.confirm('Eliminare questo tag?')) return;
+    try {
+      await staffDeleteCartaTag(id, onLogout);
+      setMsg('Tag eliminato.');
+      setSelectedTag(null);
+      setTagForm(emptyTag());
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Eliminazione tag fallita.');
+    }
+  };
+
   const handleWikiSync = async (force = true) => {
     setWikiSyncing(true);
     try {
@@ -508,7 +570,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       {msg && <p className="text-sm text-amber-300">{msg}</p>}
 
       <div className="flex flex-wrap gap-2">
-        {['espansioni', 'catalogo', 'bustine', 'keywords', 'combo-reliquiario', 'scambi', 'config'].map((t) => (
+        {['espansioni', 'catalogo', 'bustine', 'tags', 'keywords', 'combo-reliquiario', 'scambi', 'config'].map((t) => (
           <button
             key={t}
             type="button"
@@ -661,6 +723,8 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                         bonus_equip: c.bonus_equip && typeof c.bonus_equip === 'object' ? c.bonus_equip : {},
                         statistiche_reliquiario: normalizeCartaStats(c.statistiche_reliquiario),
                         testo_reliquiario: c.testo_reliquiario || '',
+                        tag_ids: c.tag_ids || [],
+                        effect_scripts_entries: effectScriptsFromApi(c.effect_scripts),
                       });
                       resetCartaImmagineState();
                     }}
@@ -669,6 +733,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                     <span className="ml-2 text-xs text-gray-500">
                       {c.codice} · {CARTA_RARITA_LABEL[c.rarita]}
                       {c.espansione_nome ? ` · ${c.espansione_nome}` : ''}
+                      {(c.tag_codici || []).length > 0 ? ` · [${c.tag_codici.join(', ')}]` : ''}
                     </span>
                   </button>
                 </li>
@@ -755,13 +820,55 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                 Duplicabile nel mazzo (max 2 copie)
               </label>
             </div>
+            {tags.length > 0 && (
+              <div className="rounded border border-amber-900/40 bg-amber-950/20 p-2">
+                <h4 className="mb-2 text-xs font-bold text-amber-300">Tag meccanici</h4>
+                <div className="flex flex-wrap gap-2">
+                  {tags.filter((t) => t.attiva !== false).map((t) => {
+                    const checked = (form.tag_ids || []).includes(t.id);
+                    return (
+                      <label
+                        key={t.id}
+                        className={`flex cursor-pointer items-center gap-1 rounded border px-2 py-1 text-xs ${
+                          checked ? 'border-amber-500 bg-amber-900/40' : 'border-gray-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setForm((p) => {
+                              const cur = p.tag_ids || [];
+                              const next = checked
+                                ? cur.filter((id) => id !== t.id)
+                                : [...cur, t.id];
+                              return { ...p, tag_ids: next };
+                            });
+                          }}
+                        />
+                        <span className="font-mono text-[10px] text-gray-400">{t.codice}</span>
+                        {t.nome}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-[10px] text-gray-500">
+                  I tag non compaiono nel testo carta: servono agli effetti keyword (es. Cavalleria, Crociata).
+                </p>
+              </div>
+            )}
             <BonusEquipEditor
               tipo={form.tipo}
               value={form.bonus_equip}
               onChange={(bonus_equip) => setForm((p) => ({ ...p, bonus_equip }))}
             />
+            <CartaEffectScriptsEditor
+              entries={form.effect_scripts_entries || []}
+              onChange={(effect_scripts_entries) => setForm((p) => ({ ...p, effect_scripts_entries }))}
+              onMessage={setMsg}
+            />
             <div className="rounded border border-violet-900/50 bg-violet-950/20 p-2 space-y-2">
-              <h4 className="text-xs font-bold text-violet-300">Testo gioco (Keywords)</h4>
+              <h4 className="text-xs font-bold text-violet-300">Testo gioco (flavour + keyword condivise)</h4>
               <textarea
                 className="h-36 w-full rounded border border-gray-600 bg-gray-900 p-2 text-sm leading-relaxed"
                 placeholder="Testo regole in gioco — le Keywords del tab dedicato vengono evidenziate in anteprima"
@@ -945,6 +1052,108 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                 Elimina
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {!loading && tab === 'tags' && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <p className="col-span-full text-xs text-gray-500">
+            I <strong>tag</strong> sono etichette meccaniche assegnate dal catalogo (non si cercano nel testo).
+            Le keyword possono usarli negli EffectScript per buff, distruzione o filtri (es. tag <code>CAVALIERE</code>).
+          </p>
+          <div className="rounded border border-gray-700 p-3">
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-amber-300">
+              <Tag size={16} /> Tag ({tags.length})
+            </h3>
+            <ul className="max-h-80 space-y-1 overflow-y-auto text-sm">
+              {tags.map((t) => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    className={`w-full rounded px-2 py-1 text-left ${selectedTag?.id === t.id ? 'bg-amber-900' : 'hover:bg-gray-800'}`}
+                    onClick={() => {
+                      setSelectedTag(t);
+                      setTagForm({ ...t });
+                    }}
+                  >
+                    <span className="font-mono text-xs text-gray-500">{t.codice}</span>
+                    {' — '}
+                    {t.nome}
+                    {!t.attiva && <span className="ml-1 text-amber-500">(off)</span>}
+                  </button>
+                </li>
+              ))}
+              {tags.length === 0 && <p className="text-gray-500">Nessun tag.</p>}
+            </ul>
+            <button
+              type="button"
+              className="mt-2 flex items-center gap-1 rounded bg-gray-800 px-2 py-1 text-xs"
+              onClick={() => {
+                setSelectedTag(null);
+                setTagForm(emptyTag());
+              }}
+            >
+              <Plus size={12} /> Nuovo tag
+            </button>
+          </div>
+          <div className="space-y-2 rounded border border-gray-700 p-3">
+            <label className="block text-sm">
+              Codice
+              <input
+                className="mt-1 w-full rounded bg-gray-900 px-2 py-1 font-mono uppercase"
+                value={tagForm.codice}
+                onChange={(e) => setTagForm((p) => ({ ...p, codice: e.target.value.toUpperCase() }))}
+              />
+            </label>
+            <label className="block text-sm">
+              Nome
+              <input
+                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
+                value={tagForm.nome}
+                onChange={(e) => setTagForm((p) => ({ ...p, nome: e.target.value }))}
+              />
+            </label>
+            <label className="block text-sm">
+              Descrizione
+              <textarea
+                className="mt-1 w-full rounded bg-gray-900 px-2 py-1"
+                rows={3}
+                value={tagForm.descrizione || ''}
+                onChange={(e) => setTagForm((p) => ({ ...p, descrizione: e.target.value }))}
+              />
+            </label>
+            <label className="block text-sm">
+              Colore UI
+              <input
+                className="mt-1 w-full rounded bg-gray-900 px-2 py-1 font-mono"
+                placeholder="#c9a227"
+                value={tagForm.colore || ''}
+                onChange={(e) => setTagForm((p) => ({ ...p, colore: e.target.value }))}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={tagForm.attiva !== false}
+                onChange={(e) => setTagForm((p) => ({ ...p, attiva: e.target.checked }))}
+              />
+              Attivo
+            </label>
+            <div className="flex gap-2">
+              <button type="button" className="rounded bg-emerald-800 px-3 py-1 text-sm" onClick={saveTag}>
+                <Save size={14} className="inline" /> Salva
+              </button>
+              {selectedTag?.id && (
+                <button
+                  type="button"
+                  className="rounded bg-red-900 px-3 py-1 text-sm"
+                  onClick={() => deleteTag(selectedTag.id)}
+                >
+                  Elimina
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

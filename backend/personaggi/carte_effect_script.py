@@ -361,3 +361,40 @@ def sinergia_energia_effect_script_template() -> dict:
             },
         ],
     }
+
+
+def cavalleria_effect_script_template() -> dict:
+    """on_play: i tuoi Cavalieri prendono +X Forza e +X Robustezza."""
+    return {
+        "version": EFFECT_SCRIPT_VERSION,
+        "params": {
+            "X": {"type": "int", "from_placeholder": "X", "default": 1},
+        },
+        "trigger": {"event": "on_play", "source": "this"},
+        "steps": [
+            {
+                "type": "modify_tagged_heroes",
+                "tag": "CAVALIERE",
+                "owner": "controller",
+                "forza_delta": {"ref": "param.X"},
+                "robustezza_delta": {"ref": "param.X"},
+            },
+        ],
+    }
+
+
+def crociata_effect_script_template() -> dict:
+    """on_play: rimuovi tutti i personaggi in gioco che non hanno il tag Cavaliere."""
+    return {
+        "version": EFFECT_SCRIPT_VERSION,
+        "params": {},
+        "trigger": {"event": "on_play", "source": "this"},
+        "steps": [
+            {
+                "type": "destroy_heroes",
+                "owner": "any",
+                "tags_none": ["CAVALIERE"],
+                "optional": True,
+            },
+        ],
+    }

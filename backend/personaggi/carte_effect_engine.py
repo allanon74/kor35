@@ -162,6 +162,18 @@ def _advance_effect(duello: DuelloCarte, state: dict) -> dict | None:
             state["step_index"] = idx
             continue
 
+        if stype == "modify_tagged_heroes":
+            _exec_modify_tagged_heroes(duello, controller, step, state)
+            idx += 1
+            state["step_index"] = idx
+            continue
+
+        if stype == "destroy_heroes":
+            _exec_destroy_heroes(duello, controller, step, state)
+            idx += 1
+            state["step_index"] = idx
+            continue
+
         raise ValidationError(f"Passo effetto non implementato: {stype}")
 
     _pop_queue_head(duello)
@@ -713,6 +725,80 @@ def _exec_sinergia_if_active(duello: DuelloCarte, controller: Personaggio, step:
     _append_log(duello.stato_gioco, f"{controller.nome}: Sinergia attiva ({min_count}+ personaggi).")
 
 
+def _tag_filter_from_step(step: dict) -> dict:
+    tags_any = [str(t).strip() for t in (step.get("tags_any") or []) if str(t).strip()]
+    tag_single = (step.get("tag") or "").strip()
+    if tag_single:
+        tags_any.append(tag_single)
+    tags_all = [str(t).strip() for t in (step.get("tags_all") or []) if str(t).strip()]
+    tags_none = [str(t).strip() for t in (step.get("tags_none") or []) if str(t).strip()]
+    return {
+        "tags_any": tags_any or None,
+        "tags_all": tags_all or None,
+        "tags_none": tags_none or None,
+    }
+
+
+def _exec_modify_tagged_heroes(duello: DuelloCarte, controller: Personaggio, step: dict, state: dict):
+    from personaggi.carte_duello_service import _aggiorna_salute_eroe_da_stats, _pg_key, _stats_eroe_slot
+    from personaggi.carte_tag_utils import iter_eroi_per_tag_filter
+
+    filt = _tag_filter_from_step(step)
+    if not filt["tags_any"] and not filt["tags_all"]:
+        raise ValidationError("modify_tagged_heroes: specificare tag o tags_any.")
+    owner = step.get("owner") or "controller"
+    forza_d = int(resolve_value_ref(step.get("forza_delta"), params=state["params"], choices=state["choices"]) or 0)
+    rob_d = int(resolve_value_ref(step.get("robustezza_delta"), params=state["params"], choices=state["choices"]) or 0)
+    if not (forza_d or rob_d):
+        return
+
+    matches = iter_eroi_per_tag_filter(duello, controller, owner, **filt)
+    touched = 0
+    for pg, lato, slot in matches:
+        fb = lato.setdefault("forza_bonus_eroi", [0, 0])
+        rb = lato.setdefault("robustezza_bonus_eroi", [0, 0])
+        while len(fb) < 2:
+            fb.append(0)
+        while len(rb) < 2:
+            rb.append(0)
+        if forza_d:
+            fb[slot] = int(fb[slot] or 0) + forza_d
+        if rob_d:
+            rb[slot] = int(rb[slot] or 0) + rob_d
+        if rob_d or forza_d:
+            stats = _stats_eroe_slot(duello, pg, lato, slot)
+            _aggiorna_salute_eroe_da_stats(lato, slot, stats)
+        touched += 1
+    if touched:
+        _append_log(
+            duello.stato_gioco,
+            f"{controller.nome}: bonus tag su {touched} personaggio/i "
+            f"(+{forza_d} forza, +{rob_d} robustezza).",
+        )
+
+
+def _exec_destroy_heroes(duello: DuelloCarte, controller: Personaggio, step: dict, state: dict):
+    from personaggi.carte_duello_service import _rimuovi_eroe_da_campo
+    from personaggi.carte_tag_utils import iter_eroi_per_tag_filter
+
+    filt = _tag_filter_from_step(step)
+    owner = step.get("owner") or "controller"
+    matches = iter_eroi_per_tag_filter(duello, controller, owner, **filt)
+    if not matches and not step.get("optional"):
+        _append_log(duello.stato_gioco, f"{controller.nome}: nessun personaggio da rimuovere (tag).")
+        return
+
+    destroyed = 0
+    for pg, _lato, slot in sorted(matches, key=lambda m: (str(m[0].id), m[2])):
+        pending = _rimuovi_eroe_da_campo(duello, pg, slot)
+        destroyed += 1
+        if pending:
+            state["pending_after_destroy"] = pending
+            break
+    if destroyed:
+        _append_log(duello.stato_gioco, f"{controller.nome}: rimossi {destroyed} personaggio/i (filtro tag).")
+
+
 def get_open_effect_choice(duello: DuelloCarte, personaggio: Personaggio) -> dict | None:
     stato = duello.stato_gioco or {}
     queue = _get_queue(stato)
@@ -832,5 +918,243 @@ def trigger_keyword_effect_on_exhaust(
         script=effect_script,
         controller=personaggio,
         keyword_params=keyword_params,
+        context=ctx,
+    )
+
+
+def trigger_carta_effects_for_event(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    carta,
+    event: str,
+    *,
+    context: dict | None = None,
+    keyword_params: dict | None = None,
+) -> dict | None:
+    """Accoda gli EffectScript definiti sulla carta per l'evento richiesto."""
+    from personaggi.carte_carta_effects import iter_carta_scripts_for_event
+
+    matches = iter_carta_scripts_for_event(carta, event)
+    if not matches:
+        return None
+    ctx_base = {"pg_key": _pg_key(personaggio), **(context or {})}
+    pending = None
+    for idx, entry, script in matches:
+        ctx = dict(ctx_base)
+        ctx["carta_effect_index"] = idx
+        if entry.get("codice"):
+            ctx["carta_effect_codice"] = entry["codice"]
+        result = enqueue_effect(
+            duello,
+            script=script,
+            controller=personaggio,
+            keyword_params=keyword_params,
+            context=ctx,
+        )
+        if result:
+            pending = result
+    return pending
+
+
+def trigger_card_effects_for_event(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    carta,
+    testo_gioco: str,
+    event: str,
+    *,
+    context: dict | None = None,
+) -> dict | None:
+    """Keyword nel testo + script sulla carta (stesso evento)."""
+    pending = trigger_keyword_effects_for_event(
+        duello, personaggio, testo_gioco or "", event, context=context
+    )
+    carta_pending = trigger_carta_effects_for_event(
+        duello, personaggio, carta, event, context=context
+    )
+    return carta_pending or pending
+
+
+def trigger_card_effects_on_exhaust(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    *,
+    carta,
+    carta_posseduta_id: str,
+    hero_slot: int,
+    testo_gioco: str,
+) -> dict | None:
+    """on_exhaust da keyword nel testo e da script carta."""
+    ctx = {
+        "carta_posseduta_id": str(carta_posseduta_id),
+        "hero_slot": hero_slot,
+    }
+    pending = trigger_keyword_effects_on_exhaust(
+        duello,
+        personaggio,
+        carta_posseduta_id=carta_posseduta_id,
+        hero_slot=hero_slot,
+        testo_gioco=testo_gioco,
+    )
+    carta_pending = trigger_carta_effects_for_event(
+        duello,
+        personaggio,
+        carta,
+        "on_exhaust",
+        context=ctx,
+    )
+    return carta_pending or pending
+
+
+def trigger_carta_manual_effect(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    carta,
+    *,
+    script_index: int | None,
+    script_codice: str | None,
+    carta_posseduta_id: str,
+    context: dict | None = None,
+) -> dict | None:
+    """Avvia un'abilità manuale definita sulla carta."""
+    from personaggi.carte_carta_effects import trova_script_manuale_carta
+
+    idx, entry, script = trova_script_manuale_carta(
+        carta,
+        script_index=script_index,
+        script_codice=script_codice,
+    )
+    ctx = {
+        "pg_key": _pg_key(personaggio),
+        "carta_posseduta_id": str(carta_posseduta_id),
+        "carta_effect_index": idx,
+        **(context or {}),
+    }
+    if entry.get("codice"):
+        ctx["carta_effect_codice"] = entry["codice"]
+    return enqueue_effect(
+        duello,
+        script=script,
+        controller=personaggio,
+        keyword_params=None,
+        context=ctx,
+    )
+
+
+def trigger_carta_effects_for_event(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    carta,
+    event: str,
+    *,
+    context: dict | None = None,
+    keyword_params: dict | None = None,
+) -> dict | None:
+    """Accoda gli EffectScript definiti sulla carta per l'evento richiesto."""
+    from personaggi.carte_carta_effects import iter_carta_scripts_for_event
+
+    matches = iter_carta_scripts_for_event(carta, event)
+    if not matches:
+        return None
+    ctx_base = {"pg_key": _pg_key(personaggio), **(context or {})}
+    pending = None
+    for idx, entry, script in matches:
+        ctx = dict(ctx_base)
+        ctx["carta_effect_index"] = idx
+        if entry.get("codice"):
+            ctx["carta_effect_codice"] = entry["codice"]
+        result = enqueue_effect(
+            duello,
+            script=script,
+            controller=personaggio,
+            keyword_params=keyword_params,
+            context=ctx,
+        )
+        if result:
+            pending = result
+    return pending
+
+
+def trigger_card_effects_for_event(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    carta,
+    testo_gioco: str,
+    event: str,
+    *,
+    context: dict | None = None,
+) -> dict | None:
+    """Keyword nel testo + script sulla carta (stesso evento)."""
+    pending = trigger_keyword_effects_for_event(
+        duello, personaggio, testo_gioco or "", event, context=context
+    )
+    carta_pending = trigger_carta_effects_for_event(
+        duello, personaggio, carta, event, context=context
+    )
+    return carta_pending or pending
+
+
+def trigger_card_effects_on_exhaust(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    *,
+    carta,
+    carta_posseduta_id: str,
+    hero_slot: int,
+    testo_gioco: str,
+) -> dict | None:
+    """on_exhaust da keyword nel testo e da script carta."""
+    ctx = {
+        "carta_posseduta_id": str(carta_posseduta_id),
+        "hero_slot": hero_slot,
+    }
+    pending = trigger_keyword_effects_on_exhaust(
+        duello,
+        personaggio,
+        carta_posseduta_id=carta_posseduta_id,
+        hero_slot=hero_slot,
+        testo_gioco=testo_gioco,
+    )
+    carta_pending = trigger_carta_effects_for_event(
+        duello,
+        personaggio,
+        carta,
+        "on_exhaust",
+        context=ctx,
+    )
+    return carta_pending or pending
+
+
+def trigger_carta_manual_effect(
+    duello: DuelloCarte,
+    personaggio: Personaggio,
+    carta,
+    *,
+    script_index: int | None,
+    script_codice: str | None,
+    carta_posseduta_id: str,
+    context: dict | None = None,
+) -> dict | None:
+    """Avvia un'abilità manuale definita sulla carta."""
+    from personaggi.carte_carta_effects import trova_script_manuale_carta
+
+    idx, entry, script = trova_script_manuale_carta(
+        carta,
+        script_index=script_index,
+        script_codice=script_codice,
+    )
+    ctx = {
+        "pg_key": _pg_key(personaggio),
+        "carta_posseduta_id": str(carta_posseduta_id),
+        "carta_effect_index": idx,
+        **(context or {}),
+    }
+    if entry.get("codice"):
+        ctx["carta_effect_codice"] = entry["codice"]
+    return enqueue_effect(
+        duello,
+        script=script,
+        controller=personaggio,
+        keyword_params=None,
         context=ctx,
     )

@@ -16,6 +16,7 @@ from personaggi.carte_collezionabili_models import (
     ConfigurazioneCarteCollezionabili,
     EspansioneCarte,
     KeywordCarta,
+    TagCarta,
 )
 from personaggi.models import CartaReliquiarioStatistica, ComboReliquiarioStatistica
 from personaggi.serializers import StatisticaSerializer
@@ -149,6 +150,13 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
     immagine_url = serializers.SerializerMethodField()
     espansione_nome = serializers.CharField(source="espansione.nome", read_only=True, allow_null=True)
+    tag_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=TagCarta.objects.all(),
+        source="tags",
+        required=False,
+    )
+    tag_codici = serializers.SerializerMethodField()
     statistiche_reliquiario = CartaReliquiarioStatisticaSerializer(
         source="reliquiario_statistiche",
         many=True,
@@ -181,7 +189,10 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             "campagna_origine",
             "legame_id",
             "tag_tematici",
+            "tag_ids",
+            "tag_codici",
             "bonus_equip",
+            "effect_scripts",
             "statistiche_reliquiario",
             "duplicabile",
             "immagine",
@@ -189,7 +200,10 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             "attiva",
             "ordine_set",
         ]
-        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "immagine_url", "espansione_nome"]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "immagine_url", "espansione_nome", "tag_codici"]
+
+    def get_tag_codici(self, obj):
+        return [t.codice for t in obj.tags.filter(attiva=True).order_by("nome")]
 
     def get_immagine_url(self, obj):
         if obj.immagine:
@@ -210,6 +224,17 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages)
 
+    def validate_effect_scripts(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from personaggi.carte_carta_effects import validate_carta_effect_scripts
+
+        parsed = _parse_json_field(value, "effect_scripts")
+        try:
+            return validate_carta_effect_scripts(parsed)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+
     def validate_statistiche_reliquiario(self, value):
         return _parse_json_field(value, "statistiche_reliquiario") or []
 
@@ -220,16 +245,22 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         stats = validated_data.pop("reliquiario_statistiche", [])
+        tags = validated_data.pop("tags", None)
         carta = CartaCollezionabile.objects.create(**validated_data)
+        if tags is not None:
+            carta.tags.set(tags)
         _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", carta, stats)
         return carta
 
     @transaction.atomic
     def update(self, instance, validated_data):
         stats = validated_data.pop("reliquiario_statistiche", None)
+        tags = validated_data.pop("tags", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        if tags is not None:
+            instance.tags.set(tags)
         if stats is not None:
             _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", instance, stats)
         return instance
@@ -340,6 +371,27 @@ class ConfigurazioneCarteCollezionabiliSerializer(serializers.ModelSerializer):
         elif modo is not None:
             attrs["abilitata"] = modo == CARTE_ACCESSO_OPEN
         return attrs
+
+
+class TagCartaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TagCarta
+        fields = [
+            "id",
+            "sync_id",
+            "created_at",
+            "updated_at",
+            "campagna",
+            "codice",
+            "nome",
+            "descrizione",
+            "colore",
+            "attiva",
+        ]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna"]
+
+    def validate_codice(self, value):
+        return (value or "").strip().upper()
 
 
 class KeywordCartaSerializer(serializers.ModelSerializer):

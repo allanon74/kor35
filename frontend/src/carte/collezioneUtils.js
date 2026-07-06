@@ -67,7 +67,11 @@ export function filterCollezioneStacks(stacks, filters = {}) {
     if (espansioneId && String(c.espansione_id || '') !== String(espansioneId)) return false;
     if (soloNonEquip && stack.inReliquarioCount >= stack.count) return false;
     if (!q) return true;
-    const hay = [c.nome, c.codice, c.espansione_nome, c.set_collezione, ...(c.tag_tematici || [])]
+    const hay = [
+      c.nome, c.codice, c.espansione_nome, c.set_collezione,
+      ...(c.tag_tematici || []),
+      ...((c.tags || []).map((t) => (typeof t === 'string' ? t : t.nome || t.codice))),
+    ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase();

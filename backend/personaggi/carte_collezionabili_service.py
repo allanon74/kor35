@@ -202,6 +202,10 @@ def _serializza_carta(carta: CartaCollezionabile) -> dict:
         "campagna_origine": carta.campagna_origine,
         "legame_id": carta.legame_id,
         "tag_tematici": carta.tag_tematici or [],
+        "tags": [
+            {"codice": t.codice, "nome": t.nome, "colore": t.colore or ""}
+            for t in carta.tags.filter(attiva=True).order_by("nome")
+        ],
         "bonus_equip": carta.bonus_equip or {},
         "duplicabile": carta.duplicabile,
         "ordine_set": carta.ordine_set,
@@ -234,6 +238,12 @@ def lista_keywords_campagna(campagna) -> list[dict]:
     ]
 
 
+def lista_tags_campagna(campagna) -> list[dict]:
+    from personaggi.carte_tag_utils import lista_tags_campagna as _lista
+
+    return _lista(campagna)
+
+
 def build_collezione_payload(personaggio: Personaggio) -> dict:
     accesso_modo = get_carte_accesso_modo(personaggio.campagna)
     puo_accedere = personaggio_puo_accedere_carte(personaggio)
@@ -254,6 +264,7 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
             "bustine": [],
             "config": {},
             "keywords": [],
+            "tags": [],
             "regole_mazzo": descrizione_regole_mazzo_duello(),
         }
 
@@ -320,6 +331,7 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
         "riserva": float(personaggio.riserva),
         "tema_energie": get_tema_energie_carte(),
         "keywords": lista_keywords_campagna(personaggio.campagna),
+        "tags": lista_tags_campagna(personaggio.campagna),
         "regole_mazzo": descrizione_regole_mazzo_duello(),
     }
 

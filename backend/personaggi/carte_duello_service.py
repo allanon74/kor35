@@ -278,6 +278,14 @@ def _stats_eroe_slot(duello: DuelloCarte, owner_pg: Personaggio, lato: dict, slo
         )
         for key in ("forza", "robustezza", "iniziativa"):
             stats[key] += delta[key]
+    fb = lato.get("forza_bonus_eroi") or [0, 0]
+    rb = lato.get("robustezza_bonus_eroi") or [0, 0]
+    while len(fb) < 2:
+        fb.append(0)
+    while len(rb) < 2:
+        rb.append(0)
+    stats["forza"] = int(stats.get("forza", 0)) + int(fb[slot] or 0)
+    stats["robustezza"] = int(stats.get("robustezza", 0)) + int(rb[slot] or 0)
     return stats
 
 
@@ -533,6 +541,8 @@ def _stato_lato_vuoto() -> dict:
         "eroi": [None, None],
         "salute_eroi": [None, None],
         "guscio_eroi": [0, 0],
+        "forza_bonus_eroi": [0, 0],
+        "robustezza_bonus_eroi": [0, 0],
         "oggetti": {},
         "energia": 0,
         "mana_massimo": MANA_MASSIMO_BASE,
@@ -691,16 +701,17 @@ def _rimuovi_eroe_da_campo(duello: DuelloCarte, owner_pg: Personaggio, hero_slot
         lato["oggetti"] = oggetti
 
     cp = CartaPosseduta.objects.select_related("carta").get(pk=cp_id)
-    from personaggi.carte_effect_engine import trigger_keyword_effects_on_exhaust
+    from personaggi.carte_effect_engine import trigger_card_effects_on_exhaust
 
     if carta_e_leader_partita(duello, owner_pg, cp_id):
         lato.setdefault("mano", []).append(str(cp_id))
         _append_log(duello.stato_gioco, f"{cp.carta.nome} (Leader) torna in mano.")
         return None
 
-    pending = trigger_keyword_effects_on_exhaust(
+    pending = trigger_card_effects_on_exhaust(
         duello,
         owner_pg,
+        carta=cp.carta,
         carta_posseduta_id=str(cp_id),
         hero_slot=hero_slot,
         testo_gioco=cp.carta.testo_gioco or "",
@@ -775,11 +786,13 @@ def _duello_ha_scelta_effetto_aperta(duello: DuelloCarte) -> bool:
 
 
 def _carte_snapshot(ids: list[str]) -> dict[str, dict]:
+    from personaggi.carte_carta_effects import lista_abilita_manuali_carta
     from personaggi.carte_collezionabili_models import CartaPosseduta
 
     rows = (
         CartaPosseduta.objects.filter(pk__in=ids)
         .select_related("carta")
+        .prefetch_related("carta__tags")
     )
     out = {}
     for cp in rows:
@@ -795,6 +808,12 @@ def _carte_snapshot(ids: list[str]) -> dict[str, dict]:
             "salute_attuale": c.salute,
             "costo_gioco": c.costo_gioco,
             "testo_gioco": c.testo_gioco,
+            "tags": [
+                {"codice": t.codice, "nome": t.nome}
+                for t in c.tags.all()
+                if t.attiva
+            ],
+            "abilita_manuali": lista_abilita_manuali_carta(c),
         }
     return out
 
@@ -1077,6 +1096,26 @@ def annulla_duello(duello_id, personaggio: Personaggio) -> dict:
     return payload
 
 
+def _carta_cp_in_campo_giocatore(lato: dict, stato_gioco: dict, cp_id: str) -> bool:
+    cp_id = str(cp_id)
+    for e in lato.get("eroi") or []:
+        if e and str(e) == cp_id:
+            return True
+    for oid in (lato.get("oggetti") or {}).values():
+        if oid and str(oid) == cp_id:
+            return True
+    terra_id = _terra_cp_id(stato_gioco)
+    return bool(terra_id and str(terra_id) == cp_id)
+
+
+def _slot_eroe_per_cp(lato: dict, cp_id: str) -> int | None:
+    cp_id = str(cp_id)
+    for slot, e in enumerate(lato.get("eroi") or []):
+        if e and str(e) == cp_id:
+            return slot
+    return None
+
+
 def _carte_campo_ids(lato: dict, stato_gioco: dict | None = None) -> list[str]:
     ids: list[str] = []
     for cp_id in lato.get("eroi") or []:
@@ -1092,10 +1131,24 @@ def _carte_campo_ids(lato: dict, stato_gioco: dict | None = None) -> list[str]:
     return ids
 
 
-def _trigger_turn_keywords(duello: DuelloCarte, personaggio: Personaggio, event: str):
-    """Accoda effect_script con trigger turno per ogni carta sul campo (catena FIFO)."""
+    ids: list[str] = []
+    for cp_id in lato.get("eroi") or []:
+        if cp_id:
+            ids.append(str(cp_id))
+    for cp_id in (lato.get("oggetti") or {}).values():
+        if cp_id:
+            ids.append(str(cp_id))
+    if stato_gioco:
+        terra_id = _terra_cp_id(stato_gioco)
+        if terra_id:
+            ids.append(terra_id)
+    return ids
+
+
+def _trigger_turn_card_effects(duello: DuelloCarte, personaggio: Personaggio, event: str):
+    """Accoda effect_script (keyword + carta) con trigger turno per ogni carta sul campo."""
     from personaggi.carte_collezionabili_models import CartaPosseduta
-    from personaggi.carte_effect_engine import trigger_keyword_effects_for_event
+    from personaggi.carte_effect_engine import trigger_card_effects_for_event
 
     pg_key = _pg_key(personaggio)
     stato = duello.stato_gioco or {}
@@ -1104,13 +1157,19 @@ def _trigger_turn_keywords(duello: DuelloCarte, personaggio: Personaggio, event:
     if not cp_ids:
         return
     for cp in CartaPosseduta.objects.filter(pk__in=cp_ids).select_related("carta"):
-        trigger_keyword_effects_for_event(
+        trigger_card_effects_for_event(
             duello,
             personaggio,
+            cp.carta,
             cp.carta.testo_gioco or "",
             event,
             context={"carta_posseduta_id": str(cp.id), "pg_key": pg_key},
         )
+
+
+def _trigger_turn_keywords(duello: DuelloCarte, personaggio: Personaggio, event: str):
+    """Alias retrocompatibile."""
+    _trigger_turn_card_effects(duello, personaggio, event)
 
 
 def _avvia_turno_con_effetti(duello: DuelloCarte, personaggio: Personaggio):
@@ -1274,12 +1333,13 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
         elif tipo == CARTA_TIPO_LUOGO:
             _sostituisci_terra_condivisa(duello, personaggio, cp_id)
         elif tipo == CARTA_TIPO_EVENTO:
-            from personaggi.carte_effect_engine import trigger_keyword_effect_for_event
+            from personaggi.carte_effect_engine import trigger_card_effects_for_event
 
             testo_evt = cp.carta.testo_gioco or ""
-            script_evt = trigger_keyword_effect_for_event(
+            script_evt = trigger_card_effects_for_event(
                 duello,
                 personaggio,
+                cp.carta,
                 testo_evt,
                 "on_play",
                 context={"carta_posseduta_id": cp_id},
@@ -1317,11 +1377,12 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
         lato["energia"] -= costo
         flags["permanente_giocato"] = True
         _append_log(duello.stato_gioco, f"{personaggio.nome} gioca {cp.carta.nome}.")
-        from personaggi.carte_effect_engine import trigger_keyword_effect_for_event
+        from personaggi.carte_effect_engine import trigger_card_effects_for_event
 
-        trigger_keyword_effect_for_event(
+        trigger_card_effects_for_event(
             duello,
             personaggio,
+            cp.carta,
             cp.carta.testo_gioco or "",
             "on_play",
             context={
@@ -1369,11 +1430,12 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
                 duello.influenza_sfidante = max(0, duello.influenza_sfidante - attacco)
             _append_log(duello.stato_gioco, f"{cp.carta.nome} colpisce Influenza ({attacco}).")
         _esaurisci_eroe(lato, int(slot))
-        from personaggi.carte_effect_engine import trigger_keyword_effect_for_event
+        from personaggi.carte_effect_engine import trigger_card_effects_for_event
 
-        trigger_keyword_effect_for_event(
+        trigger_card_effects_for_event(
             duello,
             personaggio,
+            cp.carta,
             cp.carta.testo_gioco or "",
             "on_attack",
             context={
@@ -1385,6 +1447,37 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
             },
         )
         _chiudi_se_vittoria(duello)
+
+    elif azione == "attiva_abilita":
+        from personaggi.carte_collezionabili_models import CartaPosseduta
+        from personaggi.carte_effect_engine import trigger_carta_manual_effect
+
+        cp_id = str(payload.get("carta_posseduta_id") or "")
+        if not cp_id:
+            raise ValidationError("carta_posseduta_id richiesto.")
+        if not _carta_cp_in_campo_giocatore(lato, duello.stato_gioco or {}, cp_id):
+            raise ValidationError("La carta non è sul tuo campo.")
+        fase = lato.get("fase_turno") or FASE_TURNO_APERTURA
+        if fase == FASE_TURNO_CHIUSURA:
+            raise ValidationError("In fase finale non puoi attivare abilità.")
+        cp = CartaPosseduta.objects.select_related("carta").get(pk=cp_id, personaggio=personaggio)
+        hero_slot = _slot_eroe_per_cp(lato, cp_id)
+        pending = trigger_carta_manual_effect(
+            duello,
+            personaggio,
+            cp.carta,
+            script_index=payload.get("script_index"),
+            script_codice=payload.get("script_codice"),
+            carta_posseduta_id=cp_id,
+            context={"slot_eroe": hero_slot} if hero_slot is not None else {},
+        )
+        label = cp.carta.nome
+        _append_log(duello.stato_gioco, f"{personaggio.nome} attiva abilità di {label}.")
+        if pending:
+            duello.save()
+            out = serializza_duello(duello, personaggio)
+            broadcast_duello_update(duello.id, out)
+            return out
 
     elif azione == "passa":
         if manuale:

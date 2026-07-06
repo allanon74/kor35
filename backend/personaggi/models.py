@@ -7864,6 +7864,7 @@ from personaggi.carte_collezionabili_models import (  # noqa: E402, F401
     CARTE_ACCESSO_OPEN,
     CARTA_ENERGIA_AURA_SIGLA,
     KeywordCarta,
+    TagCarta,
 )
 
 # ============================================================================

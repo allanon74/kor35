@@ -27,6 +27,7 @@ export default function MazzoDuelloBuilder({
   saving = false,
   temaEnergie,
   keywords = [],
+  tagsGlossary = [],
 }) {
   const stacks = useMemo(() => groupCollezioneStacks(carte), [carte]);
   const inMazzoSet = useMemo(() => new Set(mazzoIds), [mazzoIds]);
@@ -144,6 +145,7 @@ export default function MazzoDuelloBuilder({
               compact
               temaEnergie={temaEnergie}
               keywords={keywords}
+              tagsGlossary={tagsGlossary}
               showRules={false}
             />
             <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-800 text-white">
@@ -173,6 +175,7 @@ export default function MazzoDuelloBuilder({
                     compact
                     temaEnergie={temaEnergie}
                     keywords={keywords}
+              tagsGlossary={tagsGlossary}
                     showRules={false}
                   />
                 </button>
@@ -243,6 +246,7 @@ export default function MazzoDuelloBuilder({
                   compact
                   temaEnergie={temaEnergie}
                   keywords={keywords}
+              tagsGlossary={tagsGlossary}
                   showRules={false}
                 />
                 {stack.count > 1 && (
