@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import CardFrame from '../../../carte/CardFrame';
 import { buildTemaEnergieFromPunteggi } from '../../../carte/carteEnergyAuraMap';
 import { CardRulesPreview } from '../../../carte/cardTextBlocks';
@@ -11,8 +11,9 @@ import {
   staffInputClass,
 } from '../../../staff/StaffCrudUi';
 import BonusEquipEditor from '../BonusEquipEditor';
-import CartaEffectScriptsEditor from '../CartaEffectScriptsEditor';
+import CartaEffectScriptsEditor, { effectScriptsToApi } from '../CartaEffectScriptsEditor';
 import StatModInline from '../inlines/StatModInline';
+import CartaCatalogoAdvancedPanel from './CartaCatalogoAdvancedPanel';
 
 function CartaImmagineUpload({
   label,
@@ -74,8 +75,14 @@ export default function CartaCatalogoEditModal({
   onRemoveCartaImmagine,
   onMessage,
   gameplayLocked = false,
+  studioTemplates = [],
 }) {
+  const [editTab, setEditTab] = useState('catalogo');
   const temaEnergie = useMemo(() => buildTemaEnergieFromPunteggi(punteggi), [punteggi]);
+
+  useEffect(() => {
+    if (open) setEditTab('catalogo');
+  }, [open]);
 
   const previewCarta = useMemo(() => ({
     nome: form.nome || 'Anteprima',
@@ -101,6 +108,14 @@ export default function CartaCatalogoEditModal({
     [tags],
   );
 
+  const effectScriptsForPlayable = useMemo(() => {
+    try {
+      return effectScriptsToApi(form.effect_scripts_entries || []);
+    } catch {
+      return [];
+    }
+  }, [form.effect_scripts_entries]);
+
   return (
     <StaffModal
       open={open}
@@ -110,8 +125,37 @@ export default function CartaCatalogoEditModal({
       onSave={onSave}
       saveLabel={isEdit ? 'Salva modifiche' : 'Crea carta'}
     >
+      <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-700 pb-2">
+        {[
+          { id: 'catalogo', label: 'Catalogo' },
+          { id: 'avanzato', label: 'Avanzato (Studio / Arena)' },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setEditTab(id)}
+            className={`rounded px-3 py-1 text-xs ${
+              editTab === id ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="space-y-4">
+          {editTab === 'avanzato' ? (
+            <CartaCatalogoAdvancedPanel
+              form={form}
+              setForm={setForm}
+              studioTemplates={studioTemplates}
+              espansioni={espansioni}
+              effectScripts={effectScriptsForPlayable}
+              onMessage={onMessage}
+            />
+          ) : (
+            <>
           {isEdit && gameplayLocked && (
             <p className="rounded border border-amber-700/60 bg-amber-950/30 px-2 py-1 text-xs text-amber-200">
               Campagna in OPEN: campi gameplay bloccati (duello). Restano editabili solo reliquiario, lore e metadati.
@@ -443,6 +487,8 @@ export default function CartaCatalogoEditModal({
               onChange={(e) => setForm((p) => ({ ...p, testo_lore: e.target.value }))}
             />
           </StaffSection>
+            </>
+          )}
         </div>
 
         <aside className="lg:sticky lg:top-0 lg:self-start">

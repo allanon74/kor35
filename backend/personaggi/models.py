@@ -7868,6 +7868,17 @@ from personaggi.carte_collezionabili_models import (  # noqa: E402, F401
 )
 
 # ============================================================================
+# CARD PLATFORM (Studio / Arena bridge)
+# ============================================================================
+from personaggi.carte_platform_models import (  # noqa: E402, F401
+    CarteGiocoDefinizione,
+    CarteStudioTemplate,
+    CarteArenaRuleset,
+    CartePlatformGiocatore,
+    CartePlatformExchangeJob,
+)
+
+# ============================================================================
 # SIGNALS - Inizializzazione automatica
 # ============================================================================
 

@@ -29,6 +29,11 @@ import {
   staffCreateCartaErrata,
   staffUpdateCartaErrata,
   staffDeleteCartaErrata,
+  staffGetCartePlatformGioco,
+  staffCreateCartePlatformGioco,
+  staffUpdateCartePlatformGioco,
+  staffBootstrapCartePlatformGioco,
+  staffGetCartePlatformTemplates,
   getStaffWikiCarteRegolamentoInfo,
   syncStaffWikiCarteRegolamento,
   resolveMediaUrl,
@@ -44,6 +49,7 @@ import {
   staffInputClass,
 } from '../../staff/StaffCrudUi';
 import CartaCatalogoEditModal from './carte/CartaCatalogoEditModal';
+import JsonSpecField, { parseJsonObject } from './carte/JsonSpecField';
 import ComboReliquiarioStaffPanel from './ComboReliquiarioStaffPanel';
 import EffectScriptWizard from './EffectScriptWizard';
 import { effectScriptsFromApi, effectScriptsToApi } from './CartaEffectScriptsEditor';
@@ -89,6 +95,10 @@ const emptyCarta = (espansioneId = '') => ({
   duplicabile: false,
   attiva: true,
   ordine_set: 0,
+  studio_template: null,
+  studio_carta_spec: {},
+  arena_playable_spec: {},
+  mse_campi: {},
 });
 
 const CARTA_READ_ONLY_KEYS = new Set([
@@ -213,6 +223,9 @@ const emptyEspansione = () => ({
   vendita_al: '',
   legale_duello: true,
   disclaimer_disattiva: '',
+  gioco_definizione: null,
+  studio_set_spec: {},
+  mse_set_riferimento: '',
 });
 
 const emptyTag = () => ({
@@ -231,6 +244,9 @@ const emptyKeyword = () => ({
   priorita: 0,
   attiva: true,
   effect_script: {},
+  mse_match_pattern: '',
+  mse_reminder_template: '',
+  mse_export_mode: 'kor35',
 });
 
 const emptyErrata = (cartaId = '') => ({
@@ -308,6 +324,17 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [selectedErrata, setSelectedErrata] = useState(null);
   const [errataForm, setErrataForm] = useState(emptyErrata());
   const [errataCardFilter, setErrataCardFilter] = useState('');
+  const [studioTemplates, setStudioTemplates] = useState([]);
+  const [platformGiochi, setPlatformGiochi] = useState([]);
+  const [espansioneEditTab, setEspansioneEditTab] = useState('catalogo');
+  const [platformGiocoForm, setPlatformGiocoForm] = useState({
+    slug: '',
+    nome: '',
+    descrizione: '',
+    studio_abilitato: false,
+    arena_abilitata: false,
+    mse_game_name: '',
+  });
 
   const statsOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'ST'), [punteggi]);
   const auraOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'AU'), [punteggi]);
@@ -355,7 +382,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [esp, cfg, kw, tagRes, errRes, wiki, punt] = await Promise.all([
+      const [esp, cfg, kw, tagRes, errRes, wiki, punt, tmplRes, giocoRes] = await Promise.all([
         staffGetCarteEspansioni(onLogout),
         staffGetCarteConfig(onLogout),
         staffGetCarteKeywords(onLogout),
@@ -363,6 +390,8 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         staffGetCarteErrata(onLogout),
         getStaffWikiCarteRegolamentoInfo(onLogout).catch(() => null),
         getPunteggiList(onLogout).catch(() => []),
+        staffGetCartePlatformTemplates(onLogout).catch(() => []),
+        staffGetCartePlatformGioco(onLogout).catch(() => []),
       ]);
       const espList = Array.isArray(esp) ? esp : esp?.results || [];
       setEspansioni(espList);
@@ -372,6 +401,21 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       setErrata(Array.isArray(errRes) ? errRes : errRes?.results || []);
       setWikiInfo(wiki);
       setPunteggi(punt || []);
+      setStudioTemplates(Array.isArray(tmplRes) ? tmplRes : tmplRes?.results || []);
+      const giocoList = Array.isArray(giocoRes) ? giocoRes : giocoRes?.results || [];
+      setPlatformGiochi(giocoList);
+      if (giocoList[0]) {
+        setPlatformGiocoForm({ ...giocoList[0] });
+      } else {
+        setPlatformGiocoForm({
+          slug: '',
+          nome: '',
+          descrizione: '',
+          studio_abilitato: false,
+          arena_abilitata: false,
+          mse_game_name: '',
+        });
+      }
 
       const espId = selectedEspansione?.id;
       const loadCatalogo = espId
@@ -470,6 +514,10 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         legale_duello: c.legale_duello !== false,
         bandita: !!c.bandita,
         ban_reason: c.ban_reason || '',
+        studio_template: c.studio_template || null,
+        studio_carta_spec: c.studio_carta_spec && typeof c.studio_carta_spec === 'object' ? c.studio_carta_spec : {},
+        arena_playable_spec: c.arena_playable_spec && typeof c.arena_playable_spec === 'object' ? c.arena_playable_spec : {},
+        mse_campi: c.mse_campi && typeof c.mse_campi === 'object' ? c.mse_campi : {},
       });
     } else {
       setSelected(null);
@@ -481,6 +529,12 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const saveEspansione = async () => {
     try {
+      try {
+        parseJsonObject(espansioneForm.studio_set_spec, 'studio_set_spec');
+      } catch (e) {
+        setMsg(e?.message || 'JSON studio_set_spec non valido.');
+        return;
+      }
       let payload;
       if (espansioneImmagineFile) {
         payload = buildEspansioneFormData(espansioneForm, espansioneImmagineFile);
@@ -507,7 +561,13 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const openEspansioneModal = (e = null) => {
     setEspansioneEditTarget(e);
-    setEspansioneForm(e ? { ...e } : emptyEspansione());
+    setEspansioneForm(e ? {
+      ...e,
+      studio_set_spec: e.studio_set_spec && typeof e.studio_set_spec === 'object' ? e.studio_set_spec : {},
+      gioco_definizione: e.gioco_definizione || null,
+      mse_set_riferimento: e.mse_set_riferimento || '',
+    } : emptyEspansione());
+    setEspansioneEditTab('catalogo');
     resetEspansioneImmagineState();
     setEspansioneModalOpen(true);
   };
@@ -533,6 +593,14 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         effect_scripts = effectScriptsToApi(form.effect_scripts_entries || []);
       } catch (e) {
         setMsg(e?.message || 'EffectScript carta: JSON non valido.');
+        return;
+      }
+      try {
+        parseJsonObject(form.studio_carta_spec, 'studio_carta_spec');
+        parseJsonObject(form.arena_playable_spec, 'arena_playable_spec');
+        parseJsonObject(form.mse_campi, 'mse_campi');
+      } catch (e) {
+        setMsg(e?.message || 'JSON tab Avanzato non valido.');
         return;
       }
       let payload;
@@ -636,7 +704,12 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const openKeywordModal = (k = null) => {
     setSelectedKeyword(k);
-    setKeywordForm(k ? { ...k } : emptyKeyword());
+    setKeywordForm(k ? {
+      ...k,
+      mse_match_pattern: k.mse_match_pattern || '',
+      mse_reminder_template: k.mse_reminder_template || '',
+      mse_export_mode: k.mse_export_mode || 'kor35',
+    } : emptyKeyword());
     setEffectScriptText(k ? formatEffectScriptText(k.effect_script) : '');
     setKeywordModalOpen(true);
   };
@@ -771,13 +844,55 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
 
   const selectEspansione = (esp) => {
     setSelectedEspansione(esp);
-    setEspansioneForm(esp ? { ...esp } : emptyEspansione());
+    setEspansioneForm(esp ? {
+      ...esp,
+      studio_set_spec: esp.studio_set_spec && typeof esp.studio_set_spec === 'object' ? esp.studio_set_spec : {},
+      gioco_definizione: esp.gioco_definizione || null,
+      mse_set_riferimento: esp.mse_set_riferimento || '',
+    } : emptyEspansione());
     resetEspansioneImmagineState();
     setSelected(null);
     setForm(emptyCarta(esp?.id));
     resetCartaImmagineState();
     setSelectedBustina(null);
     setBustinaForm(emptyBustina(esp?.id));
+  };
+
+  const savePlatformGioco = async () => {
+    try {
+      const payload = {
+        slug: platformGiocoForm.slug,
+        nome: platformGiocoForm.nome,
+        descrizione: platformGiocoForm.descrizione || '',
+        studio_abilitato: !!platformGiocoForm.studio_abilitato,
+        arena_abilitata: !!platformGiocoForm.arena_abilitata,
+        mse_game_name: platformGiocoForm.mse_game_name || '',
+        meta: platformGiocoForm.meta && typeof platformGiocoForm.meta === 'object' ? platformGiocoForm.meta : {},
+      };
+      if (platformGiocoForm.id) {
+        await staffUpdateCartePlatformGioco(platformGiocoForm.id, payload, onLogout);
+      } else {
+        await staffCreateCartePlatformGioco(payload, onLogout);
+      }
+      setMsg('Definizione gioco platform salvata.');
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Salvataggio platform fallito.');
+    }
+  };
+
+  const bootstrapPlatformGioco = async () => {
+    if (!platformGiocoForm.id) {
+      setMsg('Salva prima la definizione gioco.');
+      return;
+    }
+    try {
+      const res = await staffBootstrapCartePlatformGioco(platformGiocoForm.id, onLogout);
+      setMsg(`Bootstrap: creati ${(res?.created || []).join(', ') || 'nessun elemento nuovo'}.`);
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Bootstrap platform fallito.');
+    }
   };
 
   return (
@@ -794,14 +909,14 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       {msg && <p className="text-sm text-amber-300">{msg}</p>}
 
       <div className="flex flex-wrap gap-2">
-        {['espansioni', 'catalogo', 'bustine', 'tags', 'keywords', 'errata', 'combo-reliquiario', 'scambi', 'config'].map((t) => (
+        {['espansioni', 'catalogo', 'bustine', 'tags', 'keywords', 'errata', 'combo-reliquiario', 'scambi', 'platform', 'config'].map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
             className={`rounded px-3 py-1 text-sm capitalize ${tab === t ? 'bg-violet-700' : 'bg-gray-800'}`}
           >
-            {t === 'combo-reliquiario' ? 'combo reliquiario' : t === 'scambi' ? 'mercato scambi' : t}
+            {t === 'combo-reliquiario' ? 'combo reliquiario' : t === 'scambi' ? 'mercato scambi' : t === 'platform' ? 'platform' : t}
           </button>
         ))}
       </div>
@@ -862,6 +977,58 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         onClose={() => setEspansioneModalOpen(false)}
         onSave={saveEspansione}
       >
+        <div className="mb-3 flex flex-wrap gap-2 border-b border-gray-700 pb-2">
+          {[
+            { id: 'catalogo', label: 'Catalogo' },
+            { id: 'avanzato', label: 'Avanzato (Studio)' },
+          ].map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setEspansioneEditTab(id)}
+              className={`rounded px-3 py-1 text-xs ${
+                espansioneEditTab === id ? 'bg-violet-700 text-white' : 'bg-gray-800 text-gray-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {espansioneEditTab === 'avanzato' ? (
+          <div className="space-y-3">
+            <LabeledField
+              label="Definizione gioco platform"
+              hint="Collega l'espansione al container Card Studio / Arena (tab Platform)."
+            >
+              <select
+                className={staffInputClass()}
+                value={espansioneForm.gioco_definizione || ''}
+                onChange={(ev) => setEspansioneForm((p) => ({
+                  ...p,
+                  gioco_definizione: ev.target.value || null,
+                }))}
+              >
+                <option value="">— Nessuna —</option>
+                {platformGiochi.map((g) => (
+                  <option key={g.id} value={g.id}>{g.nome} ({g.slug})</option>
+                ))}
+              </select>
+            </LabeledField>
+            <LabeledField label="Riferimento MSE set" hint="Path o id package .mse-set.">
+              <input
+                className={staffInputClass('font-mono')}
+                value={espansioneForm.mse_set_riferimento || ''}
+                onChange={(ev) => setEspansioneForm((p) => ({ ...p, mse_set_riferimento: ev.target.value }))}
+              />
+            </LabeledField>
+            <JsonSpecField
+              label="studio_set_spec (JSON)"
+              hint="Metadati set Card Studio (studio_set_spec_v1)."
+              value={espansioneForm.studio_set_spec}
+              onChange={(studio_set_spec) => setEspansioneForm((p) => ({ ...p, studio_set_spec }))}
+            />
+          </div>
+        ) : (
         <div className="space-y-3">
           <LabeledField label="Nome" required>
             <input
@@ -958,6 +1125,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             onRemoveExisting={espansioneEditTarget?.immagine_url ? setRemoveEspansioneImmagine : null}
           />
         </div>
+        )}
       </StaffModal>
 
       {!loading && tab === 'catalogo' && (
@@ -1023,7 +1191,92 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         onRemoveCartaImmagine={setRemoveCartaImmagine}
         onMessage={setMsg}
         gameplayLocked={gameplayLocked}
+        studioTemplates={studioTemplates}
       />
+
+      {!loading && tab === 'platform' && (
+        <div className="max-w-xl space-y-4">
+          <p className="text-xs text-gray-400">
+            Configurazione Card Studio / Card Arena per la campagna attiva. Documentazione: docs/card-platform/.
+          </p>
+          <StaffFieldGrid>
+            <LabeledField label="Slug gioco" required>
+              <input
+                className={staffInputClass('font-mono')}
+                value={platformGiocoForm.slug || ''}
+                onChange={(e) => setPlatformGiocoForm((p) => ({ ...p, slug: e.target.value }))}
+              />
+            </LabeledField>
+            <LabeledField label="Nome gioco" required>
+              <input
+                className={staffInputClass()}
+                value={platformGiocoForm.nome || ''}
+                onChange={(e) => setPlatformGiocoForm((p) => ({ ...p, nome: e.target.value }))}
+              />
+            </LabeledField>
+          </StaffFieldGrid>
+          <LabeledField label="Descrizione">
+            <textarea
+              className={staffInputClass('min-h-[72px]')}
+              value={platformGiocoForm.descrizione || ''}
+              onChange={(e) => setPlatformGiocoForm((p) => ({ ...p, descrizione: e.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Nome MSE game (export)">
+            <input
+              className={staffInputClass()}
+              value={platformGiocoForm.mse_game_name || ''}
+              onChange={(e) => setPlatformGiocoForm((p) => ({ ...p, mse_game_name: e.target.value }))}
+            />
+          </LabeledField>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!platformGiocoForm.studio_abilitato}
+              onChange={(e) => setPlatformGiocoForm((p) => ({ ...p, studio_abilitato: e.target.checked }))}
+            />
+            Card Studio abilitato
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!platformGiocoForm.arena_abilitata}
+              onChange={(e) => setPlatformGiocoForm((p) => ({ ...p, arena_abilitata: e.target.checked }))}
+            />
+            Card Arena abilitata
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded bg-violet-700 px-3 py-1 text-sm hover:bg-violet-600"
+              onClick={savePlatformGioco}
+            >
+              Salva definizione gioco
+            </button>
+            {platformGiocoForm.id && (
+              <button
+                type="button"
+                className="rounded bg-gray-700 px-3 py-1 text-sm hover:bg-gray-600"
+                onClick={bootstrapPlatformGioco}
+              >
+                Bootstrap template + ruleset
+              </button>
+            )}
+          </div>
+          {studioTemplates.length > 0 && (
+            <div>
+              <h4 className="mb-2 text-xs font-bold uppercase text-violet-300">Template Studio</h4>
+              <ul className="space-y-1 text-sm text-gray-300">
+                {studioTemplates.map((t) => (
+                  <li key={t.id}>
+                    {t.nome} <span className="font-mono text-xs text-gray-500">({t.slug})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {!loading && tab === 'bustine' && (
         <div>
@@ -1317,6 +1570,34 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             onLogout={onLogout}
             onMessage={setMsg}
           />
+          <div className="rounded border border-gray-700 bg-gray-900/40 p-3">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-violet-300">Export MSE (avanzato)</p>
+            <LabeledField label="Modalità export">
+              <select
+                className={staffInputClass()}
+                value={keywordForm.mse_export_mode || 'kor35'}
+                onChange={(e) => setKeywordForm((p) => ({ ...p, mse_export_mode: e.target.value }))}
+              >
+                <option value="kor35">Solo KOR35</option>
+                <option value="mse_compat">Compatibile MSE</option>
+                <option value="both">KOR35 + MSE</option>
+              </select>
+            </LabeledField>
+            <LabeledField label="Pattern match MSE">
+              <input
+                className={staffInputClass('font-mono')}
+                value={keywordForm.mse_match_pattern || ''}
+                onChange={(e) => setKeywordForm((p) => ({ ...p, mse_match_pattern: e.target.value }))}
+              />
+            </LabeledField>
+            <LabeledField label="Template reminder MSE">
+              <textarea
+                className={staffInputClass('min-h-[72px]')}
+                value={keywordForm.mse_reminder_template || ''}
+                onChange={(e) => setKeywordForm((p) => ({ ...p, mse_reminder_template: e.target.value }))}
+              />
+            </LabeledField>
+          </div>
         </div>
       </StaffModal>
 

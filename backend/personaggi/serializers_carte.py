@@ -117,6 +117,9 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
             "vendita_al",
             "legale_duello",
             "disclaimer_disattiva",
+            "gioco_definizione",
+            "studio_set_spec",
+            "mse_set_riferimento",
             "bustine_count",
             "carte_count",
         ]
@@ -164,6 +167,10 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
                 {"vendita_al": "La fine vendita deve essere successiva all'inizio vendita."}
             )
         return attrs
+
+    def validate_studio_set_spec(self, value):
+        parsed = _parse_json_field(value, "studio_set_spec")
+        return parsed if parsed is not None else {}
 
 
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
@@ -216,6 +223,10 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             "bandita",
             "ban_reason",
             "layout_versione",
+            "studio_template",
+            "studio_carta_spec",
+            "arena_playable_spec",
+            "mse_campi",
             "statistiche_reliquiario",
             "duplicabile",
             "immagine",
@@ -264,6 +275,18 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
     def validate_tag_tematici(self, value):
         parsed = _parse_json_field(value, "tag_tematici")
         return parsed if parsed is not None else []
+
+    def validate_studio_carta_spec(self, value):
+        parsed = _parse_json_field(value, "studio_carta_spec")
+        return parsed if parsed is not None else {}
+
+    def validate_arena_playable_spec(self, value):
+        parsed = _parse_json_field(value, "arena_playable_spec")
+        return parsed if parsed is not None else {}
+
+    def validate_mse_campi(self, value):
+        parsed = _parse_json_field(value, "mse_campi")
+        return parsed if parsed is not None else {}
 
     def validate(self, attrs):
         bandita = attrs.get("bandita")
@@ -525,6 +548,9 @@ class KeywordCartaSerializer(serializers.ModelSerializer):
             "priorita",
             "attiva",
             "effect_script",
+            "mse_match_pattern",
+            "mse_reminder_template",
+            "mse_export_mode",
         ]
         read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna"]
 

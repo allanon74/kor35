@@ -4398,6 +4398,35 @@ export const staffUpdateCartaErrata = (id, data, onLogout) =>
 export const staffDeleteCartaErrata = (id, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/errata/${id}/`, { method: 'DELETE' }, onLogout);
 
+const STAFF_CARTE_PLATFORM = `${STAFF_CARTE}/platform`;
+
+export const staffGetCartePlatformGioco = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE_PLATFORM}/gioco/`, { method: 'GET' }, onLogout);
+
+export const staffCreateCartePlatformGioco = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE_PLATFORM}/gioco/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartePlatformGioco = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE_PLATFORM}/gioco/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffBootstrapCartePlatformGioco = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE_PLATFORM}/gioco/${id}/bootstrap/`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+    }, onLogout);
+
+export const staffGetCartePlatformTemplates = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE_PLATFORM}/templates/`, { method: 'GET' }, onLogout);
+
+export const staffGetCartePlatformRuleset = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE_PLATFORM}/ruleset/`, { method: 'GET' }, onLogout);
+
 export const staffGetCarteScambi = (onLogout, { stato = '', limit = 100 } = {}) => {
     const params = new URLSearchParams();
     if (stato) params.set('stato', stato);

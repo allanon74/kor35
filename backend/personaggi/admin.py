@@ -112,6 +112,11 @@ PERSONAGGI_ADMIN_MODEL_GROUPS = {
     "MazzoDuello": ("Carte", 90),
     "DuelloCarte": ("Carte", 91),
     "OffertaScambioCarte": ("Carte", 92),
+    "CarteGiocoDefinizione": ("Carte", 93),
+    "CarteStudioTemplate": ("Carte", 94),
+    "CarteArenaRuleset": ("Carte", 95),
+    "CartePlatformGiocatore": ("Carte", 96),
+    "CartePlatformExchangeJob": ("Carte", 97),
     # Sistemi di regole
     "Punteggio": ("Regole", 50),
     "Statistica": ("Regole", 51),

@@ -195,6 +195,27 @@ class KeywordCarta(SyncableModel, models.Model):
         default=dict,
         help_text="EffectScript v1 (JSON) per automazione duello; opzionale.",
     )
+    mse_match_pattern = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Pattern match MSE per export keyword (opzionale).",
+    )
+    mse_reminder_template = models.TextField(
+        blank=True,
+        default="",
+        help_text="Template reminder MSE; placeholder come nel nome.",
+    )
+    mse_export_mode = models.CharField(
+        max_length=12,
+        choices=[
+            ("kor35", "Solo KOR35"),
+            ("mse_compat", "Compatibile MSE"),
+            ("both", "KOR35 + MSE"),
+        ],
+        default="kor35",
+        help_text="Modalità export verso Card Studio / MSE.",
+    )
 
     class Meta:
         verbose_name = "Keyword carta"
@@ -309,6 +330,25 @@ class EspansioneCarte(SyncableModel, models.Model):
         blank=True,
         default="",
         help_text="Nota staff mostrata quando si disattiva l'espansione.",
+    )
+    gioco_definizione = models.ForeignKey(
+        "personaggi.CarteGiocoDefinizione",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="espansioni",
+        help_text="Definizione gioco piattaforma (Card Studio / Arena).",
+    )
+    studio_set_spec = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Metadati set Card Studio / MSE (studio_set_spec_v1).",
+    )
+    mse_set_riferimento = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Identificatore o path package .mse-set collegato.",
     )
 
     class Meta:
@@ -438,6 +478,29 @@ class CartaCollezionabile(SyncableModel, models.Model):
         choices=CARTA_LAYOUT_CHOICES,
         default=CARTA_LAYOUT_STANDARD,
         help_text="Layout visuale carta (standard/full-size).",
+    )
+    studio_template = models.ForeignKey(
+        "personaggi.CarteStudioTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="carte",
+        help_text="Template Card Studio per rendering stampa.",
+    )
+    studio_carta_spec = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Campi layout/stampa extra (studio_card_spec_v1).",
+    )
+    arena_playable_spec = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Snapshot normalizzato per Card Arena (playable_card_spec_v1).",
+    )
+    mse_campi = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Mappa campi raw MSE importati (round-trip export).",
     )
     duplicabile = models.BooleanField(
         default=False,
@@ -822,6 +885,17 @@ class MazzoDuello(SyncableModel, models.Model):
         help_text="UUID CartaPosseduta Leader (Personaggio comandante, fuori dal mazzo).",
     )
     is_default = models.BooleanField(default=False)
+    formato_codice = models.CharField(
+        max_length=40,
+        default="standard_15",
+        db_index=True,
+        help_text="Codice formato Arena (es. standard_15, sealed).",
+    )
+    arena_deck_spec = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Metadati mazzo per Card Arena (arena_deck_spec_v1).",
+    )
 
     class Meta:
         verbose_name = "Mazzo duello"

@@ -14,6 +14,7 @@ Progetto Django + React, architettura **master** (prod) + **replica** (mirror/Pi
 | `docs/wiki/carte/README.md` | Wiki regolamento carte → `make wiki-carte-sync` |
 | `.cursor/rules/django-tests-docker.mdc` | Test Django in Docker: **sempre `--keepdb`** + `exec -T` |
 | `config/docker/SYNC.md` | Runbook Docker: ruoli nodo, `make sync-db`, media rsync |
+| `docs/card-platform/` | Roadmap Card Studio / Card Arena, allineamento DB, contratti JSON |
 
 ## Checklist rapida (feature che tocca il DB)
 
