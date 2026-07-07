@@ -96,8 +96,8 @@ export default function CardFrame({
   const inner = (
   <>
     <div
-      className={`flex items-center justify-between gap-1 px-2 py-1 font-bold ${size === 'xl' ? 'py-2 text-base' : ''}`}
-      style={styles.header}
+      className={`flex items-center justify-between gap-1 px-2 py-1 font-bold ${size === 'xl' ? 'py-2 text-base' : ''} ${isFullLayout ? 'absolute left-1 right-1 top-1 z-20 rounded-md bg-black/55 backdrop-blur-[1px]' : ''}`}
+      style={isFullLayout ? { ...styles.header, border: '1px solid rgba(255,255,255,0.12)' } : styles.header}
     >
       <span
         className={`flex shrink-0 items-center justify-center rounded-full font-black ${size === 'xl' ? 'h-7 w-7 text-sm' : 'h-5 w-5 text-[10px]'}`}
@@ -115,7 +115,7 @@ export default function CardFrame({
       </span>
     </div>
 
-    <div className={`relative ${isFullLayout ? 'mt-0 h-full min-h-[60%] overflow-hidden' : `mx-2 mt-2 overflow-hidden rounded-md border border-black/40 bg-black/30 ${ART_HEIGHT[size]}`}`}>
+    <div className={`relative ${isFullLayout ? 'h-full min-h-[66%] overflow-hidden' : `mx-2 mt-2 overflow-hidden rounded-md border border-black/40 bg-black/30 ${ART_HEIGHT[size]}`}`}>
       {img ? (
         <img src={img} alt="" className="h-full w-full object-cover" />
       ) : (
@@ -134,7 +134,7 @@ export default function CardFrame({
     </div>
 
     <div
-      className={`${isFullLayout ? 'mx-2 mt-1 bg-black/45' : 'mx-2 mt-1.5'} rounded border px-1.5 py-0.5 font-semibold uppercase tracking-wide ${size === 'xl' ? 'px-2 py-1 text-[11px]' : 'text-[8px]'}`}
+      className={`${isFullLayout ? 'mx-2 -mt-8 z-10 bg-black/65' : 'mx-2 mt-1.5'} rounded border px-1.5 py-0.5 font-semibold uppercase tracking-wide ${size === 'xl' ? 'px-2 py-1 text-[11px]' : 'text-[8px]'}`}
       style={styles.typeLine}
     >
       {CARTA_TIPO_LABEL[c.tipo] || c.tipo}
@@ -144,8 +144,8 @@ export default function CardFrame({
 
     {showRules && (!compact || reliquiarioMode) && (
       <div
-        className={`mx-2 mt-1.5 flex min-h-0 flex-1 flex-col rounded border px-2 py-2 ${expandRules ? 'overflow-y-auto' : ''} ${rulesTextClass}`}
-        style={isFullLayout ? { ...styles.rulesBox, backgroundColor: 'rgba(15, 23, 42, 0.58)' } : styles.rulesBox}
+        className={`mx-2 mt-1.5 flex min-h-0 flex-1 flex-col rounded border px-2 py-2 ${expandRules ? 'overflow-y-auto' : ''} ${rulesTextClass} ${isFullLayout ? 'relative z-10' : ''}`}
+        style={isFullLayout ? { ...styles.rulesBox, backgroundColor: 'rgba(15, 23, 42, 0.62)', backdropFilter: 'blur(1px)' } : styles.rulesBox}
       >
         {!!c.errata_attiva && (
           <p className="mb-1 rounded bg-amber-700/40 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100">

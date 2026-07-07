@@ -129,6 +129,44 @@ function CartaDetailModal({ item, stack, onClose, temaEnergie, keywords, tagsGlo
             Possiedi {copyCount} copie di questa carta
           </p>
         )}
+
+        {!!c.errata_attiva && (
+          <div className="rounded border border-amber-700/60 bg-amber-950/30 p-2">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-200">
+              Errata attiva
+            </p>
+            <p className="text-sm text-amber-100">
+              {c.errata_attiva.titolo || 'Aggiornamento regolamento'}
+              {c.errata_attiva.versione ? ` (${c.errata_attiva.versione})` : ''}
+            </p>
+            {c.errata_attiva.descrizione && (
+              <p className="mt-1 text-xs text-amber-100/90">{c.errata_attiva.descrizione}</p>
+            )}
+            {c.errata_attiva.pubblicata_nota && (
+              <p className="mt-1 text-xs text-amber-200/80">{c.errata_attiva.pubblicata_nota}</p>
+            )}
+          </div>
+        )}
+
+        {!!(c.errata_storico || []).length && (
+          <div className="rounded border border-gray-700 bg-gray-900/60 p-2">
+            <p className="mb-1 text-xs font-bold uppercase tracking-wide text-gray-300">
+              Storico errata
+            </p>
+            <ul className="space-y-1">
+              {(c.errata_storico || []).map((e) => (
+                <li key={e.id} className="rounded border border-gray-800 bg-gray-950/60 p-1.5 text-xs text-gray-300">
+                  <p className="font-semibold text-gray-200">
+                    {e.titolo || 'Errata'} {e.versione ? `(${e.versione})` : ''}
+                  </p>
+                  <p className="text-[11px] text-gray-400">{e.effective_from?.replace('T', ' ').slice(0, 16)}</p>
+                  {e.descrizione && <p className="mt-0.5">{e.descrizione}</p>}
+                  {e.pubblicata_nota && <p className="mt-0.5 text-gray-400">{e.pubblicata_nota}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

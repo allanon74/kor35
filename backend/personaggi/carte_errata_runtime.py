@@ -25,6 +25,7 @@ def gameplay_view(carta, *, when=None) -> dict:
         "testo_gioco": carta.testo_gioco,
         "effect_scripts": carta.effect_scripts or [],
         "errata": None,
+        "errata_storico": [],
     }
     if not err:
         return out
@@ -45,5 +46,23 @@ def gameplay_view(carta, *, when=None) -> dict:
         "effective_from": err.effective_from.isoformat(),
         "titolo": err.titolo,
         "descrizione": err.descrizione,
+        "versione": err.versione,
+        "pubblicata_nota": err.pubblicata_nota,
     }
+    hist_qs = (
+        carta.errata.filter(attiva=True, pubblicata=True, effective_from__lte=when or timezone.now())
+        .order_by("-effective_from", "-updated_at")[:6]
+    )
+    out["errata_storico"] = [
+        {
+            "id": str(e.id),
+            "effective_from": e.effective_from.isoformat(),
+            "titolo": e.titolo,
+            "descrizione": e.descrizione,
+            "versione": e.versione,
+            "pubblicata_at": e.pubblicata_at.isoformat() if e.pubblicata_at else None,
+            "pubblicata_nota": e.pubblicata_nota,
+        }
+        for e in hist_qs
+    ]
     return out

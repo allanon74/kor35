@@ -237,6 +237,10 @@ const emptyErrata = (cartaId = '') => ({
   carta: cartaId || '',
   effective_from: '',
   attiva: true,
+  versione: '',
+  pubblicata: false,
+  pubblicata_at: '',
+  pubblicata_nota: '',
   titolo: '',
   descrizione: '',
   testo_gioco_override: '',
@@ -1353,6 +1357,8 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                   <span className="text-gray-400">Effettiva da:</span> {e.effective_from || '—'}
                   {' · '}
                   <span className="text-gray-400">Stato:</span> {e.attiva ? 'attiva' : 'disattiva'}
+                  {e.versione && <><span className="text-gray-400"> · Ver:</span> {e.versione}</>}
+                  {e.pubblicata && <span className="ml-2 text-emerald-300">(pubblicata)</span>}
                 </p>
               </StaffListRow>
             ))}
@@ -1395,6 +1401,37 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             />
             Errata attiva
           </label>
+          <LabeledField label="Versione errata">
+            <input
+              className={staffInputClass()}
+              placeholder="es. 2026.07-A"
+              value={errataForm.versione || ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, versione: ev.target.value }))}
+            />
+          </LabeledField>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!errataForm.pubblicata}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, pubblicata: ev.target.checked }))}
+            />
+            Pubblicata ai giocatori
+          </label>
+          <LabeledField label="Pubblicata il">
+            <input
+              type="datetime-local"
+              className={staffInputClass()}
+              value={errataForm.pubblicata_at ? String(errataForm.pubblicata_at).slice(0, 16) : ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, pubblicata_at: ev.target.value || null }))}
+            />
+          </LabeledField>
+          <LabeledField label="Nota pubblicazione">
+            <textarea
+              className={staffInputClass('min-h-[72px]')}
+              value={errataForm.pubblicata_nota || ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, pubblicata_nota: ev.target.value }))}
+            />
+          </LabeledField>
           <LabeledField label="Titolo">
             <input
               className={staffInputClass()}

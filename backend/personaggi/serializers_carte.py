@@ -4,6 +4,7 @@ Serializers carte collezionabili.
 import json
 
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import serializers
 
@@ -396,6 +397,10 @@ class CartaErrataSerializer(serializers.ModelSerializer):
             "carta",
             "effective_from",
             "attiva",
+            "versione",
+            "pubblicata",
+            "pubblicata_at",
+            "pubblicata_nota",
             "titolo",
             "descrizione",
             "testo_gioco_override",
@@ -410,6 +415,11 @@ class CartaErrataSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if not attrs.get("effective_from") and not (self.instance and self.instance.effective_from):
             raise serializers.ValidationError({"effective_from": "Data efficacia obbligatoria."})
+        pubblicata = attrs.get("pubblicata")
+        if pubblicata is None and self.instance:
+            pubblicata = self.instance.pubblicata
+        if pubblicata and not attrs.get("pubblicata_at") and not (self.instance and self.instance.pubblicata_at):
+            attrs["pubblicata_at"] = timezone.now()
         return attrs
 
     @transaction.atomic

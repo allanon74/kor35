@@ -5,8 +5,16 @@ from django.test import TestCase
 from django.utils import timezone
 
 from kor35.edge_sync import EdgeSyncView
+from kor35.sync_tombstone import get_sync_model_registry
 from kor35.syncing import serialize_for_sync
-from personaggi.models import Manifesto, MinigiocoQrConfig, Punteggio, QrCode, Tessitura
+from personaggi.carte_collezionabili_models import (
+    CARTA_ENERGIA_MARZIALE,
+    CARTA_RARITA_COMUNE,
+    CARTA_TIPO_PERSONAGGIO,
+    CartaCollezionabile,
+    CartaErrata,
+)
+from personaggi.models import Campagna, Manifesto, MinigiocoQrConfig, Punteggio, QrCode, Tessitura
 from pilotaggio.models import SottosistemaNave
 
 
@@ -235,6 +243,45 @@ class EdgeSyncQrCodeNaturalPkTests(TestCase):
 
         cfg = MinigiocoQrConfig.objects.get(qr_code=qr)
         self.assertEqual(cfg.messaggio_pre, "Ciao")
+
+
+class EdgeSyncCartaErrataTests(TestCase):
+    def test_registry_includes_carta_errata(self):
+        registry = get_sync_model_registry(("personaggi",))
+        self.assertIn("personaggi.cartaerrata", registry)
+
+    def test_apply_carta_errata_row(self):
+        camp = Campagna.objects.create(slug="errata-sync", nome="Errata Sync")
+        carta = CartaCollezionabile.objects.create(
+            campagna=camp,
+            codice="ERR-SYNC-1",
+            nome="Carta Sync",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+        )
+        remote_updated = timezone.now()
+        row = {
+            "sync_id": str(uuid.uuid4()),
+            "campagna": str(camp.sync_id),
+            "carta": str(carta.sync_id),
+            "effective_from": remote_updated.isoformat(),
+            "attiva": True,
+            "versione": "2026.07-A",
+            "pubblicata": True,
+            "pubblicata_nota": "Nerf ufficiale",
+            "titolo": "Nerf sync",
+            "descrizione": "Descrizione",
+            "testo_gioco_override": "Nuovo testo",
+            "updated_at": remote_updated.isoformat(),
+        }
+        view = EdgeSyncView()
+        result = view._try_apply_one(CartaErrata, row)
+        self.assertEqual(result, "applied")
+        err = CartaErrata.objects.get(sync_id=row["sync_id"])
+        self.assertEqual(err.carta_id, carta.id)
+        self.assertEqual(err.campagna_id, camp.id)
+        self.assertTrue(err.pubblicata)
 
     def test_apply_rekeys_qrcode_with_vista_one_to_one(self):
         """Rekey non deve violare personaggi_qrcode_vista_id_key."""

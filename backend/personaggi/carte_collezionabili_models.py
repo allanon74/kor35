@@ -501,6 +501,27 @@ class CartaErrata(SyncableModel, models.Model):
     )
     effective_from = models.DateTimeField(db_index=True)
     attiva = models.BooleanField(default=True, db_index=True)
+    versione = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text="Codice versione errata (es. 2026.07-A).",
+    )
+    pubblicata = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Se true, mostrata ai giocatori nel riepilogo storico errata.",
+    )
+    pubblicata_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp pubblicazione errata verso i giocatori.",
+    )
+    pubblicata_nota = models.TextField(
+        blank=True,
+        default="",
+        help_text="Nota di rilascio mostrata nell'interfaccia personaggi.",
+    )
     titolo = models.CharField(max_length=120, blank=True, default="")
     descrizione = models.TextField(blank=True, default="")
     testo_gioco_override = models.TextField(blank=True, default="")

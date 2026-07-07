@@ -225,6 +225,7 @@ def _serializza_carta(carta: CartaCollezionabile) -> dict:
         "ban_reason": carta.ban_reason,
         "layout_versione": carta.layout_versione,
         "errata_attiva": gameplay["errata"],
+        "errata_storico": gameplay.get("errata_storico") or [],
         "duplicabile": carta.duplicabile,
         "ordine_set": carta.ordine_set,
         "immagine_url": carta.immagine.url if carta.immagine else None,
