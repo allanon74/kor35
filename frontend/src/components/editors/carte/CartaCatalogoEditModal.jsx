@@ -73,6 +73,7 @@ export default function CartaCatalogoEditModal({
   removeCartaImmagine,
   onRemoveCartaImmagine,
   onMessage,
+  gameplayLocked = false,
 }) {
   const temaEnergie = useMemo(() => buildTemaEnergieFromPunteggi(punteggi), [punteggi]);
 
@@ -111,6 +112,11 @@ export default function CartaCatalogoEditModal({
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div className="space-y-4">
+          {isEdit && gameplayLocked && (
+            <p className="rounded border border-amber-700/60 bg-amber-950/30 px-2 py-1 text-xs text-amber-200">
+              Campagna in OPEN: campi gameplay bloccati (duello). Restano editabili solo reliquiario, lore e metadati.
+            </p>
+          )}
           <StaffSection
             title="Identità"
             hint="Codice univoco per campagna. Set cronaca e legame servono a progressi collezione e combo reliquiario."
@@ -181,6 +187,7 @@ export default function CartaCatalogoEditModal({
                 <select
                   className={staffInputClass()}
                   value={form.tipo}
+                  disabled={isEdit && gameplayLocked}
                   onChange={(e) => setForm((p) => ({ ...p, tipo: e.target.value }))}
                 >
                   {Object.entries(CARTA_TIPO_LABEL).map(([k, v]) => (
@@ -192,6 +199,7 @@ export default function CartaCatalogoEditModal({
                 <select
                   className={staffInputClass()}
                   value={form.energia}
+                  disabled={isEdit && gameplayLocked}
                   onChange={(e) => setForm((p) => ({ ...p, energia: e.target.value }))}
                 >
                   {Object.entries(CARTA_ENERGIA_LABEL).map(([k, v]) => (
@@ -203,11 +211,22 @@ export default function CartaCatalogoEditModal({
                 <select
                   className={staffInputClass()}
                   value={form.rarita}
+                  disabled={isEdit && gameplayLocked}
                   onChange={(e) => setForm((p) => ({ ...p, rarita: e.target.value }))}
                 >
                   {Object.entries(CARTA_RARITA_LABEL).map(([k, v]) => (
                     <option key={k} value={k}>{v}</option>
                   ))}
+                </select>
+              </LabeledField>
+              <LabeledField label="Layout carta">
+                <select
+                  className={staffInputClass()}
+                  value={form.layout_versione || 'STD'}
+                  onChange={(e) => setForm((p) => ({ ...p, layout_versione: e.target.value }))}
+                >
+                  <option value="STD">Standard</option>
+                  <option value="FULL">Full-size borderless</option>
                 </select>
               </LabeledField>
             </StaffFieldGrid>
@@ -233,6 +252,7 @@ export default function CartaCatalogoEditModal({
             title="Statistiche in gioco (duello)"
             hint="Numeri stampati sulla carta: costo mana, attacco, salute (robustezza), iniziativa. Valgono mentre la carta è in campo come PG/OGG."
           >
+            <fieldset disabled={isEdit && gameplayLocked} className="space-y-3 disabled:opacity-60">
             <StaffFieldGrid cols={3}>
               {[
                 { key: 'costo_gioco', label: 'Costo gioco', min: 0, max: 3 },
@@ -267,6 +287,38 @@ export default function CartaCatalogoEditModal({
               />
               Duplicabile nel mazzo (max 2 copie)
             </label>
+            </fieldset>
+          </StaffSection>
+
+          <StaffSection
+            title="Legalità duello"
+            hint="Controlla uso nei mazzi/scontri. Non impatta reliquiario."
+          >
+            <fieldset disabled={isEdit && gameplayLocked} className="space-y-2 disabled:opacity-60">
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={form.legale_duello !== false}
+                  onChange={(e) => setForm((p) => ({ ...p, legale_duello: e.target.checked }))}
+                />
+                Carta legale nei duelli
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={!!form.bandita}
+                  onChange={(e) => setForm((p) => ({ ...p, bandita: e.target.checked }))}
+                />
+                Carta bandita dai mazzi
+              </label>
+              <LabeledField label="Motivazione ban" hint="Obbligatoria se carta bandita.">
+                <textarea
+                  className={staffInputClass("min-h-[72px]")}
+                  value={form.ban_reason || ""}
+                  onChange={(e) => setForm((p) => ({ ...p, ban_reason: e.target.value }))}
+                />
+              </LabeledField>
+            </fieldset>
           </StaffSection>
 
           {tags.length > 0 && (
@@ -274,6 +326,7 @@ export default function CartaCatalogoEditModal({
               title="Tag meccanici"
               hint="Etichette per effetti (Cavaliere, …). Non compaiono nel testo: si assegnano qui."
             >
+              <fieldset disabled={isEdit && gameplayLocked} className="disabled:opacity-60">
               <div className="flex flex-wrap gap-2">
                 {tags.filter((t) => t.attiva !== false).map((t) => {
                   const checked = (form.tag_ids || []).includes(t.id);
@@ -303,6 +356,7 @@ export default function CartaCatalogoEditModal({
                   );
                 })}
               </div>
+              </fieldset>
             </StaffSection>
           )}
 
@@ -321,15 +375,18 @@ export default function CartaCatalogoEditModal({
             entries={form.effect_scripts_entries || []}
             onChange={(effect_scripts_entries) => setForm((p) => ({ ...p, effect_scripts_entries }))}
             onMessage={onMessage}
+            disabled={isEdit && gameplayLocked}
           />
 
           <StaffSection title="Testo gioco" hint="Flavour e keyword condivise evidenziate in anteprima sotto.">
+            <fieldset disabled={isEdit && gameplayLocked} className="space-y-2 disabled:opacity-60">
             <textarea
               className={`${staffInputClass()} min-h-[120px] leading-relaxed`}
               value={form.testo_gioco || ''}
               onChange={(e) => setForm((p) => ({ ...p, testo_gioco: e.target.value }))}
             />
             <CardRulesPreview text={form.testo_gioco} keywords={keywords} />
+            </fieldset>
           </StaffSection>
 
           <StaffSection

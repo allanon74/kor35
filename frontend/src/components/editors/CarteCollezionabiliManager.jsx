@@ -25,6 +25,10 @@ import {
   staffCreateCartaTag,
   staffUpdateCartaTag,
   staffDeleteCartaTag,
+  staffGetCarteErrata,
+  staffCreateCartaErrata,
+  staffUpdateCartaErrata,
+  staffDeleteCartaErrata,
   getStaffWikiCarteRegolamentoInfo,
   syncStaffWikiCarteRegolamento,
   resolveMediaUrl,
@@ -78,6 +82,10 @@ const emptyCarta = (espansioneId = '') => ({
   tag_ids: [],
   bonus_equip: {},
   effect_scripts_entries: [],
+  layout_versione: 'STD',
+  legale_duello: true,
+  bandita: false,
+  ban_reason: '',
   duplicabile: false,
   attiva: true,
   ordine_set: 0,
@@ -200,6 +208,11 @@ const emptyEspansione = () => ({
   descrizione: '',
   ordine: 0,
   attiva: true,
+  in_vendita: true,
+  vendita_dal: '',
+  vendita_al: '',
+  legale_duello: true,
+  disclaimer_disattiva: '',
 });
 
 const emptyTag = () => ({
@@ -220,6 +233,21 @@ const emptyKeyword = () => ({
   effect_script: {},
 });
 
+const emptyErrata = (cartaId = '') => ({
+  carta: cartaId || '',
+  effective_from: '',
+  attiva: true,
+  titolo: '',
+  descrizione: '',
+  testo_gioco_override: '',
+  costo_gioco_override: null,
+  attacco_override: null,
+  salute_override: null,
+  iniziativa_override: null,
+  effect_scripts_override: [],
+  effect_scripts_override_text: '',
+});
+
 const formatEffectScriptText = (script) => {
   if (!script || (typeof script === 'object' && Object.keys(script).length === 0)) return '';
   try {
@@ -236,6 +264,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [bustine, setBustine] = useState([]);
   const [keywords, setKeywords] = useState([]);
   const [tags, setTags] = useState([]);
+  const [errata, setErrata] = useState([]);
   const [config, setConfig] = useState({
     pity_soglia: 20,
     max_bustine_giorno: 10,
@@ -271,12 +300,17 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const [bustinaModalOpen, setBustinaModalOpen] = useState(false);
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const [keywordModalOpen, setKeywordModalOpen] = useState(false);
+  const [errataModalOpen, setErrataModalOpen] = useState(false);
+  const [selectedErrata, setSelectedErrata] = useState(null);
+  const [errataForm, setErrataForm] = useState(emptyErrata());
+  const [errataCardFilter, setErrataCardFilter] = useState('');
 
   const statsOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'ST'), [punteggi]);
   const auraOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'AU'), [punteggi]);
   const elementOptions = useMemo(() => punteggi.filter((p) => p.tipo === 'EL'), [punteggi]);
 
   const activeEspansioneId = selectedEspansione?.id || '';
+  const gameplayLocked = (config?.accesso_modo || 'OFF') === 'OPEN';
 
   useEffect(() => {
     if (!cartaImmagineFile) {
@@ -317,11 +351,12 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [esp, cfg, kw, tagRes, wiki, punt] = await Promise.all([
+      const [esp, cfg, kw, tagRes, errRes, wiki, punt] = await Promise.all([
         staffGetCarteEspansioni(onLogout),
         staffGetCarteConfig(onLogout),
         staffGetCarteKeywords(onLogout),
         staffGetCarteTags(onLogout),
+        staffGetCarteErrata(onLogout),
         getStaffWikiCarteRegolamentoInfo(onLogout).catch(() => null),
         getPunteggiList(onLogout).catch(() => []),
       ]);
@@ -330,6 +365,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       if (cfg) setConfig(cfg);
       setKeywords(Array.isArray(kw) ? kw : kw?.results || []);
       setTags(Array.isArray(tagRes) ? tagRes : tagRes?.results || []);
+      setErrata(Array.isArray(errRes) ? errRes : errRes?.results || []);
       setWikiInfo(wiki);
       setPunteggi(punt || []);
 
@@ -385,6 +421,22 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     return map;
   }, [espansioni, bustine]);
 
+  const filteredErrata = useMemo(
+    () => (errataCardFilter ? errata.filter((e) => e.carta === errataCardFilter) : errata),
+    [errata, errataCardFilter],
+  );
+  const errataJsonError = useMemo(() => {
+    const raw = errataForm.effect_scripts_override_text || '';
+    if (!raw.trim()) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return 'Il JSON deve essere un array.';
+      return '';
+    } catch {
+      return 'JSON non valido in Effect scripts override.';
+    }
+  }, [errataForm.effect_scripts_override_text]);
+
   const deleteCarta = async (id) => {
     try {
       await staffDeleteCartaCatalogo(id, onLogout);
@@ -411,6 +463,9 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         testo_reliquiario: c.testo_reliquiario || '',
         tag_ids: c.tag_ids || [],
         effect_scripts_entries: effectScriptsFromApi(c.effect_scripts),
+        legale_duello: c.legale_duello !== false,
+        bandita: !!c.bandita,
+        ban_reason: c.ban_reason || '',
       });
     } else {
       setSelected(null);
@@ -637,6 +692,64 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
     }
   };
 
+  const openErrataModal = (row = null) => {
+    setSelectedErrata(row);
+    setErrataForm(
+      row
+        ? {
+          ...row,
+          effect_scripts_override_text: row.effect_scripts_override?.length
+            ? JSON.stringify(row.effect_scripts_override, null, 2)
+            : '',
+        }
+        : emptyErrata(selected?.id || ''),
+    );
+    setErrataModalOpen(true);
+  };
+
+  const saveErrata = async () => {
+    if (errataJsonError) {
+      setMsg(errataJsonError);
+      return;
+    }
+    try {
+      const payload = { ...errataForm };
+      if (payload.effect_scripts_override_text?.trim()) {
+        payload.effect_scripts_override = JSON.parse(payload.effect_scripts_override_text);
+      } else {
+        payload.effect_scripts_override = [];
+      }
+      delete payload.effect_scripts_override_text;
+      if (selectedErrata?.id) {
+        await staffUpdateCartaErrata(selectedErrata.id, payload, onLogout);
+      } else {
+        await staffCreateCartaErrata(payload, onLogout);
+      }
+      setMsg('Errata salvata.');
+      setErrataModalOpen(false);
+      setSelectedErrata(null);
+      setErrataForm(emptyErrata());
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Salvataggio errata fallito.');
+    }
+  };
+
+  const deleteErrata = async (id) => {
+    try {
+      await staffDeleteCartaErrata(id, onLogout);
+      setMsg('Errata eliminata.');
+      if (selectedErrata?.id === id) {
+        setErrataModalOpen(false);
+        setSelectedErrata(null);
+        setErrataForm(emptyErrata());
+      }
+      await load();
+    } catch (e) {
+      setMsg(e?.message || 'Eliminazione errata fallita.');
+    }
+  };
+
   const handleWikiSync = async (force = true) => {
     setWikiSyncing(true);
     try {
@@ -677,7 +790,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
       {msg && <p className="text-sm text-amber-300">{msg}</p>}
 
       <div className="flex flex-wrap gap-2">
-        {['espansioni', 'catalogo', 'bustine', 'tags', 'keywords', 'combo-reliquiario', 'scambi', 'config'].map((t) => (
+        {['espansioni', 'catalogo', 'bustine', 'tags', 'keywords', 'errata', 'combo-reliquiario', 'scambi', 'config'].map((t) => (
           <button
             key={t}
             type="button"
@@ -723,6 +836,8 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                   {' · '}
                   <span className="text-gray-400">Bustine:</span> {e.bustine_count ?? 0}
                   {!e.attiva && <span className="ml-2 text-amber-500">(disattiva)</span>}
+                  {e.in_vendita === false && <span className="ml-2 text-red-400">(fuori vendita)</span>}
+                  {e.legale_duello === false && <span className="ml-2 text-orange-400">(non legale duello)</span>}
                 </p>
                 <button
                   type="button"
@@ -781,6 +896,55 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             />
             Espansione attiva
           </label>
+          {!espansioneForm.attiva && (
+            <p className="rounded border border-amber-700/60 bg-amber-950/30 px-2 py-1 text-xs text-amber-200">
+              Attenzione: disattivando l'espansione, le carte non saranno più disponibili ai giocatori.
+            </p>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={espansioneForm.in_vendita !== false}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, in_vendita: ev.target.checked }))}
+            />
+            Espansione in vendita (acquisto bustine)
+          </label>
+          <StaffFieldGrid>
+            <LabeledField label="Vendita dal">
+              <input
+                type="datetime-local"
+                className={staffInputClass()}
+                value={espansioneForm.vendita_dal ? String(espansioneForm.vendita_dal).slice(0, 16) : ''}
+                onChange={(ev) => setEspansioneForm((p) => ({ ...p, vendita_dal: ev.target.value || null }))}
+              />
+            </LabeledField>
+            <LabeledField label="Vendita al">
+              <input
+                type="datetime-local"
+                className={staffInputClass()}
+                value={espansioneForm.vendita_al ? String(espansioneForm.vendita_al).slice(0, 16) : ''}
+                onChange={(ev) => setEspansioneForm((p) => ({ ...p, vendita_al: ev.target.value || null }))}
+              />
+            </LabeledField>
+          </StaffFieldGrid>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={espansioneForm.legale_duello !== false}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, legale_duello: ev.target.checked }))}
+            />
+            Espansione legale nei duelli
+          </label>
+          <LabeledField
+            label="Disclaimer disattivazione (staff)"
+            hint="Mostrato in staff per ricordare l'impatto della disattivazione."
+          >
+            <textarea
+              className={staffInputClass('min-h-[72px]')}
+              value={espansioneForm.disclaimer_disattiva || ''}
+              onChange={(ev) => setEspansioneForm((p) => ({ ...p, disclaimer_disattiva: ev.target.value }))}
+            />
+          </LabeledField>
           <CartaImmagineUpload
             label="Copertina espansione"
             previewUrl={espansionePreviewUrl}
@@ -823,6 +987,9 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
                   {(c.tag_codici || []).length > 0 && (
                     <><span className="text-gray-400">Tag:</span> [{c.tag_codici.join(', ')}]</>
                   )}
+                  {c.bandita && <span className="ml-2 text-red-400">(bandita)</span>}
+                  {c.legale_duello === false && <span className="ml-2 text-orange-400">(non legale duello)</span>}
+                  {errata.some((e) => e.carta === c.id && e.attiva) && <span className="ml-2 text-amber-300">(errata)</span>}
                   {!c.attiva && <span className="ml-1 text-amber-500">(disattiva)</span>}
                 </p>
               </StaffListRow>
@@ -851,6 +1018,7 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
         removeCartaImmagine={removeCartaImmagine}
         onRemoveCartaImmagine={setRemoveCartaImmagine}
         onMessage={setMsg}
+        gameplayLocked={gameplayLocked}
       />
 
       {!loading && tab === 'bustine' && (
@@ -1145,6 +1313,137 @@ const CarteCollezionabiliManager = ({ onLogout }) => {
             onLogout={onLogout}
             onMessage={setMsg}
           />
+        </div>
+      </StaffModal>
+
+      {!loading && tab === 'errata' && (
+        <div>
+          <div className="mb-2 max-w-sm">
+            <LabeledField label="Filtro carta">
+              <select
+                className={staffInputClass()}
+                value={errataCardFilter}
+                onChange={(e) => setErrataCardFilter(e.target.value)}
+              >
+                <option value="">— Tutte le carte —</option>
+                {carte.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome} ({c.codice})</option>
+                ))}
+              </select>
+            </LabeledField>
+          </div>
+          <StaffListToolbar
+            title="Errata carte"
+            count={filteredErrata.length}
+            onAdd={() => openErrataModal(null)}
+            addLabel="Nuova errata"
+          />
+          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
+            {filteredErrata.map((e) => (
+              <StaffListRow
+                key={e.id}
+                onEdit={() => openErrataModal(e)}
+                onDelete={() => deleteErrata(e.id)}
+                deleteConfirm={`Eliminare errata «${e.titolo || e.id}»?`}
+              >
+                <p className="font-bold text-white">{e.titolo || 'Errata senza titolo'}</p>
+                <p className="text-xs text-gray-500">
+                  <span className="text-gray-400">Carta:</span> {carte.find((c) => c.id === e.carta)?.nome || e.carta}
+                  {' · '}
+                  <span className="text-gray-400">Effettiva da:</span> {e.effective_from || '—'}
+                  {' · '}
+                  <span className="text-gray-400">Stato:</span> {e.attiva ? 'attiva' : 'disattiva'}
+                </p>
+              </StaffListRow>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <StaffModal
+        open={errataModalOpen}
+        title={selectedErrata?.id ? `Modifica errata — ${errataForm.titolo || ''}` : 'Nuova errata carta'}
+        onClose={() => setErrataModalOpen(false)}
+        onSave={saveErrata}
+      >
+        <div className="space-y-3">
+          <LabeledField label="Carta" required>
+            <select
+              className={staffInputClass()}
+              value={errataForm.carta || ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, carta: ev.target.value }))}
+            >
+              <option value="">— Seleziona carta —</option>
+              {carte.map((c) => (
+                <option key={c.id} value={c.id}>{c.nome} ({c.codice})</option>
+              ))}
+            </select>
+          </LabeledField>
+          <LabeledField label="Data efficacia" required>
+            <input
+              type="datetime-local"
+              className={staffInputClass()}
+              value={errataForm.effective_from ? String(errataForm.effective_from).slice(0, 16) : ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, effective_from: ev.target.value }))}
+            />
+          </LabeledField>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={!!errataForm.attiva}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, attiva: ev.target.checked }))}
+            />
+            Errata attiva
+          </label>
+          <LabeledField label="Titolo">
+            <input
+              className={staffInputClass()}
+              value={errataForm.titolo || ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, titolo: ev.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Descrizione">
+            <textarea
+              className={staffInputClass('min-h-[80px]')}
+              value={errataForm.descrizione || ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, descrizione: ev.target.value }))}
+            />
+          </LabeledField>
+          <LabeledField label="Override testo gioco">
+            <textarea
+              className={staffInputClass('min-h-[100px]')}
+              value={errataForm.testo_gioco_override || ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, testo_gioco_override: ev.target.value }))}
+            />
+          </LabeledField>
+          <StaffFieldGrid cols={2}>
+            {[
+              ['costo_gioco_override', 'Costo gioco'],
+              ['attacco_override', 'Attacco'],
+              ['salute_override', 'Salute'],
+              ['iniziativa_override', 'Iniziativa'],
+            ].map(([key, label]) => (
+              <LabeledField key={key} label={label}>
+                <input
+                  type="number"
+                  className={staffInputClass()}
+                  value={errataForm[key] ?? ''}
+                  onChange={(ev) => setErrataForm((p) => ({ ...p, [key]: ev.target.value === '' ? null : Number(ev.target.value) }))}
+                />
+              </LabeledField>
+            ))}
+          </StaffFieldGrid>
+          <LabeledField label="Effect scripts override (JSON)">
+            <textarea
+              className={staffInputClass('min-h-[110px] font-mono')}
+              placeholder='[{"codice":"RITO","nome":"Rito","script":{"version":1,"trigger":{"event":"on_play"},"steps":[]}}]'
+              value={errataForm.effect_scripts_override_text || ''}
+              onChange={(ev) => setErrataForm((p) => ({ ...p, effect_scripts_override_text: ev.target.value }))}
+            />
+            {!!errataJsonError && (
+              <p className="mt-1 text-xs text-red-400">{errataJsonError}</p>
+            )}
+          </LabeledField>
         </div>
       </StaffModal>
 

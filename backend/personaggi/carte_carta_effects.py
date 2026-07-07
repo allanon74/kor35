@@ -74,6 +74,14 @@ def validate_carta_effect_scripts(value) -> list[dict]:
 def carta_effect_scripts_raw(carta) -> list[dict]:
     if isinstance(carta, dict):
         return carta.get("effect_scripts") or []
+    try:
+        from personaggi.carte_errata_runtime import gameplay_view
+
+        view = gameplay_view(carta)
+        if view.get("effect_scripts"):
+            return view.get("effect_scripts") or []
+    except Exception:
+        pass
     return getattr(carta, "effect_scripts", None) or []
 
 

@@ -8,7 +8,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from personaggi.carte_collezionabili_models import (
@@ -45,6 +45,13 @@ from personaggi.carte_collezionabili_models import (
     ReliquiarioSlot,
 )
 from personaggi.models import MODIFICATORE_ADDITIVO, Personaggio, Statistica
+from personaggi.carte_legality import (
+    carta_disponibile_per_giocatori,
+    carta_legale_duello,
+    espansione_in_vendita,
+    motivo_illegalita_duello,
+)
+from personaggi.carte_errata_runtime import gameplay_view
 
 RARITA_ORDINE = {code: idx for idx, (code, _) in enumerate(CARTA_RARITA_CHOICES)}
 
@@ -113,7 +120,11 @@ def _pool_carte(bustina: BustinaCarte):
         qs = qs.filter(espansione_id=bustina.espansione_id)
     elif bustina.set_collezione:
         qs = qs.filter(set_collezione=bustina.set_collezione)
-    return list(qs)
+    out = []
+    for carta in qs.select_related("espansione"):
+        if carta_disponibile_per_giocatori(carta):
+            out.append(carta)
+    return out
 
 
 def _carta_unica_gia_posseduta(carta: CartaCollezionabile) -> bool:
@@ -176,11 +187,13 @@ def _serializza_espansione(esp: EspansioneCarte) -> dict:
         "descrizione": esp.descrizione,
         "immagine_url": esp.immagine.url if esp.immagine else None,
         "ordine": esp.ordine,
+        "in_vendita": espansione_in_vendita(esp),
     }
 
 
 def _serializza_carta(carta: CartaCollezionabile) -> dict:
     esp = carta.espansione
+    gameplay = gameplay_view(carta)
     return {
         "id": str(carta.id),
         "codice": carta.codice,
@@ -188,11 +201,11 @@ def _serializza_carta(carta: CartaCollezionabile) -> dict:
         "tipo": carta.tipo,
         "energia": carta.energia,
         "rarita": carta.rarita,
-        "costo_gioco": carta.costo_gioco,
-        "attacco": carta.attacco,
-        "salute": carta.salute,
-        "iniziativa": carta.iniziativa,
-        "testo_gioco": carta.testo_gioco,
+        "costo_gioco": gameplay["costo_gioco"],
+        "attacco": gameplay["attacco"],
+        "salute": gameplay["salute"],
+        "iniziativa": gameplay["iniziativa"],
+        "testo_gioco": gameplay["testo_gioco"],
         "testo_lore": carta.testo_lore,
         "testo_reliquiario": carta.testo_reliquiario,
         "set_collezione": carta.set_collezione,
@@ -207,6 +220,11 @@ def _serializza_carta(carta: CartaCollezionabile) -> dict:
             for t in carta.tags.filter(attiva=True).order_by("nome")
         ],
         "bonus_equip": carta.bonus_equip or {},
+        "legale_duello": carta.legale_duello,
+        "bandita": carta.bandita,
+        "ban_reason": carta.ban_reason,
+        "layout_versione": carta.layout_versione,
+        "errata_attiva": gameplay["errata"],
         "duplicabile": carta.duplicabile,
         "ordine_set": carta.ordine_set,
         "immagine_url": carta.immagine.url if carta.immagine else None,
@@ -273,6 +291,7 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
         .select_related("carta", "carta__espansione")
         .order_by("-created_at")
     )
+    possedute = [cp for cp in possedute if carta_disponibile_per_giocatori(cp.carta)]
     slots = {
         s.slot_index: str(s.carta_posseduta_id) if s.carta_posseduta_id else None
         for s in ReliquiarioSlot.objects.filter(personaggio=personaggio)
@@ -283,8 +302,10 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
     sets_count = (
         CartaCollezionabile.objects.filter(
             possessioni__personaggio=personaggio,
+            attiva=True,
             set_collezione__gt="",
         )
+        .filter(Q(espansione__isnull=True) | Q(espansione__attiva=True))
         .values("set_collezione")
         .annotate(owned=Count("possessioni", distinct=True))
     )
@@ -294,6 +315,7 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
             attiva=True,
             set_collezione__gt="",
         )
+        .filter(Q(espansione__isnull=True) | Q(espansione__attiva=True))
         .values("set_collezione")
         .annotate(total=Count("id"))
     )
@@ -374,9 +396,11 @@ def calcola_legami_attivi(personaggio: Personaggio) -> list[dict]:
 @transaction.atomic
 def apri_bustina(personaggio: Personaggio, bustina_id) -> dict:
     assert_personaggio_puo_accedere_carte(personaggio)
-    bustina = BustinaCarte.objects.select_for_update().get(pk=bustina_id, attiva=True)
+    bustina = BustinaCarte.objects.select_for_update().select_related("espansione").get(pk=bustina_id, attiva=True)
     if bustina.campagna_id != personaggio.campagna_id:
         raise ValidationError("Bustina non disponibile per la campagna del personaggio.")
+    if bustina.espansione_id and not espansione_in_vendita(bustina.espansione):
+        raise ValidationError("Questa espansione non è attualmente in vendita.")
 
     cfg = get_config_carte(personaggio.campagna, create=True)
     if _conteggio_bustine_oggi(personaggio) >= cfg.max_bustine_giorno:
@@ -511,6 +535,7 @@ def _serializza_bustina(b: BustinaCarte) -> dict:
         "espansione_id": str(esp.id) if esp else None,
         "espansione_nome": esp.nome if esp else None,
         "espansione_slug": esp.slug if esp else None,
+        "in_vendita": espansione_in_vendita(esp) if esp else True,
     }
 
 
@@ -522,7 +547,12 @@ def lista_bustine(campagna) -> list[dict]:
         .select_related("espansione")
         .order_by("espansione__ordine", "ordine", "nome")
     )
-    return [_serializza_bustina(b) for b in qs]
+    out = []
+    for b in qs:
+        if b.espansione_id and not espansione_in_vendita(b.espansione):
+            continue
+        out.append(_serializza_bustina(b))
+    return out
 
 
 def lista_espansioni_giocatore(campagna) -> list[dict]:
@@ -638,6 +668,10 @@ def valida_mazzo_duello(carte_possedute_ids: list, personaggio: Personaggio) -> 
         return False, errori
 
     carte = [p.carta for p in possedute]
+
+    for carta in carte:
+        if not carta_legale_duello(carta):
+            errori.append(f"«{carta.nome}»: {motivo_illegalita_duello(carta)}")
 
     pg_count = sum(1 for c in carte if c.tipo == CARTA_TIPO_PERSONAGGIO)
     if pg_count < MAZZO_MIN_PERSONAGGI:

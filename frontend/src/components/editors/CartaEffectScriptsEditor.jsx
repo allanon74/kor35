@@ -22,7 +22,7 @@ function parseScriptText(text) {
   return JSON.parse(text);
 }
 
-export default function CartaEffectScriptsEditor({ entries = [], onChange, onMessage }) {
+export default function CartaEffectScriptsEditor({ entries = [], onChange, onMessage, disabled = false }) {
   const [activeIdx, setActiveIdx] = useState(null);
   const [scriptText, setScriptText] = useState('');
 
@@ -63,6 +63,7 @@ export default function CartaEffectScriptsEditor({ entries = [], onChange, onMes
         </p>
         <button
           type="button"
+          disabled={disabled}
           className="flex items-center gap-1 rounded bg-violet-800 px-2 py-0.5 text-[10px]"
           onClick={addEntry}
         >
@@ -91,7 +92,7 @@ export default function CartaEffectScriptsEditor({ entries = [], onChange, onMes
                 activeIdx === idx ? 'border-violet-500 bg-gray-900' : 'border-gray-700'
               }`}
             >
-              <button type="button" className="font-bold text-violet-200" onClick={() => openEditor(idx)}>
+              <button type="button" disabled={disabled} className="font-bold text-violet-200 disabled:opacity-60" onClick={() => openEditor(idx)}>
                 {e.nome || e.codice || `Effetto ${idx + 1}`}
               </button>
               {eventLabel && (
@@ -99,7 +100,8 @@ export default function CartaEffectScriptsEditor({ entries = [], onChange, onMes
               )}
               <button
                 type="button"
-                className="ml-auto text-red-400"
+                disabled={disabled}
+                className="ml-auto text-red-400 disabled:opacity-50"
                 onClick={() => removeEntry(idx)}
                 aria-label="Rimuovi"
               >
@@ -117,12 +119,14 @@ export default function CartaEffectScriptsEditor({ entries = [], onChange, onMes
           </p>
           <div className="grid grid-cols-2 gap-2">
             <input
+              disabled={disabled}
               className="rounded border border-gray-600 bg-gray-900 px-2 py-1 text-xs"
               placeholder="Codice (es. RITO_KAEL)"
               value={entries[activeIdx].codice || ''}
               onChange={(ev) => updateMeta(activeIdx, 'codice', ev.target.value)}
             />
             <input
+              disabled={disabled}
               className="rounded border border-gray-600 bg-gray-900 px-2 py-1 text-xs"
               placeholder="Nome UI (es. Rito delle ombre)"
               value={entries[activeIdx].nome || ''}
@@ -138,8 +142,10 @@ export default function CartaEffectScriptsEditor({ entries = [], onChange, onMes
             }}
             triggerOptions={TRIGGER_OPTIONS}
             onMessage={onMessage}
+            disabled={disabled}
           />
           <textarea
+            disabled={disabled}
             className="h-32 w-full rounded border border-gray-700 bg-gray-950 p-2 font-mono text-[10px]"
             value={scriptText}
             onChange={(ev) => {

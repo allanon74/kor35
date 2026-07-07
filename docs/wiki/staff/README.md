@@ -29,4 +29,11 @@ make wiki-staff-sync ENV=prod WIKI_STAFF_FORCE=1
 
 Quando modifichi `Makefile`, `docs/MIRROR_PI_NETWORK.md`, target mirror o runbook Docker/sync, aggiorna anche i `.md` in questa cartella (il deploy CI sincronizza prod automaticamente).
 
+## Note carte governance (Fase 1)
+
+- `EspansioneCarte`: `attiva`, `in_vendita` + finestra `vendita_dal`/`vendita_al`, `legale_duello`, `disclaimer_disattiva`.
+- `CartaCollezionabile`: `legale_duello`, `bandita`, `ban_reason`.
+- Enforcement: bustine acquistabili solo se espansione in vendita; carte di espansioni disattive non compaiono ai giocatori; carte bandite/non legali bloccate nei mazzi duello ma restano valide nel reliquiario.
+- Con campagna in `OPEN`, in staff i campi gameplay carta sono bloccati lato API (UI con guardia disabilitata); reliquiario/lore restano editabili.
+
 Vedi `.cursor/rules/wiki-staff-ops.mdc`.

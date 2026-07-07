@@ -4380,6 +4380,24 @@ export const staffUpdateCartaComboReliquiario = (id, data, onLogout) =>
 export const staffDeleteCartaComboReliquiario = (id, onLogout) =>
     fetchAuthenticated(`${STAFF_CARTE}/combo-reliquiario/${id}/`, { method: 'DELETE' }, onLogout);
 
+export const staffGetCarteErrata = (onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/errata/`, { method: 'GET' }, onLogout);
+
+export const staffCreateCartaErrata = (data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/errata/`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffUpdateCartaErrata = (id, data, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/errata/${id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    }, onLogout);
+
+export const staffDeleteCartaErrata = (id, onLogout) =>
+    fetchAuthenticated(`${STAFF_CARTE}/errata/${id}/`, { method: 'DELETE' }, onLogout);
+
 export const staffGetCarteScambi = (onLogout, { stato = '', limit = 100 } = {}) => {
     const params = new URLSearchParams();
     if (stato) params.set('stato', stato);

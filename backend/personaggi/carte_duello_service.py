@@ -45,6 +45,7 @@ from personaggi.carte_collezionabili_service import (
     personaggio_puo_accedere_carte,
     valida_setup_duello,
 )
+from personaggi.carte_errata_runtime import gameplay_view
 from personaggi.carte_duello_ws import broadcast_duello_update
 from personaggi.models import Personaggio
 
@@ -213,7 +214,8 @@ def mana_disponibile_per_turno(turno_numero: int, mana_massimo: int) -> int:
 
 def costo_effettivo_carta(duello: DuelloCarte, personaggio: Personaggio, carta) -> int:
     """Costo mana con bonus color pie del Leader (aura primaria)."""
-    costo = int(carta.costo_gioco or 0)
+    gameplay = gameplay_view(carta)
+    costo = int(gameplay.get("costo_gioco") or 0)
     aura = _aura_leader(duello, personaggio)
     if aura == CARTA_ENERGIA_MAGICA and carta.tipo == CARTA_TIPO_EVENTO:
         costo -= 1
@@ -239,9 +241,10 @@ def stats_combattimento_carta(
     carta_posseduta_id=None,
 ) -> dict:
     """Forza, Robustezza e Iniziativa con bonus aura primaria (Leader di mazzo)."""
-    forza = int(carta.attacco or 1)
-    robustezza = max(1, int(carta.salute or 1))
-    iniziativa = int(carta.iniziativa or 0)
+    gameplay = gameplay_view(carta)
+    forza = int(gameplay.get("attacco") or 1)
+    robustezza = max(1, int(gameplay.get("salute") or 1))
+    iniziativa = int(gameplay.get("iniziativa") or 0)
     is_leader = (
         carta_e_leader_partita(duello, owner_pg, carta_posseduta_id)
         if carta_posseduta_id
@@ -330,7 +333,7 @@ def slot_difensore(lato: dict) -> int | None:
         if not cp_id:
             continue
         cp = CartaPosseduta.objects.select_related("carta").filter(pk=cp_id).first()
-        if cp and _carta_ha_difensore(cp.carta.testo_gioco):
+        if cp and _carta_ha_difensore(gameplay_view(cp.carta).get("testo_gioco")):
             return slot
     return None
 
@@ -714,7 +717,7 @@ def _rimuovi_eroe_da_campo(duello: DuelloCarte, owner_pg: Personaggio, hero_slot
         carta=cp.carta,
         carta_posseduta_id=str(cp_id),
         hero_slot=hero_slot,
-        testo_gioco=cp.carta.testo_gioco or "",
+        testo_gioco=gameplay_view(cp.carta).get("testo_gioco") or "",
     )
     if pending:
         _append_log(
@@ -752,7 +755,7 @@ def _applica_danno_eroe(duello: DuelloCarte, owner_pg: Personaggio, hero_slot: i
         from personaggi.carte_collezionabili_models import CartaPosseduta
 
         cp = CartaPosseduta.objects.select_related("carta").get(pk=lato["eroi"][hero_slot])
-        cur = int(cp.carta.salute or 1)
+        cur = int(gameplay_view(cp.carta).get("salute") or 1)
     sal[hero_slot] = cur - amount
     if sal[hero_slot] <= 0:
         guscio = _guscio_eroi(lato)
@@ -1161,7 +1164,7 @@ def _trigger_turn_card_effects(duello: DuelloCarte, personaggio: Personaggio, ev
             duello,
             personaggio,
             cp.carta,
-            cp.carta.testo_gioco or "",
+            gameplay_view(cp.carta).get("testo_gioco") or "",
             event,
             context={"carta_posseduta_id": str(cp.id), "pg_key": pg_key},
         )
@@ -1265,7 +1268,7 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
                     from personaggi.carte_collezionabili_models import CartaPosseduta
 
                     cp_obj = CartaPosseduta.objects.select_related("carta").get(pk=cp_new)
-                    _imposta_salute_eroe_slot(lato_cur, slot, int(cp_obj.carta.salute or 1))
+                    _imposta_salute_eroe_slot(lato_cur, slot, int(gameplay_view(cp_obj.carta).get("salute") or 1))
             lato = duello.stato_gioco[pg_key]
             payload = {k: v for k, v in payload.items() if k != "eroi"}
         for campo in ("eroi", "oggetti", "energia", "mano", "mazzo", "scarto"):
@@ -1290,8 +1293,11 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
         if cp_id not in lato["mano"]:
             raise ValidationError("Carta non in mano.")
         from personaggi.carte_collezionabili_models import CartaPosseduta
+        from personaggi.carte_legality import carta_legale_duello, motivo_illegalita_duello
 
         cp = CartaPosseduta.objects.select_related("carta").get(pk=cp_id, personaggio=personaggio)
+        if not carta_legale_duello(cp.carta):
+            raise ValidationError(f"Questa carta non è giocabile nel duello: {motivo_illegalita_duello(cp.carta)}")
         costo = costo_effettivo_carta(duello, personaggio, cp.carta)
         if lato["energia"] < costo:
             raise ValidationError("Mana insufficiente.")
@@ -1335,7 +1341,7 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
         elif tipo == CARTA_TIPO_EVENTO:
             from personaggi.carte_effect_engine import trigger_card_effects_for_event
 
-            testo_evt = cp.carta.testo_gioco or ""
+            testo_evt = gameplay_view(cp.carta).get("testo_gioco") or ""
             script_evt = trigger_card_effects_for_event(
                 duello,
                 personaggio,
@@ -1383,7 +1389,7 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
             duello,
             personaggio,
             cp.carta,
-            cp.carta.testo_gioco or "",
+            gameplay_view(cp.carta).get("testo_gioco") or "",
             "on_play",
             context={
                 "carta_posseduta_id": cp_id,
@@ -1436,7 +1442,7 @@ def esegui_azione_duello(duello_id, personaggio: Personaggio, azione: str, paylo
             duello,
             personaggio,
             cp.carta,
-            cp.carta.testo_gioco or "",
+            gameplay_view(cp.carta).get("testo_gioco") or "",
             "on_attack",
             context={
                 "carta_posseduta_id": str(cp_id),

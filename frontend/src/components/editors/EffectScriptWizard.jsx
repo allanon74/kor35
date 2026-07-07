@@ -180,6 +180,7 @@ export default function EffectScriptWizard({
   onMessage,
   mode = 'keyword',
   triggerOptions = null,
+  disabled = false,
 }) {
   const keywordForm = keywordFormProp || { nome: '', codice: '', testo_regola: '' };
   const triggerList = triggerOptions || TRIGGER_EVENTS;
@@ -333,6 +334,7 @@ export default function EffectScriptWizard({
                   : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
               }`}
               onClick={() => applyRecipe(recipe)}
+              disabled={disabled}
             >
               {recipe.label}
             </button>
@@ -352,6 +354,7 @@ export default function EffectScriptWizard({
               };
               syncScriptText(blank);
             }}
+            disabled={disabled}
           >
             Vuoto
           </button>
@@ -364,6 +367,7 @@ export default function EffectScriptWizard({
           <select
             className="mb-1 w-full rounded bg-gray-900 px-2 py-1 text-xs text-white"
             value={triggerEvent}
+            disabled={disabled}
             onChange={(e) => setTriggerEvent(e.target.value)}
           >
             {triggerList.map((opt) => (
@@ -373,6 +377,7 @@ export default function EffectScriptWizard({
           <select
             className="w-full rounded bg-gray-900 px-2 py-1 text-xs text-white"
             value={triggerSource}
+            disabled={disabled}
             onChange={(e) => setTriggerSource(e.target.value)}
           >
             {TRIGGER_SOURCES.map((opt) => (
@@ -403,6 +408,7 @@ export default function EffectScriptWizard({
                     type="number"
                     className="mt-0.5 block w-20 rounded bg-gray-900 px-2 py-1 text-xs text-white"
                     value={paramValues[ph] ?? 0}
+                    disabled={disabled}
                     onChange={(e) => setParamValues((prev) => ({
                       ...prev,
                       [ph]: e.target.value,
@@ -431,7 +437,7 @@ export default function EffectScriptWizard({
           type="button"
           className="rounded bg-emerald-900 px-2 py-1 text-xs font-bold text-emerald-100"
           onClick={handleValidate}
-          disabled={validating}
+          disabled={validating || disabled}
         >
           {validating ? 'Validazione…' : 'Valida script'}
         </button>
@@ -439,6 +445,7 @@ export default function EffectScriptWizard({
           type="button"
           className="rounded bg-gray-800 px-2 py-1 text-xs text-gray-300"
           onClick={() => setAdvancedOpen((v) => !v)}
+          disabled={disabled}
         >
           {advancedOpen ? 'Nascondi JSON' : 'Modifica JSON avanzato'}
         </button>

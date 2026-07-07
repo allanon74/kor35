@@ -3,11 +3,14 @@ Carte collezionabili «Cronache delle Sette Elegie» — catalogo, collezione, r
 """
 from __future__ import annotations
 
+from io import BytesIO
 import uuid
 from decimal import Decimal
 
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.files.base import ContentFile
 from django.db import models
+from django.utils import timezone
 
 from kor35.syncing import SyncableModel
 
@@ -68,6 +71,13 @@ CARTA_RARITA_CHOICES = [
     (CARTA_RARITA_UNICA, "Unica"),
 ]
 
+CARTA_LAYOUT_STANDARD = "STD"
+CARTA_LAYOUT_FULL = "FULL"
+CARTA_LAYOUT_CHOICES = [
+    (CARTA_LAYOUT_STANDARD, "Standard"),
+    (CARTA_LAYOUT_FULL, "Full-size borderless"),
+]
+
 DEFAULT_PROBABILITA_BUSTINA = {
     CARTA_RARITA_COMUNE: 0.55,
     CARTA_RARITA_NON_COMUNE: 0.28,
@@ -114,6 +124,32 @@ CARTA_ENERGIA_AURA_SIGLA = {
     CARTA_ENERGIA_PSIONICA: "APS",
     CARTA_ENERGIA_ARCANA: "AAR",
 }
+
+
+def _compress_image_field(instance, field_name: str, *, max_side: int = 1600, quality: int = 82) -> None:
+    """Riduce immagini troppo pesanti lato server (upload carte/espansioni)."""
+    image_field = getattr(instance, field_name, None)
+    if not image_field:
+        return
+    try:
+        from PIL import Image
+    except Exception:
+        return
+    try:
+        image_field.file.seek(0)
+        img = Image.open(image_field.file)
+    except Exception:
+        return
+    img = img.convert("RGB")
+    width, height = img.size
+    if max(width, height) > max_side:
+        scale = max_side / float(max(width, height))
+        img = img.resize((int(width * scale), int(height * scale)), Image.Resampling.LANCZOS)
+    out = BytesIO()
+    img.save(out, format="JPEG", quality=quality, optimize=True)
+    out.seek(0)
+    name = (image_field.name or "upload.jpg").rsplit(".", 1)[0] + ".jpg"
+    image_field.save(name, ContentFile(out.read()), save=False)
 
 
 class KeywordCarta(SyncableModel, models.Model):
@@ -249,6 +285,31 @@ class EspansioneCarte(SyncableModel, models.Model):
     immagine = models.ImageField(upload_to="carte_collezionabili/espansioni/", blank=True, null=True)
     ordine = models.PositiveSmallIntegerField(default=0)
     attiva = models.BooleanField(default=True, db_index=True)
+    in_vendita = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Se false, le bustine dell'espansione non sono acquistabili.",
+    )
+    vendita_dal = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Inizio finestra vendita bustine (opzionale).",
+    )
+    vendita_al = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fine finestra vendita bustine (opzionale).",
+    )
+    legale_duello = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Se false, carte dell'espansione non legali nei mazzi duello.",
+    )
+    disclaimer_disattiva = models.TextField(
+        blank=True,
+        default="",
+        help_text="Nota staff mostrata quando si disattiva l'espansione.",
+    )
 
     class Meta:
         verbose_name = "Espansione carte"
@@ -261,6 +322,10 @@ class EspansioneCarte(SyncableModel, models.Model):
 
     def __str__(self):
         return self.nome
+
+    def save(self, *args, **kwargs):
+        _compress_image_field(self, "immagine", max_side=1920, quality=84)
+        return super().save(*args, **kwargs)
 
 
 class CartaCollezionabile(SyncableModel, models.Model):
@@ -353,6 +418,27 @@ class CartaCollezionabile(SyncableModel, models.Model):
             "Ogni elemento: {codice?, nome?, script: {version, trigger, steps, params?}}."
         ),
     )
+    legale_duello = models.BooleanField(
+        default=True,
+        db_index=True,
+        help_text="Se false, carta non legale nei mazzi duello.",
+    )
+    bandita = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Se true, carta bandita dai mazzi duello.",
+    )
+    ban_reason = models.TextField(
+        blank=True,
+        default="",
+        help_text="Motivazione ban mostrata in staff/UI.",
+    )
+    layout_versione = models.CharField(
+        max_length=4,
+        choices=CARTA_LAYOUT_CHOICES,
+        default=CARTA_LAYOUT_STANDARD,
+        help_text="Layout visuale carta (standard/full-size).",
+    )
     duplicabile = models.BooleanField(
         default=False,
         help_text="Se true, fino a 2 copie nel mazzo da duello.",
@@ -382,6 +468,60 @@ class CartaCollezionabile(SyncableModel, models.Model):
     @property
     def is_soprannaturale(self):
         return self.energia in CARTA_ENERGIE_SOPRANNATURALI
+
+    def errata_attiva(self, *, when=None):
+        when = when or timezone.now()
+        return (
+            self.errata.filter(attiva=True, effective_from__lte=when)
+            .order_by("-effective_from", "-updated_at")
+            .first()
+        )
+
+    def save(self, *args, **kwargs):
+        _compress_image_field(self, "immagine", max_side=1600, quality=82)
+        return super().save(*args, **kwargs)
+
+
+class CartaErrata(SyncableModel, models.Model):
+    """Override schedulati gameplay carta attivi da una data."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.PROTECT,
+        related_name="carte_errata",
+    )
+    carta = models.ForeignKey(
+        CartaCollezionabile,
+        on_delete=models.CASCADE,
+        related_name="errata",
+    )
+    effective_from = models.DateTimeField(db_index=True)
+    attiva = models.BooleanField(default=True, db_index=True)
+    titolo = models.CharField(max_length=120, blank=True, default="")
+    descrizione = models.TextField(blank=True, default="")
+    testo_gioco_override = models.TextField(blank=True, default="")
+    costo_gioco_override = models.PositiveSmallIntegerField(null=True, blank=True)
+    attacco_override = models.PositiveSmallIntegerField(null=True, blank=True)
+    salute_override = models.PositiveSmallIntegerField(null=True, blank=True)
+    iniziativa_override = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(5)],
+    )
+    effect_scripts_override = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        verbose_name = "Errata carta"
+        verbose_name_plural = "Errata carte"
+        ordering = ["-effective_from", "-updated_at"]
+        indexes = [models.Index(fields=["campagna", "effective_from", "attiva"])]
+
+    def __str__(self):
+        return f"Errata {self.carta.nome} @ {self.effective_from:%Y-%m-%d %H:%M}"
 
 
 COMBO_TRIGGER_LEGAME = "LEGAME"

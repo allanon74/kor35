@@ -81,6 +81,7 @@ export default function CardFrame({
   const energy = getTheme(c.energia);
   const styles = getFrameStyles(c.energia);
   const img = c.immagine_url ? resolveMediaUrl(c.immagine_url) : null;
+  const isFullLayout = c.layout_versione === 'FULL';
   const hasStats = c.attacco != null || c.salute != null || c.iniziativa != null;
   const rulesText = rulesTextOverride != null
     ? rulesTextOverride
@@ -114,7 +115,7 @@ export default function CardFrame({
       </span>
     </div>
 
-    <div className={`relative mx-2 mt-2 overflow-hidden rounded-md border border-black/40 bg-black/30 ${ART_HEIGHT[size]}`}>
+    <div className={`relative ${isFullLayout ? 'mt-0 h-full min-h-[60%] overflow-hidden' : `mx-2 mt-2 overflow-hidden rounded-md border border-black/40 bg-black/30 ${ART_HEIGHT[size]}`}`}>
       {img ? (
         <img src={img} alt="" className="h-full w-full object-cover" />
       ) : (
@@ -122,16 +123,18 @@ export default function CardFrame({
           <CreditCard size={compact ? 22 : 32} />
         </div>
       )}
-      <div
-        className="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide"
-        style={{ backgroundColor: 'rgba(0,0,0,0.55)', color: energy.colore }}
-      >
-        {CARTA_RARITA_LABEL[c.rarita] || c.rarita}
-      </div>
+      {!isFullLayout && (
+        <div
+          className="absolute bottom-0 left-0 right-0 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide"
+          style={{ backgroundColor: 'rgba(0,0,0,0.55)', color: energy.colore }}
+        >
+          {CARTA_RARITA_LABEL[c.rarita] || c.rarita}
+        </div>
+      )}
     </div>
 
     <div
-      className={`mx-2 mt-1.5 rounded border px-1.5 py-0.5 font-semibold uppercase tracking-wide ${size === 'xl' ? 'px-2 py-1 text-[11px]' : 'text-[8px]'}`}
+      className={`${isFullLayout ? 'mx-2 mt-1 bg-black/45' : 'mx-2 mt-1.5'} rounded border px-1.5 py-0.5 font-semibold uppercase tracking-wide ${size === 'xl' ? 'px-2 py-1 text-[11px]' : 'text-[8px]'}`}
       style={styles.typeLine}
     >
       {CARTA_TIPO_LABEL[c.tipo] || c.tipo}
@@ -142,8 +145,13 @@ export default function CardFrame({
     {showRules && (!compact || reliquiarioMode) && (
       <div
         className={`mx-2 mt-1.5 flex min-h-0 flex-1 flex-col rounded border px-2 py-2 ${expandRules ? 'overflow-y-auto' : ''} ${rulesTextClass}`}
-        style={styles.rulesBox}
+        style={isFullLayout ? { ...styles.rulesBox, backgroundColor: 'rgba(15, 23, 42, 0.58)' } : styles.rulesBox}
       >
+        {!!c.errata_attiva && (
+          <p className="mb-1 rounded bg-amber-700/40 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100">
+            Errata attiva
+          </p>
+        )}
         {tagLabels.length > 0 && (
           <p className={`mb-1 font-bold leading-tight text-white ${size === 'xl' ? 'text-sm' : ''}`}>
             {tagLabels.join(' · ')}

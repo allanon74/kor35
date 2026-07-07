@@ -149,6 +149,7 @@ router.register(r'staff/carte/config', views_carte.ConfigurazioneCarteStaffViewS
 router.register(r'staff/carte/keywords', views_carte.KeywordCartaStaffViewSet, basename='staff-carte-keywords')
 router.register(r'staff/carte/tags', views_carte.TagCartaStaffViewSet, basename='staff-carte-tags')
 router.register(r'staff/carte/combo-reliquiario', views_carte.ComboReliquiarioStaffViewSet, basename='staff-carte-combo-reliquiario')
+router.register(r'staff/carte/errata', views_carte.CartaErrataStaffViewSet, basename='staff-carte-errata')
 
 urlpatterns = [
     path('api/device/watch/pair/start/', watch_views.WatchPairStartView.as_view(), name='watch-pair-start'),

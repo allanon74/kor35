@@ -13,6 +13,7 @@ from gestione_plot.permissions import IsStaffOrMaster
 from personaggi.carte_collezionabili_models import (
     BustinaCarte,
     CartaCollezionabile,
+    CartaErrata,
     CartaPosseduta,
     ComboReliquiario,
     ConfigurazioneCarteCollezionabili,
@@ -59,6 +60,7 @@ from personaggi.models import FEATURE_CARTE_COLLEZIONABILI, Personaggio
 from personaggi.serializers_carte import (
     BustinaCarteSerializer,
     CartaCollezionabileSerializer,
+    CartaErrataSerializer,
     ComboReliquiarioSerializer,
     ConfigurazioneCarteCollezionabiliSerializer,
     EspansioneCarteSerializer,
@@ -617,6 +619,27 @@ class ComboReliquiarioStaffViewSet(viewsets.ModelViewSet):
                 "statistiche__limit_a_elementi",
             )
             .order_by("ordine", "nome")
+        )
+        return _campaign_feature_filter(self.request, qs, FEATURE_CARTE_COLLEZIONABILI)
+
+    def perform_create(self, serializer):
+        campagna = _get_active_campaign(self.request) or _get_default_campaign()
+        if not campagna:
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+
+            raise DRFValidationError({"campagna": "Campagna attiva non trovata."})
+        serializer.save(campagna=campagna)
+
+
+class CartaErrataStaffViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsStaffOrMaster]
+    serializer_class = CartaErrataSerializer
+
+    def get_queryset(self):
+        qs = (
+            CartaErrata.objects.all()
+            .select_related("campagna", "carta")
+            .order_by("-effective_from", "-updated_at")
         )
         return _campaign_feature_filter(self.request, qs, FEATURE_CARTE_COLLEZIONABILI)
 

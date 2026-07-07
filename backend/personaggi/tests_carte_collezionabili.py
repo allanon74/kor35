@@ -6,6 +6,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
 from personaggi.carte_collezionabili_models import (
     BustinaCarte,
@@ -45,6 +46,7 @@ from personaggi.carte_collezionabili_service import (
     valida_mazzo_duello,
     valida_setup_duello,
 )
+from personaggi.carte_errata_runtime import gameplay_view
 from personaggi.models import AURA, Campagna, Personaggio, Punteggio, TipologiaPersonaggio
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -128,6 +130,13 @@ class CarteCollezionabiliServiceTests(TestCase):
         self.assertEqual(self.pg.carte_possedute.count(), 5)
         self.assertEqual(self.pg.crediti, crediti_prima - Decimal("500"))
 
+    def test_apri_bustina_bloccata_fuori_finestra_vendita(self):
+        self.espansione.in_vendita = False
+        self.espansione.vendita_dal = timezone.now()
+        self.espansione.save(update_fields=["in_vendita", "vendita_dal", "updated_at"])
+        with self.assertRaises(ValidationError):
+            apri_bustina(self.pg, self.bustina.id)
+
     def test_equip_reliquio(self):
         cp = CartaPosseduta.objects.create(
             personaggio=self.pg,
@@ -158,6 +167,17 @@ class CarteCollezionabiliServiceTests(TestCase):
         self.assertIn("regole_mazzo", payload)
         self.assertGreaterEqual(len(payload["regole_mazzo"]), 5)
         self.assertTrue(payload["puo_accedere"])
+
+    def test_build_collezione_nasconde_carte_espansione_disattiva(self):
+        cp = CartaPosseduta.objects.create(
+            personaggio=self.pg,
+            carta=CartaCollezionabile.objects.first(),
+        )
+        self.assertIsNotNone(cp.id)
+        self.espansione.attiva = False
+        self.espansione.save(update_fields=["attiva", "updated_at"])
+        payload = build_collezione_payload(self.pg)
+        self.assertEqual(len(payload["carte"]), 0)
 
     def test_valida_mazzo_insufficiente(self):
         carte = []
@@ -361,6 +381,91 @@ class KeywordCartaStaffApiTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data["nome"], "Mutazione [X]")
+
+
+class EspansioneCarteStaffApiTests(APITestCase):
+    url = "/api/personaggi/api/staff/carte/espansioni/"
+
+    def setUp(self):
+        from personaggi.models import CAMPAGNA_ROLE_MASTER, CampagnaUtente
+
+        self.user = User.objects.create_user(username="esp_staff", password="x")
+        self.campagna = Campagna.objects.create(slug="esp-test", nome="ESP Test", attiva=True)
+        ConfigurazioneCarteCollezionabili.objects.create(
+            campagna=self.campagna,
+            accesso_modo=CARTE_ACCESSO_OPEN,
+            abilitata=True,
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna, user=self.user, ruolo=CAMPAGNA_ROLE_MASTER, attivo=True
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_senza_campagna_payload(self):
+        resp = self.client.post(
+            self.url,
+            {
+                "nome": "Espansione test",
+                "slug": "espansione-test",
+                "attiva": True,
+            },
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.data["nome"], "Espansione test")
+
+
+class CartaCatalogoOpenLockApiTests(APITestCase):
+    base_url = "/api/personaggi/api/staff/carte/catalogo/"
+
+    def setUp(self):
+        from personaggi.models import CAMPAGNA_ROLE_MASTER, CampagnaUtente
+
+        self.user = User.objects.create_user(username="open_lock_staff", password="x")
+        self.campagna = Campagna.objects.create(slug="open-lock", nome="OPEN Lock", attiva=True)
+        ConfigurazioneCarteCollezionabili.objects.create(
+            campagna=self.campagna,
+            accesso_modo=CARTE_ACCESSO_OPEN,
+            abilitata=True,
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna, user=self.user, ruolo=CAMPAGNA_ROLE_MASTER, attivo=True
+        )
+        self.carta = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            codice="LOCK-001",
+            nome="Carta Lock",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+            testo_gioco="Base",
+            testo_reliquiario="Rel base",
+            attacco=1,
+            salute=1,
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_open_blocca_modifica_gameplay(self):
+        resp = self.client.patch(
+            f"{self.base_url}{self.carta.id}/",
+            {"testo_gioco": "Nuovo testo gameplay"},
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("OPEN", str(resp.data))
+
+    def test_open_permette_modifica_reliquiario(self):
+        resp = self.client.patch(
+            f"{self.base_url}{self.carta.id}/",
+            {"testo_reliquiario": "Nuovo reliquiario"},
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.carta.refresh_from_db()
+        self.assertEqual(self.carta.testo_reliquiario, "Nuovo reliquiario")
 
 
 class KeywordCartaParametriTests(TestCase):
@@ -574,3 +679,66 @@ class ValidazioneMazzoDuelloTests(TestCase):
         )
         mazzo = next(m for m in res["mazzi"] if m["nome"] == "Test leader")
         self.assertEqual(mazzo["leader_carta_posseduta_id"], leader_id)
+
+    def test_blocca_carta_bandita(self):
+        ids = self._mazzo_valido_ids()
+        cp = CartaPosseduta.objects.select_related("carta").get(pk=ids[0])
+        cp.carta.bandita = True
+        cp.carta.ban_reason = "Carta troppo dominante"
+        cp.carta.save(update_fields=["bandita", "ban_reason", "updated_at"])
+        ok, errs = valida_mazzo_duello(ids, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("bandita" in e.lower() for e in errs))
+
+    def test_blocca_espansione_non_legale_duello(self):
+        ids = self._mazzo_valido_ids()
+        cp = CartaPosseduta.objects.select_related("carta__espansione").get(pk=ids[0])
+        esp = EspansioneCarte.objects.create(
+            campagna=self.campagna,
+            nome="No Duel",
+            slug="no-duel",
+            legale_duello=False,
+        )
+        cp.carta.espansione = esp
+        cp.carta.save(update_fields=["espansione", "updated_at"])
+        ok, errs = valida_mazzo_duello(ids, self.pg)
+        self.assertFalse(ok)
+        self.assertTrue(any("non legale" in e.lower() for e in errs))
+
+
+class CartaErrataRuntimeTests(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        from personaggi.carte_collezionabili_models import CartaErrata
+
+        self.user = User.objects.create_user(username="errata_user", password="x")
+        self.campagna = Campagna.objects.create(slug="errata-camp", nome="Errata Camp", attiva=True)
+        self.carta = CartaCollezionabile.objects.create(
+            campagna=self.campagna,
+            codice="ERR-001",
+            nome="Carta Errata",
+            tipo=CARTA_TIPO_PERSONAGGIO,
+            energia=CARTA_ENERGIA_MARZIALE,
+            rarita=CARTA_RARITA_COMUNE,
+            costo_gioco=3,
+            attacco=2,
+            salute=4,
+            iniziativa=1,
+            testo_gioco="Testo originale",
+        )
+        CartaErrata.objects.create(
+            campagna=self.campagna,
+            carta=self.carta,
+            effective_from=timezone.now(),
+            titolo="Nerf",
+            testo_gioco_override="Testo erratato",
+            costo_gioco_override=1,
+            attacco_override=1,
+        )
+
+    def test_gameplay_view_applica_errata_attiva(self):
+        eff = gameplay_view(self.carta)
+        self.assertEqual(eff["costo_gioco"], 1)
+        self.assertEqual(eff["attacco"], 1)
+        self.assertEqual(eff["testo_gioco"], "Testo erratato")
+        self.assertIsNotNone(eff["errata"])

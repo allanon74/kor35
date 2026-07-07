@@ -12,6 +12,7 @@ from personaggi.carte_collezionabili_models import (
     CARTE_ACCESSO_OFF,
     CARTE_ACCESSO_OPEN,
     CartaCollezionabile,
+    CartaErrata,
     ComboReliquiario,
     ConfigurazioneCarteCollezionabili,
     EspansioneCarte,
@@ -110,6 +111,11 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
             "immagine_url",
             "ordine",
             "attiva",
+            "in_vendita",
+            "vendita_dal",
+            "vendita_al",
+            "legale_duello",
+            "disclaimer_disattiva",
             "bustine_count",
             "carte_count",
         ]
@@ -118,6 +124,7 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
             "sync_id",
             "created_at",
             "updated_at",
+            "campagna",
             "immagine_url",
             "bustine_count",
             "carte_count",
@@ -144,6 +151,17 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
             attrs["slug"] = slugify(nome)[:80]
         if not attrs.get("slug"):
             raise serializers.ValidationError({"slug": "Slug obbligatorio."})
+        vendita_dal = attrs.get("vendita_dal")
+        vendita_al = attrs.get("vendita_al")
+        if self.instance:
+            if vendita_dal is None and "vendita_dal" not in attrs:
+                vendita_dal = self.instance.vendita_dal
+            if vendita_al is None and "vendita_al" not in attrs:
+                vendita_al = self.instance.vendita_al
+        if vendita_dal and vendita_al and vendita_dal > vendita_al:
+            raise serializers.ValidationError(
+                {"vendita_al": "La fine vendita deve essere successiva all'inizio vendita."}
+            )
         return attrs
 
 
@@ -193,6 +211,10 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             "tag_codici",
             "bonus_equip",
             "effect_scripts",
+            "legale_duello",
+            "bandita",
+            "ban_reason",
+            "layout_versione",
             "statistiche_reliquiario",
             "duplicabile",
             "immagine",
@@ -200,7 +222,7 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             "attiva",
             "ordine_set",
         ]
-        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "immagine_url", "espansione_nome", "tag_codici"]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna", "immagine_url", "espansione_nome", "tag_codici"]
 
     def get_tag_codici(self, obj):
         return [t.codice for t in obj.tags.filter(attiva=True).order_by("nome")]
@@ -241,6 +263,60 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
     def validate_tag_tematici(self, value):
         parsed = _parse_json_field(value, "tag_tematici")
         return parsed if parsed is not None else []
+
+    def validate(self, attrs):
+        bandita = attrs.get("bandita")
+        ban_reason = attrs.get("ban_reason")
+        if self.instance:
+            if bandita is None and "bandita" not in attrs:
+                bandita = self.instance.bandita
+            if ban_reason is None and "ban_reason" not in attrs:
+                ban_reason = self.instance.ban_reason
+        if bandita and not (ban_reason or "").strip():
+            raise serializers.ValidationError(
+                {"ban_reason": "Inserisci una motivazione ban quando la carta è bandita."}
+            )
+        if self.instance:
+            cfg = ConfigurazioneCarteCollezionabili.objects.filter(
+                campagna=self.instance.campagna
+            ).first()
+            accesso = cfg.accesso_modo if cfg else CARTE_ACCESSO_OFF
+            if accesso == CARTE_ACCESSO_OPEN:
+                locked_fields = {
+                    "tipo",
+                    "energia",
+                    "rarita",
+                    "costo_gioco",
+                    "attacco",
+                    "salute",
+                    "iniziativa",
+                    "testo_gioco",
+                    "effect_scripts",
+                    "tag_tematici",
+                    "tags",
+                    "legale_duello",
+                    "bandita",
+                    "ban_reason",
+                }
+                touched = []
+                for field in locked_fields:
+                    if field not in attrs:
+                        continue
+                    if field == "tags":
+                        touched.append("tag_ids")
+                        continue
+                    if attrs[field] != getattr(self.instance, field):
+                        touched.append(field)
+                if touched:
+                    raise serializers.ValidationError(
+                        {
+                            "detail": (
+                                "Campagna in OPEN: campi gameplay bloccati. "
+                                f"Campi non modificabili: {', '.join(sorted(set(touched)))}."
+                            )
+                        }
+                    )
+        return attrs
 
     @transaction.atomic
     def create(self, validated_data):
@@ -290,7 +366,7 @@ class ComboReliquiarioSerializer(serializers.ModelSerializer):
             "attiva",
             "statistiche",
         ]
-        read_only_fields = ["id", "sync_id", "created_at", "updated_at"]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna"]
 
     def validate_param_carte_codici(self, value):
         parsed = _parse_json_field(value, "param_carte_codici")
@@ -306,6 +382,35 @@ class ComboReliquiarioSerializer(serializers.ModelSerializer):
         combo = ComboReliquiario.objects.create(**validated_data)
         _save_condizione_stat_rows(ComboReliquiarioStatistica, "combo", combo, stats)
         return combo
+
+
+class CartaErrataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CartaErrata
+        fields = [
+            "id",
+            "sync_id",
+            "created_at",
+            "updated_at",
+            "campagna",
+            "carta",
+            "effective_from",
+            "attiva",
+            "titolo",
+            "descrizione",
+            "testo_gioco_override",
+            "costo_gioco_override",
+            "attacco_override",
+            "salute_override",
+            "iniziativa_override",
+            "effect_scripts_override",
+        ]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna"]
+
+    def validate(self, attrs):
+        if not attrs.get("effective_from") and not (self.instance and self.instance.effective_from):
+            raise serializers.ValidationError({"effective_from": "Data efficacia obbligatoria."})
+        return attrs
 
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -343,7 +448,7 @@ class BustinaCarteSerializer(serializers.ModelSerializer):
             "ordine",
             "qr_code_id",
         ]
-        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "qr_code_id", "espansione_nome"]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna", "qr_code_id", "espansione_nome"]
 
 
 class ConfigurazioneCarteCollezionabiliSerializer(serializers.ModelSerializer):
@@ -361,7 +466,7 @@ class ConfigurazioneCarteCollezionabiliSerializer(serializers.ModelSerializer):
             "max_bustine_giorno",
             "mercato_commissione_pct",
         ]
-        read_only_fields = ["id", "sync_id", "created_at", "updated_at"]
+        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna"]
 
     def validate(self, attrs):
         modo = attrs.get("accesso_modo")
