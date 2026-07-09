@@ -7876,6 +7876,7 @@ from personaggi.carte_platform_models import (  # noqa: E402, F401
     CarteArenaRuleset,
     CartePlatformGiocatore,
     CartePlatformExchangeJob,
+    CarteMsePackageImport,
 )
 
 # ============================================================================

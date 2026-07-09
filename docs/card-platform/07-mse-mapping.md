@@ -14,6 +14,21 @@ Fase export: **subset** sufficiente per stampa e scambio set con community MSE.
 | `.mse-style` | `CarteStudioTemplate` (`mse_style_riferimento`, `layout_spec`) |
 | `.mse-set` | `EspansioneCarte` + carte |
 
+## Funzionalita MSE verificate nel sorgente
+
+Dal sorgente/documentazione tecnica in `external/MagicSetEditor2/doc/type/`:
+
+- `game` (`doc/type/game.txt`): definisce campi carta/set, keyword modes, keyword param types.
+- `stylesheet` (`doc/type/stylesheet.txt`): collega un `game` e definisce look&feel (dpi, size, styling fields).
+- `set` (`doc/type/set.txt`): ha `game`, `stylesheet` default del set, `styling` per piu stylesheet e lista carte.
+
+Implicazione per KOR35 Card Studio:
+
+1. supportare **piu giochi** (es. `kor35`, `mtg`, `custom`) nello stesso backend;
+2. supportare **piu template** per lo stesso gioco;
+3. avere un **template default** per nuove carte (a livello gioco + override espansione);
+4. mantenere override per-carta (`CartaCollezionabile.studio_template`).
+
 ## Campi carta
 
 | Campo MSE (tipico) | KOR35 | Note |

@@ -118,6 +118,7 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
             "legale_duello",
             "disclaimer_disattiva",
             "gioco_definizione",
+            "default_studio_template",
             "studio_set_spec",
             "mse_set_riferimento",
             "bustine_count",
@@ -171,6 +172,14 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
     def validate_studio_set_spec(self, value):
         parsed = _parse_json_field(value, "studio_set_spec")
         return parsed if parsed is not None else {}
+
+    def validate_default_studio_template(self, value):
+        if value is None:
+            return None
+        campagna = self.instance.campagna if self.instance else self.context.get("campagna")
+        if campagna and value.campagna_id != campagna.id:
+            raise serializers.ValidationError("Template non appartenente alla campagna attiva.")
+        return value
 
 
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
@@ -300,6 +309,14 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"ban_reason": "Inserisci una motivazione ban quando la carta è bandita."}
             )
+
+        espansione = attrs.get("espansione", self.instance.espansione if self.instance else None)
+        studio_template = attrs.get("studio_template", self.instance.studio_template if self.instance else None)
+        if studio_template and espansione and espansione.campagna_id != studio_template.campagna_id:
+            raise serializers.ValidationError(
+                {"studio_template": "Template non compatibile con la campagna dell'espansione."}
+            )
+
         if self.instance:
             cfg = ConfigurazioneCarteCollezionabili.objects.filter(
                 campagna=self.instance.campagna
@@ -346,6 +363,22 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         stats = validated_data.pop("reliquiario_statistiche", [])
         tags = validated_data.pop("tags", None)
+        espansione = validated_data.get("espansione")
+        if not validated_data.get("studio_template"):
+            default_template = None
+            if espansione and espansione.default_studio_template_id:
+                default_template = espansione.default_studio_template
+            elif espansione and espansione.gioco_definizione_id:
+                default_template = (
+                    espansione.gioco_definizione.studio_templates.filter(
+                        is_default_for_new_cards=True,
+                        attivo=True,
+                    )
+                    .order_by("ordine", "nome")
+                    .first()
+                )
+            if default_template:
+                validated_data["studio_template"] = default_template
         carta = CartaCollezionabile.objects.create(**validated_data)
         if tags is not None:
             carta.tags.set(tags)

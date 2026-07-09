@@ -1,10 +1,13 @@
 """
 API staff Card Studio / Card Arena (predisposizione piattaforma).
 """
+import zipfile
+
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from gestione_plot.permissions import IsStaffOrMaster
@@ -18,6 +21,7 @@ from personaggi.carte_platform_models import (
     CarteStudioTemplate,
 )
 from personaggi.carte_platform_specs import build_playable_spec_from_carta
+from personaggi.mse_style_import import import_mse_style_package
 from personaggi.carte_collezionabili_models import CartaCollezionabile
 from personaggi.models import FEATURE_CARTE_COLLEZIONABILI
 from personaggi.serializers_carte_platform import (
@@ -81,6 +85,7 @@ class CarteGiocoDefinizioneStaffViewSet(viewsets.ModelViewSet):
                 campagna=campagna,
                 slug="default",
                 nome="Template standard",
+                is_default_for_new_cards=True,
                 layout_spec={"version": "1", "width_mm": 63, "height_mm": 88, "dpi": 300},
                 campi_schema={"version": "1", "mapping": {}},
             )
@@ -104,6 +109,110 @@ class CarteStudioTemplateStaffViewSet(viewsets.ModelViewSet):
                 {"gioco_definizione": "Crea prima una definizione gioco per la campagna."}
             )
         serializer.save(campagna=campagna, gioco_definizione=gioco)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-mse-style",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_mse_style(self, request):
+        """
+        Import package `.mse-style/.zip`, estrai asset grafici/non grafici
+        e crea/aggiorna un template studio.
+        """
+        campagna = _require_campagna(request)
+        up = request.FILES.get("file")
+        if not up:
+            raise DRFValidationError({"file": "File .mse-style/.zip obbligatorio."})
+        if not (up.name.endswith(".zip") or up.name.endswith(".mse-style")):
+            raise DRFValidationError({"file": "Estensione non valida: usare .zip o .mse-style."})
+
+        gioco_id = request.data.get("gioco_definizione")
+        if gioco_id:
+            gioco = CarteGiocoDefinizione.objects.filter(id=gioco_id, campagna=campagna).first()
+            if not gioco:
+                raise DRFValidationError({"gioco_definizione": "Gioco non trovato nella campagna attiva."})
+        else:
+            gioco = _get_gioco_for_campagna(campagna)
+            if not gioco:
+                raise DRFValidationError(
+                    {"gioco_definizione": "Crea prima una definizione gioco per la campagna."}
+                )
+
+        slug = (request.data.get("slug") or "").strip().lower().replace(" ", "-")
+        nome = (request.data.get("nome") or "").strip()
+        if not slug:
+            base = up.name.rsplit(".", 1)[0].lower().replace(" ", "-")
+            slug = f"mse-{base}"[:80]
+        if not nome:
+            nome = up.name.rsplit(".", 1)[0][:120]
+        base_slug = slug
+        idx = 2
+        while CarteStudioTemplate.objects.filter(
+            campagna=campagna, gioco_definizione=gioco, slug=slug
+        ).exists():
+            suffix = f"-{idx}"
+            slug = f"{base_slug[: max(1, 80 - len(suffix))]}{suffix}"
+            idx += 1
+        is_default = str(request.data.get("is_default_for_new_cards", "")).lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+        template = CarteStudioTemplate(
+            campagna=campagna,
+            gioco_definizione=gioco,
+            slug=slug,
+            nome=nome,
+            is_default_for_new_cards=is_default,
+            attivo=True,
+        )
+
+        try:
+            imported = import_mse_style_package(template=template, upload_file=up)
+        except zipfile.BadZipFile as exc:
+            raise DRFValidationError({"file": "Archivio non valido o corrotto."}) from exc
+
+        if imported.parsed_meta.get("full_name") and not request.data.get("nome"):
+            template.nome = imported.parsed_meta["full_name"][:120]
+
+        if imported.parsed_meta.get("game"):
+            campi_schema = dict(template.campi_schema or {})
+            campi_schema.setdefault("version", "1")
+            campi_schema.setdefault("mse_game", imported.parsed_meta["game"])
+            template.campi_schema = campi_schema
+
+        template.save()
+        if template.is_default_for_new_cards:
+            (
+                CarteStudioTemplate.objects.filter(gioco_definizione=gioco)
+                .exclude(pk=template.pk)
+                .update(is_default_for_new_cards=False)
+            )
+
+        return Response(
+            {
+                "template": CarteStudioTemplateSerializer(template, context={"request": request}).data,
+                "import_summary": {
+                    "assets_total": len(imported.assets_manifest),
+                    "images_total": len(
+                        [a for a in imported.assets_manifest if a.get("asset_type") == "image"]
+                    ),
+                    "text_total": len(
+                        [a for a in imported.assets_manifest if a.get("asset_type") == "text"]
+                    ),
+                    "binary_total": len(
+                        [a for a in imported.assets_manifest if a.get("asset_type") == "binary"]
+                    ),
+                    "extracted_root": imported.extracted_root,
+                    "parsed_meta": imported.parsed_meta,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class CarteArenaRulesetStaffViewSet(viewsets.ModelViewSet):

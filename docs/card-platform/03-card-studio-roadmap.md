@@ -47,7 +47,37 @@ Condividere con KOR35:
 | `GET/PATCH /api/staff/carte/catalogo/` | Carte |
 | `GET/POST /api/staff/carte/platform/gioco/` | Game def |
 | `GET/POST /api/staff/carte/platform/templates/` | Template |
+| `POST /api/staff/carte/platform/templates/import-mse-style/` | Import package `.mse-style/.zip` |
 | `POST /api/staff/carte/platform/gioco/{id}/bootstrap/` | Setup iniziale |
+
+### Import `.mse-style` e gestione file package
+
+L'endpoint `import-mse-style`:
+
+- salva il package originale in `mse_style_package`;
+- estrae **tutti** i file (grafici e non) sotto `MEDIA_ROOT/card_studio/mse_styles_extracted/<template_sync_id>/`;
+- genera `mse_assets_manifest` con `path`, `size`, `sha256`, `mime`, `asset_type` (`image|text|binary`);
+- aggiorna `mse_extracted_root` e `mse_style_riferimento`;
+- prova a leggere metadati base dal file `style` (`game`, `card width/height/dpi`) e li riflette in `layout_spec`.
+
+### Import massivo dataset MSE iniziale
+
+Per bootstrap da installazioni MSE esterne (es. `~/Scaricati/mse/`):
+
+```bash
+docker compose ... exec -T backend python manage.py import_mse_dataset \
+  --campagna-slug <slug_campagna> \
+  --source-root ~/Scaricati/mse
+```
+
+Regola ordine sorgenti: le sottocartelle vengono elaborate per primo carattere numerico
+(`1*`, poi `2*`, poi `3*`, poi `4*`...), e i package omonimi successivi fanno **overwrite**.
+
+Opzione analisi:
+
+```bash
+python manage.py import_mse_dataset --campagna-slug <slug> --source-root ~/Scaricati/mse --dry-run
+```
 
 ## Permessi
 

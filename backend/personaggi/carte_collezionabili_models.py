@@ -350,6 +350,14 @@ class EspansioneCarte(SyncableModel, models.Model):
         default="",
         help_text="Identificatore o path package .mse-set collegato.",
     )
+    default_studio_template = models.ForeignKey(
+        "personaggi.CarteStudioTemplate",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="espansioni_default",
+        help_text="Template predefinito per nuove carte in questa espansione.",
+    )
 
     class Meta:
         verbose_name = "Espansione carte"

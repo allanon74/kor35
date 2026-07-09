@@ -15,6 +15,14 @@ from django.db.models import Q
 from kor35.syncing import SyncableModel
 
 PLATFORM_VERSION_DEFAULT = "1.0.0"
+MODELLO_BASE_KOR35 = "kor35"
+MODELLO_BASE_MTG = "mtg"
+MODELLO_BASE_CUSTOM = "custom"
+MODELLO_BASE_CHOICES = [
+    (MODELLO_BASE_KOR35, "KOR35"),
+    (MODELLO_BASE_MTG, "Magic: The Gathering (MSE-compatible)"),
+    (MODELLO_BASE_CUSTOM, "Custom"),
+]
 
 MSE_EXPORT_MODE_KOR35 = "kor35"
 MSE_EXPORT_MODE_COMPAT = "mse_compat"
@@ -49,6 +57,23 @@ EXCHANGE_JOB_STATO_CHOICES = [
     (EXCHANGE_JOB_FAILED, "Fallito"),
 ]
 
+MSE_PACKAGE_STYLE = "mse-style"
+MSE_PACKAGE_GAME = "mse-game"
+MSE_PACKAGE_SET = "mse-set"
+MSE_PACKAGE_SYMBOL_FONT = "mse-symbol-font"
+MSE_PACKAGE_EXPORT_TEMPLATE = "mse-export-template"
+MSE_PACKAGE_INCLUDE = "mse-include"
+MSE_PACKAGE_LOCALE = "mse-locale"
+MSE_PACKAGE_TYPE_CHOICES = [
+    (MSE_PACKAGE_STYLE, "MSE Style"),
+    (MSE_PACKAGE_GAME, "MSE Game"),
+    (MSE_PACKAGE_SET, "MSE Set"),
+    (MSE_PACKAGE_SYMBOL_FONT, "MSE Symbol Font"),
+    (MSE_PACKAGE_EXPORT_TEMPLATE, "MSE Export Template"),
+    (MSE_PACKAGE_INCLUDE, "MSE Include"),
+    (MSE_PACKAGE_LOCALE, "MSE Locale"),
+]
+
 
 class CarteGiocoDefinizione(SyncableModel, models.Model):
     """
@@ -71,6 +96,13 @@ class CarteGiocoDefinizione(SyncableModel, models.Model):
         help_text="Identificatore stabile per URL/API future (es. sette-elegie).",
     )
     nome = models.CharField(max_length=120, help_text="Nome mostrato del gioco di carte.")
+    modello_base = models.CharField(
+        max_length=24,
+        choices=MODELLO_BASE_CHOICES,
+        default=MODELLO_BASE_KOR35,
+        db_index=True,
+        help_text="Preset modello regole/template (KOR35, MTG, custom).",
+    )
     descrizione = models.TextField(blank=True, default="")
     platform_version = models.CharField(
         max_length=16,
@@ -135,6 +167,23 @@ class CarteStudioTemplate(SyncableModel, models.Model):
         default="",
         help_text="Path o identificatore package .mse-style importato.",
     )
+    mse_style_package = models.FileField(
+        upload_to="card_studio/mse_styles/",
+        blank=True,
+        null=True,
+        help_text="Archivio originale .mse-style/.zip caricato.",
+    )
+    mse_assets_manifest = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Elenco file estratti dal package MSE con metadati (grafici e non).",
+    )
+    mse_extracted_root = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Path relativo media della directory estratta del template MSE.",
+    )
     layout_spec = models.JSONField(
         default=dict,
         blank=True,
@@ -144,6 +193,11 @@ class CarteStudioTemplate(SyncableModel, models.Model):
         default=dict,
         blank=True,
         help_text="Mappatura campi MSE ↔ campi CartaCollezionabile (studio_field_map_v1).",
+    )
+    is_default_for_new_cards = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Template default per nuove carte di questo gioco.",
     )
     attivo = models.BooleanField(default=True, db_index=True)
     ordine = models.PositiveSmallIntegerField(default=0)
@@ -319,3 +373,44 @@ class CartePlatformExchangeJob(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.tipo} ({self.stato})"
+
+
+class CarteMsePackageImport(SyncableModel, models.Model):
+    """
+    Registry package MSE importati (style, game, include, font, export, locale, set).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    campagna = models.ForeignKey(
+        "Campagna",
+        on_delete=models.CASCADE,
+        related_name="carte_mse_packages",
+    )
+    gioco_definizione = models.ForeignKey(
+        CarteGiocoDefinizione,
+        on_delete=models.CASCADE,
+        related_name="mse_packages",
+        null=True,
+        blank=True,
+    )
+    package_type = models.CharField(max_length=24, choices=MSE_PACKAGE_TYPE_CHOICES, db_index=True)
+    package_name = models.CharField(max_length=160, db_index=True)
+    source_priority = models.PositiveSmallIntegerField(default=999, db_index=True)
+    source_root = models.CharField(max_length=255, blank=True, default="")
+    source_path = models.CharField(max_length=255, blank=True, default="")
+    extracted_root = models.CharField(max_length=255, blank=True, default="")
+    parsed_meta = models.JSONField(default=dict, blank=True)
+    assets_manifest = models.JSONField(default=list, blank=True)
+    imported = models.BooleanField(default=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Package MSE importato"
+        verbose_name_plural = "Package MSE importati"
+        ordering = ["package_type", "package_name"]
+        unique_together = [("campagna", "package_type", "package_name")]
+
+    def __str__(self):
+        return f"{self.package_type}:{self.package_name}"

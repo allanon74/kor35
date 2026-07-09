@@ -24,6 +24,7 @@ class CarteGiocoDefinizioneSerializer(serializers.ModelSerializer):
             "campagna",
             "slug",
             "nome",
+            "modello_base",
             "descrizione",
             "platform_version",
             "studio_abilitato",
@@ -51,12 +52,24 @@ class CarteStudioTemplateSerializer(serializers.ModelSerializer):
             "slug",
             "nome",
             "mse_style_riferimento",
+            "mse_style_package",
+            "mse_assets_manifest",
+            "mse_extracted_root",
             "layout_spec",
             "campi_schema",
+            "is_default_for_new_cards",
             "attivo",
             "ordine",
         ]
-        read_only_fields = ["id", "sync_id", "created_at", "updated_at", "campagna"]
+        read_only_fields = [
+            "id",
+            "sync_id",
+            "created_at",
+            "updated_at",
+            "campagna",
+            "mse_assets_manifest",
+            "mse_extracted_root",
+        ]
 
     def validate_layout_spec(self, value):
         parsed = _parse_json_field(value, "layout_spec")
@@ -65,6 +78,28 @@ class CarteStudioTemplateSerializer(serializers.ModelSerializer):
     def validate_campi_schema(self, value):
         parsed = _parse_json_field(value, "campi_schema")
         return parsed if parsed is not None else {}
+
+    def create(self, validated_data):
+        is_default = validated_data.get("is_default_for_new_cards", False)
+        template = super().create(validated_data)
+        if is_default:
+            (
+                CarteStudioTemplate.objects.filter(gioco_definizione=template.gioco_definizione)
+                .exclude(pk=template.pk)
+                .update(is_default_for_new_cards=False)
+            )
+        return template
+
+    def update(self, instance, validated_data):
+        is_default = validated_data.get("is_default_for_new_cards", instance.is_default_for_new_cards)
+        template = super().update(instance, validated_data)
+        if is_default:
+            (
+                CarteStudioTemplate.objects.filter(gioco_definizione=template.gioco_definizione)
+                .exclude(pk=template.pk)
+                .update(is_default_for_new_cards=False)
+            )
+        return template
 
 
 class CarteArenaRulesetSerializer(serializers.ModelSerializer):
