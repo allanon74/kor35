@@ -40,6 +40,10 @@ location = /cardeditor/index.html {
     expires -1;
 }
 
+location = /cardeditor {
+    return 301 /cardeditor/;
+}
+
 location ^~ /cardeditor/ {
     alias /usr/share/nginx/html/cardeditor/;
     index index.html;

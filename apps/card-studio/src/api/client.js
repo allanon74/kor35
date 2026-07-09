@@ -3,6 +3,14 @@ const STAFF_PLATFORM = `${STAFF_CARTE}/platform`;
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH || "/login";
 let loginRedirectTriggered = false;
 
+function getAuthToken() {
+  return String(localStorage.getItem("kor35_token") || "").trim();
+}
+
+function getActiveCampaignSlug() {
+  return String(localStorage.getItem("kor35_active_campaign") || "").trim().toLowerCase();
+}
+
 function redirectToLogin() {
   if (loginRedirectTriggered) return;
   loginRedirectTriggered = true;
@@ -12,17 +20,26 @@ function redirectToLogin() {
 }
 
 async function fetchJson(url, options = {}) {
+  const token = getAuthToken();
+  const activeCampaign = getActiveCampaignSlug();
+  const authHeaders = token ? { Authorization: `Token ${token}` } : {};
+  const campaignHeaders = activeCampaign ? { "X-Campagna": activeCampaign } : {};
   const res = await fetch(url, {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
+      ...campaignHeaders,
       ...(options.headers || {}),
     },
     ...options,
   });
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     redirectToLogin();
     throw new Error("Sessione non valida o permessi insufficienti.");
+  }
+  if (res.status === 403) {
+    throw new Error("Permessi insufficienti: serve un account staff abilitato.");
   }
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
@@ -88,14 +105,24 @@ export async function importMseStyleTemplate({
   if (slug) fd.append("slug", slug);
   fd.append("is_default_for_new_cards", is_default_for_new_cards ? "true" : "false");
 
+  const token = getAuthToken();
+  const activeCampaign = getActiveCampaignSlug();
+  const headers = {};
+  if (token) headers.Authorization = `Token ${token}`;
+  if (activeCampaign) headers["X-Campagna"] = activeCampaign;
+
   const res = await fetch(`${STAFF_PLATFORM}/templates/import-mse-style/`, {
     method: "POST",
     credentials: "include",
+    headers,
     body: fd,
   });
-  if (res.status === 401 || res.status === 403) {
+  if (res.status === 401) {
     redirectToLogin();
     throw new Error("Sessione non valida o permessi insufficienti.");
+  }
+  if (res.status === 403) {
+    throw new Error("Permessi insufficienti: serve un account staff abilitato.");
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
