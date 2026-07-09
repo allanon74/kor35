@@ -1,5 +1,15 @@
 const STAFF_CARTE = "/api/personaggi/api/staff/carte";
 const STAFF_PLATFORM = `${STAFF_CARTE}/platform`;
+const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH || "/login";
+let loginRedirectTriggered = false;
+
+function redirectToLogin() {
+  if (loginRedirectTriggered) return;
+  loginRedirectTriggered = true;
+  const next = window.location.pathname + window.location.search + window.location.hash;
+  const sep = LOGIN_PATH.includes("?") ? "&" : "?";
+  window.location.assign(`${LOGIN_PATH}${sep}next=${encodeURIComponent(next)}`);
+}
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, {
@@ -11,6 +21,7 @@ async function fetchJson(url, options = {}) {
     ...options,
   });
   if (res.status === 401 || res.status === 403) {
+    redirectToLogin();
     throw new Error("Sessione non valida o permessi insufficienti.");
   }
   if (res.status === 204) return null;
@@ -82,6 +93,10 @@ export async function importMseStyleTemplate({
     credentials: "include",
     body: fd,
   });
+  if (res.status === 401 || res.status === 403) {
+    redirectToLogin();
+    throw new Error("Sessione non valida o permessi insufficienti.");
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data?.detail || data?.error || `Import fallito (${res.status})`);

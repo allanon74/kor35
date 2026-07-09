@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -47,6 +47,8 @@ help:
 	@echo ""
 	@echo "Dopo modifiche al codice (stack già avviato):"
 	@echo "  make restart-fe ENV=dev-home # rebuild React + riavvio container nginx (frontend)"
+	@echo "  make card-editor-build       # build app separata Card Editor in /cardeditor/"
+	@echo "  make card-editor-dev ENV=dev-office # avvio Vite Card Editor con proxy API ambiente"
 	@echo "  make restart-fe ENV=prod     # su prod/mirror: niente npm locale; solo dir dati + restart frontend (statici da CI/rsync)"
 	@echo "  make restart-fe-pilot ENV=dev-home # build console pilota e reload nginx (no npm in prod)"
 	@echo "  make pilot-tick ENV=dev-home  # avanza motore pilotaggio (one-shot)"
@@ -55,6 +57,8 @@ help:
 	@echo "  make pilot-tick-stop ENV=dev-home # disabilita tick runtime (flag)"
 	@echo "  make seed-componenti-nave ENV=dev-home  # placeholder catalogo 10 componenti (once per nodo)"
 	@echo "  make seed-carte-esempio ENV=dev-home    # 20 carte demo Sette Elegie + keyword MVP + combo reliquiario"
+	@echo "  make import-mse-dataset ENV=dev-office CAMPAGNA_SLUG=<slug> # import massivo ~/Scaricati/mse"
+	@echo "  make import-mse-dataset-dry-run ENV=dev-office CAMPAGNA_SLUG=<slug> # anteprima senza scrivere"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make deploy-be ENV=prod      # rebuild backend/daphne + restart + migrate + collectstatic"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
@@ -192,8 +196,47 @@ restart-fe:
 		./scripts/setup_wsl_pi_like.sh --skip-frontend-build; \
 	else \
 		./scripts/setup_wsl_pi_like.sh; \
+		$(MAKE) card-editor-build ENV="$(ENV)"; \
 	fi
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$(CURDIR)/backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml restart frontend
+
+# Build app separata Card Editor e copia statici in nginx /cardeditor/
+card-editor-build:
+	@if [ ! -d "$(CURDIR)/apps/card-studio" ]; then \
+		echo "apps/card-studio non presente, skip."; \
+		exit 0; \
+	fi
+	cd "$(CURDIR)/apps/card-studio" && (npm ci || npm install) && npm run build
+	mkdir -p "$(CURDIR)/config/docker/nginx-docker/react_build/cardeditor"
+	find "$(CURDIR)/config/docker/nginx-docker/react_build/cardeditor" -mindepth 1 -delete 2>/dev/null || true
+	cp -R "$(CURDIR)/apps/card-studio/dist/." "$(CURDIR)/config/docker/nginx-docker/react_build/cardeditor/"
+
+# Dev server locale Card Editor con proxy verso frontend nginx del profilo
+card-editor-dev:
+	@TARGET=http://127.0.0.1:8080; \
+	if [ "$(ENV)" = "dev-office" ]; then TARGET=http://127.0.0.1:8081; fi; \
+	if [ "$(ENV)" = "prod" ]; then TARGET=http://127.0.0.1:8080; fi; \
+	echo "Card Editor dev proxy target: $$TARGET"; \
+	cd "$(CURDIR)/apps/card-studio" && VITE_API_PROXY_TARGET=$$TARGET npm run dev
+
+# Import massivo dataset MSE (ordine cartelle 1->2->3->4 con overwrite)
+import-mse-dataset:
+	@if [ -z "$(CAMPAGNA_SLUG)" ]; then \
+		echo "Errore: specifica CAMPAGNA_SLUG=<slug>"; \
+		exit 1; \
+	fi
+	mkdir -p "$(CURDIR)/.runtime-state/mse_dataset"
+	cp -a "$$HOME/Scaricati/mse/." "$(CURDIR)/.runtime-state/mse_dataset/"
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py import_mse_dataset --campagna-slug "$(CAMPAGNA_SLUG)" --source-root /app/runtime-state/mse_dataset
+
+import-mse-dataset-dry-run:
+	@if [ -z "$(CAMPAGNA_SLUG)" ]; then \
+		echo "Errore: specifica CAMPAGNA_SLUG=<slug>"; \
+		exit 1; \
+	fi
+	mkdir -p "$(CURDIR)/.runtime-state/mse_dataset"
+	cp -a "$$HOME/Scaricati/mse/." "$(CURDIR)/.runtime-state/mse_dataset/"
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py import_mse_dataset --campagna-slug "$(CAMPAGNA_SLUG)" --source-root /app/runtime-state/mse_dataset --dry-run
 
 # Riavvia backend + daphne così Gunicorn/Daphne carica le modifiche ai file Python (bind-mount backend).
 restart-be:

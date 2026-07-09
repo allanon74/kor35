@@ -62,7 +62,32 @@ L'endpoint `import-mse-style`:
 
 ### Import massivo dataset MSE iniziale
 
-Per bootstrap da installazioni MSE esterne (es. `~/Scaricati/mse/`):
+Per bootstrap da installazioni MSE esterne.
+
+Sorgente prevista lato host dev (fuori container):
+
+- `~/Scaricati/mse/`
+  - `1_*`
+  - `2_*`
+  - `3_*`
+  - `4_*`
+
+Prima del comando, i contenuti sorgente vengono copiati in workspace:
+
+- host: `./.runtime-state/mse_dataset/`
+- container backend: `/app/runtime-state/mse_dataset/`
+
+Target make consigliati:
+
+```bash
+# Dry-run (nessuna scrittura DB/media)
+make import-mse-dataset-dry-run ENV=dev-office CAMPAGNA_SLUG=<slug_campagna>
+
+# Import reale
+make import-mse-dataset ENV=dev-office CAMPAGNA_SLUG=<slug_campagna>
+```
+
+Comando Django equivalente (se vuoi lanciarlo manualmente):
 
 ```bash
 docker compose ... exec -T backend python manage.py import_mse_dataset \
@@ -72,12 +97,6 @@ docker compose ... exec -T backend python manage.py import_mse_dataset \
 
 Regola ordine sorgenti: le sottocartelle vengono elaborate per primo carattere numerico
 (`1*`, poi `2*`, poi `3*`, poi `4*`...), e i package omonimi successivi fanno **overwrite**.
-
-Opzione analisi:
-
-```bash
-python manage.py import_mse_dataset --campagna-slug <slug> --source-root ~/Scaricati/mse --dry-run
-```
 
 ## Permessi
 

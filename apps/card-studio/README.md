@@ -33,3 +33,8 @@ Output: `apps/card-studio/dist/` (da servire su `/cardeditor/` via nginx).
 - `/api/personaggi/api/staff/carte/platform/templates/`
 
 Auth: sessione Django (`credentials: include`).
+
+Se la sessione non e' valida (`401/403`), il client reindirizza automaticamente a:
+
+- default: `/login?next=/cardeditor/...`
+- override: env `VITE_LOGIN_PATH`

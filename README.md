@@ -12,6 +12,7 @@ sito kor35
 - [Sviluppo locale in WSL](#sviluppo-locale-in-wsl)
 - [Setup Da Zero: Deploy Automatico GitHub](#setup-da-zero-deploy-automatico-github)
 - [Setup Ambienti Di Sviluppo (prima di `make`)](#setup-ambienti-di-sviluppo-prima-di-make)
+- [Card Editor (MSE-first)](#card-editor-mse-first)
 - [Appendice: Comandi rapidi quotidiani](#appendice-comandi-rapidi-quotidiani)
 - [Transizione post-merge (docker → main)](#transizione-post-merge-docker--main)
 - [Git: merge in `main` e riallineamento branch](#git-merge-in-main-e-riallineamento-branch)
@@ -898,3 +899,55 @@ Cleanup legacy (vecchio stack WSL):
 ```bash
 make cleanup-legacy
 ```
+
+## Card Editor (MSE-first)
+
+Card Editor e' una web app separata in `apps/card-studio/` (build Vite), servita da nginx sotto path:
+
+- `http://127.0.0.1:8080/cardeditor/` (`ENV=dev-home`)
+- `http://127.0.0.1:8081/cardeditor/` (`ENV=dev-office`)
+
+### Build e integrazione Make
+
+- `make restart-fe ENV=<profilo>` **include anche** la build del Card Editor (`card-editor-build`) per `dev-home`/`dev-office`.
+- `make restart ENV=<profilo>` include `restart-fe`, quindi include anche Card Editor negli stessi profili.
+
+Target dedicati:
+
+```bash
+make card-editor-build ENV=dev-office
+make card-editor-dev ENV=dev-office
+```
+
+### Import dataset MSE (massivo, ordine 1->2->3->4)
+
+Sorgente host prevista:
+
+- `~/Scaricati/mse/`
+  - `1_*`
+  - `2_*`
+  - `3_*`
+  - `4_*`
+
+Copia operativa automatica:
+
+- host -> `./.runtime-state/mse_dataset/`
+- container backend -> `/app/runtime-state/mse_dataset/`
+
+Comandi Make:
+
+```bash
+# preview senza scrivere DB/media
+make import-mse-dataset-dry-run ENV=dev-office CAMPAGNA_SLUG=<slug_campagna>
+
+# import reale (sovrascrive package omonimi importati da sorgenti precedenti)
+make import-mse-dataset ENV=dev-office CAMPAGNA_SLUG=<slug_campagna>
+```
+
+### Login / sessione
+
+Card Editor usa la stessa sessione Django (`credentials: include`) e API staff.
+
+- Se sei gia loggato come staff: funziona direttamente.
+- Se non sei loggato (o senza permessi): al momento mostra errore "Sessione non valida o permessi insufficienti".
+- Redirect automatico alla pagina login **non ancora implementato** in Card Editor separato.
