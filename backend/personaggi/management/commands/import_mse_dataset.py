@@ -19,6 +19,8 @@ from personaggi.carte_platform_models import CarteMsePackageImport
 from personaggi.mse_style_import import (
     import_generic_package_directory,
     import_mse_style_directory,
+    parse_mse_game_spec,
+    parse_generic_package_meta,
 )
 from personaggi.models import Campagna
 
@@ -52,6 +54,14 @@ def _guess_model_from_name(name: str) -> str:
     if "kor35" in s:
         return "kor35"
     return "custom"
+
+
+def _norm_game_key(raw: str) -> str:
+    return slugify((raw or "").strip().lower())[:80]
+
+
+def _guess_model_from_game_name(game_name: str) -> str:
+    return _guess_model_from_name(game_name or "")
 
 
 def _read_style_meta(style_dir: Path) -> tuple[str, str]:
@@ -114,38 +124,102 @@ class Command(BaseCommand):
         if options["dry_run"]:
             self.stdout.write(self.style.WARNING("Modalità dry-run: nessuna scrittura."))
 
+        game_map: dict[str, CarteGiocoDefinizione] = {}
+
+        def resolve_game_for_package(
+            *,
+            package_path: Path,
+            package_type: str,
+            parsed_meta: dict | None = None,
+            fallback_name: str = "",
+        ):
+            parsed_meta = parsed_meta or {}
+            game_name = (parsed_meta.get("game") or fallback_name or "").strip()
+            if not game_name:
+                game_name = "KOR35 imported"
+            game_key = _norm_game_key(game_name)
+            if not game_key:
+                game_key = "kor35-imported"
+            modello = _guess_model_from_game_name(game_name)
+            game_slug = game_key
+
+            if options["dry_run"]:
+                self.stdout.write(
+                    f"DRY game resolve: pkg={package_path.name} type={package_type} game={game_name} slug={game_slug} model={modello}"
+                )
+                return None
+
+            if game_key in game_map:
+                return game_map[game_key]
+
+            gioco = (
+                CarteGiocoDefinizione.objects.filter(campagna=campagna, slug=game_slug).first()
+                or CarteGiocoDefinizione.objects.filter(
+                    campagna=campagna, mse_game_name__iexact=game_name
+                ).first()
+            )
+            if not gioco:
+                base_slug = game_slug or "mse-game"
+                idx = 2
+                while CarteGiocoDefinizione.objects.filter(campagna=campagna, slug=game_slug).exists():
+                    suffix = f"-{idx}"
+                    game_slug = f"{base_slug[: max(1, 80 - len(suffix))]}{suffix}"
+                    idx += 1
+                gioco = CarteGiocoDefinizione.objects.create(
+                    campagna=campagna,
+                    slug=game_slug,
+                    nome=game_name[:120] or package_path.stem[:120],
+                    modello_base=modello,
+                    studio_abilitato=True,
+                    arena_abilitata=False,
+                    mse_game_name=game_name[:120],
+                )
+                summary["giochi_created"] += 1
+            else:
+                to_update = []
+                if game_name and gioco.mse_game_name != game_name[:120]:
+                    gioco.mse_game_name = game_name[:120]
+                    to_update.append("mse_game_name")
+                if modello and gioco.modello_base != modello:
+                    gioco.modello_base = modello
+                    to_update.append("modello_base")
+                if to_update:
+                    to_update.append("updated_at")
+                    gioco.save(update_fields=to_update)
+                    summary["giochi_updated"] += 1
+            game_map[game_key] = gioco
+            return gioco
+
         for src in source_dirs:
             self.stdout.write(self.style.HTTP_INFO(f"\n[SORGENTE] {src.name}"))
             for pkg in _iter_packages(src):
-                gioco = CarteGiocoDefinizione.objects.filter(campagna=campagna).first()
                 suffix = next((s for s in PACKAGE_SUFFIXES if pkg.name.endswith(s)), "")
                 summary[f"seen{suffix}"] += 1
                 pkg_type = suffix.lstrip(".")
                 if suffix == ".mse-style":
                     short_name, full_name = _read_style_meta(pkg)
                     slug = slugify(short_name)[:80] or slugify(pkg.stem)[:80] or "style"
-                    modello = _guess_model_from_name(pkg.name)
+                    style_meta = parse_generic_package_meta(
+                        "mse-style",
+                        (pkg / "style").read_text(encoding="utf-8", errors="replace")
+                        if (pkg / "style").exists()
+                        else "",
+                    )
+                    game_hint = style_meta.get("game") or full_name or short_name or pkg.stem
+                    modello = _guess_model_from_game_name(game_hint)
                     if options["dry_run"]:
-                        self.stdout.write(f"DRY style: {pkg} -> slug={slug}, model={modello}")
+                        self.stdout.write(
+                            f"DRY style: {pkg} -> slug={slug}, model={modello}, game={game_hint}"
+                        )
                         summary["dry_style"] += 1
                         continue
 
-                    gioco = CarteGiocoDefinizione.objects.filter(campagna=campagna).first()
-                    if not gioco:
-                        gioco = CarteGiocoDefinizione.objects.create(
-                            campagna=campagna,
-                            slug="mse-imported",
-                            nome=f"{modello.upper()} imported",
-                            modello_base=modello,
-                            studio_abilitato=True,
-                            arena_abilitata=False,
-                        )
-                        summary["giochi_created"] += 1
-                    elif gioco.modello_base == "kor35" and modello != "kor35":
-                        # Primo import non-KOR35 può convertire la definizione bootstrap.
-                        gioco.modello_base = modello
-                        gioco.save(update_fields=["modello_base", "updated_at"])
-                        summary["giochi_model_promoted"] += 1
+                    gioco = resolve_game_for_package(
+                        package_path=pkg,
+                        package_type=pkg_type,
+                        parsed_meta=style_meta,
+                        fallback_name=full_name or short_name,
+                    )
 
                     template = CarteStudioTemplate.objects.filter(
                         campagna=campagna,
@@ -180,6 +254,31 @@ class Command(BaseCommand):
                         package_type=pkg_type,
                         destination_root_rel=dest_rel,
                     )
+                    if suffix == ".mse-game":
+                        game_root = pkg / "game"
+                        if game_root.exists():
+                            game_text = game_root.read_text(encoding="utf-8", errors="replace")
+                            parsed_meta = {**parsed_meta, "game_spec": parse_mse_game_spec(game_text)}
+                    gioco = resolve_game_for_package(
+                        package_path=pkg,
+                        package_type=pkg_type,
+                        parsed_meta=parsed_meta,
+                        fallback_name=(
+                            parsed_meta.get("full_name")
+                            or parsed_meta.get("short_name")
+                            or pkg.stem
+                        ),
+                    )
+                    if suffix == ".mse-game" and gioco:
+                        merged_meta = dict(gioco.meta or {})
+                        if parsed_meta.get("game_spec"):
+                            merged_meta["mse_game_spec"] = parsed_meta["game_spec"]
+                        if parsed_meta.get("version"):
+                            merged_meta["mse_game_version"] = parsed_meta["version"]
+                        if merged_meta != (gioco.meta or {}):
+                            gioco.meta = merged_meta
+                            gioco.save(update_fields=["meta", "updated_at"])
+                            summary["giochi_spec_updated"] += 1
                     obj, created = CarteMsePackageImport.objects.update_or_create(
                         campagna=campagna,
                         package_type=pkg_type,

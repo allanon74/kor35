@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "hooks": {
+    "workspaceOpen": [
+      { "command": ".cursor/hooks/sync-personal-agents.sh" }
+    ]
+  }
+}

@@ -152,6 +152,7 @@ router.register(r'staff/carte/combo-reliquiario', views_carte.ComboReliquiarioSt
 router.register(r'staff/carte/errata', views_carte.CartaErrataStaffViewSet, basename='staff-carte-errata')
 router.register(r'staff/carte/platform/gioco', views_carte_platform.CarteGiocoDefinizioneStaffViewSet, basename='staff-carte-platform-gioco')
 router.register(r'staff/carte/platform/templates', views_carte_platform.CarteStudioTemplateStaffViewSet, basename='staff-carte-platform-templates')
+router.register(r'staff/carte/platform/packages', views_carte_platform.CarteMsePackageImportStaffViewSet, basename='staff-carte-platform-packages')
 router.register(r'staff/carte/platform/ruleset', views_carte_platform.CarteArenaRulesetStaffViewSet, basename='staff-carte-platform-ruleset')
 router.register(r'staff/carte/platform/giocatori', views_carte_platform.CartePlatformGiocatoreStaffViewSet, basename='staff-carte-platform-giocatori')
 router.register(r'staff/carte/platform/jobs', views_carte_platform.CartePlatformExchangeJobStaffViewSet, basename='staff-carte-platform-jobs')

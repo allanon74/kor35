@@ -16,10 +16,13 @@ from personaggi.carte_platform_models import (
     EXCHANGE_JOB_PENDING,
     CarteArenaRuleset,
     CarteGiocoDefinizione,
+    CarteMsePackageImport,
     CartePlatformExchangeJob,
     CartePlatformGiocatore,
     CarteStudioTemplate,
+    MODELLO_BASE_KOR35,
 )
+from personaggi.mse_kor35_game_spec import merge_kor35_game_meta
 from personaggi.carte_platform_specs import build_playable_spec_from_carta
 from personaggi.mse_style_import import import_mse_style_package
 from personaggi.carte_collezionabili_models import CartaCollezionabile
@@ -27,6 +30,7 @@ from personaggi.models import FEATURE_CARTE_COLLEZIONABILI
 from personaggi.serializers_carte_platform import (
     CarteArenaRulesetSerializer,
     CarteGiocoDefinizioneSerializer,
+    CarteMsePackageImportSerializer,
     CartePlatformExchangeJobSerializer,
     CartePlatformGiocatoreSerializer,
     CarteStudioTemplateSerializer,
@@ -42,7 +46,10 @@ def _require_campagna(request):
 
 
 def _get_gioco_for_campagna(campagna):
-    return CarteGiocoDefinizione.objects.filter(campagna=campagna).first()
+    qs = CarteGiocoDefinizione.objects.filter(campagna=campagna).order_by("nome")
+    if qs.count() == 1:
+        return qs.first()
+    return None
 
 
 class CarteGiocoDefinizioneStaffViewSet(viewsets.ModelViewSet):
@@ -55,10 +62,6 @@ class CarteGiocoDefinizioneStaffViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         campagna = _require_campagna(self.request)
-        if CarteGiocoDefinizione.objects.filter(campagna=campagna).exists():
-            raise DRFValidationError(
-                {"campagna": "Esiste già una definizione gioco per questa campagna."}
-            )
         serializer.save(campagna=campagna)
 
     @action(detail=True, methods=["post"], url_path="bootstrap")
@@ -90,6 +93,12 @@ class CarteGiocoDefinizioneStaffViewSet(viewsets.ModelViewSet):
                 campi_schema={"version": "1", "mapping": {}},
             )
             created.append("studio_template")
+        if gioco.modello_base == MODELLO_BASE_KOR35:
+            merged_meta = merge_kor35_game_meta(gioco.meta)
+            if merged_meta != (gioco.meta or {}):
+                gioco.meta = merged_meta
+                gioco.save(update_fields=["meta", "updated_at"])
+                created.append("kor35_mse_game_spec")
         return Response({"created": created, "gioco_id": str(gioco.id)})
 
 
@@ -106,7 +115,11 @@ class CarteStudioTemplateStaffViewSet(viewsets.ModelViewSet):
         gioco = serializer.validated_data.get("gioco_definizione") or _get_gioco_for_campagna(campagna)
         if not gioco:
             raise DRFValidationError(
-                {"gioco_definizione": "Crea prima una definizione gioco per la campagna."}
+                {
+                    "gioco_definizione": (
+                        "Specifica gioco_definizione: la campagna non ha un unico gioco predefinito."
+                    )
+                }
             )
         serializer.save(campagna=campagna, gioco_definizione=gioco)
 
@@ -137,7 +150,11 @@ class CarteStudioTemplateStaffViewSet(viewsets.ModelViewSet):
             gioco = _get_gioco_for_campagna(campagna)
             if not gioco:
                 raise DRFValidationError(
-                    {"gioco_definizione": "Crea prima una definizione gioco per la campagna."}
+                    {
+                        "gioco_definizione": (
+                            "Specifica gioco_definizione: la campagna non ha un unico gioco predefinito."
+                        )
+                    }
                 )
 
         slug = (request.data.get("slug") or "").strip().lower().replace(" ", "-")
@@ -215,6 +232,19 @@ class CarteStudioTemplateStaffViewSet(viewsets.ModelViewSet):
         )
 
 
+class CarteMsePackageImportStaffViewSet(viewsets.ReadOnlyModelViewSet):
+    """Registry package MSE importati (per package choice nel Card Studio)."""
+
+    permission_classes = [IsStaffOrMaster]
+    serializer_class = CarteMsePackageImportSerializer
+
+    def get_queryset(self):
+        qs = CarteMsePackageImport.objects.filter(imported=True).select_related(
+            "campagna", "gioco_definizione"
+        )
+        return _campaign_feature_filter(self.request, qs, FEATURE_CARTE_COLLEZIONABILI)
+
+
 class CarteArenaRulesetStaffViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrMaster]
     serializer_class = CarteArenaRulesetSerializer
@@ -228,7 +258,11 @@ class CarteArenaRulesetStaffViewSet(viewsets.ModelViewSet):
         gioco = serializer.validated_data.get("gioco_definizione") or _get_gioco_for_campagna(campagna)
         if not gioco:
             raise DRFValidationError(
-                {"gioco_definizione": "Crea prima una definizione gioco per la campagna."}
+                {
+                    "gioco_definizione": (
+                        "Specifica gioco_definizione: la campagna non ha un unico gioco predefinito."
+                    )
+                }
             )
         if hasattr(gioco, "arena_ruleset"):
             raise DRFValidationError(
@@ -252,7 +286,11 @@ class CartePlatformGiocatoreStaffViewSet(viewsets.ModelViewSet):
         gioco = serializer.validated_data.get("gioco_definizione") or _get_gioco_for_campagna(campagna)
         if not gioco:
             raise DRFValidationError(
-                {"gioco_definizione": "Crea prima una definizione gioco per la campagna."}
+                {
+                    "gioco_definizione": (
+                        "Specifica gioco_definizione: la campagna non ha un unico gioco predefinito."
+                    )
+                }
             )
         serializer.save(campagna=campagna, gioco_definizione=gioco)
 
@@ -273,7 +311,11 @@ class CartePlatformExchangeJobStaffViewSet(viewsets.ModelViewSet):
         gioco = serializer.validated_data.get("gioco_definizione") or _get_gioco_for_campagna(campagna)
         if not gioco:
             raise DRFValidationError(
-                {"gioco_definizione": "Crea prima una definizione gioco per la campagna."}
+                {
+                    "gioco_definizione": (
+                        "Specifica gioco_definizione: la campagna non ha un unico gioco predefinito."
+                    )
+                }
             )
         serializer.save(
             campagna=campagna,

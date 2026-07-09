@@ -1,0 +1,52 @@
+---
+description: Sync subagent Cursor personali nel repo (manifest + sync_to_project)
+globs: .cursor/agents/**,.cursor/agents-sync.manifest.json,scripts/sync_cursor_agents.*
+alwaysApply: false
+---
+
+# Sync subagent Cursor nel progetto
+
+Cursor **non** sincronizza `~/.cursor/agents/` tra PC. Per portare subagent personali nel repo (Git → altri PC / cloud agents):
+
+## Marcare un subagent come sincronizzabile
+
+In `~/.cursor/agents/<nome>.md`, aggiungi nel frontmatter YAML (campo custom, ignorato da Cursor):
+
+```yaml
+sync_to_project: true
+```
+
+Oppure elenca il nome in `.cursor/agents-sync.manifest.json`:
+
+```json
+{
+  "include_marked_global": true,
+  "agents": ["nome-subagent"]
+}
+```
+
+- `include_marked_global: true` — importa tutti i globali con `sync_to_project: true`
+- `agents` — nomi espliciti per questo progetto (anche senza flag globale)
+
+## Eseguire la copia
+
+```bash
+make cursor-agents-sync
+# oppure
+./scripts/sync_cursor_agents.sh
+./scripts/sync_cursor_agents.sh --dry-run
+./scripts/sync_cursor_agents.sh --force
+```
+
+Destinazione: `.cursor/agents/<nome>.md` (committare in Git).
+
+All'apertura workspace, l'hook `workspaceOpen` in `.cursor/hooks.json` tenta la sync in automatico.
+
+## Quando l'Agent deve intervenire
+
+Se l'utente chiede di sincronizzare subagent, o modifica manifest / flag `sync_to_project`:
+
+1. Esegui `./scripts/sync_cursor_agents.sh` (o `--dry-run` prima se incerto).
+2. Verifica i file in `.cursor/agents/` e proponi commit se appropriato.
+
+Non editare manualmente copie in `.cursor/agents/` se la sorgente è globale: aggiorna `~/.cursor/agents/` e rilancia lo script.

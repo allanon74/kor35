@@ -6,10 +6,13 @@ from rest_framework import serializers
 from personaggi.carte_platform_models import (
     CarteArenaRuleset,
     CarteGiocoDefinizione,
+    CarteMsePackageImport,
     CartePlatformExchangeJob,
     CartePlatformGiocatore,
     CarteStudioTemplate,
+    MODELLO_BASE_KOR35,
 )
+from personaggi.mse_kor35_game_spec import merge_kor35_game_meta
 from personaggi.serializers_carte import _parse_json_field
 
 
@@ -37,6 +40,12 @@ class CarteGiocoDefinizioneSerializer(serializers.ModelSerializer):
     def validate_meta(self, value):
         parsed = _parse_json_field(value, "meta")
         return parsed if parsed is not None else {}
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.modello_base == MODELLO_BASE_KOR35:
+            data["meta"] = merge_kor35_game_meta(data.get("meta") or {})
+        return data
 
 
 class CarteStudioTemplateSerializer(serializers.ModelSerializer):
@@ -100,6 +109,26 @@ class CarteStudioTemplateSerializer(serializers.ModelSerializer):
                 .update(is_default_for_new_cards=False)
             )
         return template
+
+
+class CarteMsePackageImportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CarteMsePackageImport
+        fields = [
+            "id",
+            "sync_id",
+            "created_at",
+            "updated_at",
+            "gioco_definizione",
+            "campagna",
+            "package_type",
+            "package_name",
+            "source_priority",
+            "extracted_root",
+            "parsed_meta",
+            "imported",
+        ]
+        read_only_fields = fields
 
 
 class CarteArenaRulesetSerializer(serializers.ModelSerializer):

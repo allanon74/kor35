@@ -85,10 +85,10 @@ class CarteGiocoDefinizione(SyncableModel, models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    campagna = models.OneToOneField(
+    campagna = models.ForeignKey(
         "Campagna",
         on_delete=models.CASCADE,
-        related_name="carte_gioco_definizione",
+        related_name="carte_gioco_definizioni",
     )
     slug = models.CharField(
         max_length=80,
@@ -135,6 +135,12 @@ class CarteGiocoDefinizione(SyncableModel, models.Model):
         verbose_name = "Definizione gioco carte"
         verbose_name_plural = "Definizioni gioco carte"
         ordering = ["nome"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["campagna", "slug"],
+                name="personaggi_cgd_campagna_slug_uniq",
+            )
+        ]
 
     def __str__(self):
         return f"{self.nome} ({self.campagna.nome})"

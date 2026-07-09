@@ -24,6 +24,7 @@ from personaggi.carte_platform_models import (
 )
 from personaggi.carte_platform_specs import build_playable_spec_from_carta
 from personaggi.mse_style_import import import_mse_style_package
+from personaggi.serializers_carte_platform import CarteGiocoDefinizioneSerializer
 from personaggi.models import Campagna
 
 
@@ -131,6 +132,7 @@ class CartePlatformModelTests(TestCase):
         self.assertEqual(template.layout_spec.get("card_width_px"), 375.0)
         self.assertEqual(template.layout_spec.get("card_height_px"), 523.0)
         self.assertEqual(template.layout_spec.get("dpi"), 300.0)
+        self.assertIn("mse_v1", template.layout_spec)
         img_assets = [a for a in template.mse_assets_manifest if a.get("asset_type") == "image"]
         self.assertTrue(img_assets)
 
@@ -214,3 +216,22 @@ class CartePlatformExchangeJobTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
         carta = serializer.save(campagna=camp)
         self.assertEqual(carta.studio_template_id, tmpl.id)
+
+
+class CarteGiocoDefinizioneSerializerTests(TestCase):
+    def setUp(self):
+        self.campagna = Campagna.objects.create(slug="gioco-serializer", nome="Gioco Serializer")
+
+    def test_read_merges_kor35_pack_defaults_without_db_write(self):
+        gioco = CarteGiocoDefinizione.objects.create(
+            campagna=self.campagna,
+            slug="kor35-pack-merge",
+            nome="KOR35 merge test",
+            modello_base="kor35",
+            meta={"mse_game_spec": {"version": "custom"}},
+        )
+        data = CarteGiocoDefinizioneSerializer(gioco).data
+        self.assertEqual(data["meta"]["mse_game_spec"]["version"], "custom")
+        self.assertTrue(data["meta"]["mse_game_spec"].get("pack_types"))
+        gioco.refresh_from_db()
+        self.assertFalse(gioco.meta.get("mse_game_spec", {}).get("pack_types"))

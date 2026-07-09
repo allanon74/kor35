@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -366,6 +366,9 @@ WIKI_CARTE_FORCE ?= 0
 wiki-carte-sync:
 	./scripts/up_wsl_pi_like.sh --env "$(ENV)" --no-build --skip-collectstatic
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py sync_wiki_carte_regolamento $(if $(filter 1,$(WIKI_CARTE_FORCE)),--force,)
+
+cursor-agents-sync:
+	./scripts/sync_cursor_agents.sh
 
 SCOMMESSE_SYNC_MAX ?= 1
 scommesse-sync-programmazione:

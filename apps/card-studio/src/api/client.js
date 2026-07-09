@@ -57,12 +57,13 @@ async function fetchJson(url, options = {}) {
 const toList = (payload) => (Array.isArray(payload) ? payload : payload?.results || []);
 
 export async function loadInitialData() {
-  const [espansioni, carte, keywords, templates, giochi] = await Promise.all([
+  const [espansioni, carte, keywords, templates, giochi, packages] = await Promise.all([
     fetchJson(`${STAFF_CARTE}/espansioni/`),
     fetchJson(`${STAFF_CARTE}/catalogo/`),
     fetchJson(`${STAFF_CARTE}/keywords/`),
     fetchJson(`${STAFF_PLATFORM}/templates/`).catch(() => []),
     fetchJson(`${STAFF_PLATFORM}/gioco/`).catch(() => []),
+    fetchJson(`${STAFF_PLATFORM}/packages/`).catch(() => []),
   ]);
   return {
     espansioni: toList(espansioni),
@@ -70,6 +71,7 @@ export async function loadInitialData() {
     keywords: toList(keywords),
     templates: toList(templates),
     giochi: toList(giochi),
+    packages: toList(packages),
   };
 }
 
@@ -88,6 +90,12 @@ export const saveCarta = (id, payload) =>
 export const saveKeyword = (id, payload) =>
   fetchJson(`${STAFF_CARTE}/keywords/${id ? `${id}/` : ""}`, {
     method: id ? "PATCH" : "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const saveGioco = (id, payload) =>
+  fetchJson(`${STAFF_PLATFORM}/gioco/${id}/`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 
