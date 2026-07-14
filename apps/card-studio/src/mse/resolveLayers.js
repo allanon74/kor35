@@ -1,11 +1,12 @@
 import { mediaUrl } from "./assetUrl";
 import { evalMseProp } from "./scriptEngine";
 import {
+  normalizeSymbolFieldText,
   resolveSymbolLayersForText,
   symbolImageUrl,
   textContainsSymbolTokens,
 } from "./symbolFonts";
-import { mseColorToCss, normFieldKey } from "./fieldUtils";
+import { mseColorToCss, normFieldKey, lookupChoiceColor } from "./fieldUtils";
 
 function pickProp(styleDef, ...keys) {
   for (const k of keys) {
@@ -46,6 +47,19 @@ function inferRenderStyle(fieldName, cardFields) {
   if (t === "image" || t === "symbol") return "image";
   if (t === "choice" || t === "multiple choice" || t === "boolean") return "text";
   return "text";
+}
+
+function fieldDefForName(fieldName, cardFields) {
+  return (cardFields || []).find(
+    (f) => f.name === fieldName || normFieldKey(f.name) === normFieldKey(fieldName)
+  );
+}
+
+function choiceTextColor(fieldName, text, cardFields) {
+  const field = fieldDefForName(fieldName, cardFields);
+  if (!field) return "";
+  const map = field.choice_colors_cardlist || field.choice_colors || {};
+  return lookupChoiceColor(map, text);
 }
 
 function resolveFont(styleDef) {
@@ -115,6 +129,9 @@ function resolveLayersFromStyles(stylesMap, options) {
       if (!src && symbolFontPackage && raw) {
         src = symbolImageUrl(symbolFontPackage, raw);
       }
+      if (!src && symbolFontPackage && raw && renderStyle === "symbol") {
+        src = symbolImageUrl(symbolFontPackage, normalizeSymbolFieldText(raw, true));
+      }
       if (src) {
         layers.push({
           type: "image",
@@ -137,20 +154,23 @@ function resolveLayersFromStyles(stylesMap, options) {
     if (!text && fieldName !== "name") return;
 
     const font = resolveFont(styleDef);
+    const choiceColor = choiceTextColor(fieldName, text, cardFields);
+    if (choiceColor) font.color = choiceColor;
     const alwaysSymbol = Boolean(
       styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"]
     );
+    const symbolText = normalizeSymbolFieldText(text, alwaysSymbol);
 
     if (
       symbolFontPackage &&
-      (renderStyle === "symbol" || alwaysSymbol || textContainsSymbolTokens(text))
+      (renderStyle === "symbol" || alwaysSymbol || textContainsSymbolTokens(symbolText))
     ) {
       layers.push({
         type: "symbols",
         fieldName,
         z,
         box,
-        glyphs: resolveSymbolLayersForText(text, symbolFontPackage, font.size),
+        glyphs: resolveSymbolLayersForText(symbolText, symbolFontPackage, font.size),
         font,
         alignment: String(evalMseProp(pickProp(styleDef, "alignment"), ctx, "left top")),
       });

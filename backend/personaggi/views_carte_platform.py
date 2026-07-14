@@ -99,6 +99,50 @@ class CarteGiocoDefinizioneStaffViewSet(viewsets.ModelViewSet):
                 gioco.meta = merged_meta
                 gioco.save(update_fields=["meta", "updated_at"])
                 created.append("kor35_mse_game_spec")
+        if str(request.data.get("install_mse_template", "")).lower() in {"1", "true", "yes", "on"}:
+            from django.core.files.uploadedfile import SimpleUploadedFile
+
+            from personaggi.mse_kor35_style import (
+                KOR35_TEMPLATE_NAME,
+                KOR35_TEMPLATE_SLUG,
+                build_kor35_mse_style_zip,
+                kor35_campi_schema,
+            )
+
+            template_slug = (request.data.get("template_slug") or KOR35_TEMPLATE_SLUG).strip()
+            template = gioco.studio_templates.filter(slug=template_slug).first()
+            if not template:
+                template = CarteStudioTemplate.objects.create(
+                    campagna=campagna,
+                    gioco_definizione=gioco,
+                    slug=template_slug,
+                    nome=KOR35_TEMPLATE_NAME,
+                    attivo=True,
+                    is_default_for_new_cards=True,
+                    layout_spec={"version": "1", "width_mm": 63, "height_mm": 88, "dpi": 300},
+                    campi_schema=kor35_campi_schema(),
+                )
+                created.append("kor35_mse_template")
+            upload = SimpleUploadedFile(
+                "kor35-standard.mse-style",
+                build_kor35_mse_style_zip(),
+                content_type="application/zip",
+            )
+            import_mse_style_package(template=template, upload_file=upload)
+            template.campi_schema = kor35_campi_schema()
+            template.is_default_for_new_cards = True
+            template.attivo = True
+            template.save()
+            (
+                CarteStudioTemplate.objects.filter(gioco_definizione=gioco)
+                .exclude(pk=template.pk)
+                .update(is_default_for_new_cards=False)
+            )
+            created.append("kor35_mse_template_import")
+            from personaggi.mse_kor35_symbol_font import install_kor35_aura_symbol_font
+
+            _pkg, pkg_created = install_kor35_aura_symbol_font(campagna=campagna, gioco=gioco)
+            created.append("kor35_aura_symbol_font" if pkg_created else "kor35_aura_symbol_font_refresh")
         return Response({"created": created, "gioco_id": str(gioco.id)})
 
 

@@ -149,13 +149,35 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
     def get_carte_count(self, obj):
         return getattr(obj, "carte_count", None) or obj.carte.count()
 
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            data = dict(data)
+            for key in ("vendita_dal", "vendita_al"):
+                if data.get(key) == "":
+                    data[key] = None
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         nome = attrs.get("nome") or (self.instance.nome if self.instance else "")
         slug = attrs.get("slug") or (self.instance.slug if self.instance else "")
+        if attrs.get("vendita_dal") == "":
+            attrs["vendita_dal"] = None
+        if attrs.get("vendita_al") == "":
+            attrs["vendita_al"] = None
         if not slug and nome:
             attrs["slug"] = slugify(nome)[:80]
         if not attrs.get("slug"):
             raise serializers.ValidationError({"slug": "Slug obbligatorio."})
+        campagna = self.instance.campagna if self.instance else self.context.get("campagna")
+        slug_val = attrs.get("slug", slug)
+        if campagna and slug_val:
+            dup_qs = EspansioneCarte.objects.filter(campagna=campagna, slug=slug_val)
+            if self.instance:
+                dup_qs = dup_qs.exclude(pk=self.instance.pk)
+            if dup_qs.exists():
+                raise serializers.ValidationError(
+                    {"slug": "Esiste già un set con questo codice in questa campagna."}
+                )
         vendita_dal = attrs.get("vendita_dal")
         vendita_al = attrs.get("vendita_al")
         if self.instance:
@@ -364,6 +386,14 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
         stats = validated_data.pop("reliquiario_statistiche", [])
         tags = validated_data.pop("tags", None)
         espansione = validated_data.get("espansione")
+        if not (validated_data.get("codice") or "").strip() and espansione:
+            from personaggi.carte_set_codice import suggest_carta_codice_for_espansione
+
+            campagna = validated_data.get("campagna") or espansione.campagna
+            ordine, codice = suggest_carta_codice_for_espansione(campagna, espansione)
+            validated_data["codice"] = codice
+            if not validated_data.get("ordine_set"):
+                validated_data["ordine_set"] = ordine
         if not validated_data.get("studio_template"):
             default_template = None
             if espansione and espansione.default_studio_template_id:

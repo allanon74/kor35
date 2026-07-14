@@ -493,6 +493,11 @@ class EspansioneCarteStaffViewSet(viewsets.ModelViewSet):
         )
         return _campaign_feature_filter(self.request, qs, FEATURE_CARTE_COLLEZIONABILI)
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["campagna"] = _get_active_campaign(self.request) or _get_default_campaign()
+        return ctx
+
     def perform_create(self, serializer):
         campagna = _get_active_campaign(self.request) or _get_default_campaign()
         if not campagna:

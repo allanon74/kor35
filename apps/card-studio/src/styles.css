@@ -47,8 +47,70 @@ body {
   border-bottom: 1px solid #aca899;
 }
 
+.mse-workspace-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1.25rem;
+  padding: 0.5rem 0.75rem;
+  background: #ece9d8;
+  border-bottom: 1px solid #aca899;
+}
+
+.mse-workspace-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 12rem;
+}
+
+.mse-workspace-field span {
+  font-size: 11px;
+  color: #444;
+}
+
+.mse-workspace-field select {
+  min-width: 14rem;
+  font: inherit;
+}
+
+.mse-workspace-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 12px;
+  color: #333;
+  flex: 1;
+  min-width: 12rem;
+}
+
+.mse-card-context-bar {
+  grid-area: context;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  padding: 0.35rem 0.5rem;
+  background: #f4f2ea;
+  border-bottom: 1px solid #aca899;
+}
+
+.mse-card-context-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 10rem;
+}
+
+.mse-card-context-bar select {
+  min-width: 12rem;
+  font: inherit;
+}
+
 .mse .toolbar button,
 .mse .mse-btn-small,
+.mse .mse-btn-primary,
 .mse .tabs button,
 .mse button {
   font: inherit;
@@ -62,6 +124,47 @@ body {
 .mse .toolbar button:active,
 .mse .tabs button:active {
   background: #d4d0c8;
+}
+
+.mse-btn-primary {
+  font-weight: 700;
+  padding: 0.35rem 0.9rem !important;
+  border-color: #1d4ed8 !important;
+  background: linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%) !important;
+  color: #1e3a8a !important;
+}
+
+.mse-btn-primary:active {
+  background: #93c5fd !important;
+}
+
+.mse-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.45rem 0.75rem;
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  border-bottom: 2px solid #3b82f6;
+}
+
+.mse-editor-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.mse-editor-actions-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #1e40af;
+}
+
+.mse-pane-fields .mse-editor-actions {
+  margin: 0.5rem 0.35rem 0.35rem;
+  border: 1px solid #3b82f6;
+  border-radius: 2px;
 }
 
 .mse .tabs {
@@ -116,8 +219,9 @@ body {
   flex: 1;
   display: grid;
   grid-template-columns: minmax(220px, 28%) minmax(280px, 34%) minmax(300px, 1fr);
-  grid-template-rows: 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto;
   grid-template-areas:
+    "context context context"
     "list fields preview"
     "kor35 kor35 kor35"
     "status status status";
@@ -547,6 +651,32 @@ button.btn-danger {
   grid-template-areas:
     "list fields"
     "status status";
+}
+
+.mse-crud-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.mse-crud-hint {
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 11px;
+  color: #334155;
+  background: #fff7d6;
+  border-bottom: 1px solid #d4c88a;
+}
+
+.mse .mse-btn-danger,
+.mse .toolbar .mse-btn-danger {
+  color: #7f1d1d;
+  border-color: #b91c1c;
+  background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+}
+
+.mse .mse-btn-danger:active {
+  background: #fecaca;
 }
 
 .mse-pane-title-row {

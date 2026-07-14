@@ -5,10 +5,13 @@ import MseFieldTable from "./MseFieldTable";
 import { readCardFieldValue, writeCardFieldPatch } from "../mse/cardFieldBridge";
 import { exportCardPngFromRender } from "../mse/exportCardPng";
 
+import MseEditorActions from "./MseEditorActions";
+
 export default function MseCardsTab({
   cardForm,
   setCardForm,
   cardId,
+  isNewCard,
   cardFilter,
   setCardFilter,
   filteredCards,
@@ -16,20 +19,24 @@ export default function MseCardsTab({
   gameCardListColumns,
   cardListRowStyle,
   onSelectCard,
+  onNewCard,
+  onDeleteCard,
+  onSaveCard,
+  saveCardLabel,
+  canDeleteCard,
   selectNeighborCard,
   selectedGameId,
-  giochi,
   espansioni,
   templatesForSelectedGame,
   updateCardField,
   updateTemplateByGame,
-  onGameChange,
   packages,
   activeTemplate,
   espansioniById,
   stylingValues,
   onPickFile,
   onStatusMessage,
+  onMseCampiSync,
 }) {
   const [statusText, setStatusText] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -37,7 +44,13 @@ export default function MseCardsTab({
 
   const getValue = (field) => readCardFieldValue(cardForm, field);
   const setValue = (field, raw) => {
-    setCardForm((prev) => writeCardFieldPatch(prev, field, raw));
+    setCardForm((prev) => {
+      const next = writeCardFieldPatch(prev, field, raw);
+      if (next.mse_campi !== prev.mse_campi) {
+        onMseCampiSync?.(next.mse_campi || {});
+      }
+      return next;
+    });
   };
 
   const hasMsePreview = Boolean(activeTemplate?.layout_spec?.mse_v1?.card_styles);
@@ -84,8 +97,71 @@ export default function MseCardsTab({
 
   return (
     <section className="mse-cards-tab">
+      <div className="mse-card-context-bar">
+        <label>
+          <span>Card set</span>
+          <select
+            value={cardForm.espansione || ""}
+            onChange={(e) => updateCardField("espansione", e.target.value || null)}
+            disabled={!selectedGameId}
+          >
+            <option value="">— none —</option>
+            {espansioni
+              .filter((e) => !selectedGameId || e.gioco_definizione === selectedGameId)
+              .map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nome}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          <span>Stylesheet</span>
+          <select
+            value={cardForm.studio_template || ""}
+            onChange={(e) => updateTemplateByGame(e.target.value)}
+            disabled={!selectedGameId}
+          >
+            <option value="">— default —</option>
+            {templatesForSelectedGame.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.nome}
+                {t.is_default_for_new_cards ? " (default)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!selectedGameId && (
+          <p className="mse-empty-hint">Seleziona un gioco nella barra in alto per campi e stylesheet corretti.</p>
+        )}
+        {selectedGameId && !templatesForSelectedGame.length && (
+          <p className="mse-empty-hint">
+            Nessuno stylesheet per questo gioco — passa a <strong>Magic</strong> (import MTG) o <strong>KOR35</strong> (
+            kor35-standard).
+          </p>
+        )}
+        {selectedGameId && !gameCardFields.length && (
+          <p className="mse-empty-hint">Il gioco selezionato non espone campi carta MSE (mse_game_spec).</p>
+        )}
+      </div>
+
       <aside className="mse-pane mse-pane-list">
-        <h2 className="mse-pane-title">Card list</h2>
+        <div className="mse-pane-title-row">
+          <h2 className="mse-pane-title">Card list</h2>
+          <div className="mse-crud-actions">
+            <button type="button" className="mse-btn-small" onClick={onNewCard} title="Nuova carta">
+              + Nuova
+            </button>
+            {canDeleteCard && (
+              <button type="button" className="mse-btn-small mse-btn-danger" onClick={onDeleteCard} title="Elimina carta">
+                Elimina
+              </button>
+            )}
+          </div>
+        </div>
+        {isNewCard && (
+          <p className="mse-crud-hint">Modalità creazione: compila i campi e premi «Crea carta» (barra blu sotto i tab o in fondo ai campi).</p>
+        )}
         <MseCardList
           columns={gameCardListColumns}
           cards={filteredCards}
@@ -100,7 +176,9 @@ export default function MseCardsTab({
       </aside>
 
       <div className="mse-pane mse-pane-fields">
-        <h2 className="mse-pane-title">Card fields</h2>
+        <div className="mse-pane-title-row">
+          <h2 className="mse-pane-title">Card fields</h2>
+        </div>
         <MseFieldTable
           fields={gameCardFields}
           getValue={getValue}
@@ -111,6 +189,12 @@ export default function MseCardsTab({
             setStatusText(t);
             onStatusMessage?.(t);
           }}
+        />
+        <MseEditorActions
+          saveLabel={saveCardLabel}
+          onSave={onSaveCard}
+          deleteLabel={canDeleteCard ? "Elimina carta" : ""}
+          onDelete={canDeleteCard ? onDeleteCard : null}
         />
       </div>
 
@@ -151,57 +235,9 @@ export default function MseCardsTab({
       </aside>
 
       <details className="mse-kor35-panel">
-        <summary>KOR35 integration (optional)</summary>
-        <div className="mse-kor35-grid">
-          <label>
-            <span>Set / expansion</span>
-            <select
-              value={cardForm.espansione || ""}
-              onChange={(e) => updateCardField("espansione", e.target.value || null)}
-            >
-              <option value="">— none —</option>
-              {espansioni
-                .filter((e) => !selectedGameId || e.gioco_definizione === selectedGameId)
-                .map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.nome}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label>
-            <span>Game</span>
-            <select
-              value={selectedGameId || ""}
-              onChange={(e) => onGameChange?.(e.target.value)}
-              disabled={Boolean(cardId || cardForm.espansione)}
-            >
-              <option value="">— select —</option>
-              {giochi.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Stylesheet</span>
-            <select
-              value={cardForm.studio_template || ""}
-              onChange={(e) => updateTemplateByGame(e.target.value)}
-              disabled={!selectedGameId}
-            >
-              <option value="">— default —</option>
-              {templatesForSelectedGame.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <summary>KOR35 sync (optional JSON)</summary>
         <p className="mse-empty-hint">
-          Collega set e stylesheet solo se la carta deve partecipare al catalogo KOR35 / sync edge.
+          Set e stylesheet si gestiscono sopra. Usa questa sezione solo per override JSON avanzati su sync edge.
         </p>
       </details>
 

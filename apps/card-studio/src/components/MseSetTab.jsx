@@ -1,9 +1,17 @@
 import MseFieldTable from "./MseFieldTable";
 
+import MseEditorActions from "./MseEditorActions";
+
 export default function MseSetTab({
   espansioni,
   espId,
+  isNewSet,
   onSelectSet,
+  onNewSet,
+  onDeleteSet,
+  onSaveSet,
+  saveSetLabel,
+  canDeleteSet,
   gameSetFields,
   getSetSpecValue,
   setSetSpecValue,
@@ -26,7 +34,22 @@ export default function MseSetTab({
   return (
     <section className="mse-set-tab">
       <aside className="mse-pane mse-pane-list">
-        <h2 className="mse-pane-title">Sets</h2>
+        <div className="mse-pane-title-row">
+          <h2 className="mse-pane-title">Sets (espansioni)</h2>
+          <div className="mse-crud-actions">
+            <button type="button" className="mse-btn-small" onClick={onNewSet} title="Nuovo set">
+              + Nuovo
+            </button>
+            {canDeleteSet && (
+              <button type="button" className="mse-btn-small mse-btn-danger" onClick={onDeleteSet} title="Elimina set">
+                Elimina
+              </button>
+            )}
+          </div>
+        </div>
+        {isNewSet && (
+          <p className="mse-crud-hint">Nuovo set: titolo e codice obbligatori — poi «Crea set» (barra blu sotto i tab).</p>
+        )}
         <div className="mse-card-list-scroll">
           <table className="mse-card-list-table">
             <thead>
@@ -81,7 +104,9 @@ export default function MseSetTab({
       </aside>
 
       <div className="mse-pane mse-pane-fields">
-        <h2 className="mse-pane-title">Set fields</h2>
+        <div className="mse-pane-title-row">
+          <h2 className="mse-pane-title">Set fields</h2>
+        </div>
         {gameSetFields.length > 0 ? (
           <MseFieldTable
             fields={gameSetFields}
@@ -142,9 +167,17 @@ export default function MseSetTab({
             </label>
           </div>
         </details>
+        <MseEditorActions
+          saveLabel={saveSetLabel}
+          onSave={onSaveSet}
+          deleteLabel={canDeleteSet ? "Elimina set" : ""}
+          onDelete={canDeleteSet ? onDeleteSet : null}
+        />
       </div>
 
-      <footer className="mse-statusbar">Set fields map to EspansioneCarte when integrated with KOR35.</footer>
+      <footer className="mse-statusbar">
+        Set = espansione KOR35 (stesso record DB). Collega gioco e stylesheet default per le carte del set.
+      </footer>
     </section>
   );
 }

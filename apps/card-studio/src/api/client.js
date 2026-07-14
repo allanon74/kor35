@@ -1,6 +1,7 @@
 const STAFF_CARTE = "/api/personaggi/api/staff/carte";
 const STAFF_PLATFORM = `${STAFF_CARTE}/platform`;
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH || "/login";
+import { formatApiError } from "./errors";
 let loginRedirectTriggered = false;
 
 function getAuthToken() {
@@ -24,8 +25,10 @@ async function fetchJson(url, options = {}) {
   const activeCampaign = getActiveCampaignSlug();
   const authHeaders = token ? { Authorization: `Token ${token}` } : {};
   const campaignHeaders = activeCampaign ? { "X-Campagna": activeCampaign } : {};
+  const method = String(options.method || "GET").toUpperCase();
   const res = await fetch(url, {
     credentials: "include",
+    cache: method === "GET" ? "no-store" : options.cache,
     headers: {
       "Content-Type": "application/json",
       ...authHeaders,
@@ -44,12 +47,7 @@ async function fetchJson(url, options = {}) {
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(
-      data?.detail ||
-        data?.error ||
-        data?.message ||
-        `Errore API (${res.status})`
-    );
+    throw new Error(formatApiError(data, `Errore API (${res.status})`));
   }
   return data;
 }
@@ -81,11 +79,17 @@ export const saveEspansione = (id, payload) =>
     body: JSON.stringify(payload),
   });
 
+export const deleteEspansione = (id) =>
+  fetchJson(`${STAFF_CARTE}/espansioni/${id}/`, { method: "DELETE" });
+
 export const saveCarta = (id, payload) =>
   fetchJson(`${STAFF_CARTE}/catalogo/${id ? `${id}/` : ""}`, {
     method: id ? "PATCH" : "POST",
     body: JSON.stringify(payload),
   });
+
+export const deleteCarta = (id) =>
+  fetchJson(`${STAFF_CARTE}/catalogo/${id}/`, { method: "DELETE" });
 
 export const saveKeyword = (id, payload) =>
   fetchJson(`${STAFF_CARTE}/keywords/${id ? `${id}/` : ""}`, {

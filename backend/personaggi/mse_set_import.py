@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
 
+from personaggi.carte_set_codice import build_carta_codice
 from personaggi.carte_collezionabili_models import (
     CARTA_RARITA_COMUNE,
     CARTA_TIPO_PERSONAGGIO,
@@ -378,7 +379,10 @@ def import_mse_set_package(
     cards_updated = 0
     if create_cards:
         for i, card_raw in enumerate(parsed.get("cards") or []):
-            mapped = map_mse_card_to_kor35(card_raw, codice_fallback=f"{slug.upper()}-{i + 1:03d}")
+            mapped = map_mse_card_to_kor35(
+                card_raw,
+                codice_fallback=build_carta_codice(slug, i + 1),
+            )
             codice = mapped["codice"]
             existing = CartaCollezionabile.objects.filter(campagna=campagna, codice=codice).first()
             if existing and not update_existing:
@@ -400,6 +404,7 @@ def import_mse_set_package(
                 "mse_campi": mapped["mse_campi"],
                 "studio_template": template,
                 "attiva": True,
+                "ordine_set": i + 1,
             }
             if existing:
                 for k, v in payload.items():

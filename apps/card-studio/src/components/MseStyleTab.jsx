@@ -99,7 +99,11 @@ export default function MseStyleTab({
             </tbody>
           </table>
           {!filteredTemplates.length && (
-            <p className="mse-empty-hint">No stylesheets for this game. Import a .mse-style package.</p>
+            <p className="mse-empty-hint">
+              Nessuno stylesheet per il gioco selezionato. Gli import MTG (328) sono sul gioco{" "}
+              <strong>Magic</strong>; il template KOR35 (<code>kor35-standard</code>) è sul gioco{" "}
+              <strong>KOR35</strong>. Non serve re-importare: cambia gioco nella barra in alto.
+            </p>
           )}
         </div>
         <details className="mse-kor35-panel mse-inline-details">

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { sanitizeEspansionePayload } from "./api/errors";
+import { mergeRecordById } from "./api/listUtils";
 import {
+  deleteCarta,
+  deleteEspansione,
   importMseSet,
   importMseStyleTemplate,
   loadInitialData,
@@ -8,8 +12,10 @@ import {
   saveGioco,
   saveKeyword,
 } from "./api/client";
-import { resolveCardListRowColor } from "./mse/cardListColor";
+import { sortCardsForSetOrder, suggestCardIdentity } from "./mse/cardSetOrder";
 import { defaultStylingFromSpec } from "./mse/resolveLayers";
+import MseWorkspaceBar from "./components/MseWorkspaceBar";
+import MseEditorActions from "./components/MseEditorActions";
 import MseCardsTab from "./components/MseCardsTab";
 import MseKeywordsTab from "./components/MseKeywordsTab";
 import MseRandomPackTab from "./components/MseRandomPackTab";
@@ -60,6 +66,7 @@ const emptyCarta = {
   arena_playable_spec: {},
   mse_campi: {},
   attiva: true,
+  ordine_set: 0,
 };
 
 function parseJsonOrThrow(raw, label) {
@@ -108,6 +115,123 @@ const DEFAULT_CARD_LIST_COLUMNS = [
   { key: "codice", label: "Code" },
 ];
 
+function pickDefaultGame(giochi) {
+  if (!giochi?.length) return null;
+  return (
+    giochi.find((g) => g.slug === "kor35" && g.modello_base === "kor35") ||
+    giochi.find((g) => g.modello_base === "kor35") ||
+    giochi.find((g) => g.slug === "magic" || g.modello_base === "mtg") ||
+    giochi[0]
+  );
+}
+
+function sortGiochiForStudio(giochi) {
+  const rank = (g) => {
+    if (g.slug === "kor35" || g.modello_base === "kor35") return 0;
+    if (g.slug === "magic" || g.modello_base === "mtg") return 1;
+    return 2;
+  };
+  return [...(giochi || [])].sort((a, b) => {
+    const d = rank(a) - rank(b);
+    return d !== 0 ? d : String(a.nome || "").localeCompare(String(b.nome || ""));
+  });
+}
+
+const ESPANSIONE_READ_ONLY = new Set([
+  "id",
+  "sync_id",
+  "created_at",
+  "updated_at",
+  "campagna",
+  "bustine_count",
+  "carte_count",
+  "immagine_url",
+]);
+
+const CARTA_READ_ONLY = new Set([
+  "id",
+  "sync_id",
+  "created_at",
+  "updated_at",
+  "campagna",
+  "espansione_nome",
+  "immagine_url",
+  "tag_codici",
+  "statistiche_reliquiario",
+]);
+
+function stripPayloadFields(form, readOnlyKeys) {
+  const out = {};
+  Object.entries(form || {}).forEach(([k, v]) => {
+    if (!readOnlyKeys.has(k)) out[k] = v;
+  });
+  return out;
+}
+
+function parseJsonObject(raw, label) {
+  try {
+    return parseJsonOrThrow(raw, label);
+  } catch {
+    return {};
+  }
+}
+
+function buildCardSavePayload(cardForm, { studioSpecText, playableSpecText, mseCampiText }) {
+  const fromTextMse = parseJsonObject(mseCampiText, "mse_campi");
+  const fromFormMse = cardForm.mse_campi && typeof cardForm.mse_campi === "object" ? cardForm.mse_campi : {};
+  const fromTextStudio = parseJsonObject(studioSpecText, "studio_carta_spec");
+  const fromFormStudio =
+    cardForm.studio_carta_spec && typeof cardForm.studio_carta_spec === "object" ? cardForm.studio_carta_spec : {};
+  return {
+    ...stripPayloadFields(cardForm, CARTA_READ_ONLY),
+    studio_carta_spec: {
+      ...fromTextStudio,
+      ...fromFormStudio,
+      styling: {
+        ...(fromTextStudio.styling || {}),
+        ...(fromFormStudio.styling || {}),
+      },
+    },
+    arena_playable_spec: parseJsonObject(playableSpecText, "arena_playable_spec"),
+    mse_campi: { ...fromTextMse, ...fromFormMse },
+  };
+}
+
+function buildNewEspForm({ selectedGameId, defaultTemplateByGame }) {
+  return {
+    ...emptyEspansione,
+    gioco_definizione: selectedGameId || null,
+    default_studio_template: selectedGameId ? defaultTemplateByGame[selectedGameId] || null : null,
+  };
+}
+
+function buildNewCardForm({
+  selectedExpansionId,
+  selectedGameId,
+  espansioniById,
+  defaultTemplateByGame,
+  templatesForSelectedGame,
+  carte = [],
+}) {
+  const esp = selectedExpansionId ? espansioniById[selectedExpansionId] : null;
+  const tmpl =
+    esp?.default_studio_template ||
+    (selectedGameId ? defaultTemplateByGame[selectedGameId] : null) ||
+    templatesForSelectedGame[0]?.id ||
+    null;
+  const expansionCards = selectedExpansionId
+    ? carte.filter((c) => c.espansione === selectedExpansionId)
+    : [];
+  const suggested = esp ? suggestCardIdentity({ expansionCards, espansione: esp }) : { codice: "", ordine_set: 0 };
+  return {
+    ...emptyCarta,
+    espansione: selectedExpansionId || null,
+    studio_template: tmpl,
+    codice: suggested.codice,
+    ordine_set: suggested.ordine_set,
+  };
+}
+
 export default function App() {
   const [tab, setTab] = useState("cards");
   const [loading, setLoading] = useState(true);
@@ -144,7 +268,7 @@ export default function App() {
   const [importingSet, setImportingSet] = useState(false);
   const [selectedGameId, setSelectedGameId] = useState("");
   const [defaultsAppliedGameId, setDefaultsAppliedGameId] = useState("");
-  const [statsEspansioneId, setStatsEspansioneId] = useState("");
+  const [selectedExpansionId, setSelectedExpansionId] = useState("");
   const [stylingValues, setStylingValues] = useState({});
   const [selectedPackName, setSelectedPackName] = useState("");
   const [packCopies, setPackCopies] = useState(1);
@@ -154,26 +278,35 @@ export default function App() {
   const [packSaving, setPackSaving] = useState(false);
   const [stylePreviewTemplateId, setStylePreviewTemplateId] = useState("");
 
-  const refresh = async () => {
-    setLoading(true);
+  const applyLoadedData = (data) => {
+    setEspansioni(data.espansioni);
+    setCarte(data.carte);
+    setKeywords(data.keywords);
+    setTemplates(data.templates);
+    setMsePackages(data.packages || []);
+    setGiochi(data.giochi);
+    const defaultGame = pickDefaultGame(data.giochi);
+    if (defaultGame) {
+      setGiocoForm(defaultGame);
+      setSelectedGameId((prev) => prev || defaultGame.id);
+    }
+    return data;
+  };
+
+  const reloadData = async ({ showLoading = false } = {}) => {
+    if (showLoading) setLoading(true);
     try {
       const data = await loadInitialData();
-      setEspansioni(data.espansioni);
-      setCarte(data.carte);
-      setKeywords(data.keywords);
-      setTemplates(data.templates);
-      setMsePackages(data.packages || []);
-      setGiochi(data.giochi);
-      if (data.giochi[0]) {
-        setGiocoForm(data.giochi[0]);
-        setSelectedGameId((prev) => prev || data.giochi[0].id);
-      }
+      return applyLoadedData(data);
     } catch (err) {
       setMsg(err.message || "Errore caricamento.");
+      throw err;
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
+
+  const refresh = () => reloadData({ showLoading: true });
 
   useEffect(() => {
     refresh();
@@ -183,15 +316,28 @@ export default function App() {
     () => Object.fromEntries(espansioni.map((e) => [e.id, e])),
     [espansioni]
   );
+  const sortedGiochi = useMemo(() => sortGiochiForStudio(giochi), [giochi]);
   const filteredCards = useMemo(() => {
+    let pool = carte;
+    if (selectedExpansionId) {
+      pool = pool.filter((c) => c.espansione === selectedExpansionId);
+    } else if (selectedGameId) {
+      pool = pool.filter((c) => {
+        if (!c.espansione) return true;
+        const esp = espansioniById[c.espansione];
+        return esp?.gioco_definizione === selectedGameId;
+      });
+    }
     const q = cardFilter.trim().toLowerCase();
-    if (!q) return carte;
-    return carte.filter((c) =>
-      [c.nome, c.codice, c.tipo, c.energia, c.rarita].some((v) =>
-        String(v || "").toLowerCase().includes(q)
-      )
-    );
-  }, [carte, cardFilter]);
+    if (q) {
+      pool = pool.filter((c) =>
+        [c.nome, c.codice, c.tipo, c.energia, c.rarita].some((v) =>
+          String(v || "").toLowerCase().includes(q)
+        )
+      );
+    }
+    return sortCardsForSetOrder(pool);
+  }, [carte, selectedExpansionId, selectedGameId, espansioniById, cardFilter]);
   const defaultTemplateByGame = useMemo(() => {
     const map = {};
     templates.forEach((t) => {
@@ -265,14 +411,14 @@ export default function App() {
   const packCardPool = useMemo(() => {
     return carte.filter((c) => {
       if (c.attiva === false) return false;
-      if (statsEspansioneId && c.espansione !== statsEspansioneId) return false;
-      if (!statsEspansioneId && selectedGameId) {
+      if (selectedExpansionId && c.espansione !== selectedExpansionId) return false;
+      if (!selectedExpansionId && selectedGameId) {
         const esp = espansioniById[c.espansione];
         if (esp?.gioco_definizione && esp.gioco_definizione !== selectedGameId) return false;
       }
       return true;
     });
-  }, [carte, statsEspansioneId, selectedGameId, espansioniById]);
+  }, [carte, selectedExpansionId, selectedGameId, espansioniById]);
 
   const packSummaryRows = useMemo(() => {
     if (!gamePackSpec || !packCardPool.length) return [];
@@ -337,15 +483,15 @@ export default function App() {
 
   const statisticsReport = useMemo(() => {
     const pool = carte.filter((c) => {
-      if (statsEspansioneId && c.espansione !== statsEspansioneId) return false;
-      if (!statsEspansioneId && selectedGameId) {
+      if (selectedExpansionId && c.espansione !== selectedExpansionId) return false;
+      if (!selectedExpansionId && selectedGameId) {
         const esp = espansioniById[c.espansione];
         if (esp?.gioco_definizione && esp.gioco_definizione !== selectedGameId) return false;
       }
       return true;
     });
     return buildSetStatistics({ cards: pool, cardFields: gameCardFields });
-  }, [carte, statsEspansioneId, selectedGameId, espansioniById, gameCardFields]);
+  }, [carte, selectedExpansionId, selectedGameId, espansioniById, gameCardFields]);
 
   const cardListRowStyle = (row) =>
     resolveCardListRowColor({
@@ -363,6 +509,24 @@ export default function App() {
     () => templates.filter((t) => !selectedGameId || t.gioco_definizione === selectedGameId),
     [templates, selectedGameId]
   );
+  const espansioniForWorkspace = useMemo(
+    () =>
+      espansioni.filter((e) => !selectedGameId || e.gioco_definizione === selectedGameId),
+    [espansioni, selectedGameId]
+  );
+  const workspaceCardPool = useMemo(() => {
+    let pool = carte;
+    if (selectedExpansionId) {
+      pool = pool.filter((c) => c.espansione === selectedExpansionId);
+    } else if (selectedGameId) {
+      pool = pool.filter((c) => {
+        if (!c.espansione) return true;
+        const esp = espansioniById[c.espansione];
+        return esp?.gioco_definizione === selectedGameId;
+      });
+    }
+    return pool;
+  }, [carte, selectedExpansionId, selectedGameId, espansioniById]);
 
   const activeTemplate = useMemo(
     () => (cardForm.studio_template ? templatesById[cardForm.studio_template] : null),
@@ -445,6 +609,31 @@ export default function App() {
     setEspForm({ ...emptyEspansione, ...row });
     setEspSetSpecText(JSON.stringify(row.studio_set_spec || {}, null, 2));
     if (row.gioco_definizione) setSelectedGameId(row.gioco_definizione);
+    setSelectedExpansionId(row.id);
+  };
+
+  const onNewEsp = () => {
+    setEspId(null);
+    setEspForm(buildNewEspForm({ selectedGameId, defaultTemplateByGame }));
+    setEspSetSpecText("{}");
+    setTab("set_info");
+  };
+
+  const onNewCard = () => {
+    setCardId(null);
+    const draft = buildNewCardForm({
+      selectedExpansionId,
+      selectedGameId,
+      espansioniById,
+      defaultTemplateByGame,
+      templatesForSelectedGame,
+      carte,
+    });
+    setCardForm(draft);
+    setStudioSpecText("{}");
+    setPlayableSpecText("{}");
+    setMseCampiText("{}");
+    setTab("cards");
   };
 
   const onNewKeyword = () => {
@@ -467,6 +656,28 @@ export default function App() {
     }
   };
 
+  const refreshAfterMutation = async ({ kind, saved }) => {
+    if (kind === "card" && saved?.id) {
+      setCarte((prev) => mergeRecordById(prev, saved));
+      onEditCard(saved);
+    } else if (kind === "esp" && saved?.id) {
+      setEspansioni((prev) => mergeRecordById(prev, saved));
+      onEditEsp(saved);
+    }
+    try {
+      const data = await reloadData({ showLoading: false });
+      if (kind === "card" && saved?.id) {
+        const freshCard = data.carte.find((row) => row.id === saved.id);
+        if (freshCard) onEditCard(freshCard);
+      } else if (kind === "esp" && saved?.id) {
+        const freshEsp = data.espansioni.find((row) => row.id === saved.id);
+        if (freshEsp) onEditEsp(freshEsp);
+      }
+    } catch {
+      // merge + onEdit già applicati
+    }
+  };
+
   const selectNeighborCard = (delta) => {
     if (!filteredCards.length) return;
     const idx = filteredCards.findIndex((c) => c.id === cardId);
@@ -482,38 +693,95 @@ export default function App() {
 
   const handleSaveEsp = async () => {
     try {
-      const payload = {
-        ...espForm,
+      const raw = {
+        ...stripPayloadFields(espForm, ESPANSIONE_READ_ONLY),
         studio_set_spec: parseJsonOrThrow(espSetSpecText, "studio_set_spec"),
       };
-      await saveEspansione(espForm.id, payload);
-      setMsg("Espansione salvata.");
+      const payload = sanitizeEspansionePayload(raw);
+      if (!payload.nome) {
+        setMsg("Nome set obbligatorio (campo title / nome).");
+        return;
+      }
+      if (!payload.slug) {
+        setMsg("Codice set obbligatorio (campo code / slug).");
+        return;
+      }
+      const saved = await saveEspansione(espId, payload);
+      setMsg(espId ? "Set aggiornato." : "Set creato.");
+      await refreshAfterMutation({ kind: "esp", saved });
+    } catch (err) {
+      setMsg(err.message || "Salvataggio set fallito.");
+    }
+  };
+
+  const handleDeleteEsp = async () => {
+    if (!espId) return;
+    const label = espForm.nome || espForm.slug || espId;
+    if (!window.confirm(`Eliminare il set «${label}»? Le carte collegate possono restare orfane.`)) {
+      return;
+    }
+    try {
+      await deleteEspansione(espId);
+      setMsg("Set eliminato.");
+      setEspId(null);
       setEspForm(emptyEspansione);
       setEspSetSpecText("{}");
-      await refresh();
+      if (selectedExpansionId === espId) setSelectedExpansionId("");
+      await reloadData({ showLoading: false });
     } catch (err) {
-      setMsg(err.message || "Salvataggio espansione fallito.");
+      setMsg(err.message || "Eliminazione set fallita.");
     }
   };
 
   const handleSaveCard = async () => {
     try {
-      const payload = {
-        ...cardForm,
-        studio_carta_spec: parseJsonOrThrow(studioSpecText, "studio_carta_spec"),
-        arena_playable_spec: parseJsonOrThrow(playableSpecText, "arena_playable_spec"),
-        mse_campi: parseJsonOrThrow(mseCampiText, "mse_campi"),
-      };
-      await saveCarta(cardId, payload);
-      setMsg("Carta salvata.");
+      let formForSave = cardForm;
+      if (!cardId && !String(cardForm.codice || "").trim() && cardForm.espansione) {
+        const esp = espansioniById[cardForm.espansione];
+        const expansionCards = carte.filter((c) => c.espansione === cardForm.espansione);
+        const suggested = suggestCardIdentity({ expansionCards, espansione: esp });
+        formForSave = { ...cardForm, ...suggested };
+        setCardForm(formForSave);
+      }
+      const payload = buildCardSavePayload(formForSave, {
+        studioSpecText,
+        playableSpecText,
+        mseCampiText,
+      });
+      const saved = await saveCarta(cardId, payload);
+      setMsg(cardId ? "Carta aggiornata." : "Carta creata.");
+      await refreshAfterMutation({ kind: "card", saved });
+    } catch (err) {
+      setMsg(err.message || "Salvataggio carta fallito.");
+    }
+  };
+
+  const handleDeleteCard = async () => {
+    if (!cardId) return;
+    const label = cardForm.nome || cardForm.codice || cardId;
+    if (!window.confirm(`Eliminare la carta «${label}» dal catalogo?`)) {
+      return;
+    }
+    try {
+      await deleteCarta(cardId);
+      setMsg("Carta eliminata.");
       setCardId(null);
-      setCardForm(emptyCarta);
+      setCardForm(
+        buildNewCardForm({
+          selectedExpansionId,
+          selectedGameId,
+          espansioniById,
+          defaultTemplateByGame,
+          templatesForSelectedGame,
+          carte,
+        })
+      );
       setStudioSpecText("{}");
       setPlayableSpecText("{}");
       setMseCampiText("{}");
-      await refresh();
+      await reloadData({ showLoading: false });
     } catch (err) {
-      setMsg(err.message || "Salvataggio carta fallito.");
+      setMsg(err.message || "Eliminazione carta fallita.");
     }
   };
 
@@ -667,7 +935,7 @@ export default function App() {
       setKwId(null);
       setKwForm(emptyKeyword);
       setEffectScriptText("{}");
-      await refresh();
+      await reloadData({ showLoading: false });
     } catch (err) {
       setMsg(err.message || "Salvataggio keyword fallito.");
     }
@@ -675,6 +943,7 @@ export default function App() {
 
   const handleGameChange = (gid) => {
     setSelectedGameId(gid);
+    setSelectedExpansionId("");
     if (!cardId && !cardForm.espansione) {
       const fallback =
         defaultTemplateByGame[gid] ||
@@ -683,6 +952,53 @@ export default function App() {
       updateCardField("studio_template", fallback);
     }
   };
+
+  const handleExpansionChange = (expId) => {
+    const next = expId || "";
+    setSelectedExpansionId(next);
+    if (next) {
+      const esp = espansioniById[next];
+      if (esp?.gioco_definizione) {
+        setSelectedGameId(esp.gioco_definizione);
+      }
+    }
+    if (!cardId) {
+      setCardForm((prev) => ({ ...prev, espansione: next || null }));
+    }
+  };
+
+  useEffect(() => {
+    if (cardId || !selectedExpansionId) return;
+    setCardForm((prev) =>
+      prev.espansione === selectedExpansionId ? prev : { ...prev, espansione: selectedExpansionId }
+    );
+  }, [cardId, selectedExpansionId]);
+
+  const primarySaveAction = useMemo(() => {
+    if (tab === "cards") {
+      return {
+        label: cardId ? "Salva carta" : "Crea carta",
+        onClick: handleSaveCard,
+      };
+    }
+    if (tab === "set_info") {
+      return {
+        label: espId ? "Salva set" : "Crea set",
+        onClick: handleSaveEsp,
+      };
+    }
+    if (tab === "keywords" && gameHasKeywords) {
+      return { label: kwId ? "Salva keyword" : "Crea keyword", onClick: handleSaveKeyword };
+    }
+    if (tab === "random_pack") return { label: "Salva pack spec", onClick: savePackSpec };
+    return null;
+  }, [tab, gameHasKeywords, cardId, espId, kwId]);
+
+  const primaryDeleteAction = useMemo(() => {
+    if (tab === "cards" && cardId) return { label: "Elimina carta", onClick: handleDeleteCard };
+    if (tab === "set_info" && espId) return { label: "Elimina set", onClick: handleDeleteEsp };
+    return null;
+  }, [tab, cardId, espId]);
 
   const handleImportMseSet = async () => {
     if (!mseSetFile) {
@@ -709,7 +1025,7 @@ export default function App() {
       setMseSetFile(null);
       setMseSetImportName("");
       setMseSetImportSlug("");
-      await refresh();
+      await reloadData({ showLoading: false });
       if (res?.espansione) {
         onEditEsp(res.espansione);
       }
@@ -743,7 +1059,7 @@ export default function App() {
       setMseImportName("");
       setMseImportSlug("");
       setMseImportDefault(false);
-      await refresh();
+      await reloadData({ showLoading: false });
     } catch (err) {
       setMsg(err.message || "Import .mse-style fallito.");
     }
@@ -755,12 +1071,30 @@ export default function App() {
         <h1>Magic Set Editor — KOR35 Card Studio</h1>
       </header>
 
+      {!loading && (
+        <MseWorkspaceBar
+          giochi={sortedGiochi}
+          selectedGameId={selectedGameId}
+          onGameChange={handleGameChange}
+          espansioni={espansioni}
+          selectedExpansionId={selectedExpansionId}
+          onExpansionChange={handleExpansionChange}
+          templatesCount={templatesForSelectedGame.length}
+          cardsCount={workspaceCardPool.length}
+        />
+      )}
+
       <div className="toolbar">
         <button type="button" onClick={refresh}>Refresh</button>
-        <button type="button" onClick={handleSaveCard}>Save card</button>
-        <button type="button" onClick={handleSaveEsp}>Save set</button>
-        {gameHasKeywords && (
-          <button type="button" onClick={handleSaveKeyword}>Save keyword</button>
+        {primarySaveAction && (
+          <button type="button" className="mse-btn-primary" onClick={primarySaveAction.onClick}>
+            {primarySaveAction.label}
+          </button>
+        )}
+        {primaryDeleteAction && (
+          <button type="button" className="mse-btn-danger" onClick={primaryDeleteAction.onClick}>
+            {primaryDeleteAction.label}
+          </button>
         )}
       </div>
 
@@ -777,6 +1111,26 @@ export default function App() {
         ))}
       </nav>
 
+      {!loading && primarySaveAction && (
+        <MseEditorActions
+          saveLabel={primarySaveAction.label}
+          onSave={primarySaveAction.onClick}
+          deleteLabel={primaryDeleteAction?.label}
+          onDelete={primaryDeleteAction?.onClick}
+          hint={
+            tab === "cards"
+              ? cardId
+                ? `Modifica carta: ${cardForm.nome || cardForm.codice || cardId}`
+                : "Nuova carta — compila code e name, poi salva."
+              : tab === "set_info"
+                ? espId
+                  ? `Modifica set: ${espForm.nome || espForm.slug || espId}`
+                  : "Nuovo set — titolo e codice obbligatori."
+                : ""
+          }
+        />
+      )}
+
       {msg && <p className="msg">{msg}</p>}
       {loading && <p>Caricamento…</p>}
 
@@ -792,20 +1146,25 @@ export default function App() {
           gameCardListColumns={gameCardListColumns}
           cardListRowStyle={cardListRowStyle}
           onSelectCard={onEditCard}
+          onNewCard={onNewCard}
+          onDeleteCard={handleDeleteCard}
+          onSaveCard={handleSaveCard}
+          saveCardLabel={cardId ? "Salva carta" : "Crea carta"}
+          canDeleteCard={Boolean(cardId)}
+          isNewCard={!cardId}
           selectNeighborCard={selectNeighborCard}
           selectedGameId={selectedGameId}
-          giochi={giochi}
           espansioni={espansioni}
           templatesForSelectedGame={templatesForSelectedGame}
           updateCardField={updateCardField}
           updateTemplateByGame={updateTemplateByGame}
-          onGameChange={handleGameChange}
           packages={msePackages}
           activeTemplate={activeTemplate}
           espansioniById={espansioniById}
           stylingValues={stylingValues}
           onPickFile={onDynamicFilePicked}
           onStatusMessage={setMsg}
+          onMseCampiSync={(mse) => setMseCampiText(JSON.stringify(mse, null, 2))}
         />
       )}
 
@@ -841,9 +1200,15 @@ export default function App() {
 
       {!loading && tab === "set_info" && (
         <MseSetTab
-          espansioni={espansioni}
+          espansioni={espansioniForWorkspace}
           espId={espId}
+          isNewSet={!espId}
           onSelectSet={onEditEsp}
+          onNewSet={onNewEsp}
+          onDeleteSet={handleDeleteEsp}
+          onSaveSet={handleSaveEsp}
+          saveSetLabel={espId ? "Salva set" : "Crea set"}
+          canDeleteSet={Boolean(espId)}
           gameSetFields={gameSetFields}
           getSetSpecValue={getSetSpecValue}
           setSetSpecValue={setSetSpecValue}
@@ -886,8 +1251,8 @@ export default function App() {
       {!loading && tab === "statistics" && (
         <MseStatisticsTab
           statisticsReport={statisticsReport}
-          statsEspansioneId={statsEspansioneId}
-          onStatsEspansioneId={setStatsEspansioneId}
+          selectedExpansionId={selectedExpansionId}
+          onStatsEspansioneId={setSelectedExpansionId}
           espansioni={espansioni}
           selectedGameId={selectedGameId}
           metaCounts={{ sets: espansioni.length, keywords: keywords.length, templates: templates.length }}
@@ -908,8 +1273,8 @@ export default function App() {
           onSelectPackName={setSelectedPackName}
           packCopies={packCopies}
           onPackCopies={setPackCopies}
-          poolExpansionId={statsEspansioneId}
-          onPoolExpansion={setStatsEspansioneId}
+          poolExpansionId={selectedExpansionId}
+          onPoolExpansion={setSelectedExpansionId}
           espansioni={espansioni}
           packCardPool={packCardPool}
           packSummaryRows={packSummaryRows}

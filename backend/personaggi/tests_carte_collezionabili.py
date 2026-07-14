@@ -415,6 +415,36 @@ class EspansioneCarteStaffApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.data["nome"], "Espansione test")
 
+    def test_create_slug_duplicato_400(self):
+        EspansioneCarte.objects.create(
+            campagna=self.campagna,
+            nome="Esistente",
+            slug="dup-slug",
+        )
+        resp = self.client.post(
+            self.url,
+            {"nome": "Altro", "slug": "dup-slug", "attiva": True},
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("slug", resp.data)
+
+    def test_create_vendita_vuote_non_400(self):
+        resp = self.client.post(
+            self.url,
+            {
+                "nome": "Finestra vendita",
+                "slug": "finestra-vendita",
+                "vendita_dal": "",
+                "vendita_al": "",
+                "attiva": True,
+            },
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
 
 class CartaCatalogoOpenLockApiTests(APITestCase):
     base_url = "/api/personaggi/api/staff/carte/catalogo/"

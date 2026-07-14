@@ -15,7 +15,7 @@ COMPOSE_PROJECT_NAME_ARG = $(if $(filter mirror,$(ENV)),COMPOSE_PROJECT_NAME=kor
 MIRROR_NETWORK_AUTO_BOOT ?= 0
 MIRROR_PI_GIT_REF ?= main
 
-.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run
+.PHONY: help setup env up up-no-build up-no-static down down-volumes logs status collectstatic migrate makemigrations restart restart-fe restart-fe-pilot restart-be deploy-be sync-db sync-db-full sync-db-diagnose sync-db-full-diagnose sync-media sync-media-push sync-certs-to-mirror sync-certs-prod-to-mirror refresh-prod-docker-tls install-prod-tls-automation mirror-renew-ddns-tls install-mirror-ddns-tls mirror-resync-after-event mirror-network-check mirror-network-mode mirror-install-network mirror-configure mirror-reinstall-units mirror-ensure-emergency-wifi mirror-ssh-check mirror-pi-check mirror-pi-pull mirror-pi-install-network mirror-pi-network-mode mirror-pi-configure mirror-pi-update wiki-staff-sync wiki-carte-sync cursor-agents-sync scommesse-sync-programmazione seed-componenti-nave seed-carte-esempio cleanup-legacy backup-db pilot-tick pilot-tick-loop pilot-tick-stop pilot-tick-restart card-editor-build card-editor-dev import-mse-dataset import-mse-dataset-dry-run bootstrap-kor35-mse-template bootstrap-kor35-mse-template-dry-run
 
 help:
 	@echo "KOR35 monorepo helper"
@@ -59,6 +59,7 @@ help:
 	@echo "  make seed-carte-esempio ENV=dev-home    # 20 carte demo Sette Elegie + keyword MVP + combo reliquiario"
 	@echo "  make import-mse-dataset ENV=dev-office CAMPAGNA_SLUG=<slug> # import massivo ~/Scaricati/mse"
 	@echo "  make import-mse-dataset-dry-run ENV=dev-office CAMPAGNA_SLUG=<slug> # anteprima senza scrivere"
+	@echo "  make bootstrap-kor35-mse-template ENV=dev-home CAMPAGNA_SLUG=kor35 # template MSE KOR35 + allineamento DB"
 	@echo "  make restart-be ENV=dev-home # riavvia backend + daphne (carica .py aggiornati)"
 	@echo "  make deploy-be ENV=prod      # rebuild backend/daphne + restart + migrate + collectstatic"
 	@echo "  make restart ENV=dev-home    # restart-fe + restart-be"
@@ -237,6 +238,21 @@ import-mse-dataset-dry-run:
 	mkdir -p "$(CURDIR)/.runtime-state/mse_dataset"
 	cp -a "$$HOME/Scaricati/mse/." "$(CURDIR)/.runtime-state/mse_dataset/"
 	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py import_mse_dataset --campagna-slug "$(CAMPAGNA_SLUG)" --source-root /app/runtime-state/mse_dataset --dry-run
+
+# Template MSE KOR35 completo (kor35-standard) + refresh layout template già importati
+bootstrap-kor35-mse-template:
+	@if [ -z "$(CAMPAGNA_SLUG)" ]; then \
+		echo "Errore: specifica CAMPAGNA_SLUG=<slug>"; \
+		exit 1; \
+	fi
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py bootstrap_kor35_mse_template --campagna-slug "$(CAMPAGNA_SLUG)" --set-default --link-expansions $(if $(GIOCO_SLUG),--gioco-slug "$(GIOCO_SLUG)",)
+
+bootstrap-kor35-mse-template-dry-run:
+	@if [ -z "$(CAMPAGNA_SLUG)" ]; then \
+		echo "Errore: specifica CAMPAGNA_SLUG=<slug>"; \
+		exit 1; \
+	fi
+	cd config/docker && $(COMPOSE_PROJECT_NAME_ARG) KOR35_BACKEND_ENV_FILE="$$(pwd)/../../backend/.env.$(ENV)" docker compose -f compose.base.yml -f compose.$(ENV).yml exec -T backend python manage.py bootstrap_kor35_mse_template --campagna-slug "$(CAMPAGNA_SLUG)" --dry-run $(if $(GIOCO_SLUG),--gioco-slug "$(GIOCO_SLUG)",)
 
 # Riavvia backend + daphne così Gunicorn/Daphne carica le modifiche ai file Python (bind-mount backend).
 restart-be:

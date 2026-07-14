@@ -38,14 +38,21 @@ export function findGameSymbolFontField(gameCardFields) {
 
 export function resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm) {
   const field = findGameSymbolFontField(gameCardFields);
-  if (!field) return null;
-  const k = normFieldKey(field.name);
-  const selected =
-    cardForm?.mse_campi?.[k] ??
-    cardForm?.mse_campi?.[field.name] ??
-    field.initial ??
-    "";
-  return findSymbolFontPackage(packages, field.match, selected);
+  if (field) {
+    const k = normFieldKey(field.name);
+    const selected =
+      cardForm?.mse_campi?.[k] ??
+      cardForm?.mse_campi?.[field.name] ??
+      field.initial ??
+      "";
+    const hit = findSymbolFontPackage(packages, field.match, selected);
+    if (hit) return hit;
+  }
+  return (
+    (packages || []).find(
+      (p) => p.package_type === "mse-symbol-font" && p.package_name === "KOR35 Aure"
+    ) || null
+  );
 }
 
 const TOKEN_RE = /\{[^}]+\}/g;
@@ -66,10 +73,27 @@ export function tokenizeSymbolText(text) {
 
 export function symbolImageUrl(symbolFontPkg, code) {
   const symbols = symbolFontPkg?.parsed_meta?.symbols || {};
-  const entry = symbols[code] || symbols[code.toLowerCase()];
-  const image = entry?.image;
-  if (!image || !symbolFontPkg?.extracted_root) return "";
-  return mediaUrl(symbolFontPkg.extracted_root, image);
+  const raw = String(code || "").trim();
+  const candidates = [raw];
+  if (raw && !raw.startsWith("{")) {
+    candidates.push(`{${raw}}`, `{${raw.toUpperCase()}}`);
+  }
+  for (const key of candidates) {
+    const entry = symbols[key] || symbols[key.toLowerCase()];
+    const image = entry?.image;
+    if (image && symbolFontPkg?.extracted_root) {
+      return mediaUrl(symbolFontPkg.extracted_root, image);
+    }
+  }
+  return "";
+}
+
+export function normalizeSymbolFieldText(text, alwaysSymbol = false) {
+  const s = String(text || "").trim();
+  if (!s) return s;
+  if (textContainsSymbolTokens(s)) return s;
+  if (alwaysSymbol && /^[A-Za-z]{2,4}$/.test(s)) return `{${s.toUpperCase()}}`;
+  return s;
 }
 
 export function textContainsSymbolTokens(text) {
