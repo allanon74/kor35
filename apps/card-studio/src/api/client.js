@@ -138,3 +138,45 @@ export async function importMseStyleTemplate({
   }
   return data;
 }
+
+export async function importMseSet({
+  file,
+  gioco_definizione,
+  nome,
+  slug,
+  create_cards = true,
+  update_existing = true,
+}) {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (gioco_definizione) fd.append("gioco_definizione", gioco_definizione);
+  if (nome) fd.append("nome", nome);
+  if (slug) fd.append("slug", slug);
+  fd.append("create_cards", create_cards ? "true" : "false");
+  fd.append("update_existing", update_existing ? "true" : "false");
+
+  const token = getAuthToken();
+  const activeCampaign = getActiveCampaignSlug();
+  const headers = {};
+  if (token) headers.Authorization = `Token ${token}`;
+  if (activeCampaign) headers["X-Campagna"] = activeCampaign;
+
+  const res = await fetch(`${STAFF_CARTE}/espansioni/import-mse-set/`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: fd,
+  });
+  if (res.status === 401) {
+    redirectToLogin();
+    throw new Error("Sessione non valida o permessi insufficienti.");
+  }
+  if (res.status === 403) {
+    throw new Error("Permessi insufficienti: serve un account staff abilitato.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.detail || data?.error || `Import fallito (${res.status})`);
+  }
+  return data;
+}

@@ -46,6 +46,7 @@ def _choice_field(
     card_list_column: int = 0,
     show_statistics: bool = True,
     initial: str = "",
+    description: str = "",
 ) -> dict[str, Any]:
     return {
         "name": name,
@@ -58,7 +59,7 @@ def _choice_field(
         "choice_colors_cardlist": dict(choice_colors_cardlist or {}),
         "default": "",
         "initial": initial,
-        "description": "",
+        "description": description,
         "card_list_name": name,
         "card_list_visible": card_list_visible,
         "card_list_allow": True,
@@ -80,6 +81,7 @@ def _text_field(
     card_list_visible: bool = False,
     card_list_column: int = 0,
     show_statistics: bool = False,
+    description: str = "",
 ) -> dict[str, Any]:
     return {
         "name": name,
@@ -92,7 +94,7 @@ def _text_field(
         "choice_colors_cardlist": {},
         "default": "",
         "initial": "",
-        "description": "",
+        "description": description,
         "card_list_name": name,
         "card_list_visible": card_list_visible,
         "card_list_allow": True,
@@ -113,6 +115,7 @@ def _number_field(
     card_list_column: int = 0,
     show_statistics: bool = False,
     initial: str = "0",
+    description: str = "",
 ) -> dict[str, Any]:
     return {
         "name": name,
@@ -125,7 +128,7 @@ def _number_field(
         "choice_colors_cardlist": {},
         "default": "",
         "initial": initial,
-        "description": "",
+        "description": description,
         "card_list_name": name,
         "card_list_visible": card_list_visible,
         "card_list_allow": True,
@@ -146,7 +149,19 @@ def kor35_mse_game_spec() -> dict[str, Any]:
         "keyword_modes": ["kor35", "reminder"],
         "card_list_color_script": "",
         "card_fields": [
-            _text_field("name", identifying=True, card_list_visible=True, card_list_column=1),
+            _text_field(
+                "code",
+                card_list_visible=True,
+                card_list_column=0,
+                description="Unique card code in the set (KOR35: codice).",
+            ),
+            _text_field(
+                "name",
+                identifying=True,
+                card_list_visible=True,
+                card_list_column=1,
+                description="Card name shown on the template (KOR35: nome).",
+            ),
             _choice_field(
                 "type",
                 choices=KOR35_TYPE_CHOICES,
@@ -154,6 +169,7 @@ def kor35_mse_game_spec() -> dict[str, Any]:
                 card_list_visible=True,
                 card_list_column=2,
                 initial="PG",
+                description="Card type line (KOR35: tipo).",
             ),
             _choice_field(
                 "energy",
@@ -162,6 +178,7 @@ def kor35_mse_game_spec() -> dict[str, Any]:
                 card_list_visible=True,
                 card_list_column=3,
                 initial="MAR",
+                description="Energy / sphere (KOR35: energia).",
             ),
             _choice_field(
                 "rarity",
@@ -170,13 +187,30 @@ def kor35_mse_game_spec() -> dict[str, Any]:
                 card_list_visible=True,
                 card_list_column=4,
                 initial="COM",
+                description="Rarity tier; used by statistics and random packs.",
             ),
-            _number_field("cost", card_list_visible=True, card_list_column=5, show_statistics=True),
-            _number_field("attack", card_list_column=6),
-            _number_field("health", card_list_column=7),
-            _number_field("initiative", card_list_column=8),
-            _text_field("rules", multi_line=True, show_statistics=False),
-            _text_field("lore", multi_line=True, show_statistics=False),
+            _number_field(
+                "cost",
+                card_list_visible=True,
+                card_list_column=5,
+                show_statistics=True,
+                description="Play cost 0–3 (KOR35: costo_gioco).",
+            ),
+            _number_field("attack", card_list_column=6, description="Attack value (KOR35: attacco / forza)."),
+            _number_field("health", card_list_column=7, description="Health value (KOR35: salute / robustezza)."),
+            _number_field("initiative", card_list_column=8, description="Initiative (KOR35: iniziativa)."),
+            _text_field(
+                "rules",
+                multi_line=True,
+                show_statistics=False,
+                description="Rules text with KOR35 keyword markup (KOR35: testo_gioco).",
+            ),
+            _text_field(
+                "lore",
+                multi_line=True,
+                show_statistics=False,
+                description="Flavor text for card back (KOR35: testo_lore).",
+            ),
         ],
         "set_fields": [
             _text_field("title", identifying=True),

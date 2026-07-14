@@ -1,6 +1,7 @@
 from django.test import SimpleTestCase
 
 from personaggi.mse_kor35_game_spec import kor35_mse_game_spec, merge_kor35_game_meta
+from personaggi.mse_set_import import map_mse_card_to_kor35, parse_mse_set, parse_mse_symbol_font
 from personaggi.mse_style_import import parse_mse_game_spec, parse_mse_style_spec
 
 
@@ -33,6 +34,7 @@ class Kor35MseGameSpecTests(SimpleTestCase):
         spec = kor35_mse_game_spec()
         names = [f["name"] for f in spec["card_fields"]]
         self.assertIn("name", names)
+        self.assertIn("code", names)
         self.assertIn("type", names)
         self.assertTrue(spec["has_keywords"])
 
@@ -119,3 +121,47 @@ pack type:
         self.assertEqual(booster["name"], "booster pack")
         self.assertEqual(booster["select"], "all")
         self.assertGreaterEqual(len(booster["items"]), 2)
+
+
+class MseSetParserTests(SimpleTestCase):
+    def test_parse_mse_set_cards_and_set_info(self):
+        sample = """
+mse version: 2.0.0
+game: kor35
+stylesheet: demo.mse-style
+short name: Demo
+set info:
+    title: Demo Set
+    description: A test set
+card:
+    name: Fire Bolt
+    code: FB01
+    rules text: Deal 3 damage.
+"""
+        parsed = parse_mse_set(sample)
+        self.assertEqual(parsed["meta"]["short_name"], "Demo")
+        self.assertEqual(parsed["set_info"]["title"], "Demo Set")
+        self.assertEqual(len(parsed["cards"]), 1)
+        self.assertEqual(parsed["cards"][0]["name"], "Fire Bolt")
+
+    def test_map_mse_card_to_kor35(self):
+        mapped = map_mse_card_to_kor35({"name": "Bolt", "rules text": "Ping", "code": "B1"})
+        self.assertEqual(mapped["nome"], "Bolt")
+        self.assertEqual(mapped["codice"], "B1")
+        self.assertEqual(mapped["testo_gioco"], "Ping")
+
+
+class MseSymbolFontParserTests(SimpleTestCase):
+    def test_parse_symbol_font_codes(self):
+        sample = """
+symbol:
+    code: {W}
+    image: white.png
+symbol:
+    code: {U}
+    image: blue.png
+"""
+        parsed = parse_mse_symbol_font(sample)
+        self.assertIn("{W}", parsed["symbols"])
+        self.assertEqual(parsed["symbols"]["{W}"]["image"], "white.png")
+        self.assertEqual(parsed["symbols"]["{U}"]["code"], "{U}")

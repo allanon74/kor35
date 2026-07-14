@@ -1,5 +1,10 @@
 import { mediaUrl } from "./assetUrl";
 import { evalMseProp } from "./scriptEngine";
+import {
+  resolveSymbolLayersForText,
+  symbolImageUrl,
+  textContainsSymbolTokens,
+} from "./symbolFonts";
 import { mseColorToCss, normFieldKey } from "./fieldUtils";
 
 function pickProp(styleDef, ...keys) {
@@ -66,7 +71,16 @@ function fieldValueForName(fieldName, card, cardFields) {
 }
 
 function resolveLayersFromStyles(stylesMap, options) {
-  const { mseV1, card, styling, set, cardFields, extractedRoot, ctxBase } = options;
+  const {
+    mseV1,
+    card,
+    styling,
+    set,
+    cardFields,
+    extractedRoot,
+    ctxBase,
+    symbolFontPackage,
+  } = options;
   const cardW = mseV1?.card_size?.width || 375;
   const cardH = mseV1?.card_size?.height || 523;
   const layers = [];
@@ -94,8 +108,13 @@ function resolveLayersFromStyles(stylesMap, options) {
       ? evalMseProp(imageProp, ctx, "")
       : fieldValueForName(fieldName, card, cardFields);
 
-    if (renderStyle === "image" || (String(imageRaw).match(/\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i))) {
-      const src = mediaUrl(extractedRoot, String(imageRaw || "").trim());
+    if (renderStyle === "image" || String(imageRaw).match(/\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i)) {
+      const raw = String(imageRaw || "").trim();
+      const looksLikeFile = /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(raw) || raw.includes("/");
+      let src = looksLikeFile ? mediaUrl(extractedRoot, raw) : "";
+      if (!src && symbolFontPackage && raw) {
+        src = symbolImageUrl(symbolFontPackage, raw);
+      }
       if (src) {
         layers.push({
           type: "image",
@@ -104,8 +123,9 @@ function resolveLayersFromStyles(stylesMap, options) {
           box,
           src,
         });
+        return;
       }
-      return;
+      if (renderStyle === "image" && !raw) return;
     }
 
     const text =
@@ -116,13 +136,34 @@ function resolveLayersFromStyles(stylesMap, options) {
 
     if (!text && fieldName !== "name") return;
 
+    const font = resolveFont(styleDef);
+    const alwaysSymbol = Boolean(
+      styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"]
+    );
+
+    if (
+      symbolFontPackage &&
+      (renderStyle === "symbol" || alwaysSymbol || textContainsSymbolTokens(text))
+    ) {
+      layers.push({
+        type: "symbols",
+        fieldName,
+        z,
+        box,
+        glyphs: resolveSymbolLayersForText(text, symbolFontPackage, font.size),
+        font,
+        alignment: String(evalMseProp(pickProp(styleDef, "alignment"), ctx, "left top")),
+      });
+      return;
+    }
+
     layers.push({
       type: "text",
       fieldName,
       z,
       box,
       text,
-      font: resolveFont(styleDef),
+      font,
       alignment: String(evalMseProp(pickProp(styleDef, "alignment"), ctx, "left top")),
     });
   });
@@ -137,6 +178,7 @@ export function resolveMseLayers({
   set = {},
   cardFields = [],
   extractedRoot = "",
+  symbolFontPackage = null,
 }) {
   if (!mseV1) return { width: 375, height: 523, background: "#111827", layers: [] };
 
@@ -150,6 +192,7 @@ export function resolveMseLayers({
     cardFields,
     extractedRoot,
     ctxBase,
+    symbolFontPackage,
   }).sort((a, b) => a.z - b.z || a.box.top - b.box.top);
 
   const bg = mseColorToCss(mseV1.card_background) || "#1f2937";

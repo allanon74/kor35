@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { resolveTemplateBackground } from "../mse/assetUrl";
 import { buildCardScriptContext } from "../mse/scriptEngine";
 import { resolveMseLayers } from "../mse/resolveLayers";
+import { resolveSelectedSymbolFontPackage } from "../mse/symbolFonts";
 
 function alignmentStyle(alignment) {
   const parts = String(alignment || "left top").toLowerCase().split(/\s+/);
@@ -23,13 +24,20 @@ export default function MseCardPreview({
   styling = {},
   setData = {},
   getFieldValue,
+  packages = [],
   className = "",
+  previewRef,
 }) {
   const mseV1 = template?.layout_spec?.mse_v1;
 
   const card = useMemo(
     () => buildCardScriptContext(cardForm, gameCardFields, getFieldValue),
     [cardForm, gameCardFields, getFieldValue]
+  );
+
+  const symbolFontPackage = useMemo(
+    () => resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm),
+    [packages, gameCardFields, cardForm]
   );
 
   const render = useMemo(
@@ -41,8 +49,9 @@ export default function MseCardPreview({
         set: setData,
         cardFields: gameCardFields,
         extractedRoot: template?.mse_extracted_root || "",
+        symbolFontPackage,
       }),
-    [mseV1, card, styling, setData, gameCardFields, template?.mse_extracted_root]
+    [mseV1, card, styling, setData, gameCardFields, template?.mse_extracted_root, symbolFontPackage]
   );
 
   const bgImage = useMemo(() => resolveTemplateBackground(template), [template]);
@@ -55,6 +64,7 @@ export default function MseCardPreview({
 
   return (
     <div
+      ref={previewRef}
       className={`mse-card-preview ${className}`.trim()}
       style={{
         width: render.width * scale,
@@ -86,6 +96,47 @@ export default function MseCardPreview({
             />
           );
         }
+        if (layer.type === "symbols") {
+          return (
+            <div
+              key={`${layer.fieldName}-${layer.z}-sym`}
+              className="mse-layer mse-layer-symbols"
+              style={{
+                ...boxStyle,
+                ...alignmentStyle(layer.alignment),
+                display: "flex",
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "2px",
+              }}
+            >
+              {(layer.glyphs || []).map((g, idx) =>
+                g.type === "image" && g.src ? (
+                  <img
+                    key={`${layer.fieldName}-g-${idx}`}
+                    src={g.src}
+                    alt={g.value}
+                    style={{ width: g.size, height: g.size }}
+                    draggable={false}
+                  />
+                ) : (
+                  <span
+                    key={`${layer.fieldName}-t-${idx}`}
+                    style={{
+                      fontFamily: layer.font.family,
+                      fontSize: `${layer.font.size}px`,
+                      color: layer.font.color,
+                      fontWeight: layer.font.weight,
+                    }}
+                  >
+                    {g.value}
+                  </span>
+                )
+              )}
+            </div>
+          );
+        }
         return (
           <div
             key={`${layer.fieldName}-${layer.z}`}
@@ -105,4 +156,28 @@ export default function MseCardPreview({
       })}
     </div>
   );
+}
+
+export function useMseCardRender(props) {
+  const {
+    template,
+    cardForm,
+    gameCardFields,
+    styling = {},
+    setData = {},
+    getFieldValue,
+    packages = [],
+  } = props;
+  const mseV1 = template?.layout_spec?.mse_v1;
+  const card = buildCardScriptContext(cardForm, gameCardFields, getFieldValue);
+  const symbolFontPackage = resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm);
+  return resolveMseLayers({
+    mseV1,
+    card,
+    styling,
+    set: setData,
+    cardFields: gameCardFields,
+    extractedRoot: template?.mse_extracted_root || "",
+    symbolFontPackage,
+  });
 }

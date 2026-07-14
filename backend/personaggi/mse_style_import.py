@@ -740,4 +740,9 @@ def import_generic_package_directory(
             root_text = data.decode("utf-8", errors="replace")
 
     parsed_meta = parse_generic_package_meta(package_type, root_text) if root_text else {}
+    if package_type == "mse-symbol-font" and root_text:
+        from personaggi.mse_set_import import parse_mse_symbol_font
+
+        sf = parse_mse_symbol_font(root_text)
+        parsed_meta = {**parsed_meta, "symbols": sf.get("symbols", {})}
     return destination_root_rel, manifest, parsed_meta

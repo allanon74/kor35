@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  importMseSet,
   importMseStyleTemplate,
   loadInitialData,
   saveCarta,
@@ -8,15 +9,15 @@ import {
   saveKeyword,
 } from "./api/client";
 import { resolveCardListRowColor } from "./mse/cardListColor";
-import { resolveTemplateBackground } from "./mse/assetUrl";
 import { defaultStylingFromSpec } from "./mse/resolveLayers";
-import MseCardPreview from "./components/MseCardPreview";
-import PackSpecEditor from "./components/PackSpecEditor";
+import MseCardsTab from "./components/MseCardsTab";
+import MseKeywordsTab from "./components/MseKeywordsTab";
+import MseRandomPackTab from "./components/MseRandomPackTab";
+import MseSetTab from "./components/MseSetTab";
+import MseStatisticsTab from "./components/MseStatisticsTab";
+import MseStyleTab from "./components/MseStyleTab";
 import {
-  cardFieldValue,
-  mseColorToCss,
   normFieldKey,
-  wildcardMatch,
 } from "./mse/fieldUtils";
 import { buildSetStatistics } from "./mse/statistics";
 import {
@@ -61,37 +62,14 @@ const emptyCarta = {
   attiva: true,
 };
 
-const DEFAULT_LAYOUT = {
-  frame: { width: 320, height: 448 },
-  slots: {
-    title: { x: 12, y: 12, w: 216, h: 32 },
-    code: { x: 236, y: 12, w: 72, h: 32 },
-    rules: { x: 12, y: 264, w: 296, h: 120 },
-    stats: { x: 182, y: 392, w: 126, h: 44 },
-  },
-};
-
-const PRESET_LAYOUTS = {
-  std: DEFAULT_LAYOUT.slots,
-  mtg: {
-    title: { x: 14, y: 10, w: 210, h: 30 },
-    code: { x: 228, y: 10, w: 78, h: 30 },
-    rules: { x: 14, y: 278, w: 292, h: 110 },
-    stats: { x: 184, y: 392, w: 122, h: 44 },
-  },
-  kor35: {
-    title: { x: 12, y: 12, w: 216, h: 32 },
-    code: { x: 236, y: 12, w: 72, h: 32 },
-    rules: { x: 12, y: 264, w: 296, h: 120 },
-    stats: { x: 182, y: 392, w: 126, h: 44 },
-  },
-};
-
-const SNAP_GRID = 4;
-const TYPE_OPTIONS = ["PG", "Creatura", "Evento", "Supporto", "Incantesimo"];
-const ENERGY_OPTIONS = ["MAR", "FUO", "NAT", "OMB", "LUC", "ARC"];
-const RARITY_OPTIONS = ["COM", "NON", "RAR", "MIT", "UNI"];
-const COST_OPTIONS = Array.from({ length: 16 }, (_, i) => i);
+function parseJsonOrThrow(raw, label) {
+  if (!raw || !String(raw).trim()) return {};
+  const parsed = JSON.parse(raw);
+  if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
+    throw new Error(`${label}: atteso oggetto JSON.`);
+  }
+  return parsed;
+}
 
 const emptyKeyword = {
   codice: "",
@@ -115,87 +93,13 @@ const emptyGioco = {
   mse_game_name: "",
 };
 
-function parseJsonOrThrow(raw, label) {
-  if (!raw || !String(raw).trim()) return {};
-  const parsed = JSON.parse(raw);
-  if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
-    throw new Error(`${label}: atteso oggetto JSON.`);
-  }
-  return parsed;
-}
-
-const LORE_FIELD_KEYS = new Set(["lore", "flavor", "flavor_text"]);
-
-const LEGACY_SLOT_ALIASES = {
-  name: "title",
-  card_name: "title",
-  title: "title",
-  codice: "code",
-  code: "code",
-  rules: "rules",
-  rules_text: "rules",
-  text: "rules",
-  card_text: "rules",
-  type: "type_slot",
-  card_type: "type_slot",
-  energy: "energy_slot",
-  mana: "energy_slot",
-  resource: "energy_slot",
-  rarity: "rarity_slot",
-  cost: "stats",
-  mana_cost: "stats",
-  attack: "stats",
-  power: "stats",
-  forza: "stats",
-  health: "stats",
-  toughness: "stats",
-  robustezza: "stats",
-  initiative: "stats",
-  iniziativa: "stats",
-};
-
-const DEFAULT_FIELD_SLOTS = {
-  title: { x: 12, y: 12, w: 216, h: 32 },
-  code: { x: 236, y: 12, w: 72, h: 32 },
-  type_slot: { x: 12, y: 48, w: 120, h: 24 },
-  energy_slot: { x: 136, y: 48, w: 80, h: 24 },
-  rarity_slot: { x: 220, y: 48, w: 88, h: 24 },
-  rules: { x: 12, y: 264, w: 296, h: 120 },
-  stats: { x: 182, y: 392, w: 126, h: 44 },
-};
-
-function slotToStyle(slot) {
-  if (!slot) return {};
-  return {
-    position: "absolute",
-    left: slot.x,
-    top: slot.y,
-    width: slot.w,
-    height: slot.h,
-  };
-}
-
-function JsonField({ label, value, setValue }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <textarea
-        rows={5}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="{}"
-      />
-    </label>
-  );
-}
-
 const PANELS = [
   { id: "cards", label: "Cards" },
   { id: "style", label: "Style" },
-  { id: "set_info", label: "Set info" },
+  { id: "set_info", label: "Set" },
   { id: "keywords", label: "Keywords" },
   { id: "statistics", label: "Statistics" },
-  { id: "random_pack", label: "Random pack" },
+  { id: "random_pack", label: "Random Pack" },
   { id: "console", label: "Console" },
 ];
 
@@ -218,6 +122,7 @@ export default function App() {
   const [giocoForm, setGiocoForm] = useState(emptyGioco);
 
   const [espForm, setEspForm] = useState(emptyEspansione);
+  const [espId, setEspId] = useState(null);
   const [espSetSpecText, setEspSetSpecText] = useState("{}");
   const [cardForm, setCardForm] = useState(emptyCarta);
   const [cardId, setCardId] = useState(null);
@@ -233,13 +138,10 @@ export default function App() {
   const [mseImportName, setMseImportName] = useState("");
   const [mseImportSlug, setMseImportSlug] = useState("");
   const [mseImportDefault, setMseImportDefault] = useState(false);
-  const [previewMode, setPreviewMode] = useState("edit");
-  const [layoutSlots, setLayoutSlots] = useState(DEFAULT_LAYOUT.slots);
-  const [layoutPreset, setLayoutPreset] = useState("kor35");
-  const [lockedSlots, setLockedSlots] = useState({});
-  const [dragState, setDragState] = useState(null);
-  const [showExtraFields, setShowExtraFields] = useState(false);
-  const [cardFace, setCardFace] = useState("front");
+  const [mseSetFile, setMseSetFile] = useState(null);
+  const [mseSetImportName, setMseSetImportName] = useState("");
+  const [mseSetImportSlug, setMseSetImportSlug] = useState("");
+  const [importingSet, setImportingSet] = useState(false);
   const [selectedGameId, setSelectedGameId] = useState("");
   const [defaultsAppliedGameId, setDefaultsAppliedGameId] = useState("");
   const [statsEspansioneId, setStatsEspansioneId] = useState("");
@@ -250,6 +152,7 @@ export default function App() {
   const [packDraft, setPackDraft] = useState({ pack_items: [], pack_types: [] });
   const [packDraftBaseline, setPackDraftBaseline] = useState("");
   const [packSaving, setPackSaving] = useState(false);
+  const [stylePreviewTemplateId, setStylePreviewTemplateId] = useState("");
 
   const refresh = async () => {
     setLoading(true);
@@ -444,211 +347,12 @@ export default function App() {
     return buildSetStatistics({ cards: pool, cardFields: gameCardFields });
   }, [carte, statsEspansioneId, selectedGameId, espansioniById, gameCardFields]);
 
-  const previewFields = useMemo(() => {
-    if (!gameCardFields.length) return [];
-    return gameCardFields.filter((f) => {
-      const k = normFieldKey(f.name);
-      if (cardFace === "back") return LORE_FIELD_KEYS.has(k);
-      return !LORE_FIELD_KEYS.has(k);
-    });
-  }, [gameCardFields, cardFace]);
-
-  const packageOptionsForField = (field) => {
-    const staticChoices = (field.choices || []).map((c) => c.name).filter(Boolean);
-    const match = String(field.match || "").trim();
-    if (!match) return staticChoices;
-    return msePackages
-      .filter((pkg) => wildcardMatch(match, pkg.package_name))
-      .map((pkg) => pkg.package_name)
-      .sort((a, b) => a.localeCompare(b));
-  };
-
-  const resolvePreviewSlot = (fieldKey) => {
-    if (layoutSlots[fieldKey]) return layoutSlots[fieldKey];
-    const alias = LEGACY_SLOT_ALIASES[fieldKey];
-    if (alias && layoutSlots[alias]) return layoutSlots[alias];
-    if (alias && DEFAULT_FIELD_SLOTS[alias]) return DEFAULT_FIELD_SLOTS[alias];
-    if (DEFAULT_FIELD_SLOTS[fieldKey]) return DEFAULT_FIELD_SLOTS[fieldKey];
-    const idx = previewFields.findIndex((f) => normFieldKey(f.name) === fieldKey);
-    const row = Math.max(0, idx);
-    return { x: 12, y: 72 + row * 34, w: 280, h: 28 };
-  };
-
   const cardListRowStyle = (row) =>
     resolveCardListRowColor({
       gameSpec: selectedGame?.meta?.mse_game_spec,
       cardFields: gameCardFields,
       row,
     });
-
-  const renderPackageChoiceSelect = (field, val, onChange) => {
-    const options = packageOptionsForField(field);
-    const required = field.required !== false;
-    const emptyLabel = field.empty_name || "None";
-    return (
-      <select value={String(val || "")} onChange={(e) => onChange(e.target.value)}>
-        {!required && <option value="">{emptyLabel}</option>}
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
-    );
-  };
-
-  const renderPreviewFieldEditor = (field) => {
-    const fieldKey = normFieldKey(field.name);
-    const fType = String(field.type || "text").toLowerCase();
-    const val = dynamicFieldValue(field);
-    const slot = resolvePreviewSlot(fieldKey);
-    const slotStyle = slotToStyle(slot);
-    const commonProps = {
-      style: slotStyle,
-      onMouseDown: (e) => beginDrag(fieldKey, e),
-      title: field.name,
-    };
-
-    if (previewMode === "preview") {
-      const display =
-        fType === "multiple choice"
-          ? (Array.isArray(val) ? val : String(val || "").split(",")).join(", ")
-          : fType === "color"
-            ? ""
-            : String(val || "");
-      return (
-        <div
-          key={`pv-${fieldKey}`}
-          className={`incard-field-preview incard-field-${fType.replace(/\s+/g, "-")}`}
-          style={{
-            ...slotStyle,
-            ...(fType === "color" ? { backgroundColor: mseColorToCss(val) || "#000" } : {}),
-          }}
-        >
-          {fType !== "color" ? display : null}
-        </div>
-      );
-    }
-
-    if (fType === "multiple choice") {
-      const options = (field.choices || []).map((c) => c.name).filter(Boolean);
-      const selected = Array.isArray(val)
-        ? val.map(String)
-        : String(val || "")
-            .split(",")
-            .map((x) => x.trim())
-            .filter(Boolean);
-      return (
-        <select
-          key={`pv-${fieldKey}`}
-          multiple
-          className="incard-field-input"
-          {...commonProps}
-          value={selected}
-          onChange={(e) =>
-            setDynamicFieldValue(field, Array.from(e.target.selectedOptions).map((o) => o.value))
-          }
-        >
-          {options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      );
-    }
-    if (fType === "choice") {
-      const options = (field.choices || []).map((c) => c.name).filter(Boolean);
-      return (
-        <select
-          key={`pv-${fieldKey}`}
-          className="incard-field-input"
-          {...commonProps}
-          value={String(val || "")}
-          onChange={(e) => setDynamicFieldValue(field, e.target.value)}
-        >
-          {options.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
-          ))}
-        </select>
-      );
-    }
-    if (fType === "package choice") {
-      return (
-        <div key={`pv-${fieldKey}`} className="incard-field-input-wrap" style={slotStyle}>
-          {renderPackageChoiceSelect(field, val, (v) => setDynamicFieldValue(field, v))}
-        </div>
-      );
-    }
-    if (fType === "color") {
-      return (
-        <input
-          key={`pv-${fieldKey}`}
-          type="color"
-          className="incard-field-input"
-          {...commonProps}
-          value={String(val || "#000000")}
-          onChange={(e) => setDynamicFieldValue(field, e.target.value)}
-        />
-      );
-    }
-    if (field.multi_line || fType === "text") {
-      return (
-        <textarea
-          key={`pv-${fieldKey}`}
-          className={`incard-field-input ${fType === "text" && fieldKey.includes("rule") ? "incard-rules" : ""}`}
-          {...commonProps}
-          value={String(val || "")}
-          onChange={(e) => setDynamicFieldValue(field, e.target.value)}
-        />
-      );
-    }
-    if (["number", "int"].includes(fType)) {
-      return (
-        <input
-          key={`pv-${fieldKey}`}
-          type="number"
-          className="incard-field-input"
-          {...commonProps}
-          value={Number(val || 0)}
-          onChange={(e) => setDynamicFieldValue(field, e.target.value)}
-        />
-      );
-    }
-    return (
-      <input
-        key={`pv-${fieldKey}`}
-        className={`incard-field-input ${fieldKey === "title" || fieldKey === "name" ? "incard-title" : fieldKey === "code" ? "incard-code" : ""}`}
-        {...commonProps}
-        value={String(val || "")}
-        onChange={(e) => setDynamicFieldValue(field, e.target.value)}
-      />
-    );
-  };
-
-  const renderPreviewSlotChrome = (fieldKey) => {
-    if (previewMode !== "edit") return null;
-    const slot = resolvePreviewSlot(fieldKey);
-    return (
-      <>
-        <button
-          type="button"
-          className={`slot-lock ${lockedSlots[fieldKey] ? "locked" : ""}`}
-          style={{ left: slot.x + slot.w - 18, top: slot.y - 10 }}
-          onClick={() => setLockedSlots((p) => ({ ...p, [fieldKey]: !p[fieldKey] }))}
-        >
-          🔒
-        </button>
-        <span
-          className="resize-handle"
-          style={{ left: slot.x + slot.w - 8, top: slot.y + slot.h - 8 }}
-          onMouseDown={(e) => beginResize(fieldKey, e)}
-        />
-      </>
-    );
-  };
 
   useEffect(() => {
     if (!visiblePanels.some((p) => p.id === tab)) {
@@ -666,20 +370,6 @@ export default function App() {
   );
 
   const mseV1 = useMemo(() => activeTemplate?.layout_spec?.mse_v1 || null, [activeTemplate]);
-  const hasMsePreview = useMemo(
-    () => Boolean(mseV1 && Object.keys(mseV1.card_styles || {}).length > 0),
-    [mseV1]
-  );
-  const cardFrameSize = useMemo(() => {
-    const w = activeTemplate?.layout_spec?.card_width_px || mseV1?.card_size?.width || 320;
-    const h = activeTemplate?.layout_spec?.card_height_px || mseV1?.card_size?.height || 448;
-    return { width: w, height: h };
-  }, [activeTemplate, mseV1]);
-
-  const templateBackgroundImage = useMemo(
-    () => resolveTemplateBackground(activeTemplate),
-    [activeTemplate]
-  );
 
   useEffect(() => {
     if (!mseV1) {
@@ -689,6 +379,12 @@ export default function App() {
     const saved = cardForm.studio_carta_spec?.styling || {};
     setStylingValues({ ...defaultStylingFromSpec(mseV1), ...saved });
   }, [mseV1, cardForm.studio_template, cardId, cardForm.studio_carta_spec]);
+
+  useEffect(() => {
+    if (cardForm.studio_template) {
+      setStylePreviewTemplateId(cardForm.studio_template);
+    }
+  }, [cardForm.studio_template]);
 
   const patchStylingValue = (field, rawValue) => {
     const name = field?.name;
@@ -745,8 +441,16 @@ export default function App() {
   ]);
 
   const onEditEsp = (row) => {
+    setEspId(row.id);
     setEspForm({ ...emptyEspansione, ...row });
     setEspSetSpecText(JSON.stringify(row.studio_set_spec || {}, null, 2));
+    if (row.gioco_definizione) setSelectedGameId(row.gioco_definizione);
+  };
+
+  const onNewKeyword = () => {
+    setKwId(null);
+    setKwForm(emptyKeyword);
+    setEffectScriptText("{}");
   };
 
   const onEditCard = (row) => {
@@ -761,96 +465,6 @@ export default function App() {
     } else if (row.studio_template && templatesById[row.studio_template]?.gioco_definizione) {
       setSelectedGameId(templatesById[row.studio_template].gioco_definizione);
     }
-  };
-
-  useEffect(() => {
-    try {
-      const spec = parseJsonOrThrow(studioSpecText, "studio_carta_spec");
-      const slots = spec?.layout?.slots;
-      if (slots && typeof slots === "object") {
-        setLayoutSlots((prev) => ({ ...prev, ...slots }));
-      } else {
-        setLayoutSlots(DEFAULT_LAYOUT.slots);
-      }
-    } catch {
-      // ignore while typing invalid json
-    }
-  }, [studioSpecText]);
-
-  const patchStudioLayoutSlots = (slots) => {
-    let spec = {};
-    try {
-      spec = parseJsonOrThrow(studioSpecText, "studio_carta_spec");
-    } catch {
-      spec = {};
-    }
-    spec.layout = spec.layout || {};
-    spec.layout.slots = slots;
-    const txt = JSON.stringify(spec, null, 2);
-    setStudioSpecText(txt);
-    setCardForm((p) => ({ ...p, studio_carta_spec: spec }));
-  };
-
-  const beginDrag = (slotKey, ev) => {
-    if (previewMode !== "edit") return;
-    if (lockedSlots[slotKey]) return;
-    const slot = layoutSlots[slotKey] || resolvePreviewSlot(slotKey);
-    if (!slot) return;
-    setDragState({
-      mode: "move",
-      slotKey,
-      startX: ev.clientX,
-      startY: ev.clientY,
-      originX: slot.x,
-      originY: slot.y,
-    });
-  };
-
-  const beginResize = (slotKey, ev) => {
-    if (previewMode !== "edit") return;
-    if (lockedSlots[slotKey]) return;
-    ev.stopPropagation();
-    const slot = layoutSlots[slotKey] || resolvePreviewSlot(slotKey);
-    if (!slot) return;
-    setDragState({
-      mode: "resize",
-      slotKey,
-      startX: ev.clientX,
-      startY: ev.clientY,
-      originW: slot.w,
-      originH: slot.h,
-    });
-  };
-
-  const onCardMouseMove = (ev) => {
-    if (!dragState) return;
-    const dx = ev.clientX - dragState.startX;
-    const dy = ev.clientY - dragState.startY;
-    const snap = (n) => Math.round(n / SNAP_GRID) * SNAP_GRID;
-    let updatedSlot = { ...layoutSlots[dragState.slotKey] };
-    if (dragState.mode === "resize") {
-      updatedSlot.w = Math.max(24, snap(dragState.originW + dx));
-      updatedSlot.h = Math.max(24, snap(dragState.originH + dy));
-    } else {
-      updatedSlot.x = Math.max(0, snap(dragState.originX + dx));
-      updatedSlot.y = Math.max(0, snap(dragState.originY + dy));
-    }
-    const next = { ...layoutSlots, [dragState.slotKey]: updatedSlot };
-    setLayoutSlots(next);
-  };
-
-  const endDrag = () => {
-    if (!dragState) return;
-    patchStudioLayoutSlots(layoutSlots);
-    setDragState(null);
-  };
-
-  const applyPreset = (presetKey) => {
-    const slots = PRESET_LAYOUTS[presetKey] || PRESET_LAYOUTS.kor35;
-    const cloned = JSON.parse(JSON.stringify(slots));
-    setLayoutPreset(presetKey);
-    setLayoutSlots(cloned);
-    patchStudioLayoutSlots(cloned);
   };
 
   const selectNeighborCard = (delta) => {
@@ -952,21 +566,6 @@ export default function App() {
     }
     spec.mse_set_fields = { ...(spec.mse_set_fields || {}), [k]: v };
     setEspSetSpecText(JSON.stringify(spec, null, 2));
-  };
-
-  const dynamicFieldValue = (field) => {
-    const k = normFieldKey(field?.name);
-    if (["name", "card_name", "title"].includes(k)) return cardForm.nome || "";
-    if (["rules", "rules_text", "text", "card_text"].includes(k)) return cardForm.testo_gioco || "";
-    if (["lore", "flavor", "flavor_text"].includes(k)) return cardForm.testo_lore || "";
-    if (["type", "card_type"].includes(k)) return cardForm.tipo || "";
-    if (["energy", "mana", "resource"].includes(k)) return cardForm.energia || "";
-    if (["rarity"].includes(k)) return cardForm.rarita || "";
-    if (["cost", "mana_cost"].includes(k)) return cardForm.costo_gioco ?? 0;
-    if (["attack", "power", "forza"].includes(k)) return cardForm.attacco ?? 0;
-    if (["health", "toughness", "robustezza"].includes(k)) return cardForm.salute ?? 0;
-    if (["initiative", "iniziativa"].includes(k)) return cardForm.iniziativa ?? 0;
-    return cardForm.mse_campi?.[k] ?? field.initial ?? "";
   };
 
   const setDynamicFieldValue = (field, rawValue) => {
@@ -1074,6 +673,53 @@ export default function App() {
     }
   };
 
+  const handleGameChange = (gid) => {
+    setSelectedGameId(gid);
+    if (!cardId && !cardForm.espansione) {
+      const fallback =
+        defaultTemplateByGame[gid] ||
+        templates.find((t) => t.gioco_definizione === gid)?.id ||
+        null;
+      updateCardField("studio_template", fallback);
+    }
+  };
+
+  const handleImportMseSet = async () => {
+    if (!mseSetFile) {
+      setMsg("Seleziona prima un file .mse-set/.zip.");
+      return;
+    }
+    const giocoId = selectedGameId || giocoForm.id;
+    if (!giocoId) {
+      setMsg("Seleziona un gioco prima di importare il set.");
+      return;
+    }
+    setImportingSet(true);
+    try {
+      const res = await importMseSet({
+        file: mseSetFile,
+        gioco_definizione: giocoId,
+        nome: mseSetImportName,
+        slug: mseSetImportSlug,
+      });
+      const s = res?.import_summary || {};
+      setMsg(
+        `Set importato: ${s.card_count || 0} carte (${s.cards_created || 0} nuove, ${s.cards_updated || 0} aggiornate).`
+      );
+      setMseSetFile(null);
+      setMseSetImportName("");
+      setMseSetImportSlug("");
+      await refresh();
+      if (res?.espansione) {
+        onEditEsp(res.espansione);
+      }
+    } catch (err) {
+      setMsg(err.message || "Import .mse-set fallito.");
+    } finally {
+      setImportingSet(false);
+    }
+  };
+
   const handleImportMseStyle = async () => {
     if (!mseStyleFile) {
       setMsg("Seleziona prima un file .mse-style/.zip.");
@@ -1106,15 +752,16 @@ export default function App() {
   return (
     <main className="app mse">
       <header className="header">
-        <h1>Card Set Editor</h1>
-        <p>UI ispirata a MSE: pannelli dedicati per Cards, Style, Set info, Keywords, Stats.</p>
+        <h1>Magic Set Editor — KOR35 Card Studio</h1>
       </header>
 
       <div className="toolbar">
         <button type="button" onClick={refresh}>Refresh</button>
         <button type="button" onClick={handleSaveCard}>Save card</button>
-        <button type="button" onClick={handleSaveEsp}>Save set info</button>
-        <button type="button" onClick={handleSaveKeyword}>Save keyword</button>
+        <button type="button" onClick={handleSaveEsp}>Save set</button>
+        {gameHasKeywords && (
+          <button type="button" onClick={handleSaveKeyword}>Save keyword</button>
+        )}
       </div>
 
       <nav className="tabs mse-tabs">
@@ -1134,790 +781,145 @@ export default function App() {
       {loading && <p>Caricamento…</p>}
 
       {!loading && tab === "cards" && (
-        <section className="cards-layout">
-          <aside className="cards-list-panel">
-            <h2>Card list</h2>
-            <label className="field">
-              <span>Search cards</span>
-              <input
-                value={cardFilter}
-                onChange={(e) => setCardFilter(e.target.value)}
-                placeholder="name, code, type..."
-              />
-            </label>
-            <div className="row-actions">
-              <button type="button" onClick={() => selectNeighborCard(-1)}>Prev</button>
-              <button type="button" onClick={() => selectNeighborCard(1)}>Next</button>
-            </div>
-            <ul>
-              {filteredCards.map((row) => (
-                <li key={row.id} style={cardListRowStyle(row)}>
-                  <button type="button" onClick={() => onEditCard(row)}>
-                    {gameCardListColumns.map((c) => {
-                      const val =
-                        c.key === "nome"
-                          ? row.nome
-                          : c.key === "codice"
-                            ? row.codice
-                            : cardFieldValue(row, { name: c.key }) ||
-                              row.mse_campi?.[c.key];
-                      return (
-                        <span
-                          key={c.key}
-                          className="list-col"
-                          style={{
-                            width: `${Math.max(60, Number(c.width || 100))}px`,
-                            textAlign: c.align,
-                          }}
-                        >
-                          <strong>{c.label}:</strong> {String(val || "—")}
-                        </span>
-                      );
-                    })}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </aside>
-          <article className="cards-editor-panel">
-            <h2>Card editor</h2>
-            <section className="incard-section">
-              <p className="sub">In-card direct edit</p>
-              <div className="row-actions">
-                <button type="button" className={previewMode === "edit" ? "active" : ""} onClick={() => setPreviewMode("edit")}>Edit overlay</button>
-                <button type="button" className={previewMode === "preview" ? "active" : ""} onClick={() => setPreviewMode("preview")}>Render preview</button>
-                <select value={layoutPreset} onChange={(e) => applyPreset(e.target.value)}>
-                  <option value="kor35">Preset kor35</option>
-                  <option value="mtg">Preset mtg</option>
-                  <option value="std">Preset std</option>
-                </select>
-                <button type="button" onClick={() => {
-                  setLayoutSlots(DEFAULT_LAYOUT.slots);
-                  patchStudioLayoutSlots(DEFAULT_LAYOUT.slots);
-                }}>Reset layout</button>
-                <button type="button" className={cardFace === "front" ? "active" : ""} onClick={() => setCardFace("front")}>Front</button>
-                <button type="button" className={cardFace === "back" ? "active" : ""} onClick={() => setCardFace("back")}>Back/Lore</button>
-                <button type="button" onClick={() => setShowExtraFields(true)}>Extra fields</button>
-              </div>
-              <div className="mse-workbench">
-                <div className="mse-card-table">
-                  <h3>Card table</h3>
-                  <label className="field"><span>Code</span><input value={cardForm.codice || ""} onChange={(e) => updateCardField("codice", e.target.value)} /></label>
-                  {gameCardFields.length > 0 ? (
-                    gameCardFields
-                      .filter((f) => f.editable !== false)
-                      .map((field) => {
-                        const fType = String(field.type || "text").toLowerCase();
-                        const val = dynamicFieldValue(field);
-                        const options = (field.choices || []).map((c) => c.name).filter(Boolean);
-                        return (
-                          <label className="field" key={`${field.name}-${fType}`}>
-                            <span>{field.name}</span>
-                            {fType === "multiple choice" ? (
-                              <select
-                                multiple
-                                value={
-                                  Array.isArray(val)
-                                    ? val.map(String)
-                                    : String(val || "")
-                                        .split(",")
-                                        .map((x) => x.trim())
-                                        .filter(Boolean)
-                                }
-                                onChange={(e) =>
-                                  setDynamicFieldValue(
-                                    field,
-                                    Array.from(e.target.selectedOptions).map((o) => o.value)
-                                  )
-                                }
-                              >
-                                {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                              </select>
-                            ) : fType === "choice" ? (
-                              <select value={String(val || "")} onChange={(e) => setDynamicFieldValue(field, e.target.value)}>
-                                {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                              </select>
-                            ) : fType === "package choice" ? (
-                              renderPackageChoiceSelect(field, val, (v) => setDynamicFieldValue(field, v))
-                            ) : fType === "color" ? (
-                              <input type="color" value={String(val || "#000000")} onChange={(e) => setDynamicFieldValue(field, e.target.value)} />
-                            ) : fType === "image" || fType === "symbol" ? (
-                              <>
-                                <input type="file" onChange={(e) => onDynamicFilePicked(field, e.target.files?.[0] || null)} />
-                                <input value={String(val || "")} onChange={(e) => setDynamicFieldValue(field, e.target.value)} placeholder="asset path..." />
-                              </>
-                            ) : fType === "boolean" ? (
-                              <select value={String(val || "no")} onChange={(e) => setDynamicFieldValue(field, e.target.value)}>
-                                <option value="yes">yes</option>
-                                <option value="no">no</option>
-                              </select>
-                            ) : field.multi_line ? (
-                              <textarea rows={4} value={String(val || "")} onChange={(e) => setDynamicFieldValue(field, e.target.value)} />
-                            ) : (
-                              <input value={String(val || "")} onChange={(e) => setDynamicFieldValue(field, e.target.value)} />
-                            )}
-                          </label>
-                        );
-                      })
-                  ) : (
-                    <>
-                      <p className="hint">Nessun `card field` disponibile nel game MSE selezionato: fallback schema base.</p>
-                      <label className="field"><span>Name</span><input value={cardForm.nome || ""} onChange={(e) => updateCardField("nome", e.target.value)} /></label>
-                      <label className="field"><span>Type</span><select value={cardForm.tipo || "PG"} onChange={(e) => updateCardField("tipo", e.target.value)}>{TYPE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>
-                      <label className="field"><span>Energy</span><select value={cardForm.energia || "MAR"} onChange={(e) => updateCardField("energia", e.target.value)}>{ENERGY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>
-                      <label className="field"><span>Rarity</span><select value={cardForm.rarita || "COM"} onChange={(e) => updateCardField("rarita", e.target.value)}>{RARITY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>
-                    </>
-                  )}
-                </div>
-                <div className="incard-preview">
-                <div
-                  className={`incard-frame ${previewMode === "preview" ? "preview-mode" : ""} ${hasMsePreview ? "has-mse-preview" : ""}`}
-                  onAuxClick={() => setCardFace((prev) => (prev === "front" ? "back" : "front"))}
-                  onMouseMove={onCardMouseMove}
-                  onMouseUp={endDrag}
-                  onMouseLeave={endDrag}
-                  style={{
-                    width: `${cardFrameSize.width}px`,
-                    height: `${cardFrameSize.height}px`,
-                    ...(!(hasMsePreview && previewMode === "preview") && templateBackgroundImage
-                      ? {
-                          backgroundImage: `url(${templateBackgroundImage})`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                        }
-                      : {}),
-                  }}
-                >
-                  {cardFace === "front" ? (
-                    hasMsePreview && previewMode === "preview" ? (
-                      <MseCardPreview
-                        template={activeTemplate}
-                        cardForm={cardForm}
-                        gameCardFields={gameCardFields}
-                        styling={stylingValues}
-                        setData={
-                          cardForm.espansione
-                            ? espansioniById[cardForm.espansione]?.studio_set_spec?.mse_set_fields || {}
-                            : {}
-                        }
-                        getFieldValue={dynamicFieldValue}
-                        className="mse-fill"
-                      />
-                    ) : (
-                    <>
-                  {previewFields.length > 0 ? (
-                    <>
-                      {previewFields
-                        .filter((f) => f.editable !== false)
-                        .map((field) => {
-                          const fieldKey = normFieldKey(field.name);
-                          return (
-                            <div key={`wrap-${fieldKey}`}>
-                              {renderPreviewFieldEditor(field)}
-                              {renderPreviewSlotChrome(fieldKey)}
-                            </div>
-                          );
-                        })}
-                      {!previewFields.some((f) => ["codice", "code"].includes(normFieldKey(f.name))) && (
-                        <>
-                          <input
-                            className="incard-code"
-                            style={slotToStyle(resolvePreviewSlot("code"))}
-                            value={cardForm.codice || ""}
-                            onChange={(e) => updateCardField("codice", e.target.value)}
-                            placeholder="CODE-001"
-                            onMouseDown={(e) => beginDrag("code", e)}
-                          />
-                          {renderPreviewSlotChrome("code")}
-                        </>
-                      )}
-                      {previewMode === "edit" && (
-                        <div className="overlay-hint">
-                          Drag/resize con snap grid {SNAP_GRID}px. Slot da game fields + studio_carta_spec.layout.slots.
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                  <input
-                    className="incard-title"
-                    style={layoutSlots.title}
-                    value={cardForm.nome || ""}
-                    onChange={(e) => updateCardField("nome", e.target.value)}
-                    placeholder="Card name"
-                    onMouseDown={(e) => beginDrag("title", e)}
-                  />
-                  {previewMode === "edit" && (
-                    <>
-                      <button type="button" className={`slot-lock ${lockedSlots.title ? "locked" : ""}`} style={{ left: layoutSlots.title.x + layoutSlots.title.w - 18, top: layoutSlots.title.y - 10 }} onClick={() => setLockedSlots((p) => ({ ...p, title: !p.title }))}>🔒</button>
-                      <span className="resize-handle" style={{ left: layoutSlots.title.x + layoutSlots.title.w - 8, top: layoutSlots.title.y + layoutSlots.title.h - 8 }} onMouseDown={(e) => beginResize("title", e)} />
-                    </>
-                  )}
-                  <input
-                    className="incard-code"
-                    style={layoutSlots.code}
-                    value={cardForm.codice || ""}
-                    onChange={(e) => updateCardField("codice", e.target.value)}
-                    placeholder="CODE-001"
-                    onMouseDown={(e) => beginDrag("code", e)}
-                  />
-                  {previewMode === "edit" && (
-                    <>
-                      <button type="button" className={`slot-lock ${lockedSlots.code ? "locked" : ""}`} style={{ left: layoutSlots.code.x + layoutSlots.code.w - 18, top: layoutSlots.code.y - 10 }} onClick={() => setLockedSlots((p) => ({ ...p, code: !p.code }))}>🔒</button>
-                      <span className="resize-handle" style={{ left: layoutSlots.code.x + layoutSlots.code.w - 8, top: layoutSlots.code.y + layoutSlots.code.h - 8 }} onMouseDown={(e) => beginResize("code", e)} />
-                    </>
-                  )}
-                  <textarea
-                    className="incard-rules"
-                    style={layoutSlots.rules}
-                    value={cardForm.testo_gioco || ""}
-                    onChange={(e) => updateCardField("testo_gioco", e.target.value)}
-                    placeholder="Rules text..."
-                    onMouseDown={(e) => beginDrag("rules", e)}
-                  />
-                  {previewMode === "edit" && (
-                    <>
-                      <button type="button" className={`slot-lock ${lockedSlots.rules ? "locked" : ""}`} style={{ left: layoutSlots.rules.x + layoutSlots.rules.w - 18, top: layoutSlots.rules.y - 10 }} onClick={() => setLockedSlots((p) => ({ ...p, rules: !p.rules }))}>🔒</button>
-                      <span className="resize-handle" style={{ left: layoutSlots.rules.x + layoutSlots.rules.w - 8, top: layoutSlots.rules.y + layoutSlots.rules.h - 8 }} onMouseDown={(e) => beginResize("rules", e)} />
-                    </>
-                  )}
-                  <div
-                    className="incard-stats"
-                    style={{
-                      left: layoutSlots.stats.x,
-                      top: layoutSlots.stats.y,
-                      width: layoutSlots.stats.w,
-                      height: layoutSlots.stats.h,
-                    }}
-                    onMouseDown={(e) => beginDrag("stats", e)}
-                  >
-                    <input
-                      type="number"
-                      value={cardForm.costo_gioco ?? 0}
-                      onChange={(e) => updateCardField("costo_gioco", Number(e.target.value))}
-                      title="Cost"
-                    />
-                    <input
-                      type="number"
-                      value={cardForm.attacco ?? 0}
-                      onChange={(e) => updateCardField("attacco", Number(e.target.value))}
-                      title="Attack"
-                    />
-                    <input
-                      type="number"
-                      value={cardForm.salute ?? 0}
-                      onChange={(e) => updateCardField("salute", Number(e.target.value))}
-                      title="Health"
-                    />
-                    <input
-                      type="number"
-                      value={cardForm.iniziativa ?? 0}
-                      onChange={(e) => updateCardField("iniziativa", Number(e.target.value))}
-                      title="Initiative"
-                    />
-                  </div>
-                  {previewMode === "edit" && (
-                    <>
-                      <button type="button" className={`slot-lock ${lockedSlots.stats ? "locked" : ""}`} style={{ left: layoutSlots.stats.x + layoutSlots.stats.w - 18, top: layoutSlots.stats.y - 10 }} onClick={() => setLockedSlots((p) => ({ ...p, stats: !p.stats }))}>🔒</button>
-                      <span className="resize-handle" style={{ left: layoutSlots.stats.x + layoutSlots.stats.w - 8, top: layoutSlots.stats.y + layoutSlots.stats.h - 8 }} onMouseDown={(e) => beginResize("stats", e)} />
-                    </>
-                  )}
-                  {previewMode === "edit" && (
-                    <div className="overlay-hint">
-                      Drag/resize con snap grid {SNAP_GRID}px. Usa lock per bloccare slot.
-                    </div>
-                  )}
-                    </>
-                  )}
-                    </>
-                    )
-                  ) : (
-                    <div className="card-back">
-                      {previewFields.length > 0 ? (
-                        previewFields
-                          .filter((f) => f.editable !== false)
-                          .map((field) => renderPreviewFieldEditor(field))
-                      ) : (
-                        <>
-                          <h3>{cardForm.nome || "Card name"}</h3>
-                          <p>{cardForm.testo_lore || "Lore non ancora compilata."}</p>
-                        </>
-                      )}
-                      <div className="back-thumb">{activeTemplate?.nome || "Template"}</div>
-                    </div>
-                  )}
-                </div>
-                </div>
-              </div>
-            </section>
-            <div className="fields-2">
-              <label className="field"><span>Code</span><input value={cardForm.codice} onChange={(e) => setCardForm((p) => ({ ...p, codice: e.target.value }))} /></label>
-              <label className="field"><span>Name</span><input value={cardForm.nome} onChange={(e) => setCardForm((p) => ({ ...p, nome: e.target.value }))} /></label>
-              <label className="field">
-                <span>Game</span>
-                <select
-                  value={selectedGameId || ""}
-                  onChange={(e) => {
-                    const gid = e.target.value;
-                    setSelectedGameId(gid);
-                    if (!cardId && !cardForm.espansione) {
-                      const fallback = defaultTemplateByGame[gid] || templates.find((t) => t.gioco_definizione === gid)?.id || null;
-                      updateCardField("studio_template", fallback);
-                    }
-                  }}
-                  disabled={Boolean(cardId || cardForm.espansione)}
-                >
-                  <option value="">— Select game —</option>
-                  {giochi.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
-                </select>
-              </label>
-              <label className="field">
-                <span>Set / Expansion</span>
-                <select value={cardForm.espansione || ""} onChange={(e) => setCardForm((p) => ({ ...p, espansione: e.target.value || null }))}>
-                  <option value="">— None —</option>
-                  {espansioni
-                    .filter((e) => !selectedGameId || e.gioco_definizione === selectedGameId)
-                    .map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                </select>
-              </label>
-              <label className="field">
-                <span>Template</span>
-                <select value={cardForm.studio_template || ""} onChange={(e) => updateTemplateByGame(e.target.value)} disabled={!selectedGameId}>
-                  <option value="">— None —</option>
-                  {templatesForSelectedGame.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
-              </label>
-              <label className="field"><span>Type</span><select value={cardForm.tipo || "PG"} onChange={(e) => updateCardField("tipo", e.target.value)}>{TYPE_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>
-              <label className="field"><span>Energy</span><select value={cardForm.energia || "MAR"} onChange={(e) => updateCardField("energia", e.target.value)}>{ENERGY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>
-              <label className="field"><span>Rarity</span><select value={cardForm.rarita || "COM"} onChange={(e) => updateCardField("rarita", e.target.value)}>{RARITY_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>
-              <label className="field"><span>Cost</span><select value={cardForm.costo_gioco ?? 0} onChange={(e) => updateCardField("costo_gioco", Number(e.target.value))}>{COST_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}</select></label>
-              <label className="field"><span>Forza</span><input type="number" value={cardForm.attacco ?? 0} onChange={(e) => updateCardField("attacco", Number(e.target.value))} /></label>
-              <label className="field"><span>Robustezza</span><input type="number" value={cardForm.salute ?? 0} onChange={(e) => updateCardField("salute", Number(e.target.value))} /></label>
-              <label className="field"><span>Iniziativa</span><input type="number" value={cardForm.iniziativa ?? 0} onChange={(e) => updateCardField("iniziativa", Number(e.target.value))} /></label>
-            </div>
-            <label className="field"><span>Rules text</span><textarea rows={5} value={cardForm.testo_gioco || ""} onChange={(e) => updateCardField("testo_gioco", e.target.value)} /></label>
-            <label className="field"><span>Lore text (retro)</span><textarea rows={4} value={cardForm.testo_lore || ""} onChange={(e) => updateCardField("testo_lore", e.target.value)} /></label>
-            <details open>
-              <summary>Advanced data (MSE/Arena mapping)</summary>
-              <JsonField label="studio_carta_spec" value={studioSpecText} setValue={setStudioSpecText} />
-              <JsonField label="arena_playable_spec" value={playableSpecText} setValue={setPlayableSpecText} />
-              <JsonField label="mse_campi" value={mseCampiText} setValue={setMseCampiText} />
-            </details>
-            {cardForm.espansione && (
-              <p className="hint">Set attivo: {espansioniById[cardForm.espansione]?.nome || "n/d"}</p>
-            )}
-            {!cardForm.espansione && selectedGame && (
-              <p className="hint">Gioco selezionato: {selectedGame.nome}</p>
-            )}
-            {showExtraFields && (
-              <div className="modal-backdrop" onClick={() => setShowExtraFields(false)}>
-                <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-                  <h3>Campi extra non visibili sulla carta</h3>
-                  <JsonField label="mse_campi" value={mseCampiText} setValue={setMseCampiText} />
-                  <button type="button" onClick={() => setShowExtraFields(false)}>Chiudi</button>
-                </div>
-              </div>
-            )}
-          </article>
-        </section>
+        <MseCardsTab
+          cardForm={cardForm}
+          setCardForm={setCardForm}
+          cardId={cardId}
+          cardFilter={cardFilter}
+          setCardFilter={setCardFilter}
+          filteredCards={filteredCards}
+          gameCardFields={gameCardFields}
+          gameCardListColumns={gameCardListColumns}
+          cardListRowStyle={cardListRowStyle}
+          onSelectCard={onEditCard}
+          selectNeighborCard={selectNeighborCard}
+          selectedGameId={selectedGameId}
+          giochi={giochi}
+          espansioni={espansioni}
+          templatesForSelectedGame={templatesForSelectedGame}
+          updateCardField={updateCardField}
+          updateTemplateByGame={updateTemplateByGame}
+          onGameChange={handleGameChange}
+          packages={msePackages}
+          activeTemplate={activeTemplate}
+          espansioniById={espansioniById}
+          stylingValues={stylingValues}
+          onPickFile={onDynamicFilePicked}
+          onStatusMessage={setMsg}
+        />
       )}
 
       {!loading && tab === "style" && (
-        <section className="grid">
-          <article>
-            <h2>Stylesheets (templates)</h2>
-            <ul>
-              {templates.map((t) => (
-                <li key={t.id}>
-                  <button type="button">
-                    {t.nome} <small>({t.slug})</small>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </article>
-          <article>
-            <h2>Import .mse-style / .zip</h2>
-            <label className="field"><span>Game</span>
-              <select value={giocoForm.id || ""} onChange={(e) => {
-                const g = giochi.find((x) => x.id === e.target.value);
-                if (g) setGiocoForm(g);
-              }}>
-                <option value="">— Select game —</option>
-                {giochi.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              <span>Template package file</span>
-              <input type="file" accept=".mse-style,.zip,application/zip" onChange={(e) => setMseStyleFile(e.target.files?.[0] || null)} />
-            </label>
-            <label className="field"><span>Name override</span><input value={mseImportName} onChange={(e) => setMseImportName(e.target.value)} /></label>
-            <label className="field"><span>Slug override</span><input value={mseImportSlug} onChange={(e) => setMseImportSlug(e.target.value)} /></label>
-            <label className="field-checkbox">
-              <input type="checkbox" checked={mseImportDefault} onChange={(e) => setMseImportDefault(e.target.checked)} />
-              Set as default template for new cards
-            </label>
-            <button type="button" onClick={handleImportMseStyle}>Import stylesheet</button>
-            <p className="hint">Importa asset grafici/non grafici e costruisce manifest + layout_spec.mse_v1.</p>
-            {mseV1?.styling_fields?.length > 0 && (
-              <>
-                <h3>Styling fields (template carta corrente)</h3>
-                {mseV1.styling_fields.map((field) => {
-                  const fType = String(field.type || "text").toLowerCase();
-                  const val = stylingValues[field.name] ?? stylingValues[normFieldKey(field.name)] ?? "";
-                  return (
-                    <label className="field" key={`styling-${field.name}`}>
-                      <span>{field.name}</span>
-                      {fType === "boolean" ? (
-                        <select
-                          value={val ? "yes" : "no"}
-                          onChange={(e) => patchStylingValue(field, e.target.value === "yes")}
-                        >
-                          <option value="yes">yes</option>
-                          <option value="no">no</option>
-                        </select>
-                      ) : fType === "choice" ? (
-                        <select
-                          value={String(val)}
-                          onChange={(e) => patchStylingValue(field, e.target.value)}
-                        >
-                          {(field.choices || []).map((c) => (
-                            <option key={c.name} value={c.name}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <input value={String(val)} onChange={(e) => patchStylingValue(field, e.target.value)} />
-                      )}
-                    </label>
-                  );
-                })}
-              </>
-            )}
-            {activeTemplate?.layout_spec?.mse_v1 && (
-              <p className="hint">
-                MSE preview: {Object.keys(activeTemplate.layout_spec.mse_v1.card_styles || {}).length} card style,{" "}
-                {Object.keys(activeTemplate.layout_spec.mse_v1.extra_card_styles || {}).length} extra.
-              </p>
-            )}
-          </article>
-        </section>
+        <MseStyleTab
+          templates={templates}
+          selectedGameId={selectedGameId}
+          previewTemplateId={stylePreviewTemplateId || cardForm.studio_template || ""}
+          onSelectTemplate={setStylePreviewTemplateId}
+          cardForm={cardForm}
+          gameCardFields={gameCardFields}
+          stylingValues={stylingValues}
+          onStylingChange={patchStylingValue}
+          packages={msePackages}
+          espansioniById={espansioniById}
+          importGameId={giocoForm.id}
+          onImportGameChange={(id) => {
+            const g = giochi.find((x) => x.id === id);
+            if (g) setGiocoForm(g);
+          }}
+          giochi={giochi}
+          mseStyleFile={mseStyleFile}
+          onMseStyleFile={setMseStyleFile}
+          mseImportName={mseImportName}
+          onMseImportName={setMseImportName}
+          mseImportSlug={mseImportSlug}
+          onMseImportSlug={setMseImportSlug}
+          mseImportDefault={mseImportDefault}
+          onMseImportDefault={setMseImportDefault}
+          onImport={handleImportMseStyle}
+        />
       )}
 
       {!loading && tab === "set_info" && (
-        <section className="grid">
-          <article>
-            <h2>Set list</h2>
-            <ul>
-              {espansioni.map((row) => (
-                <li key={row.id}>
-                  <button type="button" onClick={() => onEditEsp(row)}>
-                    {row.nome} <small>({row.slug})</small>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </article>
-          <article>
-            <h2>Set info editor</h2>
-            <div className="fields-2">
-              <label className="field"><span>Name</span><input value={espForm.nome} onChange={(e) => setEspForm((p) => ({ ...p, nome: e.target.value }))} /></label>
-              <label className="field"><span>Slug</span><input value={espForm.slug} onChange={(e) => setEspForm((p) => ({ ...p, slug: e.target.value }))} /></label>
-              <label className="field">
-                <span>Game definition</span>
-                <select value={espForm.gioco_definizione || ""} onChange={(e) => setEspForm((p) => ({ ...p, gioco_definizione: e.target.value || null }))}>
-                  <option value="">— None —</option>
-                  {giochi.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
-                </select>
-              </label>
-              <label className="field">
-                <span>Default template</span>
-                <select value={espForm.default_studio_template || ""} onChange={(e) => setEspForm((p) => ({ ...p, default_studio_template: e.target.value || null }))}>
-                  <option value="">— None (fallback game default) —</option>
-                  {templates.filter((t) => !espForm.gioco_definizione || t.gioco_definizione === espForm.gioco_definizione).map((t) => (
-                    <option key={t.id} value={t.id}>{t.nome}{t.is_default_for_new_cards ? " [game default]" : ""}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <label className="field"><span>Description</span><textarea rows={4} value={espForm.descrizione || ""} onChange={(e) => setEspForm((p) => ({ ...p, descrizione: e.target.value }))} /></label>
-            <label className="field"><span>MSE set reference</span><input value={espForm.mse_set_riferimento || ""} onChange={(e) => setEspForm((p) => ({ ...p, mse_set_riferimento: e.target.value }))} /></label>
-            <JsonField label="studio_set_spec" value={espSetSpecText} setValue={setEspSetSpecText} />
-            {gameSetFields.length > 0 && (
-              <>
-                <p className="sub">Set fields from selected game</p>
-                {gameSetFields
-                  .filter((f) => f.editable !== false)
-                  .map((field) => {
-                    const fType = String(field.type || "text").toLowerCase();
-                    const val = getSetSpecValue(field);
-                    const options = (field.choices || []).map((c) => c.name).filter(Boolean);
-                    return (
-                      <label className="field" key={`set-${field.name}-${fType}`}>
-                        <span>{field.name}</span>
-                        {fType === "multiple choice" ? (
-                          <select
-                            multiple
-                            value={
-                              Array.isArray(val)
-                                ? val.map(String)
-                                : String(val || "")
-                                    .split(",")
-                                    .map((x) => x.trim())
-                                    .filter(Boolean)
-                            }
-                            onChange={(e) =>
-                              setSetSpecValue(
-                                field,
-                                Array.from(e.target.selectedOptions).map((o) => o.value)
-                              )
-                            }
-                          >
-                            {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                          </select>
-                        ) : fType === "choice" || fType === "package choice" ? (
-                          fType === "package choice" ? (
-                            renderPackageChoiceSelect(field, val, (v) => setSetSpecValue(field, v))
-                          ) : (
-                            <select value={String(val || "")} onChange={(e) => setSetSpecValue(field, e.target.value)}>
-                              {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                            </select>
-                          )
-                        ) : fType === "color" ? (
-                          <input type="color" value={String(val || "#000000")} onChange={(e) => setSetSpecValue(field, e.target.value)} />
-                        ) : field.multi_line ? (
-                          <textarea rows={3} value={String(val || "")} onChange={(e) => setSetSpecValue(field, e.target.value)} />
-                        ) : (
-                          <input value={String(val || "")} onChange={(e) => setSetSpecValue(field, e.target.value)} />
-                        )}
-                      </label>
-                    );
-                  })}
-              </>
-            )}
-          </article>
-        </section>
+        <MseSetTab
+          espansioni={espansioni}
+          espId={espId}
+          onSelectSet={onEditEsp}
+          gameSetFields={gameSetFields}
+          getSetSpecValue={getSetSpecValue}
+          setSetSpecValue={setSetSpecValue}
+          packages={msePackages}
+          espForm={espForm}
+          setEspForm={setEspForm}
+          giochi={giochi}
+          templates={templates}
+          importGameId={selectedGameId || giocoForm.id}
+          onImportGameChange={(id) => {
+            setSelectedGameId(id);
+            const g = giochi.find((x) => x.id === id);
+            if (g) setGiocoForm(g);
+          }}
+          mseSetFile={mseSetFile}
+          onMseSetFile={setMseSetFile}
+          mseSetImportName={mseSetImportName}
+          onMseSetImportName={setMseSetImportName}
+          mseSetImportSlug={mseSetImportSlug}
+          onMseSetImportSlug={setMseSetImportSlug}
+          onImportSet={handleImportMseSet}
+          importingSet={importingSet}
+        />
       )}
 
       {!loading && tab === "keywords" && (
-        <section className="grid">
-          <article>
-            <h2>Keywords</h2>
-            <ul>
-              {keywords.map((row) => (
-                <li key={row.id}>
-                  <button type="button" onClick={() => onEditKw(row)}>
-                    {row.nome} <small>({row.codice})</small>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </article>
-          <article>
-            <h2>Keyword editor</h2>
-            <div className="fields-2">
-              <label className="field"><span>Code</span><input value={kwForm.codice} onChange={(e) => setKwForm((p) => ({ ...p, codice: e.target.value.toUpperCase() }))} /></label>
-              <label className="field"><span>Name</span><input value={kwForm.nome} onChange={(e) => setKwForm((p) => ({ ...p, nome: e.target.value }))} /></label>
-              <label className="field"><span>Reminder</span><input value={kwForm.reminder_breve || ""} onChange={(e) => setKwForm((p) => ({ ...p, reminder_breve: e.target.value }))} /></label>
-              <label className="field">
-                <span>MSE export mode</span>
-                <select value={kwForm.mse_export_mode} onChange={(e) => setKwForm((p) => ({ ...p, mse_export_mode: e.target.value }))}>
-                  <option value="kor35">kor35</option>
-                  <option value="mse_compat">mse_compat</option>
-                  <option value="both">both</option>
-                </select>
-              </label>
-              {gameKeywordModes.length > 0 && (
-                <label className="field">
-                  <span>Keyword mode (from game)</span>
-                  <select value={kwForm.mse_match_pattern || gameKeywordModes[0]} onChange={(e) => setKwForm((p) => ({ ...p, mse_match_pattern: e.target.value }))}>
-                    {gameKeywordModes.map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </label>
-              )}
-            </div>
-            <label className="field"><span>Rules text</span><textarea rows={4} value={kwForm.testo_regola || ""} onChange={(e) => setKwForm((p) => ({ ...p, testo_regola: e.target.value }))} /></label>
-            <label className="field"><span>MSE match pattern</span><input value={kwForm.mse_match_pattern || ""} onChange={(e) => setKwForm((p) => ({ ...p, mse_match_pattern: e.target.value }))} /></label>
-            <label className="field"><span>MSE reminder template</span><textarea rows={3} value={kwForm.mse_reminder_template || ""} onChange={(e) => setKwForm((p) => ({ ...p, mse_reminder_template: e.target.value }))} /></label>
-            <JsonField label="effect_script" value={effectScriptText} setValue={setEffectScriptText} />
-          </article>
-        </section>
+        <MseKeywordsTab
+          keywords={keywords}
+          kwId={kwId}
+          kwForm={kwForm}
+          setKwForm={setKwForm}
+          gameKeywordModes={gameKeywordModes}
+          effectScriptText={effectScriptText}
+          setEffectScriptText={setEffectScriptText}
+          onSelectKeyword={onEditKw}
+          onNewKeyword={onNewKeyword}
+        />
       )}
 
       {!loading && tab === "statistics" && (
-        <section className="single-panel statistics-panel">
-          <h2>Set statistics</h2>
-          <div className="row-actions">
-            <label className="field inline">
-              <span>Filter by expansion</span>
-              <select
-                value={statsEspansioneId}
-                onChange={(e) => setStatsEspansioneId(e.target.value)}
-              >
-                <option value="">All (current game)</option>
-                {espansioni
-                  .filter((e) => !selectedGameId || e.gioco_definizione === selectedGameId)
-                  .map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.nome}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <div className="stats-summary-pill">
-              <strong>{statisticsReport.total}</strong> cards
-            </div>
-          </div>
-          <div className="stats-grid">
-            <div><strong>Sets</strong><span>{espansioni.length}</span></div>
-            <div><strong>Keywords</strong><span>{keywords.length}</span></div>
-            <div><strong>Stylesheets</strong><span>{templates.length}</span></div>
-            <div><strong>Dimensions</strong><span>{statisticsReport.dimensions.length}</span></div>
-          </div>
-          {statisticsReport.dimensions.map((dim) => (
-            <article key={dim.key} className="stats-dimension">
-              <h3>{dim.label}</h3>
-              <table className="stats-table">
-                <thead>
-                  <tr>
-                    <th>Value</th>
-                    <th>Count</th>
-                    <th>%</th>
-                    <th>Distribution</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dim.rows.map((row) => (
-                    <tr key={`${dim.key}-${row.label}`}>
-                      <td>{row.label}</td>
-                      <td>{row.count}</td>
-                      <td>{row.pct}%</td>
-                      <td>
-                        <div className="stats-bar-track">
-                          <div
-                            className="stats-bar-fill"
-                            style={{
-                              width: `${Math.max(4, row.pct)}%`,
-                              backgroundColor: row.color || "#6d28d9",
-                            }}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </article>
-          ))}
-        </section>
+        <MseStatisticsTab
+          statisticsReport={statisticsReport}
+          statsEspansioneId={statsEspansioneId}
+          onStatsEspansioneId={setStatsEspansioneId}
+          espansioni={espansioni}
+          selectedGameId={selectedGameId}
+          metaCounts={{ sets: espansioni.length, keywords: keywords.length, templates: templates.length }}
+        />
       )}
 
       {!loading && tab === "random_pack" && (
-        <section className="single-panel random-pack-panel">
-          <h2>Random pack</h2>
-          {!selectedGameId ? (
-            <p className="hint">Seleziona un gioco (tab Cards) per definire o simulare i pack.</p>
-          ) : (
-            <>
-          <PackSpecEditor
-            draft={packDraft}
-            onChange={setPackDraft}
-            onSave={savePackSpec}
-            saving={packSaving}
-            dirty={packDraftDirty}
-          />
-          <h3>Simulator</h3>
-          <div className="row-actions">
-            <label className="field inline">
-              <span>Pack type</span>
-              <select value={selectedPackName} onChange={(e) => setSelectedPackName(e.target.value)}>
-                {selectablePacks.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field inline">
-              <span>Copies</span>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={packCopies}
-                onChange={(e) => setPackCopies(Math.max(1, Number(e.target.value) || 1))}
-              />
-            </label>
-            <label className="field inline">
-              <span>Card pool</span>
-              <select value={statsEspansioneId} onChange={(e) => setStatsEspansioneId(e.target.value)}>
-                <option value="">All (current game)</option>
-                {espansioni
-                  .filter((e) => !selectedGameId || e.gioco_definizione === selectedGameId)
-                  .map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.nome}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <button type="button" onClick={runRandomPack}>Generate</button>
-          </div>
-          <p className="hint">
-            Pool: {packCardPool.length} carte · Pack types: {selectablePacks.length} selezionabili /{" "}
-            {(gamePackSpec?.pack_types || []).length} totali
-          </p>
-          <div className="random-pack-layout">
-            <article className="pack-summary">
-              <h3>Summary</h3>
-              <table className="stats-table">
-                <thead>
-                  <tr>
-                    <th>Pack type</th>
-                    <th>Cards (est.)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {packSummaryRows.map((row) => (
-                    <tr key={row.name}>
-                      <td>{row.name}</td>
-                      <td>{row.count}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td><strong>Total</strong></td>
-                    <td><strong>{packSummaryRows.reduce((s, r) => s + r.count, 0)}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </article>
-            <article className="pack-output">
-              <h3>Generated cards</h3>
-              {!generatedPackResult ? (
-                <p className="hint">Clicca Generate per simulare bustine.</p>
-              ) : (
-                generatedPackResult.packs.map((pack, idx) => (
-                  <div key={`pack-${idx}`} className="pack-instance">
-                    <h4>Pack #{idx + 1}</h4>
-                    <ul>
-                      {pack.map((card) => (
-                        <li key={`${idx}-${card.id}`}>
-                          <button type="button" onClick={() => onEditCard(card)}>
-                            {card.nome} <small>({card.codice})</small>
-                            {card._pack_from ? <em> · {card._pack_from}</em> : null}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))
-              )}
-            </article>
-          </div>
-            </>
-          )}
-        </section>
+        <MseRandomPackTab
+          selectedGameId={selectedGameId}
+          draft={packDraft}
+          onChange={setPackDraft}
+          onSave={savePackSpec}
+          saving={packSaving}
+          dirty={packDraftDirty}
+          selectablePacks={selectablePacks}
+          allPackTypes={gamePackSpec?.pack_types || []}
+          selectedPackName={selectedPackName}
+          onSelectPackName={setSelectedPackName}
+          packCopies={packCopies}
+          onPackCopies={setPackCopies}
+          poolExpansionId={statsEspansioneId}
+          onPoolExpansion={setStatsEspansioneId}
+          espansioni={espansioni}
+          packCardPool={packCardPool}
+          packSummaryRows={packSummaryRows}
+          onGenerate={runRandomPack}
+          generatedPackResult={generatedPackResult}
+          onOpenCard={(card) => {
+            onEditCard(card);
+            setTab("cards");
+          }}
+        />
       )}
 
       {!loading && tab === "console" && (
