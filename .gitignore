@@ -164,6 +164,10 @@ config/docker/nginx-docker/nginx_conf/ddns.conf
 omada_data/
 omada_logs/
 
+# Node / npm (mai in repo: build CI o npm locale)
+node_modules/
+**/node_modules/
+
 # Root cleanup / quarantine area
 extra/local-artifacts/*
 !extra/local-artifacts/lilygo-twatch-2021/

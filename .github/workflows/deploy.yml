@@ -359,6 +359,24 @@ jobs:
             fi
 
             cd "${PROJECT_PATH}"
+            # node_modules/dist scritti da root (Docker/npm) bloccano git reset --hard (Permission denied).
+            # Rimuovi con container root prima del reset; git ripristina solo ciò che è ancora tracciato.
+            for d in \
+              "${PROJECT_PATH}/apps/card-studio/node_modules" \
+              "${PROJECT_PATH}/apps/card-studio/dist" \
+              "${PROJECT_PATH}/frontend/node_modules" \
+              "${PROJECT_PATH}/frontend-pilot/node_modules"
+            do
+              if [ -e "${d}" ]; then
+                parent="$(dirname "${d}")"
+                base="$(basename "${d}")"
+                echo "Pulizia pre-reset (evita EACCES): ${d}"
+                docker run --rm -v "${parent}:/mnt:rw" alpine:3.20 rm -rf "/mnt/${base}" \
+                  || sudo -n rm -rf "${d}" \
+                  || rm -rf "${d}" \
+                  || true
+              fi
+            done
             git fetch --all --tags
             PREVIOUS_SHA="$(git rev-parse HEAD)"
             echo "PREVIOUS_SHA=${PREVIOUS_SHA}"
@@ -623,6 +641,23 @@ jobs:
             fi
 
             cd "${MIRROR_REPO_PATH}"
+            # Come su prod: evita git reset fallito su node_modules/dist di root.
+            for d in \
+              "${MIRROR_REPO_PATH}/apps/card-studio/node_modules" \
+              "${MIRROR_REPO_PATH}/apps/card-studio/dist" \
+              "${MIRROR_REPO_PATH}/frontend/node_modules" \
+              "${MIRROR_REPO_PATH}/frontend-pilot/node_modules"
+            do
+              if [ -e "${d}" ]; then
+                parent="$(dirname "${d}")"
+                base="$(basename "${d}")"
+                echo "Pulizia pre-reset (evita EACCES): ${d}"
+                docker run --rm -v "${parent}:/mnt:rw" alpine:3.20 rm -rf "/mnt/${base}" \
+                  || sudo -n rm -rf "${d}" \
+                  || rm -rf "${d}" \
+                  || true
+              fi
+            done
             git fetch --all --tags
             if git show-ref --verify --quiet "refs/remotes/origin/${REF}"; then
               # reset prima del checkout: scarta modifiche locali (es. script copiati a mano sul Pi)
