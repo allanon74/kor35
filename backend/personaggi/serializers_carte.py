@@ -383,12 +383,16 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        from personaggi.carte_set_codice import (
+            renumber_carte_in_espansione,
+            suggest_carta_codice_for_espansione,
+        )
+
         stats = validated_data.pop("reliquiario_statistiche", [])
         tags = validated_data.pop("tags", None)
         espansione = validated_data.get("espansione")
+        # Codice vuoto → placeholder univoco; dopo create si rinumera colore→A-Z.
         if not (validated_data.get("codice") or "").strip() and espansione:
-            from personaggi.carte_set_codice import suggest_carta_codice_for_espansione
-
             campagna = validated_data.get("campagna") or espansione.campagna
             ordine, codice = suggest_carta_codice_for_espansione(campagna, espansione)
             validated_data["codice"] = codice
@@ -413,12 +417,20 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
         if tags is not None:
             carta.tags.set(tags)
         _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", carta, stats)
+        if carta.espansione_id:
+            renumber_carte_in_espansione(carta.campagna, carta.espansione)
+            carta.refresh_from_db()
         return carta
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
         stats = validated_data.pop("reliquiario_statistiche", None)
         tags = validated_data.pop("tags", None)
+        old_esp = instance.espansione
+        old_nome = instance.nome
+        old_energia = instance.energia
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -426,6 +438,22 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             instance.tags.set(tags)
         if stats is not None:
             _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", instance, stats)
+
+        # Rinumera se cambia set / colore / nome (ordine Magic).
+        new_esp = instance.espansione
+        old_esp_id = getattr(old_esp, "pk", None)
+        new_esp_id = getattr(new_esp, "pk", None)
+        order_fields_changed = (
+            old_esp_id != new_esp_id
+            or old_nome != instance.nome
+            or old_energia != instance.energia
+        )
+        if order_fields_changed:
+            if old_esp_id and old_esp_id != new_esp_id:
+                renumber_carte_in_espansione(instance.campagna, old_esp)
+            if new_esp:
+                renumber_carte_in_espansione(instance.campagna, new_esp)
+                instance.refresh_from_db()
         return instance
 
 

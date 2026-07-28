@@ -11,12 +11,14 @@ export const KOR35_AURA_RANK = {
 
 const CARTA_CODICE_MAX_LEN = 40;
 
+/**
+ * Ordine stile Magic: colore (energia) → alfabetico nome → codice.
+ * `ordine_set` non guida il sort (viene riassegnato dalla rinumerazione).
+ */
 export function compareCardsForSetOrder(a, b) {
   const auraA = KOR35_AURA_RANK[a?.energia] ?? 999;
   const auraB = KOR35_AURA_RANK[b?.energia] ?? 999;
   if (auraA !== auraB) return auraA - auraB;
-  const byOrdine = (Number(a?.ordine_set) || 0) - (Number(b?.ordine_set) || 0);
-  if (byOrdine !== 0) return byOrdine;
   const nomeCmp = String(a?.nome || "").localeCompare(String(b?.nome || ""), "it", {
     sensitivity: "base",
   });
@@ -41,27 +43,36 @@ export function buildCartaCodice(setSlug, number) {
   return `${code}-${String(Number(number) || 1).padStart(3, "0")}`;
 }
 
-function cardNumberFromCodice(codice, setCode) {
-  const raw = String(codice || "").trim().toLowerCase();
-  const prefix = `${setCode}-`;
-  if (!raw.startsWith(prefix)) return 0;
-  const m = raw.match(/-(\d{3})$/);
-  return m ? Number(m[1]) : 0;
-}
-
 /**
- * Prossimo codice `{slug-set}-{NNN}` e ordine_set per una nuova carta.
+ * Anteprima codice/ordine per una nuova carta: posizione in lista
+ * colore → alfabetico tra le carte esistenti + draft.
  */
-export function suggestCardIdentity({ expansionCards, espansione }) {
+export function suggestCardIdentity({ expansionCards, espansione, draftCard }) {
   const setCode = setCodeFromEspansione(espansione);
-  const maxNum = (expansionCards || []).reduce((max, card) => {
-    const fromOrdine = Number(card?.ordine_set) || 0;
-    const fromCode = cardNumberFromCodice(card?.codice, setCode);
-    return Math.max(max, fromOrdine, fromCode);
-  }, 0);
-  const next = maxNum + 1;
+  const draft = {
+    id: "__draft__",
+    nome: draftCard?.nome || "",
+    energia: draftCard?.energia || "MAR",
+    codice: "",
+  };
+  const sorted = sortCardsForSetOrder([...(expansionCards || []), draft]);
+  const index = sorted.findIndex((c) => c.id === "__draft__");
+  const next = index >= 0 ? index + 1 : sorted.length;
   return {
     ordine_set: next,
     codice: buildCartaCodice(setCode, next),
   };
+}
+
+/**
+ * Anteprima locale di rinumerazione (non persiste): assegna ordine_set e codice
+ * `{slug}-{NNN}` dopo sort colore → alfabetico.
+ */
+export function previewRenumberExpansionCards(expansionCards, espansione) {
+  const setCode = setCodeFromEspansione(espansione);
+  return sortCardsForSetOrder(expansionCards).map((card, idx) => ({
+    ...card,
+    ordine_set: idx + 1,
+    codice: buildCartaCodice(setCode, idx + 1),
+  }));
 }

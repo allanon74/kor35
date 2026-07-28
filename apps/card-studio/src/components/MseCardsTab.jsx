@@ -37,6 +37,8 @@ export default function MseCardsTab({
   onPickFile,
   onStatusMessage,
   onMseCampiSync,
+  onRenumberSetCodici,
+  canRenumberSet,
 }) {
   const [statusText, setStatusText] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -152,6 +154,16 @@ export default function MseCardsTab({
             <button type="button" className="mse-btn-small" onClick={onNewCard} title="Nuova carta">
               + Nuova
             </button>
+            {canRenumberSet && (
+              <button
+                type="button"
+                className="mse-btn-small"
+                onClick={onRenumberSetCodici}
+                title="Rinumera codici del set: colore → alfabetico (slug-001…)"
+              >
+                Rinumera codici
+              </button>
+            )}
             {canDeleteCard && (
               <button type="button" className="mse-btn-small mse-btn-danger" onClick={onDeleteCard} title="Elimina carta">
                 Elimina
@@ -159,9 +171,12 @@ export default function MseCardsTab({
             )}
           </div>
         </div>
-        {isNewCard && (
-          <p className="mse-crud-hint">Modalità creazione: compila i campi e premi «Crea carta» (barra blu sotto i tab o in fondo ai campi).</p>
-        )}
+          {isNewCard && (
+            <p className="mse-crud-hint">
+              Modalità creazione: compila i campi e premi «Crea carta». Il codice sarà{" "}
+              <code>slug-set-NNN</code> automatico (colore → alfabetico nel set).
+            </p>
+          )}
         <MseCardList
           columns={gameCardListColumns}
           cards={filteredCards}

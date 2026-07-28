@@ -557,10 +557,30 @@ class EspansioneCarteStaffViewSet(viewsets.ModelViewSet):
             raise DRFValidationError({"file": "Archivio non valido o corrotto."}) from exc
 
         esp = EspansioneCarte.objects.get(pk=result["espansione_id"])
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
+        renumber_summary = renumber_carte_in_espansione(campagna, esp)
+        import_summary = {**result, "renumber": renumber_summary}
         return Response(
             {
                 "espansione": EspansioneCarteSerializer(esp, context={"request": request}).data,
-                "import_summary": result,
+                "import_summary": import_summary,
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="renumber-codici")
+    def renumber_codici(self, request, pk=None):
+        """
+        Riassegna codice `{slug}-{NNN}` e ordine_set: colore (energia) → alfabetico.
+        """
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
+        esp = self.get_object()
+        summary = renumber_carte_in_espansione(esp.campagna, esp)
+        return Response(
+            {
+                "espansione": EspansioneCarteSerializer(esp, context={"request": request}).data,
+                "renumber": summary,
             }
         )
 
@@ -593,6 +613,15 @@ class CartaCollezionabileStaffViewSet(viewsets.ModelViewSet):
 
             raise DRFValidationError({"campagna": "Campagna attiva non trovata."})
         serializer.save(campagna=campagna)
+
+    def perform_destroy(self, instance):
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
+        campagna = instance.campagna
+        espansione = instance.espansione
+        super().perform_destroy(instance)
+        if espansione:
+            renumber_carte_in_espansione(campagna, espansione)
 
 
 class BustinaCarteStaffViewSet(viewsets.ModelViewSet):

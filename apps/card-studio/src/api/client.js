@@ -82,6 +82,13 @@ export const saveEspansione = (id, payload) =>
 export const deleteEspansione = (id) =>
   fetchJson(`${STAFF_CARTE}/espansioni/${id}/`, { method: "DELETE" });
 
+/** Rinumera codici set: `{slug}-{NNN}` per colore (energia) → alfabetico. */
+export const renumberEspansioneCodici = (espansioneId) =>
+  fetchJson(`${STAFF_CARTE}/espansioni/${espansioneId}/renumber-codici/`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+
 export const saveCarta = (id, payload) =>
   fetchJson(`${STAFF_CARTE}/catalogo/${id ? `${id}/` : ""}`, {
     method: id ? "PATCH" : "POST",

@@ -7,12 +7,14 @@ import {
   importMseSet,
   importMseStyleTemplate,
   loadInitialData,
+  renumberEspansioneCodici,
   saveCarta,
   saveEspansione,
   saveGioco,
   saveKeyword,
 } from "./api/client";
 import { sortCardsForSetOrder, suggestCardIdentity } from "./mse/cardSetOrder";
+import { resolveCardListRowColor } from "./mse/cardListColor";
 import { defaultStylingFromSpec } from "./mse/resolveLayers";
 import MseWorkspaceBar from "./components/MseWorkspaceBar";
 import MseEditorActions from "./components/MseEditorActions";
@@ -222,12 +224,20 @@ function buildNewCardForm({
   const expansionCards = selectedExpansionId
     ? carte.filter((c) => c.espansione === selectedExpansionId)
     : [];
-  const suggested = esp ? suggestCardIdentity({ expansionCards, espansione: esp }) : { codice: "", ordine_set: 0 };
+  const suggested = esp
+    ? suggestCardIdentity({
+        expansionCards,
+        espansione: esp,
+        draftCard: { nome: "", energia: "MAR" },
+      })
+    : { codice: "", ordine_set: 0 };
   return {
     ...emptyCarta,
     espansione: selectedExpansionId || null,
     studio_template: tmpl,
-    codice: suggested.codice,
+    // Codice vuoto = auto al salvataggio (colore → alfabetico → slug-NNN).
+    // Anteprima suggerita solo come ordine_set; codice lasciato vuoto.
+    codice: "",
     ordine_set: suggested.ordine_set,
   };
 }
@@ -736,12 +746,18 @@ export default function App() {
   const handleSaveCard = async () => {
     try {
       let formForSave = cardForm;
+      // Nuova carta senza codice: il backend assegna e rinumera colore→A-Z nel set.
       if (!cardId && !String(cardForm.codice || "").trim() && cardForm.espansione) {
         const esp = espansioniById[cardForm.espansione];
         const expansionCards = carte.filter((c) => c.espansione === cardForm.espansione);
-        const suggested = suggestCardIdentity({ expansionCards, espansione: esp });
-        formForSave = { ...cardForm, ...suggested };
-        setCardForm(formForSave);
+        const suggested = suggestCardIdentity({
+          expansionCards,
+          espansione: esp,
+          draftCard: cardForm,
+        });
+        // Invia senza codice forzato: create + renumber lato server.
+        formForSave = { ...cardForm, ordine_set: suggested.ordine_set, codice: "" };
+        setCardForm({ ...formForSave, codice: suggested.codice });
       }
       const payload = buildCardSavePayload(formForSave, {
         studioSpecText,
@@ -749,10 +765,43 @@ export default function App() {
         mseCampiText,
       });
       const saved = await saveCarta(cardId, payload);
-      setMsg(cardId ? "Carta aggiornata." : "Carta creata.");
+      setMsg(
+        cardId
+          ? "Carta aggiornata."
+          : `Carta creata (${saved?.codice || "codice auto"}). Codici set riallineati per colore → alfabetico.`
+      );
       await refreshAfterMutation({ kind: "card", saved });
     } catch (err) {
       setMsg(err.message || "Salvataggio carta fallito.");
+    }
+  };
+
+  const handleRenumberSetCodici = async () => {
+    const espId = selectedExpansionId || cardForm.espansione;
+    if (!espId) {
+      setMsg("Seleziona un set (espansione) per rinumerare i codici.");
+      return;
+    }
+    const esp = espansioniById[espId];
+    const label = esp?.nome || esp?.slug || espId;
+    if (
+      !window.confirm(
+        `Rinumerare tutte le carte di «${label}»?\nOrdine: colore (energia) → alfabetico.\nFormato: ${esp?.slug || "slug"}-001, -002, …`
+      )
+    ) {
+      return;
+    }
+    try {
+      const result = await renumberEspansioneCodici(espId);
+      const n = result?.renumber?.updated ?? 0;
+      setMsg(`Rinumerati ${n} codici in «${label}» (colore → alfabetico).`);
+      const data = await reloadData({ showLoading: false });
+      if (cardId) {
+        const refreshed = data.carte.find((c) => c.id === cardId);
+        if (refreshed) onEditCard(refreshed);
+      }
+    } catch (err) {
+      setMsg(err.message || "Rinumerazione codici fallita.");
     }
   };
 
@@ -1165,6 +1214,8 @@ export default function App() {
           onPickFile={onDynamicFilePicked}
           onStatusMessage={setMsg}
           onMseCampiSync={(mse) => setMseCampiText(JSON.stringify(mse, null, 2))}
+          onRenumberSetCodici={handleRenumberSetCodici}
+          canRenumberSet={Boolean(selectedExpansionId || cardForm.espansione)}
         />
       )}
 
