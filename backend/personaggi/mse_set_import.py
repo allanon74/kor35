@@ -12,7 +12,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
 
-from personaggi.carte_set_codice import build_carta_codice
+from personaggi.carte_set_codice import build_carta_codice, set_code_prefix, suggest_sigla_from_nome
 from personaggi.carte_collezionabili_models import (
     CARTA_RARITA_COMUNE,
     CARTA_TIPO_PERSONAGGIO,
@@ -338,12 +338,14 @@ def import_mse_set_package(
         idx += 1
 
     template = _find_template_for_stylesheet(campagna, gioco, meta.get("stylesheet", ""))
+    sigla = suggest_sigla_from_nome(title)
 
     esp, esp_created = EspansioneCarte.objects.get_or_create(
         campagna=campagna,
         slug=slug,
         defaults={
             "nome": title[:120],
+            "sigla": sigla,
             "descrizione": set_info.get("description") or set_info.get("descrizione") or "",
             "gioco_definizione": gioco,
             "default_studio_template": template,
@@ -359,6 +361,8 @@ def import_mse_set_package(
     )
     if not esp_created:
         esp.nome = title[:120]
+        if not (esp.sigla or "").strip():
+            esp.sigla = sigla
         esp.gioco_definizione = gioco
         if template:
             esp.default_studio_template = template
@@ -378,10 +382,11 @@ def import_mse_set_package(
     cards_created = 0
     cards_updated = 0
     if create_cards:
+        prefix = set_code_prefix(esp)
         for i, card_raw in enumerate(parsed.get("cards") or []):
             mapped = map_mse_card_to_kor35(
                 card_raw,
-                codice_fallback=build_carta_codice(slug, i + 1),
+                codice_fallback=build_carta_codice(prefix, i + 1),
             )
             codice = mapped["codice"]
             existing = CartaCollezionabile.objects.filter(campagna=campagna, codice=codice).first()

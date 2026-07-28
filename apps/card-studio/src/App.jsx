@@ -13,7 +13,7 @@ import {
   saveGioco,
   saveKeyword,
 } from "./api/client";
-import { sortCardsForSetOrder, suggestCardIdentity } from "./mse/cardSetOrder";
+import { sortCardsForSetOrder, suggestCardIdentity, suggestSiglaFromNome, setCodeFromEspansione } from "./mse/cardSetOrder";
 import { resolveCardListRowColor } from "./mse/cardListColor";
 import { defaultStylingFromSpec } from "./mse/resolveLayers";
 import MseWorkspaceBar from "./components/MseWorkspaceBar";
@@ -39,6 +39,7 @@ import { buildMetaWithPackDraft, clonePackDraft } from "./mse/packSpecUtils";
 const emptyEspansione = {
   nome: "",
   slug: "",
+  sigla: "",
   descrizione: "",
   attiva: true,
   in_vendita: true,
@@ -713,7 +714,14 @@ export default function App() {
         return;
       }
       if (!payload.slug) {
-        setMsg("Codice set obbligatorio (campo code / slug).");
+        setMsg("Slug set obbligatorio (derivato dal titolo se vuoto).");
+        return;
+      }
+      if (!payload.sigla && payload.nome) {
+        payload.sigla = suggestSiglaFromNome(payload.nome);
+      }
+      if (!payload.sigla) {
+        setMsg("Sigla set obbligatoria (es. KBE) — usata nei codici carta KBE-001.");
         return;
       }
       const saved = await saveEspansione(espId, payload);
@@ -783,10 +791,11 @@ export default function App() {
       return;
     }
     const esp = espansioniById[espId];
-    const label = esp?.nome || esp?.slug || espId;
+    const label = esp?.nome || esp?.sigla || esp?.slug || espId;
+    const prefix = setCodeFromEspansione(esp);
     if (
       !window.confirm(
-        `Rinumerare tutte le carte di «${label}»?\nOrdine: colore (energia) → alfabetico.\nFormato: ${esp?.slug || "slug"}-001, -002, …`
+        `Rinumerare tutte le carte di «${label}»?\nOrdine: colore (aura) → alfabetico.\nFormato: ${prefix}-001, ${prefix}-002, …`
       )
     ) {
       return;
@@ -853,7 +862,8 @@ export default function App() {
     const k = normFieldKey(field?.name);
     if (["name", "title"].includes(k)) return espForm.nome || "";
     if (["description", "descrizione"].includes(k)) return espForm.descrizione || "";
-    if (["code", "slug", "set_code"].includes(k)) return espForm.slug || "";
+    if (["code", "set_code", "sigla"].includes(k)) return espForm.sigla || "";
+    if (["slug"].includes(k)) return espForm.slug || "";
     return spec?.mse_set_fields?.[k] ?? field.initial ?? "";
   };
 
@@ -864,14 +874,45 @@ export default function App() {
       ? (Array.isArray(rawValue) ? rawValue : String(rawValue || "").split(",").map((x) => x.trim()).filter(Boolean))
       : rawValue;
     if (["name", "title"].includes(k)) {
-      setEspForm((p) => ({ ...p, nome: String(v) }));
+      setEspForm((p) => {
+        const nome = String(v);
+        const next = { ...p, nome };
+        // Auto-sigla solo se vuota o ancora uguale al suggerimento precedente.
+        const prevSuggest = suggestSiglaFromNome(p.nome || "");
+        if (!p.sigla || p.sigla === prevSuggest) {
+          next.sigla = suggestSiglaFromNome(nome);
+        }
+        if (!p.slug) {
+          next.slug = nome
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 80);
+        }
+        return next;
+      });
       return;
     }
     if (["description", "descrizione"].includes(k)) {
       setEspForm((p) => ({ ...p, descrizione: String(v) }));
       return;
     }
-    if (["code", "slug", "set_code"].includes(k)) {
+    if (["code", "set_code", "sigla"].includes(k)) {
+      setEspForm((p) => ({
+        ...p,
+        sigla: String(v || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^A-Za-z0-9]/g, "")
+          .toUpperCase()
+          .slice(0, 8),
+      }));
+      return;
+    }
+    if (["slug"].includes(k)) {
       setEspForm((p) => ({ ...p, slug: String(v) }));
       return;
     }
@@ -1170,7 +1211,7 @@ export default function App() {
             tab === "cards"
               ? cardId
                 ? `Modifica carta: ${cardForm.nome || cardForm.codice || cardId}`
-                : "Nuova carta — compila code e name, poi salva."
+                : "Nuova carta — compila name e campi; il codice (SIGLA-NNN) è automatico."
               : tab === "set_info"
                 ? espId
                   ? `Modifica set: ${espForm.nome || espForm.slug || espId}`

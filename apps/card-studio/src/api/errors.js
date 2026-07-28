@@ -40,5 +40,13 @@ export function sanitizeEspansionePayload(payload) {
   if (out.nome != null) out.nome = String(out.nome).trim();
   if (out.slug != null) out.slug = String(out.slug).trim();
   if (!out.slug && out.nome) out.slug = slugifySetCode(out.nome);
+  if (out.sigla != null) {
+    out.sigla = String(out.sigla)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]/g, "")
+      .toUpperCase()
+      .slice(0, 8);
+  }
   return out;
 }

@@ -159,7 +159,7 @@ export default function MseCardsTab({
                 type="button"
                 className="mse-btn-small"
                 onClick={onRenumberSetCodici}
-                title="Rinumera codici del set: colore → alfabetico (slug-001…)"
+                title="Rinumera codici del set: aura → alfabetico (SIGLA-001…)"
               >
                 Rinumera codici
               </button>
@@ -174,7 +174,7 @@ export default function MseCardsTab({
           {isNewCard && (
             <p className="mse-crud-hint">
               Modalità creazione: compila i campi e premi «Crea carta». Il codice sarà{" "}
-              <code>slug-set-NNN</code> automatico (colore → alfabetico nel set).
+              <code>SIGLA-NNN</code> automatico (es. KBE-002), ordinato per aura → alfabetico.
             </p>
           )}
         <MseCardList

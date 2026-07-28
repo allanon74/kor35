@@ -302,6 +302,13 @@ class EspansioneCarte(SyncableModel, models.Model):
         db_index=True,
         help_text="Identificatore univoco per campagna, es. caduta-del-consiglio",
     )
+    sigla = models.CharField(
+        max_length=8,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Sigla corta del set per i codici carta (es. KBE → KBE-001). Solo A-Z0-9.",
+    )
     descrizione = models.TextField(blank=True, default="")
     immagine = models.ImageField(upload_to="carte_collezionabili/espansioni/", blank=True, null=True)
     ordine = models.PositiveSmallIntegerField(default=0)

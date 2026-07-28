@@ -33,7 +33,7 @@ from personaggi.carte_collezionabili_models import (
 )
 
 # Bump quando cambiano campi/choice del gioco KOR35 (refresh automatico su merge).
-KOR35_MSE_GAME_SPEC_VERSION = "kor35-sette-elegie-2"
+KOR35_MSE_GAME_SPEC_VERSION = "kor35-sette-elegie-3"
 
 KOR35_TYPE_CHOICES = [code for code, _label in CARTA_TIPO_CHOICES]
 KOR35_ENERGY_CHOICES = [code for code, _label in CARTA_ENERGIA_CHOICES]
@@ -147,11 +147,12 @@ def _text_field(
     card_list_column: int = 0,
     show_statistics: bool = False,
     description: str = "",
+    editable: bool = True,
 ) -> dict[str, Any]:
     return {
         "name": name,
         "type": "text",
-        "editable": True,
+        "editable": editable,
         "multi_line": multi_line,
         "identifying": identifying,
         "choices": [],
@@ -228,9 +229,10 @@ def kor35_mse_game_spec() -> dict[str, Any]:
                 "code",
                 card_list_visible=True,
                 card_list_column=0,
+                editable=False,
                 description=(
-                    "Codice carta: codice set + trattino + numero a 3 cifre "
-                    "(es. sette-elegie-001). Assegnato automaticamente alla creazione."
+                    "Codice automatico: SIGLA set + trattino + numero a 3 cifre "
+                    "(es. KBE-002). Ordinamento per aura poi alfabetico; non editabile."
                 ),
             ),
             _text_field(
@@ -310,9 +312,15 @@ def kor35_mse_game_spec() -> dict[str, Any]:
             ),
         ],
         "set_fields": [
-            _text_field("title", identifying=True),
-            _text_field("description", multi_line=True),
-            _text_field("code"),
+            _text_field("title", identifying=True, description="Titolo set (KOR35: nome)."),
+            _text_field(
+                "code",
+                description=(
+                    "Sigla corta del set (KOR35: sigla), es. KBE. "
+                    "Usata nei codici carta automatici: KBE-001, KBE-002, …"
+                ),
+            ),
+            _text_field("description", multi_line=True, description="Descrizione set."),
         ],
         "pack_items": [
             {

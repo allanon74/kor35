@@ -66,7 +66,7 @@ export default function MseSetTab({
                   onClick={() => onSelectSet(row)}
                 >
                   <td>{row.nome}</td>
-                  <td>{row.slug}</td>
+                  <td>{row.sigla || row.slug}</td>
                 </tr>
               ))}
             </tbody>
@@ -118,10 +118,43 @@ export default function MseSetTab({
           <div className="mse-kor35-grid">
             <label>
               <span>title</span>
-              <input value={espForm.nome} onChange={(e) => setEspForm((p) => ({ ...p, nome: e.target.value }))} />
+              <input
+                value={espForm.nome}
+                onChange={(e) => {
+                  const nome = e.target.value;
+                  setEspForm((p) => {
+                    const next = { ...p, nome };
+                    if (!p.sigla) {
+                      next.sigla = nome
+                        .normalize("NFD")
+                        .replace(/[\u0300-\u036f]/g, "")
+                        .split(/[^A-Za-z0-9]+/)
+                        .filter((t) => t && !["the", "a", "an", "of", "and", "di", "del", "la", "il", "e"].includes(t.toLowerCase()))
+                        .map((t) => t[0])
+                        .join("")
+                        .toUpperCase()
+                        .slice(0, 3);
+                    }
+                    return next;
+                  });
+                }}
+              />
             </label>
             <label>
-              <span>code</span>
+              <span>sigla (es. KBE)</span>
+              <input
+                value={espForm.sigla || ""}
+                onChange={(e) =>
+                  setEspForm((p) => ({
+                    ...p,
+                    sigla: e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 8),
+                  }))
+                }
+                placeholder="KBE"
+              />
+            </label>
+            <label>
+              <span>slug</span>
               <input value={espForm.slug} onChange={(e) => setEspForm((p) => ({ ...p, slug: e.target.value }))} />
             </label>
             <label>

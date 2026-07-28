@@ -4,7 +4,9 @@ from personaggi.carte_collezionabili_models import CartaCollezionabile, Espansio
 from personaggi.carte_set_codice import (
     build_carta_codice,
     renumber_carte_in_espansione,
+    set_code_prefix,
     suggest_carta_codice_for_espansione,
+    suggest_sigla_from_nome,
 )
 from personaggi.models import Campagna
 
@@ -13,20 +15,33 @@ class CarteSetCodiceTests(TestCase):
     def setUp(self):
         self.campagna = Campagna.objects.create(nome="Test", slug="test-codice")
 
-    def test_build_carta_codice_uses_set_slug_and_three_digits(self):
-        self.assertEqual(build_carta_codice("sette-elegie", 1), "sette-elegie-001")
-        self.assertEqual(build_carta_codice("sette-elegie", 42), "sette-elegie-042")
+    def test_suggest_sigla_kor_the_beginning(self):
+        self.assertEqual(suggest_sigla_from_nome("KOR: the beginning"), "KBE")
+
+    def test_build_carta_codice_uses_sigla_and_three_digits(self):
+        self.assertEqual(build_carta_codice("KBE", 1), "KBE-001")
+        self.assertEqual(build_carta_codice("kbe", 42), "KBE-042")
+
+    def test_set_code_prefix_prefers_sigla(self):
+        esp = EspansioneCarte.objects.create(
+            campagna=self.campagna,
+            nome="KOR: the beginning",
+            slug="kor-the-beginning",
+            sigla="KBE",
+        )
+        self.assertEqual(set_code_prefix(esp), "KBE")
 
     def test_suggest_next_number_in_expansion(self):
         esp = EspansioneCarte.objects.create(
             campagna=self.campagna,
             nome="Sette Elegie",
             slug="sette-elegie",
+            sigla="ELE",
         )
         CartaCollezionabile.objects.create(
             campagna=self.campagna,
             espansione=esp,
-            codice="sette-elegie-003",
+            codice="ELE-003",
             nome="Prima",
             tipo="PG",
             energia="MAR",
@@ -35,13 +50,14 @@ class CarteSetCodiceTests(TestCase):
         )
         ordine, codice = suggest_carta_codice_for_espansione(self.campagna, esp)
         self.assertEqual(ordine, 4)
-        self.assertEqual(codice, "sette-elegie-004")
+        self.assertEqual(codice, "ELE-004")
 
     def test_suggest_ignores_unrelated_codice_prefix(self):
         esp = EspansioneCarte.objects.create(
             campagna=self.campagna,
             nome="Alpha",
             slug="alpha",
+            sigla="ALP",
         )
         CartaCollezionabile.objects.create(
             campagna=self.campagna,
@@ -54,15 +70,15 @@ class CarteSetCodiceTests(TestCase):
         )
         ordine, codice = suggest_carta_codice_for_espansione(self.campagna, esp)
         self.assertEqual(ordine, 1)
-        self.assertEqual(codice, "alpha-001")
+        self.assertEqual(codice, "ALP-001")
 
-    def test_renumber_sorts_by_energia_then_nome(self):
+    def test_renumber_sorts_by_energia_then_nome_with_sigla(self):
         esp = EspansioneCarte.objects.create(
             campagna=self.campagna,
-            nome="Demo",
+            nome="Demo Set",
             slug="demo",
+            sigla="DEM",
         )
-        # Inserite fuori ordine: MAG Z, MAR B, MAR A, TEC C
         CartaCollezionabile.objects.create(
             campagna=self.campagna,
             espansione=esp,
@@ -106,6 +122,7 @@ class CarteSetCodiceTests(TestCase):
 
         summary = renumber_carte_in_espansione(self.campagna, esp)
         self.assertEqual(summary["updated"], 4)
+        self.assertEqual(summary["sigla"], "DEM")
 
         ordered = list(
             CartaCollezionabile.objects.filter(espansione=esp).order_by("ordine_set", "nome")
@@ -113,9 +130,9 @@ class CarteSetCodiceTests(TestCase):
         self.assertEqual(
             [(c.codice, c.nome, c.energia, c.ordine_set) for c in ordered],
             [
-                ("demo-001", "Alpha", "MAR", 1),
-                ("demo-002", "Bravo", "MAR", 2),
-                ("demo-003", "Charlie", "TEC", 3),
-                ("demo-004", "Zebra Magica", "MAG", 4),
+                ("DEM-001", "Alpha", "MAR", 1),
+                ("DEM-002", "Bravo", "MAR", 2),
+                ("DEM-003", "Charlie", "TEC", 3),
+                ("DEM-004", "Zebra Magica", "MAG", 4),
             ],
         )

@@ -571,7 +571,7 @@ class EspansioneCarteStaffViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="renumber-codici")
     def renumber_codici(self, request, pk=None):
         """
-        Riassegna codice `{slug}-{NNN}` e ordine_set: colore (energia) → alfabetico.
+        Riassegna codice `{SIGLA}-{NNN}` e ordine_set: colore (energia) → alfabetico.
         """
         from personaggi.carte_set_codice import renumber_carte_in_espansione
 
