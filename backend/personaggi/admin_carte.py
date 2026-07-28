@@ -53,9 +53,9 @@ class KeywordCartaAdmin(admin.ModelAdmin):
 
 @admin.register(EspansioneCarte)
 class EspansioneCarteAdmin(admin.ModelAdmin):
-    list_display = ("nome", "slug", "campagna", "attiva", "ordine", "updated_at")
-    list_filter = ("attiva", "campagna")
-    search_fields = ("nome", "slug")
+    list_display = ("nome", "sigla", "slug", "campagna", "attiva", "ordine", "updated_at")
+    list_filter = ("attiva", "campagna", "in_vendita", "legale_duello")
+    search_fields = ("nome", "slug", "sigla", "descrizione")
     readonly_fields = ("id", "sync_id", "created_at", "updated_at")
     autocomplete_fields = ["campagna"]
 

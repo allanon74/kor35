@@ -1,6 +1,7 @@
 const STAFF_CARTE = "/api/personaggi/api/staff/carte";
 const STAFF_PLATFORM = `${STAFF_CARTE}/platform`;
 const LOGIN_PATH = import.meta.env.VITE_LOGIN_PATH || "/login";
+import { formatApiError } from "./errors";
 let loginRedirectTriggered = false;
 
 function getAuthToken() {
@@ -24,8 +25,10 @@ async function fetchJson(url, options = {}) {
   const activeCampaign = getActiveCampaignSlug();
   const authHeaders = token ? { Authorization: `Token ${token}` } : {};
   const campaignHeaders = activeCampaign ? { "X-Campagna": activeCampaign } : {};
+  const method = String(options.method || "GET").toUpperCase();
   const res = await fetch(url, {
     credentials: "include",
+    cache: method === "GET" ? "no-store" : options.cache,
     headers: {
       "Content-Type": "application/json",
       ...authHeaders,
@@ -44,12 +47,7 @@ async function fetchJson(url, options = {}) {
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(
-      data?.detail ||
-        data?.error ||
-        data?.message ||
-        `Errore API (${res.status})`
-    );
+    throw new Error(formatApiError(data, `Errore API (${res.status})`));
   }
   return data;
 }
@@ -81,11 +79,24 @@ export const saveEspansione = (id, payload) =>
     body: JSON.stringify(payload),
   });
 
+export const deleteEspansione = (id) =>
+  fetchJson(`${STAFF_CARTE}/espansioni/${id}/`, { method: "DELETE" });
+
+/** Rinumera codici set: `{slug}-{NNN}` per colore (energia) → alfabetico. */
+export const renumberEspansioneCodici = (espansioneId) =>
+  fetchJson(`${STAFF_CARTE}/espansioni/${espansioneId}/renumber-codici/`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+
 export const saveCarta = (id, payload) =>
   fetchJson(`${STAFF_CARTE}/catalogo/${id ? `${id}/` : ""}`, {
     method: id ? "PATCH" : "POST",
     body: JSON.stringify(payload),
   });
+
+export const deleteCarta = (id) =>
+  fetchJson(`${STAFF_CARTE}/catalogo/${id}/`, { method: "DELETE" });
 
 export const saveKeyword = (id, payload) =>
   fetchJson(`${STAFF_CARTE}/keywords/${id ? `${id}/` : ""}`, {
@@ -120,6 +131,48 @@ export async function importMseStyleTemplate({
   if (activeCampaign) headers["X-Campagna"] = activeCampaign;
 
   const res = await fetch(`${STAFF_PLATFORM}/templates/import-mse-style/`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: fd,
+  });
+  if (res.status === 401) {
+    redirectToLogin();
+    throw new Error("Sessione non valida o permessi insufficienti.");
+  }
+  if (res.status === 403) {
+    throw new Error("Permessi insufficienti: serve un account staff abilitato.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.detail || data?.error || `Import fallito (${res.status})`);
+  }
+  return data;
+}
+
+export async function importMseSet({
+  file,
+  gioco_definizione,
+  nome,
+  slug,
+  create_cards = true,
+  update_existing = true,
+}) {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (gioco_definizione) fd.append("gioco_definizione", gioco_definizione);
+  if (nome) fd.append("nome", nome);
+  if (slug) fd.append("slug", slug);
+  fd.append("create_cards", create_cards ? "true" : "false");
+  fd.append("update_existing", update_existing ? "true" : "false");
+
+  const token = getAuthToken();
+  const activeCampaign = getActiveCampaignSlug();
+  const headers = {};
+  if (token) headers.Authorization = `Token ${token}`;
+  if (activeCampaign) headers["X-Campagna"] = activeCampaign;
+
+  const res = await fetch(`${STAFF_CARTE}/espansioni/import-mse-set/`, {
     method: "POST",
     credentials: "include",
     headers,

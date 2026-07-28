@@ -1,10 +1,14 @@
 """
 API giocatore e staff per carte collezionabili.
 """
+import zipfile
+
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -68,6 +72,9 @@ from personaggi.serializers_carte import (
     TagCartaSerializer,
 )
 from personaggi.views import _can_operate_in_campaign
+from personaggi.views_carte_platform import _get_gioco_for_campagna
+from personaggi.carte_platform_models import CarteGiocoDefinizione
+from personaggi.mse_set_import import import_mse_set_package
 from personaggi.views_staff import _campaign_feature_filter, _get_active_campaign, _get_default_campaign
 
 
@@ -486,6 +493,11 @@ class EspansioneCarteStaffViewSet(viewsets.ModelViewSet):
         )
         return _campaign_feature_filter(self.request, qs, FEATURE_CARTE_COLLEZIONABILI)
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["campagna"] = _get_active_campaign(self.request) or _get_default_campaign()
+        return ctx
+
     def perform_create(self, serializer):
         campagna = _get_active_campaign(self.request) or _get_default_campaign()
         if not campagna:
@@ -493,6 +505,84 @@ class EspansioneCarteStaffViewSet(viewsets.ModelViewSet):
 
             raise DRFValidationError({"campagna": "Campagna attiva non trovata."})
         serializer.save(campagna=campagna)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-mse-set",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_mse_set(self, request):
+        """Import package `.mse-set/.zip` → espansione + carte catalogo."""
+        campagna = _get_active_campaign(request) or _get_default_campaign()
+        if not campagna:
+            raise DRFValidationError({"campagna": "Campagna attiva non trovata."})
+
+        up = request.FILES.get("file")
+        if not up:
+            raise DRFValidationError({"file": "File .mse-set/.zip obbligatorio."})
+        if not (up.name.endswith(".zip") or up.name.endswith(".mse-set")):
+            raise DRFValidationError({"file": "Estensione non valida: usare .zip o .mse-set."})
+
+        gioco_id = request.data.get("gioco_definizione")
+        if gioco_id:
+            gioco = CarteGiocoDefinizione.objects.filter(id=gioco_id, campagna=campagna).first()
+            if not gioco:
+                raise DRFValidationError({"gioco_definizione": "Gioco non trovato nella campagna attiva."})
+        else:
+            gioco = _get_gioco_for_campagna(campagna)
+            if not gioco:
+                raise DRFValidationError(
+                    {
+                        "gioco_definizione": (
+                            "Specifica gioco_definizione: la campagna non ha un unico gioco predefinito."
+                        )
+                    }
+                )
+
+        create_cards = str(request.data.get("create_cards", "true")).lower() in {"1", "true", "yes", "on"}
+        update_existing = str(request.data.get("update_existing", "true")).lower() in {"1", "true", "yes", "on"}
+
+        try:
+            result = import_mse_set_package(
+                campagna=campagna,
+                gioco=gioco,
+                upload_file=up,
+                espansione_slug=(request.data.get("slug") or "").strip(),
+                espansione_nome=(request.data.get("nome") or "").strip(),
+                create_cards=create_cards,
+                update_existing=update_existing,
+            )
+        except zipfile.BadZipFile as exc:
+            raise DRFValidationError({"file": "Archivio non valido o corrotto."}) from exc
+
+        esp = EspansioneCarte.objects.get(pk=result["espansione_id"])
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
+        renumber_summary = renumber_carte_in_espansione(campagna, esp)
+        import_summary = {**result, "renumber": renumber_summary}
+        return Response(
+            {
+                "espansione": EspansioneCarteSerializer(esp, context={"request": request}).data,
+                "import_summary": import_summary,
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="renumber-codici")
+    def renumber_codici(self, request, pk=None):
+        """
+        Riassegna codice `{SIGLA}-{NNN}` e ordine_set: colore (energia) → alfabetico.
+        """
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
+        esp = self.get_object()
+        summary = renumber_carte_in_espansione(esp.campagna, esp)
+        return Response(
+            {
+                "espansione": EspansioneCarteSerializer(esp, context={"request": request}).data,
+                "renumber": summary,
+            }
+        )
 
 
 class CartaCollezionabileStaffViewSet(viewsets.ModelViewSet):
@@ -523,6 +613,15 @@ class CartaCollezionabileStaffViewSet(viewsets.ModelViewSet):
 
             raise DRFValidationError({"campagna": "Campagna attiva non trovata."})
         serializer.save(campagna=campagna)
+
+    def perform_destroy(self, instance):
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
+        campagna = instance.campagna
+        espansione = instance.espansione
+        super().perform_destroy(instance)
+        if espansione:
+            renumber_carte_in_espansione(campagna, espansione)
 
 
 class BustinaCarteStaffViewSet(viewsets.ModelViewSet):

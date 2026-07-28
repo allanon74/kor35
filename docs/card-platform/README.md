@@ -32,6 +32,7 @@ KOR35 evolve verso una **piattaforma carte in tre layer**, senza big-bang:
 | [06-contratti-json.md](./06-contratti-json.md) | Schemi `*_spec_v1` |
 | [07-mse-mapping.md](./07-mse-mapping.md) | MSE2 ↔ KOR35 |
 | [08-permessi-identita.md](./08-permessi-identita.md) | User, PlayerProfile, Personaggio |
+| [09-kor35-mse-template-prod-runbook.md](./09-kor35-mse-template-prod-runbook.md) | Template KOR35 + allineamento stylesheet prod |
 
 ## Codice backend introdotto
 
@@ -52,6 +53,11 @@ POST /api/staff/carte/platform/gioco/{id}/bootstrap/
 # Rigenera playable spec su tutte le carte (job MVP)
 POST /api/staff/carte/platform/jobs/  # tipo=export_playable
 POST /api/staff/carte/platform/jobs/{id}/esegui-export-playable/
+
+# Template MSE KOR35 + refresh layout template importati
+make bootstrap-kor35-mse-template-dry-run ENV=dev-office CAMPAGNA_SLUG=kor35
+make bootstrap-kor35-mse-template ENV=prod CAMPAGNA_SLUG=kor35
+# Runbook: docs/card-platform/09-kor35-mse-template-prod-runbook.md
 ```
 
 ## Riferimenti esterni (solo studio, no copy GPL)

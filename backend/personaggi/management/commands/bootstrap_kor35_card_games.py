@@ -14,6 +14,11 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--campagna-slug", required=True)
         parser.add_argument("--dry-run", action="store_true")
+        parser.add_argument(
+            "--force-refresh-spec",
+            action="store_true",
+            help="Riscrive meta.mse_game_spec con la spec canonica Sette Elegie (7 aure).",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -22,6 +27,7 @@ class Command(BaseCommand):
             raise CommandError(f"Campagna non trovata: {options['campagna_slug']}")
 
         dry_run = bool(options["dry_run"])
+        force_refresh = bool(options["force_refresh_spec"])
         updated = 0
         skipped = 0
 
@@ -30,7 +36,7 @@ class Command(BaseCommand):
             modello_base=MODELLO_BASE_KOR35,
         )
         for gioco in qs:
-            merged = merge_kor35_game_meta(gioco.meta)
+            merged = merge_kor35_game_meta(gioco.meta, force_refresh=force_refresh)
             if merged == (gioco.meta or {}):
                 skipped += 1
                 continue

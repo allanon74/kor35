@@ -107,6 +107,7 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
             "campagna",
             "nome",
             "slug",
+            "sigla",
             "descrizione",
             "immagine",
             "immagine_url",
@@ -149,13 +150,58 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
     def get_carte_count(self, obj):
         return getattr(obj, "carte_count", None) or obj.carte.count()
 
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            data = dict(data)
+            for key in ("vendita_dal", "vendita_al"):
+                if data.get(key) == "":
+                    data[key] = None
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
+        from personaggi.carte_set_codice import normalize_sigla, suggest_sigla_from_nome
+
         nome = attrs.get("nome") or (self.instance.nome if self.instance else "")
         slug = attrs.get("slug") or (self.instance.slug if self.instance else "")
+        if attrs.get("vendita_dal") == "":
+            attrs["vendita_dal"] = None
+        if attrs.get("vendita_al") == "":
+            attrs["vendita_al"] = None
         if not slug and nome:
             attrs["slug"] = slugify(nome)[:80]
-        if not attrs.get("slug"):
+        if not attrs.get("slug") and not (self.instance and self.instance.slug):
             raise serializers.ValidationError({"slug": "Slug obbligatorio."})
+
+        # Sigla corta per codici carta (KBE-001). Auto da nome se vuota.
+        if "sigla" in attrs:
+            attrs["sigla"] = normalize_sigla(attrs.get("sigla") or "")
+        sigla = attrs.get("sigla")
+        if sigla is None and self.instance:
+            sigla = self.instance.sigla
+        if not (sigla or "").strip():
+            attrs["sigla"] = suggest_sigla_from_nome(nome)
+        elif "sigla" in attrs:
+            attrs["sigla"] = normalize_sigla(sigla)
+
+        campagna = self.instance.campagna if self.instance else self.context.get("campagna")
+        slug_val = attrs.get("slug", slug)
+        if campagna and slug_val:
+            dup_qs = EspansioneCarte.objects.filter(campagna=campagna, slug=slug_val)
+            if self.instance:
+                dup_qs = dup_qs.exclude(pk=self.instance.pk)
+            if dup_qs.exists():
+                raise serializers.ValidationError(
+                    {"slug": "Esiste già un set con questo codice in questa campagna."}
+                )
+        sigla_val = attrs.get("sigla") or (self.instance.sigla if self.instance else "")
+        if campagna and sigla_val:
+            dup_sigla = EspansioneCarte.objects.filter(campagna=campagna, sigla__iexact=sigla_val)
+            if self.instance:
+                dup_sigla = dup_sigla.exclude(pk=self.instance.pk)
+            if dup_sigla.exists():
+                raise serializers.ValidationError(
+                    {"sigla": "Esiste già un set con questa sigla in questa campagna."}
+                )
         vendita_dal = attrs.get("vendita_dal")
         vendita_al = attrs.get("vendita_al")
         if self.instance:
@@ -180,6 +226,19 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
         if campagna and value.campagna_id != campagna.id:
             raise serializers.ValidationError("Template non appartenente alla campagna attiva.")
         return value
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        from personaggi.carte_set_codice import normalize_sigla, renumber_carte_in_espansione
+
+        old_sigla = normalize_sigla(instance.sigla or "")
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        new_sigla = normalize_sigla(instance.sigla or "")
+        if old_sigla != new_sigla and instance.carte.exists():
+            renumber_carte_in_espansione(instance.campagna, instance)
+        return instance
 
 
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
@@ -361,9 +420,25 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        from personaggi.carte_set_codice import (
+            renumber_carte_in_espansione,
+            suggest_carta_codice_for_espansione,
+        )
+
         stats = validated_data.pop("reliquiario_statistiche", [])
         tags = validated_data.pop("tags", None)
         espansione = validated_data.get("espansione")
+        # Codice sempre automatico alla creazione in un set: placeholder poi rinumera.
+        if espansione:
+            campagna = validated_data.get("campagna") or espansione.campagna
+            ordine, codice = suggest_carta_codice_for_espansione(campagna, espansione)
+            validated_data["codice"] = codice
+            if not validated_data.get("ordine_set"):
+                validated_data["ordine_set"] = ordine
+        elif not (validated_data.get("codice") or "").strip():
+            raise serializers.ValidationError(
+                {"codice": "Codice obbligatorio se la carta non ha un'espansione."}
+            )
         if not validated_data.get("studio_template"):
             default_template = None
             if espansione and espansione.default_studio_template_id:
@@ -383,12 +458,20 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
         if tags is not None:
             carta.tags.set(tags)
         _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", carta, stats)
+        if carta.espansione_id:
+            renumber_carte_in_espansione(carta.campagna, carta.espansione)
+            carta.refresh_from_db()
         return carta
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        from personaggi.carte_set_codice import renumber_carte_in_espansione
+
         stats = validated_data.pop("reliquiario_statistiche", None)
         tags = validated_data.pop("tags", None)
+        old_esp = instance.espansione
+        old_nome = instance.nome
+        old_energia = instance.energia
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -396,6 +479,22 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
             instance.tags.set(tags)
         if stats is not None:
             _save_condizione_stat_rows(CartaReliquiarioStatistica, "carta", instance, stats)
+
+        # Rinumera se cambia set / colore / nome (ordine Magic).
+        new_esp = instance.espansione
+        old_esp_id = getattr(old_esp, "pk", None)
+        new_esp_id = getattr(new_esp, "pk", None)
+        order_fields_changed = (
+            old_esp_id != new_esp_id
+            or old_nome != instance.nome
+            or old_energia != instance.energia
+        )
+        if order_fields_changed:
+            if old_esp_id and old_esp_id != new_esp_id:
+                renumber_carte_in_espansione(instance.campagna, old_esp)
+            if new_esp:
+                renumber_carte_in_espansione(instance.campagna, new_esp)
+                instance.refresh_from_db()
         return instance
 
 
