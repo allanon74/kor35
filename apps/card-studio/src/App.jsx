@@ -118,6 +118,25 @@ const DEFAULT_CARD_LIST_COLUMNS = [
   { key: "codice", label: "Code" },
 ];
 
+const MTG_FALLBACK_CARD_FIELDS = [
+  { name: "code", type: "text", identifying: true, card_list_visible: true, card_list_column: 0, card_list_name: "Code", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 100 },
+  { name: "name", type: "text", identifying: true, card_list_visible: true, card_list_column: 1, card_list_name: "Name", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 160 },
+  { name: "type", type: "text", card_list_visible: true, card_list_column: 2, card_list_name: "Type", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 110 },
+  { name: "energy", type: "text", card_list_visible: true, card_list_column: 3, card_list_name: "Mana", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 90 },
+  { name: "cost", type: "number", card_list_visible: true, card_list_column: 4, card_list_name: "Cost", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "right", card_list_width: 70, initial: "0" },
+  { name: "attack", type: "number", card_list_visible: true, card_list_column: 5, card_list_name: "PWR", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "right", card_list_width: 70, initial: "0" },
+  { name: "health", type: "number", card_list_visible: true, card_list_column: 6, card_list_name: "TGH", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "right", card_list_width: 70, initial: "0" },
+  { name: "rules", type: "text", multi_line: true, editable: true, card_list_allow: false },
+  { name: "lore", type: "text", multi_line: true, editable: true, card_list_allow: false },
+  { name: "rarity", type: "text", card_list_visible: true, card_list_column: 7, card_list_name: "Rarity", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 90 },
+];
+
+const MTG_FALLBACK_SET_FIELDS = [
+  { name: "title", type: "text", identifying: true, editable: true },
+  { name: "code", type: "text", editable: true },
+  { name: "description", type: "text", editable: true, multi_line: true },
+];
+
 function pickDefaultGame(giochi) {
   if (!giochi?.length) return null;
   return (
@@ -366,17 +385,31 @@ export default function App() {
     () => giochi.find((g) => g.id === selectedGameId) || null,
     [giochi, selectedGameId]
   );
+  const isMtgGame = useMemo(() => {
+    if (!selectedGame) return false;
+    const slug = String(selectedGame.slug || "").toLowerCase();
+    const model = String(selectedGame.modello_base || "").toLowerCase();
+    return model === "mtg" || slug === "magic" || slug === "mtg";
+  }, [selectedGame]);
   const gameCardFields = useMemo(
-    () => selectedGame?.meta?.mse_game_spec?.card_fields || [],
-    [selectedGame]
+    () => {
+      const fields = selectedGame?.meta?.mse_game_spec?.card_fields;
+      if (Array.isArray(fields) && fields.length > 0) return fields;
+      return isMtgGame ? MTG_FALLBACK_CARD_FIELDS : [];
+    },
+    [selectedGame, isMtgGame]
   );
   const gameSetFields = useMemo(
-    () => selectedGame?.meta?.mse_game_spec?.set_fields || [],
-    [selectedGame]
+    () => {
+      const fields = selectedGame?.meta?.mse_game_spec?.set_fields;
+      if (Array.isArray(fields) && fields.length > 0) return fields;
+      return isMtgGame ? MTG_FALLBACK_SET_FIELDS : [];
+    },
+    [selectedGame, isMtgGame]
   );
   const gameHasKeywords = useMemo(
-    () => Boolean(selectedGame?.meta?.mse_game_spec?.has_keywords),
-    [selectedGame]
+    () => (selectedGame?.meta?.mse_game_spec?.has_keywords ?? isMtgGame),
+    [selectedGame, isMtgGame]
   );
   const gameKeywordModes = useMemo(
     () => selectedGame?.meta?.mse_game_spec?.keyword_modes || [],
