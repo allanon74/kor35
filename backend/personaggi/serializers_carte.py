@@ -403,7 +403,13 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
                     if field not in attrs:
                         continue
                     if field == "tags":
-                        touched.append("tag_ids")
+                        new_ids = {
+                            getattr(t, "pk", t)
+                            for t in (attrs.get("tags") or [])
+                        }
+                        old_ids = set(self.instance.tags.values_list("pk", flat=True))
+                        if new_ids != old_ids:
+                            touched.append("tag_ids")
                         continue
                     if attrs[field] != getattr(self.instance, field):
                         touched.append(field)

@@ -187,6 +187,31 @@ const CARTA_READ_ONLY = new Set([
   "statistiche_reliquiario",
 ]);
 
+/** Campi che Card Studio può scrivere (evita 400 in OPEN per tag_ids/effect_scripts reinviato). */
+const CARTA_SAVE_KEYS = [
+  "codice",
+  "nome",
+  "tipo",
+  "energia",
+  "rarita",
+  "costo_gioco",
+  "attacco",
+  "salute",
+  "iniziativa",
+  "testo_gioco",
+  "testo_lore",
+  "espansione",
+  "layout_versione",
+  "studio_template",
+  "studio_carta_spec",
+  "arena_playable_spec",
+  "mse_campi",
+  "attiva",
+  "ordine_set",
+];
+
+const CARTA_UUID_KEYS = new Set(["espansione", "studio_template"]);
+
 function appendFormField(fd, key, val) {
   if (val === null || val === undefined) return;
   if (typeof val === "boolean") {
@@ -218,6 +243,31 @@ function stripPayloadFields(form, readOnlyKeys) {
   return out;
 }
 
+function sanitizeMseCampiForSave(mseCampi) {
+  const out = {};
+  Object.entries(mseCampi || {}).forEach(([k, v]) => {
+    if (typeof v === "string" && v.startsWith("blob:")) return;
+    out[k] = v;
+  });
+  return out;
+}
+
+function sanitizeCartaSavePayload(raw) {
+  const out = {};
+  CARTA_SAVE_KEYS.forEach((key) => {
+    if (!(key in (raw || {}))) return;
+    let val = raw[key];
+    if (CARTA_UUID_KEYS.has(key) && (val === "" || val === undefined)) {
+      val = null;
+    }
+    out[key] = val;
+  });
+  if (out.mse_campi && typeof out.mse_campi === "object") {
+    out.mse_campi = sanitizeMseCampiForSave(out.mse_campi);
+  }
+  return out;
+}
+
 function parseJsonObject(raw, label) {
   try {
     return parseJsonOrThrow(raw, label);
@@ -232,7 +282,7 @@ function buildCardSavePayload(cardForm, { studioSpecText, playableSpecText, mseC
   const fromTextStudio = parseJsonObject(studioSpecText, "studio_carta_spec");
   const fromFormStudio =
     cardForm.studio_carta_spec && typeof cardForm.studio_carta_spec === "object" ? cardForm.studio_carta_spec : {};
-  return {
+  return sanitizeCartaSavePayload({
     ...stripPayloadFields(cardForm, CARTA_READ_ONLY),
     studio_carta_spec: {
       ...fromTextStudio,
@@ -243,8 +293,8 @@ function buildCardSavePayload(cardForm, { studioSpecText, playableSpecText, mseC
       },
     },
     arena_playable_spec: parseJsonObject(playableSpecText, "arena_playable_spec"),
-    mse_campi: { ...fromTextMse, ...fromFormMse },
-  };
+    mse_campi: sanitizeMseCampiForSave({ ...fromTextMse, ...fromFormMse }),
+  });
 }
 
 function buildNewEspForm({ selectedGameId, defaultTemplateByGame }) {

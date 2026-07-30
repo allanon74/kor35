@@ -13,6 +13,7 @@ from personaggi.carte_collezionabili_models import (
     CartaPosseduta,
     ConfigurazioneCarteCollezionabili,
     CARTE_ACCESSO_OPEN,
+    CARTE_ACCESSO_TEST,
     DUELLO_STATO_IN_CORSO,
     DuelloCarte,
     KeywordCarta,
@@ -42,8 +43,9 @@ class TagCartaStaffApiTests(APITestCase):
 
         self.user = User.objects.create_user(username="tag_staff", password="x")
         self.campagna = Campagna.objects.create(slug="tag-test", nome="Tag Test", attiva=True)
+        # TEST: staff può assegnare tag; in OPEN i tag sono campi gameplay bloccati.
         ConfigurazioneCarteCollezionabili.objects.create(
-            campagna=self.campagna, accesso_modo=CARTE_ACCESSO_OPEN, abilitata=True,
+            campagna=self.campagna, accesso_modo=CARTE_ACCESSO_TEST, abilitata=True,
         )
         CampagnaUtente.objects.create(
             campagna=self.campagna, user=self.user, ruolo=CAMPAGNA_ROLE_MASTER, attivo=True
