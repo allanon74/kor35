@@ -513,6 +513,40 @@ body {
   background: #111827;
 }
 
+.mse-btn-upload {
+  background: #1d4ed8 !important;
+  color: #fff !important;
+  border-color: #1e40af !important;
+  font-weight: 600;
+}
+
+.mse-art-upload-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.35rem 0.5rem 0.65rem;
+  padding: 0.55rem 0.65rem;
+  background: #fff8dc;
+  border: 1px solid #c4a35a;
+}
+
+.mse-art-upload-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 12px;
+  color: #333;
+  max-width: 28rem;
+}
+
+.mse-art-upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 /* Other tabs — shared */
 
 .grid,

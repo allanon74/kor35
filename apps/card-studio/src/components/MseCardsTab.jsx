@@ -4,8 +4,17 @@ import MseCardPreview, { useMseCardRender } from "./MseCardPreview";
 import MseFieldTable from "./MseFieldTable";
 import { readCardFieldValue, writeCardFieldPatch } from "../mse/cardFieldBridge";
 import { exportCardPngFromRender } from "../mse/exportCardPng";
+import { normFieldKey } from "../mse/fieldUtils";
 
 import MseEditorActions from "./MseEditorActions";
+
+function findImageField(fields) {
+  return (fields || []).find((f) => {
+    const t = String(f?.type || "").toLowerCase();
+    const k = normFieldKey(f?.name);
+    return t === "image" || ["image", "art", "illustration", "immagine"].includes(k);
+  });
+}
 
 export default function MseCardsTab({
   cardForm,
@@ -43,6 +52,7 @@ export default function MseCardsTab({
   const [statusText, setStatusText] = useState("");
   const [exporting, setExporting] = useState(false);
   const previewRef = useRef(null);
+  const artFileRef = useRef(null);
 
   const getValue = (field) => readCardFieldValue(cardForm, field);
   const setValue = (field, raw) => {
@@ -54,6 +64,13 @@ export default function MseCardsTab({
       return next;
     });
   };
+
+  const imageField = useMemo(() => findImageField(gameCardFields), [gameCardFields]);
+  const artPreview =
+    cardForm.immagine_preview ||
+    cardForm.immagine_url ||
+    (imageField ? readCardFieldValue(cardForm, imageField) : "") ||
+    "";
 
   const hasMsePreview = Boolean(activeTemplate?.layout_spec?.mse_v1?.card_styles);
   const cardFrameSize = useMemo(() => {
@@ -193,6 +210,35 @@ export default function MseCardsTab({
       <div className="mse-pane mse-pane-fields">
         <div className="mse-pane-title-row">
           <h2 className="mse-pane-title">Card fields</h2>
+        </div>
+        <div className="mse-art-upload-panel">
+          <div className="mse-art-upload-copy">
+            <strong>Illustrazione carta</strong>
+            <span>Carica JPG/PNG/WebP. Poi salva la carta per memorizzarla sul server.</span>
+          </div>
+          <div className="mse-art-upload-actions">
+            <input
+              ref={artFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                e.target.value = "";
+                if (!file) return;
+                onPickFile?.(imageField || { name: "image", type: "image" }, file);
+              }}
+            />
+            <button type="button" className="mse-btn-small mse-btn-upload" onClick={() => artFileRef.current?.click()}>
+              Carica immagine…
+            </button>
+            {artPreview &&
+            (artPreview.startsWith("blob:") || artPreview.startsWith("/media/") || artPreview.startsWith("http")) ? (
+              <img className="mse-image-thumb" src={artPreview} alt="Anteprima illustrazione" />
+            ) : (
+              <span className="mse-empty-hint">Nessuna immagine</span>
+            )}
+          </div>
         </div>
         <MseFieldTable
           fields={gameCardFields}

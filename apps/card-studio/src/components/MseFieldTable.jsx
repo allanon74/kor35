@@ -133,8 +133,8 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
             if (file) onPickFile?.(field, file);
           }}
         />
-        <button type="button" className="mse-btn-small" onClick={() => fileRef.current?.click()}>
-          Browse…
+        <button type="button" className="mse-btn-small mse-btn-upload" onClick={() => fileRef.current?.click()}>
+          Carica immagine…
         </button>
         {preview ? <img className="mse-image-thumb" src={preview} alt="" /> : null}
       </div>
@@ -220,7 +220,7 @@ export default function MseFieldTable({
                 }}
               >
                 <td className="mse-field-name">
-                  {field.name}
+                  {String(field.type || "").toLowerCase() === "image" ? "Illustrazione" : field.name}
                   <span className="mse-field-type">{fieldTypeLabel(field)}</span>
                 </td>
                 <td>

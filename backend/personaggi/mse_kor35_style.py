@@ -67,15 +67,18 @@ def _lerp(a: int, b: int, t: float) -> int:
 
 
 def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
-    """Cornice carta: bordo dorato, area interna scura, fascia stats in basso."""
+    """
+    Cornice carta: solo bordo dorato + fascia stats in basso.
+    L'interno resta trasparente così art/testo (layer MSE) restano visibili.
+    """
     border = 14
     inner = 22
     stats_h = 52
     gold = (196, 154, 72)
     gold_dark = (140, 108, 48)
-    panel = (23, 32, 51)
-    panel_light = (31, 42, 68)
     stats_bg = (15, 20, 32)
+    # Finestra illustrazione (allineata allo style `art:`)
+    art_left, art_top, art_w, art_h = 19, 118, 337, 250
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
         if x < border or y < border or x >= width - border or y >= height - border:
@@ -87,26 +90,26 @@ def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
         if x < inner or y < inner or x >= width - inner or y >= height - inner:
             return gold_dark[0], gold_dark[1], gold_dark[2], 255
         if y >= height - border - stats_h:
-            return stats_bg[0], stats_bg[1], stats_bg[2], 230
-        t = y / max(height, 1)
-        r = _lerp(panel_light[0], panel[0], t)
-        g = _lerp(panel_light[1], panel[1], t)
-        b = _lerp(panel_light[2], panel[2], t)
-        return r, g, b, 255
+            return stats_bg[0], stats_bg[1], stats_bg[2], 200
+        if art_left <= x < art_left + art_w and art_top <= y < art_top + art_h:
+            return 0, 0, 0, 0
+        return 0, 0, 0, 0
 
     return rgba_png(width, height, pixel)
 
 
 def kor35_art_placeholder_png(width: int = 337, height: int = 250) -> bytes:
-    """Placeholder area illustrazione (semi-trasparente)."""
+    """Placeholder area illustrazione (visibile, non quasi invisibile)."""
     cx, cy = width / 2, height / 2
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
+        if x < 2 or y < 2 or x >= width - 2 or y >= height - 2:
+            return 120, 140, 180, 220
         dx = abs(x - cx) / max(cx, 1)
         dy = abs(y - cy) / max(cy, 1)
-        if dx + dy > 0.92:
-            return 80, 96, 128, 40
-        return 45, 55, 78, 90
+        if dx < 0.35 and dy < 0.22:
+            return 70, 90, 130, 210
+        return 40, 52, 78, 180
 
     return rgba_png(width, height, pixel)
 
@@ -142,7 +145,7 @@ card style:
         top: 0
         width: 375
         height: 523
-        z index: 100
+        z index: 20
         render style: image
         image: images/frame.png
 

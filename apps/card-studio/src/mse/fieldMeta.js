@@ -41,7 +41,7 @@ export function fieldStatusDescription(field) {
     "package choice": "Installed package matching the game match pattern.",
     boolean: "yes or no.",
     color: "Color value (rgb or choice).",
-    image: "Image file path relative to the set/style package.",
+    image: "Carica un'illustrazione (Browse…) oppure incolla un percorso/URL.",
     symbol: "Symbol edited with the MSE symbol editor (path).",
     info: "Informational label; not editable.",
     number: "Numeric value.",
@@ -53,13 +53,17 @@ export function fieldStatusDescription(field) {
 }
 
 export function sortCardFieldsForEditor(fields) {
+  const typeRank = (field) => {
+    const t = String(field?.type || "").toLowerCase();
+    if (t === "info") return 0;
+    if (field?.identifying) return 1;
+    if (t === "image") return 2;
+    return 3;
+  };
   return [...(fields || [])].sort((a, b) => {
-    const ta = String(a?.type || "").toLowerCase();
-    const tb = String(b?.type || "").toLowerCase();
-    if (ta === "info" && tb !== "info") return -1;
-    if (tb === "info" && ta !== "info") return 1;
-    if (a?.identifying && !b?.identifying) return -1;
-    if (b?.identifying && !a?.identifying) return 1;
+    const ra = typeRank(a);
+    const rb = typeRank(b);
+    if (ra !== rb) return ra - rb;
     return String(a?.name || "").localeCompare(String(b?.name || ""));
   });
 }

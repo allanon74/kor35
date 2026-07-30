@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { resolveTemplateBackground } from "../mse/assetUrl";
 import { buildCardScriptContext } from "../mse/scriptEngine";
 import { resolveMseLayers } from "../mse/resolveLayers";
 import { resolveSelectedSymbolFontPackage } from "../mse/symbolFonts";
@@ -55,8 +54,6 @@ export default function MseCardPreview({
     [mseV1, card, styling, setData, gameCardFields, template?.mse_extracted_root, template?.mse_assets_manifest, symbolFontPackage]
   );
 
-  const bgImage = useMemo(() => resolveTemplateBackground(template), [template]);
-
   if (!mseV1 || !Object.keys(mseV1.card_styles || {}).length) {
     return null;
   }
@@ -71,9 +68,6 @@ export default function MseCardPreview({
         width: render.width * scale,
         height: render.height * scale,
         backgroundColor: render.background,
-        backgroundImage: bgImage ? `url(${bgImage})` : undefined,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
       }}
     >
       {render.layers.map((layer) => {
