@@ -499,6 +499,20 @@ body {
   vertical-align: middle;
 }
 
+.mse-image-field {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.mse-image-thumb {
+  max-height: 48px;
+  max-width: 72px;
+  object-fit: contain;
+  border: 1px solid #9ca3af;
+  background: #111827;
+}
+
 /* Other tabs — shared */
 
 .grid,

@@ -33,7 +33,7 @@ from personaggi.carte_collezionabili_models import (
 )
 
 # Bump quando cambiano campi/choice del gioco KOR35 (refresh automatico su merge).
-KOR35_MSE_GAME_SPEC_VERSION = "kor35-sette-elegie-3"
+KOR35_MSE_GAME_SPEC_VERSION = "kor35-sette-elegie-4"
 
 KOR35_TYPE_CHOICES = [code for code, _label in CARTA_TIPO_CHOICES]
 KOR35_ENERGY_CHOICES = [code for code, _label in CARTA_ENERGIA_CHOICES]
@@ -174,6 +174,38 @@ def _text_field(
     }
 
 
+def _image_field(
+    name: str,
+    *,
+    description: str = "",
+    card_list_visible: bool = False,
+    card_list_column: int = 0,
+) -> dict[str, Any]:
+    return {
+        "name": name,
+        "type": "image",
+        "editable": True,
+        "multi_line": False,
+        "identifying": False,
+        "choices": [],
+        "choice_colors": {},
+        "choice_colors_cardlist": {},
+        "default": "",
+        "initial": "",
+        "description": description,
+        "card_list_name": name,
+        "card_list_visible": card_list_visible,
+        "card_list_allow": False,
+        "card_list_alignment": "left",
+        "card_list_column": card_list_column,
+        "card_list_width": 100,
+        "show_statistics": False,
+        "match": "",
+        "required": False,
+        "empty_name": "(none)",
+    }
+
+
 def _number_field(
     name: str,
     *,
@@ -241,6 +273,10 @@ def kor35_mse_game_spec() -> dict[str, Any]:
                 card_list_visible=True,
                 card_list_column=1,
                 description="Nome carta (KOR35: nome).",
+            ),
+            _image_field(
+                "image",
+                description="Illustrazione carta (KOR35: immagine). Carica JPG/PNG/WebP dallo studio.",
             ),
             _choice_field(
                 "type",
@@ -366,12 +402,16 @@ def kor35_mse_game_spec() -> dict[str, Any]:
 
 
 def _kor35_spec_is_stale(spec: dict | None) -> bool:
-    """True se la spec è il vecchio placeholder (6 elementi MTG-like) o pre-Sette Elegie."""
+    """True se manca la version corrente o la spec è un placeholder pre-Sette Elegie."""
     if not spec:
         return True
-    if spec.get("version") == KOR35_MSE_GAME_SPEC_VERSION:
+    ver = spec.get("version")
+    if ver == KOR35_MSE_GAME_SPEC_VERSION:
         return False
-    if spec.get("version") in (None, "", "1"):
+    if ver in (None, "", "1"):
+        return True
+    # Refresh automatico solo sulle versioni canoniche precedenti (non su custom).
+    if isinstance(ver, str) and ver.startswith("kor35-sette-elegie-"):
         return True
     for field in spec.get("card_fields") or []:
         if field.get("name") != "energy":

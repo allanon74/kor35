@@ -26,16 +26,20 @@ async function fetchJson(url, options = {}) {
   const authHeaders = token ? { Authorization: `Token ${token}` } : {};
   const campaignHeaders = activeCampaign ? { "X-Campagna": activeCampaign } : {};
   const method = String(options.method || "GET").toUpperCase();
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const headers = {
+    ...authHeaders,
+    ...campaignHeaders,
+    ...(options.headers || {}),
+  };
+  if (!isFormData && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
+  }
   const res = await fetch(url, {
     credentials: "include",
     cache: method === "GET" ? "no-store" : options.cache,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-      ...campaignHeaders,
-      ...(options.headers || {}),
-    },
     ...options,
+    headers,
   });
   if (res.status === 401) {
     redirectToLogin();
@@ -89,11 +93,13 @@ export const renumberEspansioneCodici = (espansioneId) =>
     body: JSON.stringify({}),
   });
 
-export const saveCarta = (id, payload) =>
-  fetchJson(`${STAFF_CARTE}/catalogo/${id ? `${id}/` : ""}`, {
+export const saveCarta = (id, payload) => {
+  const isFormData = typeof FormData !== "undefined" && payload instanceof FormData;
+  return fetchJson(`${STAFF_CARTE}/catalogo/${id ? `${id}/` : ""}`, {
     method: id ? "PATCH" : "POST",
-    body: JSON.stringify(payload),
+    body: isFormData ? payload : JSON.stringify(payload),
   });
+};
 
 export const deleteCarta = (id) =>
   fetchJson(`${STAFF_CARTE}/catalogo/${id}/`, { method: "DELETE" });

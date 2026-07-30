@@ -49,9 +49,10 @@ export default function MseCardPreview({
         set: setData,
         cardFields: gameCardFields,
         extractedRoot: template?.mse_extracted_root || "",
+        assetsManifest: template?.mse_assets_manifest || null,
         symbolFontPackage,
       }),
-    [mseV1, card, styling, setData, gameCardFields, template?.mse_extracted_root, symbolFontPackage]
+    [mseV1, card, styling, setData, gameCardFields, template?.mse_extracted_root, template?.mse_assets_manifest, symbolFontPackage]
   );
 
   const bgImage = useMemo(() => resolveTemplateBackground(template), [template]);
@@ -178,6 +179,7 @@ export function useMseCardRender(props) {
     set: setData,
     cardFields: gameCardFields,
     extractedRoot: template?.mse_extracted_root || "",
+    assetsManifest: template?.mse_assets_manifest || null,
     symbolFontPackage,
   });
 }

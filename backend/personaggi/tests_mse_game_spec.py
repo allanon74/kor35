@@ -36,6 +36,9 @@ class Kor35MseGameSpecTests(SimpleTestCase):
         self.assertIn("name", names)
         self.assertIn("code", names)
         self.assertIn("type", names)
+        self.assertIn("image", names)
+        image = next(f for f in spec["card_fields"] if f["name"] == "image")
+        self.assertEqual(image["type"], "image")
         self.assertTrue(spec["has_keywords"])
 
     def test_kor35_spec_sette_aure_e_tipi_carta(self):
@@ -91,7 +94,7 @@ class Kor35MseGameSpecTests(SimpleTestCase):
             }
         }
         merged = merge_kor35_game_meta(meta)
-        self.assertEqual(merged["mse_game_spec"]["version"], "kor35-sette-elegie-2")
+        self.assertEqual(merged["mse_game_spec"]["version"], "kor35-sette-elegie-4")
         energy = next(f for f in merged["mse_game_spec"]["card_fields"] if f["name"] == "energy")
         self.assertEqual(len(energy["choices"]), 7)
 
@@ -103,7 +106,18 @@ class Kor35MseGameSpecTests(SimpleTestCase):
 
     def test_merge_only_when_missing(self):
         merged2 = merge_kor35_game_meta({})
-        self.assertEqual(merged2["mse_game_spec"]["version"], "kor35-sette-elegie-2")
+        self.assertEqual(merged2["mse_game_spec"]["version"], "kor35-sette-elegie-4")
+
+    def test_merge_refreshes_previous_sette_elegie_version(self):
+        meta = {
+            "mse_game_spec": {
+                "version": "kor35-sette-elegie-3",
+                "card_fields": [{"name": "energy", "choices": [{"name": "MAR"}] * 7}],
+            }
+        }
+        merged = merge_kor35_game_meta(meta)
+        self.assertEqual(merged["mse_game_spec"]["version"], "kor35-sette-elegie-4")
+        self.assertTrue(any(f["name"] == "image" for f in merged["mse_game_spec"]["card_fields"]))
 
 
 class MseStyleSpecParserTests(SimpleTestCase):

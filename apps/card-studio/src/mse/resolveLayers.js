@@ -17,6 +17,23 @@ function pickProp(styleDef, ...keys) {
   return undefined;
 }
 
+function isAbsoluteMediaSrc(raw) {
+  const s = String(raw || "").trim();
+  return (
+    /^(https?:)?\/\//i.test(s) ||
+    s.startsWith("/media/") ||
+    s.startsWith("blob:") ||
+    s.startsWith("data:")
+  );
+}
+
+function resolveImageSrc(extractedRoot, raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  if (isAbsoluteMediaSrc(s)) return s;
+  return mediaUrl(extractedRoot, s);
+}
+
 function resolveBox(styleDef, ctx, cardW, cardH) {
   let left = Number(evalMseProp(pickProp(styleDef, "left"), ctx, 0));
   let top = Number(evalMseProp(pickProp(styleDef, "top"), ctx, 0));
@@ -25,17 +42,23 @@ function resolveBox(styleDef, ctx, cardW, cardH) {
   const right = evalMseProp(pickProp(styleDef, "right"), ctx, null);
   const bottom = evalMseProp(pickProp(styleDef, "bottom"), ctx, null);
 
-  if (!width && right !== null && left) width = Number(right) - left;
-  if (!height && bottom !== null && top) height = Number(bottom) - top;
-  if (!width) width = Math.max(40, cardW - left - 20);
-  if (!height) height = 24;
+  if ((!width || Number.isNaN(width)) && right !== null && right !== undefined && !Number.isNaN(Number(right))) {
+    width = Number(right) - (Number.isNaN(left) ? 0 : left);
+  }
+  if ((!height || Number.isNaN(height)) && bottom !== null && bottom !== undefined && !Number.isNaN(Number(bottom))) {
+    height = Number(bottom) - (Number.isNaN(top) ? 0 : top);
+  }
+  if (!width || Number.isNaN(width)) width = Math.max(40, cardW - (Number.isNaN(left) ? 0 : left) - 20);
+  if (!height || Number.isNaN(height)) height = 24;
+  if (Number.isNaN(left)) left = 0;
+  if (Number.isNaN(top)) top = 0;
 
   return {
     left: Math.max(0, left),
     top: Math.max(0, top),
     width: Math.max(1, width),
     height: Math.max(1, height),
-    angle: Number(evalMseProp(pickProp(styleDef, "angle", "z index"), ctx, 0)) || 0,
+    angle: Number(evalMseProp(pickProp(styleDef, "angle"), ctx, 0)) || 0,
   };
 }
 
@@ -46,6 +69,8 @@ function inferRenderStyle(fieldName, cardFields) {
   const t = String(field?.type || "").toLowerCase();
   if (t === "image" || t === "symbol") return "image";
   if (t === "choice" || t === "multiple choice" || t === "boolean") return "text";
+  const nk = normFieldKey(fieldName);
+  if (["image", "art", "illustration", "card_frame", "frame", "watermark"].includes(nk)) return "image";
   return "text";
 }
 
@@ -64,24 +89,97 @@ function choiceTextColor(fieldName, text, cardFields) {
 
 function resolveFont(styleDef) {
   const font = pickProp(styleDef, "font") || {};
-    const sizeRaw = evalMseProp(font.size, {}, 14);
-    const colorRaw = evalMseProp(font.color, {}, "#f9fafb");
+  const sizeRaw = evalMseProp(font.size, {}, 14);
+  const colorRaw = evalMseProp(font.color, {}, "#f9fafb");
+  const nameRaw = evalMseProp(font.name, {}, null);
+  const familyRaw = evalMseProp(font.family, {}, null);
+  const weightRaw = evalMseProp(font.weight, {}, "normal");
+  const family =
+    (typeof nameRaw === "string" && nameRaw) ||
+    (typeof familyRaw === "string" && familyRaw) ||
+    "inherit";
   return {
-    family: font.name || font.family || "inherit",
+    family,
     size: Number(sizeRaw) || 14,
-    color: mseColorToCss(String(colorRaw)) || "#f9fafb",
-    weight: font.weight || "normal",
+    color: mseColorToCss(String(colorRaw ?? "#f9fafb")) || "#f9fafb",
+    weight: typeof weightRaw === "string" || typeof weightRaw === "number" ? weightRaw : "normal",
   };
 }
 
 function fieldValueForName(fieldName, card, cardFields) {
+  const nk = normFieldKey(fieldName);
+  const aliases = {
+    text: ["rule_text", "rules", "rules_text", "card_text", "text"],
+    rule_text: ["rule_text", "rules", "text"],
+    casting_cost: ["casting_cost", "mana_cost", "cost"],
+    image: ["image", "art", "illustration", "immagine", "immagine_url", "immagine_preview"],
+    art: ["art", "image", "illustration", "immagine", "immagine_url", "immagine_preview"],
+    pt: ["pt", "power_toughness"],
+    power: ["power", "attack", "forza"],
+    toughness: ["toughness", "health", "robustezza"],
+  };
+  const keys = aliases[nk] || [nk, fieldName];
+  for (const key of keys) {
+    if (card[key] !== undefined && card[key] !== null && card[key] !== "") return card[key];
+    const spaced = String(key).replace(/_/g, " ");
+    if (card[spaced] !== undefined && card[spaced] !== null && card[spaced] !== "") return card[spaced];
+  }
   const field = (cardFields || []).find(
-    (f) => f.name === fieldName || normFieldKey(f.name) === normFieldKey(fieldName)
+    (f) => f.name === fieldName || normFieldKey(f.name) === nk
   );
   if (field) {
     return card[field.name] ?? card[normFieldKey(field.name)] ?? "";
   }
-  return card[fieldName] ?? card[normFieldKey(fieldName)] ?? "";
+  return card[fieldName] ?? card[nk] ?? "";
+}
+
+function isArtLikeField(fieldName) {
+  return ["art", "image", "illustration", "picture"].includes(normFieldKey(fieldName));
+}
+
+function cardColorFramePath(card, assetsManifest) {
+  const colorRaw = String(
+    card.card_color || card.card_colour || card.color || card.colour || ""
+  )
+    .toLowerCase()
+    .trim();
+  const map = {
+    white: "wcard.jpg",
+    w: "wcard.jpg",
+    blue: "ucard.jpg",
+    u: "ucard.jpg",
+    black: "bcard.jpg",
+    b: "bcard.jpg",
+    red: "rcard.jpg",
+    r: "rcard.jpg",
+    green: "gcard.jpg",
+    g: "gcard.jpg",
+    artifact: "acard.jpg",
+    a: "acard.jpg",
+    colorless: "ccard.jpg",
+    colourless: "ccard.jpg",
+    c: "ccard.jpg",
+    multicolor: "mcard.jpg",
+    multicolour: "mcard.jpg",
+    gold: "mcard.jpg",
+    m: "mcard.jpg",
+    land: "lcard.jpg",
+  };
+  const preferred = map[colorRaw];
+  const images = (assetsManifest || [])
+    .filter((a) => a?.asset_type === "image" || /\.(png|jpe?g|webp)$/i.test(a?.path || ""))
+    .map((a) => String(a.path || "").replace(/^\/+/, ""));
+  const has = (name) => images.find((p) => p === name || p.endsWith(`/${name}`) || p.toLowerCase().endsWith(name));
+  if (preferred) {
+    const hit = has(preferred);
+    if (hit) return hit;
+  }
+  for (const cand of ["card-sample.png", "wcard.jpg", "ccard.jpg", "mcard.jpg", "bcard.jpg"]) {
+    const hit = has(cand);
+    if (hit) return hit;
+  }
+  const anyCard = images.find((p) => /(^|\/)[a-z]*card\.jpg$/i.test(p) || /card-sample/i.test(p));
+  return anyCard || "";
 }
 
 function resolveLayersFromStyles(stylesMap, options) {
@@ -118,14 +216,23 @@ function resolveLayersFromStyles(stylesMap, options) {
     ).toLowerCase();
 
     const imageProp = pickProp(styleDef, "image", "mask");
-    const imageRaw = imageProp
-      ? evalMseProp(imageProp, ctx, "")
-      : fieldValueForName(fieldName, card, cardFields);
+    let imageRaw = imageProp ? evalMseProp(imageProp, ctx, "") : "";
+    if (!imageRaw) {
+      imageRaw = evalMseProp(pickProp(styleDef, "default"), ctx, "") || "";
+    }
+    if (!imageRaw && (renderStyle === "image" || isArtLikeField(fieldName))) {
+      imageRaw = fieldValueForName(fieldName, card, cardFields);
+    }
+    // Script MSE falliti (es. default_image(...)): usa illustrazione carta se presente.
+    if (!imageRaw && isArtLikeField(fieldName)) {
+      imageRaw = card.immagine_preview || card.immagine_url || card.image || card.art || "";
+    }
 
-    if (renderStyle === "image" || String(imageRaw).match(/\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i)) {
+    if (renderStyle === "image" || String(imageRaw).match(/\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i) || isAbsoluteMediaSrc(imageRaw)) {
       const raw = String(imageRaw || "").trim();
-      const looksLikeFile = /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(raw) || raw.includes("/");
-      let src = looksLikeFile ? mediaUrl(extractedRoot, raw) : "";
+      const looksLikeFile =
+        isAbsoluteMediaSrc(raw) || /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(raw) || raw.includes("/");
+      let src = looksLikeFile ? resolveImageSrc(extractedRoot, raw) : "";
       if (!src && symbolFontPackage && raw) {
         src = symbolImageUrl(symbolFontPackage, raw);
       }
@@ -156,9 +263,8 @@ function resolveLayersFromStyles(stylesMap, options) {
     const font = resolveFont(styleDef);
     const choiceColor = choiceTextColor(fieldName, text, cardFields);
     if (choiceColor) font.color = choiceColor;
-    const alwaysSymbol = Boolean(
-      styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"]
-    );
+    const alwaysSymbolProp = styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"];
+    const alwaysSymbol = Boolean(evalMseProp(alwaysSymbolProp, ctx, false));
     const symbolText = normalizeSymbolFieldText(text, alwaysSymbol);
 
     if (
@@ -198,6 +304,7 @@ export function resolveMseLayers({
   set = {},
   cardFields = [],
   extractedRoot = "",
+  assetsManifest = null,
   symbolFontPackage = null,
 }) {
   if (!mseV1) return { width: 375, height: 523, background: "#111827", layers: [] };
@@ -216,14 +323,19 @@ export function resolveMseLayers({
   }).sort((a, b) => a.z - b.z || a.box.top - b.box.top);
 
   const bg = mseColorToCss(mseV1.card_background) || "#1f2937";
-  const framePath = findFrameOverlay(mseV1);
+  const hasFrameLayer = layers.some(
+    (l) => l.type === "image" && /frame|border|card_frame|__frame__/i.test(l.fieldName)
+  );
+  const framePath = hasFrameLayer
+    ? ""
+    : findFrameOverlay(mseV1) || cardColorFramePath(card, assetsManifest);
   if (framePath) {
-    layers.push({
+    layers.unshift({
       type: "image",
       fieldName: "__frame__",
-      z: 1000,
+      z: -10,
       box: { left: 0, top: 0, width: mseV1.card_size?.width || 375, height: mseV1.card_size?.height || 523 },
-      src: mediaUrl(extractedRoot, framePath),
+      src: resolveImageSrc(extractedRoot, framePath),
     });
   }
 
@@ -231,7 +343,7 @@ export function resolveMseLayers({
     width: mseV1.card_size?.width || 375,
     height: mseV1.card_size?.height || 523,
     background: bg,
-    layers,
+    layers: layers.sort((a, b) => a.z - b.z || a.box.top - b.box.top),
   };
 }
 

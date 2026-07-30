@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { sanitizeEspansionePayload } from "./api/errors";
 import { mergeRecordById } from "./api/listUtils";
 import {
@@ -15,6 +15,7 @@ import {
 } from "./api/client";
 import { sortCardsForSetOrder, suggestCardIdentity, suggestSiglaFromNome, setCodeFromEspansione } from "./mse/cardSetOrder";
 import { resolveCardListRowColor } from "./mse/cardListColor";
+import { writeCardFieldPatch } from "./mse/cardFieldBridge";
 import { defaultStylingFromSpec } from "./mse/resolveLayers";
 import MseWorkspaceBar from "./components/MseWorkspaceBar";
 import MseEditorActions from "./components/MseEditorActions";
@@ -70,6 +71,8 @@ const emptyCarta = {
   mse_campi: {},
   attiva: true,
   ordine_set: 0,
+  immagine_url: "",
+  immagine_preview: "",
 };
 
 function parseJsonOrThrow(raw, label) {
@@ -121,6 +124,7 @@ const DEFAULT_CARD_LIST_COLUMNS = [
 const MTG_FALLBACK_CARD_FIELDS = [
   { name: "code", type: "text", identifying: true, card_list_visible: true, card_list_column: 0, card_list_name: "Code", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 100 },
   { name: "name", type: "text", identifying: true, card_list_visible: true, card_list_column: 1, card_list_name: "Name", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 160 },
+  { name: "image", type: "image", editable: true, card_list_allow: false, required: false, empty_name: "(none)" },
   { name: "type", type: "text", card_list_visible: true, card_list_column: 2, card_list_name: "Type", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 110 },
   { name: "energy", type: "text", card_list_visible: true, card_list_column: 3, card_list_name: "Mana", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "left", card_list_width: 90 },
   { name: "cost", type: "number", card_list_visible: true, card_list_column: 4, card_list_name: "Cost", editable: true, multi_line: false, card_list_allow: true, card_list_alignment: "right", card_list_width: 70, initial: "0" },
@@ -178,9 +182,33 @@ const CARTA_READ_ONLY = new Set([
   "campagna",
   "espansione_nome",
   "immagine_url",
+  "immagine_preview",
   "tag_codici",
   "statistiche_reliquiario",
 ]);
+
+function appendFormField(fd, key, val) {
+  if (val === null || val === undefined) return;
+  if (typeof val === "boolean") {
+    fd.append(key, val ? "true" : "false");
+    return;
+  }
+  if (typeof val === "object") {
+    fd.append(key, JSON.stringify(val));
+    return;
+  }
+  fd.append(key, String(val));
+}
+
+function buildCartaFormData(payload, file) {
+  const fd = new FormData();
+  Object.entries(payload || {}).forEach(([key, val]) => {
+    if (key === "immagine") return;
+    appendFormField(fd, key, val);
+  });
+  if (file) fd.append("immagine", file);
+  return fd;
+}
 
 function stripPayloadFields(form, readOnlyKeys) {
   const out = {};
@@ -279,6 +307,8 @@ export default function App() {
   const [espId, setEspId] = useState(null);
   const [espSetSpecText, setEspSetSpecText] = useState("{}");
   const [cardForm, setCardForm] = useState(emptyCarta);
+  const [cartaImmagineFile, setCartaImmagineFile] = useState(null);
+  const cartaImmaginePreviewRef = useRef(null);
   const [cardId, setCardId] = useState(null);
   const [cardFilter, setCardFilter] = useState("");
   const [studioSpecText, setStudioSpecText] = useState("{}");
@@ -664,6 +694,11 @@ export default function App() {
   };
 
   const onNewCard = () => {
+    if (cartaImmaginePreviewRef.current) {
+      URL.revokeObjectURL(cartaImmaginePreviewRef.current);
+      cartaImmaginePreviewRef.current = null;
+    }
+    setCartaImmagineFile(null);
     setCardId(null);
     const draft = buildNewCardForm({
       selectedExpansionId,
@@ -687,8 +722,17 @@ export default function App() {
   };
 
   const onEditCard = (row) => {
+    if (cartaImmaginePreviewRef.current) {
+      URL.revokeObjectURL(cartaImmaginePreviewRef.current);
+      cartaImmaginePreviewRef.current = null;
+    }
+    setCartaImmagineFile(null);
     setCardId(row.id);
-    setCardForm({ ...emptyCarta, ...row });
+    setCardForm({
+      ...emptyCarta,
+      ...row,
+      immagine_preview: row.immagine_url || "",
+    });
     setStudioSpecText(JSON.stringify(row.studio_carta_spec || {}, null, 2));
     setPlayableSpecText(JSON.stringify(row.arena_playable_spec || {}, null, 2));
     setMseCampiText(JSON.stringify(row.mse_campi || {}, null, 2));
@@ -805,7 +849,13 @@ export default function App() {
         playableSpecText,
         mseCampiText,
       });
-      const saved = await saveCarta(cardId, payload);
+      const requestBody = cartaImmagineFile ? buildCartaFormData(payload, cartaImmagineFile) : payload;
+      const saved = await saveCarta(cardId, requestBody);
+      if (cartaImmaginePreviewRef.current) {
+        URL.revokeObjectURL(cartaImmaginePreviewRef.current);
+        cartaImmaginePreviewRef.current = null;
+      }
+      setCartaImmagineFile(null);
       setMsg(
         cardId
           ? "Carta aggiornata."
@@ -996,9 +1046,30 @@ export default function App() {
 
   const onDynamicFilePicked = (field, file) => {
     if (!file) return;
-    const pseudoPath = file.name;
-    setDynamicFieldValue(field, pseudoPath);
-    setMsg(`File selezionato per ${field?.name}: ${pseudoPath}`);
+    const fType = String(field?.type || "").toLowerCase();
+    const k = normFieldKey(field?.name);
+    if (fType === "image" || ["image", "art", "illustration", "picture", "immagine"].includes(k)) {
+      if (cartaImmaginePreviewRef.current) {
+        URL.revokeObjectURL(cartaImmaginePreviewRef.current);
+      }
+      const previewUrl = URL.createObjectURL(file);
+      cartaImmaginePreviewRef.current = previewUrl;
+      setCartaImmagineFile(file);
+      setCardForm((prev) => {
+        const next = writeCardFieldPatch(prev, field, previewUrl);
+        next.immagine_preview = previewUrl;
+        try {
+          setMseCampiText(JSON.stringify(next.mse_campi || {}, null, 2));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+      setMsg(`Immagine selezionata: ${file.name} (salva la carta per caricarla sul server).`);
+      return;
+    }
+    setDynamicFieldValue(field, file.name);
+    setMsg(`File selezionato per ${field?.name}: ${file.name}`);
   };
 
   const applyGameFieldDefaults = (fields) => {

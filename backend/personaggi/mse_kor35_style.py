@@ -16,6 +16,7 @@ KOR35_STYLE_GAME = "kor35"
 KOR35_FIELD_MAPPING = {
     "code": "codice",
     "name": "nome",
+    "image": "immagine",
     "type": "tipo",
     "energy": "energia",
     "rarity": "rarita",
@@ -153,7 +154,7 @@ card style:
         height: 250
         z index: 5
         render style: image
-        image: images/art-placeholder.png
+        image: {if card.image then card.image else "images/art-placeholder.png"}
 
 card style:
     code:

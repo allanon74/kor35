@@ -41,11 +41,16 @@ function mseToJs(expr) {
 export function evalMseScript(expr, ctx, fallback = null) {
   if (expr === null || expr === undefined || expr === "") return fallback;
   try {
-    const js = mseToJs(expr);
+    let js = mseToJs(expr);
+    // Funzioni MSE comuni non implementate: evita throw e lascia fallback layer.
+    js = js.replace(/\bmax\s*\(/g, "Math.max(").replace(/\bmin\s*\(/g, "Math.min(");
+    js = js.replace(/\bdefault_image\s*\([^)]*\)/g, '""');
+    js = js.replace(/\btemplate\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bframe_image\s*\([^)]*\)/g, '""');
     const card = ctx.card || {};
     const styling = ctx.styling || {};
     const set = ctx.set || {};
-    const card_style = ctx.card_style || {};
+    const card_style = withContentWidthStubs(ctx.card_style || {});
     // eslint-disable-next-line no-new-func
     const fn = new Function("card", "styling", "set", "card_style", `return (${js});`);
     const out = fn(card, styling, set, card_style);
@@ -53,6 +58,22 @@ export function evalMseScript(expr, ctx, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+function withContentWidthStubs(cardStyle) {
+  const out = { ...cardStyle };
+  Object.keys(out).forEach((k) => {
+    const v = out[k];
+    if (v && typeof v === "object" && v.content_width === undefined) {
+      out[k] = { ...v, content_width: 40, content_lines: 1 };
+    }
+  });
+  return new Proxy(out, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return { content_width: 40, content_lines: 1 };
+    },
+  });
 }
 
 export function evalMseProp(prop, ctx, fallback = null) {
@@ -84,7 +105,18 @@ export function evalMseProp(prop, ctx, fallback = null) {
 }
 
 export function buildCardScriptContext(cardForm, gameCardFields, getFieldValue) {
-  const card = { codice: cardForm?.codice || "" };
+  const card = {
+    codice: cardForm?.codice || "",
+    immagine_url: cardForm?.immagine_url || "",
+    immagine_preview: cardForm?.immagine_preview || "",
+  };
+  const imageFallback =
+    cardForm?.immagine_preview || cardForm?.immagine_url || cardForm?.mse_campi?.image || "";
+  if (imageFallback) {
+    card.image = imageFallback;
+    card.art = imageFallback;
+    card.illustration = imageFallback;
+  }
   (gameCardFields || []).forEach((field) => {
     const val = getFieldValue(field);
     card[field.name] = val;
@@ -94,5 +126,12 @@ export function buildCardScriptContext(cardForm, gameCardFields, getFieldValue) 
       .replace(/[^a-z0-9]+/g, "_");
     card[norm] = val;
   });
+  // Alias MTG ↔ campi catalogo
+  if (card.rule_text == null || card.rule_text === "") card.rule_text = card.rules || card.text || "";
+  if (card.text == null || card.text === "") card.text = card.rule_text || card.rules || "";
+  if (card.casting_cost == null || card.casting_cost === "") {
+    card.casting_cost = card.mana_cost ?? card.cost ?? "";
+  }
+  if ((card.image == null || card.image === "") && imageFallback) card.image = imageFallback;
   return card;
 }
