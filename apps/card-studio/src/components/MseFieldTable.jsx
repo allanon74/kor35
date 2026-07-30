@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { packageDisplayName } from "../mse/symbolFonts";
-import { mseColorToCss, normFieldKey, wildcardMatch } from "../mse/fieldUtils";
+import { mseColorToCss, wildcardMatch } from "../mse/fieldUtils";
 import { fieldStatusDescription, fieldTypeLabel, sortCardFieldsForEditor } from "../mse/fieldMeta";
 
 function packageOptions(field, packages) {
@@ -17,6 +17,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
   const fType = String(field.type || "text").toLowerCase();
   const editable = field.editable !== false;
   const options = (field.choices || []).map((c) => c.name).filter(Boolean);
+  const fileRef = useRef(null);
 
   if (!editable) {
     return <span className="mse-field-readonly">{String(value ?? "—")}</span>;
@@ -105,12 +106,37 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
   }
 
   if (fType === "image" || fType === "symbol") {
+    const display = String(value || "");
+    const preview =
+      display.startsWith("blob:") ||
+      display.startsWith("/media/") ||
+      display.startsWith("http") ||
+      display.startsWith("data:")
+        ? display
+        : "";
     return (
-      <div className="mse-path-row">
-        <input className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)} />
-        <button type="button" className="mse-btn-small" onClick={() => onPickFile?.(field)}>
+      <div className="mse-path-row mse-image-field">
+        <input
+          className="mse-field-input"
+          value={display}
+          placeholder="Percorso o URL…"
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            e.target.value = "";
+            if (file) onPickFile?.(field, file);
+          }}
+        />
+        <button type="button" className="mse-btn-small" onClick={() => fileRef.current?.click()}>
           Browse…
         </button>
+        {preview ? <img className="mse-image-thumb" src={preview} alt="" /> : null}
       </div>
     );
   }
