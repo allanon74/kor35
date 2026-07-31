@@ -1929,6 +1929,8 @@ export const iniziaEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/inizia/`, { method: 'POST', body: '{}' }, onLogout);
 export const terminaEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/termina/`, { method: 'POST', body: '{}' }, onLogout);
+export const riallineaIscrizioniEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/riallinea_iscrizioni/`, { method: 'POST', body: '{}' }, onLogout);
 export const reportRicompenseEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/report_ricompense/`, { method: 'GET' }, onLogout);
 

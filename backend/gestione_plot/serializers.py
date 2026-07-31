@@ -328,6 +328,7 @@ class EventoSerializer(serializers.ModelSerializer):
             'id', 'titolo', 'sinossi', 'data_inizio', 'data_fine',
             'luogo', 'logistiche_pubbliche', 'latitudine', 'longitudine',
             'pc_guadagnati', 'crediti_guadagnati', 'crediti_base_inizio_evento',
+            'prestigio_base_inizio_evento',
             'started_at', 'ended_at', 'staff_assegnato', 'partecipanti',
             'giorni', 'staff_details', 'partecipanti_details',
             'iscrizione_apertura', 'iscrizione_chiusura', 'iscrizione_costo_euro',

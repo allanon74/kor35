@@ -219,11 +219,28 @@ def riepilogo_premi_evento(evento: Evento) -> list[dict]:
     return out
 
 
+def eventi_attivi_ids():
+    """Eventi ufficialmente in corso (Inizia evento senza Termina)."""
+    return list(
+        Evento.objects.filter(started_at__isnull=False, ended_at__isnull=True)
+        .values_list("id", flat=True)
+    )
+
+
 def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
+    """
+    Visibili al giocatore solo le task legate a eventi ATTIVI,
+    non esclusive (oppure esclusive della propria KORP).
+    """
+    attivi = set(eventi_attivi_ids())
+    if not attivi:
+        return []
+
     missioni = list(
-        Missione.objects.filter(attiva=True)
+        Missione.objects.filter(attiva=True, eventi__id__in=attivi)
         .select_related("korp")
         .prefetch_related("eventi")
+        .distinct()
         .order_by("ordine", "titolo")
     )
     miei = list(
@@ -245,12 +262,12 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
             "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
         })
 
-    # solo_primo già risolti da altri (per evento) — per filtrare effettuabili
     solo_primo_ids = [m.id for m in missioni if m.premio_solo_primo]
     presi = set()
     if solo_primo_ids:
         for mid, eid in MissioneRisoluzione.objects.filter(
-            missione_id__in=solo_primo_ids
+            missione_id__in=solo_primo_ids,
+            evento_id__in=attivi,
         ).values_list("missione_id", "evento_id"):
             presi.add((str(mid), eid))
 
@@ -259,11 +276,12 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
     for m in missioni:
         if not personaggio_puo_svolgere(m, personaggio):
             continue
-        miei_r = rmap.get(str(m.id), [])
+        # Solo eventi attivi per questa task
+        eventi_ids = [eid for eid in m.eventi.values_list("id", flat=True) if eid in attivi]
+        if not eventi_ids:
+            continue
+        miei_r = [r for r in rmap.get(str(m.id), []) if r["evento_id"] in attivi]
         svolta = len(miei_r) > 0
-        eventi_ids = list(m.eventi.values_list("id", flat=True))
-        # effettuabile se esiste almeno un evento senza mia risoluzione
-        # e, se solo_primo, senza risoluzione altrui
         effettuabile = False
         for eid in eventi_ids:
             gia_mia = any(r["evento_id"] == eid for r in miei_r)
@@ -274,7 +292,6 @@ def lista_missioni_per_personaggio(personaggio: Personaggio) -> list[dict]:
             effettuabile = True
             break
         if not effettuabile and not svolta:
-            # nessuna risoluzione mia e non effettuabile → nascondi (es. solo_primo presa)
             if m.premio_solo_primo:
                 continue
 

@@ -96,6 +96,9 @@ def applica_premio_presenza_personaggio(evento: Evento, pg: Personaggio, when=No
         cred = calcola_crediti_premio_evento(evento, pg, ts=ts)
         if cred > 0:
             pg.modifica_crediti(cred, desc)
+        n_pr = int(getattr(evento, "prestigio_base_inizio_evento", 0) or 0)
+        if n_pr != 0:
+            pg.modifica_prestigio(n_pr, desc)
         return True
 
 
@@ -114,6 +117,7 @@ def report_ricompense_evento(evento: Evento, ts=None) -> dict:
                 "personaggio_nome": pg.nome,
                 "premio_gia_assegnato": pg.id in premi_ids,
                 "pc_evento": int(evento.pc_guadagnati or 0),
+                "prestigio_evento": int(getattr(evento, "prestigio_base_inizio_evento", 0) or 0),
                 **dettagli_crediti,
             }
         )

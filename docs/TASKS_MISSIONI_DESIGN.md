@@ -22,5 +22,9 @@
 1. Cr/Pr di Korp = Σ task KORP X × fattore_X  
 2. Cr/Pr non di Korp = Σ task generiche + task di altre KORP **non esclusive** (senza fattore)
 
-## Tipi risoluzione
-TECNICA | POST_SOCIAL | QUEST | MANUALE (hook in proposte / social / plot).
+## Visibilità giocatore
+- Solo con **evento attivo** (`started_at` valorizzato e `ended_at` nullo).
+- Tutte le task dell'evento **non esclusive**, più le **esclusive della propria KORP**.
+
+## Premio avvio evento
+- Oltre a PC e Crediti base: **`prestigio_base_inizio_evento`** (Integer, può essere negativo).

@@ -204,6 +204,8 @@ const PlotTab = ({ onLogout }) => {
                 raw.iscrizione_costo_euro = Number.isFinite(cost) ? cost : 0;
                 const credEvBase = parseFloat(String(raw.crediti_base_inizio_evento ?? '0').replace(',', '.'));
                 raw.crediti_base_inizio_evento = Number.isFinite(credEvBase) ? credEvBase : 0;
+                const prEv = parseInt(String(raw.prestigio_base_inizio_evento ?? '0'), 10);
+                raw.prestigio_base_inizio_evento = Number.isFinite(prEv) ? prEv : 0;
                 const pcEv = parseInt(String(raw.pc_guadagnati ?? '1'), 10);
                 raw.pc_guadagnati = Number.isFinite(pcEv) && pcEv >= 0 ? pcEv : 1;
                 raw.iscrizione_test_attiva = !!raw.iscrizione_test_attiva;
@@ -604,6 +606,7 @@ const PlotTab = ({ onLogout }) => {
                             startEdit('evento', {
                                 pc_guadagnati: 1,
                                 crediti_base_inizio_evento: 0,
+                                prestigio_base_inizio_evento: 0,
                                 iscrizione_costo_euro: 0,
                                 iscrizione_test_attiva: false,
                                 iscrizione_opzioni: [],
@@ -668,6 +671,21 @@ const PlotTab = ({ onLogout }) => {
                                             onChange={(e) => setFormData({ ...formData, crediti_base_inizio_evento: e.target.value })}
                                         />
                                         <p className="text-[10px] text-gray-500 mt-1">Quota fissa assegnata all&apos;avvio; ai singoli PG si sommano bonus carriera/carica.</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Prestigio base inizio evento</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
+                                            value={
+                                                formData.prestigio_base_inizio_evento === undefined || formData.prestigio_base_inizio_evento === null
+                                                    ? ''
+                                                    : formData.prestigio_base_inizio_evento
+                                            }
+                                            onChange={(e) => setFormData({ ...formData, prestigio_base_inizio_evento: e.target.value })}
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">Può essere negativo (malus Prestigio a tutti gli iscritti all&apos;avvio).</p>
                                     </div>
                                     <div className="md:col-span-2">
                                         <RichTextEditor label="Sinossi" value={formData.sinossi} onChange={val => setFormData({...formData, sinossi: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />

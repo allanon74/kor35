@@ -472,10 +472,24 @@ def iscrizioni_evento_cattura(request):
         return Response({"error": "Ordine non trovato"}, status=status.HTTP_404_NOT_FOUND)
 
     if row.stato == IscrizioneEventoPagamento.Stato.CAPTURED:
+        from .iscrizioni_evento_sync import ensure_partecipante_from_pagamento
+        ensure_partecipante_from_pagamento(row)
         return Response({"status": "already_captured", "message": "Pagamento già registrato."}, status=status.HTTP_200_OK)
 
     if row.stato != IscrizioneEventoPagamento.Stato.PENDING:
         return Response({"error": "Ordine non in stato atteso"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Controllo business PRIMA della capture PayPal (evita soldi presi senza iscrizione)
+    if row.tipo_ordine == IscrizioneEventoPagamento.TipoOrdine.ISCRIZIONE:
+        ev_check = Evento.objects.get(pk=row.evento_id)
+        other_registered = ev_check.partecipanti.filter(
+            proprietario=row.utente, tipologia__giocante=True
+        ).exclude(id=row.personaggio_id).exists()
+        if other_registered:
+            row.stato = IscrizioneEventoPagamento.Stato.FAILED
+            row.ultimo_errore = "Esiste già un altro tuo personaggio iscritto a questo evento."
+            row.save(update_fields=["stato", "ultimo_errore", "updated_at"])
+            return Response({"error": row.ultimo_errore}, status=status.HTTP_409_CONFLICT)
 
     paypal_row = PayPalImpostazioniGlobali.get_solo()
     sandbox = bool(row.sandbox_usato)

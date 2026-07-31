@@ -277,6 +277,16 @@ class EventoViewSet(viewsets.ModelViewSet):
         )
 
     @action(detail=True, methods=["post"])
+    def riallinea_iscrizioni(self, request, pk=None):
+        """Master: ripara partecipanti da pagamenti PayPal CAPTURED orfani."""
+        if not _is_campaign_master_plus(request):
+            return Response({"detail": "Solo Master."}, status=status.HTTP_403_FORBIDDEN)
+        evento = self.get_object()
+        from .iscrizioni_evento_sync import riallinea_iscrizioni_catturate
+        stats = riallinea_iscrizioni_catturate(evento_id=evento.id)
+        return Response({"ok": True, "evento_id": evento.id, **stats})
+
+    @action(detail=True, methods=["post"])
     def termina(self, request, pk=None):
         evento = self.get_object()
         if not evento.started_at or evento.ended_at:

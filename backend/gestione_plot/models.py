@@ -68,6 +68,14 @@ class Evento(SyncableModel, models.Model):
         verbose_name="Crediti base inizio evento",
         help_text="Quota fissa crediti assegnata a ogni PG partecipante all'avvio ufficiale evento.",
     )
+    prestigio_base_inizio_evento = models.IntegerField(
+        default=0,
+        verbose_name="Prestigio base inizio evento",
+        help_text=(
+            "Variazione Prestigio assegnata a ogni PG partecipante all'avvio ufficiale evento. "
+            "Può essere negativa (malus)."
+        ),
+    )
     started_at = models.DateTimeField(
         null=True,
         blank=True,
