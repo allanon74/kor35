@@ -1,5 +1,21 @@
 const FRAME_HINTS = ["frame", "card", "background", "preview", "template", "border"];
 
+/** Blob URL creato da createObjectURL (UUID), non stub tipo blob:http://localhost/x. */
+export function isTrustedBlobUrl(url) {
+  const s = String(url || "").trim();
+  if (!s.startsWith("blob:")) return false;
+  return /blob:[^/]*\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(s);
+}
+
+export function isUsableMediaSrc(url) {
+  const s = String(url || "").trim();
+  if (!s) return false;
+  if (s.startsWith("blob:")) return isTrustedBlobUrl(s);
+  if (s.startsWith("data:")) return true;
+  if (s.startsWith("/media/") || s.startsWith("http://") || s.startsWith("https://")) return true;
+  return false;
+}
+
 export function mediaUrl(extractedRoot, relPath) {
   if (!extractedRoot || !relPath) return "";
   const root = String(extractedRoot).replace(/^\/+/, "");
@@ -12,7 +28,8 @@ export function normalizeMediaUrl(url) {
   if (!url) return "";
   const s = String(url).trim();
   if (!s) return "";
-  if (s.startsWith("blob:") || s.startsWith("data:")) return s;
+  if (s.startsWith("blob:")) return isTrustedBlobUrl(s) ? s : "";
+  if (s.startsWith("data:")) return s;
   try {
     if (/^https?:\/\//i.test(s)) {
       const u = new URL(s);

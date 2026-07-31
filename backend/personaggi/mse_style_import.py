@@ -20,6 +20,54 @@ from django.core.files.base import ContentFile
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"}
 
+_INCLUDE_FILE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)include(?:\s+localized)?\s+file:\s*(?P<path>.+?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def resolve_mse_includes(
+    text: str,
+    base_dir: Path | None,
+    *,
+    max_depth: int = 16,
+    _depth: int = 0,
+) -> str:
+    """
+    Espande `include file:` / `include localized file:` relativi alla cartella package.
+    Percorsi assoluti tipo `/magic-modules.mse-include/...` restano commentati (non risolti).
+    """
+    if not text or base_dir is None or _depth >= max_depth:
+        return text or ""
+
+    base = Path(base_dir)
+    out: list[str] = []
+    for line in text.splitlines(keepends=True):
+        bare = line.rstrip("\n\r")
+        match = _INCLUDE_FILE_RE.match(bare)
+        if not match:
+            out.append(line)
+            continue
+        rel = match.group("path").strip().strip('"').strip("'")
+        if not rel or rel.startswith("/"):
+            out.append(f"{match.group('indent')}# unresolved include: {rel}\n")
+            continue
+        target = (base / rel).resolve()
+        try:
+            target.relative_to(base.resolve())
+        except ValueError:
+            out.append(f"{match.group('indent')}# include outside package: {rel}\n")
+            continue
+        if not target.is_file():
+            out.append(f"{match.group('indent')}# missing include: {rel}\n")
+            continue
+        nested = target.read_text(encoding="utf-8", errors="replace")
+        expanded = resolve_mse_includes(nested, base, max_depth=max_depth, _depth=_depth + 1)
+        if expanded and not expanded.endswith("\n"):
+            expanded += "\n"
+        out.append(expanded)
+    return "".join(out)
+
 
 @dataclass
 class ImportedMseStyle:
@@ -191,7 +239,8 @@ def parse_mse_style_spec(style_text: str) -> dict:
             script_lines = [value] if value else []
             return
         prop_val = _mse_prop_value(value)
-        if not value and norm in {"font", "border", "background"}:
+        # font / symbol_font / border / background sono blocchi annidati MSE.
+        if not value and norm in {"font", "symbol_font", "border", "background"}:
             target[norm] = target.get(norm) or {}
             nested_key = norm
             nested_indent = indent
@@ -330,13 +379,18 @@ def _apply_parsed_style_to_layout(layout_spec: dict, style_text: str, parsed_met
     return layout_spec
 
 
-def parse_mse_game_spec(game_text: str) -> dict:
+def parse_mse_game_spec(game_text: str, *, package_dir: Path | str | None = None) -> dict:
     """
     Parser leggero del file `game` MSE.
     Estrae principalmente card fields/set fields e opzioni di base utili al Card Editor.
+
+    Se `package_dir` è passato, espande gli `include file:` locali (es. Magic → card_fields).
     """
     if not game_text:
         return {"version": "1", "card_fields": [], "set_fields": []}
+
+    if package_dir is not None:
+        game_text = resolve_mse_includes(game_text, Path(package_dir))
 
     card_fields: list[dict] = []
     set_fields: list[dict] = []

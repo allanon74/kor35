@@ -53,6 +53,32 @@ export function fieldStatusDescription(field) {
 }
 
 export function sortCardFieldsForEditor(fields) {
+  const priority = (field) => {
+    const k = String(field?.name || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_");
+    const map = {
+      name: 10,
+      full_name: 11,
+      casting_cost: 20,
+      casting_cost_2: 21,
+      image: 30,
+      type: 40,
+      super_type: 41,
+      subtype: 42,
+      rarity: 50,
+      rule_text: 60,
+      text: 61,
+      flavor_text: 62,
+      power: 70,
+      toughness: 71,
+      pt: 72,
+      illustrator: 80,
+      card_number: 90,
+    };
+    return map[k] ?? 500;
+  };
   const typeRank = (field) => {
     const t = String(field?.type || "").toLowerCase();
     if (t === "info") return 0;
@@ -61,9 +87,25 @@ export function sortCardFieldsForEditor(fields) {
     return 3;
   };
   return [...(fields || [])].sort((a, b) => {
+    const pa = priority(a);
+    const pb = priority(b);
+    if (pa !== pb) return pa - pb;
     const ra = typeRank(a);
     const rb = typeRank(b);
     if (ra !== rb) return ra - rb;
     return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+}
+
+/** Spec MSE enormi (Magic completo): nasconde campi calcolati/non editabili. */
+export function filterEditorCardFields(fields) {
+  const list = Array.isArray(fields) ? fields : [];
+  if (list.length < 40) return list;
+  return list.filter((f) => {
+    if (f?.identifying) return true;
+    if (f?.editable === false) return false;
+    const t = String(f?.type || "").toLowerCase();
+    if (t === "info") return false;
+    return true;
   });
 }

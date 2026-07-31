@@ -138,20 +138,32 @@ class Command(BaseCommand):
                     pkg.gioco_definizione = gioco
                     pkg.save(update_fields=["gioco_definizione", "updated_at"])
             if pkg.package_type == "mse-game" and pkg.extracted_root:
-                game_file = Path(settings.MEDIA_ROOT) / pkg.extracted_root / "game"
+                game_dir = Path(settings.MEDIA_ROOT) / pkg.extracted_root
+                game_file = game_dir / "game"
                 if game_file.exists():
                     game_text = game_file.read_text(encoding="utf-8", errors="replace")
-                    game_spec = parse_mse_game_spec(game_text)
+                    game_spec = parse_mse_game_spec(game_text, package_dir=game_dir)
                     if gioco is dry_game_sentinel:
                         summary["game_spec_would_update"] += 1
                     else:
-                        merged_meta = dict(gioco.meta or {})
-                        if merged_meta.get("mse_game_spec") != game_spec:
-                            summary["game_spec_updated" if not dry_run else "game_spec_would_update"] += 1
-                            if not dry_run:
-                                merged_meta["mse_game_spec"] = game_spec
-                                gioco.meta = merged_meta
-                                gioco.save(update_fields=["meta", "updated_at"])
+                        # Aggiorna il gioco linkato al package e eventuali slug alias
+                        # (es. magic + magic-the-gathering).
+                        targets = [gioco]
+                        if pkg.package_name:
+                            alias = CarteGiocoDefinizione.objects.filter(
+                                campagna=campagna,
+                                slug=_norm_key(pkg.package_name),
+                            ).first()
+                            if alias and alias.id != gioco.id:
+                                targets.append(alias)
+                        for target in targets:
+                            merged_meta = dict(target.meta or {})
+                            if merged_meta.get("mse_game_spec") != game_spec:
+                                summary["game_spec_updated" if not dry_run else "game_spec_would_update"] += 1
+                                if not dry_run:
+                                    merged_meta["mse_game_spec"] = game_spec
+                                    target.meta = merged_meta
+                                    target.save(update_fields=["meta", "updated_at"])
 
         templates = CarteStudioTemplate.objects.filter(campagna=campagna).select_related("gioco_definizione")
         for template in templates:

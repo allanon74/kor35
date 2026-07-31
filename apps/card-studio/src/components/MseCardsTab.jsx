@@ -255,7 +255,9 @@ export default function MseCardsTab({
               Carica immagine…
             </button>
             {artPreview &&
-            (artPreview.startsWith("blob:") || artPreview.startsWith("/media/") || artPreview.startsWith("http")) ? (
+            (artPreview.startsWith("/media/") ||
+              artPreview.startsWith("http") ||
+              (artPreview.startsWith("blob:") && artPreview.length > 40)) ? (
               <img className="mse-image-thumb" src={artPreview} alt="Anteprima illustrazione" />
             ) : (
               <span className="mse-empty-hint">Nessuna immagine</span>

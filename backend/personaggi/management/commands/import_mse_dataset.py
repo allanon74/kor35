@@ -258,7 +258,10 @@ class Command(BaseCommand):
                         game_root = pkg / "game"
                         if game_root.exists():
                             game_text = game_root.read_text(encoding="utf-8", errors="replace")
-                            parsed_meta = {**parsed_meta, "game_spec": parse_mse_game_spec(game_text)}
+                            parsed_meta = {
+                                **parsed_meta,
+                                "game_spec": parse_mse_game_spec(game_text, package_dir=pkg),
+                            }
                     gioco = resolve_game_for_package(
                         package_path=pkg,
                         package_type=pkg_type,

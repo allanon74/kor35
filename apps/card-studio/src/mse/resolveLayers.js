@@ -1,6 +1,8 @@
-import { mediaUrl } from "./assetUrl";
+import { isTrustedBlobUrl, mediaUrl } from "./assetUrl";
 import { evalMseProp } from "./scriptEngine";
 import {
+  findPackageByName,
+  normalizeMsePackageName,
   normalizeSymbolFieldText,
   resolveSymbolLayersForText,
   symbolImageUrl,
@@ -22,7 +24,7 @@ function isAbsoluteMediaSrc(raw) {
   return (
     /^(https?:)?\/\//i.test(s) ||
     s.startsWith("/media/") ||
-    s.startsWith("blob:") ||
+    isTrustedBlobUrl(s) ||
     s.startsWith("data:")
   );
 }
@@ -30,6 +32,7 @@ function isAbsoluteMediaSrc(raw) {
 function resolveImageSrc(extractedRoot, raw) {
   const s = String(raw || "").trim();
   if (!s) return "";
+  if (s.startsWith("blob:") && !isTrustedBlobUrl(s)) return "";
   if (isAbsoluteMediaSrc(s)) return s;
   return mediaUrl(extractedRoot, s);
 }
@@ -87,6 +90,29 @@ function choiceTextColor(fieldName, text, cardFields) {
   return lookupChoiceColor(map, text);
 }
 
+/** Font MSE desktop → stack web leggibile (i .ttf MSE non sono serviti come @font-face). */
+const WEB_FONT_FALLBACKS = {
+  matrix: '"Matrix", "Times New Roman", Times, Georgia, serif',
+  matrixbold: '"Matrix", "Times New Roman", Times, Georgia, serif',
+  mplantin: '"MPlantin", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif',
+  "mplantin-italic": '"MPlantin", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif',
+  "mplantin-bold": '"MPlantin", Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif',
+  beleren: 'Beleren, Georgia, "Times New Roman", serif',
+  "beleren small caps": 'Beleren, Georgia, "Times New Roman", serif',
+  goudymedieval: 'Goudy Medieval, "Palatino Linotype", Palatino, Georgia, serif',
+  arial: "Arial, Helvetica, sans-serif",
+};
+
+function mapFontFamily(name) {
+  const raw = String(name || "").trim();
+  if (!raw || raw === "inherit") return 'Georgia, "Times New Roman", serif';
+  const key = raw.toLowerCase();
+  if (WEB_FONT_FALLBACKS[key]) return WEB_FONT_FALLBACKS[key];
+  const compact = key.replace(/\s+/g, "");
+  if (WEB_FONT_FALLBACKS[compact]) return WEB_FONT_FALLBACKS[compact];
+  return `"${raw}", Georgia, "Times New Roman", serif`;
+}
+
 function resolveFont(styleDef) {
   const font = pickProp(styleDef, "font") || {};
   const sizeRaw = evalMseProp(font.size, {}, 14);
@@ -94,16 +120,31 @@ function resolveFont(styleDef) {
   const nameRaw = evalMseProp(font.name, {}, null);
   const familyRaw = evalMseProp(font.family, {}, null);
   const weightRaw = evalMseProp(font.weight, {}, "normal");
-  const family =
+  const familyName =
     (typeof nameRaw === "string" && nameRaw) ||
     (typeof familyRaw === "string" && familyRaw) ||
-    "inherit";
+    "";
   return {
-    family,
+    family: mapFontFamily(familyName || "inherit"),
     size: Number(sizeRaw) || 14,
     color: mseColorToCss(String(colorRaw ?? "#f9fafb")) || "#f9fafb",
     weight: typeof weightRaw === "string" || typeof weightRaw === "number" ? weightRaw : "normal",
   };
+}
+
+/** Nome package symbol-font dichiarato nello style (o legacy parse bug). */
+function styleSymbolFontName(styleDef) {
+  const sf = pickProp(styleDef, "symbol_font", "symbol font");
+  if (sf && typeof sf === "object") {
+    const n = evalMseProp(sf.name, {}, "");
+    if (n) return normalizeMsePackageName(n);
+  }
+  // Parser legacy: `symbol font:` non annidato → name/size finivano sul card style.
+  const rootName = evalMseProp(pickProp(styleDef, "name"), {}, "");
+  if (rootName && /mana|symbol/i.test(String(rootName))) {
+    return normalizeMsePackageName(rootName);
+  }
+  return "";
 }
 
 function fieldValueForName(fieldName, card, cardFields) {
@@ -192,6 +233,7 @@ function resolveLayersFromStyles(stylesMap, options) {
     extractedRoot,
     ctxBase,
     symbolFontPackage,
+    packages = [],
   } = options;
   const cardW = mseV1?.card_size?.width || 375;
   const cardH = mseV1?.card_size?.height || 523;
@@ -215,6 +257,10 @@ function resolveLayersFromStyles(stylesMap, options) {
         inferRenderStyle(fieldName, cardFields)
     ).toLowerCase();
 
+    const layerSymbolName = styleSymbolFontName(styleDef);
+    const layerSymbolPkg =
+      (layerSymbolName && findPackageByName(packages, layerSymbolName)) || symbolFontPackage;
+
     const imageProp = pickProp(styleDef, "image", "mask");
     let imageRaw = imageProp ? evalMseProp(imageProp, ctx, "") : "";
     if (!imageRaw) {
@@ -233,11 +279,11 @@ function resolveLayersFromStyles(stylesMap, options) {
       const looksLikeFile =
         isAbsoluteMediaSrc(raw) || /\.(png|jpg|jpeg|webp|gif|bmp|svg)$/i.test(raw) || raw.includes("/");
       let src = looksLikeFile ? resolveImageSrc(extractedRoot, raw) : "";
-      if (!src && symbolFontPackage && raw) {
-        src = symbolImageUrl(symbolFontPackage, raw);
+      if (!src && layerSymbolPkg && raw) {
+        src = symbolImageUrl(layerSymbolPkg, raw);
       }
-      if (!src && symbolFontPackage && raw && renderStyle === "symbol") {
-        src = symbolImageUrl(symbolFontPackage, normalizeSymbolFieldText(raw, true));
+      if (!src && layerSymbolPkg && raw && renderStyle === "symbol") {
+        src = symbolImageUrl(layerSymbolPkg, normalizeSymbolFieldText(raw, true));
       }
       if (src) {
         layers.push({
@@ -263,12 +309,14 @@ function resolveLayersFromStyles(stylesMap, options) {
     const font = resolveFont(styleDef);
     const choiceColor = choiceTextColor(fieldName, text, cardFields);
     if (choiceColor) font.color = choiceColor;
-    const alwaysSymbolProp = styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"];
-    const alwaysSymbol = Boolean(evalMseProp(alwaysSymbolProp, ctx, false));
+    const alwaysSymbolProp = styleDef?.font?.always_symbol || styleDef?.font?.["always symbol"] || styleDef?.always_symbol;
+    const alwaysSymbol =
+      Boolean(evalMseProp(alwaysSymbolProp, ctx, false)) ||
+      /casting_cost|mana_cost/i.test(normFieldKey(fieldName));
     const symbolText = normalizeSymbolFieldText(text, alwaysSymbol);
 
     if (
-      symbolFontPackage &&
+      layerSymbolPkg &&
       (renderStyle === "symbol" || alwaysSymbol || textContainsSymbolTokens(symbolText))
     ) {
       layers.push({
@@ -276,7 +324,7 @@ function resolveLayersFromStyles(stylesMap, options) {
         fieldName,
         z,
         box,
-        glyphs: resolveSymbolLayersForText(symbolText, symbolFontPackage, font.size),
+        glyphs: resolveSymbolLayersForText(symbolText, layerSymbolPkg, font.size),
         font,
         alignment: String(evalMseProp(pickProp(styleDef, "alignment"), ctx, "left top")),
       });
@@ -306,6 +354,7 @@ export function resolveMseLayers({
   extractedRoot = "",
   assetsManifest = null,
   symbolFontPackage = null,
+  packages = [],
 }) {
   if (!mseV1) return { width: 375, height: 523, background: "#111827", layers: [] };
 
@@ -320,6 +369,7 @@ export function resolveMseLayers({
     extractedRoot,
     ctxBase,
     symbolFontPackage,
+    packages,
   }).sort((a, b) => a.z - b.z || a.box.top - b.box.top);
 
   const bg = mseColorToCss(mseV1.card_background) || "#1f2937";

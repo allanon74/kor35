@@ -254,7 +254,7 @@ function sanitizeMseCampiForSave(mseCampi) {
   return out;
 }
 
-function sanitizeCartaSavePayload(raw) {
+function sanitizeCartaSavePayload(raw, { isCreate = false } = {}) {
   const out = {};
   CARTA_SAVE_KEYS.forEach((key) => {
     if (!(key in (raw || {}))) return;
@@ -267,6 +267,10 @@ function sanitizeCartaSavePayload(raw) {
   if (out.mse_campi && typeof out.mse_campi === "object") {
     out.mse_campi = sanitizeMseCampiForSave(out.mse_campi);
   }
+  // Nuova carta: codice vuoto → omesso; il backend assegna SIGLA-NNN.
+  if (isCreate && !String(out.codice || "").trim()) {
+    delete out.codice;
+  }
   return out;
 }
 
@@ -278,25 +282,28 @@ function parseJsonObject(raw, label) {
   }
 }
 
-function buildCardSavePayload(cardForm, { studioSpecText, playableSpecText, mseCampiText }) {
+function buildCardSavePayload(cardForm, { studioSpecText, playableSpecText, mseCampiText, isCreate = false }) {
   const fromTextMse = parseJsonObject(mseCampiText, "mse_campi");
   const fromFormMse = cardForm.mse_campi && typeof cardForm.mse_campi === "object" ? cardForm.mse_campi : {};
   const fromTextStudio = parseJsonObject(studioSpecText, "studio_carta_spec");
   const fromFormStudio =
     cardForm.studio_carta_spec && typeof cardForm.studio_carta_spec === "object" ? cardForm.studio_carta_spec : {};
-  return sanitizeCartaSavePayload({
-    ...stripPayloadFields(cardForm, CARTA_READ_ONLY),
-    studio_carta_spec: {
-      ...fromTextStudio,
-      ...fromFormStudio,
-      styling: {
-        ...(fromTextStudio.styling || {}),
-        ...(fromFormStudio.styling || {}),
+  return sanitizeCartaSavePayload(
+    {
+      ...stripPayloadFields(cardForm, CARTA_READ_ONLY),
+      studio_carta_spec: {
+        ...fromTextStudio,
+        ...fromFormStudio,
+        styling: {
+          ...(fromTextStudio.styling || {}),
+          ...(fromFormStudio.styling || {}),
+        },
       },
+      arena_playable_spec: parseJsonObject(playableSpecText, "arena_playable_spec"),
+      mse_campi: sanitizeMseCampiForSave({ ...fromTextMse, ...fromFormMse }),
     },
-    arena_playable_spec: parseJsonObject(playableSpecText, "arena_playable_spec"),
-    mse_campi: sanitizeMseCampiForSave({ ...fromTextMse, ...fromFormMse }),
-  });
+    { isCreate }
+  );
 }
 
 function buildNewEspForm({ selectedGameId, defaultTemplateByGame }) {
@@ -471,16 +478,13 @@ export default function App() {
     if (!selectedGame) return false;
     const slug = String(selectedGame.slug || "").toLowerCase();
     const model = String(selectedGame.modello_base || "").toLowerCase();
-    return model === "mtg" || slug === "magic" || slug === "mtg";
+    return model === "mtg" || slug === "magic" || slug === "mtg" || slug.startsWith("magic");
   }, [selectedGame]);
-  const gameCardFields = useMemo(
-    () => {
-      const fields = selectedGame?.meta?.mse_game_spec?.card_fields;
-      if (Array.isArray(fields) && fields.length > 0) return fields;
-      return isMtgGame ? MTG_FALLBACK_CARD_FIELDS : [];
-    },
-    [selectedGame, isMtgGame]
-  );
+  const gameCardFields = useMemo(() => {
+    const fields = selectedGame?.meta?.mse_game_spec?.card_fields;
+    if (Array.isArray(fields) && fields.length > 0) return fields;
+    return isMtgGame ? MTG_FALLBACK_CARD_FIELDS : [];
+  }, [selectedGame, isMtgGame]);
   const gameSetFields = useMemo(
     () => {
       const fields = selectedGame?.meta?.mse_game_spec?.set_fields;
@@ -953,6 +957,7 @@ export default function App() {
         studioSpecText,
         playableSpecText,
         mseCampiText,
+        isCreate: !cardId,
       });
       const requestBody = cartaImmagineFile ? buildCartaFormData(payload, cartaImmagineFile) : payload;
       const saved = await saveCarta(cardId, requestBody);

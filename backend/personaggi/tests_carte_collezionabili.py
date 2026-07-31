@@ -498,6 +498,67 @@ class CartaCatalogoOpenLockApiTests(APITestCase):
         self.assertEqual(self.carta.testo_reliquiario, "Nuovo reliquiario")
 
 
+class CartaCatalogoAutoCodiceApiTests(APITestCase):
+    """Creazione carta: codice vuoto/omesso → auto-assegnato dal set."""
+
+    base_url = "/api/personaggi/api/staff/carte/catalogo/"
+
+    def setUp(self):
+        from personaggi.models import CAMPAGNA_ROLE_MASTER, CampagnaUtente
+
+        self.user = User.objects.create_user(username="auto_cod_staff", password="x")
+        self.campagna = Campagna.objects.create(slug="auto-cod", nome="Auto Cod", attiva=True)
+        ConfigurazioneCarteCollezionabili.objects.create(
+            campagna=self.campagna,
+            accesso_modo=CARTE_ACCESSO_TEST,
+            abilitata=True,
+        )
+        CampagnaUtente.objects.create(
+            campagna=self.campagna, user=self.user, ruolo=CAMPAGNA_ROLE_MASTER, attivo=True
+        )
+        self.espansione = EspansioneCarte.objects.create(
+            campagna=self.campagna,
+            nome="Set Auto",
+            slug="set-auto",
+            sigla="AUT",
+            attiva=True,
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_create_senza_codice_assegna_automatico(self):
+        resp = self.client.post(
+            self.base_url,
+            {
+                "espansione": str(self.espansione.id),
+                "nome": "Nuova Auto",
+                "tipo": CARTA_TIPO_PERSONAGGIO,
+                "energia": CARTA_ENERGIA_MARZIALE,
+                "rarita": CARTA_RARITA_COMUNE,
+                "codice": "",
+            },
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertTrue(str(resp.data.get("codice") or "").startswith("AUT-"))
+
+    def test_create_omesso_codice_assegna_automatico(self):
+        resp = self.client.post(
+            self.base_url,
+            {
+                "espansione": str(self.espansione.id),
+                "nome": "Nuova Omissa",
+                "tipo": CARTA_TIPO_PERSONAGGIO,
+                "energia": CARTA_ENERGIA_MARZIALE,
+                "rarita": CARTA_RARITA_COMUNE,
+            },
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertTrue(str(resp.data.get("codice") or "").startswith("AUT-"))
+
+
 class KeywordCartaParametriTests(TestCase):
     def test_mutazione_parametrica(self):
         from personaggi.carte_keyword_utils import (

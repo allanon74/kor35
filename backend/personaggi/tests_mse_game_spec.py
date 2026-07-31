@@ -162,6 +162,61 @@ card style:
         self.assertEqual(len(spec["styling_fields"]), 1)
         self.assertEqual(spec["styling_fields"][0]["name"], "show border")
 
+    def test_parse_symbol_font_nested_block(self):
+        sample = """
+card style:
+    casting cost:
+        left: 29
+        top: 29
+        font:
+            name: MPlantin
+            size: 15
+        symbol font:
+            name: magic-mana-large
+            size: 15
+        always symbol: true
+"""
+        spec = parse_mse_style_spec(sample)
+        casting = spec["card_styles"]["casting cost"]
+        self.assertEqual(casting["font"]["name"]["value"], "MPlantin")
+        self.assertEqual(casting["symbol_font"]["name"]["value"], "magic-mana-large")
+        self.assertEqual(casting["always_symbol"]["value"], "true")
+        # Non deve restare name/size al livello root del card style.
+        self.assertNotEqual(casting.get("name", {}).get("value"), "magic-mana-large")
+
+
+class MseGameIncludeResolverTests(SimpleTestCase):
+    def test_resolve_includes_and_parse_casting_cost(self):
+        import tempfile
+        from pathlib import Path
+
+        from personaggi.mse_style_import import resolve_mse_includes
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "card_fields").write_text(
+                """
+card field:
+    type: text
+    name: casting cost
+    description: Mana cost
+card field:
+    type: text
+    name: name
+""",
+                encoding="utf-8",
+            )
+            game = """
+short name: Magic
+include file: card_fields
+"""
+            expanded = resolve_mse_includes(game, root)
+            self.assertIn("casting cost", expanded)
+            spec = parse_mse_game_spec(game, package_dir=root)
+            names = [f["name"] for f in spec["card_fields"]]
+            self.assertIn("casting cost", names)
+            self.assertIn("name", names)
+
 
 class MsePackTypeParserTests(SimpleTestCase):
     def test_parse_pack_type_and_items(self):

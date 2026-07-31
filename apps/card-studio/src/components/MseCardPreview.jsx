@@ -35,8 +35,12 @@ export default function MseCardPreview({
   );
 
   const symbolFontPackage = useMemo(
-    () => resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm),
-    [packages, gameCardFields, cardForm]
+    () =>
+      resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm, {
+        mseV1,
+        styling,
+      }),
+    [packages, gameCardFields, cardForm, mseV1, styling]
   );
 
   const render = useMemo(
@@ -50,8 +54,9 @@ export default function MseCardPreview({
         extractedRoot: template?.mse_extracted_root || "",
         assetsManifest: template?.mse_assets_manifest || null,
         symbolFontPackage,
+        packages,
       }),
-    [mseV1, card, styling, setData, gameCardFields, template?.mse_extracted_root, template?.mse_assets_manifest, symbolFontPackage]
+    [mseV1, card, styling, setData, gameCardFields, template?.mse_extracted_root, template?.mse_assets_manifest, symbolFontPackage, packages]
   );
 
   if (!mseV1 || !Object.keys(mseV1.card_styles || {}).length) {
@@ -169,7 +174,10 @@ export function useMseCardRender(props) {
   } = props;
   const mseV1 = template?.layout_spec?.mse_v1;
   const card = buildCardScriptContext(cardForm, gameCardFields, getFieldValue);
-  const symbolFontPackage = resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm);
+  const symbolFontPackage = resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm, {
+    mseV1,
+    styling,
+  });
   return resolveMseLayers({
     mseV1,
     card,
@@ -179,5 +187,6 @@ export function useMseCardRender(props) {
     extractedRoot: template?.mse_extracted_root || "",
     assetsManifest: template?.mse_assets_manifest || null,
     symbolFontPackage,
+    packages,
   });
 }

@@ -3,6 +3,13 @@
 import { mediaUrl } from "./assetUrl";
 import { normFieldKey, wildcardMatch } from "./fieldUtils";
 
+/** Strip MSE package suffix for matching (magic-mana-large.mse-symbol-font → magic-mana-large). */
+export function normalizeMsePackageName(name) {
+  return String(name || "")
+    .trim()
+    .replace(/\.mse-(symbol-font|style|game|include|font)$/i, "");
+}
+
 export function packageDisplayName(pkg) {
   return (
     pkg?.package_name ||
@@ -14,7 +21,11 @@ export function packageDisplayName(pkg) {
 
 export function findPackageByName(packages, name) {
   if (!name) return null;
-  return (packages || []).find((p) => packageDisplayName(p) === name) || null;
+  const want = normalizeMsePackageName(name).toLowerCase();
+  return (
+    (packages || []).find((p) => normalizeMsePackageName(packageDisplayName(p)).toLowerCase() === want) ||
+    null
+  );
 }
 
 export function findSymbolFontPackage(packages, matchPattern, selectedName) {
@@ -23,20 +34,50 @@ export function findSymbolFontPackage(packages, matchPattern, selectedName) {
     if (hit?.package_type === "mse-symbol-font") return hit;
   }
   if (!matchPattern) return null;
-  return (packages || []).find(
-    (p) =>
-      p.package_type === "mse-symbol-font" &&
-      wildcardMatch(matchPattern, packageDisplayName(p))
-  );
+  const pat = normalizeMsePackageName(matchPattern);
+  return (packages || []).find((p) => {
+    if (p.package_type !== "mse-symbol-font") return false;
+    const name = normalizeMsePackageName(packageDisplayName(p));
+    return wildcardMatch(pat, name) || wildcardMatch(matchPattern, packageDisplayName(p));
+  });
 }
 
 export function findGameSymbolFontField(gameCardFields) {
-  return (gameCardFields || []).find(
-    (f) => String(f.type || "").toLowerCase() === "package choice" && /symbol-font/i.test(String(f.match || ""))
-  );
+  return (gameCardFields || []).find((f) => {
+    const t = String(f.type || "").toLowerCase();
+    if (t !== "package choice") return false;
+    const hay = `${f.match || ""} ${f.name || ""}`;
+    return /symbol.?font|mana/i.test(hay);
+  });
 }
 
-export function resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm) {
+function pickStylingSymbolFontName(styling, mseV1) {
+  if (!styling || typeof styling !== "object") return "";
+  const fields = mseV1?.styling_fields || [];
+  for (const field of fields) {
+    const hay = `${field.match || ""} ${field.name || ""}`;
+    if (!/symbol.?font|mana/i.test(hay)) continue;
+    const k = normFieldKey(field.name);
+    const val = styling[field.name] ?? styling[k] ?? "";
+    if (val) return String(val);
+  }
+  for (const [k, v] of Object.entries(styling)) {
+    if (/symbol.?font|mana.?symbol/i.test(k) && v) return String(v);
+  }
+  return "";
+}
+
+/** Preferenze tipiche Magic / fallback KOR35. */
+const SYMBOL_FONT_FALLBACKS = ["magic-mana-large", "magic-mana-small", "KOR35 Aure"];
+
+export function resolveSelectedSymbolFontPackage(packages, gameCardFields, cardForm, options = {}) {
+  const { mseV1 = null, styling = null, preferredName = "" } = options;
+
+  if (preferredName) {
+    const hit = findSymbolFontPackage(packages, "", preferredName);
+    if (hit) return hit;
+  }
+
   const field = findGameSymbolFontField(gameCardFields);
   if (field) {
     const k = normFieldKey(field.name);
@@ -48,11 +89,19 @@ export function resolveSelectedSymbolFontPackage(packages, gameCardFields, cardF
     const hit = findSymbolFontPackage(packages, field.match, selected);
     if (hit) return hit;
   }
-  return (
-    (packages || []).find(
-      (p) => p.package_type === "mse-symbol-font" && p.package_name === "KOR35 Aure"
-    ) || null
-  );
+
+  const fromStyling = pickStylingSymbolFontName(styling, mseV1);
+  if (fromStyling) {
+    const hit = findSymbolFontPackage(packages, "", fromStyling);
+    if (hit) return hit;
+  }
+
+  for (const name of SYMBOL_FONT_FALLBACKS) {
+    const hit = findPackageByName(packages, name);
+    if (hit?.package_type === "mse-symbol-font") return hit;
+  }
+
+  return (packages || []).find((p) => p.package_type === "mse-symbol-font") || null;
 }
 
 const TOKEN_RE = /\{[^}]+\}/g;
@@ -110,4 +159,28 @@ export function resolveSymbolLayersForText(text, symbolFontPkg, fontSize = 14) {
       : { type: "text", value: part.value };
   });
   return glyphs;
+}
+
+/** Token comuni per inserimento rapido (Magic + generici). */
+export const COMMON_SYMBOL_INSERTS = [
+  "{W}",
+  "{U}",
+  "{B}",
+  "{R}",
+  "{G}",
+  "{C}",
+  "{1}",
+  "{2}",
+  "{3}",
+  "{4}",
+  "{X}",
+  "{T}",
+];
+
+export function fieldWantsSymbolInsert(field) {
+  const k = normFieldKey(field?.name);
+  if (/casting_cost|mana_cost|rule_text|rules|text/.test(k)) return true;
+  if (field?.always_symbol) return true;
+  const desc = String(field?.description || "").toLowerCase();
+  return desc.includes("{w}") || desc.includes("mana") || desc.includes("symbol");
 }

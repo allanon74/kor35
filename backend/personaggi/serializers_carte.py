@@ -262,6 +262,8 @@ def _default_studio_template_for_espansione(espansione):
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
     immagine_url = serializers.SerializerMethodField()
     espansione_nome = serializers.CharField(source="espansione.nome", read_only=True, allow_null=True)
+    # Codice auto-assegnato in create se vuoto + espansione presente.
+    codice = serializers.CharField(required=False, allow_blank=True, max_length=40)
     tag_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=TagCarta.objects.all(),

@@ -1,4 +1,5 @@
 import { normFieldKey } from "./fieldUtils";
+import { isTrustedBlobUrl } from "./assetUrl";
 
 const IMAGE_KEYS = new Set(["image", "art", "illustration", "picture", "immagine"]);
 
@@ -17,8 +18,13 @@ export function readCardFieldValue(cardForm, field) {
   if (["energy", "mana", "resource"].includes(k)) return cardForm.energia || "";
   if (["rarity"].includes(k)) return cardForm.rarita || "";
   if (["cost", "mana_cost", "casting_cost"].includes(k)) {
-    if (k === "casting_cost") {
-      return cardForm.mse_campi?.casting_cost ?? cardForm.mse_campi?.["casting cost"] ?? cardForm.costo_gioco ?? "";
+    if (k === "casting_cost" || k === "mana_cost") {
+      return (
+        cardForm.mse_campi?.casting_cost ??
+        cardForm.mse_campi?.["casting cost"] ??
+        cardForm.mse_campi?.mana_cost ??
+        ""
+      );
     }
     return cardForm.costo_gioco ?? 0;
   }
@@ -64,7 +70,17 @@ export function writeCardFieldPatch(cardForm, field, rawValue) {
   if (["type", "card_type"].includes(k)) return { ...cardForm, tipo: String(v) };
   if (["energy", "mana", "resource"].includes(k)) return { ...cardForm, energia: String(v) };
   if (["rarity"].includes(k)) return { ...cardForm, rarita: String(v) };
-  if (["cost", "mana_cost"].includes(k)) return { ...cardForm, costo_gioco: Number(v) };
+  if (["cost"].includes(k)) return { ...cardForm, costo_gioco: Number(v) };
+  if (["casting_cost", "mana_cost"].includes(k)) {
+    return {
+      ...cardForm,
+      mse_campi: {
+        ...(cardForm.mse_campi || {}),
+        casting_cost: String(v ?? ""),
+        "casting cost": String(v ?? ""),
+      },
+    };
+  }
   if (["attack", "power", "forza"].includes(k)) return { ...cardForm, attacco: Number(v) };
   if (["health", "toughness", "robustezza"].includes(k)) return { ...cardForm, salute: Number(v) };
   if (["initiative", "iniziativa"].includes(k)) return { ...cardForm, iniziativa: Number(v) };
@@ -78,7 +94,7 @@ export function writeCardFieldPatch(cardForm, field, rawValue) {
         image: v,
       },
     };
-    if (typeof v === "string" && (v.startsWith("blob:") || v.startsWith("/media/") || v.startsWith("http"))) {
+    if (typeof v === "string" && (isTrustedBlobUrl(v) || v.startsWith("/media/") || v.startsWith("http"))) {
       next.immagine_preview = v;
     }
     return next;

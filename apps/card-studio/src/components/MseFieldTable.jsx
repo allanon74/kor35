@@ -1,16 +1,37 @@
 import { useRef, useState } from "react";
-import { packageDisplayName } from "../mse/symbolFonts";
+import { isUsableMediaSrc } from "../mse/assetUrl";
+import {
+  COMMON_SYMBOL_INSERTS,
+  fieldWantsSymbolInsert,
+  packageDisplayName,
+} from "../mse/symbolFonts";
 import { mseColorToCss, wildcardMatch } from "../mse/fieldUtils";
-import { fieldStatusDescription, fieldTypeLabel, sortCardFieldsForEditor } from "../mse/fieldMeta";
+import { fieldStatusDescription, fieldTypeLabel, filterEditorCardFields, sortCardFieldsForEditor } from "../mse/fieldMeta";
 
 function packageOptions(field, packages) {
   const staticChoices = (field.choices || []).map((c) => c.name).filter(Boolean);
   const match = String(field.match || "").trim();
   if (!match) return staticChoices;
+  const pat = match.replace(/\.mse-symbol-font$/i, "");
   return (packages || [])
     .map((p) => packageDisplayName(p))
     .filter(Boolean)
-    .filter((name) => wildcardMatch(match, name));
+    .filter((name) => {
+      const bare = name.replace(/\.mse-symbol-font$/i, "");
+      return wildcardMatch(pat, bare) || wildcardMatch(match, name);
+    });
+}
+
+function SymbolInsertBar({ onInsert }) {
+  return (
+    <div className="mse-symbol-insert" title="Inserisci simbolo MSE ({W}, {U}, …)">
+      {COMMON_SYMBOL_INSERTS.map((tok) => (
+        <button key={tok} type="button" className="mse-symbol-chip" onClick={() => onInsert(tok)}>
+          {tok}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
@@ -18,6 +39,7 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
   const editable = field.editable !== false;
   const options = (field.choices || []).map((c) => c.name).filter(Boolean);
   const fileRef = useRef(null);
+  const showSymbols = fieldWantsSymbolInsert(field);
 
   if (!editable) {
     return <span className="mse-field-readonly">{String(value ?? "—")}</span>;
@@ -107,18 +129,12 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
 
   if (fType === "image" || fType === "symbol") {
     const display = String(value || "");
-    const preview =
-      display.startsWith("blob:") ||
-      display.startsWith("/media/") ||
-      display.startsWith("http") ||
-      display.startsWith("data:")
-        ? display
-        : "";
+    const preview = isUsableMediaSrc(display) ? display : "";
     return (
       <div className="mse-path-row mse-image-field">
         <input
           className="mse-field-input"
-          value={display}
+          value={display.startsWith("blob:") && !preview ? "" : display}
           placeholder="Percorso o URL…"
           onChange={(e) => onChange(e.target.value)}
         />
@@ -152,18 +168,34 @@ function FieldValueEditor({ field, value, packages, onChange, onPickFile }) {
     );
   }
 
+  const insertSymbol = (tok) => onChange(`${String(value || "")}${tok}`);
+
   if (field.multi_line) {
     return (
-      <textarea
-        className="mse-field-input mse-field-textarea"
-        rows={5}
-        value={String(value || "")}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      <div className="mse-field-with-symbols">
+        {showSymbols ? <SymbolInsertBar onInsert={insertSymbol} /> : null}
+        <textarea
+          className="mse-field-input mse-field-textarea"
+          rows={5}
+          value={String(value || "")}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={showSymbols ? "Es. Deal {R} damage. Usa i chip sotto per i simboli." : undefined}
+        />
+      </div>
     );
   }
 
-  return <input className="mse-field-input" value={String(value || "")} onChange={(e) => onChange(e.target.value)} />;
+  return (
+    <div className="mse-field-with-symbols">
+      {showSymbols ? <SymbolInsertBar onInsert={insertSymbol} /> : null}
+      <input
+        className="mse-field-input"
+        value={String(value || "")}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={showSymbols ? "Es. {2}{W}{U}" : undefined}
+      />
+    </div>
+  );
 }
 
 export default function MseFieldTable({
@@ -176,7 +208,7 @@ export default function MseFieldTable({
   extraRows,
 }) {
   const [hoverField, setHoverField] = useState(null);
-  const sorted = sortCardFieldsForEditor(fields);
+  const sorted = sortCardFieldsForEditor(filterEditorCardFields(fields));
 
   const showStatus = (field) => {
     setHoverField(field);

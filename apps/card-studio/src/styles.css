@@ -393,6 +393,33 @@ body {
   padding: 0.15rem 0.25rem;
 }
 
+.mse-field-with-symbols {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.mse-symbol-insert {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.mse-symbol-chip {
+  font: inherit;
+  font-size: 11px;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid #808080;
+  background: #f0f0f0;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.mse-symbol-chip:hover {
+  background: #ddd;
+}
+
 .mse-field-textarea {
   min-height: 80px;
   resize: vertical;

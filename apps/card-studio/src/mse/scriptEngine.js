@@ -3,6 +3,8 @@
  * Uso staff-only in Card Studio preview.
  */
 
+import { isTrustedBlobUrl } from "./assetUrl";
+
 function normalizeBool(value) {
   if (typeof value === "boolean") return value;
   const s = String(value ?? "").trim().toLowerCase();
@@ -108,7 +110,8 @@ export function buildCardScriptContext(cardForm, gameCardFields, getFieldValue) 
   const toMedia = (raw) => {
     const s = String(raw || "").trim();
     if (!s) return "";
-    if (s.startsWith("blob:") || s.startsWith("data:") || s.startsWith("/media/")) return s;
+    if (s.startsWith("blob:")) return isTrustedBlobUrl(s) ? s : "";
+    if (s.startsWith("data:") || s.startsWith("/media/")) return s;
     if (/^https?:\/\//i.test(s)) {
       try {
         const u = new URL(s);
