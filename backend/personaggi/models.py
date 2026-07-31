@@ -1618,6 +1618,16 @@ class Campagna(SyncableModel, models.Model):
     is_default = models.BooleanField(default=False, db_index=True)
     is_base = models.BooleanField(default=False, db_index=True)
     attiva = models.BooleanField(default=True, db_index=True)
+    moduli_accesso = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Accesso moduli campagna: mappa chiave→OFF|TEST|OPEN "
+            "(tasks, pilotaggio, carte, scommesse, social, negozi, …). "
+            "Chiavi assenti usano i default del registry; «carte» senza override "
+            "legge ConfigurazioneCarteCollezionabili."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -18,6 +18,7 @@ import {
     applyStaffDashboardLayout,
     buildStaffSidebarItems,
 } from '../staff/staffDashboardLayout';
+import { staffToolModuloEnabled } from '../lib/campagnaModuli';
 
 import PlotTab from './PlotTab';
 import QrDebugTab from './QrDebugTab';
@@ -116,6 +117,7 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
         isCampaignStaffer,
         isCampaignMaster,
         isCampaignHeadMaster,
+        moduliAccesso,
     } = useCharacter();
 
     const roleFlags = useMemo(() => ({
@@ -173,8 +175,9 @@ const StaffDashboard = ({ onLogout, onSwitchToPlayer, initialTool = 'home', onTo
     }, [selectedCharacterId, onLogout]);
 
     const visibleTools = useMemo(
-        () => buildVisibleStaffTools(roleFlags, STAFF_COMPONENT_MAP),
-        [roleFlags],
+        () => buildVisibleStaffTools(roleFlags, STAFF_COMPONENT_MAP)
+            .filter((tool) => staffToolModuloEnabled(moduliAccesso, tool.id)),
+        [roleFlags, moduliAccesso],
     );
 
     const menuStructure = useMemo(

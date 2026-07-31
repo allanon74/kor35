@@ -160,6 +160,11 @@ class MissioneViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="mie")
     def mie(self, request):
+        from personaggi.campagna_moduli import (
+            MODULO_TASKS,
+            assert_personaggio_puo_accedere_modulo,
+        )
+
         pg_id = request.query_params.get("personaggio")
         if not pg_id:
             return Response({"detail": "Parametro personaggio obbligatorio."}, status=400)
@@ -168,6 +173,15 @@ class MissioneViewSet(viewsets.ModelViewSet):
         is_staff = _is_campaign_staff_plus(request)
         if not is_staff and pg.proprietario_id != user.id:
             return Response({"detail": "Non autorizzato."}, status=403)
+        try:
+            assert_personaggio_puo_accedere_modulo(pg, MODULO_TASKS, user=user)
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+
+            if isinstance(exc, DjangoValidationError):
+                msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+                return Response({"detail": msg}, status=403)
+            raise
         return Response(lista_missioni_per_personaggio(pg))
 
     @action(detail=False, methods=["get"], url_path=r"riepilogo-evento/(?P<evento_id>[^/.]+)")
@@ -181,12 +195,26 @@ class MissioneViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="assegna-risoluzione")
     def assegna(self, request):
+        from personaggi.campagna_moduli import (
+            MODULO_TASKS,
+            assert_personaggio_puo_accedere_modulo,
+        )
+
         ser = AssegnaRisoluzioneSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
         missione = get_object_or_404(Missione, pk=data["missione_id"])
         evento = get_object_or_404(Evento, pk=data["evento_id"])
         personaggio = get_object_or_404(Personaggio, pk=data["personaggio_id"])
+        try:
+            assert_personaggio_puo_accedere_modulo(personaggio, MODULO_TASKS, user=request.user)
+        except Exception as exc:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+
+            if isinstance(exc, DjangoValidationError):
+                msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+                return Response({"detail": msg}, status=403)
+            raise
         kwargs = {"note": data.get("note") or ""}
         if data.get("proposta_tecnica_id"):
             kwargs["proposta_tecnica"] = get_object_or_404(PropostaTecnica, pk=data["proposta_tecnica_id"])

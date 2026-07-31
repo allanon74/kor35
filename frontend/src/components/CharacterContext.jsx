@@ -26,6 +26,7 @@ import {
 import NotificationPopup from './NotificationPopup';
 import { putOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
 import { activateWebPush, isWebPushSupported } from '../lib/webpush';
+import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
 
 import { 
   usePunteggi, 
@@ -107,6 +108,16 @@ export const CharacterProvider = ({ children, onLogout }) => {
     activeCampaignRole === 'HEAD_MASTER';
   const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
   const canUseWizardTest = isGlobalSuperuser || isDjangoStaff || isCampaignStaffer;
+  const moduliAccesso = activeCampaignMeta?.moduli_accesso || {};
+  const canAccessModulo = useCallback((key, { isPngStaff = false } = {}) => {
+    const modo = getModuloAccesso(moduliAccesso, key);
+    return canAccessModuloMode(modo, {
+      isCampaignStaffer,
+      isDjangoStaff,
+      isGlobalSuperuser,
+      isPngStaff,
+    });
+  }, [moduliAccesso, isCampaignStaffer, isDjangoStaff, isGlobalSuperuser]);
 
   const [viewAll, setViewAll] = useState(false);
   const [giocoEventoStato, setGiocoEventoStato] = useState({
@@ -744,6 +755,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isAdmin: isGlobalSuperuser,
     isDjangoStaff,
     canUseWizardTest,
+    moduliAccesso,
+    canAccessModulo,
     viewAll,
     toggleViewAll,
     adminPendingCount,

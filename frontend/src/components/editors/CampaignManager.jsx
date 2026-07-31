@@ -15,10 +15,29 @@ import {
   staffUpdateCampagnaUtente,
   invalidatePlotRisorseCache,
 } from '../../api';
+import {
+  CAMPAGNA_MODULI_REGISTRY,
+  MODULO_ACCESSO_OPTIONS,
+} from '../../lib/campagnaModuli';
 
 const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
-const FEATURE_KEYS = ['abilita', 'tessiture', 'infusioni', 'oggetti_base', 'cerimoniali', 'social'];
+const FEATURE_KEYS = [
+  'abilita',
+  'tessiture',
+  'infusioni',
+  'oggetti_base',
+  'cerimoniali',
+  'social',
+  'negozi_mercante',
+  'carte_collezionabili',
+];
 const MODE_OPTIONS = ['SHARED', 'EXCLUSIVE'];
+
+const modoBadgeClass = (modo) => {
+  if (modo === 'OPEN') return 'text-emerald-300 border-emerald-700 bg-emerald-900/30';
+  if (modo === 'TEST') return 'text-amber-200 border-amber-700 bg-amber-900/30';
+  return 'text-gray-400 border-gray-600 bg-gray-900/50';
+};
 
 const CampaignManager = ({ onLogout }) => {
   const [campagne, setCampagne] = useState([]);
@@ -34,6 +53,7 @@ const CampaignManager = ({ onLogout }) => {
   const [filterCampagne, setFilterCampagne] = useState('');
   const [filterMembri, setFilterMembri] = useState('');
   const [filterPolicies, setFilterPolicies] = useState('');
+  const [moduliCampagnaId, setModuliCampagnaId] = useState('');
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -45,10 +65,15 @@ const CampaignManager = ({ onLogout }) => {
         staffGetCampagnaFeaturePolicy(onLogout),
         staffGetUsers(onLogout),
       ]);
-      setCampagne(Array.isArray(c) ? c : c.results || []);
+      const campagneList = Array.isArray(c) ? c : c.results || [];
+      setCampagne(campagneList);
       setMembri(Array.isArray(m) ? m : m.results || []);
       setPolicies(Array.isArray(p) ? p : p.results || []);
       setUsers(Array.isArray(u) ? u : u.results || []);
+      setModuliCampagnaId((prev) => {
+        if (prev && campagneList.some((x) => String(x.id) === String(prev))) return prev;
+        return campagneList[0]?.id ? String(campagneList[0].id) : '';
+      });
     } catch (e) {
       setError(e?.message || 'Errore caricamento dati campagne.');
     } finally {
@@ -67,6 +92,14 @@ const CampaignManager = ({ onLogout }) => {
     });
     return map;
   }, [campagne]);
+
+  const moduliRegistry = useMemo(() => {
+    const fromApi = campagne.find((c) => Array.isArray(c.moduli_accesso_registry))?.moduli_accesso_registry;
+    return Array.isArray(fromApi) && fromApi.length ? fromApi : CAMPAGNA_MODULI_REGISTRY;
+  }, [campagne]);
+
+  const selectedModuliCampagna = campagneById[moduliCampagnaId] || null;
+  const selectedModuliMap = selectedModuliCampagna?.moduli_accesso || {};
 
   const filteredCampagne = useMemo(() => {
     const q = filterCampagne.trim().toLowerCase();
@@ -107,6 +140,11 @@ const CampaignManager = ({ onLogout }) => {
       setSaving(false);
     }
   }, [loadAll]);
+
+  const updateModulo = useCallback((key, modo) => {
+    if (!moduliCampagnaId) return;
+    executeAction(() => staffUpdateCampagna(moduliCampagnaId, { moduli_accesso: { [key]: modo } }, onLogout));
+  }, [executeAction, moduliCampagnaId, onLogout]);
 
   if (loading) return <div className="p-6 text-gray-300">Caricamento campagne...</div>;
 
@@ -168,6 +206,67 @@ const CampaignManager = ({ onLogout }) => {
       </section>
 
       <section className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-black uppercase tracking-wide text-sm">Moduli campagna</h2>
+            <p className="text-xs text-gray-400 mt-1 max-w-2xl">
+              Abilita o disabilita le feature per campagna. <span className="text-amber-200">TEST</span> le rende
+              disponibili solo a staff/master (e PnG) per collaudi; <span className="text-emerald-300">OPEN</span> a tutti i giocatori.
+              Il modulo Carte resta allineato alla config carte.
+            </p>
+          </div>
+          <select
+            className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm min-w-[12rem]"
+            value={moduliCampagnaId}
+            onChange={(e) => setModuliCampagnaId(e.target.value)}
+            disabled={saving || !campagne.length}
+          >
+            {!campagne.length && <option value="">Nessuna campagna</option>}
+            {campagne.map((c) => (
+              <option key={c.id} value={c.id}>{c.nome}</option>
+            ))}
+          </select>
+        </div>
+        {!selectedModuliCampagna ? (
+          <p className="text-sm text-gray-500">Seleziona una campagna.</p>
+        ) : (
+          <div className="space-y-2">
+            {moduliRegistry.map((row) => {
+              const modo = selectedModuliMap[row.key] || row.default || 'OFF';
+              return (
+                <div
+                  key={row.key}
+                  className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-gray-900/60 border border-gray-700 rounded p-3"
+                >
+                  <div className="md:col-span-5">
+                    <div className="text-sm font-semibold">{row.label}</div>
+                    <div className="text-xs text-gray-500">{row.descrizione || row.key}</div>
+                  </div>
+                  <div className="md:col-span-3">
+                    <span className={`inline-block text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded border ${modoBadgeClass(modo)}`}>
+                      {modo}
+                    </span>
+                  </div>
+                  <div className="md:col-span-4">
+                    <select
+                      className="w-full bg-gray-950 border border-gray-700 rounded px-2 py-1.5 text-sm disabled:opacity-50"
+                      value={modo}
+                      disabled={saving}
+                      onChange={(e) => updateModulo(row.key, e.target.value)}
+                    >
+                      {MODULO_ACCESSO_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-black uppercase tracking-wide text-sm">Membership utenti-campagna</h2>
           <button className="px-3 py-1.5 bg-cyan-600 rounded text-xs font-bold disabled:opacity-50" disabled={saving || !newMembro.campagna || !newMembro.user} onClick={() => executeAction(async () => {
@@ -220,7 +319,10 @@ const CampaignManager = ({ onLogout }) => {
 
       <section className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-black uppercase tracking-wide text-sm">Policy feature</h2>
+          <div>
+            <h2 className="font-black uppercase tracking-wide text-sm">Policy feature (catalogo)</h2>
+            <p className="text-xs text-gray-400 mt-1">SHARED / EXCLUSIVE sul catalogo tecniche — non confondere con i moduli OFF/TEST/OPEN sopra.</p>
+          </div>
           <button className="px-3 py-1.5 bg-cyan-600 rounded text-xs font-bold disabled:opacity-50" disabled={saving || !newPolicy.campagna} onClick={() => executeAction(async () => {
             await staffCreateCampagnaFeaturePolicy(newPolicy, onLogout);
             setNewPolicy({ campagna: '', feature_key: 'social', mode: 'SHARED' });

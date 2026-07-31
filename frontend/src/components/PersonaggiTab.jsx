@@ -42,6 +42,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         selectCharacter,
         selectedCharacterId,
         campaigns,
+        canAccessModulo,
     } = useCharacter();
 
     const queryClient = useQueryClient();
@@ -738,7 +739,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                   </div>
                 ))}
 
-                {selectedCharacterId ? (
+                {selectedCharacterId && canAccessModulo('tasks') ? (
                     <MissioniPersonaggioPanel
                         personaggioId={selectedCharacterId}
                         onLogout={onLogout}

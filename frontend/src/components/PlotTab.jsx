@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { 
     getEventi, associaQrAVista, getRisorseEditor, getAVistaDisponibili,
-    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento,
+    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento, riallineaIscrizioniEvento,
     createGiorno, updateGiorno, deleteGiorno,
     createQuest, updateQuest, deleteQuest,
     addPngToQuest, addMostroToQuest, addVistaToQuest,
@@ -366,6 +366,17 @@ const PlotTab = ({ onLogout }) => {
         if (!selectedEvento?.id) return null;
         return reportRicompenseEvento(selectedEvento.id, onLogout);
     }, [selectedEvento, onLogout]);
+    const handleRiallineaIscrizioni = useCallback(async () => {
+        if (!selectedEvento?.id) return;
+        const stats = await riallineaIscrizioniEvento(selectedEvento.id, onLogout);
+        await refreshData();
+        const msg = `Riallineamento: +${stats?.aggiunti ?? 0} iscritti`
+            + ` (${stats?.gia_presenti ?? 0} già ok`
+            + (stats?.conflitti ? `, ${stats.conflitti} conflitti` : '')
+            + ')';
+        window.alert(msg);
+        return stats;
+    }, [selectedEvento, onLogout, refreshData]);
 
     const handleRefreshEvento = useCallback(async () => {
         await Promise.all([refreshData(), loadRisorseEditor(activeCampaign)]);
@@ -1150,6 +1161,7 @@ const PlotTab = ({ onLogout }) => {
                                 onIniziaEvento={handleIniziaEvento}
                                 onTerminaEvento={handleTerminaEvento}
                                 onReportRicompense={handleReportRicompenseEvento}
+                                onRiallineaIscrizioni={handleRiallineaIscrizioni}
                                 onRefresh={handleRefreshEvento}
                                 onRefreshRisorse={() => loadRisorseEditor(activeCampaign)}
                                 risorseLoading={risorseLoading}

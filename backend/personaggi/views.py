@@ -217,6 +217,8 @@ class CampagnaListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from personaggi.campagna_moduli import normalize_moduli_accesso
+
         active = _get_active_campaign(request)
         rows = []
         base_qs = Campagna.objects.filter(attiva=True).order_by("-is_default", "nome")
@@ -235,6 +237,7 @@ class CampagnaListView(APIView):
                     "is_active": bool(active and campagna.id == active.id),
                     "ruolo": membership.ruolo if membership else "PLAYER",
                     "is_member": bool(membership),
+                    "moduli_accesso": normalize_moduli_accesso(campagna),
                 }
             )
         return Response(rows, status=status.HTTP_200_OK)
@@ -244,6 +247,8 @@ class ActiveCampagnaValidateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        from personaggi.campagna_moduli import normalize_moduli_accesso
+
         slug = str(request.data.get("slug") or "").strip().lower() or "kor35"
         campagna = Campagna.objects.filter(slug=slug, attiva=True).first()
         if not campagna:
@@ -260,6 +265,7 @@ class ActiveCampagnaValidateView(APIView):
                 "nome": campagna.nome,
                 "ruolo": membership.ruolo if membership else "PLAYER",
                 "is_member": bool(membership),
+                "moduli_accesso": normalize_moduli_accesso(campagna),
             },
             status=status.HTTP_200_OK,
         )
