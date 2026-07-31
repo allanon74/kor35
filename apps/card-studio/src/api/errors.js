@@ -5,14 +5,24 @@ export function formatApiError(data, fallback = "Errore API") {
   if (typeof data.error === "string") return data.error;
   if (typeof data.message === "string") return data.message;
 
+  const FIELD_LABELS = {
+    nome: "Name / Nome",
+    codice: "Code / Codice",
+    tipo: "Type / Tipo",
+    energia: "Energy / Energia",
+    rarita: "Rarity / Rarità",
+    espansione: "Set",
+  };
+
   const parts = [];
   Object.entries(data).forEach(([field, value]) => {
+    const label = FIELD_LABELS[field] || field;
     if (Array.isArray(value)) {
-      parts.push(`${field}: ${value.map((v) => String(v)).join(", ")}`);
+      parts.push(`${label}: ${value.map((v) => String(v)).join(", ")}`);
     } else if (typeof value === "string") {
-      parts.push(`${field}: ${value}`);
+      parts.push(`${label}: ${value}`);
     } else if (value && typeof value === "object") {
-      parts.push(`${field}: ${JSON.stringify(value)}`);
+      parts.push(`${label}: ${JSON.stringify(value)}`);
     }
   });
   return parts.length ? parts.join(" · ") : fallback;

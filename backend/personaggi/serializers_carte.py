@@ -262,6 +262,8 @@ def _default_studio_template_for_espansione(espansione):
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
     immagine_url = serializers.SerializerMethodField()
     espansione_nome = serializers.CharField(source="espansione.nome", read_only=True, allow_null=True)
+    # Nome può arrivare come MSE «name»; hydrate in validate().
+    nome = serializers.CharField(required=False, allow_blank=True, max_length=120)
     # Codice auto-assegnato in create se vuoto + espansione presente.
     codice = serializers.CharField(required=False, allow_blank=True, max_length=40)
     tag_ids = serializers.PrimaryKeyRelatedField(
@@ -377,7 +379,108 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
         parsed = _parse_json_field(value, "mse_campi")
         return parsed if parsed is not None else {}
 
+    def to_internal_value(self, data):
+        """Normalizza type/rarity Magic prima della ChoiceField validation DRF."""
+        from personaggi.carte_collezionabili_models import (
+            CARTA_ENERGIA_CHOICES,
+            CARTA_ENERGIA_MARZIALE,
+            CARTA_RARITA_CHOICES,
+            CARTA_RARITA_COMUNE,
+            CARTA_TIPO_CHOICES,
+            CARTA_TIPO_PERSONAGGIO,
+        )
+
+        mutable = data.copy() if hasattr(data, "copy") else dict(data)
+        tipo_ok = {c for c, _ in CARTA_TIPO_CHOICES}
+        energia_ok = {c for c, _ in CARTA_ENERGIA_CHOICES}
+        rarita_ok = {c for c, _ in CARTA_RARITA_CHOICES}
+
+        tipo = mutable.get("tipo")
+        if tipo is not None and tipo != "" and tipo not in tipo_ok:
+            mutable["tipo"] = (
+                self.instance.tipo
+                if self.instance and self.instance.tipo in tipo_ok
+                else CARTA_TIPO_PERSONAGGIO
+            )
+        energia = mutable.get("energia")
+        if energia is not None and energia != "" and energia not in energia_ok:
+            mutable["energia"] = (
+                self.instance.energia
+                if self.instance and self.instance.energia in energia_ok
+                else CARTA_ENERGIA_MARZIALE
+            )
+        rarita = mutable.get("rarita")
+        if rarita is not None and rarita != "" and rarita not in rarita_ok:
+            mutable["rarita"] = (
+                self.instance.rarita
+                if self.instance and self.instance.rarita in rarita_ok
+                else CARTA_RARITA_COMUNE
+            )
+        return super().to_internal_value(mutable)
+
+    def validate_tipo(self, value):
+        from personaggi.carte_collezionabili_models import CARTA_TIPO_CHOICES, CARTA_TIPO_PERSONAGGIO
+
+        ok = {c for c, _ in CARTA_TIPO_CHOICES}
+        if value in ok:
+            return value
+        # Magic freeform (Creature — …): resta in mse_campi, catalogo tiene default.
+        if self.instance and self.instance.tipo in ok:
+            return self.instance.tipo
+        return CARTA_TIPO_PERSONAGGIO
+
+    def validate_energia(self, value):
+        from personaggi.carte_collezionabili_models import CARTA_ENERGIA_CHOICES, CARTA_ENERGIA_MARZIALE
+
+        ok = {c for c, _ in CARTA_ENERGIA_CHOICES}
+        if value in ok:
+            return value
+        if self.instance and self.instance.energia in ok:
+            return self.instance.energia
+        return CARTA_ENERGIA_MARZIALE
+
+    def validate_rarita(self, value):
+        from personaggi.carte_collezionabili_models import CARTA_RARITA_CHOICES, CARTA_RARITA_COMUNE
+
+        ok = {c for c, _ in CARTA_RARITA_CHOICES}
+        if value in ok:
+            return value
+        if self.instance and self.instance.rarita in ok:
+            return self.instance.rarita
+        return CARTA_RARITA_COMUNE
+
+    def _hydrate_nome_from_mse_campi(self, attrs):
+        """Name (MSE) → nome catalogo. Evita 400 «nome omesso» dopo edit Card Studio."""
+        current = attrs.get("nome")
+        if current is None and self.instance is not None:
+            current = self.instance.nome
+        if (current or "").strip():
+            attrs["nome"] = str(current).strip()[:120]
+            return attrs
+
+        mse = attrs.get("mse_campi")
+        if mse is None and self.instance is not None:
+            mse = getattr(self.instance, "mse_campi", None)
+        mse = mse or {}
+        for key in ("name", "nome", "full name", "full_name", "title", "card_name"):
+            raw = mse.get(key)
+            if raw is None and "_" in key:
+                raw = mse.get(key.replace("_", " "))
+            if raw is not None and str(raw).strip():
+                attrs["nome"] = str(raw).strip()[:120]
+                return attrs
+        raise serializers.ValidationError(
+            {
+                "nome": (
+                    "Nome obbligatorio: compila il campo MSE «name» (Name). "
+                    "Viene salvato come nome catalogo."
+                )
+            }
+        )
+
     def validate(self, attrs):
+        attrs = self._hydrate_nome_from_mse_campi(attrs)
+
         bandita = attrs.get("bandita")
         ban_reason = attrs.get("ban_reason")
         if self.instance:

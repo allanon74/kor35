@@ -31,6 +31,28 @@ export default function MseSetTab({
   onImportSet,
   importingSet,
 }) {
+  const gameId = espForm.gioco_definizione || "";
+  const templatesForSet = (templates || []).filter(
+    (t) => !gameId || t.gioco_definizione === gameId
+  );
+  const selectedTemplate = templatesForSet.find((t) => t.id === espForm.default_studio_template);
+
+  const onGameChange = (nextGameId) => {
+    const gid = nextGameId || null;
+    setEspForm((p) => {
+      const next = { ...p, gioco_definizione: gid };
+      // Se il template attuale non appartiene al nuovo gioco, azzera.
+      if (gid && p.default_studio_template) {
+        const stillOk = (templates || []).some(
+          (t) => t.id === p.default_studio_template && t.gioco_definizione === gid
+        );
+        if (!stillOk) next.default_studio_template = null;
+      }
+      if (!gid) next.default_studio_template = null;
+      return next;
+    });
+  };
+
   return (
     <section className="mse-set-tab">
       <aside className="mse-pane mse-pane-list">
@@ -107,6 +129,57 @@ export default function MseSetTab({
         <div className="mse-pane-title-row">
           <h2 className="mse-pane-title">Set fields</h2>
         </div>
+
+        <div className="mse-set-defaults-panel" role="group" aria-label="Default rendering del set">
+          <p className="mse-set-defaults-lead">
+            Stylesheet di default per le carte di questo set. Le carte ereditanlo finché non scelgono un override.
+          </p>
+          <div className="mse-kor35-grid">
+            <label>
+              <span>Gioco del set</span>
+              <select value={gameId} onChange={(e) => onGameChange(e.target.value)}>
+                <option value="">— none —</option>
+                {giochi.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Default stylesheet (template carte)</span>
+              <select
+                value={espForm.default_studio_template || ""}
+                onChange={(e) =>
+                  setEspForm((p) => ({ ...p, default_studio_template: e.target.value || null }))
+                }
+                disabled={!gameId && templatesForSet.length === 0}
+              >
+                <option value="">— default del gioco —</option>
+                {templatesForSet.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nome}
+                    {t.is_default_for_new_cards ? " *" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {!gameId && (
+            <p className="mse-empty-hint">Seleziona un gioco per elencare gli stylesheet disponibili.</p>
+          )}
+          {gameId && templatesForSet.length === 0 && (
+            <p className="mse-empty-hint">
+              Nessuno stylesheet per questo gioco — importane uno dal tab Style.
+            </p>
+          )}
+          {selectedTemplate && (
+            <p className="mse-set-defaults-current">
+              Default attuale: <strong>{selectedTemplate.nome}</strong>
+            </p>
+          )}
+        </div>
+
         {gameSetFields.length > 0 ? (
           <MseFieldTable
             fields={gameSetFields}
@@ -163,34 +236,10 @@ export default function MseSetTab({
             </label>
           </div>
         )}
+
         <details className="mse-kor35-panel">
-          <summary>KOR35 integration (optional)</summary>
+          <summary>Riferimento MSE (opzionale)</summary>
           <div className="mse-kor35-grid">
-            <label>
-              <span>Game</span>
-              <select value={espForm.gioco_definizione || ""} onChange={(e) => setEspForm((p) => ({ ...p, gioco_definizione: e.target.value || null }))}>
-                <option value="">— none —</option>
-                {giochi.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Default stylesheet</span>
-              <select value={espForm.default_studio_template || ""} onChange={(e) => setEspForm((p) => ({ ...p, default_studio_template: e.target.value || null }))}>
-                <option value="">— game default —</option>
-                {templates
-                  .filter((t) => !espForm.gioco_definizione || t.gioco_definizione === espForm.gioco_definizione)
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nome}
-                      {t.is_default_for_new_cards ? " *" : ""}
-                    </option>
-                  ))}
-              </select>
-            </label>
             <label>
               <span>MSE set reference</span>
               <input
@@ -200,6 +249,7 @@ export default function MseSetTab({
             </label>
           </div>
         </details>
+
         <MseEditorActions
           saveLabel={saveSetLabel}
           onSave={onSaveSet}
@@ -209,7 +259,7 @@ export default function MseSetTab({
       </div>
 
       <footer className="mse-statusbar">
-        Set = espansione KOR35 (stesso record DB). Collega gioco e stylesheet default per le carte del set.
+        Tab Set → «Default stylesheet»: template MSE ereditato da tutte le carte del set (salvo override sulla carta).
       </footer>
     </section>
   );

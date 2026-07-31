@@ -110,6 +110,9 @@ function mapFontFamily(name) {
   if (WEB_FONT_FALLBACKS[key]) return WEB_FONT_FALLBACKS[key];
   const compact = key.replace(/\s+/g, "");
   if (WEB_FONT_FALLBACKS[compact]) return WEB_FONT_FALLBACKS[compact];
+  // Beleren Bold → Beleren
+  const base = key.replace(/\s+bold$/, "").replace(/\s+/g, "");
+  if (WEB_FONT_FALLBACKS[base]) return WEB_FONT_FALLBACKS[base];
   return `"${raw}", Georgia, "Times New Roman", serif`;
 }
 
@@ -124,11 +127,21 @@ function resolveFont(styleDef) {
     (typeof nameRaw === "string" && nameRaw) ||
     (typeof familyRaw === "string" && familyRaw) ||
     "";
+  let color = mseColorToCss(String(colorRaw ?? "#f9fafb")) || "#f9fafb";
+  // MSE Magic usa spesso "black" su carta chiara
+  if (["black", "rgb(0,0,0)", "#000", "#000000"].includes(String(colorRaw).trim().toLowerCase())) {
+    color = "#111827";
+  }
+  if (["white", "rgb(255,255,255)", "#fff", "#ffffff"].includes(String(colorRaw).trim().toLowerCase())) {
+    color = "#f8fafc";
+  }
+  let weight = typeof weightRaw === "string" || typeof weightRaw === "number" ? weightRaw : "normal";
+  if (/bold/i.test(familyName) && weight === "normal") weight = "700";
   return {
     family: mapFontFamily(familyName || "inherit"),
     size: Number(sizeRaw) || 14,
-    color: mseColorToCss(String(colorRaw ?? "#f9fafb")) || "#f9fafb",
-    weight: typeof weightRaw === "string" || typeof weightRaw === "number" ? weightRaw : "normal",
+    color,
+    weight,
   };
 }
 
@@ -150,14 +163,17 @@ function styleSymbolFontName(styleDef) {
 function fieldValueForName(fieldName, card, cardFields) {
   const nk = normFieldKey(fieldName);
   const aliases = {
-    text: ["rule_text", "rules", "rules_text", "card_text", "text"],
-    rule_text: ["rule_text", "rules", "text"],
-    casting_cost: ["casting_cost", "mana_cost", "cost"],
+    text: ["rule_text", "rules", "rules_text", "card_text", "text", "testo_gioco"],
+    rule_text: ["rule_text", "rules", "text", "testo_gioco"],
+    casting_cost: ["casting_cost", "mana_cost"],
+    name: ["name", "nome", "title", "card_name"],
     image: ["image", "art", "illustration", "immagine", "immagine_url", "immagine_preview"],
     art: ["art", "image", "illustration", "immagine", "immagine_url", "immagine_preview"],
     pt: ["pt", "power_toughness"],
-    power: ["power", "attack", "forza"],
-    toughness: ["toughness", "health", "robustezza"],
+    power: ["power", "attack", "forza", "attacco"],
+    toughness: ["toughness", "health", "robustezza", "salute"],
+    type: ["type", "card_type", "tipo"],
+    rarity: ["rarity", "rarita"],
   };
   const keys = aliases[nk] || [nk, fieldName];
   for (const key of keys) {
@@ -372,7 +388,13 @@ export function resolveMseLayers({
     packages,
   }).sort((a, b) => a.z - b.z || a.box.top - b.box.top);
 
-  const bg = mseColorToCss(mseV1.card_background) || "#1f2937";
+  const bgRaw = mseV1.card_background;
+  let bg = mseColorToCss(bgRaw) || "#1f2937";
+  const styleKeys = Object.keys(cardStyles);
+  const looksMagic = styleKeys.some((k) => /casting cost|card color|rule text/i.test(k));
+  // Preview Magic: carta chiara (i font MSE sono neri).
+  if (looksMagic) bg = "#f3efe6";
+  // KOR35 / altri: resta lo sfondo dello style.
   const hasFrameLayer = layers.some(
     (l) => l.type === "image" && /frame|border|card_frame|__frame__/i.test(l.fieldName)
   );

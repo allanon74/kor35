@@ -49,6 +49,35 @@ export function evalMseScript(expr, ctx, fallback = null) {
     js = js.replace(/\bdefault_image\s*\([^)]*\)/g, '""');
     js = js.replace(/\btemplate\s*\([^)]*\)/g, '""');
     js = js.replace(/\bframe_image\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bhas_identity\s*\([^)]*\)/g, "false");
+    js = js.replace(/\bhas_identity\b/g, "false");
+    js = js.replace(/\bchosen\s*\([^)]*\)/g, "false");
+    js = js.replace(/\bcontains\s*\([^)]*\)/g, "false");
+    js = js.replace(/\bcard_color\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bmana_filter\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bfilter_text\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bto_text\s*\(([^)]*)\)/g, "($1)");
+    js = js.replace(/\bto_number\s*\(([^)]*)\)/g, "Number($1)||0");
+    js = js.replace(/\bto_int\s*\(([^)]*)\)/g, "Number($1)||0");
+    js = js.replace(/\bforward\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bcombine\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bfrom_script\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bset_code\s*\([^)]*\)/g, '""');
+    js = js.replace(/\brarity_code\s*\([^)]*\)/g, '""');
+    js = js.replace(/\benglish_double_sided_symbol\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bexpand\s*\([^)]*\)/g, '""');
+    js = js.replace(/\breplace\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bsort_text\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bnumber_filter\s*\([^)]*\)/g, "0");
+    js = js.replace(/\btext_filter\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bhorizontal_overlap\s*\([^)]*\)/g, "0");
+    js = js.replace(/\bvertical_overlap\s*\([^)]*\)/g, "0");
+    js = js.replace(/\blayout_function\s*\([^)]*\)/g, "0");
+    js = js.replace(/\bdrop_shadow\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bmask\s*\([^)]*\)/g, '""');
+    js = js.replace(/\bsymbol_font\s*\([^)]*\)/g, '""');
+    js = js.replace(/\buse_large_v_mana\s*\([^)]*\)/g, "false");
+    js = js.replace(/\buse_v_mana\s*\([^)]*\)/g, "false");
     const card = ctx.card || {};
     const styling = ctx.styling || {};
     const set = ctx.set || {};
@@ -149,11 +178,24 @@ export function buildCardScriptContext(cardForm, gameCardFields, getFieldValue) 
       .replace(/[^a-z0-9]+/g, "_");
     card[norm] = out;
   });
-  // Alias MTG ↔ campi catalogo
-  if (card.rule_text == null || card.rule_text === "") card.rule_text = card.rules || card.text || "";
+  // Alias catalogo ↔ MSE (sempre, anche se il campo non è nella spec filtrata)
+  if (!card.name) card.name = cardForm?.nome || "";
+  if (!card.nome) card.nome = cardForm?.nome || "";
+  if (card.rule_text == null || card.rule_text === "") {
+    card.rule_text = card.rules || card.text || cardForm?.testo_gioco || "";
+  }
   if (card.text == null || card.text === "") card.text = card.rule_text || card.rules || "";
   if (card.casting_cost == null || card.casting_cost === "") {
-    card.casting_cost = card.mana_cost ?? card.cost ?? "";
+    card.casting_cost =
+      card.mana_cost ??
+      cardForm?.mse_campi?.["casting cost"] ??
+      cardForm?.mse_campi?.casting_cost ??
+      "";
+  }
+  if (!card.pt && (card.power != null || card.toughness != null || cardForm?.attacco != null)) {
+    const p = card.power ?? cardForm?.attacco ?? "";
+    const t = card.toughness ?? cardForm?.salute ?? "";
+    if (p !== "" || t !== "") card.pt = `${p}/${t}`;
   }
   if ((card.image == null || card.image === "") && imageFallback) card.image = imageFallback;
   return card;

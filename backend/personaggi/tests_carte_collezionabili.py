@@ -558,6 +558,41 @@ class CartaCatalogoAutoCodiceApiTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertTrue(str(resp.data.get("codice") or "").startswith("AUT-"))
 
+    def test_create_nome_da_mse_name_field(self):
+        """Card Studio Magic: campo Name → mse_campi.name, senza nome catalogo esplicito."""
+        resp = self.client.post(
+            self.base_url,
+            {
+                "espansione": str(self.espansione.id),
+                "tipo": CARTA_TIPO_PERSONAGGIO,
+                "energia": CARTA_ENERGIA_MARZIALE,
+                "rarita": CARTA_RARITA_COMUNE,
+                "mse_campi": {"name": "Lightning Bolt", "casting cost": "{R}"},
+            },
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data.get("nome"), "Lightning Bolt")
+
+    def test_create_type_magic_non_rompe_tipo_kor35(self):
+        resp = self.client.post(
+            self.base_url,
+            {
+                "espansione": str(self.espansione.id),
+                "nome": "Llanowar Elves",
+                "tipo": "Creature — Elf Druid",
+                "energia": CARTA_ENERGIA_MARZIALE,
+                "rarita": "common",
+                "mse_campi": {"type": "Creature — Elf Druid", "rarity": "common"},
+            },
+            format="json",
+            HTTP_X_CAMPAGNA=self.campagna.slug,
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data.get("tipo"), CARTA_TIPO_PERSONAGGIO)
+        self.assertEqual(resp.data.get("rarita"), CARTA_RARITA_COMUNE)
+
 
 class KeywordCartaParametriTests(TestCase):
     def test_mutazione_parametrica(self):

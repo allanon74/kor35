@@ -15,7 +15,7 @@ import {
 } from "./api/client";
 import { sortCardsForSetOrder, suggestCardIdentity, suggestSiglaFromNome, setCodeFromEspansione } from "./mse/cardSetOrder";
 import { resolveCardListRowColor } from "./mse/cardListColor";
-import { writeCardFieldPatch } from "./mse/cardFieldBridge";
+import { hydrateCatalogFieldsFromMse, writeCardFieldPatch } from "./mse/cardFieldBridge";
 import { normalizeMediaUrl } from "./mse/assetUrl";
 import { defaultStylingFromSpec } from "./mse/resolveLayers";
 import { describeStudioTemplateSource, resolveStudioTemplateId } from "./mse/studioTemplateResolve";
@@ -939,19 +939,27 @@ export default function App() {
 
   const handleSaveCard = async () => {
     try {
-      let formForSave = cardForm;
+      let formForSave = hydrateCatalogFieldsFromMse(cardForm);
+      if (!String(formForSave.nome || "").trim()) {
+        setMsg(
+          'Nome carta obbligatorio: compila il campo MSE «name» (Name). Viene salvato come nome catalogo.'
+        );
+        return;
+      }
       // Nuova carta senza codice: il backend assegna e rinumera colore→A-Z nel set.
-      if (!cardId && !String(cardForm.codice || "").trim() && cardForm.espansione) {
-        const esp = espansioniById[cardForm.espansione];
-        const expansionCards = carte.filter((c) => c.espansione === cardForm.espansione);
+      if (!cardId && !String(formForSave.codice || "").trim() && formForSave.espansione) {
+        const esp = espansioniById[formForSave.espansione];
+        const expansionCards = carte.filter((c) => c.espansione === formForSave.espansione);
         const suggested = suggestCardIdentity({
           expansionCards,
           espansione: esp,
-          draftCard: cardForm,
+          draftCard: formForSave,
         });
         // Invia senza codice forzato: create + renumber lato server.
-        formForSave = { ...cardForm, ordine_set: suggested.ordine_set, codice: "" };
+        formForSave = { ...formForSave, ordine_set: suggested.ordine_set, codice: "" };
         setCardForm({ ...formForSave, codice: suggested.codice });
+      } else {
+        setCardForm(formForSave);
       }
       const payload = buildCardSavePayload(formForSave, {
         studioSpecText,
@@ -959,6 +967,10 @@ export default function App() {
         mseCampiText,
         isCreate: !cardId,
       });
+      // Garantisce nome anche se mseCampiText era stantio.
+      if (!String(payload.nome || "").trim()) {
+        payload.nome = formForSave.nome;
+      }
       const requestBody = cartaImmagineFile ? buildCartaFormData(payload, cartaImmagineFile) : payload;
       const saved = await saveCarta(cardId, requestBody);
       if (cartaImmaginePreviewRef.current) {

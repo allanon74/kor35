@@ -169,7 +169,7 @@ export default function MseCardsTab({
         {activeTemplate ? (
           <p className="mse-empty-hint">
             Rendering: <strong>{studioTemplateSourceLabel || activeTemplate.nome}</strong>
-            {!cardForm.studio_template ? " — eredita dal set finché non scegli un override." : " — override salvato sulla carta."}
+            {!cardForm.studio_template ? " — eredita dal set (tab Set → Default stylesheet)." : " — override salvato sulla carta."}
           </p>
         ) : null}
         {!selectedGameId && (

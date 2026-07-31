@@ -353,4 +353,5 @@ class Kor35MseStyleGeneratorTests(SimpleTestCase):
             names = zf.namelist()
             self.assertIn("style", names)
             self.assertIn("images/frame.png", names)
+            self.assertIn("images/title-plate.png", names)
             self.assertTrue(zf.read("images/frame.png").startswith(b"\x89PNG"))

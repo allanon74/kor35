@@ -1,5 +1,8 @@
 """
 Genera package `.mse-style` KOR35 (clean-room) allineato a `kor35_mse_game_spec`.
+
+Layout ispirato ai TCG moderni (finestra art ampia, title bar, type line, rules box, PT):
+pulito, leggibile, senza cornici opache che nascondono testo/art.
 """
 from __future__ import annotations
 
@@ -12,6 +15,7 @@ from typing import Callable
 KOR35_TEMPLATE_SLUG = "kor35-standard"
 KOR35_TEMPLATE_NAME = "KOR35 Standard"
 KOR35_STYLE_GAME = "kor35"
+KOR35_STYLE_VERSION = "2.0"
 
 KOR35_FIELD_MAPPING = {
     "code": "codice",
@@ -63,262 +67,336 @@ def rgba_png(width: int, height: int, pixel_fn: Callable[[int, int], tuple[int, 
 
 
 def _lerp(a: int, b: int, t: float) -> int:
-    return int(a + (b - a) * t)
+    return int(a + (b - a) * max(0.0, min(1.0, t)))
 
 
 def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
     """
-    Cornice carta: bordo dorato, barre nome/regole semi-opache, finestra art trasparente.
+    Cornice TCG: bordo scuro + filetto oro, finestre title/art/type/rules/stats
+    trasparenti (il testo e l'arte vivono sotto come layer CSS).
     """
-    border = 14
-    inner = 22
-    stats_h = 52
-    gold = (196, 154, 72)
-    gold_dark = (140, 108, 48)
-    stats_bg = (15, 20, 32)
-    plate = (18, 26, 42)
-    # Finestra illustrazione (allineata allo style `art:`)
-    art_left, art_top, art_w, art_h = 19, 118, 337, 250
-    # Barra titolo (sotto il bordo, sopra l'art)
-    title_top, title_bottom = inner, art_top - 4
-    # Pannello regole (sotto art, sopra stats)
-    rules_top = art_top + art_h + 4
-    rules_bottom = height - border - stats_h
+    # Geometria allineata a build_kor35_style_text()
+    margin = 12
+    art = (22, 78, 331, 210)  # left, top, w, h
+    title = (22, 18, 331, 52)
+    type_line = (22, 292, 331, 28)
+    rules = (22, 326, 331, 130)
+    stats = (22, 464, 331, 44)
+
+    ink = (18, 22, 32)
+    ink2 = (28, 34, 48)
+    gold = (212, 175, 95)
+    gold_hi = (240, 214, 140)
+    gold_lo = (150, 118, 55)
+
+    windows = (title, art, type_line, rules, stats)
+
+    def in_box(x: int, y: int, box: tuple[int, int, int, int]) -> bool:
+        l, t, w, h = box
+        return l <= x < l + w and t <= y < t + h
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
-        if x < border or y < border or x >= width - border or y >= height - border:
+        # Trasparente nelle finestre contenuto
+        for box in windows:
+            if in_box(x, y, box):
+                return 0, 0, 0, 0
+
+        # Bordo esterno pieno
+        if x < margin or y < margin or x >= width - margin or y >= height - margin:
+            # Filetto oro sul bordo interno
+            near_inner = (
+                x == margin - 1
+                or y == margin - 1
+                or x == width - margin
+                or y == height - margin
+            )
+            if near_inner:
+                return gold_hi[0], gold_hi[1], gold_hi[2], 255
             t = (x + y) / max(width + height, 1)
-            r = _lerp(gold_dark[0], gold[0], t)
-            g = _lerp(gold_dark[1], gold[1], t)
-            b = _lerp(gold_dark[2], gold[2], t)
+            r = _lerp(ink[0], ink2[0], t)
+            g = _lerp(ink[1], ink2[1], t)
+            b = _lerp(ink[2], ink2[2], t)
+            # Angoli leggermente più chiari
+            if x < 28 or y < 28 or x >= width - 28 or y >= height - 28:
+                r = _lerp(r, gold_lo[0], 0.18)
+                g = _lerp(g, gold_lo[1], 0.18)
+                b = _lerp(b, gold_lo[2], 0.18)
             return r, g, b, 255
-        if x < inner or y < inner or x >= width - inner or y >= height - inner:
-            return gold_dark[0], gold_dark[1], gold_dark[2], 255
-        if y >= height - border - stats_h:
-            return stats_bg[0], stats_bg[1], stats_bg[2], 220
-        if art_left <= x < art_left + art_w and art_top <= y < art_top + art_h:
-            return 0, 0, 0, 0
-        if title_top <= y < title_bottom and inner <= x < width - inner:
-            return plate[0], plate[1], plate[2], 210
-        if rules_top <= y < rules_bottom and inner <= x < width - inner:
-            return plate[0], plate[1], plate[2], 200
-        return 12, 18, 30, 255
+
+        # Separatori orizzontali sottili (tra finestre)
+        for top in (art[1] - 2, type_line[1] - 2, rules[1] - 2, stats[1] - 2):
+            if abs(y - top) <= 1 and margin <= x < width - margin:
+                return gold[0], gold[1], gold[2], 230
+
+        # Riempimento telaio interno (sottile)
+        return ink2[0], ink2[1], ink2[2], 255
 
     return rgba_png(width, height, pixel)
 
 
-def kor35_art_placeholder_png(width: int = 337, height: int = 250) -> bytes:
-    """Placeholder area illustrazione (visibile, non quasi invisibile)."""
+def kor35_art_placeholder_png(width: int = 331, height: int = 210) -> bytes:
+    """Placeholder art: gradiente freddo + croce guida."""
     cx, cy = width / 2, height / 2
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
-        if x < 2 or y < 2 or x >= width - 2 or y >= height - 2:
-            return 120, 140, 180, 220
-        dx = abs(x - cx) / max(cx, 1)
-        dy = abs(y - cy) / max(cy, 1)
-        if dx < 0.35 and dy < 0.22:
-            return 70, 90, 130, 210
-        return 40, 52, 78, 180
+        if x < 1 or y < 1 or x >= width - 1 or y >= height - 1:
+            return 90, 110, 150, 255
+        t = y / max(height - 1, 1)
+        r = _lerp(42, 70, t)
+        g = _lerp(56, 88, t)
+        b = _lerp(84, 120, t)
+        # Croce centrale sottile
+        if abs(x - cx) < 1.2 or abs(y - cy) < 1.2:
+            return 120, 140, 180, 200
+        return r, g, b, 255
+
+    return rgba_png(width, height, pixel)
+
+
+def kor35_plate_png(width: int = 331, height: int = 52, *, alpha: int = 210) -> bytes:
+    """Piastra semi-opaca per title / type / rules (layer sotto il testo)."""
+
+    def pixel(x: int, y: int) -> tuple[int, int, int, int]:
+        edge = x < 2 or y < 2 or x >= width - 2 or y >= height - 2
+        if edge:
+            return 40, 48, 64, min(255, alpha + 20)
+        t = y / max(height - 1, 1)
+        r = _lerp(24, 36, t)
+        g = _lerp(30, 44, t)
+        b = _lerp(46, 62, t)
+        return r, g, b, alpha
 
     return rgba_png(width, height, pixel)
 
 
 def build_kor35_style_text() -> str:
-    """File `style` MSE per tutti i campi card_fields KOR35."""
-    return """mse version: 2.0.0
+    """File `style` MSE — layout TCG leggibile."""
+    return f"""mse version: 2.0.0
 game: kor35
 short name: KOR35 Standard
 full name: KOR35 Standard Card Template
-version: 1.0
+version: {KOR35_STYLE_VERSION}
 creator: KOR35 Card Studio
 card width: 375
 card height: 523
 card dpi: 300
-card background: rgb(23,32,51)
+card background: rgb(12,16,28)
 
 styling field:
-    type: boolean
-    name: show_stats
-    initial: true
-    description: Show attack / health / initiative bar on the card.
+	type: boolean
+	name: show_stats
+	initial: true
+	description: Show attack / health / initiative badges.
 
 styling field:
-    type: boolean
-    name: show_lore
-    initial: false
-    description: Show flavor text strip at the bottom of the card face.
+	type: boolean
+	name: show_lore
+	initial: false
+	description: Show flavor text under the rules box.
 
 card style:
-    card_frame:
-        left: 0
-        top: 0
-        width: 375
-        height: 523
-        z index: 20
-        render style: image
-        image: images/frame.png
+	card_frame:
+		left: 0
+		top: 0
+		width: 375
+		height: 523
+		z index: 100
+		render style: image
+		image: images/frame.png
 
 card style:
-    art:
-        left: 19
-        top: 118
-        width: 337
-        height: 250
-        z index: 5
-        render style: image
-        image: {if card.image then card.image else "images/art-placeholder.png"}
+	title_plate:
+		left: 22
+		top: 18
+		width: 331
+		height: 52
+		z index: 8
+		render style: image
+		image: images/title-plate.png
 
 card style:
-    code:
-        left: 286
-        top: 24
-        width: 68
-        height: 22
-        z index: 30
-        alignment: middle right
-        font:
-            name: Consolas
-            size: 11
-            color: rgb(203,213,225)
+	type_plate:
+		left: 22
+		top: 292
+		width: 331
+		height: 28
+		z index: 8
+		render style: image
+		image: images/type-plate.png
 
 card style:
-    name:
-        left: 28
-        top: 40
-        width: 250
-        height: 40
-        z index: 40
-        alignment: middle left
-        font:
-            name: Georgia
-            size: 24
-            color: rgb(255,248,230)
-            weight: bold
+	rules_plate:
+		left: 22
+		top: 326
+		width: 331
+		height: 130
+		z index: 8
+		render style: image
+		image: images/rules-plate.png
 
 card style:
-    type:
-        left: 28
-        top: 84
-        width: 210
-        height: 24
-        z index: 35
-        alignment: middle left
-        font:
-            name: Arial
-            size: 14
-            color: rgb(186, 230, 253)
+	art:
+		left: 22
+		top: 78
+		width: 331
+		height: 210
+		z index: 5
+		render style: image
+		image: {{if card.image then card.image else "images/art-placeholder.png"}}
 
 card style:
-    energy:
-        left: 16
-        top: 14
-        width: 48
-        height: 48
-        z index: 45
-        alignment: middle center
-        render style: symbol
-        font:
-            always symbol: true
-            size: 30
+	energy:
+		left: 26
+		top: 24
+		width: 40
+		height: 40
+		z index: 45
+		alignment: middle center
+		render style: symbol
+		font:
+			always symbol: true
+			size: 28
+			color: rgb(255,255,255)
 
 card style:
-    rarity:
-        left: 240
-        top: 84
-        width: 110
-        height: 24
-        z index: 35
-        alignment: middle right
-        font:
-            name: Arial
-            size: 12
-            color: rgb(226,232,240)
+	name:
+		left: 72
+		top: 24
+		width: 210
+		height: 40
+		z index: 40
+		alignment: middle left
+		font:
+			name: Georgia
+			size: 20
+			color: rgb(255,248,230)
+			weight: bold
 
 card style:
-    cost:
-        left: 312
-        top: 48
-        width: 40
-        height: 36
-        z index: 35
-        alignment: middle center
-        font:
-            name: Arial
-            size: 22
-            color: rgb(253,224,71)
-            weight: bold
+	cost:
+		left: 290
+		top: 24
+		width: 54
+		height: 40
+		z index: 40
+		alignment: middle center
+		font:
+			name: Arial
+			size: 22
+			color: rgb(250,204,21)
+			weight: bold
 
 card style:
-    rules:
-        left: 26
-        top: 376
-        width: 323
-        height: 92
-        z index: 50
-        alignment: top left
-        font:
-            name: Georgia
-            size: 13
-            color: rgb(241,245,249)
+	code:
+		left: 286
+		top: 8
+		width: 70
+		height: 14
+		z index: 50
+		alignment: middle right
+		font:
+			name: Consolas
+			size: 10
+			color: rgb(148,163,184)
 
 card style:
-    lore:
-        left: 28
-        top: 478
-        width: 319
-        height: 28
-        z index: 45
-        visible: {styling.show_lore}
-        alignment: top left
-        font:
-            name: Georgia
-            size: 10
-            color: rgb(148,163,184)
+	type:
+		left: 30
+		top: 294
+		width: 220
+		height: 24
+		z index: 35
+		alignment: middle left
+		font:
+			name: Arial
+			size: 13
+			color: rgb(186,230,253)
+			weight: bold
 
 card style:
-    attack:
-        left: 48
-        top: 486
-        width: 48
-        height: 28
-        z index: 60
-        visible: {styling.show_stats}
-        alignment: middle center
-        font:
-            name: Arial
-            size: 20
-            color: rgb(248,250,252)
-            weight: bold
+	rarity:
+		left: 250
+		top: 294
+		width: 96
+		height: 24
+		z index: 35
+		alignment: middle right
+		font:
+			name: Arial
+			size: 12
+			color: rgb(226,232,240)
 
 card style:
-    health:
-        left: 164
-        top: 486
-        width: 48
-        height: 28
-        z index: 60
-        visible: {styling.show_stats}
-        alignment: middle center
-        font:
-            name: Arial
-            size: 20
-            color: rgb(248,250,252)
-            weight: bold
+	rules:
+		left: 30
+		top: 334
+		width: 315
+		height: 110
+		z index: 50
+		alignment: top left
+		font:
+			name: Georgia
+			size: 13
+			color: rgb(241,245,249)
 
 card style:
-    initiative:
-        left: 280
-        top: 486
-        width: 48
-        height: 28
-        z index: 60
-        visible: {styling.show_stats}
-        alignment: middle center
-        font:
-            name: Arial
-            size: 20
-            color: rgb(248,250,252)
-            weight: bold
+	lore:
+		left: 30
+		top: 438
+		width: 315
+		height: 18
+		z index: 45
+		visible: {{styling.show_lore}}
+		alignment: top left
+		font:
+			name: Georgia
+			size: 10
+			color: rgb(148,163,184)
+
+card style:
+	attack:
+		left: 40
+		top: 470
+		width: 70
+		height: 32
+		z index: 60
+		visible: {{styling.show_stats}}
+		alignment: middle center
+		font:
+			name: Arial
+			size: 20
+			color: rgb(254,226,226)
+			weight: bold
+
+card style:
+	health:
+		left: 152
+		top: 470
+		width: 70
+		height: 32
+		z index: 60
+		visible: {{styling.show_stats}}
+		alignment: middle center
+		font:
+			name: Arial
+			size: 20
+			color: rgb(220,252,231)
+			weight: bold
+
+card style:
+	initiative:
+		left: 264
+		top: 470
+		width: 70
+		height: 32
+		z index: 60
+		visible: {{styling.show_stats}}
+		alignment: middle center
+		font:
+			name: Arial
+			size: 20
+			color: rgb(219,234,254)
+			weight: bold
 """
 
 
@@ -327,9 +405,15 @@ def build_kor35_mse_style_zip() -> bytes:
     style_text = build_kor35_style_text()
     frame = kor35_frame_png()
     art = kor35_art_placeholder_png()
+    title_plate = kor35_plate_png(331, 52, alpha=200)
+    type_plate = kor35_plate_png(331, 28, alpha=190)
+    rules_plate = kor35_plate_png(331, 130, alpha=185)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("style", style_text)
         zf.writestr("images/frame.png", frame)
         zf.writestr("images/art-placeholder.png", art)
+        zf.writestr("images/title-plate.png", title_plate)
+        zf.writestr("images/type-plate.png", type_plate)
+        zf.writestr("images/rules-plate.png", rules_plate)
     return buf.getvalue()
