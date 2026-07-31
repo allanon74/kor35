@@ -41,6 +41,8 @@ export default function MseCardsTab({
   updateTemplateByGame,
   packages,
   activeTemplate,
+  studioTemplateSourceLabel = "",
+  resolvedStudioTemplateId = "",
   espansioniById,
   stylingValues,
   onPickFile,
@@ -140,16 +142,36 @@ export default function MseCardsTab({
             value={cardForm.studio_template || ""}
             onChange={(e) => updateTemplateByGame(e.target.value)}
             disabled={!selectedGameId}
+            title={studioTemplateSourceLabel}
           >
-            <option value="">— default —</option>
+            <option value="">
+              {(() => {
+                const esp = cardForm.espansione ? espansioniById[cardForm.espansione] : null;
+                const defId = esp?.default_studio_template || resolvedStudioTemplateId;
+                const defName =
+                  templatesForSelectedGame.find((t) => t.id === defId)?.nome ||
+                  (defId ? "default del set" : "nessun default");
+                return `— default del set (${defName}) —`;
+              })()}
+            </option>
             {templatesForSelectedGame.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nome}
-                {t.is_default_for_new_cards ? " (default)" : ""}
+                {t.is_default_for_new_cards ? " (default gioco)" : ""}
+                {cardForm.espansione &&
+                espansioniById[cardForm.espansione]?.default_studio_template === t.id
+                  ? " (default set)"
+                  : ""}
               </option>
             ))}
           </select>
         </label>
+        {activeTemplate ? (
+          <p className="mse-empty-hint">
+            Rendering: <strong>{studioTemplateSourceLabel || activeTemplate.nome}</strong>
+            {!cardForm.studio_template ? " — eredita dal set finché non scegli un override." : " — override salvato sulla carta."}
+          </p>
+        ) : null}
         {!selectedGameId && (
           <p className="mse-empty-hint">Seleziona un gioco nella barra in alto per campi e stylesheet corretti.</p>
         )}

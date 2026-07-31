@@ -241,6 +241,24 @@ class EspansioneCarteSerializer(serializers.ModelSerializer):
         return instance
 
 
+def _default_studio_template_for_espansione(espansione):
+    """Default stylesheet: set → gioco (is_default_for_new_cards)."""
+    if not espansione:
+        return None
+    if espansione.default_studio_template_id:
+        return espansione.default_studio_template
+    if espansione.gioco_definizione_id:
+        return (
+            espansione.gioco_definizione.studio_templates.filter(
+                is_default_for_new_cards=True,
+                attivo=True,
+            )
+            .order_by("ordine", "nome")
+            .first()
+        )
+    return None
+
+
 class CartaCollezionabileSerializer(serializers.ModelSerializer):
     immagine_url = serializers.SerializerMethodField()
     espansione_nome = serializers.CharField(source="espansione.nome", read_only=True, allow_null=True)
@@ -309,10 +327,11 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
 
     def get_immagine_url(self, obj):
         if obj.immagine:
-            request = self.context.get("request")
-            if request:
-                return request.build_absolute_uri(obj.immagine.url)
-            return obj.immagine.url
+            # Path relativo same-origin per Card Studio / nginx.
+            try:
+                return obj.immagine.url
+            except ValueError:
+                return None
         return None
 
     def validate_bonus_equip(self, value):
@@ -446,18 +465,9 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
                 {"codice": "Codice obbligatorio se la carta non ha un'espansione."}
             )
         if not validated_data.get("studio_template"):
-            default_template = None
-            if espansione and espansione.default_studio_template_id:
-                default_template = espansione.default_studio_template
-            elif espansione and espansione.gioco_definizione_id:
-                default_template = (
-                    espansione.gioco_definizione.studio_templates.filter(
-                        is_default_for_new_cards=True,
-                        attivo=True,
-                    )
-                    .order_by("ordine", "nome")
-                    .first()
-                )
+            default_template = _default_studio_template_for_espansione(
+                validated_data.get("espansione")
+            )
             if default_template:
                 validated_data["studio_template"] = default_template
         carta = CartaCollezionabile.objects.create(**validated_data)
@@ -480,6 +490,11 @@ class CartaCollezionabileSerializer(serializers.ModelSerializer):
         old_energia = instance.energia
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        # Legacy: carte senza override ereditano il default del set al salvataggio.
+        if not instance.studio_template_id:
+            default_template = _default_studio_template_for_espansione(instance.espansione)
+            if default_template:
+                instance.studio_template = default_template
         instance.save()
         if tags is not None:
             instance.tags.set(tags)

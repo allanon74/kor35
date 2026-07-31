@@ -68,8 +68,7 @@ def _lerp(a: int, b: int, t: float) -> int:
 
 def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
     """
-    Cornice carta: solo bordo dorato + fascia stats in basso.
-    L'interno resta trasparente così art/testo (layer MSE) restano visibili.
+    Cornice carta: bordo dorato, barre nome/regole semi-opache, finestra art trasparente.
     """
     border = 14
     inner = 22
@@ -77,8 +76,14 @@ def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
     gold = (196, 154, 72)
     gold_dark = (140, 108, 48)
     stats_bg = (15, 20, 32)
+    plate = (18, 26, 42)
     # Finestra illustrazione (allineata allo style `art:`)
     art_left, art_top, art_w, art_h = 19, 118, 337, 250
+    # Barra titolo (sotto il bordo, sopra l'art)
+    title_top, title_bottom = inner, art_top - 4
+    # Pannello regole (sotto art, sopra stats)
+    rules_top = art_top + art_h + 4
+    rules_bottom = height - border - stats_h
 
     def pixel(x: int, y: int) -> tuple[int, int, int, int]:
         if x < border or y < border or x >= width - border or y >= height - border:
@@ -90,10 +95,14 @@ def kor35_frame_png(width: int = 375, height: int = 523) -> bytes:
         if x < inner or y < inner or x >= width - inner or y >= height - inner:
             return gold_dark[0], gold_dark[1], gold_dark[2], 255
         if y >= height - border - stats_h:
-            return stats_bg[0], stats_bg[1], stats_bg[2], 200
+            return stats_bg[0], stats_bg[1], stats_bg[2], 220
         if art_left <= x < art_left + art_w and art_top <= y < art_top + art_h:
             return 0, 0, 0, 0
-        return 0, 0, 0, 0
+        if title_top <= y < title_bottom and inner <= x < width - inner:
+            return plate[0], plate[1], plate[2], 210
+        if rules_top <= y < rules_bottom and inner <= x < width - inner:
+            return plate[0], plate[1], plate[2], 200
+        return 12, 18, 30, 255
 
     return rgba_png(width, height, pixel)
 
@@ -174,83 +183,83 @@ card style:
 
 card style:
     name:
-        left: 34
-        top: 44
-        width: 240
-        height: 36
+        left: 28
+        top: 40
+        width: 250
+        height: 40
         z index: 40
-        alignment: bottom left
+        alignment: middle left
         font:
             name: Georgia
-            size: 22
-            color: rgb(248,250,252)
+            size: 24
+            color: rgb(255,248,230)
             weight: bold
 
 card style:
     type:
-        left: 34
-        top: 82
-        width: 200
-        height: 22
+        left: 28
+        top: 84
+        width: 210
+        height: 24
         z index: 35
         alignment: middle left
         font:
             name: Arial
-            size: 13
-            color: rgb(191,219,254)
+            size: 14
+            color: rgb(186, 230, 253)
 
 card style:
     energy:
-        left: 18
-        top: 16
-        width: 44
-        height: 44
+        left: 16
+        top: 14
+        width: 48
+        height: 48
         z index: 45
         alignment: middle center
         render style: symbol
         font:
             always symbol: true
-            size: 28
+            size: 30
 
 card style:
     rarity:
-        left: 248
-        top: 82
-        width: 96
-        height: 20
+        left: 240
+        top: 84
+        width: 110
+        height: 24
         z index: 35
         alignment: middle right
         font:
             name: Arial
-            size: 11
-            color: rgb(203,213,225)
+            size: 12
+            color: rgb(226,232,240)
 
 card style:
     cost:
-        left: 318
-        top: 52
-        width: 32
-        height: 32
+        left: 312
+        top: 48
+        width: 40
+        height: 36
         z index: 35
         alignment: middle center
         font:
             name: Arial
-            size: 18
-            color: rgb(250,204,21)
+            size: 22
+            color: rgb(253,224,71)
             weight: bold
 
 card style:
     rules:
-        left: 28
-        top: 378
-        width: 319
-        height: 96
+        left: 26
+        top: 376
+        width: 323
+        height: 92
         z index: 50
         alignment: top left
         font:
             name: Georgia
-            size: 12
-            color: rgb(226,232,240)
+            size: 13
+            color: rgb(241,245,249)
 
 card style:
     lore:

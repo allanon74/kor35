@@ -105,13 +105,31 @@ export function evalMseProp(prop, ctx, fallback = null) {
 }
 
 export function buildCardScriptContext(cardForm, gameCardFields, getFieldValue) {
+  const toMedia = (raw) => {
+    const s = String(raw || "").trim();
+    if (!s) return "";
+    if (s.startsWith("blob:") || s.startsWith("data:") || s.startsWith("/media/")) return s;
+    if (/^https?:\/\//i.test(s)) {
+      try {
+        const u = new URL(s);
+        return `${u.pathname}${u.search || ""}`;
+      } catch {
+        return s;
+      }
+    }
+    if (s.startsWith("media/")) return `/${s}`;
+    if (s.startsWith("/")) return s;
+    return `/media/${s.replace(/^\/+/, "")}`;
+  };
+
   const card = {
     codice: cardForm?.codice || "",
-    immagine_url: cardForm?.immagine_url || "",
-    immagine_preview: cardForm?.immagine_preview || "",
+    immagine_url: toMedia(cardForm?.immagine_url || ""),
+    immagine_preview: toMedia(cardForm?.immagine_preview || ""),
   };
-  const imageFallback =
-    cardForm?.immagine_preview || cardForm?.immagine_url || cardForm?.mse_campi?.image || "";
+  const imageFallback = toMedia(
+    cardForm?.immagine_preview || cardForm?.immagine_url || cardForm?.mse_campi?.image || ""
+  );
   if (imageFallback) {
     card.image = imageFallback;
     card.art = imageFallback;
@@ -119,12 +137,14 @@ export function buildCardScriptContext(cardForm, gameCardFields, getFieldValue) 
   }
   (gameCardFields || []).forEach((field) => {
     const val = getFieldValue(field);
-    card[field.name] = val;
+    const fType = String(field?.type || "").toLowerCase();
+    const out = fType === "image" ? toMedia(val) : val;
+    card[field.name] = out;
     const norm = String(field.name || "")
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "_");
-    card[norm] = val;
+    card[norm] = out;
   });
   // Alias MTG ↔ campi catalogo
   if (card.rule_text == null || card.rule_text === "") card.rule_text = card.rules || card.text || "";

@@ -16,7 +16,9 @@ import {
 import { sortCardsForSetOrder, suggestCardIdentity, suggestSiglaFromNome, setCodeFromEspansione } from "./mse/cardSetOrder";
 import { resolveCardListRowColor } from "./mse/cardListColor";
 import { writeCardFieldPatch } from "./mse/cardFieldBridge";
+import { normalizeMediaUrl } from "./mse/assetUrl";
 import { defaultStylingFromSpec } from "./mse/resolveLayers";
+import { describeStudioTemplateSource, resolveStudioTemplateId } from "./mse/studioTemplateResolve";
 import MseWorkspaceBar from "./components/MseWorkspaceBar";
 import MseEditorActions from "./components/MseEditorActions";
 import MseCardsTab from "./components/MseCardsTab";
@@ -652,10 +654,37 @@ export default function App() {
     return pool;
   }, [carte, selectedExpansionId, selectedGameId, espansioniById]);
 
-  const activeTemplate = useMemo(
-    () => (cardForm.studio_template ? templatesById[cardForm.studio_template] : null),
-    [cardForm.studio_template, templatesById]
-  );
+  const activeTemplate = useMemo(() => {
+    const esp = cardForm.espansione ? espansioniById[cardForm.espansione] : null;
+    const resolvedId = resolveStudioTemplateId({
+      cardStudioTemplate: cardForm.studio_template,
+      espansione: esp,
+      defaultTemplateByGame,
+      templatesForSelectedGame,
+      templatesById,
+      selectedGameId,
+    });
+    return resolvedId ? templatesById[resolvedId] || null : null;
+  }, [
+    cardForm.studio_template,
+    cardForm.espansione,
+    espansioniById,
+    defaultTemplateByGame,
+    templatesForSelectedGame,
+    templatesById,
+    selectedGameId,
+  ]);
+
+  const resolvedStudioTemplateId = activeTemplate?.id || "";
+  const studioTemplateSourceLabel = useMemo(() => {
+    const esp = cardForm.espansione ? espansioniById[cardForm.espansione] : null;
+    return describeStudioTemplateSource({
+      cardStudioTemplate: cardForm.studio_template,
+      resolvedId: resolvedStudioTemplateId || null,
+      espansione: esp,
+      templatesById,
+    });
+  }, [cardForm.studio_template, cardForm.espansione, espansioniById, resolvedStudioTemplateId, templatesById]);
 
   const mseV1 = useMemo(() => activeTemplate?.layout_spec?.mse_v1 || null, [activeTemplate]);
 
@@ -666,13 +695,13 @@ export default function App() {
     }
     const saved = cardForm.studio_carta_spec?.styling || {};
     setStylingValues({ ...defaultStylingFromSpec(mseV1), ...saved });
-  }, [mseV1, cardForm.studio_template, cardId, cardForm.studio_carta_spec]);
+  }, [mseV1, resolvedStudioTemplateId, cardId, cardForm.studio_carta_spec]);
 
   useEffect(() => {
-    if (cardForm.studio_template) {
-      setStylePreviewTemplateId(cardForm.studio_template);
+    if (resolvedStudioTemplateId) {
+      setStylePreviewTemplateId(resolvedStudioTemplateId);
     }
-  }, [cardForm.studio_template]);
+  }, [resolvedStudioTemplateId]);
 
   const patchStylingValue = (field, rawValue) => {
     const name = field?.name;
@@ -691,17 +720,32 @@ export default function App() {
     setCardForm((p) => ({ ...p, studio_carta_spec: spec }));
   };
 
+  // Solo nuove carte: copia il default risolto sul form (snapshot iniziale).
   useEffect(() => {
     if (cardId || !cardForm.espansione || cardForm.studio_template) return;
     const esp = espansioniById[cardForm.espansione];
     if (!esp) return;
-    const tmpl =
-      esp.default_studio_template ||
-      (esp.gioco_definizione ? defaultTemplateByGame[esp.gioco_definizione] : null);
+    const tmpl = resolveStudioTemplateId({
+      cardStudioTemplate: null,
+      espansione: esp,
+      defaultTemplateByGame,
+      templatesForSelectedGame,
+      templatesById,
+      selectedGameId: esp.gioco_definizione || selectedGameId,
+    });
     if (tmpl) {
       setCardForm((prev) => ({ ...prev, studio_template: tmpl }));
     }
-  }, [cardId, cardForm.espansione, cardForm.studio_template, espansioniById, defaultTemplateByGame]);
+  }, [
+    cardId,
+    cardForm.espansione,
+    cardForm.studio_template,
+    espansioniById,
+    defaultTemplateByGame,
+    templatesForSelectedGame,
+    templatesById,
+    selectedGameId,
+  ]);
 
   useEffect(() => {
     if (!cardForm.espansione) return;
@@ -714,7 +758,14 @@ export default function App() {
   useEffect(() => {
     if (cardId || !selectedGameId) return;
     if (!cardForm.studio_template || !templatesById[cardForm.studio_template]) {
-      const fallback = defaultTemplateByGame[selectedGameId] || templatesForSelectedGame[0]?.id;
+      const fallback = resolveStudioTemplateId({
+        cardStudioTemplate: null,
+        espansione: cardForm.espansione ? espansioniById[cardForm.espansione] : null,
+        defaultTemplateByGame,
+        templatesForSelectedGame,
+        templatesById,
+        selectedGameId,
+      });
       if (fallback) {
         setCardForm((prev) => ({ ...prev, studio_template: fallback }));
       }
@@ -723,6 +774,8 @@ export default function App() {
     cardId,
     selectedGameId,
     cardForm.studio_template,
+    cardForm.espansione,
+    espansioniById,
     templatesById,
     defaultTemplateByGame,
     templatesForSelectedGame,
@@ -778,10 +831,12 @@ export default function App() {
     }
     setCartaImmagineFile(null);
     setCardId(row.id);
+    const media = normalizeMediaUrl(row.immagine_url || "");
     setCardForm({
       ...emptyCarta,
       ...row,
-      immagine_preview: row.immagine_url || "",
+      immagine_url: media,
+      immagine_preview: media,
     });
     setStudioSpecText(JSON.stringify(row.studio_carta_spec || {}, null, 2));
     setPlayableSpecText(JSON.stringify(row.arena_playable_spec || {}, null, 2));
@@ -1404,6 +1459,8 @@ export default function App() {
           updateTemplateByGame={updateTemplateByGame}
           packages={msePackages}
           activeTemplate={activeTemplate}
+          studioTemplateSourceLabel={studioTemplateSourceLabel}
+          resolvedStudioTemplateId={resolvedStudioTemplateId}
           espansioniById={espansioniById}
           stylingValues={stylingValues}
           onPickFile={onDynamicFilePicked}
@@ -1418,7 +1475,7 @@ export default function App() {
         <MseStyleTab
           templates={templates}
           selectedGameId={selectedGameId}
-          previewTemplateId={stylePreviewTemplateId || cardForm.studio_template || ""}
+          previewTemplateId={stylePreviewTemplateId || resolvedStudioTemplateId || cardForm.studio_template || ""}
           onSelectTemplate={setStylePreviewTemplateId}
           cardForm={cardForm}
           gameCardFields={gameCardFields}

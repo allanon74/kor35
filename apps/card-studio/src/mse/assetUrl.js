@@ -7,6 +7,26 @@ export function mediaUrl(extractedRoot, relPath) {
   return `/media/${root}/${rel}`;
 }
 
+/** Normalizza URL media assoluti/relativi a path same-origin `/media/...`. */
+export function normalizeMediaUrl(url) {
+  if (!url) return "";
+  const s = String(url).trim();
+  if (!s) return "";
+  if (s.startsWith("blob:") || s.startsWith("data:")) return s;
+  try {
+    if (/^https?:\/\//i.test(s)) {
+      const u = new URL(s);
+      return `${u.pathname}${u.search || ""}`;
+    }
+  } catch {
+    // ignore
+  }
+  if (s.startsWith("/media/")) return s;
+  if (s.startsWith("media/")) return `/${s}`;
+  if (s.startsWith("/")) return s;
+  return `/media/${s.replace(/^\/+/, "")}`;
+}
+
 export function findManifestImage(manifest, hints = FRAME_HINTS) {
   if (!manifest) return "";
   if (!Array.isArray(manifest)) {

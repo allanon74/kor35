@@ -80,13 +80,17 @@ export default function MseCardPreview({
           transform: layer.box.angle ? `rotate(${layer.box.angle}deg)` : undefined,
         };
         if (layer.type === "image") {
+          const cover = /^(art|image|illustration|__frame__|card_frame)$/i.test(layer.fieldName);
           return (
             <img
               key={`${layer.fieldName}-${layer.z}-${layer.src}`}
-              className="mse-layer mse-layer-image"
+              className={`mse-layer mse-layer-image${cover ? " mse-layer-cover" : ""}`}
               src={layer.src}
               alt={layer.fieldName}
-              style={boxStyle}
+              style={{
+                ...boxStyle,
+                objectFit: cover ? "cover" : "contain",
+              }}
               draggable={false}
             />
           );
