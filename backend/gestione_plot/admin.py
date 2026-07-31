@@ -499,3 +499,23 @@ class CreazioneGuidataSceltaAdmin(admin.ModelAdmin):
     list_display = ('etichetta', 'passo', 'tipo_azione', 'ordine')
     list_filter = ('tipo_azione', 'passo__flusso')
     search_fields = ('etichetta',)
+
+@admin.register(Missione)
+class MissioneAdmin(admin.ModelAdmin):
+    list_display = ("titolo", "korp", "esclusiva", "tipo_risoluzione", "reward_crediti", "reward_prestigio", "premio_solo_primo", "attiva")
+    list_filter = ("tipo_risoluzione", "attiva", "esclusiva", "premio_solo_primo", "korp")
+    search_fields = ("titolo", "descrizione")
+    readonly_fields = ("sync_id", "updated_at", "created_at")
+
+
+@admin.register(MissioneEvento)
+class MissioneEventoAdmin(admin.ModelAdmin):
+    list_display = ("missione", "evento", "created_at")
+    readonly_fields = ("sync_id", "updated_at", "created_at")
+
+
+@admin.register(MissioneRisoluzione)
+class MissioneRisoluzioneAdmin(admin.ModelAdmin):
+    list_display = ("missione", "evento", "personaggio", "is_primo", "ricompensa_reclamata", "resolved_at")
+    list_filter = ("is_primo", "ricompensa_reclamata")
+    readonly_fields = ("sync_id", "updated_at", "created_at", "resolved_at")
