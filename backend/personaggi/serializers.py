@@ -343,6 +343,7 @@ class CarrieraStaffSerializer(serializers.ModelSerializer):
             "foto",
             "tipo_carriera",
             "bonus_crediti_evento",
+            "fattore_task",
             "tipo_carriera_nome",
             "tipo_carriera_codice",
             "tiers_sblocco_ids",

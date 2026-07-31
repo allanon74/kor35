@@ -2,9 +2,12 @@ import React, { useState, useMemo, useCallback, memo } from 'react';
 import { Calendar, Clock, Edit2, Trash, ChevronDown, ChevronUp, BookOpen, Plus } from 'lucide-react';
 import QuestItem from './QuestItem';
 import { RichTextViewer } from './RichTextDisplay';
+import MissioneResolvePicker from './MissioneResolvePicker';
+import SearchableSelect from './editors/SearchableSelect';
 
-const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAddQuest, questHandlers, onEditTask }) => {
+const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAddQuest, questHandlers, onEditTask, eventoId, onLogout }) => {
     const [showDettagli, setShowDettagli] = useState(false);
+    const [manualPgId, setManualPgId] = useState(null);
 
     // LOGICA DI ORDINAMENTO AGGIUNTA (Memoized)
     // Crea una copia dell'array e ordina per orario_indicativo
@@ -16,6 +19,14 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
             return timeA.localeCompare(timeB);
         });
     }, [giorno.quests]);
+
+    const pgOptions = useMemo(() => {
+        const list = risorse?.png || risorse?.personaggi || [];
+        return (list || []).map((p) => ({
+            value: p.id,
+            label: p.nome || `PG #${p.id}`,
+        }));
+    }, [risorse]);
     
     const formatTime = useCallback((iso) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--", []);
     const formatDate = useCallback((iso) => iso ? new Date(iso).toLocaleDateString([], { day: '2-digit', month: 'long', year: 'numeric' }) : "", []);
@@ -97,9 +108,34 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
                         onSaveNotes={questHandlers.onSaveNotes}
                         onScanQr={questHandlers.onScanQr}
                         onMinigioco={questHandlers.onMinigioco}
+                        eventoId={eventoId}
+                        onLogout={onLogout}
                     />
                 ))}
             </div>
+
+            {isMaster && eventoId ? (
+                <div className="rounded-xl border border-lime-900/50 bg-lime-950/15 p-4 space-y-2">
+                    <h4 className="text-[10px] font-black uppercase tracking-wide text-lime-300">
+                        Task manuali — fine giornata
+                    </h4>
+                    <SearchableSelect
+                        options={[{ value: null, label: '— Personaggio —' }, ...pgOptions]}
+                        value={manualPgId}
+                        onChange={setManualPgId}
+                        placeholder="PG…"
+                        minOptionsForSearch={0}
+                    />
+                    <MissioneResolvePicker
+                        onLogout={onLogout}
+                        tipoRisoluzione="MANUALE"
+                        eventoId={eventoId}
+                        personaggioId={manualPgId}
+                        giornoId={giorno.id}
+                        label="Assegna task manuale"
+                    />
+                </div>
+            ) : null}
         </div>
     );
 };

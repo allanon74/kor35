@@ -1279,7 +1279,7 @@ const PersonaggiStaffManager = ({ onLogout }) => {
                       <div className="rounded-lg border border-gray-700 bg-gray-900/40 p-4 space-y-4">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-violet-300">Impostazioni influencer</h3>
                       <label className="flex items-center gap-2">
-                        <span className="text-gray-400 w-32">Peso influencer</span>
+                        <span className="text-gray-400 w-32">Prestigio</span>
                         <input
                           type="number"
                           min={1}

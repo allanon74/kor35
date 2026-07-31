@@ -978,8 +978,8 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                                 const effettivo = Math.max(base, Number(p.peso_influencer_effettivo) || base);
                                 const bonus = Math.max(0, effettivo - base);
                                 return bonus > 0
-                                    ? ` · social ${base}+${bonus}=${effettivo}`
-                                    : ` · social ${effettivo}`;
+                                    ? ` · Prestigio ${base}+${bonus}=${effettivo}`
+                                    : ` · Prestigio ${effettivo}`;
                             })()}
                             {String(preferredCharacterId || '') === String(p.id) ? ' ★ Preferito' : ''}
                         </option>

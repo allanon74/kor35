@@ -153,6 +153,32 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                             Stato: {evento.started_at && !evento.ended_at ? "IN CORSO" : "NON INIZIATO"}
                         </span>
                     </div>
+                    {Array.isArray(evento.missioni_riepilogo) && evento.missioni_riepilogo.length > 0 ? (
+                        <div className="mt-3 rounded-lg border border-lime-900/40 bg-lime-950/20 px-3 py-2">
+                            <div className="text-[10px] font-black uppercase tracking-wide text-lime-300 mb-2">
+                                Premi task per KORP
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {evento.missioni_riepilogo.map((row) => (
+                                    <div
+                                        key={row.korp_id}
+                                        className="rounded border border-violet-800/40 bg-violet-950/30 px-2 py-1.5 text-[10px] text-violet-100"
+                                    >
+                                        <div className="font-black uppercase text-violet-200">
+                                            {row.korp_nome}
+                                            <span className="ml-1 font-mono text-violet-400">×{row.fattore_task}</span>
+                                        </div>
+                                        <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-gray-300">
+                                            <span>Cr KORP: {Number(row.crediti_korp || 0).toLocaleString('it-IT')}</span>
+                                            <span>Pr KORP: {row.prestigio_korp || 0}</span>
+                                            <span>Cr altre: {Number(row.crediti_non_korp || 0).toLocaleString('it-IT')}</span>
+                                            <span>Pr altre: {row.prestigio_non_korp || 0}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
                     {(evento.iscrizione_apertura ||
                         evento.iscrizione_chiusura ||
                         Number(evento.iscrizione_costo_euro) > 0 ||

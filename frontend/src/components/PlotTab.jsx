@@ -1150,6 +1150,8 @@ const PlotTab = ({ onLogout }) => {
                                     onAddQuest={handleAddQuest}
                                     questHandlers={questHandlers}
                                     onEditTask={handleEditTask}
+                                    eventoId={selectedEvento?.id}
+                                    onLogout={onLogout}
                                 />
                             ))}
                         </div>

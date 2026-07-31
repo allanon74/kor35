@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo } from 'react';
-import { staffGetProposteInValutazione, staffRifiutaProposta, staffApprovaProposta } from '../../api';
+import { staffGetProposteInValutazione, staffRifiutaProposta, staffApprovaProposta, getEventi } from '../../api';
 import GenericHeader from '../GenericHeader';
 import { Eye, X, Check, ClipboardCheck, AlertCircle } from 'lucide-react';
 import RichTextEditor from '../RichTextEditor';
@@ -10,6 +10,8 @@ import { getAuraName } from '../../utils/auraDisplay';
 import InfusioneEditor from './InfusioneEditor';
 import TessituraEditor from './TessituraEditor';
 import CerimonialeEditor from './CerimonialeEditor';
+import MissioneResolvePicker from '../MissioneResolvePicker';
+import SearchableSelect from './SearchableSelect';
 
 const StaffProposalTab = ({ onLogout }) => {
     const [proposals, setProposals] = useState([]);
@@ -19,6 +21,8 @@ const StaffProposalTab = ({ onLogout }) => {
     const [loading, setLoading] = useState(false);
     const [feedback, setFeedback] = useState({ type: '', message: '' });
     const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
+    const [eventiOpts, setEventiOpts] = useState([]);
+    const [taskEventoId, setTaskEventoId] = useState(null);
 
     const loadProposals = useCallback(async () => {
         setLoading(true);
@@ -36,9 +40,26 @@ const StaffProposalTab = ({ onLogout }) => {
         loadProposals();
     }, [loadProposals]);
 
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const ev = await getEventi(onLogout);
+                const rows = Array.isArray(ev) ? ev : ev?.results || [];
+                if (!cancelled) {
+                    setEventiOpts(rows.map((e) => ({ value: e.id, label: e.titolo })));
+                }
+            } catch {
+                if (!cancelled) setEventiOpts([]);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [onLogout]);
+
     const handleOpenDetail = useCallback((prop) => {
         setSelectedProposal(prop);
         setStaffNotes(prop.note_staff || "");
+        setTaskEventoId(null);
         setViewMode('detail');
     }, []);
 
@@ -363,7 +384,25 @@ const StaffProposalTab = ({ onLogout }) => {
                 </div>
 
                 {/* Footer Azioni */}
-                <div className="p-5 border-t border-gray-700 bg-gray-800 rounded-b-2xl flex justify-end gap-4 shadow-lg z-20">
+                <div className="p-5 border-t border-gray-700 bg-gray-800 rounded-b-2xl space-y-3 shadow-lg z-20">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        <SearchableSelect
+                            options={[{ value: null, label: '— Evento per task —' }, ...eventiOpts]}
+                            value={taskEventoId}
+                            onChange={setTaskEventoId}
+                            placeholder="Evento…"
+                            minOptionsForSearch={0}
+                        />
+                        <MissioneResolvePicker
+                            onLogout={onLogout}
+                            tipoRisoluzione="TECNICA"
+                            eventoId={taskEventoId}
+                            personaggioId={selectedProposal?.personaggio || selectedProposal?.personaggio_id}
+                            propostaTecnicaId={selectedProposal?.id}
+                            label="Questa tecnica risolve task"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-4">
                     <button 
                         onClick={() => setConfirmRejectOpen(true)}
                         className="bg-red-900/30 border border-red-700 text-red-300 hover:bg-red-900/50 px-6 py-3 rounded-xl flex items-center gap-2 text-sm font-bold uppercase transition-all"
@@ -377,6 +416,7 @@ const StaffProposalTab = ({ onLogout }) => {
                     >
                         <Check size={18} /> Approva & Crea Tecnica
                     </button>
+                    </div>
                 </div>
             </div>
             <ConfirmDialog

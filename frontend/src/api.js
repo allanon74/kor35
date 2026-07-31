@@ -1932,6 +1932,50 @@ export const terminaEvento = (id, onLogout) =>
 export const reportRicompenseEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/report_ricompense/`, { method: 'GET' }, onLogout);
 
+// --- TASK / MISSIONI ---
+export const getMissioni = (params = {}, onLogout) => {
+  const qs = new URLSearchParams();
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  });
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return fetchAuthenticated(`/api/plot/api/missioni/${suffix}`, { method: 'GET' }, onLogout);
+};
+export const getMissione = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/missioni/${id}/`, { method: 'GET' }, onLogout);
+export const createMissione = (data, onLogout) =>
+  fetchAuthenticated('/api/plot/api/missioni/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
+export const updateMissione = (id, data, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/missioni/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
+export const deleteMissione = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/missioni/${id}/`, { method: 'DELETE' }, onLogout);
+export const getMissioniMie = (personaggioId, onLogout) =>
+  fetchAuthenticated(
+    `/api/plot/api/missioni/mie/?personaggio=${encodeURIComponent(personaggioId)}`,
+    { method: 'GET' },
+    onLogout,
+  );
+export const getMissioniRiepilogoEvento = (eventoId, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/missioni/riepilogo-evento/${eventoId}/`, { method: 'GET' }, onLogout);
+export const assegnaMissioneRisoluzione = (data, onLogout) =>
+  fetchAuthenticated('/api/plot/api/missioni/assegna-risoluzione/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, onLogout);
+export const claimMissioneRicompensa = (risoluzioneId, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/missioni/claim/${risoluzioneId}/`, {
+    method: 'POST',
+    body: '{}',
+  }, onLogout);
+export const getMissioniRisoluzioni = (params = {}, onLogout) => {
+  const qs = new URLSearchParams();
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  });
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return fetchAuthenticated(`/api/plot/api/missioni-risoluzioni/${suffix}`, { method: 'GET' }, onLogout);
+};
+
 export const createVocePortare = (data, onLogout) =>
   fetchAuthenticated('/api/plot/api/voci-portare/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateVocePortare = (id, data, onLogout) =>

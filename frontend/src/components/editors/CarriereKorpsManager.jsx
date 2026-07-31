@@ -146,6 +146,15 @@ function CarrieraModal({ isOpen, onClose, onSave, value, tipi, tiersSelezionabil
             value={form.bonus_crediti_evento ?? 0}
             onChange={(e) => setForm({ ...form, bonus_crediti_evento: e.target.value })}
           />
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
+            placeholder="Fattore task KORP (es. 2 = doppie ricompense)"
+            value={form.fattore_task ?? 1}
+            onChange={(e) => setForm({ ...form, fattore_task: e.target.value })}
+          />
           <div>
             <div className="text-xs text-gray-400 mb-2">Tier abilità sbloccabili per i membri</div>
             <SearchableSelect
@@ -359,7 +368,7 @@ function CaricaModal({ isOpen, onClose, onSave, value, carriereOptions, statusMe
             type="number"
             min={0}
             className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-            placeholder="Bonus peso influencer InstaFame"
+            placeholder="Bonus Prestigio"
             value={form.bonus_peso_influencer ?? 0}
             onChange={(e) => setForm({ ...form, bonus_peso_influencer: e.target.value })}
           />
@@ -732,6 +741,7 @@ export default function CarriereKorpsManager({ onLogout }) {
         tipo: form.tipo || 'T3',
         tipo_carriera: form.tipo_carriera || form.tipo_carriera_id,
         bonus_crediti_evento: form.bonus_crediti_evento ?? 0,
+        fattore_task: form.fattore_task ?? 1,
         tiers_sblocco_ids: form.tiers_sblocco_ids || [],
         abilita_default_ids: form.abilita_default_ids || [],
       };

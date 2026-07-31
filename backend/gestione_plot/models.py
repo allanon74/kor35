@@ -1397,3 +1397,186 @@ class IscrizioneEventoPagamentoOpzione(SyncableModel, models.Model):
 
     def __str__(self):
         return f"{self.pagamento_id} — {self.opzione_id}"
+
+
+
+# --- TASK / MISSIONI GIOCATORI ---
+
+class Missione(SyncableModel, models.Model):
+    """
+    Task/missione risolvibile dai giocatori per Crediti (Cr) e/o Prestigio (Pr).
+    Può essere legata a una KORP (moltiplicatore fattore_task) o generica.
+    """
+
+    TIPO_TECNICA = "TECNICA"
+    TIPO_POST_SOCIAL = "POST_SOCIAL"
+    TIPO_QUEST = "QUEST"
+    TIPO_MANUALE = "MANUALE"
+    TIPO_RISOLUZIONE_CHOICES = [
+        (TIPO_TECNICA, "Tecnica"),
+        (TIPO_POST_SOCIAL, "Post Social"),
+        (TIPO_QUEST, "Quest"),
+        (TIPO_MANUALE, "Manuale"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    titolo = models.CharField(max_length=200)
+    descrizione = models.TextField(blank=True)
+    korp = models.ForeignKey(
+        "personaggi.Carriera",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="missioni",
+        limit_choices_to={"tipo_carriera__codice": "korp"},
+        help_text="Se valorizzato, la task è di quella KORP (ricompense maggiorate per i membri).",
+    )
+    reward_crediti = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        verbose_name="Premio Crediti (base)",
+    )
+    reward_prestigio = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Premio Prestigio (base)",
+    )
+    tipo_risoluzione = models.CharField(
+        max_length=20,
+        choices=TIPO_RISOLUZIONE_CHOICES,
+        default=TIPO_MANUALE,
+    )
+    premio_solo_primo = models.BooleanField(
+        default=False,
+        verbose_name="Premio solo al primo",
+        help_text="Se attivo, solo il primo risolvitore riceve il premio (gli altri possono essere segnati senza ricompensa).",
+    )
+    malus_non_primo_crediti = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        verbose_name="Malus Crediti se non primo",
+        help_text="Sottratto al premio Cr se non sei il primo (ignorato se premio solo al primo).",
+    )
+    malus_non_primo_prestigio = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Malus Prestigio se non primo",
+    )
+    bonus_successive_crediti = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        verbose_name="Bonus Crediti risoluzioni successive",
+        help_text="Aggiunto al premio Cr dal secondo risolvitore in poi.",
+    )
+    bonus_successive_prestigio = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Bonus Prestigio risoluzioni successive",
+    )
+    attiva = models.BooleanField(default=True)
+    ordine = models.PositiveIntegerField(default=0)
+    eventi = models.ManyToManyField(
+        Evento,
+        related_name="missioni",
+        blank=True,
+        through="MissioneEvento",
+    )
+
+    class Meta:
+        verbose_name = "Task (missione)"
+        verbose_name_plural = "Tasks (missioni)"
+        ordering = ["ordine", "titolo"]
+
+    def __str__(self):
+        korp_lbl = f" [{self.korp.nome}]" if self.korp_id else ""
+        return f"{self.titolo}{korp_lbl}"
+
+
+class MissioneEvento(SyncableModel, models.Model):
+    """Associazione task ↔ evento (syncabile)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    missione = models.ForeignKey(Missione, on_delete=models.CASCADE, related_name="evento_links")
+    evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="missione_links")
+
+    class Meta:
+        verbose_name = "Task–Evento"
+        verbose_name_plural = "Task–Eventi"
+        constraints = [
+            models.UniqueConstraint(fields=["missione", "evento"], name="uq_missione_evento"),
+        ]
+
+    def __str__(self):
+        return f"{self.missione_id} ↔ {self.evento_id}"
+
+
+class MissioneRisoluzione(SyncableModel, models.Model):
+    """
+    Assegnazione di risoluzione: un PG può risolvere una data task
+    una sola volta per ogni evento a cui la task è associata.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    missione = models.ForeignKey(Missione, on_delete=models.CASCADE, related_name="risoluzioni")
+    evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="risoluzioni_missioni")
+    personaggio = models.ForeignKey(
+        Personaggio,
+        on_delete=models.CASCADE,
+        related_name="risoluzioni_missioni",
+    )
+    resolved_at = models.DateTimeField(auto_now_add=True)
+    is_primo = models.BooleanField(default=False)
+    reward_crediti = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+    reward_prestigio = models.PositiveIntegerField(default=0)
+    ricompensa_reclamata = models.BooleanField(default=False)
+    reclamata_at = models.DateTimeField(null=True, blank=True)
+    proposta_tecnica = models.ForeignKey(
+        "personaggi.PropostaTecnica",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="missioni_risolte",
+    )
+    social_post = models.ForeignKey(
+        "social.SocialPost",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="missioni_risolte",
+    )
+    quest = models.ForeignKey(
+        "Quest",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="missioni_risolte",
+    )
+    giorno = models.ForeignKey(
+        "GiornoEvento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="missioni_manuali_risolte",
+        help_text="Giorno plot per risoluzioni manuali.",
+    )
+    note = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Risoluzione task"
+        verbose_name_plural = "Risoluzioni task"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["missione", "evento", "personaggio"],
+                name="uq_missione_evento_personaggio",
+            ),
+        ]
+        ordering = ["resolved_at"]
+
+    def __str__(self):
+        return f"{self.missione_id} / {self.evento_id} → PG {self.personaggio_id}"
