@@ -7,6 +7,7 @@ from .models import (
     ConfigurazioneSito, LinkSocial, PayPalImpostazioniGlobali, IscrizioneEventoPagamento,
     IscrizioneEventoPagamentoOpzione, EventoIscrizioneOpzione, EventoPremioPersonaggio,
     CreazioneGuidataFlusso, CreazioneGuidataPasso, CreazioneGuidataScelta,
+    Missione, MissioneEvento, MissioneRisoluzione,
 )
 from django_summernote.admin import SummernoteModelAdmin as SModelAdmin
 

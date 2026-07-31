@@ -24,6 +24,7 @@ import {
 import RichTextEditor from './RichTextEditor';
 import BuildVersions from './BuildVersions';
 import StaffCostumePhotosSection from './StaffCostumePhotosSection';
+import MissioniPersonaggioPanel from './MissioniPersonaggioPanel';
 
 const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const navigate = useNavigate();
@@ -650,9 +651,9 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                     return (
                                         <div
                                             className="mt-1 font-mono text-[10px] text-fuchsia-300/90"
-                                            title="Peso influencer InstaFame (base + bonus cariche attive)"
+                                            title="Prestigio (base + bonus cariche attive)"
                                         >
-                                            Peso social: {base}
+                                            Prestigio: {base}
                                             {bonusCariche > 0 ? ` + ${bonusCariche} cariche` : ''} = {effettivo}
                                         </div>
                                     );
@@ -736,6 +737,13 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                     })}
                   </div>
                 ))}
+
+                {selectedCharacterId ? (
+                    <MissioniPersonaggioPanel
+                        personaggioId={selectedCharacterId}
+                        onLogout={onLogout}
+                    />
+                ) : null}
             </div>
 
             {/* Conferma azioni staff (reset / morte / rivivere) */}
@@ -755,7 +763,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             {staffConfirm.kind === 'kill' && 'Segnare come morto'}
                             {staffConfirm.kind === 'revive' && 'Rivivere personaggio'}
                             {staffConfirm.kind === 'delete' && 'Archiviare personaggio'}
-                            {staffConfirm.kind === 'peso_influencer' && 'Peso influencer InstaFame'}
+                            {staffConfirm.kind === 'peso_influencer' && 'Prestigio'}
                         </h3>
                         <p className="mt-3 text-sm leading-relaxed text-gray-300">
                             {staffConfirm.kind === 'reset' && (
@@ -783,8 +791,8 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                             )}
                             {staffConfirm.kind === 'peso_influencer' && (
                                 <>
-                                    Hai modificato il peso influencer di <strong className="text-white">«{formData.nome}»</strong>.
-                                    Vuoi rigenerare anche i like già messi da questo personaggio con il nuovo peso?
+                                    Hai modificato il Prestigio di <strong className="text-white">«{formData.nome}»</strong>.
+                                    Vuoi rigenerare anche i like già messi da questo personaggio con il nuovo valore?
                                 </>
                             )}
                         </p>
@@ -954,7 +962,7 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                                         Abilita uso smartwatch per questo personaggio
                                     </label>
                                     <div>
-                                        <label className="block text-xs text-gray-500 mb-1">Peso influencer InstaFame</label>
+                                        <label className="block text-xs text-gray-500 mb-1">Prestigio</label>
                                         <input
                                             type="number"
                                             min={1}

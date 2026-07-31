@@ -51,9 +51,10 @@ const readPlotRisorseCache = (campaignSlug) => {
 const EMPTY_RISORSE = { png: [], templates: [], manifesti: [], inventari: [], staff: [], a_vista: [] };
 
 const PlotTab = ({ onLogout }) => {
-    const { isCampaignMaster, activeCampaign } = useCharacter();
+    const { isCampaignMaster, isCampaignStaffer, activeCampaign } = useCharacter();
     const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
     const canManagePlot = isCampaignMaster;
+    const canResolveTasks = isCampaignMaster || isCampaignStaffer;
     const [eventi, setEventi] = useState([]);
     const [selectedEvento, setSelectedEvento] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -1150,6 +1151,9 @@ const PlotTab = ({ onLogout }) => {
                                     onAddQuest={handleAddQuest}
                                     questHandlers={questHandlers}
                                     onEditTask={handleEditTask}
+                                    eventoId={selectedEvento?.id}
+                                    onLogout={onLogout}
+                                    canResolveTasks={canResolveTasks}
                                 />
                             ))}
                         </div>

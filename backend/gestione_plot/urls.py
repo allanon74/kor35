@@ -38,6 +38,7 @@ from .views import(
     download_wiki_manual_pdf, generate_wiki_manual_snapshot, download_latest_wiki_manual_pdf,
     download_latest_manuale_pdf, list_public_wiki_manuali,
                    )
+from .missioni_views import MissioneViewSet, MissioneRisoluzioneViewSet
 from personaggi.views_staff import(
     InfusioneMasterViewSet, 
     TessituraMasterViewSet, 
@@ -54,6 +55,8 @@ router.register(r'viste-setup', QuestVistaViewSet)
 router.register(r'png-assegnati', PngAssegnatoViewSet)
 router.register(r'fasi', QuestFaseViewSet)
 router.register(r'tasks', QuestTaskViewSet)
+router.register(r'missioni', MissioneViewSet, basename='missioni')
+router.register(r'missioni-risoluzioni', MissioneRisoluzioneViewSet, basename='missioni-risoluzioni')
 
 router.register(r'staff/mostri-templates', MostroTemplateViewSet, basename='mostri-templates') # <--- NUOVA ROUTE
 router.register(r'staff/infusioni', InfusioneMasterViewSet, basename='master-infusioni')

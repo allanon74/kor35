@@ -56,6 +56,7 @@ import InstafameNicknameInput from './InstafameNicknameInput';
 import ProfileImageField from './ProfileImageField';
 import PersonaggioEraPrefetturaFields from './PersonaggioEraPrefetturaFields';
 import { formatCount } from '../utils/formatCount';
+import MissioneResolvePicker from './MissioneResolvePicker';
 import { isStoryActive, storyExpiresAtMs } from '../utils/story';
 import { HASHTAG_INLINE_REGEX, normalizeHashtagFilter } from '../utils/hashtags';
 import { findActiveMention, replaceActiveMention } from '../utils/instafameMentions';
@@ -2431,6 +2432,18 @@ const SocialTab = ({ onLogout, onOpenMessages }) => {
                 </>
               )}
             </div>
+            {isAdmin && (post.evento || post.evento_id) ? (
+              <div className="mt-2">
+                <MissioneResolvePicker
+                  onLogout={onLogout}
+                  tipoRisoluzione="POST_SOCIAL"
+                  eventoId={post.evento?.id || post.evento || post.evento_id}
+                  personaggioId={post.autore?.id || post.autore}
+                  socialPostId={post.id}
+                  label="Questo post risolve task"
+                />
+              </div>
+            ) : null}
 
             <div className="pt-2 border-t border-gray-700 space-y-2">
               <div className="flex gap-2 items-end">

@@ -13,6 +13,7 @@ from django.db.models import Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.conf import settings
@@ -1746,6 +1747,17 @@ class Carriera(Tier):
         verbose_name="Bonus crediti evento",
         help_text="Bonus crediti assegnato a ogni evento iniziato ai membri attivi di questa carriera/KORP.",
     )
+    fattore_task = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("1.00"),
+        validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Fattore task (KORP)",
+        help_text=(
+            "Moltiplicatore ricompense (Crediti/Prestigio) delle task di questa KORP "
+            "per i membri attivi (es. 2.00 = doppie). Rilevante se tipo = korp."
+        ),
+    )
     abilita = models.ManyToManyField(
         "Abilita",
         through="CarrieraAbilita",
@@ -1829,7 +1841,8 @@ class Carica(A_modello):
     )
     bonus_peso_influencer = models.PositiveIntegerField(
         default=0,
-        help_text="Bonus al peso influencer InstaFame per i membri con questa carica.",
+        verbose_name="Bonus Prestigio",
+        help_text="Bonus al Prestigio (ex peso social) per i membri con questa carica.",
     )
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)
@@ -4583,8 +4596,11 @@ class Personaggio(Inventario):
     watch_enabled = models.BooleanField(default=False, db_index=True)
     peso_influencer = models.PositiveIntegerField(
         default=1,
-        verbose_name="Peso influencer InstaFame",
-        help_text="Peso base per like simulati su InstaFame (1 = minimo). Le cariche attive possono aumentarlo.",
+        verbose_name="Prestigio",
+        help_text=(
+            "Prestigio del personaggio (conosciuto / influenza social). "
+            "Usato per like InstaFame (1 = minimo). Le cariche attive e le task possono aumentarlo."
+        ),
     )
     badge_instafame = models.CharField(
         max_length=8,
@@ -4680,6 +4696,19 @@ class Personaggio(Inventario):
     
     def modifica_pc(self, i, d): 
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+
+    def modifica_prestigio(self, delta, descrizione=""):
+        """Variazione Prestigio (peso_influencer). Minimo 1. Ledger completo → v2."""
+        delta = int(delta or 0)
+        if delta == 0:
+            return self.peso_influencer
+        attuale = max(1, int(self.peso_influencer or 1))
+        nuovo = max(1, attuale + delta)
+        self.peso_influencer = nuovo
+        self.save(update_fields=["peso_influencer", "updated_at"])
+        segno = "+" if delta >= 0 else ""
+        self.aggiungi_log(f"Prestigio {segno}{delta} (ora {nuovo}) — {descrizione or 'variazione Prestigio'}")
+        return nuovo
 
     def modifica_riserva_scommesse(self, delta, motivo):
         """Variazione riserva scommesse (staff); non scrive movimenti crediti separati."""
