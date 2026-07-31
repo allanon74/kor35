@@ -76,14 +76,13 @@ export default function MissioniManager({ onLogout }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // SearchableSelect usa di default valueKey=id / labelKey=nome (non value/label).
   const korpOptions = useMemo(
-    () => [
-      { value: null, label: '— Nessuna (generica) —' },
-      ...korps.map((k) => ({
-        value: k.id,
-        label: `${k.nome}${k.fattore_task != null ? ` (×${k.fattore_task})` : ''}`,
+    () =>
+      korps.map((k) => ({
+        id: k.id,
+        nome: `${k.nome || `KORP #${k.id}`}${k.fattore_task != null ? ` (×${k.fattore_task})` : ''}`,
       })),
-    ],
     [korps],
   );
 
@@ -129,10 +128,14 @@ export default function MissioniManager({ onLogout }) {
     setSaving(true);
     setError('');
     try {
+      const korpId =
+        form.korp === null || form.korp === undefined || form.korp === ''
+          ? null
+          : Number(form.korp);
       const payload = {
         titolo: form.titolo.trim(),
         descrizione: form.descrizione || '',
-        korp: form.korp || null,
+        korp: Number.isFinite(korpId) ? korpId : null,
         esclusiva: !!form.esclusiva,
         reward_crediti: form.reward_crediti ?? 0,
         reward_prestigio: Math.max(0, parseInt(form.reward_prestigio, 10) || 0),
@@ -211,7 +214,12 @@ export default function MissioniManager({ onLogout }) {
               <input className={staffInputClass()} value={form.titolo} onChange={(e) => setForm({ ...form, titolo: e.target.value })} />
             </LabeledField>
             <LabeledField label="KORP">
-              <SearchableSelect options={korpOptions} value={form.korp} onChange={(v) => setForm({ ...form, korp: v, esclusiva: v ? form.esclusiva : false })} placeholder="KORP…" />
+              <SearchableSelect
+                options={korpOptions}
+                value={form.korp}
+                onChange={(v) => setForm({ ...form, korp: v, esclusiva: v ? form.esclusiva : false })}
+                placeholder="— Nessuna (generica) —"
+              />
             </LabeledField>
             <LabeledField label="Tipo risoluzione">
               <select className={staffInputClass()} value={form.tipo_risoluzione} onChange={(e) => setForm({ ...form, tipo_risoluzione: e.target.value })}>
