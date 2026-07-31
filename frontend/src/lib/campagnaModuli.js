@@ -6,6 +6,8 @@
 export const MODULO_ACCESSO_OFF = 'OFF';
 export const MODULO_ACCESSO_TEST = 'TEST';
 export const MODULO_ACCESSO_OPEN = 'OPEN';
+/** Valore di scrittura: rimuove l'override e torna al default del registry. */
+export const MODULO_ACCESSO_DEFAULT = 'DEFAULT';
 
 export const MODULO_ACCESSO_OPTIONS = [
   { value: MODULO_ACCESSO_OFF, label: 'Disattivo' },
@@ -64,6 +66,31 @@ export function canAccessModuloMode(modo, flags = {}) {
     flags.isGlobalSuperuser ||
     flags.isPngStaff
   );
+}
+
+/** True se la campagna ha un valore esplicito per il modulo (non il default registry). */
+export function isModuloOverride(moduliRawMap, key) {
+  const raw = moduliRawMap && typeof moduliRawMap === 'object' ? moduliRawMap : {};
+  return (
+    raw[key] === MODULO_ACCESSO_OFF ||
+    raw[key] === MODULO_ACCESSO_TEST ||
+    raw[key] === MODULO_ACCESSO_OPEN
+  );
+}
+
+export function moduloDefault(key, registry = CAMPAGNA_MODULI_REGISTRY) {
+  return registry.find((r) => r.key === key)?.default || MODULO_ACCESSO_OFF;
+}
+
+/** Tab giocatore e tool staff impattati da un modulo (per la UI staff). */
+export function moduloImpatti(key) {
+  const staffTools = Object.entries(STAFF_TOOL_TO_MODULO)
+    .filter(([, k]) => k === key)
+    .map(([toolId]) => toolId);
+  const playerTabs = Object.entries(PLAYER_TAB_TO_MODULO)
+    .filter(([, k]) => k === key)
+    .map(([tabId]) => tabId);
+  return { staffTools, playerTabs };
 }
 
 export function staffToolModuloEnabled(moduliMap, toolId) {

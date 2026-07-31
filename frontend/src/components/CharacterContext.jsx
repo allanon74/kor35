@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { 
   getMessages, 
@@ -108,16 +108,10 @@ export const CharacterProvider = ({ children, onLogout }) => {
     activeCampaignRole === 'HEAD_MASTER';
   const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
   const canUseWizardTest = isGlobalSuperuser || isDjangoStaff || isCampaignStaffer;
-  const moduliAccesso = activeCampaignMeta?.moduli_accesso || {};
-  const canAccessModulo = useCallback((key, { isPngStaff = false } = {}) => {
-    const modo = getModuloAccesso(moduliAccesso, key);
-    return canAccessModuloMode(modo, {
-      isCampaignStaffer,
-      isDjangoStaff,
-      isGlobalSuperuser,
-      isPngStaff,
-    });
-  }, [moduliAccesso, isCampaignStaffer, isDjangoStaff, isGlobalSuperuser]);
+  const moduliAccesso = useMemo(
+    () => activeCampaignMeta?.moduli_accesso || {},
+    [activeCampaignMeta],
+  );
 
   const [viewAll, setViewAll] = useState(false);
   const [giocoEventoStato, setGiocoEventoStato] = useState({
@@ -241,6 +235,37 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isLoading: isLoadingDetail,
     refetch: refetchCharacterDetail
   } = usePersonaggioDetail(selectedCharacterId, onLogout);
+
+  /**
+   * PnG non giocante: come lato API, vede i moduli in TEST anche senza ruolo staff.
+   * Il dettaglio è la fonte più affidabile; in fallback si usa la lista personaggi.
+   */
+  const isPngStaffAttivo = useMemo(() => {
+    const flagGiocante = (row) => {
+      if (!row || typeof row !== 'object') return null;
+      if (typeof row.tipologia_giocante === 'boolean') return row.tipologia_giocante;
+      if (typeof row.giocante === 'boolean') return row.giocante;
+      if (typeof row.tipologia?.giocante === 'boolean') return row.tipologia.giocante;
+      return null;
+    };
+    const fromDetail = flagGiocante(selectedCharacterData);
+    if (fromDetail !== null) return !fromDetail;
+    const row = Array.isArray(personaggiList)
+      ? personaggiList.find((p) => String(p?.id) === String(selectedCharacterId))
+      : null;
+    const fromList = flagGiocante(row);
+    return fromList === null ? false : !fromList;
+  }, [selectedCharacterData, personaggiList, selectedCharacterId]);
+
+  const canAccessModulo = useCallback((key, { isPngStaff } = {}) => {
+    const modo = getModuloAccesso(moduliAccesso, key);
+    return canAccessModuloMode(modo, {
+      isCampaignStaffer,
+      isDjangoStaff,
+      isGlobalSuperuser,
+      isPngStaff: isPngStaff === undefined ? isPngStaffAttivo : !!isPngStaff,
+    });
+  }, [moduliAccesso, isCampaignStaffer, isDjangoStaff, isGlobalSuperuser, isPngStaffAttivo]);
 
   /** Aggiorna IndexedDB (snapshot di gioco) dopo ogni sync online del personaggio. */
   useEffect(() => {

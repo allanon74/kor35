@@ -17,7 +17,10 @@ import {
 } from '../../api';
 import {
   CAMPAGNA_MODULI_REGISTRY,
+  MODULO_ACCESSO_DEFAULT,
   MODULO_ACCESSO_OPTIONS,
+  isModuloOverride,
+  moduloImpatti,
 } from '../../lib/campagnaModuli';
 
 const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
@@ -44,6 +47,35 @@ const modoBadgeClass = (modo) => {
   if (modo === 'OPEN') return 'text-emerald-300 border-emerald-700 bg-emerald-900/30';
   if (modo === 'TEST') return 'text-amber-200 border-amber-700 bg-amber-900/30';
   return 'text-gray-400 border-gray-600 bg-gray-900/50';
+};
+
+const STAFF_TOOL_LABELS = {
+  tasks: 'Tasks',
+  pilotaggio: 'Pilotaggio',
+  'carte-collezionabili': 'Carte collezionabili',
+  scommesse: 'Scommesse',
+  'negozi-mercante': 'Negozi mercante',
+  'creazione-guidata': 'Creazione guidata',
+  'social-report': 'Report social',
+};
+
+const PLAYER_TAB_LABELS = {
+  scommesse: 'Scommesse',
+  carte: 'Carte',
+  negozi: 'Negozi',
+  social: 'Social',
+};
+
+const impattiTesto = (key) => {
+  const { staffTools, playerTabs } = moduloImpatti(key);
+  const parti = [];
+  if (playerTabs.length) {
+    parti.push(`Tab giocatore: ${playerTabs.map((t) => PLAYER_TAB_LABELS[t] || t).join(', ')}`);
+  }
+  if (staffTools.length) {
+    parti.push(`Tool staff: ${staffTools.map((t) => STAFF_TOOL_LABELS[t] || t).join(', ')}`);
+  }
+  return parti.join(' · ');
 };
 
 const CampaignManager = ({ onLogout }) => {
@@ -107,7 +139,9 @@ const CampaignManager = ({ onLogout }) => {
   }, [campagne]);
 
   const selectedModuliCampagna = campagneById[moduliCampagnaId] || null;
+  // moduli_accesso = mappa effettiva (default + bridge carte); _raw = solo override espliciti.
   const selectedModuliMap = selectedModuliCampagna?.moduli_accesso || {};
+  const selectedModuliRaw = selectedModuliCampagna?.moduli_accesso_raw || {};
 
   const filteredCampagne = useMemo(() => {
     const q = filterCampagne.trim().toLowerCase();
@@ -153,6 +187,10 @@ const CampaignManager = ({ onLogout }) => {
     if (!moduliCampagnaId) return;
     executeAction(() => staffUpdateCampagna(moduliCampagnaId, { moduli_accesso: { [key]: modo } }, onLogout));
   }, [executeAction, moduliCampagnaId, onLogout]);
+
+  const resetModulo = useCallback((key) => {
+    updateModulo(key, MODULO_ACCESSO_DEFAULT);
+  }, [updateModulo]);
 
   if (loading) return <div className="p-6 text-gray-300">Caricamento campagne...</div>;
 
@@ -214,18 +252,25 @@ const CampaignManager = ({ onLogout }) => {
                 Il modulo Carte resta allineato alla config carte.
               </p>
             </div>
-            <select
-              className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm min-w-[12rem]"
-              value={moduliCampagnaId}
-              onChange={(e) => setModuliCampagnaId(e.target.value)}
-              disabled={saving || !campagne.length}
-              aria-label="Campagna per i moduli"
-            >
-              {!campagne.length && <option value="">Nessuna campagna</option>}
-              {campagne.map((c) => (
-                <option key={c.id} value={c.id}>{c.nome}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              {saving && (
+                <span className="text-[11px] uppercase tracking-wide text-cyan-300" role="status">
+                  Salvataggio...
+                </span>
+              )}
+              <select
+                className="bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-sm min-w-48"
+                value={moduliCampagnaId}
+                onChange={(e) => setModuliCampagnaId(e.target.value)}
+                disabled={saving || !campagne.length}
+                aria-label="Campagna per i moduli"
+              >
+                {!campagne.length && <option value="">Nessuna campagna</option>}
+                {campagne.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+            </div>
           </div>
           {!selectedModuliCampagna ? (
             <p className="text-sm text-gray-500">Seleziona una campagna.</p>
@@ -233,6 +278,8 @@ const CampaignManager = ({ onLogout }) => {
             <div className="space-y-2">
               {moduliRegistry.map((row) => {
                 const modo = selectedModuliMap[row.key] || row.default || 'OFF';
+                const override = isModuloOverride(selectedModuliRaw, row.key);
+                const impatti = impattiTesto(row.key);
                 return (
                   <div
                     key={row.key}
@@ -241,11 +288,27 @@ const CampaignManager = ({ onLogout }) => {
                     <div className="md:col-span-5">
                       <div className="text-sm font-semibold">{row.label}</div>
                       <div className="text-xs text-gray-500">{row.descrizione || row.key}</div>
+                      {impatti && <div className="text-[11px] text-gray-600 mt-0.5">{impatti}</div>}
                     </div>
-                    <div className="md:col-span-3">
+                    <div className="md:col-span-3 flex flex-wrap items-center gap-1.5">
                       <span className={`inline-block text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded border ${modoBadgeClass(modo)}`}>
                         {modo}
                       </span>
+                      {override ? (
+                        <button
+                          type="button"
+                          className="text-[10px] uppercase tracking-wide font-bold px-2 py-0.5 rounded border border-cyan-800 text-cyan-300 bg-cyan-900/20 hover:bg-cyan-900/40 disabled:opacity-50"
+                          disabled={saving}
+                          onClick={() => resetModulo(row.key)}
+                          title={`Rimuove l'override e torna al default (${row.default})`}
+                        >
+                          Ripristina default
+                        </button>
+                      ) : (
+                        <span className="text-[10px] uppercase tracking-wide text-gray-500">
+                          default
+                        </span>
+                      )}
                     </div>
                     <div className="md:col-span-4">
                       <select
@@ -259,6 +322,11 @@ const CampaignManager = ({ onLogout }) => {
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
+                      {row.key === 'carte' && (
+                        <p className="text-[11px] text-gray-500 mt-1">
+                          Sincronizzato con la config Carte collezionabili.
+                        </p>
+                      )}
                     </div>
                   </div>
                 );

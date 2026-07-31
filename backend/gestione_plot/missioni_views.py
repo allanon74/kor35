@@ -16,6 +16,7 @@ from rest_framework.serializers import (
     ValidationError,
 )
 
+from personaggi.campagna_moduli import MODULO_TASKS, ModuloStaffGateMixin
 from personaggi.models import Personaggio, PropostaTecnica
 
 from .models import Evento, GiornoEvento, Missione, MissioneEvento, MissioneRisoluzione, Quest
@@ -126,7 +127,8 @@ class AssegnaRisoluzioneSerializer(Serializer):
     note = CharField(required=False, allow_blank=True, default="")
 
 
-class MissioneViewSet(viewsets.ModelViewSet):
+class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_TASKS
     queryset = Missione.objects.all().select_related("korp").prefetch_related("eventi")
     serializer_class = MissioneSerializer
 
@@ -160,10 +162,7 @@ class MissioneViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="mie")
     def mie(self, request):
-        from personaggi.campagna_moduli import (
-            MODULO_TASKS,
-            assert_personaggio_puo_accedere_modulo,
-        )
+        from personaggi.campagna_moduli import modulo_gate_response
 
         pg_id = request.query_params.get("personaggio")
         if not pg_id:
@@ -173,15 +172,9 @@ class MissioneViewSet(viewsets.ModelViewSet):
         is_staff = _is_campaign_staff_plus(request)
         if not is_staff and pg.proprietario_id != user.id:
             return Response({"detail": "Non autorizzato."}, status=403)
-        try:
-            assert_personaggio_puo_accedere_modulo(pg, MODULO_TASKS, user=user)
-        except Exception as exc:
-            from django.core.exceptions import ValidationError as DjangoValidationError
-
-            if isinstance(exc, DjangoValidationError):
-                msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
-                return Response({"detail": msg}, status=403)
-            raise
+        gate = modulo_gate_response(pg, MODULO_TASKS, user=user, error_key="detail")
+        if gate:
+            return gate
         return Response(lista_missioni_per_personaggio(pg))
 
     @action(detail=False, methods=["get"], url_path=r"riepilogo-evento/(?P<evento_id>[^/.]+)")
@@ -195,10 +188,7 @@ class MissioneViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="assegna-risoluzione")
     def assegna(self, request):
-        from personaggi.campagna_moduli import (
-            MODULO_TASKS,
-            assert_personaggio_puo_accedere_modulo,
-        )
+        from personaggi.campagna_moduli import modulo_gate_response
 
         ser = AssegnaRisoluzioneSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -206,15 +196,11 @@ class MissioneViewSet(viewsets.ModelViewSet):
         missione = get_object_or_404(Missione, pk=data["missione_id"])
         evento = get_object_or_404(Evento, pk=data["evento_id"])
         personaggio = get_object_or_404(Personaggio, pk=data["personaggio_id"])
-        try:
-            assert_personaggio_puo_accedere_modulo(personaggio, MODULO_TASKS, user=request.user)
-        except Exception as exc:
-            from django.core.exceptions import ValidationError as DjangoValidationError
-
-            if isinstance(exc, DjangoValidationError):
-                msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
-                return Response({"detail": msg}, status=403)
-            raise
+        gate = modulo_gate_response(
+            personaggio, MODULO_TASKS, user=request.user, error_key="detail"
+        )
+        if gate:
+            return gate
         kwargs = {"note": data.get("note") or ""}
         if data.get("proposta_tecnica_id"):
             kwargs["proposta_tecnica"] = get_object_or_404(PropostaTecnica, pk=data["proposta_tecnica_id"])

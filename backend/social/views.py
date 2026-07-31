@@ -72,6 +72,24 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+def gate_modulo_social(request, personaggio):
+    """
+    Modulo campagna «social»: 403 se OFF, o se TEST e il personaggio non è
+    staff/master della campagna (né PnG non giocante).
+    """
+    from rest_framework.exceptions import PermissionDenied
+
+    from personaggi.campagna_moduli import MODULO_SOCIAL, modulo_accesso_error
+
+    if not personaggio:
+        return None
+    user = getattr(request, "user", None)
+    msg = modulo_accesso_error(personaggio, MODULO_SOCIAL, user=user)
+    if msg:
+        raise PermissionDenied(msg)
+    return personaggio
+
+
 def get_evento_in_corso(reference_dt=None):
     now = reference_dt or timezone.now()
     manuale = (
@@ -161,6 +179,7 @@ class SocialStoryViewSet(viewsets.ModelViewSet):
             return None
         requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
         personaggio = resolve_active_personaggio(self.request.user, requested, request=self.request)
+        gate_modulo_social(self.request, personaggio)
         if personaggio:
             setattr(personaggio, "_social_request", self.request)
         return personaggio
@@ -526,7 +545,8 @@ class SocialPostViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated:
             return None
         requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
-        return resolve_active_personaggio(self.request.user, requested, request=self.request)
+        personaggio = resolve_active_personaggio(self.request.user, requested, request=self.request)
+        return gate_modulo_social(self.request, personaggio)
 
     def get_queryset(self):
         personaggio = self.get_personaggio()
@@ -699,7 +719,8 @@ class SocialGroupViewSet(viewsets.ModelViewSet):
 
     def get_personaggio(self):
         requested = self.request.query_params.get("personaggio_id") or self.request.data.get("personaggio_id")
-        return resolve_active_personaggio(self.request.user, requested, request=self.request)
+        personaggio = resolve_active_personaggio(self.request.user, requested, request=self.request)
+        return gate_modulo_social(self.request, personaggio)
 
     def _membership(self, group, personaggio):
         if not personaggio:
@@ -985,6 +1006,7 @@ class SocialProfileMeView(APIView):
     def _get_or_create_profile(self, request):
         requested = request.query_params.get("personaggio_id") or request.data.get("personaggio_id")
         personaggio = resolve_active_personaggio(request.user, requested, request=request)
+        gate_modulo_social(request, personaggio)
         if not personaggio:
             return None
         profile, _ = SocialProfile.objects.select_related(
@@ -1028,6 +1050,7 @@ class SocialProfileDetailView(APIView):
         personaggio = Personaggio.objects.filter(id=personaggio_id).first()
         if not personaggio:
             return Response({"detail": "Personaggio non trovato."}, status=status.HTTP_404_NOT_FOUND)
+        gate_modulo_social(request, personaggio)
         profile, _ = SocialProfile.objects.select_related(
             "personaggio",
             "personaggio__era",
@@ -1128,6 +1151,7 @@ class SocialNotificationsView(APIView):
     def get(self, request):
         requested = request.query_params.get("personaggio_id")
         personaggio = resolve_active_personaggio(request.user, requested, request=request)
+        gate_modulo_social(request, personaggio)
         if not personaggio:
             return Response({"detail": "Nessun personaggio trovato."}, status=status.HTTP_400_BAD_REQUEST)
 

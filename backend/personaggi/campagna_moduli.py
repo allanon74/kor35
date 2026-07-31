@@ -19,6 +19,10 @@ MODULO_ACCESSO_OFF = "OFF"
 MODULO_ACCESSO_TEST = "TEST"
 MODULO_ACCESSO_OPEN = "OPEN"
 
+# Sentinella in scrittura: rimuove l'override e torna al default del registry
+# (per «carte» torna al bridge con ConfigurazioneCarteCollezionabili).
+MODULO_ACCESSO_DEFAULT = "DEFAULT"
+
 MODULO_ACCESSO_CHOICES = [
     (MODULO_ACCESSO_OFF, "Disattivo"),
     (MODULO_ACCESSO_TEST, "Testing (solo staff/master)"),
@@ -160,12 +164,18 @@ def normalize_moduli_accesso(campagna) -> dict[str, str]:
     return {row["key"]: get_modulo_accesso(campagna, row["key"]) for row in CAMPAGNA_MODULI_REGISTRY}
 
 
-def validate_moduli_accesso_payload(payload) -> dict[str, str]:
+def validate_moduli_accesso_payload(payload) -> dict[str, str | None]:
+    """
+    Normalizza il payload di scrittura.
+
+    Valore `None` nel dict risultante = «rimuovi override, torna al default»
+    (accettato in ingresso come null, stringa vuota o «DEFAULT»).
+    """
     if payload is None:
         return {}
     if not isinstance(payload, dict):
         raise ValidationError({"moduli_accesso": "Deve essere un oggetto JSON."})
-    cleaned: dict[str, str] = {}
+    cleaned: dict[str, str | None] = {}
     unknown = []
     invalid = []
     for key, val in payload.items():
@@ -173,16 +183,19 @@ def validate_moduli_accesso_payload(payload) -> dict[str, str]:
         if key not in _REGISTRY_BY_KEY:
             unknown.append(key)
             continue
-        modo = str(val or "").strip().upper()
+        modo = str(val if val is not None else "").strip().upper()
+        if modo in ("", MODULO_ACCESSO_DEFAULT):
+            cleaned[key] = None
+            continue
         if modo not in MODULO_ACCESSO_VALIDI:
             invalid.append(f"{key}={val}")
             continue
         cleaned[key] = modo
-    errors = {}
+    errors = []
     if unknown:
-        errors["unknown"] = f"Moduli sconosciuti: {', '.join(sorted(unknown))}"
+        errors.append(f"Moduli sconosciuti: {', '.join(sorted(unknown))}")
     if invalid:
-        errors["invalid"] = f"Valori non validi (usa OFF/TEST/OPEN): {', '.join(invalid)}"
+        errors.append(f"Valori non validi (usa OFF/TEST/OPEN/DEFAULT): {', '.join(invalid)}")
     if errors:
         raise ValidationError({"moduli_accesso": errors})
     return cleaned
@@ -202,18 +215,23 @@ def apply_moduli_accesso(campagna, payload, *, merge: bool = True) -> dict[str, 
     """
     Scrive moduli_accesso sul modello campagna.
     merge=True: aggiorna solo le chiavi passate; False: sostituisce l'intero dict.
+    Valore None su una chiave = rimuove l'override (torna al default registry).
     """
     cleaned = validate_moduli_accesso_payload(payload)
     if merge:
         next_map = dict(_raw_moduli(campagna))
-        next_map.update(cleaned)
+        for key, modo in cleaned.items():
+            if modo is None:
+                next_map.pop(key, None)
+            else:
+                next_map[key] = modo
     else:
-        next_map = cleaned
+        next_map = {k: v for k, v in cleaned.items() if v is not None}
     # tieni solo chiavi note
     next_map = {k: v for k, v in next_map.items() if k in _REGISTRY_BY_KEY and v in MODULO_ACCESSO_VALIDI}
     campagna.moduli_accesso = next_map
     campagna.save(update_fields=["moduli_accesso", "updated_at"])
-    if MODULO_CARTE in cleaned:
+    if cleaned.get(MODULO_CARTE):
         sync_carte_config_from_moduli(campagna, cleaned[MODULO_CARTE])
     return normalize_moduli_accesso(campagna)
 
@@ -268,14 +286,52 @@ def personaggio_puo_accedere_modulo(personaggio, key: str, *, user=None) -> bool
     return False
 
 
-def assert_personaggio_puo_accedere_modulo(personaggio, key: str, *, user=None):
+def user_puo_accedere_modulo(user, campagna, key: str) -> bool:
+    """
+    Accesso a livello utente (tool senza personaggio: wizard, console staff).
+    OPEN: tutti; OFF: nessuno; TEST: solo staff/master di campagna.
+    """
+    modo = get_modulo_accesso(campagna, key)
+    if modo == MODULO_ACCESSO_OPEN:
+        return True
+    if modo == MODULO_ACCESSO_OFF:
+        return False
+    return user_is_modulo_tester(user, campagna)
+
+
+def modulo_label(key: str) -> str:
+    return _REGISTRY_BY_KEY.get(key, {}).get("label") or key
+
+
+def modulo_accesso_error(personaggio, key: str, *, user=None) -> str | None:
+    """None se il personaggio può usare il modulo, altrimenti il messaggio di rifiuto."""
     if personaggio_puo_accedere_modulo(personaggio, key, user=user):
-        return
-    label = _REGISTRY_BY_KEY.get(key, {}).get("label") or key
+        return None
+    label = modulo_label(key)
     modo = get_modulo_accesso(getattr(personaggio, "campagna", None), key)
     if modo == MODULO_ACCESSO_TEST:
-        raise ValidationError(f"{label}: in testing — accesso solo per staff/master.")
-    raise ValidationError(f"{label}: modulo non attivo in questa campagna.")
+        return f"{label}: in testing — accesso solo per staff/master."
+    return f"{label}: modulo non attivo in questa campagna."
+
+
+def assert_personaggio_puo_accedere_modulo(personaggio, key: str, *, user=None):
+    msg = modulo_accesso_error(personaggio, key, user=user)
+    if msg:
+        raise ValidationError(msg)
+
+
+def modulo_gate_response(personaggio, key: str, *, user=None, error_key: str = "error"):
+    """
+    Gate DRF pronto all'uso nelle view: restituisce None se l'accesso è consentito,
+    altrimenti una Response 403 con il messaggio del modulo.
+    """
+    msg = modulo_accesso_error(personaggio, key, user=user)
+    if not msg:
+        return None
+    from rest_framework import status as drf_status
+    from rest_framework.response import Response
+
+    return Response({error_key: msg}, status=drf_status.HTTP_403_FORBIDDEN)
 
 
 def modulo_visibile_in_staff(campagna, key: str) -> bool:
@@ -288,3 +344,45 @@ def staff_tool_abilitato(campagna, tool_id: str) -> bool:
     if not key:
         return True
     return modulo_visibile_in_staff(campagna, key)
+
+
+def campagna_da_request(request):
+    """Campagna attiva della richiesta (header X-Campagna / query, con fallback default)."""
+    from personaggi.models import Campagna
+
+    params = getattr(request, "query_params", None) or getattr(request, "GET", {})
+    slug = (
+        request.headers.get("X-Campagna")
+        or params.get("campagna")
+        or "kor35"
+    ).strip().lower()
+    campagna = Campagna.objects.filter(slug=slug, attiva=True).first()
+    if campagna:
+        return campagna
+    return (
+        Campagna.objects.filter(attiva=True, is_default=True).first()
+        or Campagna.objects.filter(slug="kor35").first()
+    )
+
+
+class ModuloStaffGateMixin:
+    """
+    Mixin per ViewSet/APIView staff: 403 se il modulo campagna è OFF.
+    In TEST il tool staff resta accessibile (serve proprio per il collaudo).
+    """
+
+    modulo_key: str = ""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        key = getattr(self, "modulo_key", "")
+        if not key:
+            return
+        campagna = campagna_da_request(request)
+        if campagna and not modulo_visibile_in_staff(campagna, key):
+            from rest_framework.exceptions import PermissionDenied
+
+            raise PermissionDenied(
+                f"{modulo_label(key)}: modulo non attivo in questa campagna."
+            )
+

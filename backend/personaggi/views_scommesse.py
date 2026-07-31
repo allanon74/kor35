@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from gestione_plot.permissions import IsStaffOrMaster
+from personaggi.campagna_moduli import MODULO_SCOMMESSE, ModuloStaffGateMixin
 from personaggi.models import Personaggio, get_default_campagna_id
 from personaggi.scommesse_config import config_to_public_dict, get_config_scommesse
 from personaggi.scommesse_evento import personaggio_in_evento_attivo
@@ -81,8 +82,13 @@ def _get_active_personaggio(request, *, required=True):
 
 
 def _personaggio_or_error(request, *, required=True):
+    from personaggi.campagna_moduli import MODULO_SCOMMESSE, modulo_gate_response
+
     personaggio = _get_active_personaggio(request)
     if personaggio:
+        gate = modulo_gate_response(personaggio, MODULO_SCOMMESSE, user=request.user)
+        if gate:
+            return None, gate
         return personaggio, None
     if not required:
         return None, None
@@ -98,13 +104,15 @@ class ScommessePuntatePagination(PageNumberPagination):
     max_page_size = 50
 
 
-class SportScommesseStaffViewSet(viewsets.ModelViewSet):
+class SportScommesseStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_SCOMMESSE
     permission_classes = [IsStaffOrMaster]
     serializer_class = SportScommesseSerializer
     queryset = SportScommesse.objects.all().order_by("nome")
 
 
-class SquadraScommesseStaffViewSet(viewsets.ModelViewSet):
+class SquadraScommesseStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_SCOMMESSE
     permission_classes = [IsStaffOrMaster]
     serializer_class = SquadraScommesseSerializer
 
@@ -116,7 +124,8 @@ class SquadraScommesseStaffViewSet(viewsets.ModelViewSet):
         return qs
 
 
-class CalendarioScommesseStaffViewSet(viewsets.ModelViewSet):
+class CalendarioScommesseStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_SCOMMESSE
     permission_classes = [IsStaffOrMaster]
     queryset = CalendarioScommesse.objects.select_related("sport", "evento").prefetch_related(
         "incontri__squadra_casa", "incontri__squadra_trasferta"
@@ -163,7 +172,8 @@ class CalendarioScommesseStaffViewSet(viewsets.ModelViewSet):
         return Response(out.data, status=status.HTTP_201_CREATED)
 
 
-class ProgrammazioneTorneoScommesseStaffViewSet(viewsets.ModelViewSet):
+class ProgrammazioneTorneoScommesseStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_SCOMMESSE
     permission_classes = [IsStaffOrMaster]
     serializer_class = ProgrammazioneTorneoScommesseSerializer
     queryset = ProgrammazioneTorneoScommesse.objects.select_related(
@@ -255,7 +265,9 @@ class ScommesseCalendariPlayerView(APIView):
                 continue
             visibili.append(cal.id)
         calendari = CalendarioScommesse.objects.filter(id__in=visibili).select_related("sport").order_by("-data_risoluzione")
-        personaggio, _ = _personaggio_or_error(request, required=False)
+        personaggio, err = _personaggio_or_error(request, required=False)
+        if err:
+            return err
         cfg = get_config_scommesse()
         return Response({
             "config": config_to_public_dict(cfg, personaggio=personaggio),
@@ -431,7 +443,8 @@ class ScommesseConfigPlayerView(APIView):
         return Response(config_to_public_dict(cfg))
 
 
-class ScommesseConfigStaffView(APIView):
+class ScommesseConfigStaffView(ModuloStaffGateMixin, APIView):
+    modulo_key = MODULO_SCOMMESSE
     permission_classes = [IsStaffOrMaster]
 
     def _get_config(self, request):
