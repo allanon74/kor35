@@ -1,8 +1,10 @@
 # Moduli campagna (accesso feature)
 
-Staff → **Campagne** → sezione **Moduli campagna**.
+Staff → **Campagne** → tab **Moduli** (tab di default).
 
 Per ogni campagna si imposta OFF / TEST / OPEN sui moduli (Tasks, Pilotaggio, Carte, Scommesse, Social, Negozi, Creazione guidata).
+
+Altri tab dello stesso tool: **Campagne** (CRUD), **Membership**, **Policy catalogo** (SHARED/EXCLUSIVE — non confondere con OFF/TEST/OPEN).
 
 | Modo | Effetto |
 |------|---------|
