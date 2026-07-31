@@ -44,7 +44,7 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
 
     const pgOptions = useMemo(() => {
         const list = risorse?.png || [];
-        return (list || []).map((p) => ({ value: p.id, label: p.nome || `PG #${p.id}` }));
+        return (list || []).map((p) => ({ id: p.id, nome: p.nome || `PG #${p.id}` }));
     }, [risorse]);
     const showResolve = !!(canResolveTasks || isMaster);
 
@@ -83,10 +83,10 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
                     {showResolve && eventoId ? (
                         <div className="space-y-2 rounded-xl border border-lime-900/40 bg-lime-950/15 p-3">
                             <SearchableSelect
-                                options={[{ value: null, label: '— Personaggio —' }, ...pgOptions]}
+                                options={pgOptions}
                                 value={questPgId}
                                 onChange={setQuestPgId}
-                                placeholder="PG che ha risolto…"
+                                placeholder="— Personaggio —"
                                 minOptionsForSearch={0}
                             />
                             <MissioneResolvePicker

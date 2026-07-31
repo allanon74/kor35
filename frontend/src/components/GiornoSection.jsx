@@ -22,7 +22,7 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
 
     const pgOptions = useMemo(() => {
         const list = risorse?.png || [];
-        return (list || []).map((p) => ({ value: p.id, label: p.nome || `PG #${p.id}` }));
+        return (list || []).map((p) => ({ id: p.id, nome: p.nome || `PG #${p.id}` }));
     }, [risorse]);
     const showResolve = !!(canResolveTasks || isMaster);
     
@@ -119,10 +119,10 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
                         Task manuali — fine giornata
                     </h4>
                     <SearchableSelect
-                        options={[{ value: null, label: '— Personaggio —' }, ...pgOptions]}
+                        options={pgOptions}
                         value={manualPgId}
                         onChange={setManualPgId}
-                        placeholder="PG…"
+                        placeholder="— Personaggio —"
                         minOptionsForSearch={0}
                     />
                     <MissioneResolvePicker

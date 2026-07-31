@@ -28,9 +28,10 @@ export default function MissioneResolvePicker({
         onLogout,
       );
       const rows = Array.isArray(data) ? data : data?.results || [];
+      // SearchableSelect: valueKey=id / labelKey=nome (non value/label).
       setOptions(rows.map((m) => ({
-        value: m.id,
-        label: `${m.titolo}${m.korp_nome ? ` [${m.korp_nome}]` : ''}${m.esclusiva ? ' ★' : ''}`,
+        id: m.id,
+        nome: `${m.titolo}${m.korp_nome ? ` [${m.korp_nome}]` : ''}${m.esclusiva ? ' ★' : ''}`,
       })));
     } catch {
       setOptions([]);
@@ -77,10 +78,10 @@ export default function MissioneResolvePicker({
     <div className="space-y-1.5 rounded border border-lime-900/50 bg-lime-950/20 p-2">
       <div className="text-[10px] font-bold uppercase text-lime-300">{label}</div>
       <SearchableSelect
-        options={[{ value: null, label: '— Seleziona task —' }, ...options]}
+        options={options}
         value={selected}
         onChange={setSelected}
-        placeholder="Task…"
+        placeholder="— Seleziona task —"
         minOptionsForSearch={0}
       />
       <button
