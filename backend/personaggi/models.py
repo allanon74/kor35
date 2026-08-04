@@ -1618,6 +1618,16 @@ class Campagna(SyncableModel, models.Model):
     is_default = models.BooleanField(default=False, db_index=True)
     is_base = models.BooleanField(default=False, db_index=True)
     attiva = models.BooleanField(default=True, db_index=True)
+    moduli_accesso = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Accesso moduli campagna: mappa chiave→OFF|TEST|OPEN "
+            "(tasks, pilotaggio, carte, scommesse, social, negozi, …). "
+            "Chiavi assenti usano i default del registry; «carte» senza override "
+            "legge ConfigurazioneCarteCollezionabili."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1755,7 +1765,7 @@ class Carriera(Tier):
         verbose_name="Fattore task (KORP)",
         help_text=(
             "Moltiplicatore ricompense (Crediti/Prestigio) delle task di questa KORP "
-            "per i membri attivi (es. 2.00 = doppie). Solo rilevante se tipo = korp."
+            "per i membri attivi (es. 2.00 = doppie). Rilevante se tipo = korp."
         ),
     )
     abilita = models.ManyToManyField(
@@ -1842,7 +1852,7 @@ class Carica(A_modello):
     bonus_peso_influencer = models.PositiveIntegerField(
         default=0,
         verbose_name="Bonus Prestigio",
-        help_text="Bonus al Prestigio (ex peso social/influencer) per i membri con questa carica.",
+        help_text="Bonus al Prestigio (ex peso social) per i membri con questa carica.",
     )
     ordine = models.PositiveIntegerField(default=0)
     attiva = models.BooleanField(default=True)
@@ -4598,7 +4608,7 @@ class Personaggio(Inventario):
         default=1,
         verbose_name="Prestigio",
         help_text=(
-            "Prestigio del personaggio (conosciuto/influenza social). "
+            "Prestigio del personaggio (conosciuto / influenza social). "
             "Usato per like InstaFame (1 = minimo). Le cariche attive e le task possono aumentarlo."
         ),
     )
@@ -4698,10 +4708,7 @@ class Personaggio(Inventario):
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
 
     def modifica_prestigio(self, delta, descrizione=""):
-        """
-        Variazione Prestigio (campo peso_influencer). Minimo 1.
-        Usato da ricompense task e tool staff.
-        """
+        """Variazione Prestigio (peso_influencer). Minimo 1. Ledger completo → v2."""
         delta = int(delta or 0)
         if delta == 0:
             return self.peso_influencer
@@ -4710,8 +4717,7 @@ class Personaggio(Inventario):
         self.peso_influencer = nuovo
         self.save(update_fields=["peso_influencer", "updated_at"])
         segno = "+" if delta >= 0 else ""
-        motivo = descrizione or "variazione Prestigio"
-        self.aggiungi_log(f"Prestigio {segno}{delta} (ora {nuovo}) — {motivo}")
+        self.aggiungi_log(f"Prestigio {segno}{delta} (ora {nuovo}) — {descrizione or 'variazione Prestigio'}")
         return nuovo
 
     def modifica_riserva_scommesse(self, delta, motivo):

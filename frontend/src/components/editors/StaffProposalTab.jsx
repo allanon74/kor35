@@ -46,9 +46,7 @@ const StaffProposalTab = ({ onLogout }) => {
             try {
                 const ev = await getEventi(onLogout);
                 const rows = Array.isArray(ev) ? ev : ev?.results || [];
-                if (!cancelled) {
-                    setEventiOpts(rows.map((e) => ({ value: e.id, label: e.titolo })));
-                }
+                if (!cancelled) setEventiOpts(rows.map((e) => ({ id: e.id, nome: e.titolo || `Evento #${e.id}` })));
             } catch {
                 if (!cancelled) setEventiOpts([]);
             }
@@ -384,13 +382,13 @@ const StaffProposalTab = ({ onLogout }) => {
                 </div>
 
                 {/* Footer Azioni */}
-                <div className="p-5 border-t border-gray-700 bg-gray-800 rounded-b-2xl space-y-3 shadow-lg z-20">
+                <div className="space-y-3 border-t border-gray-700 bg-gray-800 p-5 shadow-lg z-20 rounded-b-2xl">
                     <div className="grid gap-2 sm:grid-cols-2">
                         <SearchableSelect
-                            options={[{ value: null, label: '— Evento per task —' }, ...eventiOpts]}
+                            options={eventiOpts}
                             value={taskEventoId}
                             onChange={setTaskEventoId}
-                            placeholder="Evento…"
+                            placeholder="— Evento per task —"
                             minOptionsForSearch={0}
                         />
                         <MissioneResolvePicker

@@ -129,6 +129,19 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class CampagnaSerializer(serializers.ModelSerializer):
+    moduli_accesso = serializers.JSONField(required=False)
+    moduli_accesso_registry = serializers.SerializerMethodField()
+
+    def get_moduli_accesso_registry(self, obj):
+        from personaggi.campagna_moduli import moduli_registry_public
+
+        return moduli_registry_public()
+
+    def validate_moduli_accesso(self, value):
+        from personaggi.campagna_moduli import validate_moduli_accesso_payload
+
+        return validate_moduli_accesso_payload(value)
+
     def validate(self, attrs):
         instance = getattr(self, "instance", None)
         next_default = attrs.get("is_default", instance.is_default if instance else False)
@@ -146,8 +159,20 @@ class CampagnaSerializer(serializers.ModelSerializer):
 
         return attrs
 
+    def to_representation(self, instance):
+        from personaggi.campagna_moduli import normalize_moduli_accesso
+
+        data = super().to_representation(instance)
+        # Espone sempre la mappa effettiva (default + bridge carte), non solo i raw.
+        data["moduli_accesso"] = normalize_moduli_accesso(instance)
+        data["moduli_accesso_raw"] = dict(instance.moduli_accesso or {})
+        return data
+
     @transaction.atomic
     def create(self, validated_data):
+        from personaggi.campagna_moduli import apply_moduli_accesso
+
+        moduli = validated_data.pop("moduli_accesso", None)
         instance = super().create(validated_data)
         if instance.is_default:
             Campagna.objects.exclude(id=instance.id).filter(is_default=True).update(is_default=False)
@@ -164,10 +189,16 @@ class CampagnaSerializer(serializers.ModelSerializer):
                     "attivo": True,
                 },
             )
+        if moduli is not None:
+            apply_moduli_accesso(instance, moduli, merge=False)
+            instance.refresh_from_db()
         return instance
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        from personaggi.campagna_moduli import apply_moduli_accesso
+
+        moduli = validated_data.pop("moduli_accesso", None)
         next_default = validated_data.get("is_default", instance.is_default)
         next_base = validated_data.get("is_base", instance.is_base)
         instance = super().update(instance, validated_data)
@@ -175,6 +206,9 @@ class CampagnaSerializer(serializers.ModelSerializer):
             Campagna.objects.exclude(id=instance.id).filter(is_default=True).update(is_default=False)
         if next_base:
             Campagna.objects.exclude(id=instance.id).filter(is_base=True).update(is_base=False)
+        if moduli is not None:
+            apply_moduli_accesso(instance, moduli, merge=True)
+            instance.refresh_from_db()
         return instance
 
     class Meta:
@@ -187,7 +221,10 @@ class CampagnaSerializer(serializers.ModelSerializer):
             "is_default",
             "is_base",
             "attiva",
+            "moduli_accesso",
+            "moduli_accesso_registry",
         )
+        read_only_fields = ("moduli_accesso_registry",)
 
 
 class CampagnaUtenteSerializer(serializers.ModelSerializer):
@@ -238,7 +275,17 @@ class KorpSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Korp
-        fields = ("id", "nome", "descrizione", "tipo", "foto", "tipo_carriera", "sync_id", "updated_at")
+        fields = (
+            "id",
+            "nome",
+            "descrizione",
+            "tipo",
+            "foto",
+            "tipo_carriera",
+            "fattore_task",
+            "sync_id",
+            "updated_at",
+        )
 
 
 class CarrieraSerializer(serializers.ModelSerializer):

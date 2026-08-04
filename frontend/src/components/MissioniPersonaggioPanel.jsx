@@ -1,15 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Gift, ListTodo } from 'lucide-react';
-import { claimMissioneRicompensa, getMissioniMie } from '../api';
+import { CheckCircle2, ListTodo } from 'lucide-react';
+import { getMissioniMie } from '../api';
 
-/**
- * Elenco task del personaggio con ricompense (maggiorate se KORP) e claim.
- */
+/** Elenco task del PG: KORP in cima, svolte, ricompense (claim automatico lato server). */
 export default function MissioniPersonaggioPanel({ personaggioId, onLogout }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [claiming, setClaiming] = useState(null);
 
   const load = useCallback(async () => {
     if (!personaggioId) return;
@@ -25,21 +22,7 @@ export default function MissioniPersonaggioPanel({ personaggioId, onLogout }) {
     }
   }, [personaggioId, onLogout]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const claimOne = async (risoluzioneId) => {
-    setClaiming(risoluzioneId);
-    try {
-      await claimMissioneRicompensa(risoluzioneId, onLogout);
-      await load();
-    } catch (err) {
-      setError(err?.message || 'Claim fallito');
-    } finally {
-      setClaiming(null);
-    }
-  };
+  useEffect(() => { load(); }, [load]);
 
   if (!personaggioId) return null;
 
@@ -51,9 +34,9 @@ export default function MissioniPersonaggioPanel({ personaggioId, onLogout }) {
       </div>
       {error ? <p className="mb-2 text-xs text-red-400">{error}</p> : null}
       {loading ? (
-        <p className="text-xs text-gray-500">Caricamento task…</p>
+        <p className="text-xs text-gray-500">Caricamento…</p>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-gray-500">Nessuna task attiva.</p>
+        <p className="text-xs text-gray-500">Nessuna task disponibile.</p>
       ) : (
         <ul className="space-y-2">
           {rows.map((m) => {
@@ -69,55 +52,26 @@ export default function MissioniPersonaggioPanel({ personaggioId, onLogout }) {
                       : 'border-gray-800 bg-gray-900/40'
                 }`}
               >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-white">{m.titolo}</span>
-                      {m.korp_nome ? (
-                        <span className="rounded bg-violet-800/60 px-1.5 py-0.5 text-[10px] uppercase text-violet-100">
-                          {m.korp_nome}
-                          {korpBonus ? ` ×${m.fattore_applicato}` : ''}
-                        </span>
-                      ) : null}
-                      {m.svolta ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] uppercase text-emerald-400">
-                          <CheckCircle2 size={12} /> Svolta
-                        </span>
-                      ) : null}
-                    </div>
-                    {m.descrizione ? (
-                      <p className="mt-1 text-[11px] text-gray-400 line-clamp-2">{m.descrizione}</p>
-                    ) : null}
-                    <div className={`mt-1 font-mono text-xs ${korpBonus ? 'text-violet-200 font-bold' : 'text-lime-200'}`}>
-                      {Number(m.reward_crediti || 0).toLocaleString('it-IT')} Cr
-                      {' · '}
-                      {m.reward_prestigio || 0} Pr
-                      {korpBonus && Number(m.reward_crediti) !== Number(m.reward_crediti_base) ? (
-                        <span className="ml-2 text-[10px] text-violet-400/80">
-                          (base {m.reward_crediti_base} Cr / {m.reward_prestigio_base} Pr)
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    {(m.risoluzioni || [])
-                      .filter((r) => !r.ricompensa_reclamata)
-                      .map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          disabled={claiming === r.id}
-                          onClick={() => claimOne(r.id)}
-                          className="inline-flex items-center gap-1 rounded bg-amber-700 px-2 py-1 text-[10px] font-bold uppercase text-white hover:bg-amber-600 disabled:opacity-50"
-                        >
-                          <Gift size={12} />
-                          Reclama
-                          {r.evento_titolo ? ` (${r.evento_titolo})` : ''}
-                          {' '}
-                          {Number(r.reward_crediti || 0)} Cr / {r.reward_prestigio || 0} Pr
-                        </button>
-                      ))}
-                  </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-white">{m.titolo}</span>
+                  {m.korp_nome ? (
+                    <span className="rounded bg-violet-800/60 px-1.5 py-0.5 text-[10px] uppercase text-violet-100">
+                      {m.korp_nome}
+                      {m.esclusiva ? ' · esclusiva' : ''}
+                      {korpBonus ? ` ×${m.fattore_applicato}` : ''}
+                    </span>
+                  ) : null}
+                  {m.svolta ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] uppercase text-emerald-400">
+                      <CheckCircle2 size={12} /> Svolta
+                    </span>
+                  ) : m.effettuabile ? (
+                    <span className="text-[10px] uppercase text-lime-400">Disponibile</span>
+                  ) : null}
+                </div>
+                {m.descrizione ? <p className="mt-1 text-[11px] text-gray-400 line-clamp-2">{m.descrizione}</p> : null}
+                <div className={`mt-1 font-mono text-xs ${korpBonus ? 'font-bold text-violet-200' : 'text-lime-200'}`}>
+                  {Number(m.reward_crediti || 0).toLocaleString('it-IT')} Cr · {m.reward_prestigio || 0} Pr
                 </div>
               </li>
             );

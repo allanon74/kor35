@@ -5,7 +5,7 @@ import { RichTextViewer } from './RichTextDisplay';
 import MissioneResolvePicker from './MissioneResolvePicker';
 import SearchableSelect from './editors/SearchableSelect';
 
-const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAddQuest, questHandlers, onEditTask, eventoId, onLogout }) => {
+const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAddQuest, questHandlers, onEditTask, eventoId, onLogout, canResolveTasks }) => {
     const [showDettagli, setShowDettagli] = useState(false);
     const [manualPgId, setManualPgId] = useState(null);
 
@@ -21,12 +21,10 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
     }, [giorno.quests]);
 
     const pgOptions = useMemo(() => {
-        const list = risorse?.png || risorse?.personaggi || [];
-        return (list || []).map((p) => ({
-            value: p.id,
-            label: p.nome || `PG #${p.id}`,
-        }));
+        const list = risorse?.png || [];
+        return (list || []).map((p) => ({ id: p.id, nome: p.nome || `PG #${p.id}` }));
     }, [risorse]);
+    const showResolve = !!(canResolveTasks || isMaster);
     
     const formatTime = useCallback((iso) => iso ? new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--", []);
     const formatDate = useCallback((iso) => iso ? new Date(iso).toLocaleDateString([], { day: '2-digit', month: 'long', year: 'numeric' }) : "", []);
@@ -110,20 +108,21 @@ const GiornoSection = ({ giorno, gIdx, isMaster, risorse, onEdit, onDelete, onAd
                         onMinigioco={questHandlers.onMinigioco}
                         eventoId={eventoId}
                         onLogout={onLogout}
+                        canResolveTasks={showResolve}
                     />
                 ))}
             </div>
 
-            {isMaster && eventoId ? (
-                <div className="rounded-xl border border-lime-900/50 bg-lime-950/15 p-4 space-y-2">
+            {showResolve && eventoId ? (
+                <div className="space-y-2 rounded-xl border border-lime-900/50 bg-lime-950/15 p-4">
                     <h4 className="text-[10px] font-black uppercase tracking-wide text-lime-300">
                         Task manuali — fine giornata
                     </h4>
                     <SearchableSelect
-                        options={[{ value: null, label: '— Personaggio —' }, ...pgOptions]}
+                        options={pgOptions}
                         value={manualPgId}
                         onChange={setManualPgId}
-                        placeholder="PG…"
+                        placeholder="— Personaggio —"
                         minOptionsForSearch={0}
                     />
                     <MissioneResolvePicker

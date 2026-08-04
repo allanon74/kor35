@@ -1922,6 +1922,9 @@ export const associaQrDiretto = (aVistaId, qrId, onLogout, force = false) => {
 
 // --- EVENTI ---
 export const getEventi = (onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'GET' }, onLogout);
+/** Solo id+titolo — per select staff (Tasks), senza il payload plot completo. */
+export const getEventiOpzioni = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/eventi/opzioni/', { method: 'GET' }, onLogout);
 export const createEvento = (data, onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateEvento = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'DELETE' }, onLogout);
@@ -1929,6 +1932,8 @@ export const iniziaEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/inizia/`, { method: 'POST', body: '{}' }, onLogout);
 export const terminaEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/termina/`, { method: 'POST', body: '{}' }, onLogout);
+export const riallineaIscrizioniEvento = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/eventi/${id}/riallinea_iscrizioni/`, { method: 'POST', body: '{}' }, onLogout);
 export const reportRicompenseEvento = (id, onLogout) =>
   fetchAuthenticated(`/api/plot/api/eventi/${id}/report_ricompense/`, { method: 'GET' }, onLogout);
 
@@ -1955,26 +1960,11 @@ export const getMissioniMie = (personaggioId, onLogout) =>
     { method: 'GET' },
     onLogout,
   );
-export const getMissioniRiepilogoEvento = (eventoId, onLogout) =>
-  fetchAuthenticated(`/api/plot/api/missioni/riepilogo-evento/${eventoId}/`, { method: 'GET' }, onLogout);
 export const assegnaMissioneRisoluzione = (data, onLogout) =>
   fetchAuthenticated('/api/plot/api/missioni/assegna-risoluzione/', {
     method: 'POST',
     body: JSON.stringify(data),
   }, onLogout);
-export const claimMissioneRicompensa = (risoluzioneId, onLogout) =>
-  fetchAuthenticated(`/api/plot/api/missioni/claim/${risoluzioneId}/`, {
-    method: 'POST',
-    body: '{}',
-  }, onLogout);
-export const getMissioniRisoluzioni = (params = {}, onLogout) => {
-  const qs = new URLSearchParams();
-  Object.entries(params || {}).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
-  });
-  const suffix = qs.toString() ? `?${qs}` : '';
-  return fetchAuthenticated(`/api/plot/api/missioni-risoluzioni/${suffix}`, { method: 'GET' }, onLogout);
-};
 
 export const createVocePortare = (data, onLogout) =>
   fetchAuthenticated('/api/plot/api/voci-portare/', { method: 'POST', body: JSON.stringify(data) }, onLogout);

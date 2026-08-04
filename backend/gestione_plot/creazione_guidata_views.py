@@ -58,7 +58,18 @@ def _flusso_produzione_attivo(campagna):
     return _flusso_queryset_for_campagna(campagna).filter(modalita_test=False).first()
 
 
+def _modulo_creazione_guidata_attivo(request):
+    """Modulo campagna «creazione_guidata»: OFF nasconde il wizard, TEST lo lascia allo staff."""
+    from personaggi.campagna_moduli import MODULO_CREAZIONE_GUIDATA, user_puo_accedere_modulo
+
+    campagna = _get_active_campaign(request)
+    return user_puo_accedere_modulo(request.user, campagna, MODULO_CREAZIONE_GUIDATA)
+
+
 def _resolve_active_flusso(request):
+    if not _modulo_creazione_guidata_attivo(request):
+        return None
+
     prefer_test = _parse_modalita_test_param(request)
     can_test = _user_can_use_wizard_test(request)
     if prefer_test is True and not can_test:
@@ -180,7 +191,7 @@ def creazione_guidata_stato(request):
     """Indica se esiste un percorso guidato accessibile (produzione o test per staff)."""
     campagna = _get_active_campaign(request)
     can_test = _user_can_use_wizard_test(request)
-    prod = _flusso_produzione_attivo(campagna)
+    prod = _flusso_produzione_attivo(campagna) if _modulo_creazione_guidata_attivo(request) else None
     sandbox = get_sandbox_for_produzione(prod) if prod and can_test else None
     test_disponibile = bool(sandbox and sandbox.attivo) if can_test else False
     flusso = _resolve_active_flusso(request)

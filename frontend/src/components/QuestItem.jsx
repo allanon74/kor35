@@ -20,7 +20,7 @@ const TIPO_A_VISTA_OPTIONS = [
     { value: 'NEG', label: 'Negozio alternativo (QR)' },
 ];
 
-const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChange, onEdit, onEditTask, onScanQr, onMinigioco, eventoId, onLogout }) => {
+const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChange, onEdit, onEditTask, onScanQr, onMinigioco, eventoId, onLogout, canResolveTasks }) => {
     const [viewMode, setViewMode] = useState('FASI'); // 'FASI' o 'STAFF'
     const [newVista, setNewVista] = useState({ tipo: 'MAN', a_vista_id: '' });
     const [questPgId, setQuestPgId] = useState(null);
@@ -43,12 +43,10 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
     }, [quest.fasi]);
 
     const pgOptions = useMemo(() => {
-        const list = risorse?.png || risorse?.personaggi || [];
-        return (list || []).map((p) => ({
-            value: p.id,
-            label: p.nome || `PG #${p.id}`,
-        }));
+        const list = risorse?.png || [];
+        return (list || []).map((p) => ({ id: p.id, nome: p.nome || `PG #${p.id}` }));
     }, [risorse]);
+    const showResolve = !!(canResolveTasks || isMaster);
 
     return (
         <div className="bg-gray-800/40 border border-gray-700/50 rounded-2xl overflow-hidden shadow-2xl border-l-4 border-l-indigo-500 w-full mb-8">
@@ -82,13 +80,13 @@ const QuestItem = ({ quest, isMaster, risorse, onAddSub, onRemoveSub, onStatChan
                             <div><span className="text-[10px] font-black text-amber-500 uppercase block mb-1 tracking-widest">Materiale di Scena:</span><div className="text-amber-100/80 text-sm"><RichTextViewer content={quest.props} /></div></div>
                         </div>
                     )}
-                    {isMaster && eventoId ? (
+                    {showResolve && eventoId ? (
                         <div className="space-y-2 rounded-xl border border-lime-900/40 bg-lime-950/15 p-3">
                             <SearchableSelect
-                                options={[{ value: null, label: '— Personaggio —' }, ...pgOptions]}
+                                options={pgOptions}
                                 value={questPgId}
                                 onChange={setQuestPgId}
-                                placeholder="PG che ha risolto…"
+                                placeholder="— Personaggio —"
                                 minOptionsForSearch={0}
                             />
                             <MissioneResolvePicker

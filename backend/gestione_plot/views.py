@@ -225,6 +225,14 @@ class EventoViewSet(viewsets.ModelViewSet):
         context["plot_staff_user_id"] = self.request.user.id if is_staffer_only else None
         return context
 
+    @action(detail=False, methods=["get"], url_path="opzioni")
+    def opzioni(self, request):
+        """Elenco leggero id+titolo per select staff (es. editor Tasks). Evita EventoSerializer completo."""
+        qs = Evento.objects.order_by("-data_inizio")
+        if not request.user.is_superuser:
+            qs = qs.filter(staff_assegnato=request.user)
+        return Response(list(qs.values("id", "titolo")))
+
     @action(detail=False, methods=["get"], url_path="geocode")
     def geocode(self, request):
         from .evento_coordinate import geocode_address
@@ -275,6 +283,16 @@ class EventoViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["post"])
+    def riallinea_iscrizioni(self, request, pk=None):
+        """Master: ripara partecipanti da pagamenti PayPal CAPTURED orfani."""
+        if not _is_campaign_master_plus(request):
+            return Response({"detail": "Solo Master."}, status=status.HTTP_403_FORBIDDEN)
+        evento = self.get_object()
+        from .iscrizioni_evento_sync import riallinea_iscrizioni_catturate
+        stats = riallinea_iscrizioni_catturate(evento_id=evento.id)
+        return Response({"ok": True, "evento_id": evento.id, **stats})
 
     @action(detail=True, methods=["post"])
     def termina(self, request, pk=None):

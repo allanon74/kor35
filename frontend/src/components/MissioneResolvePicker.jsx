@@ -2,9 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { assegnaMissioneRisoluzione, getMissioni } from '../api';
 import SearchableSelect from './editors/SearchableSelect';
 
-/**
- * Combobox staff per segnare una risoluzione task (tecnica / post / quest / manuale).
- */
+/** Combobox staff/master per segnare risoluzione task. */
 export default function MissioneResolvePicker({
   onLogout,
   tipoRisoluzione,
@@ -23,29 +21,24 @@ export default function MissioneResolvePicker({
   const [msg, setMsg] = useState('');
 
   const load = useCallback(async () => {
-    if (!eventoId) {
-      setOptions([]);
-      return;
-    }
+    if (!eventoId) { setOptions([]); return; }
     try {
       const data = await getMissioni(
-        {
-          evento: eventoId,
-          tipo_risoluzione: tipoRisoluzione,
-          attiva: '1',
-        },
+        { evento: eventoId, tipo_risoluzione: tipoRisoluzione, attiva: '1' },
         onLogout,
       );
       const rows = Array.isArray(data) ? data : data?.results || [];
-      setOptions(rows.map((m) => ({ value: m.id, label: `${m.titolo}${m.korp_nome ? ` [${m.korp_nome}]` : ''}` })));
+      // SearchableSelect: valueKey=id / labelKey=nome (non value/label).
+      setOptions(rows.map((m) => ({
+        id: m.id,
+        nome: `${m.titolo}${m.korp_nome ? ` [${m.korp_nome}]` : ''}${m.esclusiva ? ' ★' : ''}`,
+      })));
     } catch {
       setOptions([]);
     }
   }, [eventoId, tipoRisoluzione, onLogout]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const canSubmit = useMemo(
     () => selected && eventoId && personaggioId && !busy,
@@ -57,21 +50,19 @@ export default function MissioneResolvePicker({
     setBusy(true);
     setMsg('');
     try {
-      await assegnaMissioneRisoluzione(
-        {
-          missione_id: selected,
-          evento_id: Number(eventoId),
-          personaggio_id: Number(personaggioId),
-          proposta_tecnica_id: propostaTecnicaId || null,
-          social_post_id: socialPostId || null,
-          quest_id: questId || null,
-          giorno_id: giornoId || null,
-        },
-        onLogout,
-      );
-      setMsg('Task assegnata');
+      await assegnaMissioneRisoluzione({
+        missione_id: selected,
+        evento_id: Number(eventoId),
+        personaggio_id: Number(personaggioId),
+        proposta_tecnica_id: propostaTecnicaId || null,
+        social_post_id: socialPostId || null,
+        quest_id: questId || null,
+        giorno_id: giornoId || null,
+      }, onLogout);
+      setMsg('Task assegnata — ricompensa accreditata');
       setSelected(null);
       onAssigned?.();
+      await load();
     } catch (err) {
       setMsg(err?.message || 'Assegnazione fallita');
     } finally {
@@ -80,21 +71,17 @@ export default function MissioneResolvePicker({
   };
 
   if (!eventoId) {
-    return (
-      <p className="text-[10px] text-gray-500">
-        {label}: associa un evento per abilitare le task.
-      </p>
-    );
+    return <p className="text-[10px] text-gray-500">{label}: serve un evento associato.</p>;
   }
 
   return (
-    <div className="rounded border border-lime-900/50 bg-lime-950/20 p-2 space-y-1.5">
+    <div className="space-y-1.5 rounded border border-lime-900/50 bg-lime-950/20 p-2">
       <div className="text-[10px] font-bold uppercase text-lime-300">{label}</div>
       <SearchableSelect
-        options={[{ value: null, label: '— Seleziona task —' }, ...options]}
+        options={options}
         value={selected}
         onChange={setSelected}
-        placeholder="Task…"
+        placeholder="— Seleziona task —"
         minOptionsForSearch={0}
       />
       <button

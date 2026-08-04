@@ -768,6 +768,33 @@ class ConfigurazioneCarteCollezionabiliSerializer(serializers.ModelSerializer):
             attrs["abilitata"] = modo == CARTE_ACCESSO_OPEN
         return attrs
 
+    def _sync_moduli_campagna(self, instance):
+        """Allinea Campagna.moduli_accesso['carte'] con accesso_modo."""
+        from personaggi.campagna_moduli import MODULO_CARTE, MODULO_ACCESSO_VALIDI
+
+        campagna = instance.campagna
+        if not campagna:
+            return
+        modo = getattr(instance, "accesso_modo", None) or CARTE_ACCESSO_OFF
+        if modo not in MODULO_ACCESSO_VALIDI:
+            return
+        raw = dict(campagna.moduli_accesso or {})
+        if raw.get(MODULO_CARTE) == modo:
+            return
+        raw[MODULO_CARTE] = modo
+        campagna.moduli_accesso = raw
+        campagna.save(update_fields=["moduli_accesso", "updated_at"])
+
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        self._sync_moduli_campagna(instance)
+        return instance
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        self._sync_moduli_campagna(instance)
+        return instance
+
 
 class TagCartaSerializer(serializers.ModelSerializer):
     class Meta:

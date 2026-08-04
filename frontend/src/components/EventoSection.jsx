@@ -17,7 +17,7 @@ const staffLabel = (user) => {
     return full || user.username || `Utente #${user.id}`;
 };
 
-const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
+const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEvento, onAddGiorno, onIniziaEvento, onTerminaEvento, onReportRicompense, onRiallineaIscrizioni, onRefresh, onRefreshRisorse, risorseLoading = false, onLogout }) => {
     const [showPartecipanti, setShowPartecipanti] = useState(false);
     const [showRicompense, setShowRicompense] = useState(false);
     const [reportLoading, setReportLoading] = useState(false);
@@ -25,6 +25,7 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
     const [reportData, setReportData] = useState(null);
     const [localStaffIds, setLocalStaffIds] = useState([]);
     const [savingStaff, setSavingStaff] = useState(false);
+    const [riallineaLoading, setRiallineaLoading] = useState(false);
 
     const allStaff = useMemo(() => risorse.staff || [], [risorse.staff]);
     const allStaffIds = useMemo(() => normalizeStaffIds(allStaff), [allStaff]);
@@ -148,6 +149,9 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                                 maximumFractionDigits: 2,
                             })}{' '}
                             CR base
+                            {Number(evento.prestigio_base_inizio_evento || 0) !== 0 ? (
+                                <> · {Number(evento.prestigio_base_inizio_evento)} Pr</>
+                            ) : null}
                         </span>
                         <span className={evento.started_at && !evento.ended_at ? "text-amber-300" : "text-gray-500"}>
                             Stato: {evento.started_at && !evento.ended_at ? "IN CORSO" : "NON INIZIATO"}
@@ -155,7 +159,7 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                     </div>
                     {Array.isArray(evento.missioni_riepilogo) && evento.missioni_riepilogo.length > 0 ? (
                         <div className="mt-3 rounded-lg border border-lime-900/40 bg-lime-950/20 px-3 py-2">
-                            <div className="text-[10px] font-black uppercase tracking-wide text-lime-300 mb-2">
+                            <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-lime-300">
                                 Premi task per KORP
                             </div>
                             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -218,7 +222,7 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                 </div>
 
                 {isMaster && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         {!evento.started_at || evento.ended_at ? (
                             <button
                                 onClick={onIniziaEvento}
@@ -234,6 +238,24 @@ const EventoSection = ({ evento, isMaster, risorse, onEdit, onDelete, onUpdateEv
                                 Termina evento
                             </button>
                         )}
+                        {onRiallineaIscrizioni ? (
+                            <button
+                                type="button"
+                                disabled={riallineaLoading}
+                                onClick={async () => {
+                                    setRiallineaLoading(true);
+                                    try {
+                                        await onRiallineaIscrizioni();
+                                    } finally {
+                                        setRiallineaLoading(false);
+                                    }
+                                }}
+                                className="px-3 py-2 bg-lime-800 text-white rounded-lg text-[10px] font-black uppercase shadow hover:bg-lime-700 disabled:opacity-50"
+                                title="Ripara iscritti da pagamenti PayPal CAPTURED orfani"
+                            >
+                                {riallineaLoading ? 'Riallineamento…' : 'Riallinea iscrizioni'}
+                            </button>
+                        ) : null}
                         <button
                             onClick={handleLoadReport}
                             className="px-4 py-2 bg-indigo-700 text-white rounded-lg text-xs font-black uppercase shadow-lg hover:bg-indigo-600 transition-all"

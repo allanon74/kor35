@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { 
     getEventi, associaQrAVista, getRisorseEditor, getAVistaDisponibili,
-    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento,
+    createEvento, updateEvento, deleteEvento, iniziaEvento, terminaEvento, reportRicompenseEvento, riallineaIscrizioniEvento,
     createGiorno, updateGiorno, deleteGiorno,
     createQuest, updateQuest, deleteQuest,
     addPngToQuest, addMostroToQuest, addVistaToQuest,
@@ -51,9 +51,10 @@ const readPlotRisorseCache = (campaignSlug) => {
 const EMPTY_RISORSE = { png: [], templates: [], manifesti: [], inventari: [], staff: [], a_vista: [] };
 
 const PlotTab = ({ onLogout }) => {
-    const { isCampaignMaster, activeCampaign } = useCharacter();
+    const { isCampaignMaster, isCampaignStaffer, activeCampaign } = useCharacter();
     const { openMinigioco, minigiocoModal } = useStaffMinigiocoQr(onLogout);
     const canManagePlot = isCampaignMaster;
+    const canResolveTasks = isCampaignMaster || isCampaignStaffer;
     const [eventi, setEventi] = useState([]);
     const [selectedEvento, setSelectedEvento] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -203,6 +204,8 @@ const PlotTab = ({ onLogout }) => {
                 raw.iscrizione_costo_euro = Number.isFinite(cost) ? cost : 0;
                 const credEvBase = parseFloat(String(raw.crediti_base_inizio_evento ?? '0').replace(',', '.'));
                 raw.crediti_base_inizio_evento = Number.isFinite(credEvBase) ? credEvBase : 0;
+                const prEv = parseInt(String(raw.prestigio_base_inizio_evento ?? '0'), 10);
+                raw.prestigio_base_inizio_evento = Number.isFinite(prEv) ? prEv : 0;
                 const pcEv = parseInt(String(raw.pc_guadagnati ?? '1'), 10);
                 raw.pc_guadagnati = Number.isFinite(pcEv) && pcEv >= 0 ? pcEv : 1;
                 raw.iscrizione_test_attiva = !!raw.iscrizione_test_attiva;
@@ -363,6 +366,17 @@ const PlotTab = ({ onLogout }) => {
         if (!selectedEvento?.id) return null;
         return reportRicompenseEvento(selectedEvento.id, onLogout);
     }, [selectedEvento, onLogout]);
+    const handleRiallineaIscrizioni = useCallback(async () => {
+        if (!selectedEvento?.id) return;
+        const stats = await riallineaIscrizioniEvento(selectedEvento.id, onLogout);
+        await refreshData();
+        const msg = `Riallineamento: +${stats?.aggiunti ?? 0} iscritti`
+            + ` (${stats?.gia_presenti ?? 0} già ok`
+            + (stats?.conflitti ? `, ${stats.conflitti} conflitti` : '')
+            + ')';
+        window.alert(msg);
+        return stats;
+    }, [selectedEvento, onLogout, refreshData]);
 
     const handleRefreshEvento = useCallback(async () => {
         await Promise.all([refreshData(), loadRisorseEditor(activeCampaign)]);
@@ -603,6 +617,7 @@ const PlotTab = ({ onLogout }) => {
                             startEdit('evento', {
                                 pc_guadagnati: 1,
                                 crediti_base_inizio_evento: 0,
+                                prestigio_base_inizio_evento: 0,
                                 iscrizione_costo_euro: 0,
                                 iscrizione_test_attiva: false,
                                 iscrizione_opzioni: [],
@@ -667,6 +682,21 @@ const PlotTab = ({ onLogout }) => {
                                             onChange={(e) => setFormData({ ...formData, crediti_base_inizio_evento: e.target.value })}
                                         />
                                         <p className="text-[10px] text-gray-500 mt-1">Quota fissa assegnata all&apos;avvio; ai singoli PG si sommano bonus carriera/carica.</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase px-1">Prestigio base inizio evento</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            className="w-full bg-gray-900 p-3 rounded-lg border border-gray-700"
+                                            value={
+                                                formData.prestigio_base_inizio_evento === undefined || formData.prestigio_base_inizio_evento === null
+                                                    ? ''
+                                                    : formData.prestigio_base_inizio_evento
+                                            }
+                                            onChange={(e) => setFormData({ ...formData, prestigio_base_inizio_evento: e.target.value })}
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">Può essere negativo (malus Prestigio a tutti gli iscritti all&apos;avvio).</p>
                                     </div>
                                     <div className="md:col-span-2">
                                         <RichTextEditor label="Sinossi" value={formData.sinossi} onChange={val => setFormData({...formData, sinossi: val})} stickyToolbar editorHeightClass="min-h-[160px] max-h-[min(340px,42vh)]" />
@@ -1131,6 +1161,7 @@ const PlotTab = ({ onLogout }) => {
                                 onIniziaEvento={handleIniziaEvento}
                                 onTerminaEvento={handleTerminaEvento}
                                 onReportRicompense={handleReportRicompenseEvento}
+                                onRiallineaIscrizioni={handleRiallineaIscrizioni}
                                 onRefresh={handleRefreshEvento}
                                 onRefreshRisorse={() => loadRisorseEditor(activeCampaign)}
                                 risorseLoading={risorseLoading}
@@ -1152,6 +1183,7 @@ const PlotTab = ({ onLogout }) => {
                                     onEditTask={handleEditTask}
                                     eventoId={selectedEvento?.id}
                                     onLogout={onLogout}
+                                    canResolveTasks={canResolveTasks}
                                 />
                             ))}
                         </div>

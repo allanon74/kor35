@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { 
   getMessages, 
@@ -26,6 +26,7 @@ import {
 import NotificationPopup from './NotificationPopup';
 import { putOfflineGameStateSnapshot } from '../lib/offlineGameStateDb';
 import { activateWebPush, isWebPushSupported } from '../lib/webpush';
+import { canAccessModuloMode, getModuloAccesso } from '../lib/campagnaModuli';
 
 import { 
   usePunteggi, 
@@ -107,6 +108,10 @@ export const CharacterProvider = ({ children, onLogout }) => {
     activeCampaignRole === 'HEAD_MASTER';
   const isCampaignRedactor = isCampaignStaffer || activeCampaignRole === 'REDACTOR';
   const canUseWizardTest = isGlobalSuperuser || isDjangoStaff || isCampaignStaffer;
+  const moduliAccesso = useMemo(
+    () => activeCampaignMeta?.moduli_accesso || {},
+    [activeCampaignMeta],
+  );
 
   const [viewAll, setViewAll] = useState(false);
   const [giocoEventoStato, setGiocoEventoStato] = useState({
@@ -141,12 +146,38 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, []);
 
   // --- FETCH INIZIALE TIMER ATTIVI ---
+  const refreshCampaigns = useCallback(async () => {
+    try {
+      const list = await getCampaigns(onLogout);
+      setCampaigns(Array.isArray(list) ? list : []);
+      return Array.isArray(list) ? list : [];
+    } catch {
+      setCampaigns([]);
+      return [];
+    }
+  }, [onLogout]);
+
   useEffect(() => {
     const syncCampaign = async () => {
       try {
         const valid = await validateActiveCampaign(activeCampaign, onLogout);
         const normalized = setActiveCampaignSlug(valid?.slug || activeCampaign);
         setActiveCampaign(normalized);
+        // Allinea moduli/ruolo senza aspettare un reload completo della lista.
+        if (valid && typeof valid === 'object' && valid.slug) {
+          setCampaigns((prev) => {
+            const slug = normCampaignSlug(valid.slug);
+            const idx = prev.findIndex((c) => normCampaignSlug(c.slug) === slug);
+            if (idx < 0) return prev;
+            const next = [...prev];
+            next[idx] = {
+              ...next[idx],
+              ...valid,
+              moduli_accesso: valid.moduli_accesso || next[idx].moduli_accesso || {},
+            };
+            return next;
+          });
+        }
       } catch {
         setActiveCampaign(setActiveCampaignSlug('kor35'));
       }
@@ -155,16 +186,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, [activeCampaign, onLogout]);
 
   useEffect(() => {
-    const loadCampaigns = async () => {
-      try {
-        const list = await getCampaigns(onLogout);
-        setCampaigns(Array.isArray(list) ? list : []);
-      } catch {
-        setCampaigns([]);
-      }
-    };
-    loadCampaigns();
-  }, [onLogout, activeCampaign]);
+    refreshCampaigns();
+  }, [refreshCampaigns, activeCampaign]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,6 +253,37 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isLoading: isLoadingDetail,
     refetch: refetchCharacterDetail
   } = usePersonaggioDetail(selectedCharacterId, onLogout);
+
+  /**
+   * PnG non giocante: come lato API, vede i moduli in TEST anche senza ruolo staff.
+   * Il dettaglio è la fonte più affidabile; in fallback si usa la lista personaggi.
+   */
+  const isPngStaffAttivo = useMemo(() => {
+    const flagGiocante = (row) => {
+      if (!row || typeof row !== 'object') return null;
+      if (typeof row.tipologia_giocante === 'boolean') return row.tipologia_giocante;
+      if (typeof row.giocante === 'boolean') return row.giocante;
+      if (typeof row.tipologia?.giocante === 'boolean') return row.tipologia.giocante;
+      return null;
+    };
+    const fromDetail = flagGiocante(selectedCharacterData);
+    if (fromDetail !== null) return !fromDetail;
+    const row = Array.isArray(personaggiList)
+      ? personaggiList.find((p) => String(p?.id) === String(selectedCharacterId))
+      : null;
+    const fromList = flagGiocante(row);
+    return fromList === null ? false : !fromList;
+  }, [selectedCharacterData, personaggiList, selectedCharacterId]);
+
+  const canAccessModulo = useCallback((key, { isPngStaff } = {}) => {
+    const modo = getModuloAccesso(moduliAccesso, key);
+    return canAccessModuloMode(modo, {
+      isCampaignStaffer,
+      isDjangoStaff,
+      isGlobalSuperuser,
+      isPngStaff: isPngStaff === undefined ? isPngStaffAttivo : !!isPngStaff,
+    });
+  }, [moduliAccesso, isCampaignStaffer, isDjangoStaff, isGlobalSuperuser, isPngStaffAttivo]);
 
   /** Aggiorna IndexedDB (snapshot di gioco) dopo ogni sync online del personaggio. */
   useEffect(() => {
@@ -737,6 +791,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     staffWorkMode,
     setStaffWorkMode,
     campaigns,
+    refreshCampaigns,
     activeCampaign,
     changeActiveCampaign,
     /** Superuser Django (bypass globale). Alias legacy per il codice esistente. */
@@ -744,6 +799,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
     isAdmin: isGlobalSuperuser,
     isDjangoStaff,
     canUseWizardTest,
+    moduliAccesso,
+    canAccessModulo,
     viewAll,
     toggleViewAll,
     adminPendingCount,

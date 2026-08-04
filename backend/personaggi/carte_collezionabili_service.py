@@ -68,6 +68,15 @@ def get_config_carte(campagna, *, create: bool = False) -> ConfigurazioneCarteCo
 
 
 def get_carte_accesso_modo(campagna) -> str:
+    """OFF/TEST/OPEN: preferisce Campagna.moduli_accesso['carte'], altrimenti config legacy."""
+    from personaggi.campagna_moduli import (
+        MODULO_CARTE,
+        get_modulo_accesso,
+        has_explicit_modulo,
+    )
+
+    if campagna and has_explicit_modulo(campagna, MODULO_CARTE):
+        return get_modulo_accesso(campagna, MODULO_CARTE)
     cfg = get_config_carte(campagna, create=False)
     if not cfg:
         return CARTE_ACCESSO_OFF
@@ -86,12 +95,9 @@ def is_png_staff_personaggio(personaggio: Personaggio) -> bool:
 
 
 def personaggio_puo_accedere_carte(personaggio: Personaggio) -> bool:
-    modo = get_carte_accesso_modo(personaggio.campagna)
-    if modo == CARTE_ACCESSO_OPEN:
-        return True
-    if modo == CARTE_ACCESSO_TEST:
-        return is_png_staff_personaggio(personaggio)
-    return False
+    from personaggi.campagna_moduli import MODULO_CARTE, personaggio_puo_accedere_modulo
+
+    return personaggio_puo_accedere_modulo(personaggio, MODULO_CARTE)
 
 
 def is_carte_collezionabili_abilitate(campagna) -> bool:

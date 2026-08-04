@@ -25,6 +25,14 @@ class Migration(migrations.Migration):
                 ("titolo", models.CharField(max_length=200)),
                 ("descrizione", models.TextField(blank=True)),
                 (
+                    "esclusiva",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Se attivo, solo i membri della KORP indicata possono svolgerla.",
+                        verbose_name="Esclusiva KORP",
+                    ),
+                ),
+                (
                     "reward_crediti",
                     models.DecimalField(
                         decimal_places=2,
@@ -34,10 +42,7 @@ class Migration(migrations.Migration):
                         verbose_name="Premio Crediti (base)",
                     ),
                 ),
-                (
-                    "reward_prestigio",
-                    models.PositiveIntegerField(default=0, verbose_name="Premio Prestigio (base)"),
-                ),
+                ("reward_prestigio", models.PositiveIntegerField(default=0, verbose_name="Premio Prestigio (base)")),
                 (
                     "tipo_risoluzione",
                     models.CharField(
@@ -55,7 +60,7 @@ class Migration(migrations.Migration):
                     "premio_solo_primo",
                     models.BooleanField(
                         default=False,
-                        help_text="Se attivo, solo il primo risolvitore riceve il premio (gli altri possono essere segnati senza ricompensa).",
+                        help_text="Se attivo, dopo la prima risoluzione la task sparisce dalle effettuabili altrui.",
                         verbose_name="Premio solo al primo",
                     ),
                 ),
@@ -64,38 +69,30 @@ class Migration(migrations.Migration):
                     models.DecimalField(
                         decimal_places=2,
                         default=Decimal("0.00"),
-                        help_text="Sottratto al premio Cr se non sei il primo (ignorato se premio solo al primo).",
                         max_digits=12,
                         validators=[django.core.validators.MinValueValidator(0)],
                         verbose_name="Malus Crediti se non primo",
                     ),
                 ),
-                (
-                    "malus_non_primo_prestigio",
-                    models.PositiveIntegerField(default=0, verbose_name="Malus Prestigio se non primo"),
-                ),
+                ("malus_non_primo_prestigio", models.PositiveIntegerField(default=0, verbose_name="Malus Prestigio se non primo")),
                 (
                     "bonus_successive_crediti",
                     models.DecimalField(
                         decimal_places=2,
                         default=Decimal("0.00"),
-                        help_text="Aggiunto al premio Cr dal secondo risolvitore in poi.",
                         max_digits=12,
                         validators=[django.core.validators.MinValueValidator(0)],
                         verbose_name="Bonus Crediti risoluzioni successive",
                     ),
                 ),
-                (
-                    "bonus_successive_prestigio",
-                    models.PositiveIntegerField(default=0, verbose_name="Bonus Prestigio risoluzioni successive"),
-                ),
+                ("bonus_successive_prestigio", models.PositiveIntegerField(default=0, verbose_name="Bonus Prestigio risoluzioni successive")),
                 ("attiva", models.BooleanField(default=True)),
                 ("ordine", models.PositiveIntegerField(default=0)),
                 (
                     "korp",
                     models.ForeignKey(
                         blank=True,
-                        help_text="Se valorizzato, la task è di quella KORP (ricompense maggiorate per i membri).",
+                        help_text="KORP di appartenenza della task (vuoto = generica).",
                         limit_choices_to={"tipo_carriera__codice": "korp"},
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
@@ -165,7 +162,6 @@ class Migration(migrations.Migration):
                     "giorno",
                     models.ForeignKey(
                         blank=True,
-                        help_text="Giorno plot per risoluzioni manuali.",
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="missioni_manuali_risolte",

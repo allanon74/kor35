@@ -62,15 +62,15 @@ const AVAILABLE_TABS = [
     { id: 'infusioni', label: 'Infusioni', icon: TestTube2, component: InfusioniTab },
     { id: 'cerimoniali', label: 'Cerimoniali', icon: Users, component: CerimonialiTab },
     { id: 'consumabili', label: 'Consumabili', icon: Package, component: ConsumabiliTab },
-    { id: 'negozi', label: 'Negozi', icon: Store, component: NegoziMercanteTab },
-    { id: 'stiva-nave', label: 'Stiva nave', icon: Ship, component: StivaNaveTab, requiresStivaAccess: true },
+    { id: 'negozi', label: 'Negozi', icon: Store, component: NegoziMercanteTab, requiresModulo: 'negozi' },
+    { id: 'stiva-nave', label: 'Stiva nave', icon: Ship, component: StivaNaveTab, requiresStivaAccess: true, requiresModulo: 'pilotaggio' },
     { id: 'qr', label: 'Scanner', icon: QrCode, component: QrTab },
     { id: 'messaggi', label: 'Messaggi', icon: Mail, component: MessaggiTab },
     { id: 'logs', label: 'Diario', icon: ScrollText, component: LogViewer },
     { id: 'transazioni', label: 'Transazioni', icon: ArrowRightLeft, component: TransazioniViewer },
     { id: 'personaggi', label: 'Personaggi', icon: Users, component: PersonaggiTab },
-    { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: ScommesseTab },
-    { id: 'carte', label: 'Carte', icon: CreditCard, component: CarteCollezionabiliTab, requiresCarteAccess: true },
+    { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: ScommesseTab, requiresModulo: 'scommesse' },
+    { id: 'carte', label: 'Carte', icon: CreditCard, component: CarteCollezionabiliTab, requiresCarteAccess: true, requiresModulo: 'carte' },
 ];
 
 const DEFAULT_SHORTCUTS = ['inventario', 'abilita', 'messaggi', 'qr'];
@@ -255,6 +255,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     isCampaignMaster,
     isCampaignStaffer,
     isCampaignHeadMaster,
+    canAccessModulo,
   } = useCharacter();
 
   useEffect(() => {
@@ -315,11 +316,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
 
   const isMainTabVisible = useCallback(
     (tab) => {
+      if (tab.requiresModulo && !canAccessModulo(tab.requiresModulo)) return false;
       if (tab.requiresStivaAccess) return stivaTabEnabled;
       if (tab.requiresCarteAccess) return carteTabEnabled;
       return true;
     },
-    [stivaTabEnabled, carteTabEnabled],
+    [stivaTabEnabled, carteTabEnabled, canAccessModulo],
   );
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
@@ -1111,6 +1113,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                     <span className="font-bold">Wiki Pubblica</span>
                     <ChevronRight size={14} className="ml-auto opacity-50"/>
                 </Link>
+                {canAccessModulo('social') && (
                 <button
                     type="button"
                     onClick={() => {
@@ -1128,6 +1131,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                       </span>
                     )}
                 </button>
+                )}
             </div>
         </div>
 

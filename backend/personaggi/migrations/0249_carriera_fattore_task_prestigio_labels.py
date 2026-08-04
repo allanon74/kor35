@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 import django.core.validators
-import django.db.models.deletion
 from django.db import migrations, models
 
 
@@ -20,7 +19,7 @@ class Migration(migrations.Migration):
                 default=Decimal("1.00"),
                 help_text=(
                     "Moltiplicatore ricompense (Crediti/Prestigio) delle task di questa KORP "
-                    "per i membri attivi (es. 2.00 = doppie). Solo rilevante se tipo = korp."
+                    "per i membri attivi (es. 2.00 = doppie). Rilevante se tipo = korp."
                 ),
                 max_digits=5,
                 validators=[django.core.validators.MinValueValidator(Decimal("0.01"))],
@@ -32,7 +31,7 @@ class Migration(migrations.Migration):
             name="bonus_peso_influencer",
             field=models.PositiveIntegerField(
                 default=0,
-                help_text="Bonus al Prestigio (ex peso social/influencer) per i membri con questa carica.",
+                help_text="Bonus al Prestigio (ex peso social) per i membri con questa carica.",
                 verbose_name="Bonus Prestigio",
             ),
         ),
@@ -42,7 +41,7 @@ class Migration(migrations.Migration):
             field=models.PositiveIntegerField(
                 default=1,
                 help_text=(
-                    "Prestigio del personaggio (conosciuto/influenza social). "
+                    "Prestigio del personaggio (conosciuto / influenza social). "
                     "Usato per like InstaFame (1 = minimo). Le cariche attive e le task possono aumentarlo."
                 ),
                 verbose_name="Prestigio",

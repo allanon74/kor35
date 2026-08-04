@@ -14,18 +14,18 @@ class _FakeMissione:
         self.malus_non_primo_prestigio = kwargs.get("malus_non_primo_prestigio", 0)
         self.bonus_successive_crediti = kwargs.get("bonus_successive_crediti", Decimal("0"))
         self.bonus_successive_prestigio = kwargs.get("bonus_successive_prestigio", 0)
+        self.esclusiva = kwargs.get("esclusiva", False)
+        self.korp_id = kwargs.get("korp_id")
 
 
 class MissioniRewardCalcTests(SimpleTestCase):
     def test_primo_piena_ricompensa(self):
-        m = _FakeMissione()
-        cr, pr = calcola_ricompensa_base(m, is_primo=True)
+        cr, pr = calcola_ricompensa_base(_FakeMissione(), is_primo=True)
         self.assertEqual(cr, Decimal("100.00"))
         self.assertEqual(pr, 10)
 
     def test_solo_primo_azzera_successivi(self):
-        m = _FakeMissione(premio_solo_primo=True)
-        cr, pr = calcola_ricompensa_base(m, is_primo=False)
+        cr, pr = calcola_ricompensa_base(_FakeMissione(premio_solo_primo=True), is_primo=False)
         self.assertEqual(cr, Decimal("0.00"))
         self.assertEqual(pr, 0)
 
@@ -39,3 +39,21 @@ class MissioniRewardCalcTests(SimpleTestCase):
         cr, pr = calcola_ricompensa_base(m, is_primo=False)
         self.assertEqual(cr, Decimal("85.00"))
         self.assertEqual(pr, 8)
+
+
+class MissioniRiepilogoLogicTests(SimpleTestCase):
+    """Verifica classificazione non-korp: generiche + altre KORP non esclusive."""
+
+    def test_classificazione_non_korp(self):
+        # Pure unit: replica la regola senza DB
+        missioni = [
+            _FakeMissione(korp_id=1, esclusiva=False, reward_crediti=Decimal("10")),
+            _FakeMissione(korp_id=2, esclusiva=False, reward_crediti=Decimal("20")),
+            _FakeMissione(korp_id=2, esclusiva=True, reward_crediti=Decimal("50")),
+            _FakeMissione(korp_id=None, esclusiva=False, reward_crediti=Decimal("5")),
+        ]
+        korp_id = 1
+        di = [m for m in missioni if m.korp_id == korp_id]
+        non = [m for m in missioni if m.korp_id != korp_id and not m.esclusiva]
+        self.assertEqual(len(di), 1)
+        self.assertEqual(sum(m.reward_crediti for m in non), Decimal("25"))  # 20 + 5, non 50 esclusiva

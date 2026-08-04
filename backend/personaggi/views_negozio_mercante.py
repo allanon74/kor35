@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from personaggi.campagna_moduli import MODULO_NEGOZI, ModuloStaffGateMixin
 from personaggi.models import FEATURE_NEGOZI_MERCANTE
 from personaggi.views_staff import (
     _campaign_feature_filter,
@@ -34,11 +35,18 @@ from personaggi.views import _can_operate_in_campaign
 
 
 def _get_pg(request, char_id):
+    from personaggi.campagna_moduli import MODULO_NEGOZI, modulo_accesso_error
+
     pg = get_object_or_404(Personaggio, pk=char_id, proprietario=request.user)
     if not _can_operate_in_campaign(request.user, pg.campagna, needs_master=False):
         from rest_framework.exceptions import PermissionDenied
 
         raise PermissionDenied("Non autorizzato per la campagna del personaggio.")
+    modulo_err = modulo_accesso_error(pg, MODULO_NEGOZI, user=request.user)
+    if modulo_err:
+        from rest_framework.exceptions import PermissionDenied
+
+        raise PermissionDenied(modulo_err)
     return pg
 
 
@@ -119,7 +127,8 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
             return Response({"error": str(e)}, status=400)
 
 
-class NegozioMercanteStaffViewSet(viewsets.ModelViewSet):
+class NegozioMercanteStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_NEGOZI
     permission_classes = [IsStaffOrMaster]
     serializer_class = NegozioMercanteSerializer
 
@@ -197,7 +206,8 @@ class NegozioMercanteStaffViewSet(viewsets.ModelViewSet):
         return Response(rows)
 
 
-class NegozioMercanteVoceStaffViewSet(viewsets.ModelViewSet):
+class NegozioMercanteVoceStaffViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
+    modulo_key = MODULO_NEGOZI
     permission_classes = [IsStaffOrMaster]
     serializer_class = NegozioMercanteVoceSerializer
 

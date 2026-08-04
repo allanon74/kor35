@@ -133,6 +133,15 @@ def _personaggio_da_qr(qr: QrCode) -> Optional[Personaggio]:
     return Personaggio.objects.filter(inventario_ptr_id=qr.vista_id).first()
 
 
+def _gate_modulo_pilotaggio(personaggio: Optional[Personaggio], user=None):
+    """Modulo campagna «pilotaggio»: Response 403 se non accessibile, altrimenti None."""
+    from personaggi.campagna_moduli import MODULO_PILOTAGGIO, modulo_gate_response
+
+    if personaggio is None:
+        return None
+    return modulo_gate_response(personaggio, MODULO_PILOTAGGIO, user=user)
+
+
 def _sottosistema_da_qr(qr: QrCode) -> Optional[SottosistemaNave]:
     if qr is None or qr.vista_id is None:
         return None
@@ -530,6 +539,9 @@ class PilotQrLoginView(APIView):
                 {"error": "Questo QR non e' associato a un personaggio."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        gate = _gate_modulo_pilotaggio(pilota)
+        if gate:
+            return gate
         valore = pilota.get_valore_statistica(navigazione_stat_sigla())
         nav_sigla = navigazione_stat_sigla()
         if int(valore or 0) < 1:
@@ -1527,6 +1539,9 @@ class PilotSubsystemQrActionView(APIView):
                 {"error": "Personaggio non valido per questo utente."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        gate = _gate_modulo_pilotaggio(pg, request.user)
+        if gate:
+            return gate
         qr = QrCode.objects.select_related("vista").filter(id=qr_id).first()
         if not qr:
             return Response(
@@ -1575,6 +1590,9 @@ class PilotSubsystemQrRepairView(APIView):
                 {"error": "Personaggio non valido per questo utente."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        gate = _gate_modulo_pilotaggio(pg, request.user)
+        if gate:
+            return gate
 
         qr = QrCode.objects.select_related("vista").filter(id=qr_id).first()
         if not qr:
@@ -1632,6 +1650,9 @@ class PilotSubsystemQrRechargeView(APIView):
                 {"error": "Personaggio non valido per questo utente."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        gate = _gate_modulo_pilotaggio(pg, request.user)
+        if gate:
+            return gate
 
         qr = QrCode.objects.select_related("vista").filter(id=qr_id).first()
         if not qr:
@@ -2183,6 +2204,9 @@ class PilotStivaView(APIView):
                     {"error": "Personaggio non valido per questo utente."},
                     status=status.HTTP_403_FORBIDDEN,
                 )
+            gate = _gate_modulo_pilotaggio(pg, request.user)
+            if gate:
+                return gate
             if int(pg.get_valore_statistica(sigla) or 0) <= 0:
                 return Response(
                     {"error": f"Accesso stiva richiede {sigla} > 0 sul personaggio."},
