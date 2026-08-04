@@ -1922,6 +1922,9 @@ export const associaQrDiretto = (aVistaId, qrId, onLogout, force = false) => {
 
 // --- EVENTI ---
 export const getEventi = (onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'GET' }, onLogout);
+/** Solo id+titolo — per select staff (Tasks), senza il payload plot completo. */
+export const getEventiOpzioni = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/eventi/opzioni/', { method: 'GET' }, onLogout);
 export const createEvento = (data, onLogout) => fetchAuthenticated('/api/plot/api/eventi/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateEvento = (id, data, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'PATCH', body: JSON.stringify(data) }, onLogout);
 export const deleteEvento = (id, onLogout) => fetchAuthenticated(`/api/plot/api/eventi/${id}/`, { method: 'DELETE' }, onLogout);
@@ -1943,6 +1946,8 @@ export const getMissioni = (params = {}, onLogout) => {
   const suffix = qs.toString() ? `?${qs}` : '';
   return fetchAuthenticated(`/api/plot/api/missioni/${suffix}`, { method: 'GET' }, onLogout);
 };
+export const getMissione = (id, onLogout) =>
+  fetchAuthenticated(`/api/plot/api/missioni/${id}/`, { method: 'GET' }, onLogout);
 export const createMissione = (data, onLogout) =>
   fetchAuthenticated('/api/plot/api/missioni/', { method: 'POST', body: JSON.stringify(data) }, onLogout);
 export const updateMissione = (id, data, onLogout) =>

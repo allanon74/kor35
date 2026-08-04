@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Target } from 'lucide-react';
 import {
   createMissione,
   deleteMissione,
-  getEventi,
+  getEventiOpzioni,
+  getMissione,
   getMissioni,
-  staffGetCarriere,
+  staffGetKorps,
   updateMissione,
 } from '../../api';
 import {
@@ -44,29 +45,46 @@ const emptyForm = () => ({
   eventi_ids: [],
 });
 
+const formFromMissione = (row) => ({
+  ...emptyForm(),
+  id: row.id,
+  titolo: row.titolo || '',
+  descrizione: row.descrizione || '',
+  korp: row.korp || null,
+  esclusiva: !!row.esclusiva,
+  reward_crediti: row.reward_crediti ?? 0,
+  reward_prestigio: row.reward_prestigio ?? 0,
+  tipo_risoluzione: row.tipo_risoluzione || 'MANUALE',
+  premio_solo_primo: !!row.premio_solo_primo,
+  malus_non_primo_crediti: row.malus_non_primo_crediti ?? 0,
+  malus_non_primo_prestigio: row.malus_non_primo_prestigio ?? 0,
+  bonus_successive_crediti: row.bonus_successive_crediti ?? 0,
+  bonus_successive_prestigio: row.bonus_successive_prestigio ?? 0,
+  attiva: row.attiva !== false,
+  ordine: row.ordine ?? 0,
+  eventi_ids: (row.eventi || []).map((ev) => ev.id),
+});
+
 export default function MissioniManager({ onLogout }) {
   const [items, setItems] = useState([]);
   const [eventi, setEventi] = useState([]);
   const [korps, setKorps] = useState([]);
+  const [metaLoaded, setMetaLoaded] = useState(false);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const metaPromiseRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
+  /** Solo lista snella — non blocca su eventi/carriere. */
+  const loadList = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [m, e, c] = await Promise.all([
-        getMissioni({}, onLogout),
-        getEventi(onLogout),
-        staffGetCarriere(onLogout),
-      ]);
+      const m = await getMissioni({}, onLogout);
       setItems(Array.isArray(m) ? m : m?.results || []);
-      setEventi(Array.isArray(e) ? e : e?.results || []);
-      const carriere = Array.isArray(c) ? c : c?.results || [];
-      setKorps(carriere.filter((x) => x.tipo_carriera_codice === 'korp' || x.tipo_carriera?.codice === 'korp'));
     } catch (err) {
       setError(err?.message || 'Errore caricamento task');
     } finally {
@@ -74,7 +92,32 @@ export default function MissioniManager({ onLogout }) {
     }
   }, [onLogout]);
 
-  useEffect(() => { load(); }, [load]);
+  /** Meta leggeri solo all’apertura del form (create/edit). */
+  const ensureFormMeta = useCallback(async () => {
+    if (metaLoaded) return;
+    if (!metaPromiseRef.current) {
+      setMetaLoading(true);
+      metaPromiseRef.current = (async () => {
+        const [e, k] = await Promise.all([
+          getEventiOpzioni(onLogout),
+          staffGetKorps(onLogout),
+        ]);
+        setEventi(Array.isArray(e) ? e : e?.results || []);
+        setKorps(Array.isArray(k) ? k : k?.results || []);
+        setMetaLoaded(true);
+      })()
+        .catch((err) => {
+          setError(err?.message || 'Errore caricamento opzioni form');
+        })
+        .finally(() => {
+          setMetaLoading(false);
+          metaPromiseRef.current = null;
+        });
+    }
+    await metaPromiseRef.current;
+  }, [metaLoaded, onLogout]);
+
+  useEffect(() => { loadList(); }, [loadList]);
 
   // SearchableSelect usa di default valueKey=id / labelKey=nome (non value/label).
   const korpOptions = useMemo(
@@ -86,28 +129,25 @@ export default function MissioniManager({ onLogout }) {
     [korps],
   );
 
-  const openCreate = () => { setForm(emptyForm()); setModalOpen(true); };
-  const openEdit = (row) => {
-    setForm({
-      ...emptyForm(),
-      id: row.id,
-      titolo: row.titolo || '',
-      descrizione: row.descrizione || '',
-      korp: row.korp || null,
-      esclusiva: !!row.esclusiva,
-      reward_crediti: row.reward_crediti ?? 0,
-      reward_prestigio: row.reward_prestigio ?? 0,
-      tipo_risoluzione: row.tipo_risoluzione || 'MANUALE',
-      premio_solo_primo: !!row.premio_solo_primo,
-      malus_non_primo_crediti: row.malus_non_primo_crediti ?? 0,
-      malus_non_primo_prestigio: row.malus_non_primo_prestigio ?? 0,
-      bonus_successive_crediti: row.bonus_successive_crediti ?? 0,
-      bonus_successive_prestigio: row.bonus_successive_prestigio ?? 0,
-      attiva: row.attiva !== false,
-      ordine: row.ordine ?? 0,
-      eventi_ids: (row.eventi || []).map((ev) => ev.id),
-    });
+  const openCreate = async () => {
+    setForm(emptyForm());
     setModalOpen(true);
+    await ensureFormMeta();
+  };
+
+  const openEdit = async (row) => {
+    setModalOpen(true);
+    setForm(formFromMissione({ ...row, eventi: row.eventi || [] }));
+    setError('');
+    try {
+      const [full] = await Promise.all([
+        getMissione(row.id, onLogout),
+        ensureFormMeta(),
+      ]);
+      if (full) setForm(formFromMissione(full));
+    } catch (err) {
+      setError(err?.message || 'Impossibile caricare il dettaglio task');
+    }
   };
 
   const toggleEvento = (eid) => {
@@ -152,7 +192,7 @@ export default function MissioniManager({ onLogout }) {
       if (form.id) await updateMissione(form.id, payload, onLogout);
       else await createMissione(payload, onLogout);
       setModalOpen(false);
-      await load();
+      await loadList();
     } catch (err) {
       setError(err?.message || 'Salvataggio fallito');
     } finally {
@@ -163,7 +203,7 @@ export default function MissioniManager({ onLogout }) {
   const remove = async (row) => {
     try {
       await deleteMissione(row.id, onLogout);
-      await load();
+      await loadList();
     } catch (err) {
       setError(err?.message || 'Eliminazione fallita');
     }
@@ -200,7 +240,7 @@ export default function MissioniManager({ onLogout }) {
                   {Number(row.reward_crediti || 0).toLocaleString('it-IT')} Cr · {row.reward_prestigio || 0} Pr
                 </span>
                 {row.premio_solo_primo ? <span className="text-amber-300">Solo primo</span> : null}
-                <span>{(row.eventi || []).length} eventi</span>
+                <span>{row.eventi_count ?? (row.eventi || []).length} eventi</span>
               </div>
             </StaffListRow>
           ))}
@@ -208,6 +248,9 @@ export default function MissioniManager({ onLogout }) {
       )}
 
       <StaffModal open={modalOpen} title={form.id ? 'Modifica task' : 'Nuova task'} onClose={() => setModalOpen(false)} onSave={save} saving={saving} wide>
+        {metaLoading && !metaLoaded ? (
+          <p className="mb-3 text-xs text-gray-500">Caricamento opzioni…</p>
+        ) : null}
         <StaffSection title="Anagrafica">
           <StaffFieldGrid>
             <LabeledField label="Titolo" required>
@@ -217,8 +260,9 @@ export default function MissioniManager({ onLogout }) {
               <SearchableSelect
                 options={korpOptions}
                 value={form.korp}
-                onChange={(v) => setForm({ ...form, korp: v, esclusiva: v ? form.esclusiva : false })}
-                placeholder="— Nessuna (generica) —"
+                onChange={(v) => setForm({ ...form, korp: v })}
+                placeholder="Generica (nessuna)"
+                allowClear
               />
             </LabeledField>
             <LabeledField label="Tipo risoluzione">
@@ -230,56 +274,39 @@ export default function MissioniManager({ onLogout }) {
               <input type="number" className={staffInputClass()} value={form.ordine} onChange={(e) => setForm({ ...form, ordine: e.target.value })} />
             </LabeledField>
           </StaffFieldGrid>
-          <LabeledField label="Descrizione">
+          <LabeledField label="Descrizione" className="mt-3">
             <textarea className={staffInputClass()} rows={3} value={form.descrizione} onChange={(e) => setForm({ ...form, descrizione: e.target.value })} />
           </LabeledField>
-          <label className="flex items-center gap-2 text-sm text-gray-300">
-            <input type="checkbox" checked={!!form.esclusiva} disabled={!form.korp} onChange={(e) => setForm({ ...form, esclusiva: e.target.checked })} />
-            Esclusiva KORP (solo membri)
-          </label>
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.esclusiva} onChange={(e) => setForm({ ...form, esclusiva: e.target.checked })} /> Esclusiva KORP</label>
+            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.attiva} onChange={(e) => setForm({ ...form, attiva: e.target.checked })} /> Attiva</label>
+            <label className="inline-flex items-center gap-2"><input type="checkbox" checked={!!form.premio_solo_primo} onChange={(e) => setForm({ ...form, premio_solo_primo: e.target.checked })} /> Premio solo al primo</label>
+          </div>
         </StaffSection>
 
         <StaffSection title="Premi">
           <StaffFieldGrid>
-            <LabeledField label="Crediti (Cr)">
-              <input type="number" step="0.01" className={staffInputClass()} value={form.reward_crediti} onChange={(e) => setForm({ ...form, reward_crediti: e.target.value })} />
-            </LabeledField>
-            <LabeledField label="Prestigio (Pr)">
-              <input type="number" min={0} className={staffInputClass()} value={form.reward_prestigio} onChange={(e) => setForm({ ...form, reward_prestigio: e.target.value })} />
-            </LabeledField>
+            <LabeledField label="Crediti"><input type="number" step="0.01" className={staffInputClass()} value={form.reward_crediti} onChange={(e) => setForm({ ...form, reward_crediti: e.target.value })} /></LabeledField>
+            <LabeledField label="Prestigio"><input type="number" className={staffInputClass()} value={form.reward_prestigio} onChange={(e) => setForm({ ...form, reward_prestigio: e.target.value })} /></LabeledField>
+            <LabeledField label="Malus Cr non-primo"><input type="number" step="0.01" className={staffInputClass()} value={form.malus_non_primo_crediti} onChange={(e) => setForm({ ...form, malus_non_primo_crediti: e.target.value })} /></LabeledField>
+            <LabeledField label="Malus Pr non-primo"><input type="number" className={staffInputClass()} value={form.malus_non_primo_prestigio} onChange={(e) => setForm({ ...form, malus_non_primo_prestigio: e.target.value })} /></LabeledField>
+            <LabeledField label="Bonus Cr successive"><input type="number" step="0.01" className={staffInputClass()} value={form.bonus_successive_crediti} onChange={(e) => setForm({ ...form, bonus_successive_crediti: e.target.value })} /></LabeledField>
+            <LabeledField label="Bonus Pr successive"><input type="number" className={staffInputClass()} value={form.bonus_successive_prestigio} onChange={(e) => setForm({ ...form, bonus_successive_prestigio: e.target.value })} /></LabeledField>
           </StaffFieldGrid>
-          <label className="mt-2 flex items-center gap-2 text-sm text-gray-300">
-            <input type="checkbox" checked={!!form.premio_solo_primo} onChange={(e) => setForm({ ...form, premio_solo_primo: e.target.checked })} />
-            Premio solo al primo (poi sparisce dalle effettuabili)
-          </label>
-          {!form.premio_solo_primo ? (
-            <StaffFieldGrid>
-              <LabeledField label="Malus Cr se non primo">
-                <input type="number" step="0.01" className={staffInputClass()} value={form.malus_non_primo_crediti} onChange={(e) => setForm({ ...form, malus_non_primo_crediti: e.target.value })} />
-              </LabeledField>
-              <LabeledField label="Malus Pr se non primo">
-                <input type="number" className={staffInputClass()} value={form.malus_non_primo_prestigio} onChange={(e) => setForm({ ...form, malus_non_primo_prestigio: e.target.value })} />
-              </LabeledField>
-              <LabeledField label="Bonus Cr successive">
-                <input type="number" step="0.01" className={staffInputClass()} value={form.bonus_successive_crediti} onChange={(e) => setForm({ ...form, bonus_successive_crediti: e.target.value })} />
-              </LabeledField>
-              <LabeledField label="Bonus Pr successive">
-                <input type="number" className={staffInputClass()} value={form.bonus_successive_prestigio} onChange={(e) => setForm({ ...form, bonus_successive_prestigio: e.target.value })} />
-              </LabeledField>
-            </StaffFieldGrid>
-          ) : null}
-          <label className="mt-2 flex items-center gap-2 text-sm text-gray-300">
-            <input type="checkbox" checked={!!form.attiva} onChange={(e) => setForm({ ...form, attiva: e.target.checked })} />
-            Attiva
-          </label>
         </StaffSection>
 
-        <StaffSection title="Eventi associati">
-          <div className="max-h-48 space-y-1 overflow-y-auto rounded border border-gray-700 p-2">
-            {(eventi || []).map((ev) => (
-              <label key={ev.id} className="flex items-center gap-2 text-sm text-gray-200">
-                <input type="checkbox" checked={(form.eventi_ids || []).map(Number).includes(Number(ev.id))} onChange={() => toggleEvento(ev.id)} />
-                {ev.titolo}
+        <StaffSection title="Eventi collegati">
+          <div className="max-h-48 space-y-1 overflow-y-auto rounded border border-gray-800 p-2">
+            {eventi.length === 0 ? (
+              <p className="text-xs text-gray-500">{metaLoading ? 'Caricamento…' : 'Nessun evento'}</p>
+            ) : eventi.map((ev) => (
+              <label key={ev.id} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={(form.eventi_ids || []).map(Number).includes(Number(ev.id))}
+                  onChange={() => toggleEvento(ev.id)}
+                />
+                <span>{ev.titolo}</span>
               </label>
             ))}
           </div>

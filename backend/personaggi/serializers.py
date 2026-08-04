@@ -275,7 +275,17 @@ class KorpSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Korp
-        fields = ("id", "nome", "descrizione", "tipo", "foto", "tipo_carriera", "sync_id", "updated_at")
+        fields = (
+            "id",
+            "nome",
+            "descrizione",
+            "tipo",
+            "foto",
+            "tipo_carriera",
+            "fattore_task",
+            "sync_id",
+            "updated_at",
+        )
 
 
 class CarrieraSerializer(serializers.ModelSerializer):

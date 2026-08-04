@@ -1,6 +1,7 @@
 """API Task/Missioni."""
 from __future__ import annotations
 
+from django.db.models import Count, Prefetch
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
@@ -39,7 +40,33 @@ class IsStaffOrMasterWrite(permissions.BasePermission):
         return _is_campaign_staff_plus(request)
 
 
+class MissioneListSerializer(ModelSerializer):
+    """Payload leggero per la lista staff (niente nested eventi completi)."""
+
+    korp_nome = CharField(source="korp.nome", read_only=True, allow_null=True)
+    eventi_count = IntegerField(read_only=True)
+
+    class Meta:
+        model = Missione
+        fields = (
+            "id",
+            "titolo",
+            "korp",
+            "korp_nome",
+            "esclusiva",
+            "reward_crediti",
+            "reward_prestigio",
+            "tipo_risoluzione",
+            "premio_solo_primo",
+            "attiva",
+            "ordine",
+            "eventi_count",
+        )
+
+
 class MissioneSerializer(ModelSerializer):
+    """Dettaglio / create / update: include eventi e campi premio avanzati."""
+
     korp_nome = CharField(source="korp.nome", read_only=True, allow_null=True)
     eventi_ids = ListField(child=IntegerField(), write_only=True, required=False)
     eventi = SerializerMethodField()
@@ -58,7 +85,8 @@ class MissioneSerializer(ModelSerializer):
         read_only_fields = ("id", "sync_id", "updated_at", "created_at", "korp_nome")
 
     def get_eventi(self, obj):
-        return [{"id": e.id, "titolo": e.titolo} for e in obj.eventi.all().order_by("-data_inizio")]
+        # Prefetch ordinato in get_queryset (retrieve/write).
+        return [{"id": e.id, "titolo": e.titolo} for e in obj.eventi.all()]
 
     def validate(self, attrs):
         esclusiva = attrs.get("esclusiva", getattr(self.instance, "esclusiva", False))
@@ -129,8 +157,13 @@ class AssegnaRisoluzioneSerializer(Serializer):
 
 class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
     modulo_key = MODULO_TASKS
-    queryset = Missione.objects.all().select_related("korp").prefetch_related("eventi")
+    queryset = Missione.objects.all().select_related("korp")
     serializer_class = MissioneSerializer
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return MissioneListSerializer
+        return MissioneSerializer
 
     def get_permissions(self):
         if self.action in ("list", "retrieve", "mie", "riepilogo_evento"):
@@ -158,7 +191,12 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
             qs = qs.filter(attiva=True)
         elif attiva in ("0", "false", "False"):
             qs = qs.filter(attiva=False)
-        return qs.distinct()
+        if getattr(self, "action", None) == "list":
+            return qs.annotate(eventi_count=Count("eventi", distinct=True)).distinct()
+        # retrieve / write: prefetch eventi per MissioneSerializer.get_eventi
+        return qs.distinct().prefetch_related(
+            Prefetch("eventi", queryset=Evento.objects.order_by("-data_inizio")),
+        )
 
     @action(detail=False, methods=["get"], url_path="mie")
     def mie(self, request):

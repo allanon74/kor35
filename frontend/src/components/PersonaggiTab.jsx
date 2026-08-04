@@ -567,6 +567,17 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                 </div>
             )}
 
+            {/* Tasks in alto: con modulo TEST/OPEN resta visibile (anche vuoto fuori evento).
+                In fondo alla lista era facile perderlo: il click sul PG porta subito al tab Game. */}
+            {selectedCharacterId && canAccessModulo('tasks') ? (
+                <div className="mb-4 shrink-0">
+                    <MissioniPersonaggioPanel
+                        personaggioId={selectedCharacterId}
+                        onLogout={onLogout}
+                    />
+                </div>
+            ) : null}
+
             <div className="flex-1 overflow-y-auto space-y-4 pb-20 custom-scrollbar">
                 {/* Controllo di sicurezza: mappa solo se è un array */}
                 {groupedPersonaggi.map(group => (
@@ -739,12 +750,6 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                   </div>
                 ))}
 
-                {selectedCharacterId && canAccessModulo('tasks') ? (
-                    <MissioniPersonaggioPanel
-                        personaggioId={selectedCharacterId}
-                        onLogout={onLogout}
-                    />
-                ) : null}
             </div>
 
             {/* Conferma azioni staff (reset / morte / rivivere) */}

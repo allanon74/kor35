@@ -41,6 +41,7 @@ export const PLAYER_TAB_TO_MODULO = {
   carte: 'carte',
   negozi: 'negozi',
   social: 'social',
+  // Tasks non ha una tab di primo livello: pannello in Personaggi (MissioniPersonaggioPanel).
 };
 
 export function getModuloAccesso(moduliMap, key, registry = CAMPAGNA_MODULI_REGISTRY) {

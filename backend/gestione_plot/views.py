@@ -225,6 +225,14 @@ class EventoViewSet(viewsets.ModelViewSet):
         context["plot_staff_user_id"] = self.request.user.id if is_staffer_only else None
         return context
 
+    @action(detail=False, methods=["get"], url_path="opzioni")
+    def opzioni(self, request):
+        """Elenco leggero id+titolo per select staff (es. editor Tasks). Evita EventoSerializer completo."""
+        qs = Evento.objects.order_by("-data_inizio")
+        if not request.user.is_superuser:
+            qs = qs.filter(staff_assegnato=request.user)
+        return Response(list(qs.values("id", "titolo")))
+
     @action(detail=False, methods=["get"], url_path="geocode")
     def geocode(self, request):
         from .evento_coordinate import geocode_address

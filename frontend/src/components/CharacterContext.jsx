@@ -146,12 +146,38 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, []);
 
   // --- FETCH INIZIALE TIMER ATTIVI ---
+  const refreshCampaigns = useCallback(async () => {
+    try {
+      const list = await getCampaigns(onLogout);
+      setCampaigns(Array.isArray(list) ? list : []);
+      return Array.isArray(list) ? list : [];
+    } catch {
+      setCampaigns([]);
+      return [];
+    }
+  }, [onLogout]);
+
   useEffect(() => {
     const syncCampaign = async () => {
       try {
         const valid = await validateActiveCampaign(activeCampaign, onLogout);
         const normalized = setActiveCampaignSlug(valid?.slug || activeCampaign);
         setActiveCampaign(normalized);
+        // Allinea moduli/ruolo senza aspettare un reload completo della lista.
+        if (valid && typeof valid === 'object' && valid.slug) {
+          setCampaigns((prev) => {
+            const slug = normCampaignSlug(valid.slug);
+            const idx = prev.findIndex((c) => normCampaignSlug(c.slug) === slug);
+            if (idx < 0) return prev;
+            const next = [...prev];
+            next[idx] = {
+              ...next[idx],
+              ...valid,
+              moduli_accesso: valid.moduli_accesso || next[idx].moduli_accesso || {},
+            };
+            return next;
+          });
+        }
       } catch {
         setActiveCampaign(setActiveCampaignSlug('kor35'));
       }
@@ -160,16 +186,8 @@ export const CharacterProvider = ({ children, onLogout }) => {
   }, [activeCampaign, onLogout]);
 
   useEffect(() => {
-    const loadCampaigns = async () => {
-      try {
-        const list = await getCampaigns(onLogout);
-        setCampaigns(Array.isArray(list) ? list : []);
-      } catch {
-        setCampaigns([]);
-      }
-    };
-    loadCampaigns();
-  }, [onLogout, activeCampaign]);
+    refreshCampaigns();
+  }, [refreshCampaigns, activeCampaign]);
 
   useEffect(() => {
     let cancelled = false;
@@ -773,6 +791,7 @@ export const CharacterProvider = ({ children, onLogout }) => {
     staffWorkMode,
     setStaffWorkMode,
     campaigns,
+    refreshCampaigns,
     activeCampaign,
     changeActiveCampaign,
     /** Superuser Django (bypass globale). Alias legacy per il codice esistente. */

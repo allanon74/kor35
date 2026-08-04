@@ -22,6 +22,7 @@ import {
   isModuloOverride,
   moduloImpatti,
 } from '../../lib/campagnaModuli';
+import { useCharacter } from '../CharacterContext';
 
 const ROLE_OPTIONS = ['PLAYER', 'REDACTOR', 'STAFFER', 'MASTER', 'HEAD_MASTER'];
 const FEATURE_KEYS = [
@@ -69,6 +70,9 @@ const PLAYER_TAB_LABELS = {
 const impattiTesto = (key) => {
   const { staffTools, playerTabs } = moduloImpatti(key);
   const parti = [];
+  if (key === 'tasks') {
+    parti.push('Pannello Personaggi: Tasks (anche vuoto fuori evento)');
+  }
   if (playerTabs.length) {
     parti.push(`Tab giocatore: ${playerTabs.map((t) => PLAYER_TAB_LABELS[t] || t).join(', ')}`);
   }
@@ -79,6 +83,7 @@ const impattiTesto = (key) => {
 };
 
 const CampaignManager = ({ onLogout }) => {
+  const { refreshCampaigns } = useCharacter();
   const [activeTab, setActiveTab] = useState('moduli');
   const [campagne, setCampagne] = useState([]);
   const [membri, setMembri] = useState([]);
@@ -175,13 +180,17 @@ const CampaignManager = ({ onLogout }) => {
     try {
       await action();
       await loadAll();
+      // Propaga moduli/ruoli al CharacterContext (tab Personaggi, gate TEST, tool staff).
+      if (typeof refreshCampaigns === 'function') {
+        await refreshCampaigns();
+      }
       if (invalidatePlotCache) invalidatePlotRisorseCache();
     } catch (e) {
       setError(e?.message || 'Operazione non riuscita.');
     } finally {
       setSaving(false);
     }
-  }, [loadAll]);
+  }, [loadAll, refreshCampaigns]);
 
   const updateModulo = useCallback((key, modo) => {
     if (!moduliCampagnaId) return;
