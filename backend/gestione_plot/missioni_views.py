@@ -23,6 +23,7 @@ from personaggi.models import Personaggio, PropostaTecnica
 from .models import Evento, GiornoEvento, Missione, MissioneEvento, MissioneRisoluzione, Quest
 from .missioni_service import (
     assegna_risoluzione,
+    eventi_attivi_ids,
     lista_missioni_per_personaggio,
     riepilogo_premi_evento,
 )
@@ -166,7 +167,7 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
         return MissioneSerializer
 
     def get_permissions(self):
-        if self.action in ("list", "retrieve", "mie", "riepilogo_evento"):
+        if self.action in ("list", "retrieve", "mie", "riepilogo_evento", "evento_attivo"):
             return [permissions.IsAuthenticated()]
         if self.action == "assegna":
             return [permissions.IsAuthenticated(), IsStaffOrMasterWrite()]
@@ -197,6 +198,27 @@ class MissioneViewSet(ModuloStaffGateMixin, viewsets.ModelViewSet):
         return qs.distinct().prefetch_related(
             Prefetch("eventi", queryset=Evento.objects.order_by("-data_inizio")),
         )
+
+    @action(detail=False, methods=["get"], url_path="evento-attivo")
+    def evento_attivo(self, request):
+        """True se esiste un evento ufficialmente in corso (Inizia senza Termina)."""
+        ids = eventi_attivi_ids()
+        if not ids:
+            return Response({"attivo": False})
+        ev = (
+            Evento.objects.filter(id__in=ids)
+            .order_by("started_at")
+            .values("id", "titolo", "started_at")
+            .first()
+        )
+        if not ev:
+            return Response({"attivo": False})
+        return Response({
+            "attivo": True,
+            "id": ev["id"],
+            "titolo": ev["titolo"],
+            "started_at": ev["started_at"],
+        })
 
     @action(detail=False, methods=["get"], url_path="mie")
     def mie(self, request):

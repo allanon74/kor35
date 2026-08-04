@@ -8,7 +8,7 @@ import QrResultModal from './QrResultModal.jsx';
 import MinigiocoModal from './minigioco/MinigiocoModal.jsx';
 import { useCharacter } from './CharacterContext';
 import { TimerOverlay } from './TimerOverlay';
-import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato } from '../api';
+import { getPilotNavigationConfig, fetchAuthenticated, fetchStaffMessages, socialGetNotifications, getArcanaPasswordStatus, normCampaignSlug, getQrCodeData, pilotSubsystemRepair, pilotSubsystemRecharge, pilotSubsystemSabota, carteGetStato, getMissioniEventoAttivo } from '../api';
 import packageInfo from '../../package.json';
 import { isWebPushEnabled } from '../lib/webpush';
 
@@ -17,7 +17,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard
+    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo
 } from 'lucide-react';
 
 import AbilitaTab from './AbilitaTab.jsx';
@@ -38,6 +38,7 @@ import ScommesseTab from './ScommesseTab.jsx';
 import CarteCollezionabiliTab from './CarteCollezionabiliTab.jsx';
 import NegoziMercanteTab from './NegoziMercanteTab.jsx';
 import StivaNaveTab from './StivaNaveTab.jsx';
+import TasksTab from './TasksTab.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
 import { getStatValueBySigla, DEFAULT_STIVA_ACCESS_STAT_SIGLA } from '../lib/pilotStats.js';
 
@@ -69,6 +70,7 @@ const AVAILABLE_TABS = [
     { id: 'logs', label: 'Diario', icon: ScrollText, component: LogViewer },
     { id: 'transazioni', label: 'Transazioni', icon: ArrowRightLeft, component: TransazioniViewer },
     { id: 'personaggi', label: 'Personaggi', icon: Users, component: PersonaggiTab },
+    { id: 'tasks', label: 'Tasks', icon: ListTodo, component: TasksTab, requiresModulo: 'tasks', requiresEventoAttivo: true },
     { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: ScommesseTab, requiresModulo: 'scommesse' },
     { id: 'carte', label: 'Carte', icon: CreditCard, component: CarteCollezionabiliTab, requiresCarteAccess: true, requiresModulo: 'carte' },
 ];
@@ -111,6 +113,7 @@ const TAB_TO_WIKI_SLUG = {
     'logs': 'diario',
     'transazioni': 'transazioni',
     'personaggi': 'gestione-personaggio',
+    'tasks': 'navigazione-app',
     'social': 'social',
     'consumabili': 'consumabili',
     'stiva-nave': 'componenti-nave-riparazione',
@@ -131,6 +134,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   const [pilotSaboting, setPilotSaboting] = useState(false);
   const [stivaAccessSigla, setStivaAccessSigla] = useState(DEFAULT_STIVA_ACCESS_STAT_SIGLA);
   const [carteTabEnabled, setCarteTabEnabled] = useState(false);
+  const [tasksEventoAttivo, setTasksEventoAttivo] = useState(false);
   const minigiocoIntentRef = useRef(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
@@ -314,14 +318,39 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
     return () => { cancelled = true; };
   }, [selectedCharacterId, onLogout]);
 
+  const tasksModuloOk = canAccessModulo('tasks');
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tasksModuloOk) {
+      setTasksEventoAttivo(false);
+      return undefined;
+    }
+    const load = async () => {
+      try {
+        const data = await getMissioniEventoAttivo(onLogout);
+        if (!cancelled) setTasksEventoAttivo(!!data?.attivo);
+      } catch {
+        if (!cancelled) setTasksEventoAttivo(false);
+      }
+    };
+    load();
+    const timer = setInterval(load, 45000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [tasksModuloOk, onLogout, activeCampaign]);
+
   const isMainTabVisible = useCallback(
     (tab) => {
       if (tab.requiresModulo && !canAccessModulo(tab.requiresModulo)) return false;
+      if (tab.requiresEventoAttivo && !tasksEventoAttivo) return false;
       if (tab.requiresStivaAccess) return stivaTabEnabled;
       if (tab.requiresCarteAccess) return carteTabEnabled;
       return true;
     },
-    [stivaTabEnabled, carteTabEnabled, canAccessModulo],
+    [stivaTabEnabled, carteTabEnabled, tasksEventoAttivo, canAccessModulo],
   );
 
   const [razzaModalOpen, setRazzaModalOpen] = useState(false);
@@ -790,6 +819,12 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
   }, [activeTab, carteTabEnabled]);
 
   useEffect(() => {
+    if (activeTab === 'tasks' && !tasksEventoAttivo) {
+      setActiveTab('game');
+    }
+  }, [activeTab, tasksEventoAttivo]);
+
+  useEffect(() => {
     if (activeTab !== 'watch') return;
     if (!selectedCharacterId) return;
     if (!watchTabEnabled) setActiveTab('game');
@@ -901,7 +936,7 @@ const MainPage = ({ token, onLogout, onSwitchToMaster }) => {
                 />
             );
         }
-        if (tabDef.id === 'scommesse') {
+        if (tabDef.id === 'scommesse' || tabDef.id === 'tasks') {
             return (
                 <div className="flex min-h-full flex-col">
                     <Component onLogout={onLogout} />

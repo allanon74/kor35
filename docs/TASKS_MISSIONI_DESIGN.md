@@ -23,8 +23,8 @@
 2. Cr/Pr non di Korp = Σ task generiche + task di altre KORP **non esclusive** (senza fattore)
 
 ## Visibilità giocatore
-- Solo con **evento attivo** (`started_at` valorizzato e `ended_at` nullo).
-- Tutte le task dell'evento **non esclusive**, più le **esclusive della propria KORP**.
+- Tab dedicata **Tasks** nel menu app (modulo campagna `tasks` in TEST/OPEN), **solo mentre un evento è ufficialmente in corso** (`started_at` valorizzato e `ended_at` nullo).
+- Contenuto: tutte le task dell'evento **non esclusive**, più le **esclusive della propria KORP**.
 
 ## Premio avvio evento
 - Oltre a PC e Crediti base: **`prestigio_base_inizio_evento`** (Integer, può essere negativo).

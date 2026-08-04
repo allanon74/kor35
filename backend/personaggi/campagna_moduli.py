@@ -56,13 +56,14 @@ PLAYER_TAB_TO_MODULO = {
     "carte": MODULO_CARTE,
     "negozi": MODULO_NEGOZI,
     "social": MODULO_SOCIAL,
+    "tasks": MODULO_TASKS,
 }
 
 CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
     {
         "key": MODULO_TASKS,
         "label": "Tasks (missioni)",
-        "descrizione": "Missioni evento con premi Crediti/Prestigio.",
+        "descrizione": "Tab Tasks: missioni evento con premi Crediti/Prestigio.",
         "default": MODULO_ACCESSO_OFF,
     },
     {

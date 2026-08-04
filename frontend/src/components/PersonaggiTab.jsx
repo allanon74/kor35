@@ -24,7 +24,6 @@ import {
 import RichTextEditor from './RichTextEditor';
 import BuildVersions from './BuildVersions';
 import StaffCostumePhotosSection from './StaffCostumePhotosSection';
-import MissioniPersonaggioPanel from './MissioniPersonaggioPanel';
 
 const PersonaggiTab = ({ onLogout, onSelectChar }) => {
     const navigate = useNavigate();
@@ -42,7 +41,6 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
         selectCharacter,
         selectedCharacterId,
         campaigns,
-        canAccessModulo,
     } = useCharacter();
 
     const queryClient = useQueryClient();
@@ -566,17 +564,6 @@ const PersonaggiTab = ({ onLogout, onSelectChar }) => {
                     </button>
                 </div>
             )}
-
-            {/* Tasks in alto: con modulo TEST/OPEN resta visibile (anche vuoto fuori evento).
-                In fondo alla lista era facile perderlo: il click sul PG porta subito al tab Game. */}
-            {selectedCharacterId && canAccessModulo('tasks') ? (
-                <div className="mb-4 shrink-0">
-                    <MissioniPersonaggioPanel
-                        personaggioId={selectedCharacterId}
-                        onLogout={onLogout}
-                    />
-                </div>
-            ) : null}
 
             <div className="flex-1 overflow-y-auto space-y-4 pb-20 custom-scrollbar">
                 {/* Controllo di sicurezza: mappa solo se è un array */}

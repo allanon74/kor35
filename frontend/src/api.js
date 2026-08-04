@@ -1960,6 +1960,9 @@ export const getMissioniMie = (personaggioId, onLogout) =>
     { method: 'GET' },
     onLogout,
   );
+/** Stato evento ufficialmente in corso (Inizia senza Termina) — per visibilità tab Tasks. */
+export const getMissioniEventoAttivo = (onLogout) =>
+  fetchAuthenticated('/api/plot/api/missioni/evento-attivo/', { method: 'GET' }, onLogout);
 export const assegnaMissioneRisoluzione = (data, onLogout) =>
   fetchAuthenticated('/api/plot/api/missioni/assegna-risoluzione/', {
     method: 'POST',

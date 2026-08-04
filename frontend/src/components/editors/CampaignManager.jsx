@@ -65,14 +65,12 @@ const PLAYER_TAB_LABELS = {
   carte: 'Carte',
   negozi: 'Negozi',
   social: 'Social',
+  tasks: 'Tasks (solo evento aperto)',
 };
 
 const impattiTesto = (key) => {
   const { staffTools, playerTabs } = moduloImpatti(key);
   const parti = [];
-  if (key === 'tasks') {
-    parti.push('Pannello Personaggi: Tasks (anche vuoto fuori evento)');
-  }
   if (playerTabs.length) {
     parti.push(`Tab giocatore: ${playerTabs.map((t) => PLAYER_TAB_LABELS[t] || t).join(', ')}`);
   }

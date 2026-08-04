@@ -17,7 +17,7 @@ export const MODULO_ACCESSO_OPTIONS = [
 
 /** Fallback registry se l'API non lo fornisce. */
 export const CAMPAGNA_MODULI_REGISTRY = [
-  { key: 'tasks', label: 'Tasks (missioni)', descrizione: 'Missioni evento con premi Crediti/Prestigio.', default: 'OFF' },
+  { key: 'tasks', label: 'Tasks (missioni)', descrizione: 'Tab Tasks: missioni evento con premi Crediti/Prestigio.', default: 'OFF' },
   { key: 'pilotaggio', label: 'Pilotaggio', descrizione: 'Console nave, stiva, QR sottosistemi.', default: 'OPEN' },
   { key: 'carte', label: 'Carte collezionabili', descrizione: 'Tab Carte e tool staff.', default: 'OFF' },
   { key: 'scommesse', label: 'Scommesse', descrizione: 'Allibratore e tab scommesse.', default: 'OPEN' },
@@ -41,7 +41,7 @@ export const PLAYER_TAB_TO_MODULO = {
   carte: 'carte',
   negozi: 'negozi',
   social: 'social',
-  // Tasks non ha una tab di primo livello: pannello in Personaggi (MissioniPersonaggioPanel).
+  tasks: 'tasks',
 };
 
 export function getModuloAccesso(moduliMap, key, registry = CAMPAGNA_MODULI_REGISTRY) {

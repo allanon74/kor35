@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, ListTodo } from 'lucide-react';
+import { CheckCircle2, ListTodo, RefreshCw } from 'lucide-react';
 import { getMissioniMie } from '../api';
 
 /** Elenco task del PG: KORP in cima, svolte, ricompense (claim automatico lato server). */
-export default function MissioniPersonaggioPanel({ personaggioId, onLogout }) {
+export default function MissioniPersonaggioPanel({
+  personaggioId,
+  personaggioNome,
+  onLogout,
+  standalone = false,
+}) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,17 +31,47 @@ export default function MissioniPersonaggioPanel({ personaggioId, onLogout }) {
 
   if (!personaggioId) return null;
 
+  const shellClass = standalone
+    ? 'space-y-4'
+    : 'rounded-xl border border-lime-900/60 bg-lime-950/20 p-4';
+
   return (
-    <section className="rounded-xl border border-lime-900/60 bg-lime-950/20 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <ListTodo className="text-lime-400" size={20} />
-        <h2 className="text-sm font-black uppercase tracking-wide text-lime-200">Tasks</h2>
+    <section className={shellClass}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <ListTodo className="text-lime-400 shrink-0" size={standalone ? 24 : 20} />
+          <div className="min-w-0">
+            <h2 className={`font-black uppercase tracking-wide text-lime-200 ${standalone ? 'text-lg' : 'text-sm'}`}>
+              Tasks
+            </h2>
+            {standalone && personaggioNome ? (
+              <p className="text-xs text-gray-400 truncate">{personaggioNome}</p>
+            ) : null}
+            {standalone ? (
+              <p className="mt-1 text-xs text-gray-500">
+                Task dell&apos;evento attivo: disponibili, esclusive KORP e già svolte.
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="shrink-0 rounded-lg border border-gray-700 bg-gray-900/60 p-2 text-gray-300 hover:text-white hover:border-lime-700 disabled:opacity-40"
+          aria-label="Aggiorna task"
+          title="Aggiorna"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        </button>
       </div>
       {error ? <p className="mb-2 text-xs text-red-400">{error}</p> : null}
-      {loading ? (
+      {loading && rows.length === 0 ? (
         <p className="text-xs text-gray-500">Caricamento…</p>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-gray-500">Nessuna task disponibile.</p>
+        <p className="text-sm text-gray-500 rounded-xl border border-dashed border-gray-700 bg-gray-900/40 p-6 text-center">
+          Nessuna task disponibile per l&apos;evento attivo.
+        </p>
       ) : (
         <ul className="space-y-2">
           {rows.map((m) => {
