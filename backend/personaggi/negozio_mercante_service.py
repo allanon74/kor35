@@ -129,16 +129,26 @@ def _tecnica_listino_extra(personaggio, tecnica) -> dict:
     }
 
 
-def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio) -> dict:
+def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio, *, prezzi_ctx=None) -> dict:
     from personaggi.economia_crediti import CATEGORIA_NEGOZIO, prezzi_duali
 
     ent = _voce_entita(voce)
     nome = getattr(ent, "nome", voce.consumabile_nome or "Consumabile")
-    duali = prezzi_duali(
-        voce.prezzo_crediti,
-        getattr(personaggio, "campagna", None),
-        categoria=CATEGORIA_NEGOZIO,
-    )
+    campagna = getattr(personaggio, "campagna", None)
+    if prezzi_ctx:
+        duali = prezzi_duali(
+            voce.prezzo_crediti,
+            campagna,
+            categoria=CATEGORIA_NEGOZIO,
+            cfg=prezzi_ctx.get("cfg"),
+            deposito_ammesso=prezzi_ctx.get("deposito_ammesso"),
+        )
+    else:
+        duali = prezzi_duali(
+            voce.prezzo_crediti,
+            campagna,
+            categoria=CATEGORIA_NEGOZIO,
+        )
     payload = {
         "id": str(voce.id),
         "tipo": "voce",
@@ -171,11 +181,20 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio) -> dict:
     return payload
 
 
-def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None) -> dict:
+def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None, *, prezzi_ctx=None) -> dict:
     from personaggi.economia_crediti import CATEGORIA_NEGOZIO, prezzi_duali
 
     campagna = getattr(personaggio, "campagna", None) if personaggio else None
-    duali = prezzi_duali(stock.prezzo_rivendita, campagna, categoria=CATEGORIA_NEGOZIO)
+    if prezzi_ctx:
+        duali = prezzi_duali(
+            stock.prezzo_rivendita,
+            campagna,
+            categoria=CATEGORIA_NEGOZIO,
+            cfg=prezzi_ctx.get("cfg"),
+            deposito_ammesso=prezzi_ctx.get("deposito_ammesso"),
+        )
+    else:
+        duali = prezzi_duali(stock.prezzo_rivendita, campagna, categoria=CATEGORIA_NEGOZIO)
     return {
         "id": str(stock.id),
         "tipo": "stock",
@@ -192,7 +211,23 @@ def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None) -> d
 
 
 def build_listino(negozio: NegozioMercante, personaggio) -> dict:
+    from personaggi.economia_crediti import (
+        CATEGORIA_NEGOZIO,
+        categoria_ammessa_deposito,
+        get_economia_config,
+    )
+
     ok, msg = negozio_e_aperto(negozio, personaggio)
+    campagna = getattr(personaggio, "campagna", None)
+    cfg = get_economia_config(campagna) if campagna is not None else None
+    prezzi_ctx = None
+    if cfg is not None:
+        prezzi_ctx = {
+            "cfg": cfg,
+            "deposito_ammesso": categoria_ammessa_deposito(
+                CATEGORIA_NEGOZIO, campagna, cfg=cfg
+            ),
+        }
     voci = []
     if ok:
         for voce in negozio.voci.filter(attivo=True).select_related(
@@ -210,9 +245,9 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
                     _assert_voce_globally_vendibile(ent)
             except ValidationError:
                 continue
-            voci.append(serializza_voce_listino(voce, personaggio))
+            voci.append(serializza_voce_listino(voce, personaggio, prezzi_ctx=prezzi_ctx))
         for stock in negozio.stock.filter(stato=STOCK_DISPONIBILE).select_related("oggetto"):
-            voci.append(serializza_stock_listino(stock, personaggio))
+            voci.append(serializza_stock_listino(stock, personaggio, prezzi_ctx=prezzi_ctx))
     return {
         "negozio_id": str(negozio.id),
         "nome": negozio.nome,
@@ -266,10 +301,9 @@ def acquista_voce(
         CATEGORIA_NEGOZIO,
         CONTO_DEPOSITO,
         addebita_bene,
-        categoria_ammessa_deposito,
-        modulo_conto_deposito_attivo,
+        get_economia_config,
         normalize_conto,
-        prezzo_da_deposito,
+        prepara_addebito_bene,
         saldo_conto,
         saldo_spendibile,
     )
@@ -295,16 +329,21 @@ def acquista_voce(
         .get(pk=voce_id, negozio=negozio, attivo=True)
     )
     prezzo = int(voce.prezzo_crediti)
+    campagna = getattr(personaggio, "campagna", None)
+    cfg = get_economia_config(campagna)
+    da_pagare = prepara_addebito_bene(
+        prezzo,
+        conto=conto,
+        categoria=CATEGORIA_NEGOZIO,
+        campagna=campagna,
+        personaggio=personaggio,
+        cfg=cfg,
+    )
     if conto == CONTO_DEPOSITO:
-        if not modulo_conto_deposito_attivo(personaggio):
-            raise ValidationError("Il conto di deposito non è attivo.")
-        if not categoria_ammessa_deposito(CATEGORIA_NEGOZIO, personaggio.campagna):
-            raise ValidationError("Acquisto negozio non pagabile con deposito.")
-        da_pagare_check = prezzo_da_deposito(prezzo, campagna=personaggio.campagna)
-        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare_check:
-            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare_check} CR.")
-    elif saldo_spendibile(personaggio) < prezzo:
-        raise ValidationError(f"Crediti insufficienti. Servono {prezzo} CR.")
+        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare:
+            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare} CR.")
+    elif saldo_spendibile(personaggio) < da_pagare:
+        raise ValidationError(f"Crediti insufficienti. Servono {da_pagare} CR.")
 
     if voce.quantita_residua is not None:
         if voce.quantita_residua <= 0:
@@ -394,6 +433,8 @@ def acquista_voce(
         conto=conto,
         categoria=CATEGORIA_NEGOZIO,
         campagna=getattr(personaggio, "campagna", None),
+        importo_gia_calcolato=da_pagare,
+        cfg=cfg,
     )
     if negozio.incassa_acquisti_catalogo:
         _aggiorna_saldo(
@@ -432,10 +473,9 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: st
         CATEGORIA_NEGOZIO,
         CONTO_DEPOSITO,
         addebita_bene,
-        categoria_ammessa_deposito,
-        modulo_conto_deposito_attivo,
+        get_economia_config,
         normalize_conto,
-        prezzo_da_deposito,
+        prepara_addebito_bene,
         saldo_conto,
         saldo_spendibile,
     )
@@ -452,16 +492,21 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: st
     )
     prezzo = int(stock.prezzo_rivendita)
     conto = normalize_conto(conto)
+    campagna = getattr(personaggio, "campagna", None)
+    cfg = get_economia_config(campagna)
+    da_pagare = prepara_addebito_bene(
+        prezzo,
+        conto=conto,
+        categoria=CATEGORIA_NEGOZIO,
+        campagna=campagna,
+        personaggio=personaggio,
+        cfg=cfg,
+    )
     if conto == CONTO_DEPOSITO:
-        if not modulo_conto_deposito_attivo(personaggio):
-            raise ValidationError("Il conto di deposito non è attivo.")
-        if not categoria_ammessa_deposito(CATEGORIA_NEGOZIO, personaggio.campagna):
-            raise ValidationError("Acquisto negozio non pagabile con deposito.")
-        da_pagare_check = prezzo_da_deposito(prezzo, campagna=personaggio.campagna)
-        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare_check:
-            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare_check} CR.")
-    elif saldo_spendibile(personaggio) < prezzo:
-        raise ValidationError(f"Crediti insufficienti. Servono {prezzo} CR.")
+        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare:
+            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare} CR.")
+    elif saldo_spendibile(personaggio) < da_pagare:
+        raise ValidationError(f"Crediti insufficienti. Servono {da_pagare} CR.")
 
     og = stock.oggetto
     og.sposta_in_inventario(personaggio)
@@ -478,6 +523,8 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: st
         conto=conto,
         categoria=CATEGORIA_NEGOZIO,
         campagna=getattr(personaggio, "campagna", None),
+        importo_gia_calcolato=da_pagare,
+        cfg=cfg,
     )
     _aggiorna_saldo(
         negozio,

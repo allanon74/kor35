@@ -11,7 +11,7 @@ from typing import Any, Iterable
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 CONTO_CORRENTE = "CORRENTE"
 CONTO_DEPOSITO = "DEPOSITO"
@@ -25,10 +25,16 @@ CATEGORIA_OGGETTO = "oggetto"
 CATEGORIA_MATERIA = "materia"
 CATEGORIA_CONSUMABILE = "consumabile"
 CATEGORIA_NEGOZIO = "negozio"
+CATEGORIA_MOD = "mod"
+CATEGORIA_INNESTI = "innesti"
+CATEGORIA_MUTAZIONI = "mutazioni"
 CATEGORIE_SPESA_DEPOSITO_DEFAULT = (
     CATEGORIA_OGGETTO,
     CATEGORIA_MATERIA,
     CATEGORIA_CONSUMABILE,
+    CATEGORIA_MOD,
+    CATEGORIA_INNESTI,
+    CATEGORIA_MUTAZIONI,
     CATEGORIA_NEGOZIO,
 )
 CATEGORIE_SPESA_DEPOSITO_VALIDE = set(CATEGORIE_SPESA_DEPOSITO_DEFAULT)
@@ -42,9 +48,9 @@ _CATEGORIA_A_REGOLA = {
     "consumabili": "consumabili",
     CATEGORIA_NEGOZIO: "negozio",
     "negozio": "negozio",
-    "mod": "mod",
-    "innesti": "innesti",
-    "mutazioni": "mutazioni",
+    CATEGORIA_MOD: "mod",
+    CATEGORIA_INNESTI: "innesti",
+    CATEGORIA_MUTAZIONI: "mutazioni",
     "infusioni": "infusioni",
     "tessiture": "tessiture",
     "cerimoniali": "cerimoniali",
@@ -57,6 +63,9 @@ _REGOLA_A_CATEGORIA_ECO = {
     "materia": CATEGORIA_MATERIA,
     "consumabili": CATEGORIA_CONSUMABILE,
     "negozio": CATEGORIA_NEGOZIO,
+    "mod": CATEGORIA_MOD,
+    "innesti": CATEGORIA_INNESTI,
+    "mutazioni": CATEGORIA_MUTAZIONI,
 }
 
 DEFAULT_FRAZIONE_TRASFERIMENTO = Decimal("1.00")
@@ -73,6 +82,21 @@ def _d2(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def _invalidate_campagna_eco_cache(campagna) -> None:
+    if campagna is None:
+        return
+    for attr in ("_economia_config_cache", "_regole_tx_ensured"):
+        if hasattr(campagna, attr):
+            delattr(campagna, attr)
+
+
+def _invalidate_personaggio_saldi_cache(personaggio) -> None:
+    if personaggio is None:
+        return
+    if hasattr(personaggio, "_eco_aggregati"):
+        delattr(personaggio, "_eco_aggregati")
+
+
 def normalizza_categoria_spesa(categoria: str) -> str:
     """Normalizza alias (oggetto→oggetti) al codice RegolaTransazioneCategoria."""
     key = str(categoria or "").strip().lower()
@@ -81,8 +105,10 @@ def normalizza_categoria_spesa(categoria: str) -> str:
 
 def _categorie_da_regole(campagna) -> list[str] | None:
     """
-    Elenco chiavi economia (oggetto/materia/…) da RegolaTransazioneCategoria.
-    None se non ci sono ancora regole (fallback JSON/default).
+    Elenco chiavi economia (oggetto/materia/mod/…) da RegolaTransazioneCategoria.
+    None solo se campagna assente (fallback JSON/default).
+    Con campagna valorizzata: dopo ensure restituisce sempre una lista
+    (anche vuota = nessuna categoria pagabile).
     """
     if campagna is None:
         return None
@@ -113,6 +139,10 @@ def sync_regole_pagabile_da_categorie(campagna, categorie: Iterable[str]) -> Non
 
     ensure_regole_transazione_campagna(campagna)
     wanted = {normalizza_categoria_spesa(c) for c in (categorie or [])}
+    from django.utils import timezone
+
+    to_update = []
+    now = timezone.now()
     for regola in RegolaTransazioneCategoria.objects.filter(campagna=campagna):
         if regola.codice not in REGOLA_TX_CODICI_DEFAULT:
             continue
@@ -123,11 +153,22 @@ def sync_regole_pagabile_da_categorie(campagna, categorie: Iterable[str]) -> Non
         nuovo = regola.codice in wanted
         if regola.pagabile_con_deposito != nuovo:
             regola.pagabile_con_deposito = nuovo
-            regola.save(update_fields=["pagabile_con_deposito", "updated_at"])
+            regola.updated_at = now
+            to_update.append(regola)
+    if to_update:
+        RegolaTransazioneCategoria.objects.bulk_update(
+            to_update, ["pagabile_con_deposito", "updated_at"]
+        )
+    _invalidate_campagna_eco_cache(campagna)
 
 
-def get_economia_config(campagna=None) -> dict[str, Any]:
+def get_economia_config(campagna=None, *, force_refresh: bool = False) -> dict[str, Any]:
     """Merge default + override JSON su Campagna.economia_config; categorie da regole se presenti."""
+    if campagna is not None and not force_refresh:
+        cached = getattr(campagna, "_economia_config_cache", None)
+        if isinstance(cached, dict):
+            return cached
+
     cfg = dict(DEFAULT_ECONOMIA_CONFIG)
     cfg["categorie_spesa_deposito"] = list(CATEGORIE_SPESA_DEPOSITO_DEFAULT)
     raw = getattr(campagna, "economia_config", None) if campagna is not None else None
@@ -139,19 +180,28 @@ def get_economia_config(campagna=None) -> dict[str, Any]:
             if fattore <= 0:
                 fattore = DEFAULT_FATTORE_VALORE_DEPOSITO
             cfg["fattore_valore_deposito"] = str(fattore)
-        cats = raw.get("categorie_spesa_deposito")
-        if isinstance(cats, list):
-            cleaned = [
-                str(c).strip().lower()
-                for c in cats
-                if str(c).strip().lower() in CATEGORIE_SPESA_DEPOSITO_VALIDE
-            ]
-            cfg["categorie_spesa_deposito"] = cleaned
+        # Categorie JSON usate solo senza campagna / prima delle regole.
+        if campagna is None:
+            cats = raw.get("categorie_spesa_deposito")
+            if isinstance(cats, list):
+                cleaned = []
+                for c in cats:
+                    key = str(c).strip().lower()
+                    if key in CATEGORIE_SPESA_DEPOSITO_VALIDE and key not in cleaned:
+                        cleaned.append(key)
+                    else:
+                        eco = _REGOLA_A_CATEGORIA_ECO.get(normalizza_categoria_spesa(key))
+                        if eco and eco not in cleaned:
+                            cleaned.append(eco)
+                cfg["categorie_spesa_deposito"] = cleaned
 
     from_regole = _categorie_da_regole(campagna)
     if from_regole is not None:
         # Fonte di verità: flag sulle regole (anche lista vuota = nessuna categoria).
         cfg["categorie_spesa_deposito"] = from_regole
+
+    if campagna is not None:
+        campagna._economia_config_cache = cfg
     return cfg
 
 
@@ -181,10 +231,13 @@ def validate_economia_config_payload(payload) -> dict[str, Any]:
         cleaned = []
         for c in cats:
             key = str(c).strip().lower()
-            if key not in CATEGORIE_SPESA_DEPOSITO_VALIDE:
+            eco = key if key in CATEGORIE_SPESA_DEPOSITO_VALIDE else _REGOLA_A_CATEGORIA_ECO.get(
+                normalizza_categoria_spesa(key)
+            )
+            if not eco or eco not in CATEGORIE_SPESA_DEPOSITO_VALIDE:
                 raise ValidationError({"categorie_spesa_deposito": f"Categoria sconosciuta: {c}"})
-            if key not in cleaned:
-                cleaned.append(key)
+            if eco not in cleaned:
+                cleaned.append(eco)
         out["categorie_spesa_deposito"] = cleaned
     return out
 
@@ -198,9 +251,10 @@ def apply_economia_config(campagna, payload, *, merge: bool = True) -> dict[str,
     else:
         campagna.economia_config = cleaned
     campagna.save(update_fields=["economia_config", "updated_at"])
+    _invalidate_campagna_eco_cache(campagna)
     if "categorie_spesa_deposito" in cleaned:
         sync_regole_pagabile_da_categorie(campagna, cleaned["categorie_spesa_deposito"])
-    return get_economia_config(campagna)
+    return get_economia_config(campagna, force_refresh=True)
 
 
 def modulo_conto_deposito_attivo(personaggio, user=None) -> bool:
@@ -225,38 +279,51 @@ def campagna_ha_conto_deposito(campagna) -> bool:
     return get_modulo_accesso(campagna, MODULO_CONTO_DEPOSITO) != MODULO_ACCESSO_OFF
 
 
+def aggregati_conti(personaggio) -> tuple[Decimal, Decimal]:
+    """
+    Saldi corrente/deposito in una sola query aggregate (cache sull'istanza PG).
+    """
+    cached = getattr(personaggio, "_eco_aggregati", None)
+    if cached is not None:
+        return cached
+    agg = personaggio.movimenti_credito.aggregate(
+        corrente=Sum("importo", filter=Q(conto=CONTO_CORRENTE)),
+        deposito=Sum("importo", filter=Q(conto=CONTO_DEPOSITO)),
+    )
+    base = _d2(personaggio.tipologia.crediti_iniziali if personaggio.tipologia_id else 0)
+    corrente = _d2(base + _d2(agg["corrente"]))
+    deposito = _d2(agg["deposito"])
+    personaggio._eco_aggregati = (corrente, deposito)
+    return corrente, deposito
+
+
 def saldo_conto(personaggio, conto: str) -> Decimal:
     conto = (conto or CONTO_CORRENTE).upper()
     if conto not in CONTI_VALIDI:
         raise ValidationError(f"Conto non valido: {conto}")
-    totale = (
-        personaggio.movimenti_credito.filter(conto=conto).aggregate(totale=Sum("importo"))["totale"]
-        or Decimal("0")
-    )
-    totale = _d2(totale)
-    if conto == CONTO_CORRENTE:
-        base = _d2(personaggio.tipologia.crediti_iniziali if personaggio.tipologia_id else 0)
-        return _d2(base + totale)
-    return totale
+    corrente, deposito = aggregati_conti(personaggio)
+    return corrente if conto == CONTO_CORRENTE else deposito
 
 
 def saldo_corrente(personaggio) -> Decimal:
-    return saldo_conto(personaggio, CONTO_CORRENTE)
+    return aggregati_conti(personaggio)[0]
 
 
 def saldo_deposito(personaggio) -> Decimal:
-    return saldo_conto(personaggio, CONTO_DEPOSITO)
+    return aggregati_conti(personaggio)[1]
 
 
-def saldo_spendibile(personaggio, *, user=None) -> Decimal:
+def saldo_spendibile(personaggio, *, user=None, duale: bool | None = None) -> Decimal:
     """Con modulo ON = solo corrente; OFF = corrente + deposito (monoconto)."""
-    corrente = saldo_corrente(personaggio)
-    if modulo_conto_deposito_attivo(personaggio, user=user):
+    corrente, deposito = aggregati_conti(personaggio)
+    if duale is None:
+        duale = modulo_conto_deposito_attivo(personaggio, user=user)
+    if duale:
         return corrente
-    return _d2(corrente + saldo_deposito(personaggio))
+    return _d2(corrente + deposito)
 
 
-def prezzo_da_deposito(prezzo, fattore=None, campagna=None) -> Decimal:
+def prezzo_da_deposito(prezzo, fattore=None, campagna=None, *, cfg=None) -> Decimal:
     """
     Potere d'acquisto ridotto: prezzo_deposito = prezzo_corrente / fattore.
     Default fattore 0.90 → si paga di più dal deposito.
@@ -265,7 +332,7 @@ def prezzo_da_deposito(prezzo, fattore=None, campagna=None) -> Decimal:
     if prezzo <= 0:
         return Decimal("0.00")
     if fattore is None:
-        cfg = get_economia_config(campagna)
+        cfg = cfg or get_economia_config(campagna)
         fattore = Decimal(cfg["fattore_valore_deposito"])
     else:
         fattore = _d2(fattore)
@@ -275,23 +342,28 @@ def prezzo_da_deposito(prezzo, fattore=None, campagna=None) -> Decimal:
     return _d2(prezzo / fattore)
 
 
-def categoria_ammessa_deposito(categoria: str, campagna=None) -> bool:
+def categoria_ammessa_deposito(
+    categoria: str,
+    campagna=None,
+    *,
+    cfg=None,
+    regole_map=None,
+) -> bool:
     """True se la categoria può essere pagata col deposito (flag su RegolaTransazioneCategoria)."""
     codice = normalizza_categoria_spesa(categoria)
     if not codice:
         return False
-    if campagna is not None:
-        from personaggi.regole_transazione import ensure_regole_transazione_campagna
-
-        ensure_regole_transazione_campagna(campagna)
-        from personaggi.models import RegolaTransazioneCategoria
-
-        regola = RegolaTransazioneCategoria.objects.filter(
-            campagna=campagna, codice=codice
-        ).only("pagabile_con_deposito").first()
+    if regole_map is not None:
+        regola = regole_map.get(codice)
         if regola is not None:
             return bool(regola.pagabile_con_deposito)
-    cfg = get_economia_config(campagna)
+    elif campagna is not None:
+        from personaggi.regole_transazione import get_regole_map
+
+        regola = get_regole_map(campagna).get(codice)
+        if regola is not None:
+            return bool(regola.pagabile_con_deposito)
+    cfg = cfg or get_economia_config(campagna)
     eco_key = _REGOLA_A_CATEGORIA_ECO.get(codice, codice)
     return eco_key in set(cfg.get("categorie_spesa_deposito") or [])
 
@@ -321,7 +393,9 @@ def modifica_crediti(
     }
     if evento is not None:
         kwargs["evento_id"] = getattr(evento, "pk", evento)
-    return CreditoMovimento.objects.create(**kwargs)
+    mov = CreditoMovimento.objects.create(**kwargs)
+    _invalidate_personaggio_saldi_cache(personaggio)
+    return mov
 
 
 def addebita(
@@ -348,7 +422,7 @@ def addebita(
 
     duale = modulo_conto_deposito_attivo(personaggio, user=user)
     if not duale and conto == CONTO_CORRENTE and allow_monoconto_fallback:
-        disponibile = saldo_spendibile(personaggio, user=user)
+        disponibile = saldo_spendibile(personaggio, user=user, duale=False)
         if disponibile < importo:
             raise ValidationError(
                 f"Crediti insufficienti. Posseduti: {disponibile}, richiesti: {importo}."
@@ -371,6 +445,40 @@ def addebita(
     modifica_crediti(personaggio, -importo, descrizione, conto=conto, evento=evento)
 
 
+def prepara_addebito_bene(
+    prezzo_listino,
+    *,
+    conto: str = CONTO_CORRENTE,
+    categoria: str,
+    campagna=None,
+    personaggio=None,
+    user=None,
+    cfg=None,
+) -> Decimal:
+    """
+    Valida conto/categoria e restituisce l'importo da addebitare (senza scrivere il ledger).
+    Utile per check saldo pre-mutazione (es. stock negozio).
+    """
+    prezzo = _d2(prezzo_listino)
+    conto = (conto or CONTO_CORRENTE).upper()
+    campagna = campagna or (getattr(personaggio, "campagna", None) if personaggio else None)
+    duale = (
+        modulo_conto_deposito_attivo(personaggio, user=user)
+        if personaggio is not None
+        else campagna_ha_conto_deposito(campagna)
+    )
+
+    if conto == CONTO_DEPOSITO:
+        if not duale:
+            raise ValidationError("Il conto di deposito non è attivo in questa campagna.")
+        cfg = cfg or get_economia_config(campagna)
+        if not categoria_ammessa_deposito(categoria, campagna, cfg=cfg):
+            raise ValidationError("Questa spesa non può essere pagata con il conto di deposito.")
+        return prezzo_da_deposito(prezzo, campagna=campagna, cfg=cfg)
+
+    return prezzo
+
+
 def addebita_bene(
     personaggio,
     prezzo_listino,
@@ -381,22 +489,32 @@ def addebita_bene(
     campagna=None,
     evento=None,
     user=None,
+    importo_gia_calcolato: Decimal | None = None,
+    cfg=None,
 ) -> Decimal:
     """
     Addebita un acquisto beni. Ritorna l'importo effettivamente scalato.
     Con deposito applica fattore valore e verifica categoria.
+    Se ``importo_gia_calcolato`` è passato (da prepara_addebito_bene), salta la ri-validazione.
     """
     prezzo = _d2(prezzo_listino)
     conto = (conto or CONTO_CORRENTE).upper()
     campagna = campagna or getattr(personaggio, "campagna", None)
-    duale = modulo_conto_deposito_attivo(personaggio, user=user)
+
+    if importo_gia_calcolato is not None:
+        da_pagare = _d2(importo_gia_calcolato)
+    else:
+        da_pagare = prepara_addebito_bene(
+            prezzo,
+            conto=conto,
+            categoria=categoria,
+            campagna=campagna,
+            personaggio=personaggio,
+            user=user,
+            cfg=cfg,
+        )
 
     if conto == CONTO_DEPOSITO:
-        if not duale:
-            raise ValidationError("Il conto di deposito non è attivo in questa campagna.")
-        if not categoria_ammessa_deposito(categoria, campagna):
-            raise ValidationError("Questa spesa non può essere pagata con il conto di deposito.")
-        da_pagare = prezzo_da_deposito(prezzo, campagna=campagna)
         addebita(
             personaggio,
             da_pagare,
@@ -410,20 +528,30 @@ def addebita_bene(
 
     addebita(
         personaggio,
-        prezzo,
+        da_pagare,
         descrizione,
         conto=CONTO_CORRENTE,
         evento=evento,
         user=user,
         allow_monoconto_fallback=True,
     )
-    return prezzo
+    return da_pagare
 
 
-def prezzi_duali(prezzo_listino, campagna=None, *, categoria: str | None = None) -> dict[str, Any]:
+def prezzi_duali(
+    prezzo_listino,
+    campagna=None,
+    *,
+    categoria: str | None = None,
+    cfg=None,
+    deposito_ammesso: bool | None = None,
+) -> dict[str, Any]:
     prezzo = _d2(prezzo_listino)
-    cfg = get_economia_config(campagna)
-    ammesso = categoria is None or categoria_ammessa_deposito(categoria, campagna)
+    cfg = cfg or get_economia_config(campagna)
+    if deposito_ammesso is None:
+        ammesso = categoria is None or categoria_ammessa_deposito(categoria, campagna, cfg=cfg)
+    else:
+        ammesso = bool(deposito_ammesso)
     out = {
         "prezzo_corrente": str(prezzo),
         "prezzo_deposito": None,
@@ -431,7 +559,7 @@ def prezzi_duali(prezzo_listino, campagna=None, *, categoria: str | None = None)
         "deposito_ammesso": bool(ammesso),
     }
     if ammesso:
-        out["prezzo_deposito"] = str(prezzo_da_deposito(prezzo, campagna=campagna))
+        out["prezzo_deposito"] = str(prezzo_da_deposito(prezzo, campagna=campagna, cfg=cfg))
     return out
 
 
@@ -441,11 +569,20 @@ def stipendio_evento(personaggio, evento, ts=None) -> Decimal:
     return _d2(calcola_crediti_premio_evento(evento, personaggio, ts=ts))
 
 
-def tetto_trasferimento_deposito(personaggio, evento, campagna=None, ts=None) -> Decimal:
+def tetto_trasferimento_deposito(
+    personaggio,
+    evento,
+    campagna=None,
+    ts=None,
+    *,
+    cfg=None,
+    stipendio: Decimal | None = None,
+) -> Decimal:
     campagna = campagna or getattr(personaggio, "campagna", None)
-    cfg = get_economia_config(campagna)
+    cfg = cfg or get_economia_config(campagna)
     frazione = Decimal(cfg["frazione_trasferimento_stipendio"])
-    stipendio = stipendio_evento(personaggio, evento, ts=ts)
+    if stipendio is None:
+        stipendio = stipendio_evento(personaggio, evento, ts=ts)
     return _d2(frazione * stipendio)
 
 
@@ -519,13 +656,13 @@ def economia_summary(personaggio, *, evento=None, user=None) -> dict[str, Any]:
     campagna = getattr(personaggio, "campagna", None)
     cfg = get_economia_config(campagna)
     duale = modulo_conto_deposito_attivo(personaggio, user=user)
-    corrente = saldo_corrente(personaggio)
-    deposito = saldo_deposito(personaggio)
+    corrente, deposito = aggregati_conti(personaggio)
+    spendibile = corrente if duale else _d2(corrente + deposito)
     summary: dict[str, Any] = {
         "modulo_attivo": duale,
         "crediti_corrente": str(corrente),
         "crediti_deposito": str(deposito),
-        "crediti": str(saldo_spendibile(personaggio, user=user)),
+        "crediti": str(spendibile),
         "config": {
             "frazione_trasferimento_stipendio": cfg["frazione_trasferimento_stipendio"],
             "fattore_valore_deposito": cfg["fattore_valore_deposito"],
@@ -534,11 +671,14 @@ def economia_summary(personaggio, *, evento=None, user=None) -> dict[str, Any]:
         "trasferimento": None,
     }
     if evento is not None and duale:
-        tetto = tetto_trasferimento_deposito(personaggio, evento, campagna=campagna)
+        stipendio = stipendio_evento(personaggio, evento)
+        tetto = tetto_trasferimento_deposito(
+            personaggio, evento, campagna=campagna, cfg=cfg, stipendio=stipendio
+        )
         gia = trasferimento_gia_effettuato(personaggio, evento)
         summary["trasferimento"] = {
             "evento_id": str(evento.pk),
-            "stipendio_evento": str(stipendio_evento(personaggio, evento)),
+            "stipendio_evento": str(stipendio),
             "tetto": str(tetto),
             "gia_effettuato": gia,
             "importo_max": str(min(tetto, deposito) if not gia else Decimal("0.00")),

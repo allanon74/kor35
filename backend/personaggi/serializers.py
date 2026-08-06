@@ -2607,23 +2607,34 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         )
 
     def get_economia(self, obj):
+        cached = getattr(self, "_economia_summary_cache", None)
+        if cached is not None and cached.get("obj_id") == id(obj):
+            return cached["summary"]
         from personaggi.economia_crediti import economia_summary
         from personaggi.scommesse_evento import personaggio_in_evento_attivo
 
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None
         evento = personaggio_in_evento_attivo(obj)
-        return economia_summary(obj, evento=evento, user=user)
+        summary = economia_summary(obj, evento=evento, user=user)
+        self._economia_summary_cache = {"obj_id": id(obj), "summary": summary}
+        return summary
 
     def to_representation(self, instance):
         """
         Applica i tick di rigenerazione automatica prima di serializzare i campi.
         Alias riserva → crediti_deposito (compat frontend scommesse/carte).
+        Calcola economia una sola volta e riusa i saldi per i campi crediti*.
         """
         instance.sync_recuperi_automatici()
+        summary = self.get_economia(instance)
         data = super(PersonaggioDetailSerializer, self).to_representation(instance)
+        data["crediti"] = summary["crediti"]
+        data["crediti_corrente"] = summary["crediti_corrente"]
+        data["crediti_deposito"] = summary["crediti_deposito"]
+        data["economia"] = summary
         # Compat: riserva legacy = saldo deposito
-        data["riserva"] = data.get("crediti_deposito") or "0.00"
+        data["riserva"] = summary["crediti_deposito"] or "0.00"
         return data
 
     def get_peso_influencer_effettivo(self, obj):

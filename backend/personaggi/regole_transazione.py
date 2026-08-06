@@ -65,6 +65,8 @@ def ensure_regole_transazione_campagna(campagna) -> None:
     """Crea righe mancanti per tutte le categorie note."""
     if not campagna:
         return
+    if getattr(campagna, '_regole_tx_ensured', False):
+        return
     esistenti = set(
         RegolaTransazioneCategoria.objects.filter(campagna=campagna).values_list('codice', flat=True)
     )
@@ -85,6 +87,7 @@ def ensure_regole_transazione_campagna(campagna) -> None:
         to_create.append(RegolaTransazioneCategoria(campagna=campagna, codice=codice, **defaults))
     if to_create:
         RegolaTransazioneCategoria.objects.bulk_create(to_create)
+    campagna._regole_tx_ensured = True
 
 
 def get_regole_map(campagna) -> Dict[str, RegolaTransazioneCategoria]:
@@ -98,13 +101,21 @@ def get_regole_map(campagna) -> Dict[str, RegolaTransazioneCategoria]:
         for r in RegolaTransazioneCategoria.objects.filter(campagna=campagna)
     }
 
+def _regola_per_categoria(
+    campagna,
+    codice: str,
+    regole_map: Optional[Dict[str, RegolaTransazioneCategoria]] = None,
+) -> Optional[RegolaTransazioneCategoria]:
+    m = regole_map if regole_map is not None else get_regole_map(campagna)
+    return m.get(codice)
 
-def _regola_per_categoria(campagna, codice: str) -> Optional[RegolaTransazioneCategoria]:
-    return get_regole_map(campagna).get(codice)
 
-
-def personaggio_puo_trasferire_categoria(personaggio: Personaggio, codice: str) -> Tuple[bool, str]:
-    regola = _regola_per_categoria(personaggio.campagna, codice)
+def personaggio_puo_trasferire_categoria(
+    personaggio: Personaggio,
+    codice: str,
+    regole_map: Optional[Dict[str, RegolaTransazioneCategoria]] = None,
+) -> Tuple[bool, str]:
+    regola = _regola_per_categoria(personaggio.campagna, codice, regole_map=regole_map)
     if not regola:
         return True, ''
     if not regola.vendibile_giocatori:
@@ -115,11 +126,16 @@ def personaggio_puo_trasferire_categoria(personaggio: Personaggio, codice: str) 
     return True, ''
 
 
-def _valida_oggetto(personaggio: Personaggio, oggetto: Oggetto, regola: RegolaTransazioneCategoria) -> Tuple[bool, str]:
+def _valida_oggetto(
+    personaggio: Personaggio,
+    oggetto: Oggetto,
+    regola: RegolaTransazioneCategoria,
+    regole_map: Optional[Dict[str, RegolaTransazioneCategoria]] = None,
+) -> Tuple[bool, str]:
     if oggetto.inventario_corrente_id != personaggio.inventario_ptr_id:
         return False, f"L'oggetto «{oggetto.nome}» non è nel tuo inventario."
     codice = TIPO_OGGETTO_A_CATEGORIA.get(oggetto.tipo_oggetto, REGOLA_TX_CODICE_OGGETTI)
-    ok, msg = personaggio_puo_trasferire_categoria(personaggio, codice)
+    ok, msg = personaggio_puo_trasferire_categoria(personaggio, codice, regole_map=regole_map)
     if not ok:
         return False, msg
     if _deve_bloccare_catalogo_accademia(regola) and oggetto_in_catalogo_accademia_ufficiale(oggetto):
@@ -151,10 +167,11 @@ def _valida_tecnica(
     tecnica,
     codice: str,
     regola: RegolaTransazioneCategoria,
+    regole_map: Optional[Dict[str, RegolaTransazioneCategoria]] = None,
 ) -> Tuple[bool, str]:
     if not _personaggio_possiede_tecnica(personaggio, tecnica, codice):
         return False, f"La tecnica «{tecnica.nome}» non è nel tuo elenco."
-    ok, msg = personaggio_puo_trasferire_categoria(personaggio, codice)
+    ok, msg = personaggio_puo_trasferire_categoria(personaggio, codice, regole_map=regole_map)
     if not ok:
         return False, msg
     if _deve_bloccare_catalogo_accademia(regola) and tecnica_in_catalogo_accademia_ufficiale(tecnica):
@@ -167,38 +184,46 @@ def _valida_tecnica(
     return True, ''
 
 
-def _valida_consumabile(personaggio: Personaggio, consumabile: ConsumabilePersonaggio) -> Tuple[bool, str]:
+def _valida_consumabile(
+    personaggio: Personaggio,
+    consumabile: ConsumabilePersonaggio,
+    regole_map: Optional[Dict[str, RegolaTransazioneCategoria]] = None,
+) -> Tuple[bool, str]:
     if consumabile.personaggio_id != personaggio.id:
         return False, f"Il consumabile «{consumabile.nome}» non ti appartiene."
-    return personaggio_puo_trasferire_categoria(personaggio, REGOLA_TX_CODICE_CONSUMABILI)
+    return personaggio_puo_trasferire_categoria(
+        personaggio, REGOLA_TX_CODICE_CONSUMABILI, regole_map=regole_map
+    )
 
 
 def valida_proposta_transazione(personaggio: Personaggio, proposta_data: dict) -> Tuple[bool, str]:
     """Valida una proposta (create o controproposta) rispetto alle regole campagna."""
     campagna = personaggio.campagna
+    regole = get_regole_map(campagna)
     crediti_dare = Decimal(str(proposta_data.get('crediti_da_dare') or 0))
     if crediti_dare > 0:
-        ok, msg = personaggio_puo_trasferire_categoria(personaggio, REGOLA_TX_CODICE_CREDITI)
+        ok, msg = personaggio_puo_trasferire_categoria(
+            personaggio, REGOLA_TX_CODICE_CREDITI, regole_map=regole
+        )
         if not ok:
             return False, msg
 
     oggetti_ids = proposta_data.get('oggetti_da_dare') or []
     if oggetti_ids:
         oggetti = Oggetto.objects.filter(pk__in=oggetti_ids).select_related('oggetto_base')
-        regole = get_regole_map(campagna)
         for oggetto in oggetti:
             codice = TIPO_OGGETTO_A_CATEGORIA.get(oggetto.tipo_oggetto, REGOLA_TX_CODICE_OGGETTI)
             regola = regole.get(codice)
             if not regola:
                 continue
-            ok, msg = _valida_oggetto(personaggio, oggetto, regola)
+            ok, msg = _valida_oggetto(personaggio, oggetto, regola, regole_map=regole)
             if not ok:
                 return False, msg
 
     consumabili_ids = proposta_data.get('consumabili_da_dare') or []
     if consumabili_ids:
         for cons in ConsumabilePersonaggio.objects.filter(pk__in=consumabili_ids):
-            ok, msg = _valida_consumabile(personaggio, cons)
+            ok, msg = _valida_consumabile(personaggio, cons, regole_map=regole)
             if not ok:
                 return False, msg
 
@@ -209,7 +234,6 @@ def valida_proposta_transazione(personaggio: Personaggio, proposta_data: dict) -
         (REGOLA_TX_CODICE_TESSITURE, 'tessiture_da_dare', Tessitura),
         (REGOLA_TX_CODICE_CERIMONIALI, 'cerimoniali_da_dare', Cerimoniale),
     )
-    regole = get_regole_map(campagna)
     for codice, field, model_cls in tecniche_map:
         ids = proposta_data.get(field) or []
         if not ids:
@@ -218,7 +242,9 @@ def valida_proposta_transazione(personaggio: Personaggio, proposta_data: dict) -
         if not regola:
             continue
         for tecnica in model_cls.objects.filter(pk__in=ids):
-            ok, msg = _valida_tecnica(personaggio, tecnica, codice, regola)
+            ok, msg = _valida_tecnica(
+                personaggio, tecnica, codice, regola, regole_map=regole
+            )
             if not ok:
                 return False, msg
 

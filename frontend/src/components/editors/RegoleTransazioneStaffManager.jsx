@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ArrowLeftRight, Loader2, Save, Wallet } from 'lucide-react';
 import { RegoleVisibilitaEditor } from './RequisitiAccessoEditor';
+import EconomiaDepositoParamsFields from './EconomiaDepositoParamsFields';
 import {
   staffPatchRegolaTransazione,
   staffGetRegoleTransazioni,
@@ -141,12 +142,6 @@ const RegoleTransazioneStaffManager = ({ onLogout }) => {
     }
   };
 
-  const esempioPrezzo = (() => {
-    const f = Number(fattore) || 0.9;
-    if (f <= 0) return '—';
-    return (100 / f).toFixed(2);
-  })();
-
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center text-gray-400">
@@ -180,41 +175,13 @@ const RegoleTransazioneStaffManager = ({ onLogout }) => {
               <Wallet size={16} />
               Parametri conto deposito
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  Frazione stipendio trasferibile (deposito → corrente)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm"
-                  value={frazione}
-                  onChange={(e) => setFrazione(e.target.value)}
-                />
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Tetto = frazione × stipendio evento (es. 1.50 = fino al 150%).
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  Fattore valore deposito (0.01–1.00)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  max="1"
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm"
-                  value={fattore}
-                  onChange={(e) => setFattore(e.target.value)}
-                />
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Bene da 100 CR in corrente costa {esempioPrezzo} CR dal deposito.
-                </p>
-              </div>
-            </div>
+            <EconomiaDepositoParamsFields
+              frazione={frazione}
+              setFrazione={setFrazione}
+              fattore={fattore}
+              setFattore={setFattore}
+              compact
+            />
             <button
               type="button"
               disabled={savingEco}

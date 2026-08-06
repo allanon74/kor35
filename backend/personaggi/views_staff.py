@@ -2347,7 +2347,10 @@ class RegolaTransazioneCategoriaStaffViewSet(viewsets.ModelViewSet):
         if instance.codice in REGOLA_TX_CODICI_CATALOGO_OBBLIGATORIO and not instance.solo_posseduti:
             instance.solo_posseduti = True
             instance.save(update_fields=['solo_posseduti', 'updated_at'])
-        return Response(serializer.data)
+        if 'pagabile_con_deposito' in payload:
+            from personaggi.economia_crediti import _invalidate_campagna_eco_cache
+            _invalidate_campagna_eco_cache(instance.campagna)
+        return Response(self.get_serializer(instance).data)
 
 
 class PersonaggioEliminatiStaffViewSet(viewsets.ReadOnlyModelViewSet):

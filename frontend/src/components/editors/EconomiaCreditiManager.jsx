@@ -5,6 +5,7 @@ import {
   patchEconomiaConfig,
   staffGetCampagne,
 } from '../../api';
+import EconomiaDepositoParamsFields from './EconomiaDepositoParamsFields';
 
 /**
  * Staff tool: parametri economia duale (frazione / fattore).
@@ -84,12 +85,6 @@ export default function EconomiaCreditiManager({ onLogout }) {
     }
   };
 
-  const esempioPrezzo = (() => {
-    const f = Number(fattore) || 0.9;
-    if (f <= 0) return '—';
-    return (100 / f).toFixed(2);
-  })();
-
   const catsLabel = Array.isArray(config?.categorie_spesa_deposito)
     ? config.categorie_spesa_deposito.join(', ') || '(nessuna)'
     : '—';
@@ -129,38 +124,12 @@ export default function EconomiaCreditiManager({ onLogout }) {
       {okMsg && <p className="text-emerald-400 mb-3 text-sm">{okMsg}</p>}
 
       <div className="grid gap-4 max-w-xl">
-        <div>
-          <label className="block text-sm text-gray-400 mb-1">
-            Frazione stipendio trasferibile (deposito → corrente)
-          </label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2"
-            value={frazione}
-            onChange={(e) => setFrazione(e.target.value)}
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Tetto = frazione × stipendio evento (es. 1.50 = fino a 150% dello stipendio).
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-sm text-gray-400 mb-1">Fattore valore deposito (0.01–1.00)</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            max="1"
-            className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2"
-            value={fattore}
-            onChange={(e) => setFattore(e.target.value)}
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Bene da 100 CR sul corrente costa {esempioPrezzo} CR dal deposito (prezzo / fattore).
-          </p>
-        </div>
+        <EconomiaDepositoParamsFields
+          frazione={frazione}
+          setFrazione={setFrazione}
+          fattore={fattore}
+          setFattore={setFattore}
+        />
 
         <div className="text-sm text-gray-400 bg-gray-800/80 border border-gray-700 rounded p-3">
           <p className="font-medium text-gray-300 mb-1">Categorie pagabili con deposito (sola lettura)</p>

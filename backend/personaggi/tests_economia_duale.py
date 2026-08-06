@@ -102,6 +102,8 @@ class EconomiaDualeTests(TestCase):
         cfg = get_economia_config(self.campagna)
         self.assertEqual(cfg["fattore_valore_deposito"], "0.90")
         self.assertIn("negozio", cfg["categorie_spesa_deposito"])
+        for cat in ("mod", "innesti", "mutazioni"):
+            self.assertIn(cat, cfg["categorie_spesa_deposito"])
 
     def test_p2p_conserva_natura_conto_deposito(self):
         from personaggi.models import (
