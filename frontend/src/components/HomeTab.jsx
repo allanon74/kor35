@@ -91,6 +91,9 @@ const CharacterSheet = memo(({ data, onLogout }) => {
     nome,
     avatar_url: avatarUrl,
     crediti,
+    crediti_corrente,
+    crediti_deposito,
+    economia,
     punti_caratteristica,
     punteggi_base,
     statistiche_base_dict,
@@ -99,6 +102,8 @@ const CharacterSheet = memo(({ data, onLogout }) => {
     oggetti,
     // log_eventi <-- RIMOSSO: Ora gestito da LogViewer
   } = data;
+
+  const duale = !!(economia && economia.modulo_attivo);
 
   const canEditRazza = !!data?.can_edit_razza;
   const canEditBackground = canEditRazza;
@@ -498,10 +503,26 @@ const CharacterSheet = memo(({ data, onLogout }) => {
       )}
 
       {/* Valute */}
-      <div className="grid grid-cols-2 gap-4 mb-6 max-w-lg mx-auto"> 
-        <StatRow label="CR" value={crediti || 0} icon={<Coins className="text-yellow-400 animate-pulse" />} />
-        <StatRow label="PC" value={punti_caratteristica || 0} icon={<Star className="text-blue-400" />} />
-      </div>
+      {duale ? (
+        <div className="grid grid-cols-3 gap-3 mb-6 max-w-2xl mx-auto">
+          <StatRow
+            label="Corrente"
+            value={Number(crediti_corrente ?? crediti ?? 0).toFixed(2)}
+            icon={<Coins className="text-yellow-400" />}
+          />
+          <StatRow
+            label="Deposito"
+            value={Number(crediti_deposito ?? 0).toFixed(2)}
+            icon={<Coins className="text-amber-500" />}
+          />
+          <StatRow label="PC" value={punti_caratteristica || 0} icon={<Star className="text-blue-400" />} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 mb-6 max-w-lg mx-auto">
+          <StatRow label="CR" value={crediti || 0} icon={<Coins className="text-yellow-400 animate-pulse" />} />
+          <StatRow label="PC" value={punti_caratteristica || 0} icon={<Star className="text-blue-400" />} />
+        </div>
+      )}
 
       {/* Statistiche Primarie */}
       {stat_primarie.length > 0 && (

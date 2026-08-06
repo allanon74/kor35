@@ -1,7 +1,7 @@
 from django.urls import path, include
 # from rest_framework.authtoken.views import obtain_auth_token
 
-from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views
+from . import views, views_staff, views_scommesse, views_carte, views_carte_platform, watch_views, views_economia
 from rest_framework import routers
 
 from rest_framework.routers import DefaultRouter
@@ -198,6 +198,27 @@ urlpatterns = [
     path('api/personaggio/me/', views.PersonaggioMeView.as_view(), name='api_personaggio_me'),
     path('api/personaggio/me/crediti/', views.CreditoMovimentoCreateView.as_view(), name='api_crediti_create'),
     path('api/personaggio/me/pc/', views.PuntiCaratteristicaMovimentoCreateView.as_view(), name='api_pc_create'),
+    path('api/personaggio/me/economia/', views_economia.EconomiaSummaryView.as_view(), name='api_economia_summary'),
+    path(
+        'api/personaggio/me/economia/trasferisci-deposito/',
+        views_economia.EconomiaTrasferisciDepositoView.as_view(),
+        name='api_economia_trasferisci',
+    ),
+    path(
+        'api/personaggio/me/economia/movimenti/',
+        views_economia.EconomiaMovimentiView.as_view(),
+        name='api_economia_movimenti',
+    ),
+    path(
+        'api/staff/economia-config/',
+        views_economia.StaffEconomiaCampagnaConfigView.as_view(),
+        name='api_staff_economia_config',
+    ),
+    path(
+        'api/staff/personaggi/<int:pk>/economia/',
+        views_economia.StaffEconomiaPersonaggioView.as_view(),
+        name='api_staff_personaggio_economia',
+    ),
     path('api/personaggi/', views.PersonaggioListView.as_view(), name='api_personaggio_list'),
     path('api/personaggi/<int:pk>/', views.PersonaggioDetailView.as_view(), name='api_personaggio_detail'),
     path('api/personaggi/<int:pk>/game_state/', views.PersonaggioGameStateView.as_view(), name='api_personaggio_game_state'),

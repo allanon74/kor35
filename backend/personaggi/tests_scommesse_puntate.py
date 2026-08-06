@@ -1,4 +1,4 @@
-"""Test riserva scommesse: versamento vincite e ritiro in evento."""
+"""Test scommesse: vincite sul deposito; ritiro per-puntata deprecato."""
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from gestione_plot.models import Evento
+from personaggi.economia_crediti import saldo_corrente, saldo_deposito
 from personaggi.models import Personaggio
 from personaggi.scommesse_models import (
     CalendarioScommesse,
@@ -38,7 +39,7 @@ class ScommesseRiservaTests(TestCase):
         )
         self.evento.partecipanti.add(self.personaggio)
 
-    def test_riscuoti_versa_intera_vincita_in_riserva(self):
+    def test_riscuoti_versa_intera_vincita_in_deposito(self):
         puntata = PuntataScommessa.objects.create(
             personaggio=self.personaggio,
             calendario=self.calendario,
@@ -49,18 +50,20 @@ class ScommesseRiservaTests(TestCase):
             vincita=Decimal("25.00"),
             liquidata_at=timezone.now(),
         )
-        riserva_prima = self.personaggio.riserva
-        crediti_prima = self.personaggio.crediti
+        dep_prima = saldo_deposito(self.personaggio)
+        corr_prima = saldo_corrente(self.personaggio)
         riscuoti_vincita(self.personaggio, puntata.id)
         self.personaggio.refresh_from_db()
         puntata.refresh_from_db()
         self.assertTrue(puntata.vincita_riscossa)
         self.assertEqual(puntata.vincita_versata_riserva, Decimal("25.00"))
         self.assertEqual(puntata.vincita_ritirata, Decimal("0.00"))
-        self.assertEqual(self.personaggio.riserva, riserva_prima + Decimal("25.00"))
-        self.assertEqual(self.personaggio.crediti, crediti_prima)
+        self.assertEqual(saldo_deposito(self.personaggio), dep_prima + Decimal("25.00"))
+        self.assertEqual(saldo_corrente(self.personaggio), corr_prima)
+        # Campo legacy riserva resta a 0
+        self.assertEqual(Decimal(str(self.personaggio.riserva or 0)), Decimal("0.00"))
 
-    def test_ritira_da_riserva_solo_in_evento_attivo(self):
+    def test_ritira_da_riserva_deprecato(self):
         puntata = PuntataScommessa.objects.create(
             personaggio=self.personaggio,
             calendario=self.calendario,
@@ -73,23 +76,12 @@ class ScommesseRiservaTests(TestCase):
             vincita_riscossa=True,
             vincita_versata_riserva=Decimal("25.00"),
         )
-        self.personaggio.riserva = Decimal("25.00")
-        self.personaggio.save(update_fields=["riserva", "updated_at"])
-
-        self.evento.partecipanti.remove(self.personaggio)
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationError) as ctx:
             ritira_da_riserva(self.personaggio, puntata.id)
+        self.assertIn("non è più disponibile", str(ctx.exception))
 
-        self.evento.partecipanti.add(self.personaggio)
-        crediti_prima = self.personaggio.crediti
-        ritira_da_riserva(self.personaggio, puntata.id)
-        self.personaggio.refresh_from_db()
-        puntata.refresh_from_db()
-        self.assertEqual(puntata.vincita_ritirata, Decimal("25.00"))
-        self.assertEqual(self.personaggio.riserva, Decimal("0.00"))
-        self.assertEqual(self.personaggio.crediti, crediti_prima + 25)
-
-    def test_vincita_rilevante_cap_ritiro_contanti(self):
+    def test_calcola_ritiro_contanti_legacy_helper(self):
+        """Helper soglia ancora calcola (audit), ma ritiro effettivo è deprecato."""
         puntata = PuntataScommessa.objects.create(
             personaggio=self.personaggio,
             calendario=self.calendario,
@@ -102,18 +94,9 @@ class ScommesseRiservaTests(TestCase):
             vincita_riscossa=True,
             vincita_versata_riserva=Decimal("800.00"),
         )
-        self.personaggio.riserva = Decimal("800.00")
-        self.personaggio.save(update_fields=["riserva", "updated_at"])
-
         ritiro, residuo = calcola_ritiro_contanti_da_riserva(self.personaggio, puntata)
         self.assertEqual(ritiro, Decimal("500.00"))
         self.assertEqual(residuo, Decimal("300.00"))
-
-        ritira_da_riserva(self.personaggio, puntata.id)
-        self.personaggio.refresh_from_db()
-        puntata.refresh_from_db()
-        self.assertEqual(puntata.vincita_ritirata, Decimal("500.00"))
-        self.assertEqual(self.personaggio.riserva, Decimal("300.00"))
 
     def test_cap_ritiro_per_calendario(self):
         PuntataScommessa.objects.create(
@@ -141,9 +124,6 @@ class ScommesseRiservaTests(TestCase):
             vincita_riscossa=True,
             vincita_versata_riserva=Decimal("400.00"),
         )
-        self.personaggio.riserva = Decimal("400.00")
-        self.personaggio.save(update_fields=["riserva", "updated_at"])
-
         ritiro, residuo = calcola_ritiro_contanti_da_riserva(self.personaggio, puntata2)
         self.assertEqual(ritiro, Decimal("200.00"))
         self.assertEqual(residuo, Decimal("200.00"))

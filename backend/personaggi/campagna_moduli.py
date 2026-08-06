@@ -38,6 +38,7 @@ MODULO_SCOMMESSE = "scommesse"
 MODULO_SOCIAL = "social"
 MODULO_NEGOZI = "negozi"
 MODULO_CREAZIONE_GUIDATA = "creazione_guidata"
+MODULO_CONTO_DEPOSITO = "conto_deposito"
 
 # tool staff id → chiave modulo (None = non gated)
 STAFF_TOOL_TO_MODULO = {
@@ -48,6 +49,7 @@ STAFF_TOOL_TO_MODULO = {
     "negozi-mercante": MODULO_NEGOZI,
     "creazione-guidata": MODULO_CREAZIONE_GUIDATA,
     "social-report": MODULO_SOCIAL,
+    "economia-crediti": MODULO_CONTO_DEPOSITO,
 }
 
 # tab player id → chiave modulo
@@ -57,6 +59,7 @@ PLAYER_TAB_TO_MODULO = {
     "negozi": MODULO_NEGOZI,
     "social": MODULO_SOCIAL,
     "tasks": MODULO_TASKS,
+    "economia": MODULO_CONTO_DEPOSITO,
 }
 
 CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
@@ -102,6 +105,12 @@ CAMPAGNA_MODULI_REGISTRY: list[dict[str, Any]] = [
         "label": "Creazione guidata PG",
         "descrizione": "Wizard creazione personaggio (staff).",
         "default": MODULO_ACCESSO_OPEN,
+    },
+    {
+        "key": MODULO_CONTO_DEPOSITO,
+        "label": "Conto di deposito",
+        "descrizione": "Economia duale: conto corrente (stipendio) e deposito (altri guadagni), trasferimento per evento.",
+        "default": MODULO_ACCESSO_OFF,
     },
 ]
 

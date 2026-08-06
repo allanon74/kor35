@@ -359,10 +359,12 @@ def accetta_offerta_scambio(
         accettante.modifica_crediti(
             -importo,
             f"Mercato carte: acquisto da {offerente.nome}",
+            conto="CORRENTE",
         )
         offerente.modifica_crediti(
             crediti_net,
             f"Mercato carte: vendita a {accettante.nome}",
+            conto="DEPOSITO",
         )
 
     carta_offerta.personaggio = accettante

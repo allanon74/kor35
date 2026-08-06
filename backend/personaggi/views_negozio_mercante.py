@@ -91,9 +91,13 @@ class NegozioMercanteGiocatoreViewSet(viewsets.ViewSet):
         negozio = get_object_or_404(NegozioMercante, pk=pk, attivo=True)
         try:
             if stock_id:
-                result = acquista_stock(negozio, pg, stock_id, slot_corpo=slot_corpo)
+                result = acquista_stock(
+                    negozio, pg, stock_id, slot_corpo=slot_corpo, conto=request.data.get("conto")
+                )
             elif voce_id:
-                result = acquista_voce(negozio, pg, voce_id, slot_corpo=slot_corpo)
+                result = acquista_voce(
+                    negozio, pg, voce_id, slot_corpo=slot_corpo, conto=request.data.get("conto")
+                )
             else:
                 return Response({"error": "voce_id o stock_id richiesto."}, status=400)
             return Response(result)

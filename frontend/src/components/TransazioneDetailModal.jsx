@@ -205,6 +205,11 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                           <span className="text-green-400 font-bold">
                             {transazione.ultima_proposta_iniziatore.crediti_da_dare} CR
                           </span>
+                          {transazione.ultima_proposta_iniziatore.conto_crediti && (
+                            <span className="text-xs text-gray-500 ml-1">
+                              ({transazione.ultima_proposta_iniziatore.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'})
+                            </span>
+                          )}
                         </div>
                       )}
                       {transazione.ultima_proposta_iniziatore.crediti_da_ricevere > 0 && (
@@ -247,6 +252,11 @@ const TransazioneDetailModal = ({ transazioneId, onClose, onLogout, onUpdate }) 
                           <span className="text-green-400 font-bold">
                             {transazione.ultima_proposta_destinatario.crediti_da_dare} CR
                           </span>
+                          {transazione.ultima_proposta_destinatario.conto_crediti && (
+                            <span className="text-xs text-gray-500 ml-1">
+                              ({transazione.ultima_proposta_destinatario.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'})
+                            </span>
+                          )}
                         </div>
                       )}
                       {transazione.ultima_proposta_destinatario.crediti_da_ricevere > 0 && (

@@ -35,11 +35,15 @@ const ComposeMessageModal = ({
   const [testo, setTesto] = useState(''); // HTML content
   const [includeTransfer, setIncludeTransfer] = useState(false);
   const [creditiToSend, setCreditiToSend] = useState('');
+  const [contoCrediti, setContoCrediti] = useState('CORRENTE');
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedSenderId, setSelectedSenderId] = useState('');
   const [senderCredits, setSenderCredits] = useState(0);
+  const [senderCorrente, setSenderCorrente] = useState(0);
+  const [senderDeposito, setSenderDeposito] = useState(0);
+  const [senderDuale, setSenderDuale] = useState(false);
   const [senderTransferItems, setSenderTransferItems] = useState([]);
   const [showOwnerToRecipient, setShowOwnerToRecipient] = useState(true);
   const [ownerLabel, setOwnerLabel] = useState('');
@@ -68,6 +72,7 @@ const ComposeMessageModal = ({
         setTesto('');
         setIncludeTransfer(false);
         setCreditiToSend('');
+        setContoCrediti('CORRENTE');
         setSelectedItemIds([]);
         setError('');
         setSelectedSenderId(currentCharacterId ? String(currentCharacterId) : '');
@@ -112,17 +117,40 @@ const ComposeMessageModal = ({
   useEffect(() => {
     if (!isOpen || !selectedSenderId) {
       setSenderCredits(0);
+      setSenderCorrente(0);
+      setSenderDeposito(0);
+      setSenderDuale(false);
       setSenderTransferItems([]);
       return;
     }
 
     let cancelled = false;
 
+    const applyBalances = (detail, fallbackCredits) => {
+      const duale = !!(detail?.economia?.modulo_attivo);
+      const corr = Number(detail?.crediti_corrente ?? detail?.crediti ?? fallbackCredits ?? 0);
+      const dep = Number(detail?.crediti_deposito ?? 0);
+      setSenderDuale(duale);
+      setSenderCorrente(corr);
+      setSenderDeposito(dep);
+      setSenderCredits(duale ? (contoCrediti === 'DEPOSITO' ? dep : corr) : Number(detail?.crediti ?? fallbackCredits ?? 0));
+    };
+
     const loadSenderInventory = async () => {
       if (String(selectedSenderId) === String(currentCharacterId)) {
         if (!cancelled) {
+          // Prefer detail from parent credits; duale may need refresh from character context via currentCredits only
           setSenderCredits(Number(currentCredits || 0));
+          setSenderCorrente(Number(currentCredits || 0));
+          setSenderDeposito(0);
+          setSenderDuale(false);
           setSenderTransferItems(filterTransferableItems(availableTransferItems));
+          try {
+            const detail = await getPersonaggioDetail(selectedSenderId, onLogout);
+            if (!cancelled && detail) applyBalances(detail, currentCredits);
+          } catch {
+            /* keep fallback */
+          }
         }
         return;
       }
@@ -131,12 +159,14 @@ const ComposeMessageModal = ({
       try {
         const detail = await getPersonaggioDetail(selectedSenderId, onLogout);
         if (cancelled) return;
-        setSenderCredits(Number(detail?.crediti ?? fromList?.crediti ?? 0));
-        setSenderTransferItems(filterTransferableItems(detail?.oggetti));
-      } catch (err) {
-        console.error('Errore caricamento inventario mittente', err);
+        applyBalances(detail, fromList?.crediti);
+        setSenderTransferItems(filterTransferableItems(detail?.oggetti || []));
+      } catch {
         if (!cancelled) {
           setSenderCredits(Number(fromList?.crediti || 0));
+          setSenderCorrente(Number(fromList?.crediti || 0));
+          setSenderDeposito(0);
+          setSenderDuale(false);
           setSenderTransferItems([]);
         }
       }
@@ -152,8 +182,9 @@ const ComposeMessageModal = ({
     currentCharacterId,
     currentCredits,
     availableTransferItems,
-    onLogout,
     ownCharacters,
+    onLogout,
+    contoCrediti,
   ]);
 
   useEffect(() => {
@@ -216,7 +247,10 @@ const ComposeMessageModal = ({
       return;
     }
 
-    if (parsedCrediti > Number(senderCredits || 0)) {
+    const availableForSend = senderDuale
+      ? (contoCrediti === 'DEPOSITO' ? senderDeposito : senderCorrente)
+      : Number(senderCredits || 0);
+    if (parsedCrediti > availableForSend) {
       setError("Crediti insufficienti per questo invio.");
       return;
     }
@@ -238,6 +272,7 @@ const ComposeMessageModal = ({
             is_staff_message: isStaffMessage, // Flag per il backend
             mostra_proprietario_giocatore: showOwnerToRecipient,
             crediti_da_inviare: parsedCrediti,
+            conto_crediti: includeTransfer ? contoCrediti : 'CORRENTE',
             oggetti_ids: includeTransfer ? selectedItemIds : [],
         };
 
@@ -473,8 +508,24 @@ const ComposeMessageModal = ({
                   <div className="space-y-3">
                     <div>
                       <label className="block text-xs uppercase tracking-wide text-gray-400 mb-1">
-                        Crediti (disponibili: {Number(senderCredits || 0)})
+                        Crediti (disponibili:{' '}
+                        {senderDuale
+                          ? contoCrediti === 'DEPOSITO'
+                            ? Number(senderDeposito || 0).toFixed(2)
+                            : Number(senderCorrente || 0).toFixed(2)
+                          : Number(senderCredits || 0)}
+                        )
                       </label>
+                      {senderDuale && (
+                        <select
+                          className="w-full mb-2 bg-gray-900 border border-gray-700 rounded p-2 text-sm"
+                          value={contoCrediti}
+                          onChange={(e) => setContoCrediti(e.target.value)}
+                        >
+                          <option value="CORRENTE">Da conto corrente</option>
+                          <option value="DEPOSITO">Da conto deposito</option>
+                        </select>
+                      )}
                       <input
                         type="number"
                         min="0"
@@ -484,6 +535,11 @@ const ComposeMessageModal = ({
                         className="w-full bg-gray-900 border border-gray-700 rounded p-2 focus:ring-2 focus:ring-indigo-500 outline-none"
                         placeholder="0"
                       />
+                      {senderDuale && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Il destinatario riceve sullo stesso conto.
+                        </p>
+                      )}
                     </div>
 
                     <div>

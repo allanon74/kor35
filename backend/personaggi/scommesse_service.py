@@ -112,6 +112,7 @@ def _liquida_calendario(calendario: CalendarioScommesse):
                     puntata.codice.allibratore.modifica_crediti(
                         float(commissione),
                         f"Commissione allibratore vincita codice {puntata.codice.codice}",
+                        conto="DEPOSITO",
                     )
         else:
             puntata.stato = PuntataScommessa.STATO_LOST
@@ -139,8 +140,15 @@ def _quota_selezione(incontro: IncontroScommesse, esito: str, *, bonus_allibrato
 def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_str=None, usa_riserva=False):
     """
     selezioni: lista di dict {"incontro_id": uuid, "esito": "1"|"X"|"2"}
-    usa_riserva: se True, l'importo è scalato dalla riserva (non dai crediti liberi).
+    usa_riserva: se True, l'importo è scalato dal conto deposito (ex-riserva).
     """
+    from personaggi.economia_crediti import (
+        CONTO_CORRENTE,
+        CONTO_DEPOSITO,
+        addebita,
+        saldo_deposito,
+    )
+
     liquidare_calendari_scaduti()
 
     try:
@@ -173,7 +181,7 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
         if is_allibratore:
             raise ValidationError("Gli allibratori non possono usare codici scommessa.")
         if usa_riserva:
-            raise ValidationError("Il codice allibratore non è utilizzabile con la riserva.")
+            raise ValidationError("Il codice allibratore non è utilizzabile con il deposito (ex-riserva).")
         codice_str = codice_str.strip().upper()
         codice_obj = CodiceScommessa.objects.select_related("allibratore").filter(
             codice=codice_str, usato=False
@@ -188,10 +196,10 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
 
     importo_riserva = Decimal("0.00")
     if usa_riserva:
-        riserva_disp = _decimal2(personaggio.riserva)
+        riserva_disp = saldo_deposito(personaggio)
         if riserva_disp < importo:
             raise ValidationError(
-                f"Riserva insufficiente. Disponibile: {riserva_disp} CR, richiesti: {importo} CR."
+                f"Deposito insufficiente. Disponibile: {riserva_disp} CR, richiesti: {importo} CR."
             )
         importo_riserva = importo
     else:
@@ -234,13 +242,21 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
 
     quota_totale = _decimal2(quota_totale)
 
+    desc = f"Scommessa {tipo.lower()} ({calendario.titolo or calendario.sport.nome})"
     if usa_riserva:
-        personaggio.riserva = _decimal2(personaggio.riserva - importo_riserva)
-        personaggio.save(update_fields=["riserva", "updated_at"])
+        addebita(
+            personaggio,
+            importo_riserva,
+            desc,
+            conto=CONTO_DEPOSITO,
+            allow_monoconto_fallback=False,
+        )
     else:
-        personaggio.modifica_crediti(
-            float(-importo),
-            f"Scommessa {tipo.lower()} ({calendario.titolo or calendario.sport.nome})",
+        addebita(
+            personaggio,
+            importo,
+            desc,
+            conto=CONTO_CORRENTE,
         )
 
     if codice_obj:
@@ -270,7 +286,9 @@ def piazza_puntata(personaggio, calendario_id, selezioni: list, importo, codice_
 
 @transaction.atomic
 def riscuoti_vincita(personaggio, puntata_id):
-    """Versa l'intera vincita nella riserva del giocatore."""
+    """Versa l'intera vincita nel conto deposito (ex-riserva)."""
+    from personaggi.economia_crediti import CONTO_DEPOSITO, modifica_crediti
+
     try:
         puntata = (
             PuntataScommessa.objects.select_for_update()
@@ -286,14 +304,18 @@ def riscuoti_vincita(personaggio, puntata_id):
     if puntata.stato != PuntataScommessa.STATO_WON:
         raise ValidationError("Questa puntata non ha una vincita da riscuotere.")
     if puntata.vincita_riscossa:
-        raise ValidationError("Vincita già versata in riserva.")
+        raise ValidationError("Vincita già versata in deposito.")
     vincita = puntata.vincita or Decimal("0.00")
     if vincita <= 0:
         raise ValidationError("Importo vincita non valido.")
 
     versato = _decimal2(vincita)
-    personaggio.riserva = _decimal2(personaggio.riserva + versato)
-    personaggio.save(update_fields=["riserva", "updated_at"])
+    modifica_crediti(
+        personaggio,
+        versato,
+        f"Vincita scommesse → deposito ({puntata.calendario.titolo or puntata.calendario.sport.nome})",
+        conto=CONTO_DEPOSITO,
+    )
 
     puntata.vincita_riscossa = True
     puntata.vincita_versata_riserva = versato
@@ -307,44 +329,14 @@ def riscuoti_vincita(personaggio, puntata_id):
 
 @transaction.atomic
 def ritira_da_riserva(personaggio, puntata_id):
-    """Preleva dalla riserva e accredita ai crediti liberi (solo durante evento attivo)."""
-    if not personaggio_in_evento_attivo(personaggio):
-        raise ValidationError(
-            "Il ritiro in contanti dalla riserva è consentito solo durante un evento attivo a cui partecipi."
-        )
-
-    try:
-        puntata = (
-            PuntataScommessa.objects.select_for_update()
-            .select_related("calendario__sport", "personaggio")
-            .get(pk=puntata_id, personaggio=personaggio)
-        )
-    except PuntataScommessa.DoesNotExist:
-        raise ValidationError("Puntata non trovata.")
-
-    if not puntata.vincita_riscossa:
-        raise ValidationError("Versa prima la vincita in riserva.")
-
-    cfg = get_config_scommesse(puntata.calendario.sport.campagna_id)
-    ritiro, _ = calcola_ritiro_contanti_da_riserva(personaggio, puntata, cfg)
-    if ritiro <= 0:
-        raise ValidationError("Nessun importo ritirabile in contanti per questa puntata.")
-
-    riserva_disp = _decimal2(personaggio.riserva)
-    if riserva_disp < ritiro:
-        raise ValidationError("Saldo riserva insufficiente.")
-
-    personaggio.riserva = _decimal2(riserva_disp - ritiro)
-    personaggio.save(update_fields=["riserva", "updated_at"])
-    personaggio.modifica_crediti(
-        float(ritiro),
-        f"Ritiro riserva scommesse ({puntata.calendario.titolo or puntata.calendario.sport.nome})",
+    """
+    Deprecato: il ritiro per-puntata è sostituito dal trasferimento deposito→corrente per evento.
+    """
+    raise ValidationError(
+        "Il ritiro per puntata non è più disponibile. "
+        "Usa il trasferimento dal conto deposito al corrente (tab Economia), "
+        "una volta per evento entro il tetto frazione × stipendio."
     )
-
-    puntata.vincita_ritirata = _decimal2((puntata.vincita_ritirata or Decimal("0.00")) + ritiro)
-    puntata.save(update_fields=["vincita_ritirata", "updated_at"])
-    return puntata
-
 
 def storico_risultati_squadra(squadra_id, limit=12):
     """Ultimi incontri con risultato pubblicato per una squadra."""

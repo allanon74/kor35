@@ -95,7 +95,9 @@ def applica_premio_presenza_personaggio(evento: Evento, pg: Personaggio, when=No
             pg.modifica_pc(n_pc, desc)
         cred = calcola_crediti_premio_evento(evento, pg, ts=ts)
         if cred > 0:
-            pg.modifica_crediti(cred, desc)
+            from personaggi.economia_crediti import CONTO_CORRENTE
+
+            pg.modifica_crediti(cred, desc, conto=CONTO_CORRENTE, evento=evento)
         n_pr = int(getattr(evento, "prestigio_base_inizio_evento", 0) or 0)
         if n_pr != 0:
             pg.modifica_prestigio(n_pr, desc)

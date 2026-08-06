@@ -755,7 +755,7 @@ class GestioneOggettiService:
                     if req.artigiano.crediti < req.offerta_crediti:
                         raise ValidationError("Il paziente non ha crediti sufficienti.")
                     req.artigiano.modifica_crediti(-req.offerta_crediti, f"Operazione da Dr. {req.committente.nome}")
-                    req.committente.modifica_crediti(req.offerta_crediti, f"Paziente {req.artigiano.nome}")
+                    req.committente.modifica_crediti(req.offerta_crediti, f"Paziente {req.artigiano.nome}", conto="DEPOSITO")
 
                 # 3. FIX CRITICO INTEGRITY ERROR
                 # Salviamo l'ID della forgiatura perché stiamo per rompere il link
@@ -816,7 +816,7 @@ class GestioneOggettiService:
                     if req.committente.crediti < req.offerta_crediti: 
                         raise ValidationError("Il committente non ha crediti sufficienti.")
                     req.committente.modifica_crediti(-req.offerta_crediti, f"Lavoro di {req.artigiano.nome}")
-                    req.artigiano.modifica_crediti(req.offerta_crediti, f"Cliente {req.committente.nome}")
+                    req.artigiano.modifica_crediti(req.offerta_crediti, f"Cliente {req.committente.nome}", conto="DEPOSITO")
 
                 # 3. Esecuzione Lavoro
                 if req.tipo_operazione == TIPO_OPERAZIONE_FORGIATURA:
@@ -1271,7 +1271,9 @@ class GestioneCraftingService:
         return {"count": count, "updated": updated, "dry_run": False}
 
     @staticmethod
-    def acquista_da_negozio(personaggio, oggetto_base_id):
+    def acquista_da_negozio(personaggio, oggetto_base_id, *, conto="CORRENTE"):
+        from personaggi.economia_crediti import CATEGORIA_OGGETTO, addebita_bene, normalize_conto
+
         from .accademia_catalogo import verifica_oggetto_base_accademia
 
         try:
@@ -1282,11 +1284,17 @@ class GestioneCraftingService:
         verifica_oggetto_base_accademia(template)
 
         costo = template.costo
-        if personaggio.crediti < costo:
-            raise ValidationError(f"Crediti insufficienti. Costo: {costo}")
+        conto = normalize_conto(conto)
 
         with transaction.atomic():
-            personaggio.modifica_crediti(-costo, f"Acquisto negozio: {template.nome}")
+            addebita_bene(
+                personaggio,
+                costo,
+                f"Acquisto negozio: {template.nome}",
+                conto=conto,
+                categoria=CATEGORIA_OGGETTO,
+                campagna=getattr(personaggio, "campagna", None),
+            )
             return GestioneCraftingService.crea_istanza_da_oggetto_base(
                 template, personaggio, costo_acquisto=costo
             )

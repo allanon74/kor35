@@ -101,12 +101,15 @@ def _lobby_attiva_per_sfidante(sfidante: Personaggio):
 
 
 def _valida_posta_disponibile(pg: Personaggio, posta: Decimal, fonte: str):
+    from personaggi.economia_crediti import saldo_deposito
+
     if posta <= 0:
         return
     if fonte == POSTA_FONTE_RISERVA:
-        if pg.riserva < posta:
+        disp = saldo_deposito(pg)
+        if disp < posta:
             raise ValidationError(
-                f"Riserva scommesse insufficiente ({pg.riserva} CR, servono {posta} CR)."
+                f"Deposito insufficiente ({disp} CR, servono {posta} CR)."
             )
     elif fonte == POSTA_FONTE_CREDITI:
         if Decimal(str(pg.crediti)) < posta:
@@ -450,8 +453,9 @@ def azione_prematch(duello_id, personaggio: Personaggio, azione: str, payload: d
 
 
 def liquida_posta_duello(duello: DuelloCarte):
-    """Alla fine partita: perdente paga da riserva/crediti, vincitore incassa sui crediti."""
+    """Alla fine partita: perdente paga da deposito/corrente, vincitore incassa su deposito."""
     from personaggi.carte_collezionabili_models import DUELLO_STATO_FINITO
+    from personaggi.economia_crediti import CONTO_CORRENTE, CONTO_DEPOSITO, addebita, modifica_crediti
 
     if duello.stato != DUELLO_STATO_FINITO or not duello.vincitore_id:
         return
@@ -466,14 +470,24 @@ def liquida_posta_duello(duello: DuelloCarte):
     fonte = (pre.get(ruolo_perd) or {}).get("posta_fonte") or POSTA_FONTE_RISERVA
 
     if fonte == POSTA_FONTE_RISERVA:
-        perdente.riserva = max(Decimal("0"), perdente.riserva - posta)
-        perdente.save(update_fields=["riserva", "updated_at"])
-        perdente.aggiungi_log(f"Duello carte perso: -{posta} CR dalla riserva scommesse.")
+        addebita(
+            perdente,
+            posta,
+            "Posta persa duello carte (deposito)",
+            conto=CONTO_DEPOSITO,
+            allow_monoconto_fallback=False,
+        )
+        perdente.aggiungi_log(f"Duello carte perso: -{posta} CR dal deposito.")
     else:
-        perdente.modifica_crediti(-float(posta), "Posta persa duello carte")
+        addebita(
+            perdente,
+            posta,
+            "Posta persa duello carte",
+            conto=CONTO_CORRENTE,
+        )
 
     vincitore = duello.vincitore
-    vincitore.modifica_crediti(float(posta), "Vittoria duello carte")
-    vincitore.aggiungi_log(f"Vittoria duello carte: +{posta} CR.")
+    modifica_crediti(vincitore, posta, "Vittoria duello carte", conto=CONTO_DEPOSITO)
+    vincitore.aggiungi_log(f"Vittoria duello carte: +{posta} CR (deposito).")
     pre["posta_liquidata"] = True
     duello.stato_prematch = pre

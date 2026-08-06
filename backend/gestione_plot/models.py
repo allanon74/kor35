@@ -271,6 +271,33 @@ class EventoPremioPersonaggio(SyncableModel, models.Model):
         return f"{self.evento_id} → PG {self.personaggio_id}"
 
 
+class EventoTrasferimentoDeposito(SyncableModel, models.Model):
+    """
+    Idempotenza: un trasferimento deposito→corrente per (evento, personaggio).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name="trasferimenti_deposito")
+    personaggio = models.ForeignKey(
+        Personaggio, on_delete=models.CASCADE, related_name="trasferimenti_deposito_evento"
+    )
+    importo = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
+
+    class Meta:
+        verbose_name = "Trasferimento deposito evento"
+        verbose_name_plural = "Trasferimenti deposito evento"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("evento", "personaggio"),
+                name="uq_evento_trasferimento_deposito_pg",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.evento_id} → PG {self.personaggio_id}: {self.importo}"
+
+
 class GiornoEvento(SyncableModel, models.Model):
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='giorni')
     titolo = models.CharField(max_length=200, blank=True, help_text="Titolo identificativo del giorno")

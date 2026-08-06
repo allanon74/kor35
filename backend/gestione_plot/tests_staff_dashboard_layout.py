@@ -66,11 +66,11 @@ class StaffDashboardLayoutTests(SimpleTestCase):
         self.assertIn("manuali-pdf", giocatori_tools)
         validate_staff_dashboard_layout(layout)
 
-    def test_personaggi_tool_nel_default(self):
+    def test_economia_crediti_tool_nel_default(self):
         from gestione_plot.staff_dashboard_layout import KNOWN_STAFF_TOOL_IDS
 
-        self.assertIn("personaggi", KNOWN_STAFF_TOOL_IDS)
+        self.assertIn("economia-crediti", KNOWN_STAFF_TOOL_IDS)
         layout = default_staff_dashboard_layout()
         giocatori_tools = layout["groups"][2]["tool_ids"]
-        self.assertIn("personaggi", giocatori_tools)
+        self.assertIn("economia-crediti", giocatori_tools)
         validate_staff_dashboard_layout(layout)

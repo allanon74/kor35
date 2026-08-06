@@ -385,7 +385,9 @@ def applica_effetto_nodo_scan(personaggio, nodo) -> Dict[str, Any]:
                     rewards["reward_source"] = "config"
                     applied_from_config = True
                 elif regola.tipo_reward == NODO_REWARD_CREDITI and delta_effettivo:
-                    personaggio.modifica_crediti(delta_effettivo, "Nodo scansionato (config)")
+                    personaggio.modifica_crediti(
+                        delta_effettivo, "Nodo scansionato (config)", conto="DEPOSITO"
+                    )
                     rewards["crediti"] = delta_effettivo
                     rewards["reward_source"] = "config"
                     applied_from_config = True
@@ -405,7 +407,7 @@ def applica_effetto_nodo_scan(personaggio, nodo) -> Dict[str, Any]:
                 rewards["pool"] = {"sigla": "ROT", "delta": mult, "valore_corrente": delta}
             elif abbr in ("imperatore", "capitale"):
                 cred = 25 * mult
-                personaggio.modifica_crediti(cred, "Nodo scansionato")
+                personaggio.modifica_crediti(cred, "Nodo scansionato", conto="DEPOSITO")
                 rewards["crediti"] = cred
             elif abbr == "silenzio":
                 delta = personaggio.regola_risorsa_staff("AST", mult, motivo="Nodo scansionato")

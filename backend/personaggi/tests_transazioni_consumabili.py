@@ -30,7 +30,11 @@ class TransazioneConsumabiliTests(TestCase):
             is_base=True,
             attiva=True,
         )
-        cls.tipologia = TipologiaPersonaggio.objects.create(nome="Standard Trans Test")
+        cls.tipologia = TipologiaPersonaggio.objects.create(
+            nome="Standard Trans Test",
+            crediti_iniziali=100,
+            caratteristiche_iniziali=0,
+        )
         cls.user_a = User.objects.create_user(username="trans_a", password="x")
         cls.user_b = User.objects.create_user(username="trans_b", password="y")
         cls.pg_a = Personaggio.objects.create(

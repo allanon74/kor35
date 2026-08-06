@@ -25,6 +25,7 @@ import {
   ArrowLeftRight,
   CreditCard,
   ListTodo,
+  Wallet,
 } from 'lucide-react';
 
 /** Icone consentite per i gruppi del menu (allineate al backend). */
@@ -67,6 +68,8 @@ export const STAFF_TOOL_ICON_MAP = {
   FileText,
   CreditCard,
   ListTodo,
+  Wallet,
+  ArrowLeftRight,
 };
 
 /**
@@ -110,6 +113,7 @@ export const STAFF_TOOLS_REGISTRY = {
   'personaggi-eliminati': { id: 'personaggi-eliminati', label: 'Personaggi eliminati', icon: Skull, color: 'bg-red-900', componentKey: 'personaggi-eliminati' },
   personaggi: { id: 'personaggi', label: 'Personaggi', icon: Users, color: 'bg-teal-700', componentKey: 'personaggi' },
   'regole-transazioni': { id: 'regole-transazioni', label: 'Regole transazioni', icon: ArrowLeftRight, color: 'bg-amber-800', componentKey: 'regole-transazioni' },
+  'economia-crediti': { id: 'economia-crediti', label: 'Economia crediti', icon: Wallet, color: 'bg-emerald-900', componentKey: 'economia-crediti' },
 };
 
 export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
@@ -145,7 +149,7 @@ export const DEFAULT_STAFF_DASHBOARD_LAYOUT = {
       palette: 'teal',
       order: 2,
       collapsed_default: true,
-      tool_ids: ['personaggi', 'regole-transazioni', 'creazione-guidata', 'inventari', 'proposte', 'immagini', 'manuali-pdf', 'risorse-pool', 'personaggi-eliminati'],
+      tool_ids: ['personaggi', 'regole-transazioni', 'economia-crediti', 'creazione-guidata', 'inventari', 'proposte', 'immagini', 'manuali-pdf', 'risorse-pool', 'personaggi-eliminati'],
     },
     {
       id: 'comunicazione',

@@ -24,6 +24,7 @@ export const CAMPAGNA_MODULI_REGISTRY = [
   { key: 'social', label: 'Social (InstaFame)', descrizione: 'Feed social e report eventi.', default: 'OPEN' },
   { key: 'negozi', label: 'Negozi mercante', descrizione: 'Tab negozi e listini staff.', default: 'OPEN' },
   { key: 'creazione_guidata', label: 'Creazione guidata PG', descrizione: 'Wizard creazione personaggio (staff).', default: 'OPEN' },
+  { key: 'conto_deposito', label: 'Conto di deposito', descrizione: 'Economia duale: corrente (stipendio) e deposito; trasferimento per evento.', default: 'OFF' },
 ];
 
 export const STAFF_TOOL_TO_MODULO = {
@@ -34,6 +35,7 @@ export const STAFF_TOOL_TO_MODULO = {
   'negozi-mercante': 'negozi',
   'creazione-guidata': 'creazione_guidata',
   'social-report': 'social',
+  'economia-crediti': 'conto_deposito',
 };
 
 export const PLAYER_TAB_TO_MODULO = {
@@ -42,6 +44,7 @@ export const PLAYER_TAB_TO_MODULO = {
   negozi: 'negozi',
   social: 'social',
   tasks: 'tasks',
+  economia: 'conto_deposito',
 };
 
 export function getModuloAccesso(moduliMap, key, registry = CAMPAGNA_MODULI_REGISTRY) {

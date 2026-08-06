@@ -357,7 +357,9 @@ def build_collezione_payload(personaggio: Personaggio) -> dict:
         "progress_espansioni": progress_espansioni,
         "mazzi": lista_mazzi_duello(personaggio),
         "crediti": float(personaggio.crediti),
-        "riserva": float(personaggio.riserva),
+        "crediti_corrente": float(personaggio.crediti_corrente),
+        "crediti_deposito": float(personaggio.crediti_deposito),
+        "riserva": float(personaggio.crediti_deposito),  # alias ex-riserva → deposito
         "tema_energie": get_tema_energie_carte(),
         "keywords": lista_keywords_campagna(personaggio.campagna),
         "tags": lista_tags_campagna(personaggio.campagna),

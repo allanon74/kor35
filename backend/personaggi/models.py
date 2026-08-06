@@ -1628,6 +1628,14 @@ class Campagna(SyncableModel, models.Model):
             "legge ConfigurazioneCarteCollezionabili."
         ),
     )
+    economia_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Config economia duale (conto deposito): frazione_trasferimento_stipendio, "
+            "fattore_valore_deposito, categorie_spesa_deposito. Chiavi assenti → default codice."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -3531,11 +3539,35 @@ class PuntiCaratteristicaMovimento(SyncableModel, models.Model):
     class Meta: verbose_name="Movimento PC"; ordering=['-data']
 
 class CreditoMovimento(SyncableModel, models.Model):
+    CONTO_CORRENTE = "CORRENTE"
+    CONTO_DEPOSITO = "DEPOSITO"
+    CONTO_CHOICES = [
+        (CONTO_CORRENTE, "Conto corrente"),
+        (CONTO_DEPOSITO, "Conto di deposito"),
+    ]
+
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="movimenti_credito")
     importo = models.DecimalField(max_digits=10, decimal_places=2)
     descrizione = models.CharField(max_length=200)
     data = models.DateTimeField(default=timezone.now)
-    class Meta: ordering=['-data']
+    conto = models.CharField(
+        max_length=16,
+        choices=CONTO_CHOICES,
+        default=CONTO_CORRENTE,
+        db_index=True,
+        help_text="Conto corrente (stipendio) o deposito (altri guadagni / ex-riserva).",
+    )
+    evento = models.ForeignKey(
+        "gestione_plot.Evento",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="movimenti_credito",
+        db_index=True,
+    )
+
+    class Meta:
+        ordering = ["-data"]
     
 class PersonaggioLog(SyncableModel, models.Model):
     personaggio = models.ForeignKey('Personaggio', on_delete=models.CASCADE, related_name="log_eventi")
@@ -4677,8 +4709,11 @@ class Personaggio(Inventario):
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
-        verbose_name="Riserva scommesse",
-        help_text="CR da vincite scommesse: spendibili solo per puntate; ritiro in contanti solo in evento attivo.",
+        verbose_name="Riserva scommesse (legacy)",
+        help_text=(
+            "Deprecato: assorbita nel conto deposito. Tenuto a 0 dopo migrazione; "
+            "usare crediti_deposito / economia_crediti."
+        ),
     )
     # -------------------
     
@@ -4701,8 +4736,10 @@ class Personaggio(Inventario):
     def aggiungi_log(self, t): 
         PersonaggioLog.objects.create(personaggio=self, testo_log=t)
     
-    def modifica_crediti(self, i, d): 
-        CreditoMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
+    def modifica_crediti(self, i, d, *, conto=None, evento=None):
+        from personaggi.economia_crediti import CONTO_CORRENTE, modifica_crediti as _mod
+
+        return _mod(self, i, d, conto=conto or CONTO_CORRENTE, evento=evento)
     
     def modifica_pc(self, i, d): 
         PuntiCaratteristicaMovimento.objects.create(personaggio=self, importo=i, descrizione=d)
@@ -4721,21 +4758,48 @@ class Personaggio(Inventario):
         return nuovo
 
     def modifica_riserva_scommesse(self, delta, motivo):
-        """Variazione riserva scommesse (staff); non scrive movimenti crediti separati."""
+        """Legacy staff: variazione sul conto deposito (ex-riserva)."""
+        from personaggi.economia_crediti import CONTO_DEPOSITO, addebita, modifica_crediti, saldo_deposito
+
         delta = Decimal(str(delta)).quantize(Decimal("0.01"))
-        attuale = Decimal(str(self.riserva or 0)).quantize(Decimal("0.01"))
-        self.riserva = max(Decimal("0.00"), attuale + delta)
-        self.save(update_fields=["riserva", "updated_at"])
+        if delta == 0:
+            return
+        if delta < 0:
+            addebita(
+                self,
+                -delta,
+                f"Staff deposito (ex-riserva) — {motivo}",
+                conto=CONTO_DEPOSITO,
+                allow_monoconto_fallback=False,
+            )
+        else:
+            modifica_crediti(self, delta, f"Staff deposito (ex-riserva) — {motivo}", conto=CONTO_DEPOSITO)
+        # Mantieni campo legacy a 0
+        if self.riserva and Decimal(str(self.riserva)) != 0:
+            self.riserva = Decimal("0.00")
+            self.save(update_fields=["riserva", "updated_at"])
         segno = "+" if delta >= 0 else ""
-        self.aggiungi_log(f"Riserva scommesse {segno}{delta} CR — {motivo}")
+        self.aggiungi_log(f"Deposito (ex-riserva) {segno}{delta} CR — {motivo} (saldo {saldo_deposito(self)})")
 
     def imposta_riserva_scommesse(self, valore, motivo):
+        """Legacy staff: imposta saldo deposito (ex-riserva) al valore indicato."""
+        from personaggi.economia_crediti import CONTO_DEPOSITO, modifica_crediti, saldo_deposito
+
         valore = max(Decimal("0.00"), Decimal(str(valore)).quantize(Decimal("0.01")))
-        precedente = Decimal(str(self.riserva or 0)).quantize(Decimal("0.01"))
-        self.riserva = valore
-        self.save(update_fields=["riserva", "updated_at"])
+        attuale = saldo_deposito(self)
+        delta = (valore - attuale).quantize(Decimal("0.01"))
+        if delta != 0:
+            modifica_crediti(
+                self,
+                delta,
+                f"Staff deposito impostato a {valore} (era {attuale}) — {motivo}",
+                conto=CONTO_DEPOSITO,
+            )
+        if self.riserva and Decimal(str(self.riserva)) != 0:
+            self.riserva = Decimal("0.00")
+            self.save(update_fields=["riserva", "updated_at"])
         self.aggiungi_log(
-            f"Riserva scommesse impostata a {valore} CR (era {precedente}) — {motivo}"
+            f"Deposito (ex-riserva) impostato a {valore} CR (era {attuale}) — {motivo}"
         )
 
     def ha_eventi_iniziati(self):
@@ -5664,9 +5728,26 @@ class Personaggio(Inventario):
         return punteggi_per_nome
     
     @property
+    def crediti_corrente(self):
+        from personaggi.economia_crediti import saldo_corrente
+
+        return saldo_corrente(self)
+
+    @property
+    def crediti_deposito(self):
+        from personaggi.economia_crediti import saldo_deposito
+
+        return saldo_deposito(self)
+
+    @property
     def crediti(self):
-        b = self.tipologia.crediti_iniziali if self.tipologia else 0
-        return b + (self.movimenti_credito.aggregate(totale=Sum('importo'))['totale'] or 0)
+        """
+        Con modulo conto_deposito ON: solo corrente.
+        Con modulo OFF: corrente + deposito (monoconto compat).
+        """
+        from personaggi.economia_crediti import saldo_spendibile
+
+        return saldo_spendibile(self)
     
     @property
     def punti_caratteristica(self):
@@ -6975,17 +7056,47 @@ class TransazioneSospesa(SyncableModel, models.Model):
         from django.db import transaction as db_transaction
         
         with db_transaction.atomic():
-            # Esegui scambi crediti
+            # Crediti: debit+credit sullo stesso conto della proposta (natura conservata)
+            from personaggi.economia_crediti import normalize_conto, saldo_conto
+
             if self.ultima_proposta_iniziatore.crediti_da_dare > 0:
-                self.destinatario.modifica_crediti(
-                    self.ultima_proposta_iniziatore.crediti_da_dare,
-                    f"Ricevuto da transazione #{self.id}",
+                amt = self.ultima_proposta_iniziatore.crediti_da_dare
+                conto = normalize_conto(
+                    getattr(self.ultima_proposta_iniziatore, "conto_crediti", None)
                 )
-            
-            if self.ultima_proposta_destinatario.crediti_da_dare > 0:
+                if saldo_conto(self.iniziatore, conto) < amt:
+                    raise Exception(
+                        f"Crediti {conto.lower()} insufficienti per l'iniziatore ({amt} CR)."
+                    )
                 self.iniziatore.modifica_crediti(
-                    self.ultima_proposta_destinatario.crediti_da_dare,
-                    f"Ricevuto da transazione #{self.id}",
+                    -amt,
+                    f"Pagato in transazione #{self.id} ({conto.lower()})",
+                    conto=conto,
+                )
+                self.destinatario.modifica_crediti(
+                    amt,
+                    f"Ricevuto da transazione #{self.id} ({conto.lower()})",
+                    conto=conto,
+                )
+
+            if self.ultima_proposta_destinatario.crediti_da_dare > 0:
+                amt = self.ultima_proposta_destinatario.crediti_da_dare
+                conto = normalize_conto(
+                    getattr(self.ultima_proposta_destinatario, "conto_crediti", None)
+                )
+                if saldo_conto(self.destinatario, conto) < amt:
+                    raise Exception(
+                        f"Crediti {conto.lower()} insufficienti per il destinatario ({amt} CR)."
+                    )
+                self.destinatario.modifica_crediti(
+                    -amt,
+                    f"Pagato in transazione #{self.id} ({conto.lower()})",
+                    conto=conto,
+                )
+                self.iniziatore.modifica_crediti(
+                    amt,
+                    f"Ricevuto da transazione #{self.id} ({conto.lower()})",
+                    conto=conto,
                 )
             
             # Esegui scambi oggetti
@@ -7030,6 +7141,16 @@ class PropostaTransazione(SyncableModel, models.Model):
     
     # Cosa l'autore DÀ
     crediti_da_dare = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    conto_crediti = models.CharField(
+        max_length=16,
+        choices=CreditoMovimento.CONTO_CHOICES,
+        default=CreditoMovimento.CONTO_CORRENTE,
+        db_index=True,
+        help_text=(
+            "Conto da cui partono i crediti_da_dare; il destinatario li riceve sullo stesso conto "
+            "(corrente resta corrente, deposito resta deposito)."
+        ),
+    )
     oggetti_da_dare = models.ManyToManyField('Oggetto', related_name='proposte_oggetti_dati', blank=True)
     consumabili_da_dare = models.ManyToManyField(
         'ConsumabilePersonaggio', related_name='proposte_consumabili_dati', blank=True
@@ -7165,6 +7286,13 @@ class Messaggio(SyncableModel, models.Model):
     destinatario_gruppo = models.ForeignKey(Gruppo, on_delete=models.SET_NULL, null=True, blank=True, related_name="messaggi_ricevuti_gruppo")
     titolo = models.CharField(max_length=150); testo = models.TextField(); data_invio = models.DateTimeField(default=timezone.now); salva_in_cronologia = models.BooleanField(default=True)
     crediti_allegati = models.IntegerField(default=0)
+    conto_crediti_allegati = models.CharField(
+        max_length=16,
+        choices=CreditoMovimento.CONTO_CHOICES,
+        default=CreditoMovimento.CONTO_CORRENTE,
+        blank=True,
+        help_text="Conto usato per crediti_allegati (mittente e destinatario sullo stesso conto).",
+    )
     oggetti_allegati_snapshot = models.JSONField(default=list, blank=True)
     is_staff_message = models.BooleanField(default=False)
     mostra_proprietario_giocatore = models.BooleanField(

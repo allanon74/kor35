@@ -1946,14 +1946,28 @@ class PersonaggioStaffViewSet(viewsets.ModelViewSet):
         if amount == 0:
             return Response({'error': "L'importo non può essere zero"}, status=status.HTTP_400_BAD_REQUEST)
         if tipo == 'crediti':
-            personaggio.modifica_crediti(amount, reason)
-            val = personaggio.crediti
+            from personaggi.economia_crediti import normalize_conto
+
+            conto = normalize_conto(request.data.get("conto") or "DEPOSITO")
+            personaggio.modifica_crediti(amount, reason, conto=conto)
+            val = (
+                float(personaggio.crediti_deposito)
+                if conto == "DEPOSITO"
+                else float(personaggio.crediti_corrente)
+            )
         elif tipo == 'pc':
             personaggio.modifica_pc(amount, reason)
             val = personaggio.punti_caratteristica
         else:
             return Response({'error': 'Tipo risorsa non valido'}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({'status': 'success', 'new_val': val, 'msg': 'Risorse aggiornate'})
+        return Response({
+            'status': 'success',
+            'new_val': val,
+            'crediti_corrente': str(personaggio.crediti_corrente),
+            'crediti_deposito': str(personaggio.crediti_deposito),
+            'crediti': str(personaggio.crediti),
+            'msg': 'Risorse aggiornate',
+        })
 
     @action(detail=True, methods=['get', 'post'], url_path='riserva-scommesse')
     def riserva_scommesse(self, request, pk=None):

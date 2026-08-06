@@ -130,14 +130,24 @@ def _tecnica_listino_extra(personaggio, tecnica) -> dict:
 
 
 def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio) -> dict:
+    from personaggi.economia_crediti import CATEGORIA_NEGOZIO, prezzi_duali
+
     ent = _voce_entita(voce)
     nome = getattr(ent, "nome", voce.consumabile_nome or "Consumabile")
+    duali = prezzi_duali(
+        voce.prezzo_crediti,
+        getattr(personaggio, "campagna", None),
+        categoria=CATEGORIA_NEGOZIO,
+    )
     payload = {
         "id": str(voce.id),
         "tipo": "voce",
         "tipo_voce": voce.tipo_voce,
         "nome": nome,
         "prezzo_crediti": voce.prezzo_crediti,
+        "prezzo_corrente": duali["prezzo_corrente"],
+        "prezzo_deposito": duali["prezzo_deposito"],
+        "deposito_ammesso": duali["deposito_ammesso"],
         "quantita_residua": voce.quantita_residua,
         "acquistabile": True,
         "messaggio_usabilita": "",
@@ -161,13 +171,20 @@ def serializza_voce_listino(voce: NegozioMercanteVoce, personaggio) -> dict:
     return payload
 
 
-def serializza_stock_listino(stock: NegozioMercanteStock) -> dict:
+def serializza_stock_listino(stock: NegozioMercanteStock, personaggio=None) -> dict:
+    from personaggi.economia_crediti import CATEGORIA_NEGOZIO, prezzi_duali
+
+    campagna = getattr(personaggio, "campagna", None) if personaggio else None
+    duali = prezzi_duali(stock.prezzo_rivendita, campagna, categoria=CATEGORIA_NEGOZIO)
     return {
         "id": str(stock.id),
         "tipo": "stock",
         "tipo_voce": VOCE_OGGETTO,
         "nome": stock.oggetto.nome,
         "prezzo_crediti": stock.prezzo_rivendita,
+        "prezzo_corrente": duali["prezzo_corrente"],
+        "prezzo_deposito": duali["prezzo_deposito"],
+        "deposito_ammesso": duali["deposito_ammesso"],
         "acquistabile": stock.stato == STOCK_DISPONIBILE,
         "messaggio_usabilita": "Usato — rivendita" if stock.stato == STOCK_DISPONIBILE else "",
         "usato": True,
@@ -195,7 +212,7 @@ def build_listino(negozio: NegozioMercante, personaggio) -> dict:
                 continue
             voci.append(serializza_voce_listino(voce, personaggio))
         for stock in negozio.stock.filter(stato=STOCK_DISPONIBILE).select_related("oggetto"):
-            voci.append(serializza_stock_listino(stock))
+            voci.append(serializza_stock_listino(stock, personaggio))
     return {
         "negozio_id": str(negozio.id),
         "nome": negozio.nome,
@@ -243,13 +260,26 @@ def acquista_voce(
     voce_id,
     *,
     slot_corpo: str | None = None,
+    conto: str = "CORRENTE",
 ) -> dict:
+    from personaggi.economia_crediti import (
+        CATEGORIA_NEGOZIO,
+        CONTO_DEPOSITO,
+        addebita_bene,
+        categoria_ammessa_deposito,
+        modulo_conto_deposito_attivo,
+        normalize_conto,
+        prezzo_da_deposito,
+        saldo_conto,
+        saldo_spendibile,
+    )
     from personaggi.services import GestioneCraftingService, GestioneOggettiService
 
     ok, msg = negozio_e_aperto(negozio, personaggio)
     if not ok:
         raise ValidationError(msg or "Negozio chiuso.")
 
+    conto = normalize_conto(conto)
     voce = (
         NegozioMercanteVoce.objects.select_for_update()
         .select_related(
@@ -265,7 +295,15 @@ def acquista_voce(
         .get(pk=voce_id, negozio=negozio, attivo=True)
     )
     prezzo = int(voce.prezzo_crediti)
-    if personaggio.crediti < prezzo:
+    if conto == CONTO_DEPOSITO:
+        if not modulo_conto_deposito_attivo(personaggio):
+            raise ValidationError("Il conto di deposito non è attivo.")
+        if not categoria_ammessa_deposito(CATEGORIA_NEGOZIO, personaggio.campagna):
+            raise ValidationError("Acquisto negozio non pagabile con deposito.")
+        da_pagare_check = prezzo_da_deposito(prezzo, campagna=personaggio.campagna)
+        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare_check:
+            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare_check} CR.")
+    elif saldo_spendibile(personaggio) < prezzo:
         raise ValidationError(f"Crediti insufficienti. Servono {prezzo} CR.")
 
     if voce.quantita_residua is not None:
@@ -349,7 +387,14 @@ def acquista_voce(
     else:
         raise ValidationError("Tipo voce non supportato.")
 
-    personaggio.modifica_crediti(-prezzo, f"Acquisto presso {negozio.nome}")
+    pagato = addebita_bene(
+        personaggio,
+        prezzo,
+        f"Acquisto presso {negozio.nome}",
+        conto=conto,
+        categoria=CATEGORIA_NEGOZIO,
+        campagna=getattr(personaggio, "campagna", None),
+    )
     if negozio.incassa_acquisti_catalogo:
         _aggiorna_saldo(
             negozio,
@@ -360,8 +405,15 @@ def acquista_voce(
             nota=f"Acquisto: {voce}",
         )
 
-    personaggio.aggiungi_log(f"Acquisto al negozio «{negozio.nome}» ({prezzo} CR).")
-    result = {"status": "success", "prezzo": prezzo}
+    personaggio.aggiungi_log(
+        f"Acquisto al negozio «{negozio.nome}» ({pagato} CR da {conto.lower()})."
+    )
+    result = {
+        "status": "success",
+        "prezzo": prezzo,
+        "prezzo_pagato": str(pagato),
+        "conto": conto,
+    }
     if entita_creata and hasattr(entita_creata, "id"):
         result["oggetto_id"] = entita_creata.id
         if entita_creata.tipo_oggetto in (TIPO_OGGETTO_INNESTO, TIPO_OGGETTO_MUTAZIONE) and not slot_corpo:
@@ -375,7 +427,18 @@ def acquista_voce(
 
 
 @transaction.atomic
-def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None) -> dict:
+def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None, conto: str = "CORRENTE") -> dict:
+    from personaggi.economia_crediti import (
+        CATEGORIA_NEGOZIO,
+        CONTO_DEPOSITO,
+        addebita_bene,
+        categoria_ammessa_deposito,
+        modulo_conto_deposito_attivo,
+        normalize_conto,
+        prezzo_da_deposito,
+        saldo_conto,
+        saldo_spendibile,
+    )
     from personaggi.services import GestioneOggettiService
 
     ok, msg = negozio_e_aperto(negozio, personaggio)
@@ -388,7 +451,16 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None) -> dict:
         .get(pk=stock_id, negozio=negozio, stato=STOCK_DISPONIBILE)
     )
     prezzo = int(stock.prezzo_rivendita)
-    if personaggio.crediti < prezzo:
+    conto = normalize_conto(conto)
+    if conto == CONTO_DEPOSITO:
+        if not modulo_conto_deposito_attivo(personaggio):
+            raise ValidationError("Il conto di deposito non è attivo.")
+        if not categoria_ammessa_deposito(CATEGORIA_NEGOZIO, personaggio.campagna):
+            raise ValidationError("Acquisto negozio non pagabile con deposito.")
+        da_pagare_check = prezzo_da_deposito(prezzo, campagna=personaggio.campagna)
+        if saldo_conto(personaggio, CONTO_DEPOSITO) < da_pagare_check:
+            raise ValidationError(f"Deposito insufficiente. Servono {da_pagare_check} CR.")
+    elif saldo_spendibile(personaggio) < prezzo:
         raise ValidationError(f"Crediti insufficienti. Servono {prezzo} CR.")
 
     og = stock.oggetto
@@ -399,7 +471,14 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None) -> dict:
     stock.stato = STOCK_VENDUTO
     stock.save(update_fields=["stato", "updated_at"])
 
-    personaggio.modifica_crediti(-prezzo, f"Riacquisto usato da {negozio.nome}")
+    pagato = addebita_bene(
+        personaggio,
+        prezzo,
+        f"Riacquisto usato da {negozio.nome}",
+        conto=conto,
+        categoria=CATEGORIA_NEGOZIO,
+        campagna=getattr(personaggio, "campagna", None),
+    )
     _aggiorna_saldo(
         negozio,
         Decimal(prezzo),
@@ -407,8 +486,16 @@ def acquista_stock(negozio, personaggio, stock_id, *, slot_corpo=None) -> dict:
         personaggio=personaggio,
         stock=stock,
     )
-    personaggio.aggiungi_log(f"Riacquisto al negozio «{negozio.nome}» ({prezzo} CR).")
-    return {"status": "success", "prezzo": prezzo, "oggetto_id": og.id}
+    personaggio.aggiungi_log(
+        f"Riacquisto al negozio «{negozio.nome}» ({pagato} CR da {conto.lower()})."
+    )
+    return {
+        "status": "success",
+        "prezzo": prezzo,
+        "prezzo_pagato": str(pagato),
+        "conto": conto,
+        "oggetto_id": og.id,
+    }
 
 
 def preview_vendita_oggetto(negozio, personaggio, oggetto_id) -> dict:
@@ -481,7 +568,7 @@ def vendi_oggetto_a_negozio(negozio, personaggio, oggetto_id) -> dict:
         stato=STOCK_DISPONIBILE,
     )
 
-    personaggio.modifica_crediti(offerta, f"Vendita a {negozio.nome}")
+    personaggio.modifica_crediti(offerta, f"Vendita a {negozio.nome}", conto="DEPOSITO")
     _aggiorna_saldo(
         negozio,
         Decimal(-offerta),

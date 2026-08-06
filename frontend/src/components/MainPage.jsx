@@ -17,7 +17,7 @@ import {
     Menu, X, UserCog, RefreshCw, Filter, DownloadCloud, ScrollText, 
     ArrowRightLeft, Gamepad2, Loader2, ExternalLink, Tag, Users, Sparkles,
     Pin, PinOff, Briefcase, ClipboardCheck, Globe, ChevronRight, Package, Star,
-    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo
+    Key, HelpCircle, Watch, Trophy,     Store, Ship, CreditCard, ListTodo, Wallet
 } from 'lucide-react';
 
 import AbilitaTab from './AbilitaTab.jsx';
@@ -39,6 +39,7 @@ import CarteCollezionabiliTab from './CarteCollezionabiliTab.jsx';
 import NegoziMercanteTab from './NegoziMercanteTab.jsx';
 import StivaNaveTab from './StivaNaveTab.jsx';
 import TasksTab from './TasksTab.jsx';
+import EconomiaTab from './EconomiaTab.jsx';
 import RazzaModal, { stripRazzaPrefix } from './RazzaCollapsible';
 import { getStatValueBySigla, DEFAULT_STIVA_ACCESS_STAT_SIGLA } from '../lib/pilotStats.js';
 
@@ -69,6 +70,7 @@ const AVAILABLE_TABS = [
     { id: 'messaggi', label: 'Messaggi', icon: Mail, component: MessaggiTab },
     { id: 'logs', label: 'Diario', icon: ScrollText, component: LogViewer },
     { id: 'transazioni', label: 'Transazioni', icon: ArrowRightLeft, component: TransazioniViewer },
+    { id: 'economia', label: 'Economia', icon: Wallet, component: EconomiaTab, requiresModulo: 'conto_deposito' },
     { id: 'personaggi', label: 'Personaggi', icon: Users, component: PersonaggiTab },
     { id: 'tasks', label: 'Tasks', icon: ListTodo, component: TasksTab, requiresModulo: 'tasks', requiresEventoAttivo: true },
     { id: 'scommesse', label: 'Scommesse', icon: Trophy, component: ScommesseTab, requiresModulo: 'scommesse' },

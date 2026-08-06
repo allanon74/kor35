@@ -736,7 +736,7 @@ class AcquisisciInfusioneView(APIView):
             if creatore.id != personaggio.id:
                 royalty = int(round(costo * 0.10))
                 if royalty > 0:
-                    creatore.modifica_crediti(royalty, f"Royalty per l'acquisto di '{infusione.nome}' da parte di {personaggio.nome}")
+                    creatore.modifica_crediti(royalty, f"Royalty per l'acquisto di '{infusione.nome}' da parte di {personaggio.nome}", conto="DEPOSITO")
                     creatore.aggiungi_log(f"Ha ricevuto {royalty} CR di royalty per la tecnica '{infusione.nome}'.")
 
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
@@ -843,7 +843,7 @@ class AcquisisciTessituraView(APIView):
             if creatore.id != personaggio.id:
                 royalty = int(round(costo * 0.10))
                 if royalty > 0:
-                    creatore.modifica_crediti(royalty, f"Royalty per l'acquisto di '{tessitura.nome}' da parte di {personaggio.nome}")
+                    creatore.modifica_crediti(royalty, f"Royalty per l'acquisto di '{tessitura.nome}' da parte di {personaggio.nome}", conto="DEPOSITO")
                     creatore.aggiungi_log(f"Ha ricevuto {royalty} CR di royalty per la tecnica '{tessitura.nome}'.")
 
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
@@ -1054,7 +1054,7 @@ class AcquisisciCerimonialeView(APIView):
             if creatore and creatore.id != personaggio.id:
                 royalty = int(round(costo * 0.10))
                 if royalty > 0:
-                    creatore.modifica_crediti(royalty, f"Royalty per '{cerimoniale.nome}' da {personaggio.nome}")
+                    creatore.modifica_crediti(royalty, f"Royalty per '{cerimoniale.nome}' da {personaggio.nome}", conto="DEPOSITO")
 
         serializer = PersonaggioDetailSerializer(personaggio, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -3072,6 +3072,14 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
         is_staff_message = bool(validated.get('is_staff_message'))
         requested_sender = validated.get('mittente_personaggio')
         crediti_da_inviare = int(validated.get('crediti_da_inviare') or 0)
+        from personaggi.economia_crediti import (
+            CONTO_DEPOSITO,
+            modulo_conto_deposito_attivo,
+            normalize_conto,
+            saldo_conto,
+            saldo_spendibile,
+        )
+        conto_crediti = normalize_conto(validated.get('conto_crediti') or 'CORRENTE')
         oggetti_ids = list(dict.fromkeys(validated.get('oggetti_ids') or []))
 
         # Mittente: usa il personaggio selezionato in UI, altrimenti fallback al primo.
@@ -3115,10 +3123,27 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                 destinatario = Personaggio.objects.select_for_update().get(id=destinatario.id)
 
             # Validazioni allegati economici.
-            if not is_staff_message and crediti_da_inviare > 0 and personaggio_mittente.crediti < crediti_da_inviare:
-                raise serializers.ValidationError(
-                    {"crediti_da_inviare": f"Crediti insufficienti. Disponibili: {personaggio_mittente.crediti}."}
+            if not is_staff_message and crediti_da_inviare > 0:
+                if conto_crediti == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(
+                    personaggio_mittente, user=self.request.user
+                ):
+                    raise serializers.ValidationError(
+                        {"conto_crediti": "Il conto di deposito non è attivo."}
+                    )
+                disponibile = (
+                    saldo_conto(personaggio_mittente, conto_crediti)
+                    if modulo_conto_deposito_attivo(personaggio_mittente, user=self.request.user)
+                    else saldo_spendibile(personaggio_mittente, user=self.request.user)
                 )
+                if disponibile < crediti_da_inviare:
+                    raise serializers.ValidationError(
+                        {
+                            "crediti_da_inviare": (
+                                f"Crediti insufficienti sul conto {conto_crediti.lower()}. "
+                                f"Disponibili: {disponibile}."
+                            )
+                        }
+                    )
 
             oggetti_da_trasferire = []
             if not is_staff_message and oggetti_ids:
@@ -3169,20 +3194,21 @@ class MessaggioPrivateCreateView(generics.CreateAPIView):
                     destinatario_personaggio=destinatario,
                     mostra_proprietario_giocatore=mostra_proprietario,
                     crediti_allegati=crediti_da_inviare,
+                    conto_crediti_allegati=conto_crediti,
                     oggetti_allegati_snapshot=oggetti_snapshot,
                 )
 
                 # Applica trasferimenti allegati in modo atomico con la creazione messaggio.
                 if crediti_da_inviare > 0:
-                    CreditoMovimento.objects.create(
-                        personaggio=personaggio_mittente,
-                        importo=-crediti_da_inviare,
-                        descrizione=f"Invio crediti via messaggio a {destinatario.nome}",
+                    personaggio_mittente.modifica_crediti(
+                        -crediti_da_inviare,
+                        f"Invio crediti via messaggio a {destinatario.nome}",
+                        conto=conto_crediti,
                     )
-                    CreditoMovimento.objects.create(
-                        personaggio=destinatario,
-                        importo=crediti_da_inviare,
-                        descrizione=f"Ricezione crediti via messaggio da {personaggio_mittente.nome}",
+                    destinatario.modifica_crediti(
+                        crediti_da_inviare,
+                        f"Ricezione crediti via messaggio da {personaggio_mittente.nome}",
+                        conto=conto_crediti,
                     )
 
                 for oggetto in oggetti_da_trasferire:
@@ -3495,7 +3521,9 @@ class NegozioViewSet(viewsets.ViewSet):
         
         try:
             # Usa il service per creare l'oggetto fisico dal template
-            nuovo_oggetto = GestioneCraftingService.acquista_da_negozio(personaggio, oggetto_base_id)
+            nuovo_oggetto = GestioneCraftingService.acquista_da_negozio(
+                personaggio, oggetto_base_id, conto=request.data.get("conto") or "CORRENTE"
+            )
             serializer = OggettoSerializer(nuovo_oggetto, context={'personaggio': personaggio})
             
             return Response({

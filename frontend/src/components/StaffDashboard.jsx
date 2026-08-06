@@ -56,6 +56,7 @@ const MissioniManager = lazy(() => import('./editors/MissioniManager'));
 const PersonaggiEliminatiManager = lazy(() => import('./editors/PersonaggiEliminatiManager'));
 const PersonaggiStaffManager = lazy(() => import('./editors/PersonaggiStaffManager'));
 const RegoleTransazioneStaffManager = lazy(() => import('./editors/RegoleTransazioneStaffManager'));
+const EconomiaCreditiManager = lazy(() => import('./editors/EconomiaCreditiManager'));
 
 const STAFF_COMPONENT_MAP = {
     plot: PlotTab,
@@ -94,6 +95,7 @@ const STAFF_COMPONENT_MAP = {
     'personaggi-eliminati': PersonaggiEliminatiManager,
     personaggi: PersonaggiStaffManager,
     'regole-transazioni': RegoleTransazioneStaffManager,
+    'economia-crediti': EconomiaCreditiManager,
 };
 
 const DIRECT_LOAD_TOOLS = new Set(['plot', 'qr-debug']);

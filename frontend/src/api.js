@@ -3023,10 +3023,61 @@ export const staffAdjustPersonaggioRiservaScommesse = (id, payload, onLogout) =>
   }, onLogout);
 
 /** Staff: aggiungi crediti o PC a un personaggio. */
-export const staffAddResourcesToPersonaggio = (id, tipo, amount, reason, onLogout) =>
+export const staffAddResourcesToPersonaggio = (id, tipo, amount, reason, onLogout, { conto } = {}) =>
   fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/add-resources/`, {
     method: 'POST',
-    body: JSON.stringify({ tipo, amount, reason }),
+    body: JSON.stringify({ tipo, amount, reason, ...(conto ? { conto } : {}) }),
+  }, onLogout);
+
+/** Economia duale: summary saldo / tetto trasferimento. */
+export const fetchEconomiaSummary = (charId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/personaggio/me/economia/?char_id=${encodeURIComponent(charId)}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const postTrasferimentoDeposito = (charId, importo, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/personaggio/me/economia/trasferisci-deposito/`, {
+    method: 'POST',
+    body: JSON.stringify({ char_id: charId, importo }),
+  }, onLogout);
+
+export const fetchEconomiaMovimenti = (charId, { tipo = 'crediti', conto, limit = 40, offset = 0 } = {}, onLogout) => {
+  const params = new URLSearchParams({
+    char_id: String(charId),
+    tipo,
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (conto) params.set('conto', conto);
+  return fetchAuthenticated(
+    `/api/personaggi/api/personaggio/me/economia/movimenti/?${params}`,
+    { method: 'GET' },
+    onLogout,
+  );
+};
+
+export const fetchEconomiaConfig = (campagnaId, onLogout) =>
+  fetchAuthenticated(
+    `/api/personaggi/api/staff/economia-config/?campagna_id=${encodeURIComponent(campagnaId)}`,
+    { method: 'GET' },
+    onLogout,
+  );
+
+export const patchEconomiaConfig = (campagnaId, economia_config, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/economia-config/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ campagna_id: campagnaId, economia_config }),
+  }, onLogout);
+
+export const staffGetPersonaggioEconomia = (id, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/economia/`, { method: 'GET' }, onLogout);
+
+export const staffTrasferisciDepositoPersonaggio = (id, payload, onLogout) =>
+  fetchAuthenticated(`/api/personaggi/api/staff/personaggi/${id}/economia/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   }, onLogout);
 
 /** Staff: assegna un'abilità (stesse regole e costi dell'acquisto giocatore). */

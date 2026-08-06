@@ -124,7 +124,7 @@ def reclama_ricompensa(risoluzione: MissioneRisoluzione, *, notifica: bool = Tru
     pg = risoluzione.personaggio
     titolo = risoluzione.missione.titolo
     if cr > ZERO:
-        pg.modifica_crediti(cr, f"Task «{titolo}» — ricompensa Crediti")
+        pg.modifica_crediti(cr, f"Task «{titolo}» — ricompensa Crediti", conto="DEPOSITO")
     if pr > 0:
         pg.modifica_prestigio(pr, f"Task «{titolo}» — ricompensa Prestigio")
     risoluzione.ricompensa_reclamata = True

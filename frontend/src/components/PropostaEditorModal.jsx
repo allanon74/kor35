@@ -15,6 +15,7 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   const [formData, setFormData] = useState({
     crediti_da_dare: 0,
     crediti_da_ricevere: 0,
+    conto_crediti: 'CORRENTE',
     oggetti_da_dare: [],
     oggetti_da_ricevere: [],
     consumabili_da_dare: [],
@@ -25,6 +26,11 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
   // Ottieni oggetti e consumabili disponibili dall'inventario
   const oggettiDisponibili = selectedCharacterData?.oggetti || [];
   const consumabiliDisponibili = selectedCharacterData?.consumabili || [];
+  const duale = !!(selectedCharacterData?.economia?.modulo_attivo);
+  const saldoConto =
+    formData.conto_crediti === 'DEPOSITO'
+      ? Number(selectedCharacterData?.crediti_deposito ?? 0)
+      : Number(selectedCharacterData?.crediti_corrente ?? selectedCharacterData?.crediti ?? 0);
 
   // Determina chi è l'altro personaggio
   const altroPersonaggioId = transazione?.iniziatore === selectedCharacterId 
@@ -149,8 +155,12 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
       return;
     }
 
-    if (formData.crediti_da_dare > selectedCharacterData?.crediti) {
-      alert("Non hai abbastanza crediti!");
+    if (formData.crediti_da_dare > saldoConto) {
+      alert(
+        duale
+          ? `Non hai abbastanza crediti sul conto ${formData.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'}!`
+          : 'Non hai abbastanza crediti!',
+      );
       return;
     }
 
@@ -207,6 +217,16 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
                 <label className="block text-sm font-bold text-gray-400 mb-2">
                   Crediti che DAI
                 </label>
+                {duale && (
+                  <select
+                    className="w-full mb-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm"
+                    value={formData.conto_crediti}
+                    onChange={(e) => setFormData({ ...formData, conto_crediti: e.target.value })}
+                  >
+                    <option value="CORRENTE">Da conto corrente</option>
+                    <option value="DEPOSITO">Da conto deposito</option>
+                  </select>
+                )}
                 <input
                   type="number"
                   min="0"
@@ -217,6 +237,10 @@ const PropostaEditorModal = ({ transazione, onClose, onSave, onLogout }) => {
                   placeholder="0.00"
                 />
                 <p className="text-xs text-gray-500 mt-1">
+                  Disponibili: {saldoConto.toFixed(2)} CR
+                  {duale ? ` (${formData.conto_crediti === 'DEPOSITO' ? 'deposito' : 'corrente'})` : ''}
+                  {duale ? ' — il destinatario riceve sullo stesso conto.' : ''}
+                </p>
                   Disponibili: {selectedCharacterData?.crediti || 0} CR
                 </p>
               </div>

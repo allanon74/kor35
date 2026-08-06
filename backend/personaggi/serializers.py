@@ -2409,7 +2409,8 @@ class PersonaggioLogSerializer(serializers.ModelSerializer):
 class CreditoMovimentoSerializer(serializers.ModelSerializer):
     class Meta:
         model = CreditoMovimento
-        fields = ('importo', 'descrizione', 'data')
+        fields = ('importo', 'descrizione', 'data', 'conto')
+        read_only_fields = fields
 
 
 class PropostaTransazioneSerializer(serializers.ModelSerializer):
@@ -2423,6 +2424,7 @@ class PropostaTransazioneSerializer(serializers.ModelSerializer):
         model = PropostaTransazione
         fields = (
             'id', 'autore', 'autore_nome', 'crediti_da_dare', 'crediti_da_ricevere',
+            'conto_crediti',
             'oggetti_da_dare', 'oggetti_da_ricevere',
             'consumabili_da_dare', 'consumabili_da_ricevere',
             'messaggio', 
@@ -2529,6 +2531,9 @@ class ConsumabilePersonaggioSerializer(serializers.ModelSerializer):
 class PersonaggioDetailSerializer(serializers.ModelSerializer):
     proprietario = serializers.StringRelatedField(read_only=True)
     crediti = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    crediti_corrente = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    crediti_deposito = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    economia = serializers.SerializerMethodField()
     punti_caratteristica = serializers.IntegerField(read_only=True)
     punteggi_base = serializers.JSONField(read_only=True)
     statistiche_base_dict = serializers.JSONField(read_only=True)
@@ -2579,7 +2584,8 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
         model = Personaggio
         fields = (
             'id', 'nome', 'testo', 'proprietario', 'data_nascita', 'data_morte', 'costume',
-            'tipologia', 'crediti', 'riserva', 'punti_caratteristica',
+            'tipologia', 'crediti', 'crediti_corrente', 'crediti_deposito', 'economia',
+            'riserva', 'punti_caratteristica',
             'punteggi_base', 'statistiche_base_dict', 'modificatori_calcolati',
             'abilita_possedute', 'oggetti',
             'attivate_possedute', 'infusioni_possedute', 'tessiture_possedute',
@@ -2599,6 +2605,26 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             'watch_enabled', 'watch_binding',
             'peso_influencer', 'peso_influencer_effettivo',
         )
+
+    def get_economia(self, obj):
+        from personaggi.economia_crediti import economia_summary
+        from personaggi.scommesse_evento import personaggio_in_evento_attivo
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        evento = personaggio_in_evento_attivo(obj)
+        return economia_summary(obj, evento=evento, user=user)
+
+    def to_representation(self, instance):
+        """
+        Applica i tick di rigenerazione automatica prima di serializzare i campi.
+        Alias riserva → crediti_deposito (compat frontend scommesse/carte).
+        """
+        instance.sync_recuperi_automatici()
+        data = super(PersonaggioDetailSerializer, self).to_representation(instance)
+        # Compat: riserva legacy = saldo deposito
+        data["riserva"] = data.get("crediti_deposito") or "0.00"
+        return data
 
     def get_peso_influencer_effettivo(self, obj):
         from social.influencer import get_effective_peso_influencer
@@ -2624,16 +2650,6 @@ class PersonaggioDetailSerializer(serializers.ModelSerializer):
             "last_seen_at": binding.last_seen_at.isoformat() if binding.last_seen_at else None,
             "is_active": bool(binding.is_active),
         }
-
-    def to_representation(self, instance):
-        """
-        Applica i tick di rigenerazione automatica prima di serializzare i campi.
-        `statistiche_primarie` è valutata prima di `risorse_pool_ui` / `rigenerazioni_auto_ui`
-        (che chiamano già sync): senza questo, valori corrente pool e ranghi restano obsoleti
-        dopo il refetch post-timer.
-        """
-        instance.sync_recuperi_automatici()
-        return super().to_representation(instance)
 
     def get_can_edit_razza(self, personaggio):
         """
@@ -3285,10 +3301,35 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
                 iniziatore,
                 'consumabili_da_dare',
             )
+            from personaggi.economia_crediti import (
+                CONTO_DEPOSITO,
+                modulo_conto_deposito_attivo,
+                normalize_conto,
+                saldo_conto,
+                saldo_spendibile,
+            )
             from personaggi.regole_transazione import valida_proposta_transazione
             ok, msg = valida_proposta_transazione(iniziatore, value)
             if not ok:
                 raise serializers.ValidationError(msg)
+            dare = Decimal(str(value.get('crediti_da_dare') or 0))
+            if dare > 0:
+                conto = normalize_conto(value.get('conto_crediti'))
+                if conto == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(iniziatore):
+                    raise serializers.ValidationError(
+                        "Il conto di deposito non è attivo: usa il conto corrente."
+                    )
+                disponibile = (
+                    saldo_conto(iniziatore, conto)
+                    if modulo_conto_deposito_attivo(iniziatore)
+                    else saldo_spendibile(iniziatore)
+                )
+                if dare > disponibile:
+                    raise serializers.ValidationError(
+                        f"Crediti insufficienti sul conto {conto.lower()} "
+                        f"(disponibili {disponibile}, richiesti {dare})."
+                    )
+                value['conto_crediti'] = conto
         return value
     
     def create(self, validated_data):
@@ -3297,6 +3338,7 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
         proposta_data = validated_data['proposta']
         
         from django.db import transaction as db_transaction
+        from personaggi.economia_crediti import normalize_conto
         
         with db_transaction.atomic():
             # Crea transazione
@@ -3312,6 +3354,7 @@ class TransazioneAvanzataCreateSerializer(serializers.Serializer):
                 autore=iniziatore,
                 crediti_da_dare=proposta_data.get('crediti_da_dare', 0),
                 crediti_da_ricevere=proposta_data.get('crediti_da_ricevere', 0),
+                conto_crediti=normalize_conto(proposta_data.get('conto_crediti')),
                 messaggio=proposta_data.get('messaggio', ''),
                 is_attiva=True
             )
@@ -3332,6 +3375,11 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
     """Serializer per creare una nuova proposta (controproposta o rilancio)"""
     crediti_da_dare = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
     crediti_da_ricevere = serializers.DecimalField(max_digits=10, decimal_places=2, default=0)
+    conto_crediti = serializers.ChoiceField(
+        choices=["CORRENTE", "DEPOSITO"],
+        required=False,
+        default="CORRENTE",
+    )
     oggetti_da_dare = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
     oggetti_da_ricevere = serializers.PrimaryKeyRelatedField(many=True, queryset=Oggetto.objects.all(), required=False)
     consumabili_da_dare = serializers.PrimaryKeyRelatedField(
@@ -3347,6 +3395,13 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
         if autore:
             dare_ids = [c.id for c in data.get('consumabili_da_dare', [])]
             _valida_consumabili_proprieta(dare_ids, autore, 'consumabili_da_dare')
+            from personaggi.economia_crediti import (
+                CONTO_DEPOSITO,
+                modulo_conto_deposito_attivo,
+                normalize_conto,
+                saldo_conto,
+                saldo_spendibile,
+            )
             from personaggi.regole_transazione import valida_proposta_transazione
             payload = {
                 'crediti_da_dare': data.get('crediti_da_dare', 0),
@@ -3356,6 +3411,28 @@ class PropostaTransazioneCreateSerializer(serializers.Serializer):
             ok, msg = valida_proposta_transazione(autore, payload)
             if not ok:
                 raise serializers.ValidationError(msg)
+            dare = Decimal(str(data.get('crediti_da_dare') or 0))
+            conto = normalize_conto(data.get('conto_crediti'))
+            if dare > 0:
+                if conto == CONTO_DEPOSITO and not modulo_conto_deposito_attivo(autore):
+                    raise serializers.ValidationError(
+                        {"conto_crediti": "Il conto di deposito non è attivo."}
+                    )
+                disponibile = (
+                    saldo_conto(autore, conto)
+                    if modulo_conto_deposito_attivo(autore)
+                    else saldo_spendibile(autore)
+                )
+                if dare > disponibile:
+                    raise serializers.ValidationError(
+                        {
+                            "crediti_da_dare": (
+                                f"Crediti insufficienti sul conto {conto.lower()} "
+                                f"(disponibili {disponibile})."
+                            )
+                        }
+                    )
+            data['conto_crediti'] = conto
         return data
     
     def create(self, validated_data):
@@ -4074,6 +4151,11 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
         queryset=Personaggio.objects.all(), source='mittente_personaggio', write_only=True, required=False, allow_null=True
     )
     crediti_da_inviare = serializers.IntegerField(required=False, min_value=0, default=0)
+    conto_crediti = serializers.ChoiceField(
+        choices=["CORRENTE", "DEPOSITO"],
+        required=False,
+        default="CORRENTE",
+    )
     mostra_proprietario_giocatore = serializers.BooleanField(required=False, allow_null=True, default=None)
     oggetti_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
@@ -4092,11 +4174,13 @@ class MessaggioCreateSerializer(serializers.ModelSerializer):
             'mittente_personaggio_id',
             'mostra_proprietario_giocatore',
             'crediti_da_inviare',
+            'conto_crediti',
             'oggetti_ids',
         )
 
     def create(self, validated_data):
         validated_data.pop('crediti_da_inviare', None)
+        validated_data.pop('conto_crediti', None)
         validated_data.pop('oggetti_ids', None)
         validated_data['mittente'] = self.context['request'].user
         campagna = None
