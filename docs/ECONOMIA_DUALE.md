@@ -17,7 +17,13 @@ Una volta per evento il giocatore (tab **Economia**) può spostare deposito → 
 
 `frazione_trasferimento_stipendio × stipendio_evento`
 
-Config in Staff → **Economia crediti** (`Campagna.economia_config`).
+Parametri (`frazione_trasferimento_stipendio`, `fattore_valore_deposito`) in Staff → **Economia crediti** o nella sezione deposito di **Regole transazioni** (`Campagna.economia_config`).
+
+## Categorie spendibili col deposito
+
+Fonte di verità: flag **Pagabile con crediti di deposito** su ogni riga di Staff → **Regole transazioni** (`RegolaTransazioneCategoria.pagabile_con_deposito`), inclusa la categoria **Negozi / mercanti NPC**.
+
+Default tipici: oggetti, materia, consumabili, mod, innesti, mutazioni, negozio. Tecniche (infusioni/tessiture/cerimoniali) e crediti restano di norma sul corrente.
 
 ## Prezzo deposito
 

@@ -4,17 +4,11 @@ import {
   fetchEconomiaConfig,
   patchEconomiaConfig,
   staffGetCampagne,
-} from '../api';
-
-const CATEGORIE = [
-  { id: 'oggetto', label: 'Oggetti' },
-  { id: 'materia', label: 'Materia' },
-  { id: 'consumabile', label: 'Consumabili' },
-  { id: 'negozio', label: 'Negozi / Accademia' },
-];
+} from '../../api';
 
 /**
- * Staff tool: config economia duale per campagna.
+ * Staff tool: parametri economia duale (frazione / fattore).
+ * Le categorie pagabili col deposito sono in «Regole transazioni».
  */
 export default function EconomiaCreditiManager({ onLogout }) {
   const [campagne, setCampagne] = useState([]);
@@ -22,7 +16,6 @@ export default function EconomiaCreditiManager({ onLogout }) {
   const [config, setConfig] = useState(null);
   const [frazione, setFrazione] = useState('1.00');
   const [fattore, setFattore] = useState('0.90');
-  const [categorie, setCategorie] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [okMsg, setOkMsg] = useState('');
@@ -58,7 +51,6 @@ export default function EconomiaCreditiManager({ onLogout }) {
       setConfig(cfg);
       setFrazione(String(cfg.frazione_trasferimento_stipendio ?? '1.00'));
       setFattore(String(cfg.fattore_valore_deposito ?? '0.90'));
-      setCategorie(Array.isArray(cfg.categorie_spesa_deposito) ? [...cfg.categorie_spesa_deposito] : []);
     } catch (e) {
       setError(e.message || 'Errore caricamento config');
     } finally {
@@ -70,10 +62,6 @@ export default function EconomiaCreditiManager({ onLogout }) {
     loadConfig();
   }, [loadConfig]);
 
-  const toggleCat = (id) => {
-    setCategorie((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
-
   const save = async () => {
     setBusy(true);
     setError('');
@@ -84,7 +72,6 @@ export default function EconomiaCreditiManager({ onLogout }) {
         {
           frazione_trasferimento_stipendio: frazione,
           fattore_valore_deposito: fattore,
-          categorie_spesa_deposito: categorie,
         },
         onLogout,
       );
@@ -103,6 +90,10 @@ export default function EconomiaCreditiManager({ onLogout }) {
     return (100 / f).toFixed(2);
   })();
 
+  const catsLabel = Array.isArray(config?.categorie_spesa_deposito)
+    ? config.categorie_spesa_deposito.join(', ') || '(nessuna)'
+    : '—';
+
   return (
     <div className="h-full overflow-y-auto bg-gray-900 text-gray-100 p-4 md:p-6">
       <div className="flex items-center gap-3 mb-6">
@@ -112,7 +103,11 @@ export default function EconomiaCreditiManager({ onLogout }) {
         <div>
           <h2 className="text-xl font-bold">Economia crediti</h2>
           <p className="text-sm text-gray-400">
-            Frazione trasferimento deposito→corrente, fattore valore deposito e categorie spesa.
+            Frazione trasferimento deposito→corrente e fattore valore deposito.
+            Per abilitare le categorie spendibili col deposito usa lo strumento
+            {' '}
+            <strong className="text-amber-300">Regole transazioni</strong>
+            .
           </p>
         </div>
       </div>
@@ -167,20 +162,12 @@ export default function EconomiaCreditiManager({ onLogout }) {
           </p>
         </div>
 
-        <div>
-          <p className="text-sm text-gray-400 mb-2">Categorie pagabili con deposito</p>
-          <div className="flex flex-wrap gap-3">
-            {CATEGORIE.map((c) => (
-              <label key={c.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={categorie.includes(c.id)}
-                  onChange={() => toggleCat(c.id)}
-                />
-                {c.label}
-              </label>
-            ))}
-          </div>
+        <div className="text-sm text-gray-400 bg-gray-800/80 border border-gray-700 rounded p-3">
+          <p className="font-medium text-gray-300 mb-1">Categorie pagabili con deposito (sola lettura)</p>
+          <p className="font-mono text-xs text-emerald-300/90">{catsLabel}</p>
+          <p className="text-xs text-gray-500 mt-2">
+            Modifica i flag «Pagabile con crediti di deposito» in Regole transazioni.
+          </p>
         </div>
 
         <button
@@ -191,12 +178,6 @@ export default function EconomiaCreditiManager({ onLogout }) {
         >
           {busy ? 'Salvataggio…' : 'Salva configurazione'}
         </button>
-
-        {config && (
-          <pre className="text-xs text-gray-500 bg-gray-950/50 p-3 rounded overflow-x-auto">
-            {JSON.stringify(config, null, 2)}
-          </pre>
-        )}
       </div>
     </div>
   );

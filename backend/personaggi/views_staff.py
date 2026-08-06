@@ -2331,11 +2331,15 @@ class RegolaTransazioneCategoriaStaffViewSet(viewsets.ModelViewSet):
         allowed = {
             'vendibile_giocatori', 'requisiti_gruppo',
             'solo_posseduti', 'trasferimento_copia', 'rispetta_non_insegnabile',
+            'pagabile_con_deposito',
         }
         payload = {k: v for k, v in request.data.items() if k in allowed}
         if not payload:
             return Response({'detail': 'Nessun campo aggiornabile.'}, status=status.HTTP_400_BAD_REQUEST)
         instance = self.get_object()
+        # Negozi NPC: non sono scambi P2P
+        if instance.codice == 'negozio' and 'vendibile_giocatori' in payload:
+            payload['vendibile_giocatori'] = False
         serializer = self.get_serializer(instance, data=payload, partial=True)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()

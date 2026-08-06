@@ -7208,6 +7208,7 @@ REGOLA_TX_CODICE_MUTAZIONI = 'mutazioni'
 REGOLA_TX_CODICE_INFUSIONI = 'infusioni'
 REGOLA_TX_CODICE_TESSITURE = 'tessiture'
 REGOLA_TX_CODICE_CERIMONIALI = 'cerimoniali'
+REGOLA_TX_CODICE_NEGOZIO = 'negozio'
 
 REGOLA_TX_CODICE_CHOICES = [
     (REGOLA_TX_CODICE_CREDITI, 'Crediti'),
@@ -7220,7 +7221,19 @@ REGOLA_TX_CODICE_CHOICES = [
     (REGOLA_TX_CODICE_INFUSIONI, 'Infusioni'),
     (REGOLA_TX_CODICE_TESSITURE, 'Tessiture'),
     (REGOLA_TX_CODICE_CERIMONIALI, 'Cerimoniali'),
+    (REGOLA_TX_CODICE_NEGOZIO, 'Negozi / mercanti NPC'),
 ]
+
+# Categorie tipicamente pagabili col deposito (crediti di investimento).
+REGOLA_TX_CODICI_PAGABILI_DEPOSITO_DEFAULT = frozenset({
+    REGOLA_TX_CODICE_OGGETTI,
+    REGOLA_TX_CODICE_MATERIA,
+    REGOLA_TX_CODICE_CONSUMABILI,
+    REGOLA_TX_CODICE_MOD,
+    REGOLA_TX_CODICE_INNESTI,
+    REGOLA_TX_CODICE_MUTAZIONI,
+    REGOLA_TX_CODICE_NEGOZIO,
+})
 
 REGOLA_TX_CODICI_DEFAULT = [c[0] for c in REGOLA_TX_CODICE_CHOICES]
 
@@ -7254,6 +7267,14 @@ class RegolaTransazioneCategoria(SyncableModel, models.Model):
     rispetta_non_insegnabile = models.BooleanField(
         default=True,
         help_text='Blocca il trasferimento se la tecnica è marcata non acquistabile/insegnabile.',
+    )
+    pagabile_con_deposito = models.BooleanField(
+        default=False,
+        verbose_name='Pagabile con crediti di deposito',
+        help_text=(
+            'Se attivo (e modulo conto deposito ON), acquisti di questa categoria '
+            'possono usare il conto deposito / crediti di investimento (prezzo con fattore).'
+        ),
     )
     ordine = models.PositiveSmallIntegerField(default=0)
 

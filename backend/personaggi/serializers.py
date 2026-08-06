@@ -3852,6 +3852,7 @@ class RegolaTransazioneCategoriaStaffSerializer(serializers.ModelSerializer):
             'id', 'sync_id', 'campagna', 'codice', 'nome', 'ordine',
             'vendibile_giocatori', 'requisiti_gruppo',
             'solo_posseduti', 'trasferimento_copia', 'rispetta_non_insegnabile',
+            'pagabile_con_deposito',
             'updated_at',
         )
         read_only_fields = ('id', 'sync_id', 'campagna', 'codice', 'nome', 'ordine', 'updated_at')

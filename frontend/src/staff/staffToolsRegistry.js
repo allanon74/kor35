@@ -112,7 +112,7 @@ export const STAFF_TOOLS_REGISTRY = {
   tasks: { id: 'tasks', label: 'Tasks', icon: ListTodo, color: 'bg-lime-800', componentKey: 'tasks' },
   'personaggi-eliminati': { id: 'personaggi-eliminati', label: 'Personaggi eliminati', icon: Skull, color: 'bg-red-900', componentKey: 'personaggi-eliminati' },
   personaggi: { id: 'personaggi', label: 'Personaggi', icon: Users, color: 'bg-teal-700', componentKey: 'personaggi' },
-  'regole-transazioni': { id: 'regole-transazioni', label: 'Regole transazioni', icon: ArrowLeftRight, color: 'bg-amber-800', componentKey: 'regole-transazioni' },
+  'regole-transazioni': { id: 'regole-transazioni', label: 'Regole scambi e spese', icon: ArrowLeftRight, color: 'bg-amber-800', componentKey: 'regole-transazioni' },
   'economia-crediti': { id: 'economia-crediti', label: 'Economia crediti', icon: Wallet, color: 'bg-emerald-900', componentKey: 'economia-crediti' },
 };
 

@@ -33,6 +33,32 @@ CATEGORIE_SPESA_DEPOSITO_DEFAULT = (
 )
 CATEGORIE_SPESA_DEPOSITO_VALIDE = set(CATEGORIE_SPESA_DEPOSITO_DEFAULT)
 
+# Alias legacy economia → codice RegolaTransazioneCategoria
+_CATEGORIA_A_REGOLA = {
+    CATEGORIA_OGGETTO: "oggetti",
+    "oggetti": "oggetti",
+    CATEGORIA_MATERIA: "materia",
+    CATEGORIA_CONSUMABILE: "consumabili",
+    "consumabili": "consumabili",
+    CATEGORIA_NEGOZIO: "negozio",
+    "negozio": "negozio",
+    "mod": "mod",
+    "innesti": "innesti",
+    "mutazioni": "mutazioni",
+    "infusioni": "infusioni",
+    "tessiture": "tessiture",
+    "cerimoniali": "cerimoniali",
+    "crediti": "crediti",
+}
+
+# Codice regola → chiave API economia (per retrocompatibilità UI/config)
+_REGOLA_A_CATEGORIA_ECO = {
+    "oggetti": CATEGORIA_OGGETTO,
+    "materia": CATEGORIA_MATERIA,
+    "consumabili": CATEGORIA_CONSUMABILE,
+    "negozio": CATEGORIA_NEGOZIO,
+}
+
 DEFAULT_FRAZIONE_TRASFERIMENTO = Decimal("1.00")
 DEFAULT_FATTORE_VALORE_DEPOSITO = Decimal("0.90")
 
@@ -47,25 +73,85 @@ def _d2(value) -> Decimal:
     return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def normalizza_categoria_spesa(categoria: str) -> str:
+    """Normalizza alias (oggetto→oggetti) al codice RegolaTransazioneCategoria."""
+    key = str(categoria or "").strip().lower()
+    return _CATEGORIA_A_REGOLA.get(key, key)
+
+
+def _categorie_da_regole(campagna) -> list[str] | None:
+    """
+    Elenco chiavi economia (oggetto/materia/…) da RegolaTransazioneCategoria.
+    None se non ci sono ancora regole (fallback JSON/default).
+    """
+    if campagna is None:
+        return None
+    from personaggi.regole_transazione import ensure_regole_transazione_campagna
+
+    ensure_regole_transazione_campagna(campagna)
+    from personaggi.models import RegolaTransazioneCategoria
+
+    qs = RegolaTransazioneCategoria.objects.filter(
+        campagna=campagna, pagabile_con_deposito=True
+    ).values_list("codice", flat=True)
+    out = []
+    for codice in qs:
+        eco = _REGOLA_A_CATEGORIA_ECO.get(codice)
+        if eco and eco not in out:
+            out.append(eco)
+        elif not eco and codice in CATEGORIE_SPESA_DEPOSITO_VALIDE and codice not in out:
+            out.append(codice)
+    return out
+
+
+def sync_regole_pagabile_da_categorie(campagna, categorie: Iterable[str]) -> None:
+    """Allinea pagabile_con_deposito sulle regole dalle chiavi economia."""
+    if campagna is None:
+        return
+    from personaggi.models import REGOLA_TX_CODICI_DEFAULT, RegolaTransazioneCategoria
+    from personaggi.regole_transazione import ensure_regole_transazione_campagna
+
+    ensure_regole_transazione_campagna(campagna)
+    wanted = {normalizza_categoria_spesa(c) for c in (categorie or [])}
+    for regola in RegolaTransazioneCategoria.objects.filter(campagna=campagna):
+        if regola.codice not in REGOLA_TX_CODICI_DEFAULT:
+            continue
+        # Solo categorie mappate in economia API aggiornano il flag via questo path;
+        # le altre (infusioni, …) restano gestite solo da Regole transazioni.
+        if regola.codice not in _REGOLA_A_CATEGORIA_ECO and regola.codice not in CATEGORIE_SPESA_DEPOSITO_VALIDE:
+            continue
+        nuovo = regola.codice in wanted
+        if regola.pagabile_con_deposito != nuovo:
+            regola.pagabile_con_deposito = nuovo
+            regola.save(update_fields=["pagabile_con_deposito", "updated_at"])
+
+
 def get_economia_config(campagna=None) -> dict[str, Any]:
-    """Merge default + override JSON su Campagna.economia_config."""
+    """Merge default + override JSON su Campagna.economia_config; categorie da regole se presenti."""
     cfg = dict(DEFAULT_ECONOMIA_CONFIG)
     cfg["categorie_spesa_deposito"] = list(CATEGORIE_SPESA_DEPOSITO_DEFAULT)
     raw = getattr(campagna, "economia_config", None) if campagna is not None else None
-    if not isinstance(raw, dict):
-        return cfg
+    if isinstance(raw, dict):
+        if "frazione_trasferimento_stipendio" in raw and raw["frazione_trasferimento_stipendio"] is not None:
+            cfg["frazione_trasferimento_stipendio"] = str(_d2(raw["frazione_trasferimento_stipendio"]))
+        if "fattore_valore_deposito" in raw and raw["fattore_valore_deposito"] is not None:
+            fattore = _d2(raw["fattore_valore_deposito"])
+            if fattore <= 0:
+                fattore = DEFAULT_FATTORE_VALORE_DEPOSITO
+            cfg["fattore_valore_deposito"] = str(fattore)
+        cats = raw.get("categorie_spesa_deposito")
+        if isinstance(cats, list):
+            cleaned = [
+                str(c).strip().lower()
+                for c in cats
+                if str(c).strip().lower() in CATEGORIE_SPESA_DEPOSITO_VALIDE
+            ]
+            cfg["categorie_spesa_deposito"] = cleaned
 
-    if "frazione_trasferimento_stipendio" in raw and raw["frazione_trasferimento_stipendio"] is not None:
-        cfg["frazione_trasferimento_stipendio"] = str(_d2(raw["frazione_trasferimento_stipendio"]))
-    if "fattore_valore_deposito" in raw and raw["fattore_valore_deposito"] is not None:
-        fattore = _d2(raw["fattore_valore_deposito"])
-        if fattore <= 0:
-            fattore = DEFAULT_FATTORE_VALORE_DEPOSITO
-        cfg["fattore_valore_deposito"] = str(fattore)
-    cats = raw.get("categorie_spesa_deposito")
-    if isinstance(cats, list):
-        cleaned = [str(c).strip().lower() for c in cats if str(c).strip().lower() in CATEGORIE_SPESA_DEPOSITO_VALIDE]
-        cfg["categorie_spesa_deposito"] = cleaned
+    from_regole = _categorie_da_regole(campagna)
+    if from_regole is not None:
+        # Fonte di verità: flag sulle regole (anche lista vuota = nessuna categoria).
+        cfg["categorie_spesa_deposito"] = from_regole
     return cfg
 
 
@@ -112,6 +198,8 @@ def apply_economia_config(campagna, payload, *, merge: bool = True) -> dict[str,
     else:
         campagna.economia_config = cleaned
     campagna.save(update_fields=["economia_config", "updated_at"])
+    if "categorie_spesa_deposito" in cleaned:
+        sync_regole_pagabile_da_categorie(campagna, cleaned["categorie_spesa_deposito"])
     return get_economia_config(campagna)
 
 
@@ -188,8 +276,24 @@ def prezzo_da_deposito(prezzo, fattore=None, campagna=None) -> Decimal:
 
 
 def categoria_ammessa_deposito(categoria: str, campagna=None) -> bool:
+    """True se la categoria può essere pagata col deposito (flag su RegolaTransazioneCategoria)."""
+    codice = normalizza_categoria_spesa(categoria)
+    if not codice:
+        return False
+    if campagna is not None:
+        from personaggi.regole_transazione import ensure_regole_transazione_campagna
+
+        ensure_regole_transazione_campagna(campagna)
+        from personaggi.models import RegolaTransazioneCategoria
+
+        regola = RegolaTransazioneCategoria.objects.filter(
+            campagna=campagna, codice=codice
+        ).only("pagabile_con_deposito").first()
+        if regola is not None:
+            return bool(regola.pagabile_con_deposito)
     cfg = get_economia_config(campagna)
-    return str(categoria or "").strip().lower() in set(cfg.get("categorie_spesa_deposito") or [])
+    eco_key = _REGOLA_A_CATEGORIA_ECO.get(codice, codice)
+    return eco_key in set(cfg.get("categorie_spesa_deposito") or [])
 
 
 def modifica_crediti(

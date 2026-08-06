@@ -21,9 +21,11 @@ from .models import (
     REGOLA_TX_CODICE_MATERIA,
     REGOLA_TX_CODICE_MOD,
     REGOLA_TX_CODICE_MUTAZIONI,
+    REGOLA_TX_CODICE_NEGOZIO,
     REGOLA_TX_CODICE_OGGETTI,
     REGOLA_TX_CODICE_TESSITURE,
     REGOLA_TX_CODICI_DEFAULT,
+    REGOLA_TX_CODICI_PAGABILI_DEPOSITO_DEFAULT,
     REGOLA_TX_CODICE_CHOICES,
     TIPO_OGGETTO_FISICO,
     TIPO_OGGETTO_INNESTO,
@@ -73,8 +75,9 @@ def ensure_regole_transazione_campagna(campagna) -> None:
         defaults = {
             'nome': NOMI_CATEGORIA.get(codice, codice),
             'ordine': idx * 10,
-            'vendibile_giocatori': True,
+            'vendibile_giocatori': codice != REGOLA_TX_CODICE_NEGOZIO,
             'requisiti_gruppo': {},
+            'pagabile_con_deposito': codice in REGOLA_TX_CODICI_PAGABILI_DEPOSITO_DEFAULT,
         }
         if codice in (REGOLA_TX_CODICE_TESSITURE, REGOLA_TX_CODICE_CERIMONIALI, REGOLA_TX_CODICE_INFUSIONI):
             defaults['solo_posseduti'] = True

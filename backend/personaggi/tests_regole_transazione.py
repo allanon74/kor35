@@ -78,3 +78,25 @@ class RegoleTransazioneTests(TestCase):
             {'crediti_da_dare': Decimal('10'), 'oggetti_da_dare': [], 'consumabili_da_dare': []},
         )
         self.assertTrue(ok, msg)
+
+    def test_pagabile_con_deposito_negozio(self):
+        from personaggi.economia_crediti import categoria_ammessa_deposito
+        from personaggi.models import REGOLA_TX_CODICE_NEGOZIO
+
+        regola = RegolaTransazioneCategoria.objects.get(
+            campagna=self.campagna, codice=REGOLA_TX_CODICE_NEGOZIO
+        )
+        self.assertTrue(regola.pagabile_con_deposito)
+        self.assertTrue(categoria_ammessa_deposito('negozio', self.campagna))
+        regola.pagabile_con_deposito = False
+        regola.save(update_fields=['pagabile_con_deposito', 'updated_at'])
+        self.assertFalse(categoria_ammessa_deposito('negozio', self.campagna))
+        # alias economia
+        regola.pagabile_con_deposito = True
+        regola.save(update_fields=['pagabile_con_deposito', 'updated_at'])
+        oggetti = RegolaTransazioneCategoria.objects.get(
+            campagna=self.campagna, codice='oggetti'
+        )
+        oggetti.pagabile_con_deposito = False
+        oggetti.save(update_fields=['pagabile_con_deposito', 'updated_at'])
+        self.assertFalse(categoria_ammessa_deposito('oggetto', self.campagna))
